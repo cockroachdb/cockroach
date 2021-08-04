@@ -54,13 +54,13 @@ type Limiter interface {
 	// acquiring the requested quantity and putting the limiter in debt.
 	//
 	// The only errors which should be returned are due to the context.
-	Wait(ctx context.Context, isWrite bool, writeBytes int64) error
+	Wait(ctx context.Context, reqInfo tenantcostmodel.RequestInfo) error
 
 	// RecordRead subtracts the bytes read by a request from the token bucket.
 	// This call may push the Limiter into debt in the ReadBytes dimensions
 	// forcing subsequent Wait calls to block until the debt is paid.
 	// However, RecordRead itself will never block.
-	RecordRead(ctx context.Context, readBytes int64)
+	RecordRead(ctx context.Context, respInfo tenantcostmodel.ResponseInfo)
 }
 
 type limiter struct {
@@ -105,15 +105,15 @@ func (rl *limiter) init(
 }
 
 // Wait is part of the Limiter interface.
-func (rl *limiter) Wait(ctx context.Context, isWrite bool, writeBytes int64) error {
-	r := newWaitRequest(isWrite, writeBytes)
+func (rl *limiter) Wait(ctx context.Context, reqInfo tenantcostmodel.RequestInfo) error {
+	r := newWaitRequest(reqInfo)
 	defer putWaitRequest(r)
 
 	if err := rl.qp.Acquire(ctx, r); err != nil {
 		return err
 	}
 
-	if isWrite {
+	if isWrite, writeBytes := reqInfo.IsWrite(); isWrite {
 		rl.metrics.writeRequestsAdmitted.Inc(1)
 		rl.metrics.writeBytesAdmitted.Inc(writeBytes)
 	} else {
@@ -126,11 +126,11 @@ func (rl *limiter) Wait(ctx context.Context, isWrite bool, writeBytes int64) err
 }
 
 // RecordRead is part of the Limiter interface.
-func (rl *limiter) RecordRead(ctx context.Context, readBytes int64) {
-	rl.metrics.readBytesAdmitted.Inc(readBytes)
+func (rl *limiter) RecordRead(ctx context.Context, respInfo tenantcostmodel.ResponseInfo) {
+	rl.metrics.readBytesAdmitted.Inc(respInfo.ReadBytes())
 	rl.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
 		tb := res.(*tokenBucket)
-		amount := float64(readBytes) * float64(tb.config.CostModel.KVReadByte)
+		amount := tb.config.CostModel.ResponseCost(respInfo)
 		tb.Adjust(quotapool.Tokens(-amount))
 		// Do not notify the head of the queue. In the best case we did not disturb
 		// the time at which it can be fulfilled and in the worst case, we made it
@@ -167,8 +167,7 @@ func (tb *tokenBucket) init(config Config, timeSource timeutil.TimeSource) {
 
 // waitRequest is used to wait for adequate resources in the tokenBuckets.
 type waitRequest struct {
-	isWrite    bool
-	writeBytes int64
+	info tenantcostmodel.RequestInfo
 }
 
 var _ quotapool.Request = (*waitRequest)(nil)
@@ -179,12 +178,9 @@ var waitRequestSyncPool = sync.Pool{
 
 // newWaitRequest allocates a waitRequest from the sync.Pool.
 // It should be returned with putWaitRequest.
-func newWaitRequest(isWrite bool, writeBytes int64) *waitRequest {
+func newWaitRequest(info tenantcostmodel.RequestInfo) *waitRequest {
 	r := waitRequestSyncPool.Get().(*waitRequest)
-	*r = waitRequest{
-		isWrite:    isWrite,
-		writeBytes: writeBytes,
-	}
+	*r = waitRequest{info: info}
 	return r
 }
 
@@ -198,14 +194,7 @@ func (req *waitRequest) Acquire(
 	ctx context.Context, res quotapool.Resource,
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	tb := res.(*tokenBucket)
-	var needed tenantcostmodel.RU
-	if req.isWrite {
-		needed = tb.config.CostModel.KVWriteCost(req.writeBytes)
-	} else {
-		// We don't know the size of the read upfront; we will adjust the bucket
-		// after the fact in RecordRead.
-		needed = tb.config.CostModel.KVReadRequest
-	}
+	needed := tb.config.CostModel.RequestCost(req.info)
 	return tb.TryToFulfill(quotapool.Tokens(needed))
 }
 

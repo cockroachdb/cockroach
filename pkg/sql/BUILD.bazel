@@ -255,6 +255,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvclient",
         "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvclient/rangecache:with-mocks",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
         "//pkg/kv/kvserver/kvserverbase",

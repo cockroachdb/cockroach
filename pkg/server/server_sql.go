@@ -271,8 +271,11 @@ type sqlServerArgs struct {
 	// Used to query valid regions on the server.
 	regionsServer serverpb.RegionsServer
 
-	// Used for multi-tenant cost control.
+	// Used for multi-tenant cost control (on the host cluster side).
 	tenantUsageServer multitenant.TenantUsageServer
+
+	// Used for multi-tenant cost control (on the tenant side).
+	costController multitenant.TenantSideCostController
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {

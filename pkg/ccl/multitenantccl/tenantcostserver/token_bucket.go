@@ -46,7 +46,7 @@ func (s *instance) TokenBucketRequest(
 	defer metrics.mutex.Unlock()
 
 	result := &roachpb.TokenBucketResponse{}
-	var consumption roachpb.TokenBucketRequest_Consumption
+	var consumption roachpb.TenantConsumption
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		*result = roachpb.TokenBucketResponse{}
 
@@ -67,7 +67,7 @@ func (s *instance) TokenBucketRequest(
 			}
 		}
 
-		tenant.addConsumption(in.ConsumptionSinceLastRequest)
+		tenant.Consumption.Add(&in.ConsumptionSinceLastRequest)
 
 		// TODO(radu): update shares.
 		*result = tenant.Bucket.Request(in, timeutil.Now())
@@ -93,6 +93,6 @@ func (s *instance) TokenBucketRequest(
 	metrics.totalReadBytes.Update(int64(consumption.ReadBytes))
 	metrics.totalWriteRequests.Update(int64(consumption.WriteRequests))
 	metrics.totalWriteBytes.Update(int64(consumption.WriteBytes))
-	metrics.totalSQLPodsCPUSeconds.Update(consumption.SQLPodCPUSeconds)
+	metrics.totalSQLPodsCPUSeconds.Update(consumption.SQLPodsCPUSeconds)
 	return result
 }

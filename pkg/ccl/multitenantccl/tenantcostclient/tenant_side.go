@@ -14,25 +14,45 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+)
+
+// TargetPeriodSetting is exported for testing purposes.
+var TargetPeriodSetting = settings.RegisterDurationSetting(
+	"tenant_cost_control_period",
+	"target duration between token bucket requests from tenants (requires restart)",
+	10*time.Second,
 )
 
 // NewTenantSideCostController creates an object which implements the
 // server.TenantSideCostController interface.
 func NewTenantSideCostController(
-	ctx context.Context, tenantID roachpb.TenantID, provider kvtenant.TokenBucketProvider,
+	st *cluster.Settings, tenantID roachpb.TenantID, provider kvtenant.TokenBucketProvider,
 ) (multitenant.TenantSideCostController, error) {
 	if tenantID == roachpb.SystemTenantID {
 		return nil, errors.AssertionFailedf("cost controller can't be used for system tenant")
 	}
-	return &tenantSideCostController{
+	tc := &tenantSideCostController{
+		settings: st,
 		tenantID: tenantID,
 		provider: provider,
-	}, nil
+	}
+	tc.mu.costCfg = tenantcostmodel.ConfigFromSettings(&st.SV)
+	sv := &st.SV
+	tenantcostmodel.SetOnChange(sv, func(context.Context) {
+		tc.mu.Lock()
+		defer tc.mu.Unlock()
+		tc.mu.costCfg = tenantcostmodel.ConfigFromSettings(sv)
+	})
+	return tc, nil
 }
 
 func init() {
@@ -40,8 +60,16 @@ func init() {
 }
 
 type tenantSideCostController struct {
+	settings *cluster.Settings
 	tenantID roachpb.TenantID
 	provider kvtenant.TokenBucketProvider
+
+	mu struct {
+		syncutil.Mutex
+
+		costCfg     tenantcostmodel.Config
+		consumption roachpb.TenantConsumption
+	}
 }
 
 var _ multitenant.TenantSideCostController = (*tenantSideCostController)(nil)
@@ -54,21 +82,28 @@ func (c *tenantSideCostController) Start(ctx context.Context, stopper *stop.Stop
 }
 
 func (c *tenantSideCostController) mainLoop(ctx context.Context, stopper *stop.Stopper) {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(TargetPeriodSetting.Get(&c.settings.SV))
 	defer ticker.Stop()
+
+	var lastConsumption roachpb.TenantConsumption
 
 	for {
 		select {
 		case <-ticker.C:
+
+			c.mu.Lock()
+			currConsumption := c.mu.consumption
+			c.mu.Unlock()
+
+			deltaConsumption := currConsumption
+			deltaConsumption.Sub(&lastConsumption)
+			lastConsumption = currConsumption
+
 			req := roachpb.TokenBucketRequest{
 				TenantID: c.tenantID.ToUint64(),
 				// TODO(radu): populate instance ID.
-				InstanceID: 1,
-				ConsumptionSinceLastRequest: roachpb.TokenBucketRequest_Consumption{
-					// Report a dummy 1 RU consumption each time.
-					RU:               1,
-					SQLPodCPUSeconds: 1,
-				},
+				InstanceID:                  1,
+				ConsumptionSinceLastRequest: deltaConsumption,
 			}
 			_, err := c.provider.TokenBucket(ctx, &req)
 			if err != nil {
@@ -80,4 +115,37 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context, stopper *stop.S
 			return
 		}
 	}
+}
+
+// OnRequestWait is part of the multitenant.TenantSideKVInterceptor
+// interface.
+func (c *tenantSideCostController) OnRequestWait(
+	ctx context.Context, info tenantcostmodel.RequestInfo,
+) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if isWrite, writeBytes := info.IsWrite(); isWrite {
+		c.mu.consumption.WriteRequests++
+		c.mu.consumption.WriteBytes += uint64(writeBytes)
+	} else {
+		c.mu.consumption.ReadRequests++
+	}
+	c.mu.consumption.RU += float64(c.mu.costCfg.RequestCost(info))
+
+	return nil
+}
+
+// OnResponse is part of the multitenant.TenantSideBatchInterceptor interface.
+func (c *tenantSideCostController) OnResponse(
+	ctx context.Context, info tenantcostmodel.ResponseInfo,
+) {
+	readBytes := info.ReadBytes()
+	if readBytes == 0 {
+		return
+	}
+	c.mu.Lock()
+	c.mu.consumption.ReadBytes += uint64(readBytes)
+	c.mu.consumption.RU += float64(c.mu.costCfg.ResponseCost(info))
+	c.mu.Unlock()
 }
