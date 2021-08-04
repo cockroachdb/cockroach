@@ -14,6 +14,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/sidetransport",
+        "//pkg/roachpb:with-mocks",
         "//pkg/server/debug/goroutineui",
         "//pkg/server/debug/pprofui",
         "//pkg/settings",
