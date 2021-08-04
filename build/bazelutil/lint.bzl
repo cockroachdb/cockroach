@@ -1,7 +1,7 @@
 load("@bazel_skylib//lib:shell.bzl", "shell")
 
 # lint_binary works as follows:
-# 1. For each test, we generate a script, which uses linttest.sh.in as a
+# 1. For each test, we generate a script, which uses lint.sh.in as a
 #    template. It simply bootstraps the environment by locating the go SDK,
 #    setting an appropriate `PATH` and `GOROOT`, and cd-ing to the right
 #    directory in the workspace. This roughly replicates what `go test` would
