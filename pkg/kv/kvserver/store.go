@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -623,6 +624,8 @@ type Store struct {
 
 	computeInitialMetrics              sync.Once
 	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
+
+	spanConfigStore spanconfig.Store
 }
 
 var _ kv.Sender = &Store{}
@@ -801,12 +804,13 @@ func NewStore(
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
 	s := &Store{
-		cfg:      cfg,
-		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:   eng,
-		nodeDesc: nodeDesc,
-		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
-		ctSender: cfg.ClosedTimestampSender,
+		cfg:             cfg,
+		db:              cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine:          eng,
+		nodeDesc:        nodeDesc,
+		metrics:         newStoreMetrics(cfg.HistogramWindowInterval),
+		ctSender:        cfg.ClosedTimestampSender,
+		spanConfigStore: spanconfigstore.New(),
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
@@ -1991,9 +1995,17 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
-func (s *Store) onSpanConfigUpdate(spanconfig.Update) {
+func (s *Store) onSpanConfigUpdate(update spanconfig.Update) {
 	// TODO(zcfgs-pod): Apply the span config update locally, updating the
 	// relevant replicas and queuing up the implied merge/split actions.
+
+	if update.Deleted {
+		// TODO(zcfgs-pod): A spanconfig.StoreWriter interface is all that's
+		// needed here.
+		s.spanConfigStore.SetSpanConfig(update.Entry.Span, roachpb.SpanConfig{})
+	} else {
+		s.spanConfigStore.SetSpanConfig(update.Entry.Span, update.Entry.Config)
+	}
 }
 
 func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached bool) {
