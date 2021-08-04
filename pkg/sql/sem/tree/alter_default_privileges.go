@@ -87,6 +87,17 @@ const (
 	Schemas   AlterDefaultPrivilegesTargetObject = 4
 )
 
+// GetAlterDefaultPrivilegesTargetObjects returns an array of all the
+// AlterDefaultPrivilegesTargetObjects.
+func GetAlterDefaultPrivilegesTargetObjects() []AlterDefaultPrivilegesTargetObject {
+	return []AlterDefaultPrivilegesTargetObject{
+		Tables,
+		Sequences,
+		Types,
+		Schemas,
+	}
+}
+
 func (t AlterDefaultPrivilegesTargetObject) String() string {
 	switch t {
 	case Tables:

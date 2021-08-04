@@ -1129,6 +1129,10 @@ SELECT has_schema_privilege('testuser', 's', 'create')
 ----
 true
 
+
+statement ok
+REVOKE USAGE ON SCHEMA s FROM testuser;
+
 # Privilege check on direct member of role without USAGE privilege granted.
 query B
 SELECT has_schema_privilege('testuser', 's', 'usage')

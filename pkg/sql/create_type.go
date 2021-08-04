@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -350,10 +349,6 @@ func CreateEnumTypeDesc(
 		params.p.User(), tree.Types, dbDesc.GetPrivileges(),
 	)
 
-	// TODO(richardjcai): Remove this once we figure out the migration from
-	//   our current "inheritance" model to default privileges.
-	inheritUsagePrivilegeFromSchema(schema, privs)
-
 	enumKind := descpb.TypeDescriptor_ENUM
 	var regionConfig *descpb.TypeDescriptor_RegionConfig
 	if enumType == EnumTypeMultiRegion {
@@ -439,35 +434,3 @@ func (n *createTypeNode) Next(params runParams) (bool, error) { return false, ni
 func (n *createTypeNode) Values() tree.Datums                 { return tree.Datums{} }
 func (n *createTypeNode) Close(ctx context.Context)           {}
 func (n *createTypeNode) ReadingOwnWrites()                   {}
-
-// TODO(richardjcai): Instead of inheriting the privilege when creating the
-// descriptor, we can check the parent of type for usage privilege as well,
-// this seems to be how Postgres does it.
-// Add a test for this when we support granting privileges to schemas #50879.
-func inheritUsagePrivilegeFromSchema(
-	schema catalog.SchemaDescriptor, privs *descpb.PrivilegeDescriptor,
-) {
-
-	switch kind := schema.SchemaKind(); kind {
-	case catalog.SchemaPublic:
-		// If the type is in the public schema, the public role has USAGE on it.
-		privs.Grant(security.PublicRoleName(), privilege.List{privilege.USAGE})
-	case catalog.SchemaTemporary, catalog.SchemaVirtual:
-		// No types should be created in a temporary schema or a virtual schema.
-		panic(errors.AssertionFailedf(
-			"type being created in schema kind %d with id %d",
-			kind, schema.GetID()))
-	case catalog.SchemaUserDefined:
-		schemaPrivs := schema.GetPrivileges()
-
-		// Look for all users that have USAGE on the schema and add it to the
-		// privilege descriptor.
-		for _, u := range schemaPrivs.Users {
-			if u.Privileges&privilege.USAGE.Mask() == 1 {
-				privs.Grant(u.User(), privilege.List{privilege.USAGE})
-			}
-		}
-	default:
-		panic(errors.AssertionFailedf("unknown schema kind %d", kind))
-	}
-}
