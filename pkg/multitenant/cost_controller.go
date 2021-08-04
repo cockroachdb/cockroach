@@ -21,10 +21,14 @@ import (
 // and throttles resource usage. Its implementation lives in the
 // tenantcostclient CCL package.
 type TenantSideCostController interface {
-	Start(ctx context.Context, stopper *stop.Stopper) error
+	Start(ctx context.Context, stopper *stop.Stopper, cpuSecsFn CPUSecsFn) error
 
 	TenantSideKVInterceptor
 }
+
+// CPUSecsFn is a function used to get the cumulative CPU usage in seconds for
+// the SQL instance.
+type CPUSecsFn func(ctx context.Context) float64
 
 // TenantSideKVInterceptor intercepts KV requests and responses, accounting
 // for resource usage and potentially throttling requests.
