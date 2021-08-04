@@ -1530,18 +1530,16 @@ SHOW SYNTAX 'select 1'
 ----
 SHOW SYNTAX 'select 1'
 SHOW SYNTAX 'select 1' -- fully parenthesized
-SHOW SYNTAX _ -- literals removed
-REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
-SHOW SYNTAX _ -- identifiers removed
+SHOW SYNTAX '_' -- literals removed
+SHOW SYNTAX '_' -- identifiers removed
 
 parse
 EXPLAIN SHOW SYNTAX 'select 1'
 ----
 EXPLAIN SHOW SYNTAX 'select 1'
 EXPLAIN SHOW SYNTAX 'select 1' -- fully parenthesized
-EXPLAIN SHOW SYNTAX _ -- literals removed
-REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
-EXPLAIN SHOW SYNTAX _ -- identifiers removed
+EXPLAIN SHOW SYNTAX '_' -- literals removed
+EXPLAIN SHOW SYNTAX '_' -- identifiers removed
 
 parse
 SHOW CREATE TABLE t
