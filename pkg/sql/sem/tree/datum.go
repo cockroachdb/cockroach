@@ -1779,12 +1779,28 @@ type ParseTimeContext interface {
 var _ ParseTimeContext = &EvalContext{}
 var _ ParseTimeContext = &simpleParseTimeContext{}
 
+// NewParseTimeContextOption is an option to NewParseTimeContext.
+type NewParseTimeContextOption func(ret *simpleParseTimeContext)
+
+// NewParseTimeContextOptionDateStyle sets the DateStyle for the context.
+func NewParseTimeContextOptionDateStyle(dateStyle pgdate.DateStyle) NewParseTimeContextOption {
+	return func(ret *simpleParseTimeContext) {
+		ret.DateStyle = dateStyle
+	}
+}
+
 // NewParseTimeContext constructs a ParseTimeContext that returns
 // the given values.
-func NewParseTimeContext(relativeParseTime time.Time) ParseTimeContext {
-	return &simpleParseTimeContext{
+func NewParseTimeContext(
+	relativeParseTime time.Time, opts ...NewParseTimeContextOption,
+) ParseTimeContext {
+	ret := &simpleParseTimeContext{
 		RelativeParseTime: relativeParseTime,
 	}
+	for _, opt := range opts {
+		opt(ret)
+	}
+	return ret
 }
 
 type simpleParseTimeContext struct {
