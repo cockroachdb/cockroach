@@ -1549,6 +1549,7 @@ func TestLint(t *testing.T) {
 	// https://github.com/dominikh/go-tools/issues/57 is fixed.
 	t.Run("TestErrCheck", func(t *testing.T) {
 		skip.UnderShort(t)
+		skip.UnderBazelWithIssue(t, 68498, "Generated files not placed in the workspace via Bazel build")
 		excludesPath, err := filepath.Abs(filepath.Join("testdata", "errcheck_excludes.txt"))
 		if err != nil {
 			t.Fatal(err)
@@ -1642,6 +1643,7 @@ func TestLint(t *testing.T) {
 	t.Run("TestStaticCheck", func(t *testing.T) {
 		// staticcheck uses 2.4GB of ram (as of 2019-05-10), so don't parallelize it.
 		skip.UnderShort(t)
+		skip.UnderBazelWithIssue(t, 68496, "A TON of build errors")
 		var args []string
 		if pkgSpecified {
 			args = []string{pkgScope}
