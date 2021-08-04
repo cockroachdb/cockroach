@@ -30,6 +30,7 @@ go_test(
     embed = [":zonepb"],
     deps = [
         "//pkg/keys",
+        "//pkg/roachpb",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",
         "//pkg/util/leaktest",

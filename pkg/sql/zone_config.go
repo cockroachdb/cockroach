@@ -279,6 +279,71 @@ func GetZoneConfigInTxn(
 	return zoneID, zone, subzone, nil
 }
 
+// GetHydratedZoneConfigForTable returns a fully hydrated zone config for a
+// given table ID.
+func GetHydratedZoneConfigForTable(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
+) (*zonepb.ZoneConfig, error) {
+	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
+		kv, err := txn.Get(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		return kv.Value, nil
+	}
+	// TODO(zcfgs-pod): Use the descCollection to do descriptor lookups instead of this
+	// getKey function that `getZoneConfig` currently uses.
+	zoneID, zone, _, placeholder, err := getZoneConfig(
+		codec, id, getKey, false /* getInheritedDefault */, true, /* mayBeTable */
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
+		return nil, err
+	}
+
+	// We've completely hydrated the zone config now. The only thing left to do
+	// is to do is hydrate the subzones, if applicable.
+
+	// A placeholder config exists only to store subzones, so we copy over that
+	// information on the zone config.
+	if placeholder != nil {
+		// A placeholder config only exists for tables. Furthermore, if it exists,
+		// then the zone config (`zone`) above must belong to an object further up
+		// in the inheritance chain (such as the database or DEFAULT RANGE). As the
+		// subzones field is only defined if the zone config applies to a table, it
+		// follows that `zone` must not have any Subzones set on it.
+		if len(zone.Subzones) != 0 {
+			return nil, errors.AssertionFailedf("placeholder %v exists in conjunction with subzones on zone config %v", *zone, *placeholder)
+		}
+		zone.Subzones = placeholder.Subzones
+		zone.SubzoneSpans = placeholder.SubzoneSpans
+	}
+
+	for i, subzone := range zone.Subzones {
+		// Check if a zone configuration exists for the index this subzone applies
+		// to by passing in a an empty partition below.
+		indexSubzone := zone.GetSubzone(subzone.IndexID, "" /* partition  */)
+		// Partitions, in terms of the inheritance hierarchy, first inherit from the
+		// zone configuration fields on their parent index (if such a zone
+		// configuration exists).
+		// NB: If the subzone we're dealing with belongs to an index and not a
+		// partition, then the call below is a no-op.
+		if indexSubzone != nil {
+			zone.Subzones[i].Config.InheritFromParent(&indexSubzone.Config)
+		}
+		// After inheriting from the index's zone configuration, any fields that are
+		// left empty must be filled in from the table's zone configuration. Note
+		// that the table's zone configuration was fully hydrated above and
+		// inheriting from it will result in the subzone config being fully hydrated
+		// as well.
+		zone.Subzones[i].Config.InheritFromParent(zone)
+	}
+
+	return zone, nil
+}
+
 func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 	if zs.NamedZone != "" {
 		return pgerror.Newf(

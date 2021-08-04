@@ -38,5 +38,5 @@ type TestingKnobs struct {
 	JobsTestingKnobs     ModuleTestingKnobs
 	BackupRestore        ModuleTestingKnobs
 	MigrationManager     ModuleTestingKnobs
-	SpanConfigManager    ModuleTestingKnobs
+	SpanConfig           ModuleTestingKnobs
 }

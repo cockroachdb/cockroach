@@ -726,7 +726,7 @@ type StoreConfig struct {
 	ProtectedTimestampCache protectedts.Cache
 
 	// Used to watch for span configuration changes.
-	SpanConfigWatcher spanconfig.Watcher
+	SpanConfigWatcher spanconfig.KVWatcher
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -1585,7 +1585,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if s.cfg.SpanConfigWatcher != nil && !s.cfg.TestingKnobs.DisableSpanConfigWatcher {
 		// Start the watcher process to listen in on span config updates and
 		// propagate said updates to the underlying store.
-		spanConfigUpdateC, err := s.cfg.SpanConfigWatcher.Watch(ctx, s.Stopper())
+		spanConfigUpdateC, err := s.cfg.SpanConfigWatcher.WatchForKVUpdates(ctx, s.Stopper())
 		if err != nil {
 			return err
 		}
