@@ -29,25 +29,25 @@ type DefaultPrivilegesRole struct {
 	ForAllRoles bool
 }
 
-// ToDefaultPrivilegesRole returns the DefaultPrivilegesRole corresponding to
+// toDefaultPrivilegesRole returns the DefaultPrivilegesRole corresponding to
 // DefaultPrivilegesForRole.
-func (u *DefaultPrivilegesForRole) ToDefaultPrivilegesRole() DefaultPrivilegesRole {
-	if u.GetForAllRoles() {
+func (p *DefaultPrivilegesForRole) toDefaultPrivilegesRole() DefaultPrivilegesRole {
+	if p.IsExplicitRole() {
 		return DefaultPrivilegesRole{
-			ForAllRoles: true,
+			Role: p.GetExplicitRole().UserProto.Decode(),
 		}
 	}
 	return DefaultPrivilegesRole{
-		Role: u.GetUserProto().Decode(),
+		ForAllRoles: true,
 	}
 }
 
-// LessThan returns whether r is less than other.
+// lessThan returns whether r is less than other.
 // The DefaultPrivilegesRole with ForAllRoles set is always considered
 // larger. Only one of r or other should have ForAllRoles set since there
 // should only ever be one entry for all roles.
 // If ForAllRoles is set for neither, we do a string comparison on the username.
-func (r DefaultPrivilegesRole) LessThan(other DefaultPrivilegesRole) bool {
+func (r DefaultPrivilegesRole) lessThan(other DefaultPrivilegesRole) bool {
 	// Defined such that ForAllRoles is never less than.
 	if r.ForAllRoles {
 		return false
@@ -63,10 +63,10 @@ func (r DefaultPrivilegesRole) LessThan(other DefaultPrivilegesRole) bool {
 // index in the User array if found. Returns -1 otherwise.
 func (p *DefaultPrivilegeDescriptor) FindUserIndex(role DefaultPrivilegesRole) int {
 	idx := sort.Search(len(p.DefaultPrivilegesPerRole), func(i int) bool {
-		return !p.DefaultPrivilegesPerRole[i].ToDefaultPrivilegesRole().LessThan(role)
+		return !p.DefaultPrivilegesPerRole[i].toDefaultPrivilegesRole().lessThan(role)
 	})
 	if idx < len(p.DefaultPrivilegesPerRole) &&
-		p.DefaultPrivilegesPerRole[idx].ToDefaultPrivilegesRole() == role {
+		p.DefaultPrivilegesPerRole[idx].toDefaultPrivilegesRole() == role {
 		return idx
 	}
 	return -1
@@ -79,34 +79,53 @@ func (p *DefaultPrivilegeDescriptor) FindOrCreateUser(
 	role DefaultPrivilegesRole,
 ) *DefaultPrivilegesForRole {
 	idx := sort.Search(len(p.DefaultPrivilegesPerRole), func(i int) bool {
-		return !p.DefaultPrivilegesPerRole[i].ToDefaultPrivilegesRole().LessThan(role)
+		return !p.DefaultPrivilegesPerRole[i].toDefaultPrivilegesRole().lessThan(role)
 	})
-	var defaultPrivilegeRole isDefaultPrivilegesForRole_Role
-	if role.ForAllRoles {
-		defaultPrivilegeRole = &DefaultPrivilegesForRole_ForAllRoles{ForAllRoles: true}
-	} else {
-		defaultPrivilegeRole = &DefaultPrivilegesForRole_UserProto{UserProto: role.Role.EncodeProto()}
-	}
 	if idx == len(p.DefaultPrivilegesPerRole) {
 		// Not found but should be inserted at the end.
 		p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole,
-			DefaultPrivilegesForRole{
-				Role:                       defaultPrivilegeRole,
-				DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
-			},
+			InitDefaultPrivilegesForRole(role),
 		)
-	} else if p.DefaultPrivilegesPerRole[idx].ToDefaultPrivilegesRole() == role {
+	} else if p.DefaultPrivilegesPerRole[idx].toDefaultPrivilegesRole() == role {
 		// Found.
 	} else {
 		// New element to be inserted at idx.
 		p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole, DefaultPrivilegesForRole{})
 		copy(p.DefaultPrivilegesPerRole[idx+1:], p.DefaultPrivilegesPerRole[idx:])
-		p.DefaultPrivilegesPerRole[idx] = DefaultPrivilegesForRole{
-			Role:                       defaultPrivilegeRole,
+		p.DefaultPrivilegesPerRole[idx] = InitDefaultPrivilegesForRole(role)
+	}
+	return &p.DefaultPrivilegesPerRole[idx]
+}
+
+// InitDefaultPrivilegesForRole creates the default DefaultPrivilegesForRole
+// for a user.
+func InitDefaultPrivilegesForRole(role DefaultPrivilegesRole) DefaultPrivilegesForRole {
+	var defaultPrivilegesRole isDefaultPrivilegesForRole_Role
+	if role.ForAllRoles {
+		defaultPrivilegesRole = &DefaultPrivilegesForRole_ForAllRoles{
+			ForAllRoles: &DefaultPrivilegesForRole_ForAllRolesPseudoRole{
+				PublicHasUsageOnTypes: true,
+			},
+		}
+		return DefaultPrivilegesForRole{
+			Role:                       defaultPrivilegesRole,
 			DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
 		}
 	}
-	return &p.DefaultPrivilegesPerRole[idx]
+	defaultPrivilegesRole = &DefaultPrivilegesForRole_ExplicitRole_{
+		ExplicitRole: &DefaultPrivilegesForRole_ExplicitRole{
+			UserProto:                       role.Role.EncodeProto(),
+			PublicHasUsageOnTypes:           true,
+			RoleHasAllPrivilegesOnTables:    true,
+			RoleHasAllPrivilegesOnSequences: true,
+			RoleHasAllPrivilegesOnSchemas:   true,
+			RoleHasAllPrivilegesOnTypes:     true,
+		},
+	}
+	return DefaultPrivilegesForRole{
+		Role:                       defaultPrivilegesRole,
+		DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
+	}
 }
 
 // RemoveUser looks for a given user in the list and removes it if present.
@@ -124,15 +143,15 @@ func (p *DefaultPrivilegeDescriptor) RemoveUser(role DefaultPrivilegesRole) {
 func (p *DefaultPrivilegeDescriptor) Validate() error {
 	entryForAllRolesFound := false
 	for i, defaultPrivilegesForRole := range p.DefaultPrivilegesPerRole {
-		if defaultPrivilegesForRole.GetForAllRoles() {
+		if !defaultPrivilegesForRole.IsExplicitRole() {
 			if entryForAllRolesFound {
 				return errors.AssertionFailedf("multiple entries found in map for all roles")
 			}
 			entryForAllRolesFound = true
 		}
 		if i+1 < len(p.DefaultPrivilegesPerRole) &&
-			!defaultPrivilegesForRole.ToDefaultPrivilegesRole().
-				LessThan(p.DefaultPrivilegesPerRole[i+1].ToDefaultPrivilegesRole()) {
+			!defaultPrivilegesForRole.toDefaultPrivilegesRole().
+				lessThan(p.DefaultPrivilegesPerRole[i+1].toDefaultPrivilegesRole()) {
 			return errors.AssertionFailedf("default privilege list is not sorted")
 		}
 		for objectType, defaultPrivileges := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
@@ -148,10 +167,8 @@ func (p *DefaultPrivilegeDescriptor) Validate() error {
 	return nil
 }
 
-// InitDefaultPrivilegeDescriptor returns a new DefaultPrivilegeDescriptor.
-func InitDefaultPrivilegeDescriptor() *DefaultPrivilegeDescriptor {
-	var defaultPrivilegesForRole []DefaultPrivilegesForRole
-	return &DefaultPrivilegeDescriptor{
-		DefaultPrivilegesPerRole: defaultPrivilegesForRole,
-	}
+// IsExplicitRole returns if DefaultPrivilegesForRole is defined for
+// an explicit role.
+func (p DefaultPrivilegesForRole) IsExplicitRole() bool {
+	return p.GetExplicitRole() != nil
 }

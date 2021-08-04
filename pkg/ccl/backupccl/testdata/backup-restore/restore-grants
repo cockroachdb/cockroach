@@ -177,14 +177,14 @@ SHOW GRANTS ON testuser_db.sc.othertable
 ----
 testuser_db sc othertable admin ALL
 testuser_db sc othertable root ALL
-testuser_db sc othertable testuser CREATE
+testuser_db sc othertable testuser ALL
 
 query-sql
 SHOW GRANTS ON testuser_db.testtable_greeting_usage
 ----
 testuser_db public testtable_greeting_usage admin ALL
 testuser_db public testtable_greeting_usage root ALL
-testuser_db public testtable_greeting_usage testuser CREATE
+testuser_db public testtable_greeting_usage testuser ALL
 
 # testuser should be owner, and therefore have SELECT privs too.
 exec-sql user=testuser
