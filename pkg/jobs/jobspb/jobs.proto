@@ -127,6 +127,26 @@ message BackupDetails {
   // written, i.e. the URI the user provided before a chosen suffix was appended
   // to its path.
   string collection_URI = 8 [(gogoproto.customname) = "CollectionURI"];
+
+  // The following fields are used by scheduled backups to chain protected timestamp records.
+  // For more details about the chaining scheme refer to
+  // ScheduledBackupExecutionArgs.ChainProtectedTimestampRecords.
+
+  // ReleaseOnSuccessPTSRecord is the id of the PTS record that a full backup
+  // running as part of a schedule will release on successful completion.
+  bytes release_on_success_pts_record = 10 [
+    (gogoproto.customname) = "ReleaseOnSuccessPTSRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+
+  // UpdateOnSuccessPTSRecord is the id of the PTS record that an incremental
+  // backup running as part of a schedule will update to the backups' EndTime,
+  // on successful completion.
+  bytes update_on_success_pts_record = 11 [
+    (gogoproto.customname) = "UpdateOnSuccessPTSRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
 }
 
 message BackupProgress {

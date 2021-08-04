@@ -372,7 +372,8 @@ func changefeedPlanHook(
 				protectedTimestampID = uuid.MakeV4()
 				spansToProtect = makeSpansToProtect(p.ExecCfg().Codec, details.Targets)
 				progress.GetChangefeed().ProtectedTimestampRecord = protectedTimestampID
-				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, jobID, statementTime, spansToProtect)
+				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, int64(jobID), statementTime,
+					spansToProtect, jobsprotectedts.Jobs)
 			}
 
 			jr := jobs.Record{

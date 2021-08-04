@@ -314,7 +314,8 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	}
 	schedule.SetExecutionDetails(
 		schedule.ExecutorType(),
-		jobspb.ExecutionArguments{Args: any},
+		jobspb.ExecutionArguments{Args: any,
+			ProtectedTimestampRecord: schedule.ExecutionArgs().ProtectedTimestampRecord},
 	)
 
 	return nil

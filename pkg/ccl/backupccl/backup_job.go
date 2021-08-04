@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -527,6 +529,22 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	b.deleteCheckpoint(ctx, p.ExecCfg(), p.User())
 
+	// maybeUpdateProtectedTimestampRecordOnSchedule is responsible for chaining
+	// of protected ts records across scheduled backups. For a detailed outline of
+	// the scheme refer to the comment above
+	// ScheduledBackupExecutionArgs.ChainProtectedTimestampRecords.
+	//
+	// maybeUpdateProtectedTimestampRecordOnSchedule writes/updates a pts record
+	// on the schedule to protect all data after the current backups EndTime. This
+	// EndTime could be out of the GC window by the time the job has reached here.
+	// In some situations, we rely on the pts record written by the backup during
+	// planning (also protecting data after EndTime) to ensure that we can protect
+	// and verify the new record. Thus, we must ensure that this method is called
+	// before we release the jobs' pts record below.
+	if err := b.maybeUpdateProtectedTimestampRecordOnSchedule(ctx, p.ExecCfg()); err != nil {
+		return err
+	}
+
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
@@ -599,8 +617,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
-	return nil
+	return b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
 }
 
 // ReportResults implements JobResultsReporter interface.
@@ -664,9 +681,151 @@ func (b *backupResumer) readManifestOnResume(
 	return &desc, nil
 }
 
-func (b *backupResumer) maybeNotifyScheduledJobCompletion(
-	ctx context.Context, jobStatus jobs.Status, exec *sql.ExecutorConfig,
-) {
+func getSpansProtectedByBackup(
+	ctx context.Context, backupDetails jobspb.BackupDetails, txn *kv.Txn, exec *sql.ExecutorConfig,
+) ([]roachpb.Span, error) {
+	if backupDetails.ProtectedTimestampRecord == nil {
+		return nil, nil
+	}
+
+	ptsRecord, err := exec.ProtectedTimestampProvider.GetRecord(ctx, txn,
+		*backupDetails.ProtectedTimestampRecord)
+	if err != nil {
+		return nil, err
+	}
+
+	return ptsRecord.Spans, nil
+}
+
+func updateTimestampRecordForSchedule(
+	ctx context.Context,
+	ptsRecordID *uuid.UUID,
+	tsToProtect hlc.Timestamp,
+	exec *sql.ExecutorConfig,
+	txn *kv.Txn,
+	scheduleID int64,
+) error {
+	if ptsRecordID == nil {
+		return errors.Newf("unexpected nil pts record id on incremental schedule %d", scheduleID)
+	}
+	err := exec.ProtectedTimestampProvider.UpdateTimestamp(ctx, txn, *ptsRecordID,
+		tsToProtect)
+	// If we cannot find the pts record to update it is possible that a
+	// concurrent full backup has released the record, and written a new record
+	// on the incremental schedule. This should only happen in the case of an
+	// "overhang" incremental backup.
+	// In such a scenario it is okay to do nothing since the next incremental on
+	// the new full backup will rely on the pts record written by the full
+	// backup.
+	if err != nil && errors.Is(err, protectedts.ErrNotExists) {
+		log.Errorf(ctx, "failed to update timestamp record %d since it does not exist", ptsRecordID)
+		return nil
+	}
+	return err
+}
+
+func protectTimestampRecordForSchedule(
+	ctx context.Context,
+	spansToProtect []roachpb.Span,
+	tsToProtect hlc.Timestamp,
+	scheduleID int64,
+	exec *sql.ExecutorConfig,
+	txn *kv.Txn,
+) (uuid.UUID, error) {
+	var protectedtsID uuid.UUID
+	if len(spansToProtect) == 0 {
+		return protectedtsID, nil
+	}
+	protectedtsID = uuid.MakeV4()
+	rec := jobsprotectedts.MakeRecord(protectedtsID, scheduleID, tsToProtect, spansToProtect,
+		jobsprotectedts.Schedules)
+	return protectedtsID, exec.ProtectedTimestampProvider.Protect(ctx, txn, rec)
+}
+
+func releaseProtectedTimestampRecordForSchedule(
+	ctx context.Context, txn *kv.Txn, ptsID *uuid.UUID, exec *sql.ExecutorConfig,
+) error {
+	if ptsID == nil {
+		return nil
+	}
+
+	err := exec.ProtectedTimestampProvider.Release(ctx, txn, *ptsID)
+	if errors.Is(err, protectedts.ErrNotExists) {
+		// No reason to return an error which might cause problems if it doesn't
+		// seem to exist.
+		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+		return nil
+	}
+	return err
+}
+
+// manageFullBackupPTSChaining is invoked on successful completion of a
+// scheduled full backup. It is responsible for:
+// - Releasing the pts record that was stored on the incremental schedule when
+//   the full backup was planned.
+// - Writing a new pts record protecting all data after the full backups' EndTime
+//   and store this on the incremental schedule.
+func manageFullBackupPTSChaining(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	backupDetails jobspb.BackupDetails,
+	exec *sql.ExecutorConfig,
+	args *ScheduledBackupExecutionArgs,
+) error {
+	// Let's resolve the dependent incremental schedule as the first step. If the
+	// schedule has been dropped then we can avoid doing unnecessary work.
+	incSj, _, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn, exec.InternalExecutor,
+		args.DependentScheduleID)
+	if err != nil {
+		if jobs.HasScheduledJobNotFoundError(err) {
+			log.Warningf(ctx, "could not find dependent schedule with id %d",
+				args.DependentScheduleID)
+			return nil
+		}
+		return err
+	}
+
+	// Resolve the spans that need to be protected on this execution of the
+	// scheduled backup.
+	spansToProtect, err := getSpansProtectedByBackup(ctx, backupDetails, txn, exec)
+	if err != nil {
+		return errors.Wrap(err, "getting spans to protect")
+	}
+
+	// Protect the spans after the EndTime of the current backup. We do not need
+	// to verify this new record as we have a record written by the backup during
+	// planning, already protecting these spans after EndTime.
+	//
+	// Since this record will be stored on the incremental schedule, we use the
+	// inc schedule ID as the records' Meta. This ensures that even if the full
+	// schedule is dropped, the reconciliation job will not release the pts
+	// record stored on the inc schedule, and the chaining will continue.
+	ptsRecord, err := protectTimestampRecordForSchedule(ctx, spansToProtect,
+		backupDetails.EndTime, incSj.ScheduleID(), exec, txn)
+	if err != nil {
+		return errors.Wrap(err, "protect and verify pts record for schedule")
+	}
+
+	// Attempt to release the pts record that was written on the incremental
+	// schedule when the full backup was being planned.
+	if err := releaseProtectedTimestampRecordForSchedule(ctx, txn,
+		backupDetails.ReleaseOnSuccessPTSRecord, exec); err != nil {
+		return errors.Wrap(err, "release pts record for schedule")
+	}
+
+	// Update the incremental schedule with the new pts record.
+	incSj.ExecutionArgs().ProtectedTimestampRecord = &ptsRecord
+	incSj.SetExecutionDetails(
+		incSj.ExecutorType(),
+		*incSj.ExecutionArgs(),
+	)
+	return incSj.Update(ctx, exec.InternalExecutor, txn)
+}
+
+func (b *backupResumer) maybeUpdateProtectedTimestampRecordOnSchedule(
+	ctx context.Context, exec *sql.ExecutorConfig,
+) error {
 	env := scheduledjobs.ProdJobSchedulerEnv
 	if knobs, ok := exec.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
@@ -674,8 +833,77 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 		}
 	}
 
+	var backupDetails jobspb.BackupDetails
+	var ok bool
+	if backupDetails, ok = b.job.Details().(jobspb.BackupDetails); !ok {
+		return errors.Newf("unexpected job details type %T", b.job.Details())
+	}
+
 	if err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		// Do not rely on b.job containing created_by_id.  Query it directly.
+		// We cannot rely on b.job containing created_by_id because on job
+		// resumption the registry does not populate the resumers' CreatedByInfo.
+		datums, err := exec.InternalExecutor.QueryRowEx(
+			ctx,
+			"lookup-schedule-info",
+			txn,
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			fmt.Sprintf(
+				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
+				env.SystemJobsTableName()),
+			b.job.ID(), jobs.CreatedByScheduledJobs)
+
+		if err != nil {
+			return errors.Wrap(err, "schedule info lookup")
+		}
+		if datums == nil {
+			// Not a scheduled backup.
+			return nil
+		}
+
+		scheduleID := int64(tree.MustBeDInt(datums[0]))
+		_, args, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
+			exec.InternalExecutor, scheduleID)
+		if err != nil {
+			return errors.Wrap(err, "load scheduled job")
+		}
+
+		// Check if the schedule is configured to chain protected timestamp records.
+		if !args.ChainProtectedTimestampRecords {
+			return nil
+		}
+
+		// TODO(during review): Sanity check that we do not need to reverify the updated pts record
+		// since we already have a record protecting these spans after EndTime from backup planning.
+		if args.BackupType == ScheduledBackupExecutionArgs_INCREMENTAL {
+			err := updateTimestampRecordForSchedule(ctx, backupDetails.UpdateOnSuccessPTSRecord,
+				backupDetails.EndTime, exec, txn, scheduleID)
+			return errors.Wrap(err, "failed to update and verify pts record")
+		}
+
+		if err := manageFullBackupPTSChaining(ctx, env, txn, backupDetails, exec, args); err != nil {
+			return errors.Wrap(err, "failed to manage chaining of pts record during a full backup")
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (b *backupResumer) maybeNotifyScheduledJobCompletion(
+	ctx context.Context, jobStatus jobs.Status, exec *sql.ExecutorConfig,
+) error {
+	env := scheduledjobs.ProdJobSchedulerEnv
+	if knobs, ok := exec.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+		if knobs.JobSchedulerEnv != nil {
+			env = knobs.JobSchedulerEnv
+		}
+	}
+
+	err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// We cannot rely on b.job containing created_by_id because on job
+		// resumption the registry does not populate the resumer's CreatedByInfo.
 		datums, err := exec.InternalExecutor.QueryRowEx(
 			ctx,
 			"lookup-schedule-info",
@@ -697,24 +925,16 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
 		if err := jobs.NotifyJobTermination(
 			ctx, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID, exec.InternalExecutor, txn); err != nil {
-			log.Warningf(ctx,
-				"failed to notify schedule %d of completion of job %d; err=%s",
-				scheduleID, b.job.ID(), err)
+			return errors.Wrapf(err,
+				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
 		}
 		return nil
-	}); err != nil {
-		log.Errorf(ctx, "maybeNotifySchedule error: %v", err)
-	}
+	})
+	return err
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
-	defer b.maybeNotifyScheduledJobCompletion(
-		ctx,
-		jobs.StatusFailed,
-		execCtx.(sql.JobExecContext).ExecCfg(),
-	)
-
 	telemetry.Count("backup.total.failed")
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
@@ -722,9 +942,15 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
 	b.deleteCheckpoint(ctx, cfg, p.User())
-	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return b.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
-	})
+	}); err != nil {
+		return err
+	}
+
+	// This should never return an error unless resolving the schedule that the
+	// job is being run under fails.
+	return b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusFailed, execCtx.(sql.JobExecContext).ExecCfg())
 }
 
 func (b *backupResumer) deleteCheckpoint(
