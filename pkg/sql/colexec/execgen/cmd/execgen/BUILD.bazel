@@ -35,6 +35,7 @@ go_library(
         "min_max_agg_gen.go",
         "ntile_gen.go",
         "ordered_synchronizer_gen.go",
+        "overloads_abbr.go",
         "overloads_base.go",
         "overloads_bin.go",
         "overloads_cmp.go",

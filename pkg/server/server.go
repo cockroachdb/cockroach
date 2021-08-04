@@ -88,6 +88,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -178,6 +179,10 @@ type Server struct {
 	externalStorageBuilder *externalStorageBuilder
 
 	gcoord *admission.GrantCoordinator
+	// kvMemoryMonitor is a child of the rootSQLMemoryMonitor and is used to
+	// account for and bound the memory used for request processing in the KV
+	// layer.
+	kvMemoryMonitor *mon.BytesMonitor
 
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 	startTime time.Time
@@ -555,6 +560,20 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// ClosedTimestamp), but the Node needs a StoreConfig to be made.
 	var lateBoundNode *Node
 
+	// Break a circular dependency: we need the rootSQLMemoryMonitor to construct
+	// the KV memory monitor for the StoreConfig.
+	sqlMonitorAndMetrics := newRootSQLMemoryMonitor(monitorAndMetricsOptions{
+		memoryPoolSize:          cfg.MemoryPoolSize,
+		histogramWindowInterval: cfg.HistogramWindowInterval(),
+		settings:                cfg.Settings,
+	})
+	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
+	kvMemoryMonitor.Start(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor, mon.BoundAccount{})
+	stopper.AddCloser(stop.CloserFn(func() {
+		kvMemoryMonitor.Stop(ctx)
+	}))
+
 	storeCfg := kvserver.StoreConfig{
 		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
 		Settings:                st,
@@ -603,6 +622,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ExternalStorage:         externalStorage,
 		ExternalStorageFromURI:  externalStorageFromURI,
 		ProtectedTimestampCache: protectedtsProvider,
+		KVMemoryMonitor:         kvMemoryMonitor,
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
@@ -744,6 +764,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		sqlStatusServer:          sStatus,
 		regionsServer:            sStatus,
 		tenantUsageServer:        tenantUsage,
+		monitorAndMetrics:        sqlMonitorAndMetrics,
 	})
 	if err != nil {
 		return nil, err
@@ -790,6 +811,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
 		gcoord:                 gcoord,
+		kvMemoryMonitor:        kvMemoryMonitor,
 	}
 	return lateBoundServer, err
 }

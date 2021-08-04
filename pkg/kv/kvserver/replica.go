@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -1867,6 +1868,13 @@ func (r *Replica) markSystemConfigGossipFailed() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.failureToGossipSystemConfig = true
+}
+
+// GetResponseMemoryAccount implements the batcheval.EvalContext interface.
+func (r *Replica) GetResponseMemoryAccount() *mon.BoundAccount {
+	// Return an empty account, which places no limits. Places where a real
+	// account is needed use a wrapper for Replica as the EvalContext.
+	return nil
 }
 
 func init() {

@@ -427,6 +427,14 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	monitoring := f.acc.Monitor() != nil
 
 	const tokenFetchAllocation = 1 << 10
+	if !monitoring || f.acc.Used() < tokenFetchAllocation {
+		// In case part of this batch ends up being evaluated locally, we want
+		// that local evaluation to do memory accounting since we have reserved
+		// negligible bytes. Ideally, we would split the memory reserved across
+		// the various servers that DistSender will split this batch into, but we
+		// do not yet have that capability.
+		ba.AdmissionHeader.NoMemoryReservedAtSource = true
+	}
 	if monitoring && f.acc.Used() < tokenFetchAllocation {
 		// Pre-reserve a token fraction of the maximum amount of memory this scan
 		// could return. Most of the time, scans won't use this amount of memory,

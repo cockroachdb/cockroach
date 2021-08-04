@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -820,6 +821,15 @@ func parseClientProvidedSessionParameters(
 		// CockroachDB-specific behavior: if no database is specified,
 		// default to "defaultdb". In PostgreSQL this would be "postgres".
 		args.SessionDefaults["database"] = catalogkeys.DefaultDatabaseName
+	}
+
+	// The client might override the application name,
+	// which would prevent it from being counted in telemetry.
+	// We've decided that this noise in the data is acceptable.
+	if appName, ok := args.SessionDefaults["application_name"]; ok {
+		if appName == catconstants.ReportableAppNamePrefix+catconstants.InternalSQLAppName {
+			telemetry.Inc(sqltelemetry.CockroachShellCounter)
+		}
 	}
 
 	return args, nil
