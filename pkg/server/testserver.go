@@ -256,6 +256,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			if cfg.GoroutineDumpDirName == "" {
 				cfg.GoroutineDumpDirName = filepath.Join(storeSpec.Path, "logs", base.GoroutineDumpDir)
 			}
+			if cfg.InflightTraceDirName == "" {
+				cfg.InflightTraceDirName = filepath.Join(storeSpec.Path, "logs", base.InflightTraceDir)
+			}
 		}
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
