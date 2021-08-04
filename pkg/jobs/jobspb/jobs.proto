@@ -725,7 +725,7 @@ message ExecutionEvent {
 
     // JobEndEvent indicates that this event was created at the end of job
     // execution.
-    END   = 2 [(gogoproto.enumvalue_customname) = "JobEndEvent"];
+    END = 2 [(gogoproto.enumvalue_customname) = "JobEndEvent"];
   }
   // Type of event, start or end of execution when this event is created.
   EventType type = 1;
@@ -740,6 +740,12 @@ message ExecutionEvent {
   // Errors during execution: it is empty for a JobStartEvent. For a JobEndEvent,
   // it consists of errors encountered during the current job execution.
   string execution_error = 5;
+}
+
+message SQLStatsCompactionDetails {
+}
+
+message SQLStatsCompactionProgress {
 }
 
 message Payload {
@@ -786,6 +792,7 @@ message Payload {
     NewSchemaChangeDetails newSchemaChange = 24;
     MigrationDetails migration = 25;
     AutoSpanConfigReconciliationDetails autoSpanConfigReconciliation = 27;
+    SQLStatsCompactionDetails sqlStatsCompaction = 30;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -801,7 +808,7 @@ message Payload {
   // of a job and the errors encountered during job execution.
   repeated ExecutionEvent executionLog = 29;
 
-  // NEXT ID: 30.
+  // NEXT ID: 31.
 }
 
 message Progress {
@@ -825,6 +832,7 @@ message Progress {
     NewSchemaChangeProgress newSchemaChange = 19;
     MigrationProgress migration = 20;
     AutoSpanConfigReconciliationProgress AutoSpanConfigReconciliation = 22;
+    SQLStatsCompactionProgress sqlStatsCompaction = 23;
   }
 
   uint64 trace_id = 21 [(gogoproto.customname) = "TraceID"];
@@ -850,6 +858,7 @@ enum Type {
   NEW_SCHEMA_CHANGE = 11 [(gogoproto.enumvalue_customname) = "TypeNewSchemaChange"];
   MIGRATION = 12 [(gogoproto.enumvalue_customname) = "TypeMigration"];
   AUTO_SPAN_CONFIG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeAutoSpanConfigReconciliation"];
+  SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeSQLStatsCompaction"];
 }
 
 message Job {
