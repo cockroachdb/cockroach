@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,6 +31,16 @@ var TargetPeriodSetting = settings.RegisterDurationSetting(
 	"tenant_cost_control_period",
 	"target duration between token bucket requests from tenants (requires restart)",
 	10*time.Second,
+	settings.PositiveDuration,
+)
+
+var CPUUsageAllowance = settings.RegisterDurationSetting(
+	"tenant_cpu_usage_allowance",
+	"this much CPU usage per second is considered background usage and "+
+		"doesn't contribute to consumption; for example, if it is set to 10ms, "+
+		"that corresponds to 1% of a CPU",
+	10*time.Millisecond,
+	settings.NonNegativeDuration,
 )
 
 // NewTenantSideCostController creates an object which implements the
@@ -75,29 +86,49 @@ type tenantSideCostController struct {
 var _ multitenant.TenantSideCostController = (*tenantSideCostController)(nil)
 
 // Start is part of multitenant.TenantSideCostController.
-func (c *tenantSideCostController) Start(ctx context.Context, stopper *stop.Stopper) error {
+func (c *tenantSideCostController) Start(
+	ctx context.Context, stopper *stop.Stopper, cpuSecsFn multitenant.CPUSecsFn,
+) error {
 	return stopper.RunAsyncTask(ctx, "cost-controller", func(ctx context.Context) {
-		c.mainLoop(ctx, stopper)
+		c.mainLoop(ctx, stopper, cpuSecsFn)
 	})
 }
 
-func (c *tenantSideCostController) mainLoop(ctx context.Context, stopper *stop.Stopper) {
+func (c *tenantSideCostController) currentConsumption() roachpb.TenantConsumption {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.consumption
+}
+
+func (c *tenantSideCostController) mainLoop(
+	ctx context.Context, stopper *stop.Stopper, cpuSecsFn multitenant.CPUSecsFn,
+) {
 	ticker := time.NewTicker(TargetPeriodSetting.Get(&c.settings.SV))
 	defer ticker.Stop()
 
-	var lastConsumption roachpb.TenantConsumption
+	lastTime, lastCPUSecs, lastConsumption := timeutil.Now(), cpuSecsFn(ctx), c.currentConsumption()
 
 	for {
 		select {
 		case <-ticker.C:
+			newTime, newCPUSecs, newConsumption := timeutil.Now(), cpuSecsFn(ctx), c.currentConsumption()
 
-			c.mu.Lock()
-			currConsumption := c.mu.consumption
-			c.mu.Unlock()
-
-			deltaConsumption := currConsumption
+			deltaConsumption := newConsumption
 			deltaConsumption.Sub(&lastConsumption)
-			lastConsumption = currConsumption
+
+			deltaCPU := newCPUSecs - lastCPUSecs
+
+			// Subtract any allowance that we consider free background usage.
+			if deltaTime := newTime.Sub(lastTime); deltaTime > 0 {
+				deltaCPU -= CPUUsageAllowance.Get(&c.settings.SV).Seconds() * deltaTime.Seconds()
+			}
+
+			if deltaCPU < 0 {
+				deltaCPU = 0
+			}
+			deltaConsumption.SQLPodsCPUSeconds = deltaCPU
+
+			lastTime, lastCPUSecs, lastConsumption = newTime, newCPUSecs, newConsumption
 
 			req := roachpb.TokenBucketRequest{
 				TenantID: c.tenantID.ToUint64(),

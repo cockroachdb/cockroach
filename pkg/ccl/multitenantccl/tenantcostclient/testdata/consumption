@@ -37,6 +37,17 @@ Reads:  1 requests (1024000 bytes)
 Writes:  1 requests (1024 bytes)
 SQL Pods CPU seconds:  0.00
 
+cpu
+1s
+----
+
+usage
+----
+RU:  11.86
+Reads:  1 requests (1024000 bytes)
+Writes:  1 requests (1024 bytes)
+SQL Pods CPU seconds:  1.00
+
 write-request bytes=4096
 ----
 
@@ -54,4 +65,15 @@ usage
 RU:  18.31
 Reads:  2 requests (1089536 bytes)
 Writes:  3 requests (9216 bytes)
-SQL Pods CPU seconds:  0.00
+SQL Pods CPU seconds:  1.00
+
+cpu
+1h
+----
+
+usage
+----
+RU:  18.31
+Reads:  2 requests (1089536 bytes)
+Writes:  3 requests (9216 bytes)
+SQL Pods CPU seconds:  3601.00
