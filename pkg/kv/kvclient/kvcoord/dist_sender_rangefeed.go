@@ -189,7 +189,7 @@ func (ds *DistSender) partialRangeFeed(
 				case roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 					roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
 					roachpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER:
-					// Evict the decriptor from the cache.
+					// Evict the descriptor from the cache.
 					rangeInfo.token.Evict(ctx)
 					return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
 				default:
@@ -204,7 +204,7 @@ func (ds *DistSender) partialRangeFeed(
 }
 
 // singleRangeFeed gathers and rearranges the replicas, and makes a RangeFeed
-// RPC call. Results will be send on the provided channel. Returns the timestamp
+// RPC call. Results will be sent on the provided channel. Returns the timestamp
 // of the maximum rangefeed checkpoint seen, which can be used to re-establish
 // the rangefeed with a larger starting timestamp, reflecting the fact that all
 // values up to the last checkpoint have already been observed. Returns the
