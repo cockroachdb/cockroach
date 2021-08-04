@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -414,11 +415,11 @@ func internalExtendedEvalCtx(
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
-	var sqlStatsResetter tree.SQLStatsResetter
+	var sqlStatsController tree.SQLStatsController
 	if execCfg.InternalExecutor != nil {
-		sqlStatsResetter = execCfg.InternalExecutor.s
 		if execCfg.InternalExecutor.s != nil {
 			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
+			sqlStatsController = execCfg.InternalExecutor.s.sqlStatsController
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
 			// index usage stats collector. The sql.Server in the ExecutorConfig
@@ -426,24 +427,25 @@ func internalExtendedEvalCtx(
 			indexUsageStats = idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 				Setting: execCfg.Settings,
 			})
+			sqlStatsController = &sslocal.Controller{}
 		}
 	}
 
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Txn:              txn,
-			SessionData:      sd,
-			TxnReadOnly:      false,
-			TxnImplicit:      true,
-			Settings:         execCfg.Settings,
-			Codec:            execCfg.Codec,
-			Context:          ctx,
-			Mon:              plannerMon,
-			TestingKnobs:     evalContextTestingKnobs,
-			StmtTimestamp:    stmtTimestamp,
-			TxnTimestamp:     txnTimestamp,
-			InternalExecutor: execCfg.InternalExecutor,
-			SQLStatsResetter: sqlStatsResetter,
+			Txn:                txn,
+			SessionData:        sd,
+			TxnReadOnly:        false,
+			TxnImplicit:        true,
+			Settings:           execCfg.Settings,
+			Codec:              execCfg.Codec,
+			Context:            ctx,
+			Mon:                plannerMon,
+			TestingKnobs:       evalContextTestingKnobs,
+			StmtTimestamp:      stmtTimestamp,
+			TxnTimestamp:       txnTimestamp,
+			InternalExecutor:   execCfg.InternalExecutor,
+			SQLStatsController: sqlStatsController,
 		},
 		SessionMutator:    dataMutator,
 		VirtualSchemas:    execCfg.VirtualSchemas,

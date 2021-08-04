@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -426,15 +425,8 @@ func TestPebbleDiskSlowEmit(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	MaxSyncDurationFatalOnExceeded.Override(ctx, &settings.SV, false)
-	p := newPebbleInMem(
-		context.Background(),
-		roachpb.Attributes{},
-		1<<20,   /* cacheSize */
-		512<<20, /* storeSize */
-		vfs.NewMem(),
-		"",
-		settings,
-	)
+	p, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), Settings(settings))
+	require.NoError(t, err)
 	defer p.Close()
 
 	require.Equal(t, uint64(0), p.diskSlowCount)

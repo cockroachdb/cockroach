@@ -906,13 +906,14 @@ func SendEmptySnapshot(
 	to roachpb.ReplicaDescriptor,
 ) error {
 	// Create an engine to use as a buffer for the empty snapshot.
-	eng := storage.NewInMem(
+	eng, err := storage.Open(
 		context.Background(),
-		roachpb.Attributes{},
-		1<<20,   /* cacheSize 1MiB */
-		512<<20, /* storeSize 512 MiB */
-		nil,     /* settings */
-	)
+		storage.InMemory(),
+		storage.CacheSize(1<<20 /* 1 MiB */),
+		storage.MaxSize(512<<20 /* 512 MiB */))
+	if err != nil {
+		return err
+	}
 	defer eng.Close()
 
 	var ms enginepb.MVCCStats
@@ -927,7 +928,7 @@ func SendEmptySnapshot(
 	if st.Version.IsActive(ctx, clusterversion.ReplicaVersions) {
 		replicaVersion = st.Version.ActiveVersionOrEmpty(ctx).Version
 	}
-	ms, err := stateloader.WriteInitialReplicaState(
+	ms, err = stateloader.WriteInitialReplicaState(
 		ctx,
 		eng,
 		ms,

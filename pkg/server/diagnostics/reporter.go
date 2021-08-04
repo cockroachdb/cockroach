@@ -159,7 +159,7 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 			"error: %v", res.Status, b, err)
 		return
 	}
-	r.SQLServer.ResetReportedStats(ctx)
+	r.SQLServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 }
 
 // CreateReport generates a new diagnostics report containing information about

@@ -119,7 +119,10 @@ func TestMVCCHistories(t *testing.T) {
 		}
 		settings := makeSettingsForSeparatedIntents(oldClusterVersion, enabledSeparated)
 		// We start from a clean slate in every test file.
-		engine := createTestPebbleEngineWithSettings(settings)
+		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), Settings(settings))
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer engine.Close()
 
 		reportDataEntries := func(buf *bytes.Buffer) error {

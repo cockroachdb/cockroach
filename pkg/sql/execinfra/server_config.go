@@ -141,9 +141,9 @@ type ServerConfig struct {
 	// gateway.
 	RangeCache *rangecache.RangeCache
 
-	// SQLStatsResetter is an interface used to reset SQL stats without the need to
+	// SQLStatsController is an interface used to reset SQL stats without the need to
 	// introduce dependency on the sql package.
-	SQLStatsResetter tree.SQLStatsResetter
+	SQLStatsController tree.SQLStatsController
 
 	// SQLSQLResponseAdmissionQ is the admission queue to use for
 	// SQLSQLResponseWork.

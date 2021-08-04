@@ -65,8 +65,8 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
 
 	// Flush stats at the beginning of the test.
-	sqlServer.ResetSQLStats(ctx)
-	sqlServer.ResetReportedStats(ctx)
+	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Run some queries mixed with diagnostics, and ensure that the statistics
 	// are unnaffected by the calls to report diagnostics.
@@ -167,8 +167,8 @@ func TestSQLStatCollection(t *testing.T) {
 	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
 
 	// Flush stats at the beginning of the test.
-	sqlServer.ResetSQLStats(ctx)
-	sqlServer.ResetReportedStats(ctx)
+	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Execute some queries against the sqlDB to build up some stats.
 	if _, err := sqlDB.Exec(`
@@ -202,7 +202,7 @@ func TestSQLStatCollection(t *testing.T) {
 
 	// Reset the SQL statistics, which will dump stats into the
 	// reported statistics pool.
-	sqlServer.ResetSQLStats(ctx)
+	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Query the reported statistics.
 	stats, err = sqlServer.GetScrubbedReportingStats(ctx)
@@ -248,7 +248,7 @@ func TestSQLStatCollection(t *testing.T) {
 	}
 
 	// Flush the SQL stats again.
-	sqlServer.ResetSQLStats(ctx)
+	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Find our statement stat from the reported stats pool.
 	stats, err = sqlServer.GetScrubbedReportingStats(ctx)

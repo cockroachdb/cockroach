@@ -30,9 +30,11 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Force separated intents for writing.
-	settings := makeSettingsForSeparatedIntents(
-		false /* oldClusterVersion */, true /* enabled */)
-	eng := createTestPebbleEngineWithSettings(settings)
+	eng, err := Open(context.Background(), InMemory(),
+		CacheSize(1<<20),
+		Settings(makeSettingsForSeparatedIntents(
+			false /* oldClusterVersion */, true /* enabled */)))
+	require.NoError(t, err)
 	defer eng.Close()
 
 	keys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
