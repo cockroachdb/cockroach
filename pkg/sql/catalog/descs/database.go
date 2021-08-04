@@ -93,6 +93,20 @@ func (tc *Collection) GetImmutableDatabaseByID(
 	return tc.getDatabaseByID(ctx, txn, dbID, flags)
 }
 
+// GetMutableDatabaseByID returns a mutable database descriptor with properties
+// according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) GetMutableDatabaseByID(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
+) (bool, *dbdesc.Mutable, error) {
+	flags.RequireMutable = true
+	found, desc, err := tc.getDatabaseByID(ctx, txn, dbID, flags)
+	if !found || desc == nil || err != nil {
+		return found, nil, err
+	}
+
+	return found, desc.(*dbdesc.Mutable), nil
+}
+
 func (tc *Collection) getDatabaseByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
 ) (bool, catalog.DatabaseDescriptor, error) {
