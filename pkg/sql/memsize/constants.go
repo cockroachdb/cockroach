@@ -34,6 +34,9 @@ const (
 	// Int32 is the in-memory size of an int32 in bytes.
 	Int32 = int64(unsafe.Sizeof(int32(0)))
 
+	// Uint32 is the in-memory size of a uint32 in bytes.
+	Uint32 = int64(unsafe.Sizeof(uint32(0)))
+
 	// Int64 is the in-memory size of an int64 in bytes.
 	Int64 = int64(unsafe.Sizeof(int64(0)))
 

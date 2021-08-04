@@ -116,11 +116,11 @@ type minBoolOrderedAgg struct {
 	col coldata.Bools
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg bool
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minBoolOrderedAgg{}
@@ -152,13 +152,13 @@ func (a *minBoolOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -166,10 +166,9 @@ func (a *minBoolOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -192,6 +191,7 @@ func (a *minBoolOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -202,13 +202,13 @@ func (a *minBoolOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -216,10 +216,9 @@ func (a *minBoolOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -242,6 +241,7 @@ func (a *minBoolOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -254,13 +254,13 @@ func (a *minBoolOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -268,10 +268,9 @@ func (a *minBoolOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -294,6 +293,7 @@ func (a *minBoolOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -303,13 +303,13 @@ func (a *minBoolOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -317,10 +317,9 @@ func (a *minBoolOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -343,6 +342,7 @@ func (a *minBoolOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -363,7 +363,7 @@ func (a *minBoolOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -372,7 +372,7 @@ func (a *minBoolOrderedAgg) Flush(outputIdx int) {
 
 func (a *minBoolOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minBoolOrderedAggAlloc struct {
@@ -402,11 +402,11 @@ type minBytesOrderedAgg struct {
 	col *coldata.Bytes
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg []byte
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minBytesOrderedAgg{}
@@ -438,13 +438,13 @@ func (a *minBytesOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -452,10 +452,9 @@ func (a *minBytesOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -470,6 +469,7 @@ func (a *minBytesOrderedAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -480,13 +480,13 @@ func (a *minBytesOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -494,10 +494,9 @@ func (a *minBytesOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -512,6 +511,7 @@ func (a *minBytesOrderedAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -524,13 +524,13 @@ func (a *minBytesOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -538,10 +538,9 @@ func (a *minBytesOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -556,6 +555,7 @@ func (a *minBytesOrderedAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -565,13 +565,13 @@ func (a *minBytesOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -579,10 +579,9 @@ func (a *minBytesOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -597,6 +596,7 @@ func (a *minBytesOrderedAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -617,7 +617,7 @@ func (a *minBytesOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -630,7 +630,11 @@ func (a *minBytesOrderedAgg) Flush(outputIdx int) {
 
 func (a *minBytesOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	oldCurAggSize := len(a.curAgg)
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type minBytesOrderedAggAlloc struct {
@@ -660,11 +664,11 @@ type minDecimalOrderedAgg struct {
 	col coldata.Decimals
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minDecimalOrderedAgg{}
@@ -696,13 +700,13 @@ func (a *minDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -710,10 +714,9 @@ func (a *minDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -728,6 +731,7 @@ func (a *minDecimalOrderedAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -738,13 +742,13 @@ func (a *minDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -752,10 +756,9 @@ func (a *minDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -770,6 +773,7 @@ func (a *minDecimalOrderedAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -782,13 +786,13 @@ func (a *minDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -796,10 +800,9 @@ func (a *minDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -814,6 +817,7 @@ func (a *minDecimalOrderedAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -823,13 +827,13 @@ func (a *minDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -837,10 +841,9 @@ func (a *minDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -855,6 +858,7 @@ func (a *minDecimalOrderedAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -875,7 +879,7 @@ func (a *minDecimalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -884,7 +888,7 @@ func (a *minDecimalOrderedAgg) Flush(outputIdx int) {
 
 func (a *minDecimalOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minDecimalOrderedAggAlloc struct {
@@ -914,11 +918,11 @@ type minInt16OrderedAgg struct {
 	col coldata.Int16s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int16
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minInt16OrderedAgg{}
@@ -950,13 +954,13 @@ func (a *minInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -964,10 +968,9 @@ func (a *minInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -993,6 +996,7 @@ func (a *minInt16OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1003,13 +1007,13 @@ func (a *minInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1017,10 +1021,9 @@ func (a *minInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1046,6 +1049,7 @@ func (a *minInt16OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1058,13 +1062,13 @@ func (a *minInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1072,10 +1076,9 @@ func (a *minInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1101,6 +1104,7 @@ func (a *minInt16OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1110,13 +1114,13 @@ func (a *minInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1124,10 +1128,9 @@ func (a *minInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1153,6 +1156,7 @@ func (a *minInt16OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1173,7 +1177,7 @@ func (a *minInt16OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -1182,7 +1186,7 @@ func (a *minInt16OrderedAgg) Flush(outputIdx int) {
 
 func (a *minInt16OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minInt16OrderedAggAlloc struct {
@@ -1212,11 +1216,11 @@ type minInt32OrderedAgg struct {
 	col coldata.Int32s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int32
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minInt32OrderedAgg{}
@@ -1248,13 +1252,13 @@ func (a *minInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1262,10 +1266,9 @@ func (a *minInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1291,6 +1294,7 @@ func (a *minInt32OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1301,13 +1305,13 @@ func (a *minInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1315,10 +1319,9 @@ func (a *minInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1344,6 +1347,7 @@ func (a *minInt32OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1356,13 +1360,13 @@ func (a *minInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1370,10 +1374,9 @@ func (a *minInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1399,6 +1402,7 @@ func (a *minInt32OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1408,13 +1412,13 @@ func (a *minInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1422,10 +1426,9 @@ func (a *minInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1451,6 +1454,7 @@ func (a *minInt32OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1471,7 +1475,7 @@ func (a *minInt32OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -1480,7 +1484,7 @@ func (a *minInt32OrderedAgg) Flush(outputIdx int) {
 
 func (a *minInt32OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minInt32OrderedAggAlloc struct {
@@ -1510,11 +1514,11 @@ type minInt64OrderedAgg struct {
 	col coldata.Int64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minInt64OrderedAgg{}
@@ -1546,13 +1550,13 @@ func (a *minInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1560,10 +1564,9 @@ func (a *minInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1589,6 +1592,7 @@ func (a *minInt64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1599,13 +1603,13 @@ func (a *minInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1613,10 +1617,9 @@ func (a *minInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1642,6 +1645,7 @@ func (a *minInt64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1654,13 +1658,13 @@ func (a *minInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1668,10 +1672,9 @@ func (a *minInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1697,6 +1700,7 @@ func (a *minInt64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1706,13 +1710,13 @@ func (a *minInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1720,10 +1724,9 @@ func (a *minInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1749,6 +1752,7 @@ func (a *minInt64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1769,7 +1773,7 @@ func (a *minInt64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -1778,7 +1782,7 @@ func (a *minInt64OrderedAgg) Flush(outputIdx int) {
 
 func (a *minInt64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minInt64OrderedAggAlloc struct {
@@ -1808,11 +1812,11 @@ type minFloat64OrderedAgg struct {
 	col coldata.Float64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg float64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minFloat64OrderedAgg{}
@@ -1844,13 +1848,13 @@ func (a *minFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1858,10 +1862,9 @@ func (a *minFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1895,6 +1898,7 @@ func (a *minFloat64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1905,13 +1909,13 @@ func (a *minFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1919,10 +1923,9 @@ func (a *minFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1956,6 +1959,7 @@ func (a *minFloat64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1968,13 +1972,13 @@ func (a *minFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1982,10 +1986,9 @@ func (a *minFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2019,6 +2022,7 @@ func (a *minFloat64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2028,13 +2032,13 @@ func (a *minFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2042,10 +2046,9 @@ func (a *minFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2079,6 +2082,7 @@ func (a *minFloat64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2099,7 +2103,7 @@ func (a *minFloat64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -2108,7 +2112,7 @@ func (a *minFloat64OrderedAgg) Flush(outputIdx int) {
 
 func (a *minFloat64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minFloat64OrderedAggAlloc struct {
@@ -2138,11 +2142,11 @@ type minTimestampOrderedAgg struct {
 	col coldata.Times
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg time.Time
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minTimestampOrderedAgg{}
@@ -2174,13 +2178,13 @@ func (a *minTimestampOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2188,10 +2192,9 @@ func (a *minTimestampOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2213,6 +2216,7 @@ func (a *minTimestampOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2223,13 +2227,13 @@ func (a *minTimestampOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2237,10 +2241,9 @@ func (a *minTimestampOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2262,6 +2265,7 @@ func (a *minTimestampOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2274,13 +2278,13 @@ func (a *minTimestampOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2288,10 +2292,9 @@ func (a *minTimestampOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2313,6 +2316,7 @@ func (a *minTimestampOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2322,13 +2326,13 @@ func (a *minTimestampOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2336,10 +2340,9 @@ func (a *minTimestampOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2361,6 +2364,7 @@ func (a *minTimestampOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2381,7 +2385,7 @@ func (a *minTimestampOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -2390,7 +2394,7 @@ func (a *minTimestampOrderedAgg) Flush(outputIdx int) {
 
 func (a *minTimestampOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minTimestampOrderedAggAlloc struct {
@@ -2420,11 +2424,11 @@ type minIntervalOrderedAgg struct {
 	col coldata.Durations
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg duration.Duration
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minIntervalOrderedAgg{}
@@ -2456,13 +2460,13 @@ func (a *minIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2470,10 +2474,9 @@ func (a *minIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2488,6 +2491,7 @@ func (a *minIntervalOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2498,13 +2502,13 @@ func (a *minIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2512,10 +2516,9 @@ func (a *minIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2530,6 +2533,7 @@ func (a *minIntervalOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2542,13 +2546,13 @@ func (a *minIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2556,10 +2560,9 @@ func (a *minIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2574,6 +2577,7 @@ func (a *minIntervalOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2583,13 +2587,13 @@ func (a *minIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2597,10 +2601,9 @@ func (a *minIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2615,6 +2618,7 @@ func (a *minIntervalOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2635,7 +2639,7 @@ func (a *minIntervalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -2644,7 +2648,7 @@ func (a *minIntervalOrderedAgg) Flush(outputIdx int) {
 
 func (a *minIntervalOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minIntervalOrderedAggAlloc struct {
@@ -2674,11 +2678,11 @@ type minJSONOrderedAgg struct {
 	col *coldata.JSONs
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg json.JSON
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minJSONOrderedAgg{}
@@ -2713,13 +2717,13 @@ func (a *minJSONOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2727,7 +2731,7 @@ func (a *minJSONOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -2741,7 +2745,6 @@ func (a *minJSONOrderedAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2773,6 +2776,7 @@ func (a *minJSONOrderedAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2783,13 +2787,13 @@ func (a *minJSONOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2797,7 +2801,7 @@ func (a *minJSONOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -2811,7 +2815,6 @@ func (a *minJSONOrderedAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2843,6 +2846,7 @@ func (a *minJSONOrderedAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2855,13 +2859,13 @@ func (a *minJSONOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2869,7 +2873,7 @@ func (a *minJSONOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -2883,7 +2887,6 @@ func (a *minJSONOrderedAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2915,6 +2918,7 @@ func (a *minJSONOrderedAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2924,13 +2928,13 @@ func (a *minJSONOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -2938,7 +2942,7 @@ func (a *minJSONOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -2952,7 +2956,6 @@ func (a *minJSONOrderedAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2984,6 +2987,7 @@ func (a *minJSONOrderedAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -3007,7 +3011,7 @@ func (a *minJSONOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -3023,7 +3027,14 @@ func (a *minJSONOrderedAgg) Flush(outputIdx int) {
 
 func (a *minJSONOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type minJSONOrderedAggAlloc struct {
@@ -3053,11 +3064,11 @@ type minDatumOrderedAgg struct {
 	col coldata.DatumVec
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg interface{}
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minDatumOrderedAgg{}
@@ -3093,13 +3104,13 @@ func (a *minDatumOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3107,10 +3118,9 @@ func (a *minDatumOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3127,6 +3137,7 @@ func (a *minDatumOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -3137,13 +3148,13 @@ func (a *minDatumOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3151,10 +3162,9 @@ func (a *minDatumOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3171,6 +3181,7 @@ func (a *minDatumOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -3183,13 +3194,13 @@ func (a *minDatumOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3197,10 +3208,9 @@ func (a *minDatumOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3217,6 +3227,7 @@ func (a *minDatumOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -3226,13 +3237,13 @@ func (a *minDatumOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3240,10 +3251,9 @@ func (a *minDatumOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3260,6 +3270,7 @@ func (a *minDatumOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -3284,7 +3295,7 @@ func (a *minDatumOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -3301,7 +3312,15 @@ func (a *minDatumOrderedAgg) Flush(outputIdx int) {
 
 func (a *minDatumOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
+	}
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type minDatumOrderedAggAlloc struct {
@@ -3400,11 +3419,11 @@ type maxBoolOrderedAgg struct {
 	col coldata.Bools
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg bool
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxBoolOrderedAgg{}
@@ -3436,13 +3455,13 @@ func (a *maxBoolOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3450,10 +3469,9 @@ func (a *maxBoolOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3476,6 +3494,7 @@ func (a *maxBoolOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -3486,13 +3505,13 @@ func (a *maxBoolOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3500,10 +3519,9 @@ func (a *maxBoolOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3526,6 +3544,7 @@ func (a *maxBoolOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -3538,13 +3557,13 @@ func (a *maxBoolOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3552,10 +3571,9 @@ func (a *maxBoolOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3578,6 +3596,7 @@ func (a *maxBoolOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -3587,13 +3606,13 @@ func (a *maxBoolOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3601,10 +3620,9 @@ func (a *maxBoolOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3627,6 +3645,7 @@ func (a *maxBoolOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -3647,7 +3666,7 @@ func (a *maxBoolOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -3656,7 +3675,7 @@ func (a *maxBoolOrderedAgg) Flush(outputIdx int) {
 
 func (a *maxBoolOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxBoolOrderedAggAlloc struct {
@@ -3686,11 +3705,11 @@ type maxBytesOrderedAgg struct {
 	col *coldata.Bytes
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg []byte
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxBytesOrderedAgg{}
@@ -3722,13 +3741,13 @@ func (a *maxBytesOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3736,10 +3755,9 @@ func (a *maxBytesOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3754,6 +3772,7 @@ func (a *maxBytesOrderedAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -3764,13 +3783,13 @@ func (a *maxBytesOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3778,10 +3797,9 @@ func (a *maxBytesOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3796,6 +3814,7 @@ func (a *maxBytesOrderedAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -3808,13 +3827,13 @@ func (a *maxBytesOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3822,10 +3841,9 @@ func (a *maxBytesOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3840,6 +3858,7 @@ func (a *maxBytesOrderedAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -3849,13 +3868,13 @@ func (a *maxBytesOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3863,10 +3882,9 @@ func (a *maxBytesOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3881,6 +3899,7 @@ func (a *maxBytesOrderedAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -3901,7 +3920,7 @@ func (a *maxBytesOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -3914,7 +3933,11 @@ func (a *maxBytesOrderedAgg) Flush(outputIdx int) {
 
 func (a *maxBytesOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	oldCurAggSize := len(a.curAgg)
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type maxBytesOrderedAggAlloc struct {
@@ -3944,11 +3967,11 @@ type maxDecimalOrderedAgg struct {
 	col coldata.Decimals
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxDecimalOrderedAgg{}
@@ -3980,13 +4003,13 @@ func (a *maxDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -3994,10 +4017,9 @@ func (a *maxDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4012,6 +4034,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -4022,13 +4045,13 @@ func (a *maxDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4036,10 +4059,9 @@ func (a *maxDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4054,6 +4076,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -4066,13 +4089,13 @@ func (a *maxDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4080,10 +4103,9 @@ func (a *maxDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4098,6 +4120,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -4107,13 +4130,13 @@ func (a *maxDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4121,10 +4144,9 @@ func (a *maxDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4139,6 +4161,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -4159,7 +4182,7 @@ func (a *maxDecimalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -4168,7 +4191,7 @@ func (a *maxDecimalOrderedAgg) Flush(outputIdx int) {
 
 func (a *maxDecimalOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxDecimalOrderedAggAlloc struct {
@@ -4198,11 +4221,11 @@ type maxInt16OrderedAgg struct {
 	col coldata.Int16s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int16
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxInt16OrderedAgg{}
@@ -4234,13 +4257,13 @@ func (a *maxInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4248,10 +4271,9 @@ func (a *maxInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4277,6 +4299,7 @@ func (a *maxInt16OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -4287,13 +4310,13 @@ func (a *maxInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4301,10 +4324,9 @@ func (a *maxInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4330,6 +4352,7 @@ func (a *maxInt16OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -4342,13 +4365,13 @@ func (a *maxInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4356,10 +4379,9 @@ func (a *maxInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4385,6 +4407,7 @@ func (a *maxInt16OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -4394,13 +4417,13 @@ func (a *maxInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4408,10 +4431,9 @@ func (a *maxInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4437,6 +4459,7 @@ func (a *maxInt16OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -4457,7 +4480,7 @@ func (a *maxInt16OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -4466,7 +4489,7 @@ func (a *maxInt16OrderedAgg) Flush(outputIdx int) {
 
 func (a *maxInt16OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxInt16OrderedAggAlloc struct {
@@ -4496,11 +4519,11 @@ type maxInt32OrderedAgg struct {
 	col coldata.Int32s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int32
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxInt32OrderedAgg{}
@@ -4532,13 +4555,13 @@ func (a *maxInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4546,10 +4569,9 @@ func (a *maxInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4575,6 +4597,7 @@ func (a *maxInt32OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -4585,13 +4608,13 @@ func (a *maxInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4599,10 +4622,9 @@ func (a *maxInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4628,6 +4650,7 @@ func (a *maxInt32OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -4640,13 +4663,13 @@ func (a *maxInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4654,10 +4677,9 @@ func (a *maxInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4683,6 +4705,7 @@ func (a *maxInt32OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -4692,13 +4715,13 @@ func (a *maxInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4706,10 +4729,9 @@ func (a *maxInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4735,6 +4757,7 @@ func (a *maxInt32OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -4755,7 +4778,7 @@ func (a *maxInt32OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -4764,7 +4787,7 @@ func (a *maxInt32OrderedAgg) Flush(outputIdx int) {
 
 func (a *maxInt32OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxInt32OrderedAggAlloc struct {
@@ -4794,11 +4817,11 @@ type maxInt64OrderedAgg struct {
 	col coldata.Int64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxInt64OrderedAgg{}
@@ -4830,13 +4853,13 @@ func (a *maxInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4844,10 +4867,9 @@ func (a *maxInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4873,6 +4895,7 @@ func (a *maxInt64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -4883,13 +4906,13 @@ func (a *maxInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4897,10 +4920,9 @@ func (a *maxInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4926,6 +4948,7 @@ func (a *maxInt64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -4938,13 +4961,13 @@ func (a *maxInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -4952,10 +4975,9 @@ func (a *maxInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -4981,6 +5003,7 @@ func (a *maxInt64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -4990,13 +5013,13 @@ func (a *maxInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5004,10 +5027,9 @@ func (a *maxInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5033,6 +5055,7 @@ func (a *maxInt64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -5053,7 +5076,7 @@ func (a *maxInt64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -5062,7 +5085,7 @@ func (a *maxInt64OrderedAgg) Flush(outputIdx int) {
 
 func (a *maxInt64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxInt64OrderedAggAlloc struct {
@@ -5092,11 +5115,11 @@ type maxFloat64OrderedAgg struct {
 	col coldata.Float64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg float64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxFloat64OrderedAgg{}
@@ -5128,13 +5151,13 @@ func (a *maxFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5142,10 +5165,9 @@ func (a *maxFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5179,6 +5201,7 @@ func (a *maxFloat64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -5189,13 +5212,13 @@ func (a *maxFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5203,10 +5226,9 @@ func (a *maxFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5240,6 +5262,7 @@ func (a *maxFloat64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -5252,13 +5275,13 @@ func (a *maxFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5266,10 +5289,9 @@ func (a *maxFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5303,6 +5325,7 @@ func (a *maxFloat64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -5312,13 +5335,13 @@ func (a *maxFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5326,10 +5349,9 @@ func (a *maxFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5363,6 +5385,7 @@ func (a *maxFloat64OrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -5383,7 +5406,7 @@ func (a *maxFloat64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -5392,7 +5415,7 @@ func (a *maxFloat64OrderedAgg) Flush(outputIdx int) {
 
 func (a *maxFloat64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxFloat64OrderedAggAlloc struct {
@@ -5422,11 +5445,11 @@ type maxTimestampOrderedAgg struct {
 	col coldata.Times
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg time.Time
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxTimestampOrderedAgg{}
@@ -5458,13 +5481,13 @@ func (a *maxTimestampOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5472,10 +5495,9 @@ func (a *maxTimestampOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5497,6 +5519,7 @@ func (a *maxTimestampOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -5507,13 +5530,13 @@ func (a *maxTimestampOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5521,10 +5544,9 @@ func (a *maxTimestampOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5546,6 +5568,7 @@ func (a *maxTimestampOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -5558,13 +5581,13 @@ func (a *maxTimestampOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5572,10 +5595,9 @@ func (a *maxTimestampOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5597,6 +5619,7 @@ func (a *maxTimestampOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -5606,13 +5629,13 @@ func (a *maxTimestampOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5620,10 +5643,9 @@ func (a *maxTimestampOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5645,6 +5667,7 @@ func (a *maxTimestampOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -5665,7 +5688,7 @@ func (a *maxTimestampOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -5674,7 +5697,7 @@ func (a *maxTimestampOrderedAgg) Flush(outputIdx int) {
 
 func (a *maxTimestampOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxTimestampOrderedAggAlloc struct {
@@ -5704,11 +5727,11 @@ type maxIntervalOrderedAgg struct {
 	col coldata.Durations
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg duration.Duration
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxIntervalOrderedAgg{}
@@ -5740,13 +5763,13 @@ func (a *maxIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5754,10 +5777,9 @@ func (a *maxIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5772,6 +5794,7 @@ func (a *maxIntervalOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -5782,13 +5805,13 @@ func (a *maxIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5796,10 +5819,9 @@ func (a *maxIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5814,6 +5836,7 @@ func (a *maxIntervalOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -5826,13 +5849,13 @@ func (a *maxIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5840,10 +5863,9 @@ func (a *maxIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5858,6 +5880,7 @@ func (a *maxIntervalOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -5867,13 +5890,13 @@ func (a *maxIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -5881,10 +5904,9 @@ func (a *maxIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -5899,6 +5921,7 @@ func (a *maxIntervalOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -5919,7 +5942,7 @@ func (a *maxIntervalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -5928,7 +5951,7 @@ func (a *maxIntervalOrderedAgg) Flush(outputIdx int) {
 
 func (a *maxIntervalOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxIntervalOrderedAggAlloc struct {
@@ -5958,11 +5981,11 @@ type maxJSONOrderedAgg struct {
 	col *coldata.JSONs
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg json.JSON
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxJSONOrderedAgg{}
@@ -5997,13 +6020,13 @@ func (a *maxJSONOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -6011,7 +6034,7 @@ func (a *maxJSONOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -6025,7 +6048,6 @@ func (a *maxJSONOrderedAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -6057,6 +6079,7 @@ func (a *maxJSONOrderedAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -6067,13 +6090,13 @@ func (a *maxJSONOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -6081,7 +6104,7 @@ func (a *maxJSONOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -6095,7 +6118,6 @@ func (a *maxJSONOrderedAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -6127,6 +6149,7 @@ func (a *maxJSONOrderedAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -6139,13 +6162,13 @@ func (a *maxJSONOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -6153,7 +6176,7 @@ func (a *maxJSONOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -6167,7 +6190,6 @@ func (a *maxJSONOrderedAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -6199,6 +6221,7 @@ func (a *maxJSONOrderedAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -6208,13 +6231,13 @@ func (a *maxJSONOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -6222,7 +6245,7 @@ func (a *maxJSONOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -6236,7 +6259,6 @@ func (a *maxJSONOrderedAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -6268,6 +6290,7 @@ func (a *maxJSONOrderedAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -6291,7 +6314,7 @@ func (a *maxJSONOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -6307,7 +6330,14 @@ func (a *maxJSONOrderedAgg) Flush(outputIdx int) {
 
 func (a *maxJSONOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type maxJSONOrderedAggAlloc struct {
@@ -6337,11 +6367,11 @@ type maxDatumOrderedAgg struct {
 	col coldata.DatumVec
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg interface{}
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxDatumOrderedAgg{}
@@ -6377,13 +6407,13 @@ func (a *maxDatumOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -6391,10 +6421,9 @@ func (a *maxDatumOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -6411,6 +6440,7 @@ func (a *maxDatumOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -6421,13 +6451,13 @@ func (a *maxDatumOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -6435,10 +6465,9 @@ func (a *maxDatumOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -6455,6 +6484,7 @@ func (a *maxDatumOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -6467,13 +6497,13 @@ func (a *maxDatumOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -6481,10 +6511,9 @@ func (a *maxDatumOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -6501,6 +6530,7 @@ func (a *maxDatumOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -6510,13 +6540,13 @@ func (a *maxDatumOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -6524,10 +6554,9 @@ func (a *maxDatumOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -6544,6 +6573,7 @@ func (a *maxDatumOrderedAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -6568,7 +6598,7 @@ func (a *maxDatumOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -6585,7 +6615,15 @@ func (a *maxDatumOrderedAgg) Flush(outputIdx int) {
 
 func (a *maxDatumOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
+	}
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type maxDatumOrderedAggAlloc struct {

@@ -94,6 +94,7 @@ targets = [
     ("lag.eg.go", "lead_lag_tmpl.go"),
     ("last_value.eg.go", "first_last_nth_value_tmpl.go"),
     ("lead.eg.go", "lead_lag_tmpl.go"),
+    ("min_max_removable_agg.eg.go", "min_max_removable_agg_tmpl.go"),
     ("nth_value.eg.go", "first_last_nth_value_tmpl.go"),
     ("ntile.eg.go", "ntile_tmpl.go"),
     ("range_offset_handler.eg.go", "range_offset_handler_tmpl.go"),
