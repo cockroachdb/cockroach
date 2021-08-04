@@ -25,19 +25,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/gorhill/cronexpr"
@@ -101,6 +107,15 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 		dirCleanupFn()
 		s.Stopper().Stop(context.Background())
 	}
+}
+
+func (h *testHelper) loadSchedule(t *testing.T, scheduleID int64) *jobs.ScheduledJob {
+	t.Helper()
+
+	loaded, err := jobs.LoadScheduledJob(
+		context.Background(), h.env, scheduleID, h.cfg.InternalExecutor, nil)
+	require.NoError(t, err)
+	return loaded
 }
 
 func (h *testHelper) clearSchedules(t *testing.T) {
@@ -617,62 +632,66 @@ INSERT INTO t1 values (-1), (10), (-100);
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			destination := "nodelocal://0/backup/" + tc.name
-			schedules, err := th.createBackupSchedule(t, tc.schedule, destination)
-			require.NoError(t, err)
-			require.LessOrEqual(t, 1, len(schedules))
-
-			// Either 1 or two schedules will be created.
-			// One of them (incremental) must be paused.
-			var full, inc *jobs.ScheduledJob
-			if len(schedules) == 1 {
-				full = schedules[0]
-			} else {
-				require.Equal(t, 2, len(schedules))
-				full, inc = schedules[0], schedules[1]
-				if full.IsPaused() {
-					full, inc = inc, full // Swap: inc should be paused.
-				}
-				require.True(t, inc.IsPaused())
-				require.False(t, full.IsPaused())
-
-				// The full should list incremental as a schedule to unpause.
-				args := &ScheduledBackupExecutionArgs{}
-				require.NoError(t, pbtypes.UnmarshalAny(full.ExecutionArgs().Args, args))
-				require.EqualValues(t, inc.ScheduleID(), args.UnpauseOnSuccess)
-			}
-
-			defer func() {
-				th.sqlDB.Exec(t, "DROP SCHEDULE $1", full.ScheduleID())
-				if inc != nil {
-					th.sqlDB.Exec(t, "DROP SCHEDULE $1", inc.ScheduleID())
-				}
-			}()
-
-			// Force the schedule to execute.
-			th.env.SetTime(full.NextRun().Add(time.Second))
-			require.NoError(t, th.executeSchedules())
-
-			// Wait for the backup complete.
-			th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
-
-			if inc != nil {
-				// Once the full backup completes, the incremental one should no longer be paused.
-				loadedInc, err := jobs.LoadScheduledJob(
-					context.Background(), th.env, inc.ScheduleID(), th.cfg.InternalExecutor, nil)
+		for _, enabled := range []bool{true, false} {
+			testName := fmt.Sprintf("%s_chaining=%t", tc.name, enabled)
+			t.Run(testName, func(t *testing.T) {
+				th.sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING schedules.backup.gc_protection.enabled = %t`, enabled))
+				destination := "nodelocal://0/backup/" + testName
+				schedules, err := th.createBackupSchedule(t, tc.schedule, destination)
 				require.NoError(t, err)
-				require.False(t, loadedInc.IsPaused())
-			}
+				require.LessOrEqual(t, 1, len(schedules))
 
-			// Verify backup.
-			latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", tc.name, latestFileName))
-			require.NoError(t, err)
-			backedUp := th.sqlDB.QueryStr(t,
-				`SELECT database_name, object_name FROM [SHOW BACKUP $1] WHERE object_type='table' ORDER BY database_name, object_name`,
-				fmt.Sprintf("%s/%s", destination, string(latest)))
-			require.Equal(t, tc.verifyTables, backedUp)
-		})
+				// Either 1 or two schedules will be created.
+				// One of them (incremental) must be paused.
+				var full, inc *jobs.ScheduledJob
+				if len(schedules) == 1 {
+					full = schedules[0]
+				} else {
+					require.Equal(t, 2, len(schedules))
+					full, inc = schedules[0], schedules[1]
+					if full.IsPaused() {
+						full, inc = inc, full // Swap: inc should be paused.
+					}
+					require.True(t, inc.IsPaused())
+					require.False(t, full.IsPaused())
+
+					// The full should list incremental as a schedule to unpause.
+					args := &ScheduledBackupExecutionArgs{}
+					require.NoError(t, pbtypes.UnmarshalAny(full.ExecutionArgs().Args, args))
+					require.EqualValues(t, inc.ScheduleID(), args.UnpauseOnSuccess)
+				}
+
+				defer func() {
+					th.sqlDB.Exec(t, "DROP SCHEDULE $1", full.ScheduleID())
+					if inc != nil {
+						th.sqlDB.Exec(t, "DROP SCHEDULE $1", inc.ScheduleID())
+					}
+				}()
+
+				// Force the schedule to execute.
+				th.env.SetTime(full.NextRun().Add(time.Second))
+				require.NoError(t, th.executeSchedules())
+
+				// Wait for the backup complete.
+				th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+
+				if inc != nil {
+					// Once the full backup completes, the incremental one should no longer be paused.
+					loadedInc, err := jobs.LoadScheduledJob(
+						context.Background(), th.env, inc.ScheduleID(), th.cfg.InternalExecutor, nil)
+					require.NoError(t, err)
+					require.False(t, loadedInc.IsPaused())
+				}
+
+				// Verify backup.
+				latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", testName, latestFileName))
+				require.NoError(t, err)
+				backedUp := th.sqlDB.QueryStr(t,
+					`SELECT database_name, object_name FROM [SHOW BACKUP $1] WHERE object_type='table' ORDER BY database_name, object_name`,
+					fmt.Sprintf("%s/%s", destination, string(latest)))
+				require.Equal(t, tc.verifyTables, backedUp)
+			})
+		}
 	}
 }
 
@@ -741,6 +760,139 @@ func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 	require.NoError(t, res.Err())
 }
 
+func TestScheduleBackupChainsProtectedTimestampRecords(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.sqlDB.Exec(t, `SET CLUSTER SETTING schedules.backup.gc_protection.enabled = true`)
+	th.sqlDB.Exec(t, `
+CREATE DATABASE db;
+USE db;
+CREATE TABLE t(a int);
+INSERT INTO t values (1), (10), (100);
+`)
+
+	backupAsOfTimes := make([]time.Time, 0)
+	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause) {
+		backupAsOfTime := th.cfg.DB.Clock().PhysicalTime()
+		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
+		require.NoError(t, err)
+		clause.Expr = expr
+		backupAsOfTimes = append(backupAsOfTimes, backupAsOfTime)
+	}
+
+	// Create backup schedules for this test.
+	// Returns schedule IDs for full and incremental schedules, plus a cleanup function.
+	createSchedules := func(t *testing.T, name string) (int64, int64, func()) {
+		schedules, err := th.createBackupSchedule(t,
+			"CREATE SCHEDULE FOR BACKUP INTO $1 WITH revision_history RECURRING '*/5 * * * *'",
+			"nodelocal://0/backup/"+name)
+		require.NoError(t, err)
+
+		// We expect full & incremental schedule to be created.
+		require.Equal(t, 2, len(schedules))
+
+		// Order schedules so that the full schedule is the first one
+		fullID, incID := schedules[0].ScheduleID(), schedules[1].ScheduleID()
+		if schedules[0].IsPaused() {
+			fullID, incID = incID, fullID
+		}
+
+		return fullID,
+			incID,
+			func() {
+				th.sqlDB.Exec(t, "DROP SCHEDULE $1", schedules[0].ScheduleID())
+				th.sqlDB.Exec(t, "DROP SCHEDULE $1", schedules[1].ScheduleID())
+			}
+	}
+
+	runSchedule := func(t *testing.T, schedule *jobs.ScheduledJob) {
+		th.env.SetTime(schedule.NextRun().Add(time.Second))
+		require.NoError(t, th.executeSchedules())
+		th.waitForSuccessfulScheduledJob(t, schedule.ScheduleID())
+	}
+
+	clearSuccessfulJobEntryForSchedule := func(t *testing.T, schedule *jobs.ScheduledJob) {
+		query := "DELETE FROM " + th.env.SystemJobsTableName() +
+			" WHERE status=$1 AND created_by_type=$2 AND created_by_id=$3"
+		_, err := th.sqlDB.DB.ExecContext(context.Background(), query, jobs.StatusSucceeded,
+			jobs.CreatedByScheduledJobs, schedule.ScheduleID())
+		require.NoError(t, err)
+	}
+
+	ctx := context.Background()
+	checkPTSRecord := func(t *testing.T, id uuid.UUID, schedule *jobs.ScheduledJob,
+		timestamp hlc.Timestamp) {
+		var ptsRecord *ptpb.Record
+		var err error
+		require.NoError(t, th.server.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			ptsRecord, err = th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider.
+				GetRecord(context.Background(), txn, id)
+			require.NoError(t, err)
+			return nil
+		}))
+		encodedScheduleID := []byte(strconv.FormatInt(schedule.ScheduleID(), 10))
+		require.Equal(t, encodedScheduleID, ptsRecord.Meta)
+		require.Equal(t, jobsprotectedts.GetMetaType(jobsprotectedts.Schedules), ptsRecord.MetaType)
+		require.Equal(t, timestamp, ptsRecord.Timestamp)
+	}
+
+	fullID, incID, cleanupSchedules := createSchedules(t, "foo")
+	defer cleanupSchedules()
+
+	fullSchedule := th.loadSchedule(t, fullID)
+
+	// Force full backup to execute (this unpauses incremental).
+	runSchedule(t, fullSchedule)
+
+	// Check that there is no PTS record on the full schedule.
+	incSchedule := th.loadSchedule(t, incID)
+	require.Nil(t, fullSchedule.ExecutionArgs().ProtectedTimestampRecord)
+
+	// Check that there is a PTS record on the incremental schedule.
+	ptsOnIncID := incSchedule.ExecutionArgs().ProtectedTimestampRecord
+	require.NotNil(t, ptsOnIncID)
+	checkPTSRecord(t, *ptsOnIncID, incSchedule,
+		hlc.Timestamp{WallTime: backupAsOfTimes[0].UnixNano()})
+
+	// Force inc backup to execute.
+	runSchedule(t, incSchedule)
+
+	// Check that the pts record was updated to the inc backups' EndTime.
+	checkPTSRecord(t, *ptsOnIncID, incSchedule,
+		hlc.Timestamp{WallTime: backupAsOfTimes[1].UnixNano()})
+
+	// Pause the incSchedule so that it doesn't run when we forward the env time
+	// to re-run the full schedule.
+	incSchedule = th.loadSchedule(t, incSchedule.ScheduleID())
+	incSchedule.Pause()
+	require.NoError(t, incSchedule.Update(context.Background(), th.cfg.InternalExecutor, nil))
+
+	clearSuccessfulJobEntryForSchedule(t, fullSchedule)
+
+	// Force another full backup to execute.
+	fullSchedule = th.loadSchedule(t, fullSchedule.ScheduleID())
+	runSchedule(t, fullSchedule)
+
+	// Check that the pts record on the inc schedule has been overwritten with a new
+	// record written by the full backup.
+	incSchedule = th.loadSchedule(t, incSchedule.ScheduleID())
+	require.NotEqual(t, *ptsOnIncID, *incSchedule.ExecutionArgs().ProtectedTimestampRecord)
+
+	// Check that the old pts record has been released.
+	require.NoError(t, th.cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider.GetRecord(
+			ctx, txn, *ptsOnIncID)
+		require.True(t, errors.Is(err, protectedts.ErrNotExists))
+		return nil
+	}))
+	checkPTSRecord(t, *incSchedule.ExecutionArgs().ProtectedTimestampRecord, incSchedule,
+		hlc.Timestamp{WallTime: backupAsOfTimes[2].UnixNano()})
+}
+
 // Normally, we issue backups with AOST set to be the scheduled nextRun.
 // But if the schedule time is way in the past, the backup will fail.
 // This test verifies that scheduled backups will start working
@@ -759,16 +911,9 @@ CREATE TABLE t(a int);
 INSERT INTO t values (1), (10), (100);
 `)
 
-	loadSchedule := func(t *testing.T, id int64) *jobs.ScheduledJob {
-		loaded, err := jobs.LoadScheduledJob(
-			context.Background(), th.env, id, th.cfg.InternalExecutor, nil)
-		require.NoError(t, err)
-		return loaded
-	}
-
 	advanceNextRun := func(t *testing.T, id int64, delta time.Duration) {
 		// Adjust next run by the specified delta (which maybe negative).
-		s := loadSchedule(t, id)
+		s := th.loadSchedule(t, id)
 		s.SetNextRun(th.env.Now().Add(delta))
 		require.NoError(t, s.Update(context.Background(), th.cfg.InternalExecutor, nil))
 	}
@@ -832,7 +977,7 @@ INSERT INTO t values (1), (10), (100);
 	) {
 		for _, id := range []int64{fullID, incID} {
 			// Pretend we were down for a year.
-			s := loadSchedule(t, id)
+			s := th.loadSchedule(t, id)
 			s.SetNextRun(s.NextRun().Add(-365 * 24 * time.Hour))
 			// Set onError policy to the specified value.
 			s.SetScheduleDetails(jobspb.ScheduleDetails{
@@ -853,7 +998,7 @@ INSERT INTO t values (1), (10), (100);
 		// AOST way in the past causes backup planning to fail.  We don't need
 		// to wait for any jobs, and the schedules should now be paused.
 		for _, id := range []int64{fullID, incID} {
-			require.True(t, loadSchedule(t, id).IsPaused())
+			require.True(t, th.loadSchedule(t, id).IsPaused())
 		}
 	})
 
@@ -876,7 +1021,7 @@ INSERT INTO t values (1), (10), (100);
 		// to wait for any jobs, and the schedule nextRun should be advanced
 		// a bit in the future.
 		for _, id := range []int64{fullID, incID} {
-			require.True(t, loadSchedule(t, id).NextRun().Sub(th.env.Now()) > 0)
+			require.True(t, th.loadSchedule(t, id).NextRun().Sub(th.env.Now()) > 0)
 		}
 
 		// We expect that, eventually, both backups would succeed.
@@ -907,7 +1052,7 @@ INSERT INTO t values (1), (10), (100);
 		// to wait for any jobs, and the schedule nextRun should be advanced
 		// to the next scheduled recurrence.
 		for _, id := range []int64{fullID, incID} {
-			s := loadSchedule(t, id)
+			s := th.loadSchedule(t, id)
 			require.EqualValues(t,
 				cronexpr.MustParse(s.ScheduleExpr()).Next(th.env.Now()).Round(time.Microsecond),
 				s.NextRun())
