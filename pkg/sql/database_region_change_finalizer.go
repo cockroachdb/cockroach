@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -77,13 +78,17 @@ func newDatabaseRegionChangeFinalizer(
 			ctx,
 			dbDesc,
 			func(ctx context.Context, scName string, tableDesc *tabledesc.Mutable) error {
-				if !tableDesc.IsLocalityRegionalByRow() || tableDesc.Dropped() {
+				if tableDesc.Dropped() {
+					return nil
+				}
+
+				if tableDesc.IsLocalityRegionalByRow() {
 					// We only need to re-partition REGIONAL BY ROW tables. Even then, we
 					// don't need to (can't) repartition a REGIONAL BY ROW table if it has
 					// been dropped.
-					return nil
+					regionalByRowTables = append(regionalByRowTables, tableDesc)
 				}
-				regionalByRowTables = append(regionalByRowTables, tableDesc)
+
 				return nil
 			},
 		)
@@ -113,6 +118,9 @@ func (r *databaseRegionChangeFinalizer) cleanup() {
 // REGIONAL BY ROW tables once the region promotion/demotion is complete.
 func (r *databaseRegionChangeFinalizer) finalize(ctx context.Context, txn *kv.Txn) error {
 	if err := r.updateDatabaseZoneConfig(ctx, txn); err != nil {
+		return err
+	}
+	if err := r.updateGlobalTablesZoneConfig(ctx, txn); err != nil {
 		return err
 	}
 	return r.preDrop(ctx, txn)
@@ -145,6 +153,39 @@ func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn *kv.Txn
 		}
 	}
 	return txn.Run(ctx, b)
+}
+
+// updateGlobalTablesZoneConfig recalculates all global tables' zone configs so
+// that their zone configs are recalculated after a newly-added region goes
+// out of being a transitioning region.
+func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
+	ctx context.Context, txn *kv.Txn,
+) error {
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn, r.dbID, r.localPlanner.Descriptors())
+	if err != nil {
+		return err
+	}
+	// If we're not in PLACEMENT RESTRICTED, GLOBAL tables will inherit the
+	// database zone config. Therefore, their constraints do not have to be
+	// recalculated.
+	if !regionConfig.IsPlacementRestricted() {
+		return nil
+	}
+
+	descsCol := r.localPlanner.Descriptors()
+
+	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, r.dbID, tree.DatabaseLookupFlags{Required: true})
+	if err != nil {
+		return err
+	}
+	mutableDesc := dbDesc.(*dbdesc.Mutable)
+
+	err = r.localPlanner.updateZoneConfigsForTables(ctx, mutableDesc, WithOnlyGlobalTables)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // updateDatabaseZoneConfig updates the zone config of the database that

@@ -147,7 +147,7 @@ func zoneConfigForMultiRegionDatabase(
 		// non-voters so that REGIONAL BY [TABLE | ROW] can inherit the RESTRICTED
 		// placement. Voter placement will be set at the table/partition level to
 		// the table/partition region.
-		constraints = []zonepb.ConstraintsConjunction{}
+		constraints = nil
 	} else {
 		constraints = make([]zonepb.ConstraintsConjunction, len(regionConfig.Regions()))
 		for i, region := range regionConfig.Regions() {
@@ -774,27 +774,58 @@ func applyZoneConfigForMultiRegionDatabase(
 	return nil
 }
 
-// updateZoneConfigsForAllTables loops through all of the tables in the
+type updateZoneConfigOptions struct {
+	filterFunc func(tb *tabledesc.Mutable) bool
+}
+
+type updateZoneConfigOption func(options *updateZoneConfigOptions)
+
+// updateZoneConfigsForTables loops through all of the tables in the
 // specified database and refreshes the zone configs for all tables.
-func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdesc.Mutable) error {
+func (p *planner) updateZoneConfigsForTables(
+	ctx context.Context, desc *dbdesc.Mutable, updateOpts ...updateZoneConfigOption,
+) error {
+	opts := updateZoneConfigOptions{
+		filterFunc: func(_ *tabledesc.Mutable) bool { return true },
+	}
+	for _, f := range updateOpts {
+		f(&opts)
+	}
+
+	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.ID, p.Descriptors())
+	if err != nil {
+		return err
+	}
+
 	return p.forEachMutableTableInDatabase(
 		ctx,
 		desc,
 		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
-			regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.ID, p.Descriptors())
-			if err != nil {
-				return err
+			if opts.filterFunc(tbDesc) {
+				return ApplyZoneConfigForMultiRegionTable(
+					ctx,
+					p.txn,
+					p.ExecCfg(),
+					regionConfig,
+					tbDesc,
+					ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+				)
 			}
-			return ApplyZoneConfigForMultiRegionTable(
-				ctx,
-				p.txn,
-				p.ExecCfg(),
-				regionConfig,
-				tbDesc,
-				ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
-			)
+			return nil
 		},
 	)
+}
+
+// WithOnlyGlobalTables modifies an updateZoneConfigOptions to only apply to
+// global tables.
+func WithOnlyGlobalTables(opts *updateZoneConfigOptions) {
+	opts.filterFunc = func(tb *tabledesc.Mutable) bool {
+		return tb.IsLocalityGlobal()
+	}
+}
+
+func filterIsLocalityGlobal(t *tabledesc.Mutable) bool {
+	return t.IsLocalityGlobal()
 }
 
 // maybeInitializeMultiRegionDatabase initializes a multi-region database if
