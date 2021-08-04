@@ -2524,6 +2524,7 @@ var charts = []sectionDescription{
 					"jobs.typedesc_schema_change.currently_running",
 					"jobs.stream_ingestion.currently_running",
 					"jobs.migration.currently_running",
+					"jobs.sql_stats_compaction.currently_running",
 				},
 			},
 			{
@@ -2666,6 +2667,17 @@ var charts = []sectionDescription{
 					"jobs.migration.resume_completed",
 					"jobs.migration.resume_failed",
 					"jobs.migration.resume_retry_error",
+				},
+			},
+			{
+				Title: "SQL Stats Compaction",
+				Metrics: []string{
+					"jobs.sql_stats_compaction.fail_or_cancel_completed",
+					"jobs.sql_stats_compaction.fail_or_cancel_failed",
+					"jobs.sql_stats_compaction.fail_or_cancel_retry_error",
+					"jobs.sql_stats_compaction.resume_completed",
+					"jobs.sql_stats_compaction.resume_failed",
+					"jobs.sql_stats_compaction.resume_retry_error",
 				},
 			},
 		},
