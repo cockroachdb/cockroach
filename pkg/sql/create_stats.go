@@ -543,7 +543,9 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		if details.AsOf != nil {
 			p.ExtendedEvalContext().AsOfSystemTime = &tree.AsOfSystemTime{Timestamp: *details.AsOf}
 			p.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
-			txn.SetFixedTimestamp(ctx, *details.AsOf)
+			if err := txn.SetFixedTimestamp(ctx, *details.AsOf); err != nil {
+				return err
+			}
 		}
 
 		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn, true /* distribute */)

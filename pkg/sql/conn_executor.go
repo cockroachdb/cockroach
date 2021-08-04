@@ -2215,7 +2215,9 @@ func (ex *connExecutor) setTransactionModes(
 		return errors.AssertionFailedf("expected an evaluated AS OF timestamp")
 	}
 	if !asOfTs.IsEmpty() {
-		ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs)
+		if err := ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs); err != nil {
+			return err
+		}
 		ex.state.sqlTimestamp = asOfTs.GoTime()
 		if rwMode == tree.UnspecifiedReadWriteMode {
 			rwMode = tree.ReadOnly

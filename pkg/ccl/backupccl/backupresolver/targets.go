@@ -571,8 +571,11 @@ func LoadAllDescs(
 	var allDescs []catalog.Descriptor
 	if err := db.Txn(
 		ctx,
-		func(ctx context.Context, txn *kv.Txn) (err error) {
-			txn.SetFixedTimestamp(ctx, asOf)
+		func(ctx context.Context, txn *kv.Txn) error {
+			err := txn.SetFixedTimestamp(ctx, asOf)
+			if err != nil {
+				return err
+			}
 			allDescs, err = catalogkv.GetAllDescriptors(
 				ctx, txn, codec, true, /* shouldRunPostDeserializationChanges */
 			)

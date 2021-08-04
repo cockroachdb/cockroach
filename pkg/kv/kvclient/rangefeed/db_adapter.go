@@ -74,7 +74,9 @@ func (dbc *dbAdapter) Scan(
 	ctx context.Context, span roachpb.Span, asOf hlc.Timestamp, rowFn func(value roachpb.KeyValue),
 ) error {
 	return dbc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, asOf)
+		if err := txn.SetFixedTimestamp(ctx, asOf); err != nil {
+			return err
+		}
 		sp := span
 		var b kv.Batch
 		for {

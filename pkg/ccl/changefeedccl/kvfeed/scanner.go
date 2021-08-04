@@ -103,7 +103,9 @@ func (p *scanRequestScanner) exportSpan(
 	if log.V(2) {
 		log.Infof(ctx, `sending ScanRequest %s at %s`, span, ts)
 	}
-	txn.SetFixedTimestamp(ctx, ts)
+	if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
+		return err
+	}
 	stopwatchStart := timeutil.Now()
 	var scanDuration, bufferDuration time.Duration
 	const targetBytesPerScan = 16 << 20 // 16 MiB
