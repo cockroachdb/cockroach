@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // TODO(azhng): currently we do not have the ability to compute a hash for
@@ -35,16 +37,25 @@ import (
 //  update this.
 const dummyPlanHash = int64(0)
 
+// ErrConcurrentSQLStatsCompaction is reported when two sql stats compaction
+// jobs are issued concurrently. This is a sentinel error.
+var ErrConcurrentSQLStatsCompaction = errors.New("another sql stats compaction job is already running")
+
 // Config is a configuration struct for the persisted SQL stats subsystem.
 type Config struct {
 	Settings         *cluster.Settings
 	InternalExecutor sqlutil.InternalExecutor
 	KvDB             *kv.DB
 	SQLIDContainer   *base.SQLIDContainer
-	Knobs            *TestingKnobs
-	FlushCounter     *metric.Counter
-	FlushDuration    *metric.Histogram
-	FailureCounter   *metric.Counter
+	JobRegistry      *jobs.Registry
+
+	// Metrics.
+	FlushCounter   *metric.Counter
+	FlushDuration  *metric.Histogram
+	FailureCounter *metric.Counter
+
+	// Testing knobs.
+	Knobs *TestingKnobs
 }
 
 // PersistedSQLStats is a sqlstats.Provider that wraps a node-local in-memory
