@@ -167,7 +167,7 @@ export function addStatementStats(
 
 export function aggregateStatementStats(
   statementStats: CollectedStatementStatistics[],
-) {
+): CollectedStatementStatistics[] {
   const statementsMap: {
     [statement: string]: CollectedStatementStatistics[];
   } = {};
