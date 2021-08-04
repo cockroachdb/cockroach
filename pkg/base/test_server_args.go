@@ -233,9 +233,6 @@ type TestTenantArgs struct {
 	// to be created by StartTenant.
 	Existing bool
 
-	// IdleExitAfter, if set will cause the tenant process to exit if idle.
-	IdleExitAfter time.Duration
-
 	// Settings allows the caller to control the settings object used for the
 	// tenant cluster.
 	Settings *cluster.Settings
