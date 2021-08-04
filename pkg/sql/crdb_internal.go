@@ -253,6 +253,7 @@ CREATE TABLE crdb_internal.databases (
 	primary_region STRING,
 	regions STRING[],
 	survival_goal STRING,
+	placement_policy STRING,
 	create_statement STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -260,6 +261,7 @@ CREATE TABLE crdb_internal.databases (
 			func(db catalog.DatabaseDescriptor) error {
 				var survivalGoal tree.Datum = tree.DNull
 				var primaryRegion tree.Datum = tree.DNull
+				var placement tree.Datum = tree.DNull
 				regions := tree.NewDArray(types.String)
 
 				createNode := tree.CreateDatabase{}
@@ -283,6 +285,19 @@ CREATE TABLE crdb_internal.databases (
 						createNode.Regions[i] = tree.Name(region)
 					}
 
+					if db.GetRegionConfig().Placement == descpb.DataPlacement_RESTRICTED {
+						placement = tree.NewDString("restricted")
+						createNode.Placement = tree.DataPlacementRestricted
+					} else {
+						placement = tree.NewDString("default")
+						// We can't differentiate between a database that was created with
+						// unspecified and default, and we don't want to expose PLACEMENT
+						// unless we know the user wants to use PLACEMENT. Therefore, we
+						// only add a PLACEMENT clause if the database was configured with
+						// restricted placement.
+						createNode.Placement = tree.DataPlacementUnspecified
+					}
+
 					createNode.SurvivalGoal = tree.SurvivalGoalDefault
 					switch db.GetRegionConfig().SurvivalGoal {
 					case descpb.SurvivalGoal_ZONE_FAILURE:
@@ -303,6 +318,7 @@ CREATE TABLE crdb_internal.databases (
 					primaryRegion,                        // primary_region
 					regions,                              // regions
 					survivalGoal,                         // survival_goal
+					placement,                            // data_placement
 					tree.NewDString(createNode.String()), // create_statement
 				)
 			})

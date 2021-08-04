@@ -115,7 +115,10 @@ func (r *databaseRegionChangeFinalizer) finalize(ctx context.Context, txn *kv.Tx
 	if err := r.updateDatabaseZoneConfig(ctx, txn); err != nil {
 		return err
 	}
-	return r.preDrop(ctx, txn)
+	if err := r.preDrop(ctx, txn); err != nil {
+		return err
+	}
+	return r.updateGlobalTablesZoneConfig(ctx, txn)
 }
 
 // preDrop is called in advance of dropping regions from a multi-region
@@ -145,6 +148,46 @@ func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn *kv.Txn
 		}
 	}
 	return txn.Run(ctx, b)
+}
+
+// updateGlobalTablesZoneConfig refreshes all global tables' zone configs so
+// that their zone configs are refreshes after a newly-added region goes out of
+// being a transitioning region. This function only applies if the database is
+// in PLACEMENT RESTRICTED because if the database is in PLACEMENT DEFAULT, it
+// will inherit the database's constraints. In the RESTRICTED case, however,
+// constraints must be explicitly refreshed when new regions are added/removed.
+func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
+	ctx context.Context, txn *kv.Txn,
+) error {
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn, r.dbID, r.localPlanner.Descriptors())
+	if err != nil {
+		return err
+	}
+	// If we're not in PLACEMENT RESTRICTED, GLOBAL tables will inherit the
+	// database zone config. Therefore, their constraints do not have to be
+	// refreshed.
+	if !regionConfig.IsPlacementRestricted() {
+		return nil
+	}
+
+	descsCol := r.localPlanner.Descriptors()
+
+	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+		ctx,
+		txn,
+		r.dbID,
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return err
+	}
+
+	err = r.localPlanner.updateZoneConfigsForTables(ctx, dbDesc, WithOnlyGlobalTables)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // updateDatabaseZoneConfig updates the zone config of the database that
