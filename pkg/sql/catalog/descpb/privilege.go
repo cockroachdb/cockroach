@@ -160,8 +160,6 @@ func NewDefaultPrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescrip
 }
 
 // Grant adds new privileges to this descriptor for a given list of users.
-// TODO(marc): if all privileges other than ALL are set, should we collapse
-// them into ALL?
 func (p *PrivilegeDescriptor) Grant(user security.SQLUsername, privList privilege.List) {
 	userPriv := p.FindOrCreateUser(user)
 	if privilege.ALL.IsSetIn(userPriv.Privileges) {
@@ -383,6 +381,26 @@ func (p PrivilegeDescriptor) AnyPrivilege(user security.SQLUsername) bool {
 		return false
 	}
 	return userPriv.Privileges != 0
+}
+
+func (p PrivilegeDescriptor) hasAllPrivileges(
+	user security.SQLUsername, objectType privilege.ObjectType,
+) bool {
+	if p.CheckPrivilege(user, privilege.ALL) {
+		return true
+	}
+	// If ALL is not set, check if all other privileges would add up to all.
+	validPrivileges := privilege.GetValidPrivilegesForObject(objectType)
+	for _, priv := range validPrivileges {
+		if priv == privilege.ALL {
+			continue
+		}
+		if !p.CheckPrivilege(user, priv) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // SetOwner sets the owner of the privilege descriptor to the provided string.

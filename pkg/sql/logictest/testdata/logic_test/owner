@@ -199,7 +199,8 @@ user root
 # ownership.
 
 statement ok
-REVOKE ALL ON DATABASE test FROM testuser
+REVOKE ALL ON DATABASE test FROM testuser;
+REVOKE ALL ON TABLE d.t FROM testuser;
 
 statement error pq: role testuser cannot be dropped because some objects depend on it.*\n.*owner of database d.*\n.*owner of table test.public.t.*\n.*owner of table d.public.t
 DROP ROLE testuser
@@ -212,6 +213,9 @@ user testuser2
 
 statement ok
 CREATE TABLE t2()
+
+statement ok
+REVOKE ALL ON TABLE t2 FROM testuser2
 
 statement error pq: role testuser2 cannot be dropped because some objects depend on it.*\n.*owner of table test.public.t2
 DROP ROLE testuser2, testuser
@@ -235,7 +239,10 @@ CREATE TABLE s.t()
 user root
 
 statement ok
-REVOKE ALL ON DATABASE test FROM testuser
+REVOKE ALL ON DATABASE test FROM testuser;
+REVOKE ALL ON SCHEMA d.s FROM testuser;
+REVOKE ALL ON TYPE d.typ FROM testuser;
+REVOKE ALL ON TABLE d.s.t FROM testuser;
 
 user testuser
 
