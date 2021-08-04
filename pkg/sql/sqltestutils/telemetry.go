@@ -246,7 +246,7 @@ func (tt *telemetryTest) RunTest(
 
 	case "sql-stats":
 		// Report diagnostics once to reset the stats.
-		sqlServer.ResetSQLStats(ctx)
+		sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
 		reportDiags(ctx)
 
 		_, err := db.Exec(td.Input)
@@ -254,7 +254,7 @@ func (tt *telemetryTest) RunTest(
 		if err != nil {
 			fmt.Fprintf(&buf, "error: %v\n", err)
 		}
-		sqlServer.ResetSQLStats(ctx)
+		sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
 		reportDiags(ctx)
 		last := tt.diagSrv.LastRequestData()
 		buf.WriteString(formatSQLStats(last.SqlStats))

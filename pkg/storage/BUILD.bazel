@@ -19,6 +19,7 @@ go_library(
         "mvcc.go",
         "mvcc_incremental_iterator.go",
         "mvcc_logical_ops.go",
+        "open.go",
         "pebble.go",
         "pebble_batch.go",
         "pebble_file_registry.go",

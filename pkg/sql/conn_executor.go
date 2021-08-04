@@ -258,10 +258,17 @@ type Server struct {
 	// node. Newly collected statistics flow into sqlStats.
 	sqlStats sqlstats.Provider
 
+	// sqlStatsController is the control-plane interface for sqlStats.
+	sqlStatsController *sslocal.Controller
+
 	// reportedStats is a pool of stats that is held for reporting, and is
 	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
 	// into reported stats when sqlStats is cleared.
 	reportedStats sqlstats.Provider
+
+	// reportedStatsController is the control-plane interface for
+	// reportedStatsController.
+	reportedStatsController *sslocal.Controller
 
 	reCache *tree.RegexpCache
 
@@ -313,6 +320,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* resetInterval */
 		nil, /* reportedProvider */
 	)
+	reportedSQLStatsController := reportedSQLStats.GetController(cfg.SQLStatusServer)
 	sqlStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -323,14 +331,17 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.SQLStatReset,
 		reportedSQLStats,
 	)
+	sqlStatsController := sqlStats.GetController(cfg.SQLStatusServer)
 	s := &Server{
-		cfg:             cfg,
-		Metrics:         metrics,
-		InternalMetrics: makeMetrics(cfg, true /* internal */),
-		pool:            pool,
-		sqlStats:        sqlStats,
-		reportedStats:   reportedSQLStats,
-		reCache:         tree.NewRegexpCache(512),
+		cfg:                     cfg,
+		Metrics:                 metrics,
+		InternalMetrics:         makeMetrics(cfg, true /* internal */),
+		pool:                    pool,
+		sqlStats:                sqlStats,
+		sqlStatsController:      sqlStatsController,
+		reportedStats:           reportedSQLStats,
+		reportedStatsController: reportedSQLStatsController,
+		reCache:                 tree.NewRegexpCache(512),
 		indexUsageStats: idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 			ChannelSize: idxusage.DefaultChannelSize,
 			Setting:     cfg.Settings,
@@ -401,28 +412,16 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.reportedStats.Start(ctx, stopper)
 }
 
-// ResetSQLStats resets the executor's collected sql statistics.
-// TODO(azhng): after refactoring of sqlstats package is completed, we want to
-//  remove the following functions below that's related to fetching SQL stats
-//  and expose the provider interfaces instead. This will decouple other
-//  subsystems from directly consuming the SQLServer methods.
-func (s *Server) ResetSQLStats(ctx context.Context) {
-	err := s.sqlStats.Reset(ctx)
-	if err != nil {
-		if log.V(1) {
-			log.Warningf(ctx, "reported SQL stats memory limit has been exceeded, some fingerprints stats are discarded: %s", err)
-		}
-	}
+// GetSQLStatsController returns the sqlstats.Controller for current
+// sql.Server's SQL Stats.
+func (s *Server) GetSQLStatsController() *sslocal.Controller {
+	return s.sqlStatsController
 }
 
-// ResetReportedStats resets the executor's collected reported stats.
-func (s *Server) ResetReportedStats(ctx context.Context) {
-	err := s.reportedStats.Reset(ctx)
-	if err != nil {
-		if log.V(1) {
-			log.Errorf(ctx, "failed to reset reported stats: %s", err)
-		}
-	}
+// GetReportedSQLStatsController returns the sqlstats.Controller for the current
+// sql.Server's reported SQL Stats.
+func (s *Server) GetReportedSQLStatsController() *sslocal.Controller {
+	return s.reportedStatsController
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
@@ -856,16 +855,6 @@ func (s *Server) newConnExecutorWithTxn(
 	// parent executor.
 	ex.extraTxnState.descCollection.SetSyntheticDescriptors(syntheticDescs)
 	return ex
-}
-
-// ResetClusterSQLStats resets the collected cluster-wide SQL statistics by calling into the statusServer.
-func (s *Server) ResetClusterSQLStats(ctx context.Context) error {
-	req := &serverpb.ResetSQLStatsRequest{}
-	_, err := s.cfg.SQLStatusServer.ResetSQLStats(ctx, req)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 type closeType int
@@ -2312,7 +2301,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			InternalExecutor:   &ie,
 			DB:                 ex.server.cfg.DB,
 			SQLLivenessReader:  ex.server.cfg.SQLLivenessReader,
-			SQLStatsResetter:   ex.server,
+			SQLStatsController: ex.server.sqlStatsController,
 			CompactEngineSpan:  ex.server.cfg.CompactEngineSpanFunc,
 		},
 		SessionMutator:       ex.dataMutator,

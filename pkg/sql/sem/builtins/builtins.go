@@ -5540,11 +5540,11 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if evalCtx.SQLStatsResetter == nil {
+				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats resetter not set")
 				}
 				ctx := evalCtx.Ctx()
-				if err := evalCtx.SQLStatsResetter.ResetClusterSQLStats(ctx); err != nil {
+				if err := evalCtx.SQLStatsController.ResetClusterSQLStats(ctx); err != nil {
 					return nil, err
 				}
 				return tree.MakeDBool(true), nil

@@ -108,8 +108,11 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 
 	log.Infof(ctx, "creating new sticky in-mem engine %s", spec.StickyInMemoryEngineID)
 	fs := vfs.NewMem()
-	engine := storage.InMemFromFS(
-		ctx, spec.Attributes, cfg.CacheSize, spec.Size.InBytes, fs, "", storage.MakeRandomSettingsForSeparatedIntents())
+	engine := storage.InMemFromFS(ctx, fs, "",
+		storage.Attributes(spec.Attributes),
+		storage.CacheSize(cfg.CacheSize),
+		storage.MaxSize(spec.Size.InBytes),
+		storage.SettingsForTesting())
 
 	engineEntry := &stickyInMemEngine{
 		id:     spec.StickyInMemoryEngineID,

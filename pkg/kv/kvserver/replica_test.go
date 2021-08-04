@@ -233,7 +233,15 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
 	}
 	if tc.engine == nil {
-		tc.engine = storage.NewInMemForTesting(context.Background(), roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+		var err error
+		tc.engine, err = storage.Open(context.Background(),
+			storage.InMemory(),
+			storage.Attributes(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}),
+			storage.MaxSize(1<<20),
+			storage.SettingsForTesting())
+		if err != nil {
+			t.Fatal(err)
+		}
 		stopper.AddCloser(tc.engine)
 	}
 	if tc.transport == nil {

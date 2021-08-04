@@ -15,11 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/vfs"
 )
 
 // NewTempEngine creates a new engine for DistSQL processors to use when
@@ -28,21 +26,6 @@ func NewTempEngine(
 	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, fs.FS, error) {
 	return NewPebbleTempEngine(ctx, tempStorage, storeSpec)
-}
-
-// storageConfigFromTempStorageConfigAndStoreSpec creates a base.StorageConfig
-// used by both the RocksDB and Pebble temp engines from the given arguments.
-func storageConfigFromTempStorageConfigAndStoreSpec(
-	config base.TempStorageConfig, spec base.StoreSpec,
-) base.StorageConfig {
-	return base.StorageConfig{
-		Attrs:             roachpb.Attributes{},
-		Dir:               config.Path,
-		MaxSize:           0, // doesn't matter for temp storage - it's not enforced in any way.
-		Settings:          config.Settings,
-		UseFileRegistry:   spec.UseFileRegistry,
-		EncryptionOptions: spec.EncryptionOptions,
-	}
 }
 
 type pebbleTempEngine struct {
@@ -78,35 +61,29 @@ func NewPebbleTempEngine(
 func newPebbleTempEngine(
 	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (*pebbleTempEngine, fs.FS, error) {
-	// Default options as copied over from pebble/cmd/pebble/db.go
-	opts := DefaultPebbleOptions()
-	// Pebble doesn't currently support 0-size caches, so use a 128MB cache for
-	// now.
-	opts.Cache = pebble.NewCache(128 << 20)
-	defer opts.Cache.Unref()
-
-	// The Pebble temp engine does not use MVCC Encoding. Instead, the
-	// caller-provided key is used as-is (with the prefix prepended). See
-	// pebbleMap.makeKey and pebbleMap.makeKeyWithSequence on how this works.
-	// Use the default bytes.Compare-like comparer.
-	opts.Comparer = pebble.DefaultComparer
-	opts.DisableWAL = true
-	opts.TablePropertyCollectors = nil
-
-	storageConfig := storageConfigFromTempStorageConfigAndStoreSpec(tempStorage, storeSpec)
+	var loc Location
 	if tempStorage.InMemory {
-		opts.FS = vfs.NewMem()
-		storageConfig.Dir = ""
+		loc = InMemory()
+	} else {
+		loc = Filesystem(tempStorage.Path)
 	}
 
-	p, err := NewPebble(
-		ctx,
-		PebbleConfig{
-			StorageConfig: storageConfig,
-			Opts:          opts,
+	p, err := Open(ctx, loc,
+		CacheSize(128<<20),
+		func(cfg *engineConfig) error {
+			cfg.UseFileRegistry = storeSpec.UseFileRegistry
+			cfg.EncryptionOptions = storeSpec.EncryptionOptions
+
+			// The Pebble temp engine does not use MVCC Encoding. Instead, the
+			// caller-provided key is used as-is (with the prefix prepended). See
+			// pebbleMap.makeKey and pebbleMap.makeKeyWithSequence on how this works.
+			// Use the default bytes.Compare-like comparer.
+			cfg.Opts.Comparer = pebble.DefaultComparer
+			cfg.Opts.DisableWAL = true
+			cfg.Opts.TablePropertyCollectors = nil
+			return nil
 		},
 	)
-
 	if err != nil {
 		return nil, nil, err
 	}

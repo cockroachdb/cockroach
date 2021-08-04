@@ -37,16 +37,11 @@ import (
 	"github.com/kr/pretty"
 )
 
-// createTestPebbleEngine returns a new in-memory Pebble storage engine.
-func createTestPebbleEngine() storage.Engine {
-	return storage.NewInMemForTesting(context.Background(), roachpb.Attributes{}, 1<<20)
-}
-
 var engineImpls = []struct {
 	name   string
 	create func() storage.Engine
 }{
-	{"pebble", createTestPebbleEngine},
+	{"pebble", storage.NewDefaultInMemForTesting},
 }
 
 func singleKVSSTable(key storage.MVCCKey, value []byte) ([]byte, error) {

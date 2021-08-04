@@ -602,36 +602,6 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	return p, nil
 }
 
-func newPebbleInMem(
-	ctx context.Context,
-	attrs roachpb.Attributes,
-	cacheSize, storeSize int64,
-	fs vfs.FS,
-	dir string,
-	settings *cluster.Settings,
-) *Pebble {
-	opts := DefaultPebbleOptions()
-	opts.Cache = pebble.NewCache(cacheSize)
-	defer opts.Cache.Unref()
-
-	opts.FS = fs
-	db, err := NewPebble(
-		ctx,
-		PebbleConfig{
-			StorageConfig: base.StorageConfig{
-				Attrs:    attrs,
-				Dir:      dir,
-				MaxSize:  storeSize,
-				Settings: settings,
-			},
-			Opts: opts,
-		})
-	if err != nil {
-		panic(err)
-	}
-	return db
-}
-
 func (p *Pebble) connectEventMetrics(ctx context.Context, eventListener *pebble.EventListener) {
 	oldDiskSlow := eventListener.DiskSlow
 

@@ -17,7 +17,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -871,24 +870,6 @@ type EncryptionRegistries struct {
 	// KeyRegistry is the list of keys, scrubbed of actual key data.
 	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
 	KeyRegistry []byte
-}
-
-// NewEngine creates a new storage engine.
-func NewEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
-	pebbleConfig := PebbleConfig{
-		StorageConfig: storageConfig,
-		Opts:          DefaultPebbleOptions(),
-	}
-	pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
-	defer pebbleConfig.Opts.Cache.Unref()
-
-	return NewPebble(context.Background(), pebbleConfig)
-}
-
-// NewDefaultEngine allocates and returns a new, opened engine with the default configuration.
-// The caller must call the engine's Close method when the engine is no longer needed.
-func NewDefaultEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
-	return NewEngine(cacheSize, storageConfig)
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string

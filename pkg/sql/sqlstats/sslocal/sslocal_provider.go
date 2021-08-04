@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -45,6 +46,12 @@ func New(
 }
 
 var _ sqlstats.Provider = &SQLStats{}
+
+// GetController returns a sqlstats.Controller responsible for the current
+// SQLStats.
+func (s *SQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
+	return NewController(s, server)
+}
 
 // Start implements sqlstats.Provider interface.
 func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
