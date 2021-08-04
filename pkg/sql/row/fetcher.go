@@ -629,7 +629,9 @@ func (rf *Fetcher) StartInconsistentScan(
 		)
 	}
 	txn := kv.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */)
-	txn.SetFixedTimestamp(ctx, txnTimestamp)
+	if err := txn.SetFixedTimestamp(ctx, txnTimestamp); err != nil {
+		return err
+	}
 	if log.V(1) {
 		log.Infof(ctx, "starting inconsistent scan at timestamp %v", txnTimestamp)
 	}
@@ -644,7 +646,9 @@ func (rf *Fetcher) StartInconsistentScan(
 			txnTimestamp = txnTimestamp.Add(now.Sub(txnStartTime).Nanoseconds(), 0 /* logical */)
 			txnStartTime = now
 			txn = kv.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */)
-			txn.SetFixedTimestamp(ctx, txnTimestamp)
+			if err := txn.SetFixedTimestamp(ctx, txnTimestamp); err != nil {
+				return nil, err
+			}
 
 			if log.V(1) {
 				log.Infof(ctx, "bumped inconsistent scan timestamp to %v", txnTimestamp)

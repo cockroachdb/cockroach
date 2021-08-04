@@ -274,7 +274,9 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		initialDescs = initialDescs[:0]
-		txn.SetFixedTimestamp(ctx, initialTableDescTs)
+		if err := txn.SetFixedTimestamp(ctx, initialTableDescTs); err != nil {
+			return err
+		}
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range tf.targets {
 			flags := tree.ObjectLookupFlagsWithRequired()

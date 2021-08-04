@@ -202,7 +202,9 @@ func (ts *txnState) resetForNewSQLTxn(
 	ts.mu.txnStart = timeutil.Now()
 	ts.mu.Unlock()
 	if historicalTimestamp != nil {
-		ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp)
+		if err := ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp); err != nil {
+			panic(err)
+		}
 	}
 	if err := ts.setReadOnlyMode(readOnly); err != nil {
 		panic(err)
@@ -262,11 +264,16 @@ func (ts *txnState) finishExternalTxn() {
 	ts.mu.Unlock()
 }
 
-func (ts *txnState) setHistoricalTimestamp(ctx context.Context, historicalTimestamp hlc.Timestamp) {
+func (ts *txnState) setHistoricalTimestamp(
+	ctx context.Context, historicalTimestamp hlc.Timestamp,
+) error {
 	ts.mu.Lock()
-	ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp)
-	ts.mu.Unlock()
+	defer ts.mu.Unlock()
+	if err := ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp); err != nil {
+		return err
+	}
 	ts.isHistorical = true
+	return nil
 }
 
 // getReadTimestamp returns the transaction's current read timestamp.

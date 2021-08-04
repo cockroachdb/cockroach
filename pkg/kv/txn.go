@@ -328,6 +328,14 @@ func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 	return txn.mu.sender.CommitTimestamp()
 }
 
+// CommitTimestampFixed returns true if the commit timestamp has
+// been fixed to the start timestamp and cannot be pushed forward.
+func (txn *Txn) CommitTimestampFixed() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.CommitTimestampFixed()
+}
+
 // ProvisionalCommitTimestamp returns the transaction's provisional
 // commit timestamp. This can evolve throughout a txn's lifecycle. See
 // the comment on the WriteTimestamp field of TxnMeta for details.
@@ -1179,16 +1187,19 @@ func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
 // This is used to support historical queries (AS OF SYSTEM TIME queries and
 // backups). This method must be called on every transaction retry (but note
 // that retries should be rare for read-only queries with no clock uncertainty).
-func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
+func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error {
 	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(
-			errors.AssertionFailedf("SetFixedTimestamp() called on leaf txn"), ctx))
+		return errors.WithContextTags(errors.AssertionFailedf(
+			"SetFixedTimestamp() called on leaf txn"), ctx)
 	}
 
 	if ts.IsEmpty() {
-		log.Fatalf(ctx, "empty timestamp is invalid for SetFixedTimestamp()")
+		return errors.WithContextTags(errors.AssertionFailedf(
+			"empty timestamp is invalid for SetFixedTimestamp()"), ctx)
 	}
-	txn.mu.sender.SetFixedTimestamp(ctx, ts)
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.SetFixedTimestamp(ctx, ts)
 }
 
 // GenerateForcedRetryableError returns a TransactionRetryWithProtoRefreshError that will
