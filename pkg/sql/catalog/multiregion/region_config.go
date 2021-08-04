@@ -78,6 +78,11 @@ func (r *RegionConfig) RegionEnumID() descpb.ID {
 	return r.regionEnumID
 }
 
+// Placement returns the data placement strategy for the region config.
+func (r *RegionConfig) Placement() descpb.DataPlacement {
+	return r.placement
+}
+
 // IsPlacementRestricted returns true if the database is in restricted
 // placement, false otherwise.
 func (r *RegionConfig) IsPlacementRestricted() bool {

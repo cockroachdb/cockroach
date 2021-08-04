@@ -84,6 +84,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterDatabaseDropRegion(ctx, n)
 	case *tree.AlterDatabasePrimaryRegion:
 		return p.AlterDatabasePrimaryRegion(ctx, n)
+	case *tree.AlterDatabasePlacement:
+		return p.AlterDatabasePlacement(ctx, n)
 	case *tree.AlterDatabaseSurvivalGoal:
 		return p.AlterDatabaseSurvivalGoal(ctx, n)
 	case *tree.AlterDefaultPrivileges:
@@ -224,6 +226,7 @@ func init() {
 		&tree.AlterDatabaseDropRegion{},
 		&tree.AlterDatabaseOwner{},
 		&tree.AlterDatabasePrimaryRegion{},
+		&tree.AlterDatabasePlacement{},
 		&tree.AlterDatabaseSurvivalGoal{},
 		&tree.AlterDefaultPrivileges{},
 		&tree.AlterIndex{},
