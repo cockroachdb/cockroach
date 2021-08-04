@@ -55,6 +55,8 @@ type SemaContext struct {
 
 	// IntervalStyleEnabled determines whether IntervalStyle is enabled.
 	IntervalStyleEnabled bool
+	// DateStyleEnabled determines whether DateStyle is enabled.
+	DateStyleEnabled bool
 
 	Properties SemaProperties
 
@@ -420,7 +422,11 @@ func (expr *CaseExpr) TypeCheck(
 //
 // On success, any relevant telemetry counters are incremented.
 func resolveCast(
-	context string, castFrom, castTo *types.T, allowStable bool, intervalStyleEnabled bool,
+	context string,
+	castFrom, castTo *types.T,
+	allowStable bool,
+	intervalStyleEnabled bool,
+	dateStyleEnabled bool,
 ) error {
 	toFamily := castTo.Family()
 	fromFamily := castFrom.Family()
@@ -432,6 +438,7 @@ func resolveCast(
 			castTo.ArrayContents(),
 			allowStable,
 			intervalStyleEnabled,
+			dateStyleEnabled,
 		)
 		if err != nil {
 			return err
@@ -449,7 +456,7 @@ func resolveCast(
 		return nil
 
 	default:
-		cast := lookupCast(fromFamily, toFamily, intervalStyleEnabled)
+		cast := lookupCast(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled)
 		if cast == nil {
 			return pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, castTo)
 		}
@@ -529,7 +536,14 @@ func (expr *CastExpr) TypeCheck(
 		allowStable = false
 		context = semaCtx.Properties.required.context
 	}
-	err = resolveCast(context, castFrom, exprType, allowStable, semaCtx != nil && semaCtx.IntervalStyleEnabled)
+	err = resolveCast(
+		context,
+		castFrom,
+		exprType,
+		allowStable,
+		semaCtx != nil && semaCtx.IntervalStyleEnabled,
+		semaCtx != nil && semaCtx.DateStyleEnabled,
+	)
 	if err != nil {
 		return nil, err
 	}
