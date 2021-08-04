@@ -28,7 +28,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
-        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/pgwire/pgcode",

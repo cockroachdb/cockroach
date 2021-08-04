@@ -1185,11 +1185,6 @@ type TenantTestingKnobs struct {
 	// server's codec, but nothing else (e.g. its certs).
 	TenantIDCodecOverride roachpb.TenantID
 
-	// IdleExitCountdownDuration is a filed that if set, will overwrite the
-	// default countdown duration of the countdown timer that leads to shutdown in
-	// case of no SQL connections.
-	IdleExitCountdownDuration time.Duration
-
 	// OverrideTokenBucketProvider allows a test-only TokenBucketProvider (which
 	// can optionally forward requests to the real provider).
 	OverrideTokenBucketProvider func(origProvider kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider
