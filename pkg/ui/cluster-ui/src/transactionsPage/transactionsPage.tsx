@@ -26,6 +26,7 @@ import {
   aggregateAcrossNodeIDs,
   generateRegionNode,
   getTrxAppFilterOptions,
+  statementFingerprintIdsToText,
 } from "./utils";
 import {
   searchTransactionsData,
@@ -34,7 +35,7 @@ import {
 } from "./utils";
 import { forIn } from "lodash";
 import Long from "long";
-import { aggregateStatementStats, getSearchParams, unique } from "src/util";
+import { getSearchParams, unique } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
 import { PageConfig, PageConfigItem } from "../pageConfig";
@@ -329,10 +330,14 @@ export class TransactionsPage extends React.Component<
     const transactionDetails =
       statementFingerprintIds &&
       getStatementsByFingerprintId(statementFingerprintIds, statements);
+    const transactionText =
+      statementFingerprintIds &&
+      statementFingerprintIdsToText(statementFingerprintIds, statements);
 
     return (
       <TransactionDetails
-        statements={aggregateStatementStats(transactionDetails)}
+        transactionText={transactionText}
+        statements={transactionDetails}
         nodeRegions={this.props.nodeRegions}
         transactionStats={this.state.transactionStats}
         lastReset={this.lastReset()}
