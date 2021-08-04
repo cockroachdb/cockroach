@@ -323,7 +323,7 @@ func (s *SQLWatcher) onDescIDUpdate(
 				return err
 			}
 			for _, id := range affectedIDs {
-				entries, err := s.generateSpanConfigurationsForTable(ctx, txn, id)
+				entries, err := s.GenerateSpanConfigurationsForTable(ctx, txn, id)
 				if err != nil {
 					return err
 				}
@@ -364,18 +364,13 @@ func (s *SQLWatcher) onDescIDUpdate(
 	return nil
 }
 
-// generateSpanConfigurationsForTable generates the span configurations
+// GenerateSpanConfigurationsForTable generates the span configurations
 // corresponding to the given tableID. It uses a transactional view of
 // system.zones and system.descriptors to do so.
-func (s *SQLWatcher) generateSpanConfigurationsForTable(
+// This function is exported only for testing.
+func (s *SQLWatcher) GenerateSpanConfigurationsForTable(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) ([]roachpb.SpanConfigEntry, error) {
-	copyKey := func(k roachpb.Key) roachpb.Key {
-		k2 := make([]byte, len(k))
-		copy(k2, k)
-		return k2
-	}
-
 	zone, err := sql.GetHydratedZoneConfigForTable(ctx, txn, s.codec, id)
 	if err != nil {
 		return nil, err
@@ -386,15 +381,14 @@ func (s *SQLWatcher) generateSpanConfigurationsForTable(
 	}
 
 	ret := make([]roachpb.SpanConfigEntry, 0)
-	tablePrefix := s.codec.TablePrefix(uint32(id))
-	prevEndKey := tablePrefix
+	prevEndKey := s.codec.TablePrefix(uint32(id))
 	for i := range zone.SubzoneSpans {
 		// We need to prepend the tablePrefix to the spans stored inside the
 		// SubzoneSpans field because we store the stripped version there for
 		// historical reasons.
 		span := roachpb.Span{
-			Key:    append(tablePrefix, zone.SubzoneSpans[i].Key...),
-			EndKey: append(tablePrefix, zone.SubzoneSpans[i].EndKey...),
+			Key:    append(s.codec.TablePrefix(uint32(id)), zone.SubzoneSpans[i].Key...),
+			EndKey: append(s.codec.TablePrefix(uint32(id)), zone.SubzoneSpans[i].EndKey...),
 		}
 
 		{
@@ -411,7 +405,7 @@ func (s *SQLWatcher) generateSpanConfigurationsForTable(
 		if !prevEndKey.Equal(span.Key) {
 			ret = append(ret,
 				roachpb.SpanConfigEntry{
-					Span:   roachpb.Span{Key: copyKey(prevEndKey), EndKey: copyKey(span.Key)},
+					Span:   roachpb.Span{Key: prevEndKey, EndKey: span.Key},
 					Config: spanConfig,
 				},
 			)
@@ -424,20 +418,20 @@ func (s *SQLWatcher) generateSpanConfigurationsForTable(
 		}
 		ret = append(ret,
 			roachpb.SpanConfigEntry{
-				Span:   span,
+				Span:   roachpb.Span{Key: span.Key, EndKey: span.EndKey},
 				Config: subzoneSpanConfig,
 			},
 		)
 
-		prevEndKey = copyKey(span.EndKey)
+		prevEndKey = span.EndKey
 	}
 
 	// If the last subzone span doesn't cover the entire table's keyspace then we
 	// cover the remaining key range with the table's zone configuration.
-	if !prevEndKey.Equal(tablePrefix.PrefixEnd()) {
+	if !prevEndKey.Equal(s.codec.TablePrefix(uint32(id)).PrefixEnd()) {
 		ret = append(ret,
 			roachpb.SpanConfigEntry{
-				Span:   roachpb.Span{Key: prevEndKey, EndKey: tablePrefix.PrefixEnd()},
+				Span:   roachpb.Span{Key: prevEndKey, EndKey: s.codec.TablePrefix(uint32(id)).PrefixEnd()},
 				Config: spanConfig,
 			},
 		)
