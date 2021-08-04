@@ -528,11 +528,13 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	b.deleteCheckpoint(ctx, p.ExecCfg(), p.User())
 
-	// TODO(adtiyamaru): Think about what we should do if any of the operations in
+	// TODO(adityamaru): Think about what we should do if any of the operations in
 	// this method fail causing the txn to rollback. Should we transition the job
 	// to a failed state and then allow the schedule to handle the failure based
 	// on how it is configured?
-	b.maybeUpdateProtectedTimestampRecordOnSchedule(ctx, p.ExecCfg())
+	if err := b.maybeUpdateProtectedTimestampRecordOnSchedule(ctx, p.ExecCfg()); err != nil {
+		return err
+	}
 
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -606,8 +608,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
-	return nil
+	return b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
 }
 
 // ReportResults implements JobResultsReporter interface.
@@ -727,7 +728,7 @@ func protectAndVerifyTimestampRecordForSchedule(
 
 func (b *backupResumer) maybeUpdateProtectedTimestampRecordOnSchedule(
 	ctx context.Context, exec *sql.ExecutorConfig,
-) {
+) error {
 	env := scheduledjobs.ProdJobSchedulerEnv
 	if knobs, ok := exec.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
@@ -735,7 +736,7 @@ func (b *backupResumer) maybeUpdateProtectedTimestampRecordOnSchedule(
 		}
 	}
 
-	if err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Do not rely on b.job containing created_by_id. Query it directly.
 		datums, err := exec.InternalExecutor.QueryRowEx(
 			ctx,
@@ -820,14 +821,13 @@ func (b *backupResumer) maybeUpdateProtectedTimestampRecordOnSchedule(
 		}
 
 		return nil
-	}); err != nil {
-		log.Errorf(ctx, "maybeUpdateProtectedTimestampRecordOnSchedule error: %v", err)
-	}
+	})
+	return err
 }
 
 func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 	ctx context.Context, jobStatus jobs.Status, exec *sql.ExecutorConfig,
-) {
+) error {
 	env := scheduledjobs.ProdJobSchedulerEnv
 	if knobs, ok := exec.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
@@ -835,7 +835,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 		}
 	}
 
-	if err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Do not rely on b.job containing created_by_id.  Query it directly.
 		datums, err := exec.InternalExecutor.QueryRowEx(
 			ctx,
@@ -858,24 +858,16 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
 		if err := jobs.NotifyJobTermination(
 			ctx, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID, exec.InternalExecutor, txn); err != nil {
-			log.Warningf(ctx,
-				"failed to notify schedule %d of completion of job %d; err=%s",
-				scheduleID, b.job.ID(), err)
+			return errors.Wrapf(err,
+				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
 		}
 		return nil
-	}); err != nil {
-		log.Errorf(ctx, "maybeNotifySchedule error: %v", err)
-	}
+	})
+	return err
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
-	defer b.maybeNotifyScheduledJobCompletion(
-		ctx,
-		jobs.StatusFailed,
-		execCtx.(sql.JobExecContext).ExecCfg(),
-	)
-
 	telemetry.Count("backup.total.failed")
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
@@ -883,9 +875,15 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
 	b.deleteCheckpoint(ctx, cfg, p.User())
-	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return b.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
-	})
+	}); err != nil {
+		return err
+	}
+
+	// This should never return an error unless resolving the schedule that the
+	// job is being run under fails.
+	return b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusFailed, execCtx.(sql.JobExecContext).ExecCfg())
 }
 
 func (b *backupResumer) deleteCheckpoint(
