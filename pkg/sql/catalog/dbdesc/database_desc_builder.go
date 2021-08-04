@@ -150,7 +150,7 @@ func NewInitial(
 		id,
 		name,
 		descpb.NewDefaultPrivilegeDescriptor(owner),
-		descpb.InitDefaultPrivilegeDescriptor(),
+		catprivilege.MakeNewDefaultPrivilegeDescriptor(),
 		options...,
 	)
 }

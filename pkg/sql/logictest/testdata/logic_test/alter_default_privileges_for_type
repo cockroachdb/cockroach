@@ -1,5 +1,44 @@
 statement ok
-CREATE DATABASE d
+CREATE DATABASE d;
+GRANT CREATE ON DATABASE d TO testuser;
+
+# By default, testuser should have ALL privileges on a types it creates and
+# Public should have usage.
+user testuser
+
+statement ok
+USE d;
+
+statement ok
+CREATE TYPE testuser_t AS ENUM();
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE testuser_t;
+----
+database_name  schema_name  type_name   grantee   privilege_type
+d              public       testuser_t  admin     ALL
+d              public       testuser_t  public    USAGE
+d              public       testuser_t  root      ALL
+d              public       testuser_t  testuser  ALL
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM testuser;
+ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM public;
+
+statement ok
+CREATE TYPE testuser_t2 AS ENUM();
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE testuser_t2
+----
+database_name  schema_name  type_name    grantee  privilege_type
+d              public       testuser_t2  admin    ALL
+d              public       testuser_t2  root     ALL
+
+user root
+
+statement ok
+USE test;
 
 statement ok
 CREATE USER testuser2
@@ -68,7 +107,6 @@ SHOW GRANTS ON TYPE t4
 ----
 database_name  schema_name  type_name  grantee  privilege_type
 d              public       t4         admin    ALL
-d              public       t4         public   USAGE
 d              public       t4         root     ALL
 
 user root
@@ -93,5 +131,4 @@ SHOW GRANTS ON TYPE t5
 ----
 database_name  schema_name  type_name  grantee  privilege_type
 d              public       t5         admin    ALL
-d              public       t5         public   USAGE
 d              public       t5         root     ALL
