@@ -65,6 +65,11 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
+	args.monitorAndMetrics = newRootSQLMemoryMonitor(monitorAndMetricsOptions{
+		memoryPoolSize:          args.MemoryPoolSize,
+		histogramWindowInterval: args.HistogramWindowInterval(),
+		settings:                args.Settings,
+	})
 	connManager := netutil.MakeServer(
 		args.stopper,
 		// The SQL server only uses connManager.ServeWith. The both below

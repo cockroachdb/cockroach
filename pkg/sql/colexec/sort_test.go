@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -156,7 +157,7 @@ func TestSortRandomized(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	nTups := coldata.BatchSize()*2 + 1
 	maxCols := 3
-	// TODO(yuzefovich): randomize types as well.
+	// TODO(yuzefovich/mgartner): randomize types as well.
 	typs := make([]*types.T, maxCols)
 	for i := range typs {
 		typs[i] = types.Int
@@ -322,6 +323,74 @@ func BenchmarkSort(b *testing.B) {
 							if err != nil {
 								b.Fatal(err)
 							}
+						}
+						sorter.Init(ctx)
+						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func BenchmarkSortUUID(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
+
+	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
+		for _, nCols := range []int{1, 2} {
+			for _, constAbbrPct := range []int{0, 50, 75, 90, 100} {
+				name := fmt.Sprintf("rows=%d/cols=%d/constAbbrPct=%d", nBatches*coldata.BatchSize(), nCols, constAbbrPct)
+				b.Run(name, func(b *testing.B) {
+					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
+					// batch) * nCols (number of columns / row).
+					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+					typs := make([]*types.T, nCols)
+					for i := range typs {
+						typs[i] = types.Bytes
+					}
+					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
+					batch.SetLength(coldata.BatchSize())
+					ordCols := make([]execinfrapb.Ordering_Column, nCols)
+					for i := range ordCols {
+						ordCols[i].ColIdx = uint32(i)
+						ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
+
+						col := batch.ColVec(i).Bytes()
+
+						// Make a constant prefix used for constAbbrPct% of
+						// UUIDs. This helps measure the overhead of abbreviated
+						// comparisons with varying cardinality. For example, if
+						// all abbreviated values are the same, then comparing
+						// them is unnecessary work because we must always fall
+						// back to full comparisons.
+						id, err := uuid.NewV4()
+						if err != nil {
+							b.Fatalf("unexpected error: %s", err)
+						}
+						constPrefix := id[:8]
+
+						for j := 0; j < coldata.BatchSize(); j++ {
+							id, err := uuid.NewV4()
+							if err != nil {
+								b.Fatalf("unexpected error: %s", err)
+							}
+							idBytes := id[:16]
+							// Make the abbreviated bytes constant constAbbrPct% of
+							// the time.
+							if rng.Float32() < float32(constAbbrPct)/100 {
+								copy(idBytes, constPrefix)
+							}
+							col.Set(j, idBytes)
+						}
+					}
+					b.ResetTimer()
+					for n := 0; n < b.N; n++ {
+						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
+						sorter, err := NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
+						if err != nil {
+							b.Fatal(err)
 						}
 						sorter.Init(ctx)
 						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
