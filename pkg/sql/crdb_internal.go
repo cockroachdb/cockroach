@@ -4554,6 +4554,8 @@ CREATE TABLE crdb_internal.interleaved (
 				if !table.IsInterleaved() {
 					return nil
 				}
+				// We want to include dropped indexes for cases where
+				// a revert may end up adding them back.
 				indexes := table.AllIndexes()
 				for _, index := range indexes {
 					if index.NumInterleaveAncestors() == 0 {

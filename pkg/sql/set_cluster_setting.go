@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strconv"
@@ -230,20 +231,56 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 
 			if isSetVersion {
+				// Updates the version inside the system.settings table.
+				// If we are already at the target version, then this
+				// function is idempotent.
+				updateVersionSystemSetting := func(ctx context.Context, version clusterversion.ClusterVersion) error {
+					rawValue, err := protoutil.Marshal(&version)
+					if err != nil {
+						return err
+					}
+					return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+						// Confirm if the version has actually changed on us.
+						datums, err := execCfg.InternalExecutor.QueryRowEx(
+							ctx, "retrieve-prev-setting", txn,
+							sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+							"SELECT value FROM system.settings WHERE name = $1", n.name,
+						)
+						versionIsDifferent := true
+						if len(datums) > 0 {
+							dStr, ok := datums[0].(*tree.DString)
+							if !ok {
+								return errors.Errorf("existing version value is not a string, got %T", datums[0])
+							}
+							oldRawValue := []byte(string(*dStr))
+							versionIsDifferent = !bytes.Equal(oldRawValue, rawValue)
+						}
+						// Only if the version has changed alter the setting.
+						if versionIsDifferent {
+							_, err = execCfg.InternalExecutor.ExecEx(
+								ctx, "update-setting", txn,
+								sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+								`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+								n.name, string(rawValue), n.setting.Typ(),
+							)
+						}
+						return err
+					})
+				}
 				if err := runVersionUpgradeHook(
-					ctx, params, prev, value, n.versionUpgradeHook,
+					ctx, params, prev, value, n.versionUpgradeHook, updateVersionSystemSetting,
 				); err != nil {
 					return err
 				}
-			}
-
-			if _, err = execCfg.InternalExecutor.ExecEx(
-				ctx, "update-setting", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
-				n.name, encoded, n.setting.Typ(),
-			); err != nil {
-				return err
+			} else {
+				if _, err = execCfg.InternalExecutor.ExecEx(
+					ctx, "update-setting", txn,
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+					`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+					n.name, encoded, n.setting.Typ(),
+				); err != nil {
+					return err
+				}
 			}
 
 			if params.p.execCfg.TenantTestingKnobs != nil {
@@ -342,7 +379,12 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 }
 
 func runVersionUpgradeHook(
-	ctx context.Context, params runParams, prev tree.Datum, value tree.Datum, f VersionUpgradeHook,
+	ctx context.Context,
+	params runParams,
+	prev tree.Datum,
+	value tree.Datum,
+	f VersionUpgradeHook,
+	updateVersionSystemSetting UpdateVersionSystemSettingHook,
 ) error {
 	var from, to clusterversion.ClusterVersion
 
@@ -372,7 +414,7 @@ func runVersionUpgradeHook(
 	// toSettingString already validated the input, and checked to
 	// see that we are allowed to transition. Let's call into our
 	// upgrade hook to run migrations, if any.
-	if err := f(ctx, params.p.User(), from, to); err != nil {
+	if err := f(ctx, params.p.User(), from, to, updateVersionSystemSetting); err != nil {
 		return err
 	}
 	return nil
