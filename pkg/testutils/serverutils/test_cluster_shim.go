@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -190,6 +191,10 @@ type TestClusterInterface interface {
 	// WaitForFullReplication waits until all stores in the cluster
 	// have no ranges with replication pending.
 	WaitForFullReplication() error
+
+	// LookupTable returns the table descriptor for the specified database and
+	// table names.
+	LookupTable(database, table string) (catalog.TableDescriptor, error)
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim

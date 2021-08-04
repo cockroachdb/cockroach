@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1534,6 +1540,37 @@ func (tc *TestCluster) GetStatusClient(
 		return nil, errors.Wrap(err, "failed to create a status client")
 	}
 	return serverpb.NewStatusClient(cc), nil
+}
+
+func (tc *TestCluster) LookupTable(database, table string) (catalog.TableDescriptor, error) {
+	execCfg := tc.Servers[0].ExecutorConfig().(sql.ExecutorConfig)
+	tableName, err := parser.ParseQualifiedTableName(database + ".public." + table)
+	if err != nil {
+		return nil, err
+	}
+
+	var tableDesc catalog.TableDescriptor
+
+	err = sql.DescsTxn(context.Background(), &execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		_, desc, err := col.GetImmutableTableByName(ctx, txn, tableName, tree.ObjectLookupFlags{
+			DesiredObjectKind: tree.TableObject,
+		})
+		if err != nil {
+			return err
+		}
+		tableDesc = desc
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if tableDesc == nil {
+		return nil, errors.Newf("could not find table %s", table)
+	}
+
+	return tableDesc, nil
 }
 
 type testClusterFactoryImpl struct{}
