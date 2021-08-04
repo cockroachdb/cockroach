@@ -298,3 +298,31 @@ func isWindowFnLinear(fn execinfrapb.WindowerSpec_Func) bool {
 		return false
 	}
 }
+
+// windowFrameCanShrink returns true if a sliding window aggregate function over
+// the given frame may need to call Remove, which is the case when the frame for
+// a given row may not include all rows that were part of the previous frame.
+func windowFrameCanShrink(
+	frame *execinfrapb.WindowerSpec_Frame, ordering *execinfrapb.Ordering,
+) bool {
+	if frame.Exclusion != execinfrapb.WindowerSpec_Frame_NO_EXCLUSION {
+		return true
+	}
+	if frame.Bounds.Start.BoundType == execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING {
+		return false
+	}
+	if len(ordering.Columns) == 0 {
+		// All rows are part of the same peer group.
+		if frame.Bounds.Start.BoundType == execinfrapb.WindowerSpec_Frame_CURRENT_ROW &&
+			(frame.Mode == execinfrapb.WindowerSpec_Frame_RANGE ||
+				frame.Mode == execinfrapb.WindowerSpec_Frame_GROUPS) {
+			return false
+		}
+		if frame.Mode == execinfrapb.WindowerSpec_Frame_GROUPS &&
+			frame.Bounds.Start.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING &&
+			frame.Bounds.Start.IntOffset >= 1 {
+			return false
+		}
+	}
+	return true
+}

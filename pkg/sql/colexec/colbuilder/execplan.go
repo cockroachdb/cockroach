@@ -1389,7 +1389,7 @@ func NewColOperator(
 							colexecerror.InternalError(err)
 						}
 						result.Root = colexecwindow.NewWindowAggregatorOperator(
-							windowArgs, wf.Frame, &wf.Ordering, argIdxs,
+							windowArgs, *wf.Func.AggregateFunc, wf.Frame, &wf.Ordering, argIdxs,
 							aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
 					}
 				} else {
