@@ -266,6 +266,11 @@ func (r *registration) outputLoop(ctx context.Context) error {
 
 func (r *registration) runOutputLoop(ctx context.Context) {
 	r.mu.Lock()
+	if r.mu.disconnected {
+		// The registration was already been disconnected.
+		r.mu.Unlock()
+		return
+	}
 	ctx, r.mu.outputLoopCancelFn = context.WithCancel(ctx)
 	r.mu.Unlock()
 	err := r.outputLoop(ctx)
