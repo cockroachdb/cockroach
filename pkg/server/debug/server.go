@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -197,25 +198,32 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 		// TODO(yevgeniy): Consider adding accessors to storage.Engine to get their path.
 		return errors.New("number of store specs must match number of engines")
 	}
+
+	storeIDs := make([]roachpb.StoreIdent, len(engines))
+	for i := range engines {
+		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
+		if err != nil {
+			return err
+		}
+		storeIDs[i] = id
+	}
+
+	ds.mux.HandleFunc("/debug/lsm", func(w http.ResponseWriter, req *http.Request) {
+		for i := range engines {
+			fmt.Fprintf(w, "Store %d:\n", storeIDs[i].StoreID)
+			_, _ = io.WriteString(w, engines[i].GetMetrics().String())
+			fmt.Fprintln(w)
+		}
+	})
+
 	for i := 0; i < len(specs); i++ {
 		if specs[i].InMemory {
 			// TODO(yevgeniy): Add plumbing to support LSM visualization for in memory engines.
 			continue
 		}
 
-		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
-		if err != nil {
-			return err
-		}
-
-		eng := engines[i]
-		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm/%d", id.StoreID),
-			func(w http.ResponseWriter, req *http.Request) {
-				_, _ = io.WriteString(w, eng.GetMetrics().String())
-			})
-
 		dir := specs[i].Path
-		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm-viz/%d", id.StoreID),
+		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm-viz/%d", storeIDs[i].StoreID),
 			func(w http.ResponseWriter, req *http.Request) {
 				if err := analyzeLSM(dir, w); err != nil {
 					fmt.Fprintf(w, "error analyzing LSM at %s: %v", dir, err)
