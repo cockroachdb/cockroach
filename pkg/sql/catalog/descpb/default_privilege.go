@@ -29,16 +29,135 @@ type DefaultPrivilegesRole struct {
 	ForAllRoles bool
 }
 
+// Grant adds new privileges to this descriptor for a given list of users.
+func (p *DefaultPrivilegesForRole) Grant(
+	role DefaultPrivilegesRole,
+	user security.SQLUsername,
+	privList privilege.List,
+	targetObject tree.AlterDefaultPrivilegesTargetObject,
+) {
+	defaultPrivileges := p.DefaultPrivilegesPerObject[targetObject]
+	// expandPrivileges turns flags on the DefaultPrivilegesForRole representing
+	// special privilege cases into real privileges on the PrivilegeDescriptor.
+	// foldPrivileges converts the real privileges back into flags.
+	p.expandPrivileges(role, &defaultPrivileges, targetObject)
+	defaultPrivileges.Grant(user, privList)
+	p.foldPrivileges(role, &defaultPrivileges, targetObject)
+	p.DefaultPrivilegesPerObject[targetObject] = defaultPrivileges
+}
+
+// Revoke removes privileges from this descriptor for a given list of users.
+func (p *DefaultPrivilegesForRole) Revoke(
+	role DefaultPrivilegesRole,
+	user security.SQLUsername,
+	privList privilege.List,
+	targetObject tree.AlterDefaultPrivilegesTargetObject,
+) {
+	defaultPrivileges := p.DefaultPrivilegesPerObject[targetObject]
+	// expandPrivileges turns flags on the DefaultPrivilegesForRole representing
+	// special privilege cases into real privileges on the PrivilegeDescriptor.
+	// foldPrivileges converts the real privileges back into flags.
+	p.expandPrivileges(role, &defaultPrivileges, targetObject)
+	defaultPrivileges.Revoke(user, privList, targetObject.ToPrivilegeObjectType())
+	p.foldPrivileges(role, &defaultPrivileges, targetObject)
+
+	p.DefaultPrivilegesPerObject[targetObject] = defaultPrivileges
+}
+
+// foldPrivileges folds ALL privileges for role and USAGE on public into
+// the corresponding flag on the DefaultPrivilegesForRole object.
+// For example, if after a Grant operation, role has ALL on tables, ALL
+// privilege is removed from the UserPrivileges object and instead
+// RoleHasAllPrivilegesOnTable is set to true.
+// This is necessary as role having ALL privileges on tables is the default state
+// and should not prevent the role from being dropped if it has ALL privileges.
+func (p *DefaultPrivilegesForRole) foldPrivileges(
+	role DefaultPrivilegesRole,
+	privileges *PrivilegeDescriptor,
+	targetObject tree.AlterDefaultPrivilegesTargetObject,
+) {
+	if targetObject == tree.Types &&
+		privileges.CheckPrivilege(security.PublicRoleName(), privilege.USAGE) {
+		p.setPublicHasUsageOnTypes(true)
+		privileges.Revoke(
+			security.PublicRoleName(),
+			privilege.List{privilege.USAGE},
+			privilege.Type,
+		)
+	}
+	// ForAllRoles cannot be a grantee, nothing left to do.
+	if role.ForAllRoles {
+		return
+	}
+	if privileges.hasAllPrivileges(role.Role, targetObject.ToPrivilegeObjectType()) {
+		switch targetObject {
+		// When granting, if the flag is set that the role has all privileges
+		// do nothing since there are no privileges to be granted.
+		case tree.Tables:
+			p.GetExplicitRole().RoleHasAllPrivilegesOnTables = true
+		case tree.Sequences:
+			p.GetExplicitRole().RoleHasAllPrivilegesOnSequences = true
+		case tree.Schemas:
+			p.GetExplicitRole().RoleHasAllPrivilegesOnSchemas = true
+		case tree.Types:
+			p.GetExplicitRole().RoleHasAllPrivilegesOnTypes = true
+		}
+		privileges.removeUser(role.Role)
+	}
+}
+
+// expandPrivileges expands the pseudo privilege flags on
+// DefaultPrivilegesForRole into real privileges on the UserPrivileges object.
+// After expandPrivileges, UserPrivileges can be Granted/Revoked from normally.
+// For example - if RoleHasAllPrivilegesOnTables is true, ALL privilege is added
+// into the UserPrivileges array for the Role.
+func (p *DefaultPrivilegesForRole) expandPrivileges(
+	role DefaultPrivilegesRole,
+	privileges *PrivilegeDescriptor,
+	targetObject tree.AlterDefaultPrivilegesTargetObject,
+) {
+	if targetObject == tree.Types && p.GetPublicHasUsageOnTypes() {
+		privileges.Grant(security.PublicRoleName(), privilege.List{privilege.USAGE})
+		p.setPublicHasUsageOnTypes(false)
+	}
+	// ForAllRoles cannot be a grantee, nothing left to do.
+	if role.ForAllRoles {
+		return
+	}
+	switch targetObject {
+	case tree.Tables:
+		if p.GetRoleHasAllPrivilegesOnTables() {
+			privileges.Grant(p.GetExplicitRole().UserProto.Decode(), privilege.List{privilege.ALL})
+			p.GetExplicitRole().RoleHasAllPrivilegesOnTables = false
+		}
+	case tree.Sequences:
+		if p.GetRoleHasAllPrivilegesOnSequences() {
+			privileges.Grant(p.GetExplicitRole().UserProto.Decode(), privilege.List{privilege.ALL})
+			p.GetExplicitRole().RoleHasAllPrivilegesOnSequences = false
+		}
+	case tree.Schemas:
+		if p.GetRoleHasAllPrivilegesOnSchemas() {
+			privileges.Grant(p.GetExplicitRole().UserProto.Decode(), privilege.List{privilege.ALL})
+			p.GetExplicitRole().RoleHasAllPrivilegesOnSchemas = false
+		}
+	case tree.Types:
+		if p.GetRoleHasAllPrivilegesOnTypes() {
+			privileges.Grant(p.GetExplicitRole().UserProto.Decode(), privilege.List{privilege.ALL})
+			p.GetExplicitRole().RoleHasAllPrivilegesOnTypes = false
+		}
+	}
+}
+
 // ToDefaultPrivilegesRole returns the DefaultPrivilegesRole corresponding to
 // DefaultPrivilegesForRole.
-func (u *DefaultPrivilegesForRole) ToDefaultPrivilegesRole() DefaultPrivilegesRole {
-	if u.GetForAllRoles() {
+func (p *DefaultPrivilegesForRole) ToDefaultPrivilegesRole() DefaultPrivilegesRole {
+	if p.GetForAllRoles() != nil {
 		return DefaultPrivilegesRole{
 			ForAllRoles: true,
 		}
 	}
 	return DefaultPrivilegesRole{
-		Role: u.GetUserProto().Decode(),
+		Role: p.GetExplicitRole().UserProto.Decode(),
 	}
 }
 
@@ -57,6 +176,61 @@ func (r DefaultPrivilegesRole) LessThan(other DefaultPrivilegesRole) bool {
 	}
 
 	return r.Role.LessThan(other.Role)
+}
+
+// GetUserPrivilegesForObject returns the set of []UserPrivileges constructed
+// from the DefaultPrivilegesForRole.
+func (p DefaultPrivilegesForRole) GetUserPrivilegesForObject(
+	targetObject tree.AlterDefaultPrivilegesTargetObject,
+) []UserPrivileges {
+	var userPrivileges []UserPrivileges
+	if privileges, ok := p.DefaultPrivilegesPerObject[targetObject]; ok {
+		userPrivileges = privileges.Users
+	}
+	if p.GetPublicHasUsageOnTypes() && targetObject == tree.Types {
+		userPrivileges = append(userPrivileges, UserPrivileges{
+			UserProto:  security.PublicRoleName().EncodeProto(),
+			Privileges: privilege.USAGE.Mask(),
+		})
+	}
+	// If ForAllRoles is specified, we can return early.
+	// ForAllRoles is not a real role and does not have implicit default privileges
+	// for itself.
+	if p.GetForAllRoles() != nil {
+		return userPrivileges
+	}
+	userProto := p.GetExplicitRole().UserProto
+	switch targetObject {
+	case tree.Tables:
+		if p.GetRoleHasAllPrivilegesOnTables() {
+			return append(userPrivileges, UserPrivileges{
+				UserProto:  userProto,
+				Privileges: privilege.ALL.Mask(),
+			})
+		}
+	case tree.Sequences:
+		if p.GetRoleHasAllPrivilegesOnSequences() {
+			return append(userPrivileges, UserPrivileges{
+				UserProto:  userProto,
+				Privileges: privilege.ALL.Mask(),
+			})
+		}
+	case tree.Schemas:
+		if p.GetRoleHasAllPrivilegesOnSchemas() {
+			return append(userPrivileges, UserPrivileges{
+				UserProto:  userProto,
+				Privileges: privilege.ALL.Mask(),
+			})
+		}
+	case tree.Types:
+		if p.GetRoleHasAllPrivilegesOnTypes() {
+			userPrivileges = append(userPrivileges, UserPrivileges{
+				UserProto:  userProto,
+				Privileges: privilege.ALL.Mask(),
+			})
+		}
+	}
+	return userPrivileges
 }
 
 // FindUserIndex looks for a given user and returns its
@@ -81,19 +255,10 @@ func (p *DefaultPrivilegeDescriptor) FindOrCreateUser(
 	idx := sort.Search(len(p.DefaultPrivilegesPerRole), func(i int) bool {
 		return !p.DefaultPrivilegesPerRole[i].ToDefaultPrivilegesRole().LessThan(role)
 	})
-	var defaultPrivilegeRole isDefaultPrivilegesForRole_Role
-	if role.ForAllRoles {
-		defaultPrivilegeRole = &DefaultPrivilegesForRole_ForAllRoles{ForAllRoles: true}
-	} else {
-		defaultPrivilegeRole = &DefaultPrivilegesForRole_UserProto{UserProto: role.Role.EncodeProto()}
-	}
 	if idx == len(p.DefaultPrivilegesPerRole) {
 		// Not found but should be inserted at the end.
 		p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole,
-			DefaultPrivilegesForRole{
-				Role:                       defaultPrivilegeRole,
-				DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
-			},
+			InitDefaultPrivilegesForRole(role),
 		)
 	} else if p.DefaultPrivilegesPerRole[idx].ToDefaultPrivilegesRole() == role {
 		// Found.
@@ -101,12 +266,41 @@ func (p *DefaultPrivilegeDescriptor) FindOrCreateUser(
 		// New element to be inserted at idx.
 		p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole, DefaultPrivilegesForRole{})
 		copy(p.DefaultPrivilegesPerRole[idx+1:], p.DefaultPrivilegesPerRole[idx:])
-		p.DefaultPrivilegesPerRole[idx] = DefaultPrivilegesForRole{
-			Role:                       defaultPrivilegeRole,
+		p.DefaultPrivilegesPerRole[idx] = InitDefaultPrivilegesForRole(role)
+	}
+	return &p.DefaultPrivilegesPerRole[idx]
+}
+
+// InitDefaultPrivilegesForRole creates the default DefaultPrivilegesForRole
+// for a user.
+func InitDefaultPrivilegesForRole(role DefaultPrivilegesRole) DefaultPrivilegesForRole {
+	var defaultPrivilegesRole isDefaultPrivilegesForRole_Role
+	if role.ForAllRoles {
+		defaultPrivilegesRole = &DefaultPrivilegesForRole_ForAllRoles{
+			ForAllRoles: &DefaultPrivilegesForRoleForAllRolesMessage{
+				IsForAllRoles:         true,
+				PublicHasUsageOnTypes: true,
+			},
+		}
+		return DefaultPrivilegesForRole{
+			Role:                       defaultPrivilegesRole,
 			DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
 		}
 	}
-	return &p.DefaultPrivilegesPerRole[idx]
+	defaultPrivilegesRole = &DefaultPrivilegesForRole_ExplicitRole{
+		ExplicitRole: &DefaultPrivilegesForRoleRoleMessage{
+			UserProto:                       role.Role.EncodeProto(),
+			PublicHasUsageOnTypes:           true,
+			RoleHasAllPrivilegesOnTables:    true,
+			RoleHasAllPrivilegesOnSequences: true,
+			RoleHasAllPrivilegesOnSchemas:   true,
+			RoleHasAllPrivilegesOnTypes:     true,
+		},
+	}
+	return DefaultPrivilegesForRole{
+		Role:                       defaultPrivilegesRole,
+		DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
+	}
 }
 
 // RemoveUser looks for a given user in the list and removes it if present.
@@ -124,7 +318,7 @@ func (p *DefaultPrivilegeDescriptor) RemoveUser(role DefaultPrivilegesRole) {
 func (p *DefaultPrivilegeDescriptor) Validate() error {
 	entryForAllRolesFound := false
 	for i, defaultPrivilegesForRole := range p.DefaultPrivilegesPerRole {
-		if defaultPrivilegesForRole.GetForAllRoles() {
+		if defaultPrivilegesForRole.GetForAllRoles() != nil {
 			if entryForAllRolesFound {
 				return errors.AssertionFailedf("multiple entries found in map for all roles")
 			}
@@ -153,5 +347,48 @@ func InitDefaultPrivilegeDescriptor() *DefaultPrivilegeDescriptor {
 	var defaultPrivilegesForRole []DefaultPrivilegesForRole
 	return &DefaultPrivilegeDescriptor{
 		DefaultPrivilegesPerRole: defaultPrivilegesForRole,
+	}
+}
+
+func (p *DefaultPrivilegesForRole) GetPublicHasUsageOnTypes() bool {
+	if p.GetForAllRoles() != nil {
+		return p.GetForAllRoles().PublicHasUsageOnTypes
+	}
+	return p.GetExplicitRole().PublicHasUsageOnTypes
+}
+
+func (p *DefaultPrivilegesForRole) GetRoleHasAllPrivilegesOnTables() bool {
+	if p.GetForAllRoles() != nil {
+		return false
+	}
+	return p.GetExplicitRole().RoleHasAllPrivilegesOnTables
+}
+
+func (p *DefaultPrivilegesForRole) GetRoleHasAllPrivilegesOnSequences() bool {
+	if p.GetForAllRoles() != nil {
+		return false
+	}
+	return p.GetExplicitRole().RoleHasAllPrivilegesOnSequences
+}
+
+func (p *DefaultPrivilegesForRole) GetRoleHasAllPrivilegesOnSchemas() bool {
+	if p.GetForAllRoles() != nil {
+		return false
+	}
+	return p.GetExplicitRole().RoleHasAllPrivilegesOnSchemas
+}
+
+func (p *DefaultPrivilegesForRole) GetRoleHasAllPrivilegesOnTypes() bool {
+	if p.GetForAllRoles() != nil {
+		return false
+	}
+	return p.GetExplicitRole().RoleHasAllPrivilegesOnTypes
+}
+
+func (p *DefaultPrivilegesForRole) setPublicHasUsageOnTypes(publicHasUsageOnTypes bool) {
+	if p.GetExplicitRole() != nil {
+		p.GetExplicitRole().PublicHasUsageOnTypes = publicHasUsageOnTypes
+	} else if p.GetForAllRoles() != nil {
+		p.GetForAllRoles().PublicHasUsageOnTypes = publicHasUsageOnTypes
 	}
 }

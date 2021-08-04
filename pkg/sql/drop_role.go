@@ -481,10 +481,10 @@ func accumulateDependentDefaultPrivileges(
 	return db.GetDefaultPrivilegeDescriptor().ForEachDefaultPrivilegeForRole(func(
 		defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
 		role := descpb.DefaultPrivilegesRole{}
-		if defaultPrivilegesForRole.GetForAllRoles() {
+		if defaultPrivilegesForRole.GetForAllRoles() != nil {
 			role.ForAllRoles = true
 		} else {
-			role.Role = defaultPrivilegesForRole.GetUserProto().Decode()
+			role.Role = defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode()
 		}
 		for object, defaultPrivs := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
 			addDependentPrivileges(object, defaultPrivs, role)
