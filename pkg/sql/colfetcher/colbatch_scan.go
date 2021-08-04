@@ -12,7 +12,6 @@ package colfetcher
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -236,20 +235,18 @@ func NewColBatchScan(
 	var bsHeader *roachpb.BoundedStalenessHeader
 	if aost := evalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
 		ts := aost.Timestamp
-		strict := aost.NearestOnly
 		if aost.Timestamp.Less(table.GetModificationTime()) {
-			fmt.Printf("table modified at %#v (aost %#v), v %#v; increasing ts\n", table.GetModificationTime(), ts, table.GetVersion())
+			//			fmt.Printf("table modified at %#v (aost %#v), v %#v; increasing ts\n", table.GetModificationTime(), ts, table.GetVersion())
 			ts = table.GetModificationTime()
-			strict = true
 		}
 		bsHeader = &roachpb.BoundedStalenessHeader{
 			MinTimestampBound:       ts,
-			MinTimestampBoundStrict: strict,
+			MinTimestampBoundStrict: aost.NearestOnly,
 		}
 		if evalCtx.PrevMinTimestampBound != nil {
 			bsHeader.MaxTimestampBound = *evalCtx.PrevMinTimestampBound
 		}
-		fmt.Printf("bs header: %#v, ts: %#v\n", bsHeader, ts)
+		//		fmt.Printf("bs header: %#v, ts: %#v\n", bsHeader, ts)
 	}
 
 	s := colBatchScanPool.Get().(*ColBatchScan)
