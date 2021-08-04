@@ -178,7 +178,7 @@ var validCasts = []castInfo{
 	{from: types.TimestampFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{
 		from: types.TimestampTZFamily, to: types.StringFamily, volatility: VolatilityStable,
-		volatilityHint: "TIMESTAMPTZ to STRING casts depend on the current timezone; consider using (t AT TIME ZONE 'UTC')::STRING instead.",
+		volatilityHint: "TIMESTAMPTZ to STRING casts depend on the current timezone; consider using (t AT TIME ZONE 'UTC') instead.",
 	},
 	{
 		from:           types.IntervalFamily,
