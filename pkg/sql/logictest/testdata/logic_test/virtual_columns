@@ -149,6 +149,24 @@ SELECT a FROM t_idx WHERE w IN (4,6)
 3
 5
 
+# Covering lookup join.
+query II
+SELECT v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_idx_v_idx ON u.x = t_idx.v
+----
+2   2
+5   5
+10  10
+10  10
+
+# Non-covering lookup join that requires a second join on the primary index.
+query IIII
+SELECT a, b, v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_idx_v_idx ON u.x = t_idx.v
+----
+1  1  2   2
+2  8  10  10
+4  6  10  10
+5  0  5   5
+
 statement ok
 DELETE FROM t_idx WHERE v = 6
 
