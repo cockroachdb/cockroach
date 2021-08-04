@@ -49,6 +49,7 @@ type slidingWindowAggregateFunc interface {
 // should put its output (if there is no such column, a new column is appended).
 func NewWindowAggregatorOperator(
 	args *WindowArgs,
+	aggType execinfrapb.AggregatorSpec_Func,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
 	argIdxs []int,
@@ -84,12 +85,43 @@ func NewWindowAggregatorOperator(
 		closers:      closers,
 		vecs:         make([]coldata.Vec, len(inputIdxs)),
 	}
-	agg := aggAlloc.MakeAggregateFuncs()[0]
+	var agg colexecagg.AggregateFunc
+	if aggAlloc != nil {
+		agg = aggAlloc.MakeAggregateFuncs()[0]
+	}
 	var windower bufferedWindower
-	if slidingWindowAgg, ok := agg.(slidingWindowAggregateFunc); ok {
-		windower = &slidingWindowAggregator{windowAggregatorBase: base, agg: slidingWindowAgg}
-	} else {
-		windower = &windowAggregator{windowAggregatorBase: base, agg: agg}
+	switch aggType {
+	case execinfrapb.Min, execinfrapb.Max:
+		if WindowFrameCanShrink(frame, ordering) {
+			// In the case when the window frame for a given row does not necessarily
+			// include all rows from the previous frame, min and max require a
+			// specialized implementation that maintains a dequeue of seen values.
+			if frame.Exclusion != execinfrapb.WindowerSpec_Frame_NO_EXCLUSION {
+				// TODO(drewk): extend the implementations to work with non-default
+				// exclusion. For now, we have to use the quadratic-time method.
+				windower = &windowAggregator{windowAggregatorBase: base, agg: agg}
+			} else {
+				switch aggType {
+				case execinfrapb.Min:
+					windower = newMinRemovableAggregator(args, framer, buffer, outputType)
+				case execinfrapb.Max:
+					windower = newMaxRemovableAggregator(args, framer, buffer, outputType)
+				}
+			}
+		} else {
+			// When the frame can only grow, the simple sliding window implementation
+			// is sufficient.
+			windower = &slidingWindowAggregator{
+				windowAggregatorBase: base,
+				agg:                  agg.(slidingWindowAggregateFunc),
+			}
+		}
+	default:
+		if slidingWindowAgg, ok := agg.(slidingWindowAggregateFunc); ok {
+			windower = &slidingWindowAggregator{windowAggregatorBase: base, agg: slidingWindowAgg}
+		} else {
+			windower = &windowAggregator{windowAggregatorBase: base, agg: agg}
+		}
 	}
 	return newBufferedWindowOperator(args, windower, outputType, mainMemLimit)
 }

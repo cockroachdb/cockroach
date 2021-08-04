@@ -1358,6 +1358,7 @@ func NewColOperator(
 					opName := opNamePrefix + strings.ToLower(wf.Func.AggregateFunc.String())
 					result.finishBufferedWindowerArgs(
 						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+					aggType := *wf.Func.AggregateFunc
 					switch *wf.Func.AggregateFunc {
 					case execinfrapb.CountRows:
 						// count_rows has a specialized implementation.
@@ -1375,20 +1376,28 @@ func NewColOperator(
 							colIdx[i] = uint32(i)
 						}
 						aggregations := []execinfrapb.AggregatorSpec_Aggregation{{
-							Func:   *wf.Func.AggregateFunc,
+							Func:   aggType,
 							ColIdx: colIdx,
 						}}
 						semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 						aggArgs.Constructors, aggArgs.ConstArguments, aggArgs.OutputTypes, err =
 							colexecagg.ProcessAggregations(evalCtx, semaCtx, aggregations, argTypes)
-						aggFnsAlloc, _, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-							&aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
-						)
-						if err != nil {
-							colexecerror.InternalError(err)
+						var toClose colexecop.Closers
+						var aggFnsAlloc *colexecagg.AggregateFuncsAlloc
+						if (aggType != execinfrapb.Min && aggType != execinfrapb.Max) ||
+							wf.Frame.Exclusion != execinfrapb.WindowerSpec_Frame_NO_EXCLUSION ||
+							!colexecwindow.WindowFrameCanShrink(wf.Frame, &wf.Ordering) {
+							// Min and max window functions have specialized implementations
+							// when the frame can shrink and has a default exclusion clause.
+							aggFnsAlloc, _, toClose, err = colexecagg.NewAggregateFuncsAlloc(
+								&aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
+							)
+							if err != nil {
+								colexecerror.InternalError(err)
+							}
 						}
 						result.Root = colexecwindow.NewWindowAggregatorOperator(
-							windowArgs, wf.Frame, &wf.Ordering, argIdxs,
+							windowArgs, aggType, wf.Frame, &wf.Ordering, argIdxs,
 							aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
 					}
 				} else {

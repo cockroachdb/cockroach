@@ -885,6 +885,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecwindow/lag.eg.go \
   pkg/sql/colexec/colexecwindow/last_value.eg.go \
   pkg/sql/colexec/colexecwindow/lead.eg.go \
+  pkg/sql/colexec/colexecwindow/min_max_removable_agg.eg.go \
   pkg/sql/colexec/colexecwindow/ntile.eg.go \
   pkg/sql/colexec/colexecwindow/nth_value.eg.go \
   pkg/sql/colexec/colexecwindow/range_offset_handler.eg.go \
