@@ -16,7 +16,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -59,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -534,42 +532,6 @@ func (t *TestTenant) TestingKnobs() *base.TestingKnobs {
 	return &t.Cfg.TestingKnobs
 }
 
-// SetupIdleMonitor will monitor the active connections and if there are none,
-// will activate a `defaultCountdownDuration` countdown timer and terminate
-// the application. The monitoring will start after a warmup period
-// specified by warmupDuration. If the warmupDuration is zero, the idle
-// detection will be turned off.
-func SetupIdleMonitor(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	warmupDuration time.Duration,
-	server netutil.Server,
-	countdownDuration ...time.Duration,
-) *IdleMonitor {
-	if warmupDuration != 0 {
-		log.VEventf(ctx, 2, "idle exit will activate after warmup duration of %s", warmupDuration)
-		oldConnStateHandler := server.ConnState
-		idleMonitor := MakeIdleMonitor(ctx, warmupDuration,
-			func() {
-				log.VEventf(ctx, 2, "idle exiting")
-				stopper.Stop(ctx)
-			},
-			countdownDuration...,
-		)
-		server.ConnState = func(conn net.Conn, state http.ConnState) {
-			if state == http.StateNew {
-				defer oldConnStateHandler(conn, state)
-				idleMonitor.NewConnection(ctx)
-			} else if state == http.StateClosed {
-				defer idleMonitor.CloseConnection(ctx)
-				oldConnStateHandler(conn, state)
-			}
-		}
-		return idleMonitor
-	}
-	return nil
-}
-
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
@@ -613,7 +575,6 @@ func (ts *TestServer) StartTenant(
 	}
 	baseCfg := makeTestBaseConfig(st)
 	baseCfg.TestingKnobs = params.TestingKnobs
-	baseCfg.IdleExitAfter = params.IdleExitAfter
 	baseCfg.Insecure = params.ForceInsecure
 	if params.AllowSettingClusterSettings {
 		tenantKnobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs)
