@@ -44,9 +44,9 @@ const (
 
 // Catalog implements the cat.Catalog interface for testing purposes.
 type Catalog struct {
-	tree.TypeReferenceResolver
 	testSchema Schema
 	counter    int
+	enumTypes  map[string]*types.T
 }
 
 type dataSource interface {
@@ -172,11 +172,6 @@ func (tc *Catalog) ResolveDataSourceByID(
 	}
 	return nil, false, pgerror.Newf(pgcode.UndefinedTable,
 		"relation [%d] does not exist", id)
-}
-
-// ResolveTypeByOID is part of the cat.Catalog interface.
-func (tc *Catalog) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
-	return nil, errors.Newf("test catalog cannot handle user defined types")
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
@@ -396,6 +391,10 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 		tc.CreateSequence(stmt)
 		return "", nil
 
+	case *tree.CreateType:
+		tc.CreateType(stmt)
+		return "", nil
+
 	case *tree.SetZoneConfig:
 		tc.SetZoneConfig(stmt)
 		return "", nil
@@ -589,7 +588,7 @@ type Table struct {
 	Checks     []cat.CheckConstraint
 	Families   []*Family
 	IsVirtual  bool
-	Catalog    cat.Catalog
+	Catalog    *Catalog
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
