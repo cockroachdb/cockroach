@@ -103,6 +103,36 @@ DROP DATABASE db1 CASCADE
   details:
     dependedOn: 56
     tableId: 55
+- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}
+  state: PUBLIC
+  details:
+    dependedOn: 58
+    tableId: 56
+- DROP RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}
+  state: PUBLIC
+  details:
+    dependedOn: 59
+    tableId: 58
+- DROP RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}
+  state: PUBLIC
+  details:
+    dependedOn: 60
+    tableId: 58
+- DROP RelationDependedOnBy:{DescID: 59, ReferencedDescID: 60}
+  state: PUBLIC
+  details:
+    dependedOn: 60
+    tableId: 59
+- DROP RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}
+  state: PUBLIC
+  details:
+    dependedOn: 61
+    tableId: 59
+- DROP RelationDependedOnBy:{DescID: 61, ReferencedDescID: 64}
+  state: PUBLIC
+  details:
+    dependedOn: 64
+    tableId: 61
 - DROP Schema:{DescID: 53}
   state: PUBLIC
   details:
