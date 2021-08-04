@@ -1,0 +1,12 @@
+statement ok
+CREATE TABLE t (x INT, y INT GENERATED ALWAYS AS IDENTITY (START 2 INCREMENT 10))
+
+statement ok
+INSERT INTO t (x) VALUES (1), (2), (3)
+
+query II
+SELECT * from t ORDER BY x;
+----
+1  2
+2  12
+3  22

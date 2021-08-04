@@ -282,6 +282,9 @@ func (p *planner) processSerialLikeInColumnDef(
 
 	} else if d.GeneratedIdentity.IsGenerated {
 		newSpecPtr, catalogPrefixPtr, seqName, seqOpts, err = p.processGenAsIdInColumnDef(ctx, d, tableName)
+		if d.GeneratedIdentity.SeqOptions != nil {
+			seqOpts = d.GeneratedIdentity.SeqOptions
+		}
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
