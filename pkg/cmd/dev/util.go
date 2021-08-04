@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os/exec"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -105,11 +107,73 @@ func addCommonTestFlags(cmd *cobra.Command) {
 	cmd.Flags().Duration(timeoutFlag, 0*time.Minute, "timeout for test")
 }
 
-func ensureBinaryInPath(bin string) error {
+func (d *dev) ensureBinaryInPath(bin string) error {
 	if !isTesting {
-		if _, err := exec.LookPath(bin); err != nil {
+		if _, err := d.exec.LookPath(bin); err != nil {
 			return errors.Newf("Could not find %s in PATH", bin)
 		}
+	}
+	return nil
+}
+
+// setupPath removes the ccache directory from PATH to prevent it writing files
+// outside of the bazel sandbox. This function is called only once to prevent
+// multiple unnecessary calls.
+func setupPath(dev *dev) error {
+	var once sync.Once
+	var err error
+	once.Do(func() {
+		err = setupPathReal(dev)
+	})
+	return err
+}
+
+// setupPathReal uses a list of known compiler names to check if they are
+// symlinks to `ccache`.
+func setupPathReal(dev *dev) error {
+	knownCompilers := []string{"cc", "gcc", "c++", "g++", "clang", "clang++"}
+	// datadriven uses Fprintln() to construct commands, adding '\n' to the end.
+	// Trim the output here and in other places that don't expect the extra new line
+	// at the end.
+	origPath := strings.TrimSuffix(dev.os.Getenv("PATH"), "\n")
+	pathEntries := strings.Split(origPath, string(os.PathListSeparator))
+	for i, entry := range pathEntries {
+		pathEntries[i] = filepath.Clean(entry)
+	}
+	for _, compiler := range knownCompilers {
+		compilerPath, err := dev.exec.LookPath(compiler)
+		if err != nil {
+			continue
+		}
+		compilerPath = strings.TrimSuffix(compilerPath, "\n")
+		compilerDir, _ := filepath.Split(compilerPath)
+		compilerDir = filepath.Clean(compilerDir)
+		compilerResolvedPath, err := dev.os.Readlink(compilerPath)
+		if err != nil {
+			// Skip broken symlinks and real binaries
+			continue
+		}
+		compilerResolvedPath = strings.TrimSuffix(compilerResolvedPath, "\n")
+		_, file := filepath.Split(filepath.Clean(compilerResolvedPath))
+		if file != "ccache" {
+			continue
+		}
+		// The compiler points to ccache, remove it from PATH
+		var newPathEntries []string
+		for _, dir := range pathEntries {
+			if compilerDir != dir {
+				newPathEntries = append(newPathEntries, dir)
+			}
+		}
+		newPath := strings.Join(newPathEntries, string(os.PathListSeparator))
+		if origPath == newPath {
+			log.Printf("WARNING: PATH did not change: %s", origPath)
+		}
+		if err := dev.os.Setenv("PATH", newPath); err != nil {
+			return fmt.Errorf("failed to set PATH to %s, %w", newPath, err)
+		}
+		// All done, return early without trying other known compilers
+		return nil
 	}
 	return nil
 }
