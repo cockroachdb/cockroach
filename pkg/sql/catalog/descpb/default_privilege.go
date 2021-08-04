@@ -62,7 +62,6 @@ func (p *DefaultPrivilegeDescriptor) RevokeDefaultPrivileges(
 ) {
 	var defaultPrivilegesPerObject map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor
 	if role.ForAllRoles {
-		//defaultPrivilegesPerObject = p.getOrCreateDefaultPrivilegesForAllRoles()
 		defaultPrivilegesPerObject = p.DefaultPrivilegesForAllRoles
 	} else {
 		defaultPrivilegesPerObject = p.findOrCreateUser(role.Role).DefaultPrivilegesPerObject

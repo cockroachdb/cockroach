@@ -191,6 +191,21 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Write Stalls"
+      sources={storeSources}
+      tooltip={`The number of intentional write stalls per second ${tooltipSelection}. Write stalls
+        are used to backpressure incoming writes during periods of heavy write traffic.`}
+    >
+      <Axis label="count">
+        <Metric
+          name="cr.store.storage.write-stalls"
+          title="Write Stalls"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Time Series Writes"
       sources={nodeSources}
       tooltip={`The number of successfully written time series samples, and number of errors attempting
