@@ -1117,7 +1117,48 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		f := func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
-			for objectType, privs := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
+			objectTypes := []tree.AlterDefaultPrivilegesTargetObject{
+				tree.Tables,
+				tree.Sequences,
+				tree.Types,
+				tree.Schemas,
+			}
+			for _, objectType := range objectTypes {
+				privs, ok := defaultPrivilegesForRole.DefaultPrivilegesPerObject[objectType]
+				if !ok || len(privs.Users) == 0 {
+					// If the default privileges default state has been altered,
+					// we use an empty entry to signify that the user has no privileges.
+					// We only omit the row entirely if the default privileges are
+					// in its default state. This is PG's behavior.
+					// Note that if ForAllRoles is true, we can skip adding an entry
+					// since ForAllRoles cannot be a grantee - therefore we can ignore
+					// the RoleHasAllPrivilegesOnX flag and skip. We still have to take
+					// into consideration the PublicHasUsageOnTypes flag.
+					switch objectType {
+					case tree.Tables:
+						if defaultPrivilegesForRole.RoleHasAllPrivilegesOnTables ||
+							defaultPrivilegesForRole.GetForAllRoles() {
+							continue
+						}
+					case tree.Sequences:
+						if defaultPrivilegesForRole.RoleHasAllPrivilegesOnSequences ||
+							defaultPrivilegesForRole.GetForAllRoles() {
+							continue
+						}
+					case tree.Schemas:
+						if defaultPrivilegesForRole.RoleHasAllPrivilegesOnSchemas ||
+							defaultPrivilegesForRole.GetForAllRoles() {
+							continue
+						}
+					case tree.Types:
+						if (defaultPrivilegesForRole.RoleHasAllPrivilegesOnTypes ||
+							defaultPrivilegesForRole.GetForAllRoles()) &&
+							defaultPrivilegesForRole.PublicHasUsageOnTypes {
+							continue
+						}
+					}
+				}
+
 				// Type of object this entry is for:
 				// r = relation (table, view), S = sequence, f = function, T = type, n = schema.
 				var c string
@@ -1145,26 +1186,34 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					privileges := privilege.ListFromBitField(
 						userPrivs.Privileges, privilegeObjectType,
 					)
-					defaclItem := fmt.Sprintf(`%s=%s/%s`,
-						user,
-						privileges.ListToACL(
-							privilegeObjectType,
-						),
-						// TODO(richardjcai): CockroachDB currently does not track grantors
-						//    See: https://github.com/cockroachdb/cockroach/issues/67442.
-						"", /* grantor */
-					)
-
-					if len(defaclItem) != 0 {
-						if err := arr.Append(
-							tree.NewDString(defaclItem)); err != nil {
-							return err
-						}
+					defaclItem := createDefACLItem(user, privileges, privilegeObjectType)
+					if err := arr.Append(
+						tree.NewDString(defaclItem)); err != nil {
+						return err
 					}
 				}
 
-				if len(arr.Array) == 0 {
-					continue
+				// Special cases to handle for types.
+				// If one of RoleHasAllPrivilegesOnTypes or PublicHasUsageOnTypes is false
+				// and the other is true, we do not omit the entry since the default
+				// state has changed. We have to produce an entry by expanding the
+				// privileges.
+				if objectType == tree.Types {
+					if !defaultPrivilegesForRole.RoleHasAllPrivilegesOnTypes &&
+						defaultPrivilegesForRole.PublicHasUsageOnTypes {
+						defaclItem := createDefACLItem(
+							"" /* public role */, privilege.List{privilege.USAGE}, privilegeObjectType,
+						)
+						arr.Append(tree.NewDString(defaclItem))
+					}
+					if !defaultPrivilegesForRole.PublicHasUsageOnTypes &&
+						defaultPrivilegesForRole.RoleHasAllPrivilegesOnTypes {
+						defaclItem := createDefACLItem(
+							defaultPrivilegesForRole.GetUserProto().Decode().Normalized(),
+							privilege.List{privilege.ALL}, privilegeObjectType,
+						)
+						arr.Append(tree.NewDString(defaclItem))
+					}
 				}
 
 				// TODO(richardjcai): Update this logic once default privileges on
@@ -1198,6 +1247,20 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 		}
 		return dbContext.GetDefaultPrivilegeDescriptor().ForEachDefaultPrivilegeForRole(f)
 	},
+}
+
+func createDefACLItem(
+	user string, privileges privilege.List, privilegeObjectType privilege.ObjectType,
+) string {
+	return fmt.Sprintf(`%s=%s/%s`,
+		user,
+		privileges.ListToACL(
+			privilegeObjectType,
+		),
+		// TODO(richardjcai): CockroachDB currently does not track grantors
+		//    See: https://github.com/cockroachdb/cockroach/issues/67442.
+		"", /* grantor */
+	)
 }
 
 var (

@@ -18,6 +18,42 @@ ALTER DEFAULT PRIVILEGES GRANT USAGE ON TABLES to testuser
 # For Tables.
 statement ok
 CREATE DATABASE d;
+GRANT CREATE ON DATABASE d TO testuser;
+
+# By default, testuser should have ALL privileges on a table it creates.
+user testuser
+
+statement ok
+USE d;
+
+statement ok
+CREATE TABLE testuser_t();
+
+query TTTTT colnames
+SHOW GRANTS ON testuser_t
+----
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       testuser_t  admin     ALL
+d              public       testuser_t  root      ALL
+d              public       testuser_t  testuser  ALL
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM testuser;
+
+statement ok
+CREATE TABLE testuser_t2();
+
+query TTTTT colnames
+SHOW GRANTS ON testuser_t2
+----
+database_name  schema_name  table_name   grantee   privilege_type
+d              public       testuser_t2  admin     ALL
+d              public       testuser_t2  root      ALL
+d              public       testuser_t2  testuser  CREATE
+
+user root
+
+statement ok
 USE d;
 
 statement ok
@@ -32,6 +68,7 @@ SHOW GRANTS ON t
 database_name  schema_name  table_name  grantee   privilege_type
 d              public       t           admin     ALL
 d              public       t           root      ALL
+d              public       t           testuser  CREATE
 d              public       t           testuser  SELECT
 
 statement ok
@@ -43,9 +80,10 @@ CREATE VIEW vx AS SELECT 1
 query TTTTT colnames
 SHOW GRANTS ON s
 ----
-database_name  schema_name  table_name  grantee  privilege_type
-d              public       s           admin    ALL
-d              public       s           root     ALL
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       s           admin     ALL
+d              public       s           root      ALL
+d              public       s           testuser  ALL
 
 query TTTTT colnames
 SHOW GRANTS ON vx
@@ -53,6 +91,7 @@ SHOW GRANTS ON vx
 database_name  schema_name  table_name  grantee   privilege_type
 d              public       vx          admin     ALL
 d              public       vx          root      ALL
+d              public       vx          testuser  CREATE
 d              public       vx          testuser  SELECT
 
 statement ok
@@ -64,9 +103,10 @@ CREATE TABLE t2()
 query TTTTT colnames
 SHOW GRANTS ON t2
 ----
-database_name  schema_name  table_name  grantee  privilege_type
-d              public       t2          admin    ALL
-d              public       t2          root     ALL
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       t2          admin     ALL
+d              public       t2          root      ALL
+d              public       t2          testuser  CREATE
 
 statement ok
 CREATE SEQUENCE s2
@@ -74,9 +114,10 @@ CREATE SEQUENCE s2
 query TTTTT colnames
 SHOW GRANTS ON s2
 ----
-database_name  schema_name  table_name  grantee  privilege_type
-d              public       s2          admin    ALL
-d              public       s2          root     ALL
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       s2          admin     ALL
+d              public       s2          root      ALL
+d              public       s2          testuser  ALL
 
 
 # Multiple users.
@@ -95,6 +136,7 @@ SHOW GRANTS ON t3
 database_name  schema_name  table_name  grantee    privilege_type
 d              public       t3          admin      ALL
 d              public       t3          root       ALL
+d              public       t3          testuser   CREATE
 d              public       t3          testuser   SELECT
 d              public       t3          testuser2  SELECT
 
@@ -104,9 +146,10 @@ CREATE SEQUENCE s3
 query TTTTT colnames
 SHOW GRANTS ON s3
 ----
-database_name  schema_name  table_name  grantee  privilege_type
-d              public       s3          admin    ALL
-d              public       s3          root     ALL
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       s3          admin     ALL
+d              public       s3          root      ALL
+d              public       s3          testuser  ALL
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM testuser, testuser2
@@ -117,9 +160,10 @@ CREATE TABLE t4()
 query TTTTT colnames
 SHOW GRANTS ON t4
 ----
-database_name  schema_name  table_name  grantee  privilege_type
-d              public       t4          admin    ALL
-d              public       t4          root     ALL
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       t4          admin     ALL
+d              public       t4          root      ALL
+d              public       t4          testuser  CREATE
 
 statement ok
 CREATE SEQUENCE s4
@@ -127,9 +171,10 @@ CREATE SEQUENCE s4
 query TTTTT colnames
 SHOW GRANTS ON s4
 ----
-database_name  schema_name  table_name  grantee  privilege_type
-d              public       s4          admin    ALL
-d              public       s4          root     ALL
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       s4          admin     ALL
+d              public       s4          root      ALL
+d              public       s4          testuser  ALL
 
 # ALTER DEFAULT PRIVILEGES FOR ROLE.
 
@@ -150,6 +195,8 @@ USE d;
 statement ok
 CREATE TABLE t5()
 
+# testuser has ALL privileges since by default, ALL is defined as a default
+# privilege for the creator role of an object..
 query TTTTT colnames
 SHOW GRANTS ON t5
 ----

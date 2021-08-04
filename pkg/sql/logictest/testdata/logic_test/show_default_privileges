@@ -10,7 +10,6 @@ SHOW DEFAULT PRIVILEGES
 root  false  schemas    public  USAGE
 root  false  sequences  public  SELECT
 root  false  tables     public  SELECT
-root  false  types      public  USAGE
 
 statement ok
 CREATE USER foo
@@ -38,7 +37,6 @@ root  false  tables     foo     ALL
 root  false  tables     public  SELECT
 root  false  types      bar     ALL
 root  false  types      foo     ALL
-root  false  types      public  USAGE
 
 statement ok
 GRANT foo, bar TO root;
@@ -63,7 +61,6 @@ root  false  tables     foo     ALL
 root  false  tables     public  SELECT
 root  false  types      bar     ALL
 root  false  types      foo     ALL
-root  false  types      public  USAGE
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TABLES FROM foo, bar;
@@ -85,7 +82,6 @@ root  false  tables     foo     ALL
 root  false  tables     public  SELECT
 root  false  types      bar     ALL
 root  false  types      foo     ALL
-root  false  types      public  USAGE
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM foo, bar, public;
