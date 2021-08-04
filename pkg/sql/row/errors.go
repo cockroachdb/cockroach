@@ -51,6 +51,11 @@ func (f *singleKVFetcher) nextBatch(
 func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch) error {
 	origPErr := b.MustPErr()
 	switch v := origPErr.GetDetail().(type) {
+	case *roachpb.MinTimestampBoundUnsatisfiableError:
+		return pgerror.WithCandidateCode(
+			origPErr.GoError(),
+			pgcode.UnsatisfiableBoundedStaleness,
+		)
 	case *roachpb.ConditionFailedError:
 		if origPErr.Index == nil {
 			break
@@ -90,6 +95,13 @@ func ConvertFetchError(ctx context.Context, descForKey KeyToDescTranslator, err 
 		key := wiErr.Intents[0].Key
 		desc, _ := descForKey.KeyToDesc(key)
 		return NewLockNotAvailableError(ctx, desc, key, wiErr.Reason)
+	}
+	var bsErr *roachpb.MinTimestampBoundUnsatisfiableError
+	if errors.As(err, &bsErr) {
+		return pgerror.WithCandidateCode(
+			err,
+			pgcode.UnsatisfiableBoundedStaleness,
+		)
 	}
 	return err
 }
