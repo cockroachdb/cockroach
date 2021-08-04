@@ -12,7 +12,6 @@ package descs
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -146,7 +145,6 @@ func (ld *leasedDescriptors) getResult(
 			(catalog.HasInactiveDescriptorError(err) &&
 				errors.Is(err, catalog.ErrDescriptorDropped)) ||
 				errors.Is(err, catalog.ErrDescriptorNotFound); shouldReadFromStore {
-			fmt.Printf("found inactive descriptor\n")
 			return nil, true, nil
 		}
 		// Lease acquisition failed with some other error. This we don't
