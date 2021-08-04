@@ -183,4 +183,4 @@ SHOW GRANTS ON b.t
 database_name  schema_name  table_name  grantee   privilege_type
 b              public       t           admin     ALL
 b              public       t           root      ALL
-b              public       t           testuser  CREATE
+b              public       t           testuser  ALL
