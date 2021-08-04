@@ -1,5 +1,9 @@
 dev builder
 ----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 docker volume inspect bzlcache
 bazel info workspace --color=no --config=dev
 mkdir go/src/github.com/cockroachdb/cockroach/artifacts

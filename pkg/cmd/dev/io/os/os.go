@@ -153,6 +153,83 @@ func (o *OS) Symlink(to, from string) error {
 	return err
 }
 
+// Getenv wraps around os.Getenv, retrieving the value of the environment
+// variable named by the key.
+func (o OS) Getenv(key string) string {
+	command := fmt.Sprintf("getenv %s", key)
+	o.logger.Print(command)
+
+	var env string
+	if o.Recorder == nil || o.Recorder.Recording() {
+		env = os.Getenv(key)
+	}
+
+	if o.Recorder == nil {
+		return env
+	}
+
+	if o.Recording() {
+		err := o.record(command, env)
+		if err != nil {
+			return ""
+		}
+		return env
+	}
+	ret, _ := o.replay(command)
+	return ret
+}
+
+// Setenv wraps around os.Setenv, which sets the value of the environment
+// variable named by the key. It returns an error, if any.
+func (o *OS) Setenv(key, value string) error {
+	command := fmt.Sprintf("export %s=%s", key, value)
+	o.logger.Print(command)
+
+	if o.Recorder == nil || o.Recorder.Recording() {
+		// Do the real thing.
+		if err := os.Setenv(key, value); err != nil {
+			return err
+		}
+	}
+
+	if o.Recorder == nil {
+		return nil
+	}
+
+	if o.Recording() {
+		return o.record(command, "")
+	}
+	_, err := o.replay(command)
+	return err
+}
+
+// Readlink wraps around os.Readlink, which returns the destination of the named
+// symbolic link. If there is an error, it will be of type *PathError.
+func (o *OS) Readlink(filename string) (string, error) {
+	command := fmt.Sprintf("readlink %s", filename)
+	o.logger.Print(command)
+
+	var resolved string
+	if o.Recorder == nil || o.Recorder.Recording() {
+		// Do the real thing.
+		var err error
+		resolved, err = os.Readlink(filename)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if o.Recorder == nil {
+		return resolved, nil
+	}
+
+	if o.Recording() {
+		return resolved, o.record(command, resolved)
+	}
+	ret, err := o.replay(command)
+	return ret, err
+}
+
 // ReadFile wraps around ioutil.ReadFile, reading a file from disk and
 // returning the contents.
 func (o *OS) ReadFile(filename string) (string, error) {

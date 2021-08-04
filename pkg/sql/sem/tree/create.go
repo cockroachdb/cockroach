@@ -94,7 +94,7 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.ConnectionLimit != -1 {
 		ctx.WriteString(" CONNECTION LIMIT = ")
 		if ctx.flags.HasFlags(FmtHideConstants) {
-			ctx.WriteByte('_')
+			ctx.WriteByte('0')
 		} else {
 			// NB: use ctx.FormatNode when the connection limit becomes an expression.
 			ctx.WriteString(strconv.Itoa(int(node.ConnectionLimit)))

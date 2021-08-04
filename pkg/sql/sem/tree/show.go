@@ -557,7 +557,7 @@ type ShowSyntax struct {
 func (node *ShowSyntax) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW SYNTAX ")
 	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
-		ctx.WriteByte('_')
+		ctx.WriteString("'_'")
 	} else {
 		ctx.WriteString(lexbase.EscapeSQLString(node.Statement))
 	}
