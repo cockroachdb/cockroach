@@ -193,6 +193,7 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 		desc := toDel.desc
 		var cascadedObjects []string
 		var err error
+		//TODO (sajjad): Add meaningful job descriptions instead of empty strings.
 		if desc.IsView() {
 			cascadedObjects, err = p.dropViewImpl(ctx, desc, false /* queueJob */, "", tree.DropCascade)
 		} else if desc.IsSequence() {

@@ -461,3 +461,26 @@ SELECT job_id
 	).Scan(&status)
 	require.Equal(t, jobs.StatusSucceeded, status)
 }
+
+func TestDescriptionUpdateInDropDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(context.Background())
+
+	tdb.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.parent (a INT PRIMARY KEY);
+CREATE TABLE t.child (
+    b INT PRIMARY KEY,
+    CONSTRAINT fk_b_a FOREIGN KEY (b) REFERENCES t.parent (a)
+  );
+DROP DATABASE t CASCADE`)
+
+	query := `
+SELECT count(*) FROM [SHOW JOBS] 
+ WHERE job_type = 'SCHEMA CHANGE GC' 
+   AND description LIKE 'GC for DROP DATABASE t CASCADE: removing FK fk_b_a %%'`
+	tdb.CheckQueryResultsRetry(t, query, [][]string{{"1"}})
+}
