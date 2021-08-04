@@ -116,11 +116,11 @@ type minBoolWindowAgg struct {
 	col coldata.Bools
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg bool
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minBoolWindowAgg{}
@@ -146,10 +146,9 @@ func (a *minBoolWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -172,6 +171,7 @@ func (a *minBoolWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -180,10 +180,9 @@ func (a *minBoolWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -206,6 +205,7 @@ func (a *minBoolWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -219,15 +219,18 @@ func (a *minBoolWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minBoolWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minBoolWindowAggAlloc struct {
@@ -251,17 +254,25 @@ func (a *minBoolWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minBoolWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minBoolWindowAgg"))
+}
+
 type minBytesWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg []byte
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minBytesWindowAgg{}
@@ -287,10 +298,9 @@ func (a *minBytesWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = append(a.curAgg[:0], val...)
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -305,6 +315,7 @@ func (a *minBytesWindowAgg) Compute(
 						a.curAgg = append(a.curAgg[:0], candidate...)
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -313,10 +324,9 @@ func (a *minBytesWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = append(a.curAgg[:0], val...)
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -331,6 +341,7 @@ func (a *minBytesWindowAgg) Compute(
 						a.curAgg = append(a.curAgg[:0], candidate...)
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -344,19 +355,22 @@ func (a *minBytesWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = append(a.curAgg[:0], a.curAgg...)
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	oldCurAggSize := len(a.curAgg)
-	// Release the reference to curAgg eagerly.
-	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
-	a.curAgg = nil
 }
 
 func (a *minBytesWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	oldCurAggSize := len(a.curAgg)
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type minBytesWindowAggAlloc struct {
@@ -380,17 +394,25 @@ func (a *minBytesWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minBytesWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minBytesWindowAgg"))
+}
+
 type minDecimalWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Decimals
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minDecimalWindowAgg{}
@@ -416,10 +438,9 @@ func (a *minDecimalWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg.Set(&val)
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -434,6 +455,7 @@ func (a *minDecimalWindowAgg) Compute(
 						a.curAgg.Set(&candidate)
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -442,10 +464,9 @@ func (a *minDecimalWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg.Set(&val)
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -460,6 +481,7 @@ func (a *minDecimalWindowAgg) Compute(
 						a.curAgg.Set(&candidate)
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -473,15 +495,18 @@ func (a *minDecimalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg.Set(&a.curAgg)
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minDecimalWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minDecimalWindowAggAlloc struct {
@@ -505,17 +530,25 @@ func (a *minDecimalWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minDecimalWindowAgg"))
+}
+
 type minInt16WindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int16s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int16
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minInt16WindowAgg{}
@@ -541,10 +574,9 @@ func (a *minInt16WindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -570,6 +602,7 @@ func (a *minInt16WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -578,10 +611,9 @@ func (a *minInt16WindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -607,6 +639,7 @@ func (a *minInt16WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -620,15 +653,18 @@ func (a *minInt16WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minInt16WindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minInt16WindowAggAlloc struct {
@@ -652,17 +688,25 @@ func (a *minInt16WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minInt16WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minInt16WindowAgg"))
+}
+
 type minInt32WindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int32s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int32
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minInt32WindowAgg{}
@@ -688,10 +732,9 @@ func (a *minInt32WindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -717,6 +760,7 @@ func (a *minInt32WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -725,10 +769,9 @@ func (a *minInt32WindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -754,6 +797,7 @@ func (a *minInt32WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -767,15 +811,18 @@ func (a *minInt32WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minInt32WindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minInt32WindowAggAlloc struct {
@@ -799,17 +846,25 @@ func (a *minInt32WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minInt32WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minInt32WindowAgg"))
+}
+
 type minInt64WindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minInt64WindowAgg{}
@@ -835,10 +890,9 @@ func (a *minInt64WindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -864,6 +918,7 @@ func (a *minInt64WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -872,10 +927,9 @@ func (a *minInt64WindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -901,6 +955,7 @@ func (a *minInt64WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -914,15 +969,18 @@ func (a *minInt64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minInt64WindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minInt64WindowAggAlloc struct {
@@ -946,17 +1004,25 @@ func (a *minInt64WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minInt64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minInt64WindowAgg"))
+}
+
 type minFloat64WindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Float64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg float64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minFloat64WindowAgg{}
@@ -982,10 +1048,9 @@ func (a *minFloat64WindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1019,6 +1084,7 @@ func (a *minFloat64WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -1027,10 +1093,9 @@ func (a *minFloat64WindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1064,6 +1129,7 @@ func (a *minFloat64WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -1077,15 +1143,18 @@ func (a *minFloat64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minFloat64WindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minFloat64WindowAggAlloc struct {
@@ -1109,17 +1178,25 @@ func (a *minFloat64WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minFloat64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minFloat64WindowAgg"))
+}
+
 type minTimestampWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Times
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg time.Time
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minTimestampWindowAgg{}
@@ -1145,10 +1222,9 @@ func (a *minTimestampWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1170,6 +1246,7 @@ func (a *minTimestampWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -1178,10 +1255,9 @@ func (a *minTimestampWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1203,6 +1279,7 @@ func (a *minTimestampWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -1216,15 +1293,18 @@ func (a *minTimestampWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minTimestampWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minTimestampWindowAggAlloc struct {
@@ -1248,17 +1328,25 @@ func (a *minTimestampWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minTimestampWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minTimestampWindowAgg"))
+}
+
 type minIntervalWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Durations
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg duration.Duration
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minIntervalWindowAgg{}
@@ -1284,10 +1372,9 @@ func (a *minIntervalWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1302,6 +1389,7 @@ func (a *minIntervalWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -1310,10 +1398,9 @@ func (a *minIntervalWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1328,6 +1415,7 @@ func (a *minIntervalWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -1341,15 +1429,18 @@ func (a *minIntervalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minIntervalWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minIntervalWindowAggAlloc struct {
@@ -1373,17 +1464,25 @@ func (a *minIntervalWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minIntervalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minIntervalWindowAgg"))
+}
+
 type minJSONWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col *coldata.JSONs
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg json.JSON
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minJSONWindowAgg{}
@@ -1412,7 +1511,7 @@ func (a *minJSONWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 
 					var _err error
@@ -1426,7 +1525,6 @@ func (a *minJSONWindowAgg) Compute(
 						colexecerror.ExpectedError(_err)
 					}
 
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1458,6 +1556,7 @@ func (a *minJSONWindowAgg) Compute(
 
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -1466,7 +1565,7 @@ func (a *minJSONWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 
 					var _err error
@@ -1480,7 +1579,6 @@ func (a *minJSONWindowAgg) Compute(
 						colexecerror.ExpectedError(_err)
 					}
 
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1512,6 +1610,7 @@ func (a *minJSONWindowAgg) Compute(
 
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -1528,22 +1627,36 @@ func (a *minJSONWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+
+		var _err error
+		var _bytes []byte
+		_bytes, _err = json.EncodeJSON(nil, a.curAgg)
+		if _err != nil {
+			colexecerror.ExpectedError(_err)
+		}
+		a.curAgg, _err = json.FromEncoding(_bytes)
+		if _err != nil {
+			colexecerror.ExpectedError(_err)
+		}
+
 		a.col.Set(outputIdx, a.curAgg)
 	}
+}
+
+func (a *minJSONWindowAgg) Reset() {
+	a.numNonNull = 0
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
 		oldCurAggSize = a.curAgg.Size()
 	}
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
-}
-
-func (a *minJSONWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
 }
 
 type minJSONWindowAggAlloc struct {
@@ -1567,17 +1680,25 @@ func (a *minJSONWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minJSONWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minJSONWindowAgg"))
+}
+
 type minDatumWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.DatumVec
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg interface{}
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minDatumWindowAgg{}
@@ -1607,10 +1728,9 @@ func (a *minDatumWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1627,6 +1747,7 @@ func (a *minDatumWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -1635,10 +1756,9 @@ func (a *minDatumWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1655,6 +1775,7 @@ func (a *minDatumWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -1672,23 +1793,26 @@ func (a *minDatumWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
+}
+
+func (a *minDatumWindowAgg) Reset() {
+	a.numNonNull = 0
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
 		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
-}
-
-func (a *minDatumWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
 }
 
 type minDatumWindowAggAlloc struct {
@@ -1710,6 +1834,14 @@ func (a *minDatumWindowAggAlloc) newAggFunc() AggregateFunc {
 	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
+}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minDatumWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minDatumWindowAgg"))
 }
 
 func newMaxWindowAggAlloc(
@@ -1787,11 +1919,11 @@ type maxBoolWindowAgg struct {
 	col coldata.Bools
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg bool
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxBoolWindowAgg{}
@@ -1817,10 +1949,9 @@ func (a *maxBoolWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1843,6 +1974,7 @@ func (a *maxBoolWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -1851,10 +1983,9 @@ func (a *maxBoolWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1877,6 +2008,7 @@ func (a *maxBoolWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -1890,15 +2022,18 @@ func (a *maxBoolWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxBoolWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxBoolWindowAggAlloc struct {
@@ -1922,17 +2057,25 @@ func (a *maxBoolWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxBoolWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxBoolWindowAgg"))
+}
+
 type maxBytesWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg []byte
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxBytesWindowAgg{}
@@ -1958,10 +2101,9 @@ func (a *maxBytesWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = append(a.curAgg[:0], val...)
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -1976,6 +2118,7 @@ func (a *maxBytesWindowAgg) Compute(
 						a.curAgg = append(a.curAgg[:0], candidate...)
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -1984,10 +2127,9 @@ func (a *maxBytesWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = append(a.curAgg[:0], val...)
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2002,6 +2144,7 @@ func (a *maxBytesWindowAgg) Compute(
 						a.curAgg = append(a.curAgg[:0], candidate...)
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -2015,19 +2158,22 @@ func (a *maxBytesWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = append(a.curAgg[:0], a.curAgg...)
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	oldCurAggSize := len(a.curAgg)
-	// Release the reference to curAgg eagerly.
-	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
-	a.curAgg = nil
 }
 
 func (a *maxBytesWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	oldCurAggSize := len(a.curAgg)
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type maxBytesWindowAggAlloc struct {
@@ -2051,17 +2197,25 @@ func (a *maxBytesWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxBytesWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxBytesWindowAgg"))
+}
+
 type maxDecimalWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Decimals
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxDecimalWindowAgg{}
@@ -2087,10 +2241,9 @@ func (a *maxDecimalWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg.Set(&val)
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2105,6 +2258,7 @@ func (a *maxDecimalWindowAgg) Compute(
 						a.curAgg.Set(&candidate)
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -2113,10 +2267,9 @@ func (a *maxDecimalWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg.Set(&val)
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2131,6 +2284,7 @@ func (a *maxDecimalWindowAgg) Compute(
 						a.curAgg.Set(&candidate)
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -2144,15 +2298,18 @@ func (a *maxDecimalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg.Set(&a.curAgg)
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxDecimalWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxDecimalWindowAggAlloc struct {
@@ -2176,17 +2333,25 @@ func (a *maxDecimalWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxDecimalWindowAgg"))
+}
+
 type maxInt16WindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int16s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int16
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxInt16WindowAgg{}
@@ -2212,10 +2377,9 @@ func (a *maxInt16WindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2241,6 +2405,7 @@ func (a *maxInt16WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -2249,10 +2414,9 @@ func (a *maxInt16WindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2278,6 +2442,7 @@ func (a *maxInt16WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -2291,15 +2456,18 @@ func (a *maxInt16WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxInt16WindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxInt16WindowAggAlloc struct {
@@ -2323,17 +2491,25 @@ func (a *maxInt16WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxInt16WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxInt16WindowAgg"))
+}
+
 type maxInt32WindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int32s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int32
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxInt32WindowAgg{}
@@ -2359,10 +2535,9 @@ func (a *maxInt32WindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2388,6 +2563,7 @@ func (a *maxInt32WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -2396,10 +2572,9 @@ func (a *maxInt32WindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2425,6 +2600,7 @@ func (a *maxInt32WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -2438,15 +2614,18 @@ func (a *maxInt32WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxInt32WindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxInt32WindowAggAlloc struct {
@@ -2470,17 +2649,25 @@ func (a *maxInt32WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxInt32WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxInt32WindowAgg"))
+}
+
 type maxInt64WindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxInt64WindowAgg{}
@@ -2506,10 +2693,9 @@ func (a *maxInt64WindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2535,6 +2721,7 @@ func (a *maxInt64WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -2543,10 +2730,9 @@ func (a *maxInt64WindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2572,6 +2758,7 @@ func (a *maxInt64WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -2585,15 +2772,18 @@ func (a *maxInt64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxInt64WindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxInt64WindowAggAlloc struct {
@@ -2617,17 +2807,25 @@ func (a *maxInt64WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxInt64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxInt64WindowAgg"))
+}
+
 type maxFloat64WindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Float64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg float64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxFloat64WindowAgg{}
@@ -2653,10 +2851,9 @@ func (a *maxFloat64WindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2690,6 +2887,7 @@ func (a *maxFloat64WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -2698,10 +2896,9 @@ func (a *maxFloat64WindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2735,6 +2932,7 @@ func (a *maxFloat64WindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -2748,15 +2946,18 @@ func (a *maxFloat64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxFloat64WindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxFloat64WindowAggAlloc struct {
@@ -2780,17 +2981,25 @@ func (a *maxFloat64WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxFloat64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxFloat64WindowAgg"))
+}
+
 type maxTimestampWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Times
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg time.Time
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxTimestampWindowAgg{}
@@ -2816,10 +3025,9 @@ func (a *maxTimestampWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2841,6 +3049,7 @@ func (a *maxTimestampWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -2849,10 +3058,9 @@ func (a *maxTimestampWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2874,6 +3082,7 @@ func (a *maxTimestampWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -2887,15 +3096,18 @@ func (a *maxTimestampWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxTimestampWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxTimestampWindowAggAlloc struct {
@@ -2919,17 +3131,25 @@ func (a *maxTimestampWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxTimestampWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxTimestampWindowAgg"))
+}
+
 type maxIntervalWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Durations
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg duration.Duration
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxIntervalWindowAgg{}
@@ -2955,10 +3175,9 @@ func (a *maxIntervalWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2973,6 +3192,7 @@ func (a *maxIntervalWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -2981,10 +3201,9 @@ func (a *maxIntervalWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -2999,6 +3218,7 @@ func (a *maxIntervalWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -3012,15 +3232,18 @@ func (a *maxIntervalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxIntervalWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxIntervalWindowAggAlloc struct {
@@ -3044,17 +3267,25 @@ func (a *maxIntervalWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxIntervalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxIntervalWindowAgg"))
+}
+
 type maxJSONWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col *coldata.JSONs
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg json.JSON
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxJSONWindowAgg{}
@@ -3083,7 +3314,7 @@ func (a *maxJSONWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 
 					var _err error
@@ -3097,7 +3328,6 @@ func (a *maxJSONWindowAgg) Compute(
 						colexecerror.ExpectedError(_err)
 					}
 
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -3129,6 +3359,7 @@ func (a *maxJSONWindowAgg) Compute(
 
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -3137,7 +3368,7 @@ func (a *maxJSONWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 
 					var _err error
@@ -3151,7 +3382,6 @@ func (a *maxJSONWindowAgg) Compute(
 						colexecerror.ExpectedError(_err)
 					}
 
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -3183,6 +3413,7 @@ func (a *maxJSONWindowAgg) Compute(
 
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -3199,22 +3430,36 @@ func (a *maxJSONWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+
+		var _err error
+		var _bytes []byte
+		_bytes, _err = json.EncodeJSON(nil, a.curAgg)
+		if _err != nil {
+			colexecerror.ExpectedError(_err)
+		}
+		a.curAgg, _err = json.FromEncoding(_bytes)
+		if _err != nil {
+			colexecerror.ExpectedError(_err)
+		}
+
 		a.col.Set(outputIdx, a.curAgg)
 	}
+}
+
+func (a *maxJSONWindowAgg) Reset() {
+	a.numNonNull = 0
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
 		oldCurAggSize = a.curAgg.Size()
 	}
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
-}
-
-func (a *maxJSONWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
 }
 
 type maxJSONWindowAggAlloc struct {
@@ -3238,17 +3483,25 @@ func (a *maxJSONWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxJSONWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxJSONWindowAgg"))
+}
+
 type maxDatumWindowAgg struct {
 	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.DatumVec
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg interface{}
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxDatumWindowAgg{}
@@ -3278,10 +3531,9 @@ func (a *maxDatumWindowAgg) Compute(
 			var isNull bool
 			isNull = nulls.NullAt(i)
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -3298,6 +3550,7 @@ func (a *maxDatumWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -3306,10 +3559,9 @@ func (a *maxDatumWindowAgg) Compute(
 			var isNull bool
 			isNull = false
 			if !isNull {
-				if !a.foundNonNullForCurrentGroup {
+				if a.numNonNull == 0 {
 					val := col.Get(i)
 					a.curAgg = val
-					a.foundNonNullForCurrentGroup = true
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
@@ -3326,6 +3578,7 @@ func (a *maxDatumWindowAgg) Compute(
 						a.curAgg = candidate
 					}
 				}
+				a.numNonNull++
 			}
 		}
 	}
@@ -3343,23 +3596,26 @@ func (a *maxDatumWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
+}
+
+func (a *maxDatumWindowAgg) Reset() {
+	a.numNonNull = 0
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
 		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
-}
-
-func (a *maxDatumWindowAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
 }
 
 type maxDatumWindowAggAlloc struct {
@@ -3381,4 +3637,12 @@ func (a *maxDatumWindowAggAlloc) newAggFunc() AggregateFunc {
 	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
+}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxDatumWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxDatumWindowAgg"))
 }

@@ -1223,8 +1223,9 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			)
 			require.NoError(b, err)
 			op = NewWindowAggregatorOperator(
-				args, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
-				[]int{arg1ColIdx}, aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
+				args, *fun.AggregateFunc, NormalizeWindowFrame(nil),
+				&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx},
+				aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
 		} else {
 			require.Fail(b, "expected non-nil window function")
 		}
