@@ -95,6 +95,24 @@ Stage 0
     TableID: 54
   *scop.UpdateRelationDeps
     TableID: 54
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 55
+    TableID: 54
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 56
+    TableID: 55
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 57
+    TableID: 55
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 57
+    TableID: 56
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 58
+    TableID: 56
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 61
+    TableID: 58
   *scop.RemoveTypeBackRef
     DescID: 61
     TypeID: 59
