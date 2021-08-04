@@ -90,16 +90,17 @@ var retiredSettings = map[string]struct{}{
 	"kv.tenant_rate_limiter.write_bytes.burst_limit":    {},
 
 	// removed as of 21.2.
-	"sql.defaults.vectorize_row_count_threshold":                 {},
-	"cloudstorage.gs.default.key":                                {},
-	"storage.sst_export.max_intents_per_error":                   {},
-	"jobs.registry.leniency":                                     {},
-	"sql.defaults.experimental_expression_based_indexes.enabled": {},
-	"kv.tenant_rate_limiter.read_request_cost":                   {},
-	"kv.tenant_rate_limiter.read_cost_per_megabyte":              {},
-	"kv.tenant_rate_limiter.write_request_cost":                  {},
-	"kv.tenant_rate_limiter.write_cost_per_megabyte":             {},
-	"kv.transaction.write_pipelining_max_outstanding_size":       {},
+	"sql.defaults.vectorize_row_count_threshold":                     {},
+	"cloudstorage.gs.default.key":                                    {},
+	"storage.sst_export.max_intents_per_error":                       {},
+	"jobs.registry.leniency":                                         {},
+	"sql.defaults.experimental_expression_based_indexes.enabled":     {},
+	"kv.tenant_rate_limiter.read_request_cost":                       {},
+	"kv.tenant_rate_limiter.read_cost_per_megabyte":                  {},
+	"kv.tenant_rate_limiter.write_request_cost":                      {},
+	"kv.tenant_rate_limiter.write_cost_per_megabyte":                 {},
+	"kv.transaction.write_pipelining_max_outstanding_size":           {},
+	"sql.defaults.optimizer_improve_disjunction_selectivity.enabled": {},
 }
 
 // register adds a setting to the registry.

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1158,4 +1159,164 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	}
 	// Now cancel it and wait for it to shut down.
 	rangeFeedCancel()
+}
+
+// Test that a new rangefeed that initially times out trying to ensure
+// a lease is created on its targeted range will retry.
+func TestNewRangefeedForceLeaseRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var scratchRangeID int64 // accessed atomically
+	// nudgeSeen will be set if a request filter sees the signature of the
+	// rangefeed nudger, as proof that the expected mechanism kicked in.
+	var nudgeSeen int64 // accessed atomically
+	// At some point, the test will require full control over the requests
+	// evaluating on the scratch range.
+	var rejectExtraneousRequests int64 // accessed atomically
+
+	var timeoutSimulated bool
+
+	cargs := aggressiveResolvedTimestampClusterArgs
+	cargs.ReplicationMode = base.ReplicationManual
+	manualClock := hlc.NewHybridManualClock()
+	cargs.ServerArgs = base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				ClockSource: manualClock.UnixNano,
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+
+					// Once reject is set, the test wants full control over the requests
+					// evaluating on the scratch range. On that range, we'll reject
+					// everything that's not triggered by the test because we want to only
+					// allow the rangefeed nudging mechanism to trigger a lease
+					// acquisition (which it does through a LeaseInfoRequests). Allowing
+					// other randos to trigger a lease acquisition would make the test
+					// inconclusive.
+					reject := atomic.LoadInt64(&rejectExtraneousRequests)
+					if reject == 0 {
+						return nil
+					}
+					scratch := atomic.LoadInt64(&scratchRangeID)
+					if roachpb.RangeID(scratch) != ba.RangeID {
+						return nil
+					}
+					if ba.IsSingleLeaseInfoRequest() {
+						atomic.StoreInt64(&nudgeSeen, 1)
+						if !timeoutSimulated {
+							mockTimeout := contextutil.RunWithTimeout(ctx, "test", 0,
+								func(ctx context.Context) error { <-ctx.Done(); return ctx.Err() })
+							timeoutSimulated = true
+							return roachpb.NewError(mockTimeout)
+						}
+						log.Infof(ctx, "lease succeeds this time")
+						return nil
+					}
+					nudged := atomic.LoadInt64(&nudgeSeen)
+					if ba.IsLeaseRequest() && (nudged == 1) {
+						return nil
+					}
+					log.Infof(ctx, "test rejecting request: %s", ba)
+					return roachpb.NewErrorf("test injected error")
+				},
+			},
+		},
+	}
+	tci := serverutils.StartNewTestCluster(t, 2, cargs)
+	tc := tci.(*testcluster.TestCluster)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	// Add a replica; we're going to move the lease to it below.
+	desc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+	atomic.StoreInt64(&scratchRangeID, int64(desc.RangeID))
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+
+	n1 := tc.Server(0)
+	n2 := tc.Server(1)
+	n2Target := tc.Target(1)
+	ts1 := n1.Clock().Now()
+	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
+	defer rangeFeedCancel()
+	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
+	rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+	rangeFeedErrC := make(chan error, 1)
+	startRangefeed := func() {
+		span := roachpb.Span{
+			Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
+		}
+		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, span, ts1, false /* withDiff */, rangeFeedCh)
+	}
+
+	// Wait for a checkpoint above ts.
+	waitForCheckpoint := func(ts hlc.Timestamp) {
+		t.Helper()
+		checkpointed := false
+		timeout := time.After(60 * time.Second)
+		for !checkpointed {
+			select {
+			case event := <-rangeFeedCh:
+				if c := event.Checkpoint; c != nil && ts.Less(c.ResolvedTS) {
+					checkpointed = true
+				}
+			case err := <-rangeFeedErrC:
+				t.Fatal(err)
+			case <-timeout:
+				t.Fatal("timed out waiting for checkpoint")
+			}
+		}
+	}
+
+	// Move the lease from n1 to n2 in order for the Raft leadership to move with
+	// it.
+	tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
+	testutils.SucceedsSoon(t, func() error {
+		leader := tc.GetRaftLeader(t, desc.StartKey).NodeID()
+		if tc.Target(1).NodeID != leader {
+			return errors.Errorf("leader still on n%d", leader)
+		}
+		return nil
+	})
+
+	// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
+	// eligible to acquire a new lease.
+	log.Infof(ctx, "test expiring lease")
+	nl := n2.NodeLiveness().(*liveness.NodeLiveness)
+	resumeHeartbeats := nl.PauseAllHeartbeatsForTest()
+	n2Liveness, ok := nl.Self()
+	require.True(t, ok)
+	manualClock.Increment(n2Liveness.Expiration.ToTimestamp().Add(1, 0).WallTime - manualClock.UnixNano())
+	atomic.StoreInt64(&rejectExtraneousRequests, 1)
+	// Ask another node to increment n2's liveness record.
+	require.NoError(t, n1.NodeLiveness().(*liveness.NodeLiveness).IncrementEpoch(ctx, n2Liveness))
+
+	resumeHeartbeats()
+
+	go startRangefeed()
+
+	// Wait for a RangeFeed checkpoint after the lease expired.
+	log.Infof(ctx, "test waiting for another checkpoint")
+	ts2 := n1.Clock().Now()
+	waitForCheckpoint(ts2)
+	nudged := atomic.LoadInt64(&nudgeSeen)
+	require.Equal(t, int64(1), nudged)
+
+	// Check that a lease now exists
+	_, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
+	require.NoError(t, err)
+
+	// Make sure the RangeFeed hasn't errored.
+	select {
+	case err := <-rangeFeedErrC:
+		t.Fatal(err)
+	default:
+	}
+	// Now cancel it and wait for it to shut down.
+	rangeFeedCancel()
+
 }

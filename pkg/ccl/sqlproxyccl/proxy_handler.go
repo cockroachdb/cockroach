@@ -208,7 +208,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 
 	// This currently only happens for CancelRequest type of startup messages
-	// that we don't support.
+	// that we don't support. Return nil to the server, which simply closes the
+	// connection.
 	if msg == nil {
 		return nil
 	}
