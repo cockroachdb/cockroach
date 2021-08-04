@@ -405,6 +405,12 @@ func (desc *Mutable) SetRegionConfig(cfg *descpb.DatabaseDescriptor_RegionConfig
 	desc.RegionConfig = cfg
 }
 
+// SetPlacement sets the placement of the region config for a database
+// descriptor.
+func (desc *Mutable) SetPlacement(placement descpb.DataPlacement) {
+	desc.RegionConfig.Placement = placement
+}
+
 // HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 // RunPostDeserializationChanges.
 func (desc *Mutable) HasPostDeserializationChanges() bool {

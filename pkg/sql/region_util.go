@@ -147,7 +147,7 @@ func zoneConfigForMultiRegionDatabase(
 		// non-voters so that REGIONAL BY [TABLE | ROW] can inherit the RESTRICTED
 		// placement. Voter placement will be set at the table/partition level to
 		// the table/partition region.
-		constraints = []zonepb.ConstraintsConjunction{}
+		constraints = nil
 	} else {
 		constraints = make([]zonepb.ConstraintsConjunction, len(regionConfig.Regions()))
 		for i, region := range regionConfig.Regions() {
@@ -777,24 +777,44 @@ func applyZoneConfigForMultiRegionDatabase(
 // updateZoneConfigsForAllTables loops through all of the tables in the
 // specified database and refreshes the zone configs for all tables.
 func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdesc.Mutable) error {
+	return p.updateZoneConfigsForFilteredTables(
+		ctx,
+		desc,
+		func(_ *tabledesc.Mutable) bool { return true },
+	)
+}
+
+// updateZoneConfigsForFilteredTables applies a zone config recalculation to all
+// tables for which f returns true.
+func (p *planner) updateZoneConfigsForFilteredTables(
+	ctx context.Context, desc *dbdesc.Mutable, f func(tb *tabledesc.Mutable) bool,
+) error {
+	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.ID, p.Descriptors())
+	if err != nil {
+		return err
+	}
+
 	return p.forEachMutableTableInDatabase(
 		ctx,
 		desc,
 		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
-			regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.ID, p.Descriptors())
-			if err != nil {
-				return err
+			if f(tbDesc) {
+				return ApplyZoneConfigForMultiRegionTable(
+					ctx,
+					p.txn,
+					p.ExecCfg(),
+					regionConfig,
+					tbDesc,
+					ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+				)
 			}
-			return ApplyZoneConfigForMultiRegionTable(
-				ctx,
-				p.txn,
-				p.ExecCfg(),
-				regionConfig,
-				tbDesc,
-				ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
-			)
+			return nil
 		},
 	)
+}
+
+func filterIsLocalityGlobal(t *tabledesc.Mutable) bool {
+	return t.IsLocalityGlobal()
 }
 
 // maybeInitializeMultiRegionDatabase initializes a multi-region database if

@@ -36,6 +36,7 @@ type databaseRegionChangeFinalizer struct {
 	localPlanner        *planner
 	cleanupFunc         func()
 	regionalByRowTables []*tabledesc.Mutable
+	globalTables        []*tabledesc.Mutable
 }
 
 // newDatabaseRegionChangeFinalizer returns a databaseRegionChangeFinalizer.
@@ -60,6 +61,7 @@ func newDatabaseRegionChangeFinalizer(
 	localPlanner := p.(*planner)
 
 	var regionalByRowTables []*tabledesc.Mutable
+	var globalTables []*tabledesc.Mutable
 	if err := func() error {
 		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
 			ctx,
@@ -77,13 +79,21 @@ func newDatabaseRegionChangeFinalizer(
 			ctx,
 			dbDesc,
 			func(ctx context.Context, scName string, tableDesc *tabledesc.Mutable) error {
-				if !tableDesc.IsLocalityRegionalByRow() || tableDesc.Dropped() {
+				if tableDesc.Dropped() {
+					return nil
+				}
+				if tableDesc.IsLocalityRegionalByRow() {
 					// We only need to re-partition REGIONAL BY ROW tables. Even then, we
 					// don't need to (can't) repartition a REGIONAL BY ROW table if it has
 					// been dropped.
-					return nil
+					regionalByRowTables = append(regionalByRowTables, tableDesc)
+				} else if tableDesc.IsLocalityGlobal() {
+					// If we're in RESTRICTED placement, GLOBAL tables will no longer
+					// inherit the database zone config and will have to be explicitly
+					// rebuilt after region adds.
+					globalTables = append(globalTables, tableDesc)
 				}
-				regionalByRowTables = append(regionalByRowTables, tableDesc)
+
 				return nil
 			},
 		)
@@ -98,6 +108,7 @@ func newDatabaseRegionChangeFinalizer(
 		localPlanner:        localPlanner,
 		cleanupFunc:         cleanup,
 		regionalByRowTables: regionalByRowTables,
+		globalTables:        globalTables,
 	}, nil
 }
 
@@ -113,6 +124,9 @@ func (r *databaseRegionChangeFinalizer) cleanup() {
 // REGIONAL BY ROW tables once the region promotion/demotion is complete.
 func (r *databaseRegionChangeFinalizer) finalize(ctx context.Context, txn *kv.Txn) error {
 	if err := r.updateDatabaseZoneConfig(ctx, txn); err != nil {
+		return err
+	}
+	if err := r.updateGlobalTablesZoneConfig(ctx, txn); err != nil {
 		return err
 	}
 	return r.preDrop(ctx, txn)
@@ -145,6 +159,34 @@ func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn *kv.Txn
 		}
 	}
 	return txn.Run(ctx, b)
+}
+
+// updateGlobalTablesZoneConfig recalculates all global tables' zone configs so
+// that their zone configs are recalculated after a newly-added region goes
+// out of being a transitioning region.
+func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
+	ctx context.Context, txn *kv.Txn,
+) error {
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn, r.dbID, r.localPlanner.Descriptors())
+	if err != nil {
+		return err
+	}
+
+	for _, tableDesc := range r.globalTables {
+		err = ApplyZoneConfigForMultiRegionTable(
+			ctx,
+			txn,
+			r.localPlanner.ExecCfg(),
+			regionConfig,
+			tableDesc,
+			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // updateDatabaseZoneConfig updates the zone config of the database that
