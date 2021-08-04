@@ -112,8 +112,11 @@ var xxx_messageInfo_PrivilegeDescriptor proto.InternalMessageInfo
 // and it's value is a PrivilegeDescriptor that is only used for
 // the list of UserPrivileges for that object.
 type DefaultPrivilegesForRole struct {
-	UserProto                  github_com_cockroachdb_cockroach_pkg_security.SQLUsernameProto                                               `protobuf:"bytes,1,opt,name=user_proto,json=userProto,casttype=github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto" json:"user_proto"`
-	DefaultPrivilegesPerObject map[github_com_cockroachdb_cockroach_pkg_sql_sem_tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor `protobuf:"bytes,2,rep,name=default_privileges_per_object,json=defaultPrivilegesPerObject,castkey=github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject" json:"default_privileges_per_object" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Types that are valid to be assigned to Role:
+	//	*DefaultPrivilegesForRole_UserProto
+	//	*DefaultPrivilegesForRole_ForAllRoles
+	Role                       isDefaultPrivilegesForRole_Role                                                                              `protobuf_oneof:"role"`
+	DefaultPrivilegesPerObject map[github_com_cockroachdb_cockroach_pkg_sql_sem_tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor `protobuf:"bytes,3,rep,name=default_privileges_per_object,json=defaultPrivilegesPerObject,castkey=github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject" json:"default_privileges_per_object" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 }
 
 func (m *DefaultPrivilegesForRole) Reset()         { *m = DefaultPrivilegesForRole{} }
@@ -145,12 +148,57 @@ func (m *DefaultPrivilegesForRole) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DefaultPrivilegesForRole proto.InternalMessageInfo
 
+type isDefaultPrivilegesForRole_Role interface {
+	isDefaultPrivilegesForRole_Role()
+	Equal(interface{}) bool
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type DefaultPrivilegesForRole_UserProto struct {
+	UserProto github_com_cockroachdb_cockroach_pkg_security.SQLUsernameProto `protobuf:"bytes,1,opt,name=user_proto,json=userProto,oneof,casttype=github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto" json:"user_proto,omitempty"`
+}
+type DefaultPrivilegesForRole_ForAllRoles struct {
+	ForAllRoles bool `protobuf:"varint,2,opt,name=for_all_roles,json=forAllRoles,oneof" json:"for_all_roles,omitempty"`
+}
+
+func (*DefaultPrivilegesForRole_UserProto) isDefaultPrivilegesForRole_Role()   {}
+func (*DefaultPrivilegesForRole_ForAllRoles) isDefaultPrivilegesForRole_Role() {}
+
+func (m *DefaultPrivilegesForRole) GetRole() isDefaultPrivilegesForRole_Role {
+	if m != nil {
+		return m.Role
+	}
+	return nil
+}
+
+func (m *DefaultPrivilegesForRole) GetUserProto() github_com_cockroachdb_cockroach_pkg_security.SQLUsernameProto {
+	if x, ok := m.GetRole().(*DefaultPrivilegesForRole_UserProto); ok {
+		return x.UserProto
+	}
+	return ""
+}
+
+func (m *DefaultPrivilegesForRole) GetForAllRoles() bool {
+	if x, ok := m.GetRole().(*DefaultPrivilegesForRole_ForAllRoles); ok {
+		return x.ForAllRoles
+	}
+	return false
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*DefaultPrivilegesForRole) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*DefaultPrivilegesForRole_UserProto)(nil),
+		(*DefaultPrivilegesForRole_ForAllRoles)(nil),
+	}
+}
+
 // DefaultPrivilegeDescriptor describes the set of default privileges for a
 // given role + object type.
 // The DefaultPrivileges list must be sorted for fast access and user lookups.
 type DefaultPrivilegeDescriptor struct {
-	DefaultPrivilegesPerRole     []DefaultPrivilegesForRole                                                                                   `protobuf:"bytes,1,rep,name=default_privileges_per_role,json=defaultPrivilegesPerRole" json:"default_privileges_per_role"`
-	DefaultPrivilegesForAllRoles map[github_com_cockroachdb_cockroach_pkg_sql_sem_tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor `protobuf:"bytes,2,rep,name=default_privileges_for_all_roles,json=defaultPrivilegesForAllRoles,castkey=github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject" json:"default_privileges_for_all_roles" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	DefaultPrivilegesPerRole []DefaultPrivilegesForRole `protobuf:"bytes,1,rep,name=default_privileges_per_role,json=defaultPrivilegesPerRole" json:"default_privileges_per_role"`
 }
 
 func (m *DefaultPrivilegeDescriptor) Reset()         { *m = DefaultPrivilegeDescriptor{} }
@@ -188,7 +236,6 @@ func init() {
 	proto.RegisterType((*DefaultPrivilegesForRole)(nil), "cockroach.sql.sqlbase.DefaultPrivilegesForRole")
 	proto.RegisterMapType((map[github_com_cockroachdb_cockroach_pkg_sql_sem_tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor)(nil), "cockroach.sql.sqlbase.DefaultPrivilegesForRole.DefaultPrivilegesPerObjectEntry")
 	proto.RegisterType((*DefaultPrivilegeDescriptor)(nil), "cockroach.sql.sqlbase.DefaultPrivilegeDescriptor")
-	proto.RegisterMapType((map[github_com_cockroachdb_cockroach_pkg_sql_sem_tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor)(nil), "cockroach.sql.sqlbase.DefaultPrivilegeDescriptor.DefaultPrivilegesForAllRolesEntry")
 }
 
 func init() {
@@ -196,43 +243,42 @@ func init() {
 }
 
 var fileDescriptor_9343d951995d5a76 = []byte{
-	// 568 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x55, 0x4f, 0x6b, 0x13, 0x41,
-	0x14, 0xcf, 0x24, 0xad, 0xd2, 0x17, 0x2a, 0xb2, 0x56, 0x58, 0x62, 0xdd, 0xc4, 0xa0, 0x10, 0x3c,
-	0xec, 0x42, 0x0f, 0x22, 0x3d, 0x88, 0x09, 0xb5, 0x27, 0xa1, 0x71, 0x5b, 0x3d, 0x88, 0x10, 0x36,
-	0x9b, 0xd7, 0xed, 0x9a, 0x49, 0x66, 0x33, 0x33, 0x1b, 0x09, 0xde, 0xfc, 0x04, 0xfa, 0x0d, 0x04,
-	0xbf, 0x4c, 0x8e, 0x3d, 0xf6, 0x54, 0x35, 0xb9, 0x78, 0xf4, 0xe2, 0x41, 0x2f, 0xca, 0xcc, 0x6e,
-	0x93, 0xd6, 0x26, 0xb6, 0x82, 0xf6, 0xb0, 0x30, 0xec, 0xbe, 0xf9, 0xfd, 0x79, 0xbf, 0xf7, 0x58,
-	0x28, 0x8b, 0x1e, 0x75, 0x7c, 0x4f, 0x7a, 0x94, 0x05, 0x4e, 0x0b, 0x85, 0x1f, 0x35, 0x9d, 0x88,
-	0x87, 0xfd, 0x90, 0x62, 0x80, 0x76, 0xc4, 0x99, 0x64, 0xc6, 0x75, 0x9f, 0xf9, 0x6d, 0xce, 0x3c,
-	0x7f, 0xcf, 0x16, 0x3d, 0xaa, 0x9e, 0xa6, 0x27, 0xb0, 0xb0, 0x12, 0xb0, 0x80, 0xe9, 0x0a, 0x47,
-	0x9d, 0x92, 0xe2, 0xf2, 0x07, 0x02, 0x57, 0x9e, 0x0a, 0xe4, 0xf5, 0x23, 0x10, 0x61, 0x20, 0x40,
-	0x2c, 0x90, 0x37, 0x74, 0x81, 0x49, 0x4a, 0xa4, 0xb2, 0x54, 0xdb, 0x1c, 0x1e, 0x16, 0x33, 0x3f,
-	0x0e, 0x8b, 0x0f, 0x82, 0x50, 0xee, 0xc5, 0x4d, 0xdb, 0x67, 0x1d, 0x67, 0x42, 0xd3, 0x6a, 0x4e,
-	0xcf, 0x4e, 0xd4, 0x0e, 0x1c, 0x81, 0x7e, 0xcc, 0x43, 0x39, 0xb0, 0xb7, 0x9f, 0x3c, 0x56, 0xe0,
-	0x5d, 0xaf, 0x83, 0x75, 0x85, 0xe6, 0x2e, 0xc5, 0x9a, 0x4b, 0xc9, 0xbc, 0x0d, 0x30, 0x51, 0x2e,
-	0xcc, 0x6c, 0x89, 0x54, 0x96, 0x6b, 0x0b, 0x8a, 0xc6, 0x3d, 0xf6, 0x7e, 0x7d, 0xe1, 0xcb, 0xfb,
-	0x22, 0x29, 0xff, 0x24, 0x70, 0x6d, 0xa2, 0x70, 0x03, 0x85, 0xcf, 0xc3, 0x48, 0x32, 0x6e, 0x54,
-	0x61, 0x51, 0x01, 0x0a, 0x93, 0x94, 0x72, 0x95, 0xfc, 0xda, 0x1d, 0x7b, 0xa6, 0x75, 0xfb, 0xa4,
-	0xc1, 0x94, 0x25, 0xb9, 0x69, 0x04, 0x90, 0x67, 0xaf, 0xba, 0x13, 0xbb, 0xd9, 0x7f, 0x6a, 0x17,
-	0x34, 0x74, 0xe2, 0xf7, 0x1e, 0x5c, 0xee, 0x23, 0x17, 0x21, 0xeb, 0x9a, 0x39, 0x6d, 0x76, 0x35,
-	0x25, 0x59, 0x39, 0xe1, 0xec, 0x59, 0x52, 0xe3, 0x1e, 0x15, 0xa7, 0x1d, 0xf8, 0x96, 0x03, 0x73,
-	0x03, 0x77, 0xbd, 0x98, 0xca, 0xa9, 0x93, 0x4d, 0xc6, 0x5d, 0x46, 0xf1, 0xa2, 0x12, 0xfb, 0x4a,
-	0xe0, 0x66, 0x2b, 0xd1, 0xd0, 0x98, 0x46, 0xd4, 0x88, 0x90, 0x37, 0x58, 0xf3, 0x25, 0xfa, 0xd2,
-	0xcc, 0xea, 0x18, 0xb6, 0xe6, 0xc4, 0x30, 0x4f, 0xff, 0xe9, 0x0f, 0x75, 0xe4, 0x5b, 0x1a, 0xf1,
-	0x51, 0x57, 0xf2, 0x41, 0xed, 0x85, 0xf2, 0xf2, 0xe6, 0x63, 0x71, 0xe7, 0x7c, 0x5e, 0x7a, 0xd4,
-	0x11, 0xd8, 0x71, 0x24, 0x47, 0xb4, 0xab, 0x54, 0x22, 0x3f, 0x85, 0xbf, 0xe3, 0xf1, 0x00, 0x65,
-	0x42, 0xe1, 0x16, 0x5a, 0x73, 0xe9, 0x0b, 0x03, 0x28, 0x9e, 0x21, 0xce, 0xb8, 0x0a, 0xb9, 0x36,
-	0x0e, 0x74, 0xd7, 0x97, 0x5d, 0x75, 0x34, 0x1e, 0xc2, 0x62, 0xdf, 0xa3, 0x31, 0xea, 0x61, 0xca,
-	0xaf, 0xdd, 0x9d, 0xd3, 0x8e, 0x19, 0x03, 0xed, 0x26, 0x17, 0xd7, 0xb3, 0xf7, 0x49, 0x9a, 0xfb,
-	0xbb, 0x05, 0x28, 0xfc, 0xae, 0xe0, 0xd8, 0x02, 0x48, 0xb8, 0x31, 0x27, 0x11, 0xce, 0x28, 0xa6,
-	0x6b, 0xe1, 0xfc, 0x65, 0x1e, 0xe9, 0x82, 0x98, 0xb3, 0xfa, 0xa2, 0xe7, 0xed, 0x3b, 0x81, 0xd2,
-	0x0c, 0xda, 0x5d, 0xc6, 0x1b, 0x1e, 0xa5, 0x9a, 0x5a, 0xa4, 0xb3, 0xb0, 0x7d, 0x4e, 0xee, 0xa9,
-	0xa7, 0x99, 0xb2, 0xaa, 0x94, 0x2a, 0x66, 0x71, 0x11, 0xf3, 0xb0, 0xda, 0xfa, 0x83, 0x80, 0xc2,
-	0x6b, 0xb8, 0x75, 0xa6, 0xc0, 0xff, 0x3b, 0x13, 0xb5, 0xca, 0xf0, 0xb3, 0x95, 0x19, 0x8e, 0x2c,
-	0xb2, 0x3f, 0xb2, 0xc8, 0xc1, 0xc8, 0x22, 0x9f, 0x46, 0x16, 0x79, 0x3b, 0xb6, 0x32, 0xfb, 0x63,
-	0x2b, 0x73, 0x30, 0xb6, 0x32, 0xcf, 0x2f, 0x25, 0xbf, 0x86, 0x5f, 0x01, 0x00, 0x00, 0xff, 0xff,
-	0x8d, 0xf3, 0x2d, 0x5a, 0x2f, 0x06, 0x00, 0x00,
+	// 558 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x54, 0x4f, 0x6b, 0x13, 0x41,
+	0x14, 0xdf, 0x69, 0xd2, 0x6a, 0x27, 0x44, 0x64, 0xad, 0xb0, 0x44, 0xdd, 0x84, 0xa0, 0x10, 0x3c,
+	0xec, 0x40, 0x0f, 0x22, 0x3d, 0x88, 0x09, 0xb5, 0xf4, 0x20, 0x34, 0xae, 0xd5, 0x83, 0x08, 0xcb,
+	0x66, 0xf2, 0xb2, 0x5d, 0x33, 0xc9, 0x6c, 0x66, 0x66, 0x23, 0xb9, 0xfa, 0x09, 0x3c, 0x7a, 0x54,
+	0xfc, 0x32, 0x39, 0xf6, 0xd8, 0x53, 0xd5, 0xe4, 0xe2, 0xd1, 0xb3, 0x17, 0x65, 0x76, 0xb7, 0x49,
+	0x63, 0x13, 0x54, 0xf4, 0x10, 0x18, 0x32, 0xef, 0xfd, 0xfe, 0xbc, 0xdf, 0xbc, 0xc5, 0x55, 0x39,
+	0x60, 0x84, 0xfa, 0xca, 0x67, 0x3c, 0x20, 0x6d, 0x90, 0x34, 0x6a, 0x91, 0x48, 0x84, 0xc3, 0x90,
+	0x41, 0x00, 0x4e, 0x24, 0xb8, 0xe2, 0xe6, 0x75, 0xca, 0x69, 0x57, 0x70, 0x9f, 0x1e, 0x39, 0x72,
+	0xc0, 0xf4, 0xaf, 0xe5, 0x4b, 0x28, 0x6d, 0x05, 0x3c, 0xe0, 0x49, 0x05, 0xd1, 0xa7, 0xb4, 0xb8,
+	0xfa, 0x11, 0xe1, 0x2b, 0xcf, 0x24, 0x88, 0xe6, 0x19, 0x88, 0x34, 0x01, 0xe3, 0x58, 0x82, 0xf0,
+	0x92, 0x02, 0x0b, 0x55, 0x50, 0x6d, 0xb3, 0xb1, 0x37, 0x3e, 0x2d, 0x1b, 0xdf, 0x4f, 0xcb, 0x0f,
+	0x82, 0x50, 0x1d, 0xc5, 0x2d, 0x87, 0xf2, 0x1e, 0x99, 0xd1, 0xb4, 0x5b, 0xf3, 0x33, 0x89, 0xba,
+	0x01, 0x91, 0x40, 0x63, 0x11, 0xaa, 0x91, 0xf3, 0xf4, 0xc9, 0x63, 0x0d, 0xde, 0xf7, 0x7b, 0xd0,
+	0xd4, 0x68, 0xee, 0x66, 0x9c, 0x70, 0x69, 0x99, 0xb7, 0x31, 0x9e, 0x29, 0x97, 0xd6, 0x5a, 0x05,
+	0xd5, 0x8a, 0x8d, 0xbc, 0xa6, 0x71, 0xcf, 0xfd, 0xbf, 0x93, 0xff, 0xfa, 0xbe, 0x8c, 0xaa, 0x3f,
+	0x10, 0xbe, 0x36, 0x53, 0xb8, 0x0b, 0x92, 0x8a, 0x30, 0x52, 0x5c, 0x98, 0x75, 0xbc, 0xae, 0x01,
+	0xa5, 0x85, 0x2a, 0xb9, 0x5a, 0x61, 0xfb, 0x8e, 0xb3, 0xd4, 0xba, 0xb3, 0x68, 0x30, 0x63, 0x49,
+	0x3b, 0xcd, 0x00, 0x17, 0xf8, 0xeb, 0xfe, 0xcc, 0xee, 0xda, 0x7f, 0xb5, 0x8b, 0x13, 0xe8, 0xd4,
+	0xef, 0x3d, 0x7c, 0x69, 0x08, 0x42, 0x86, 0xbc, 0x6f, 0xe5, 0x12, 0xb3, 0x37, 0x33, 0x92, 0xad,
+	0x05, 0x67, 0xcf, 0xd3, 0x1a, 0xf7, 0xac, 0x38, 0x9b, 0xc0, 0x87, 0x3c, 0xb6, 0x76, 0xa1, 0xe3,
+	0xc7, 0x4c, 0xcd, 0x9d, 0xec, 0x71, 0xe1, 0x72, 0x06, 0x26, 0x5d, 0x92, 0x58, 0xe3, 0xdf, 0xe5,
+	0xef, 0x1b, 0x8b, 0x79, 0x15, 0x3b, 0x5c, 0x78, 0x3e, 0x63, 0x9e, 0xe0, 0x2c, 0x8b, 0xec, 0xf2,
+	0xbe, 0xe1, 0x16, 0x3a, 0x5c, 0xd4, 0x19, 0xd3, 0x4a, 0xa4, 0xf9, 0x0d, 0xe1, 0x5b, 0xed, 0x54,
+	0xa7, 0x37, 0x8f, 0xd1, 0x8b, 0x40, 0x78, 0xbc, 0xf5, 0x0a, 0xa8, 0xb2, 0x72, 0x49, 0x54, 0x07,
+	0x2b, 0xa2, 0x5a, 0xe5, 0xf1, 0xe2, 0x45, 0x13, 0xc4, 0x41, 0x82, 0xf8, 0xa8, 0xaf, 0xc4, 0xa8,
+	0xf1, 0x52, 0x4f, 0xf3, 0xcd, 0xa7, 0xf2, 0xe1, 0x9f, 0x79, 0x1e, 0x30, 0x22, 0xa1, 0x47, 0x94,
+	0x00, 0x70, 0xea, 0x4c, 0x81, 0xb8, 0x80, 0x7f, 0xe8, 0x8b, 0x00, 0x54, 0x4a, 0xe1, 0x96, 0xda,
+	0x2b, 0xe9, 0x4b, 0x23, 0x5c, 0xfe, 0x8d, 0x38, 0xf3, 0x2a, 0xce, 0x75, 0x61, 0x94, 0x24, 0x53,
+	0x74, 0xf5, 0xd1, 0x7c, 0x88, 0xd7, 0x87, 0x3e, 0x8b, 0x21, 0x99, 0x62, 0x61, 0xfb, 0xee, 0x8a,
+	0x71, 0x2c, 0x79, 0xf4, 0x6e, 0xda, 0xb8, 0xb3, 0x76, 0x1f, 0xa5, 0x6f, 0xa3, 0xb1, 0x81, 0xf3,
+	0x3a, 0x91, 0xea, 0x3b, 0x84, 0x4b, 0xbf, 0x2a, 0x39, 0xb7, 0x2c, 0x0a, 0xdf, 0x58, 0x91, 0x8c,
+	0xee, 0xce, 0x56, 0x88, 0xfc, 0x65, 0x2e, 0xd9, 0x32, 0x59, 0xcb, 0xe6, 0xa3, 0xef, 0x33, 0x89,
+	0xb5, 0xf1, 0x17, 0xdb, 0x18, 0x4f, 0x6c, 0x74, 0x3c, 0xb1, 0xd1, 0xc9, 0xc4, 0x46, 0x9f, 0x27,
+	0x36, 0x7a, 0x3b, 0xb5, 0x8d, 0xe3, 0xa9, 0x6d, 0x9c, 0x4c, 0x6d, 0xe3, 0xc5, 0x46, 0xfa, 0x35,
+	0xfb, 0x19, 0x00, 0x00, 0xff, 0xff, 0x1a, 0x8f, 0xad, 0x2e, 0xe2, 0x04, 0x00, 0x00,
 }
 
 func (this *UserPrivileges) Equal(that interface{}) bool {
@@ -316,7 +362,13 @@ func (this *DefaultPrivilegesForRole) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if this.UserProto != that1.UserProto {
+	if that1.Role == nil {
+		if this.Role != nil {
+			return false
+		}
+	} else if this.Role == nil {
+		return false
+	} else if !this.Role.Equal(that1.Role) {
 		return false
 	}
 	if len(this.DefaultPrivilegesPerObject) != len(that1.DefaultPrivilegesPerObject) {
@@ -328,6 +380,54 @@ func (this *DefaultPrivilegesForRole) Equal(that interface{}) bool {
 		if !(&a).Equal(&b) {
 			return false
 		}
+	}
+	return true
+}
+func (this *DefaultPrivilegesForRole_UserProto) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*DefaultPrivilegesForRole_UserProto)
+	if !ok {
+		that2, ok := that.(DefaultPrivilegesForRole_UserProto)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.UserProto != that1.UserProto {
+		return false
+	}
+	return true
+}
+func (this *DefaultPrivilegesForRole_ForAllRoles) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*DefaultPrivilegesForRole_ForAllRoles)
+	if !ok {
+		that2, ok := that.(DefaultPrivilegesForRole_ForAllRoles)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.ForAllRoles != that1.ForAllRoles {
+		return false
 	}
 	return true
 }
@@ -355,16 +455,6 @@ func (this *DefaultPrivilegeDescriptor) Equal(that interface{}) bool {
 	}
 	for i := range this.DefaultPrivilegesPerRole {
 		if !this.DefaultPrivilegesPerRole[i].Equal(&that1.DefaultPrivilegesPerRole[i]) {
-			return false
-		}
-	}
-	if len(this.DefaultPrivilegesForAllRoles) != len(that1.DefaultPrivilegesForAllRoles) {
-		return false
-	}
-	for i := range this.DefaultPrivilegesForAllRoles {
-		a := this.DefaultPrivilegesForAllRoles[i]
-		b := that1.DefaultPrivilegesForAllRoles[i]
-		if !(&a).Equal(&b) {
 			return false
 		}
 	}
@@ -490,9 +580,28 @@ func (m *DefaultPrivilegesForRole) MarshalToSizedBuffer(dAtA []byte) (int, error
 			dAtA[i] = 0x8
 			i = encodeVarintPrivilege(dAtA, i, uint64(baseI-i))
 			i--
-			dAtA[i] = 0x12
+			dAtA[i] = 0x1a
 		}
 	}
+	if m.Role != nil {
+		{
+			size := m.Role.Size()
+			i -= size
+			if _, err := m.Role.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *DefaultPrivilegesForRole_UserProto) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DefaultPrivilegesForRole_UserProto) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	i -= len(m.UserProto)
 	copy(dAtA[i:], m.UserProto)
 	i = encodeVarintPrivilege(dAtA, i, uint64(len(m.UserProto)))
@@ -500,7 +609,23 @@ func (m *DefaultPrivilegesForRole) MarshalToSizedBuffer(dAtA []byte) (int, error
 	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
+func (m *DefaultPrivilegesForRole_ForAllRoles) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
 
+func (m *DefaultPrivilegesForRole_ForAllRoles) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	i--
+	if m.ForAllRoles {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i--
+	dAtA[i] = 0x10
+	return len(dAtA) - i, nil
+}
 func (m *DefaultPrivilegeDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -521,33 +646,6 @@ func (m *DefaultPrivilegeDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, err
 	_ = i
 	var l int
 	_ = l
-	if len(m.DefaultPrivilegesForAllRoles) > 0 {
-		keysForDefaultPrivilegesForAllRoles := make([]uint32, 0, len(m.DefaultPrivilegesForAllRoles))
-		for k := range m.DefaultPrivilegesForAllRoles {
-			keysForDefaultPrivilegesForAllRoles = append(keysForDefaultPrivilegesForAllRoles, uint32(k))
-		}
-		github_com_gogo_protobuf_sortkeys.Uint32s(keysForDefaultPrivilegesForAllRoles)
-		for iNdEx := len(keysForDefaultPrivilegesForAllRoles) - 1; iNdEx >= 0; iNdEx-- {
-			v := m.DefaultPrivilegesForAllRoles[github_com_cockroachdb_cockroach_pkg_sql_sem_tree.AlterDefaultPrivilegesTargetObject(keysForDefaultPrivilegesForAllRoles[iNdEx])]
-			baseI := i
-			{
-				size, err := (&v).MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintPrivilege(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x12
-			i = encodeVarintPrivilege(dAtA, i, uint64(keysForDefaultPrivilegesForAllRoles[iNdEx]))
-			i--
-			dAtA[i] = 0x8
-			i = encodeVarintPrivilege(dAtA, i, uint64(baseI-i))
-			i--
-			dAtA[i] = 0x12
-		}
-	}
 	if len(m.DefaultPrivilegesPerRole) > 0 {
 		for iNdEx := len(m.DefaultPrivilegesPerRole) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -612,8 +710,9 @@ func (m *DefaultPrivilegesForRole) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.UserProto)
-	n += 1 + l + sovPrivilege(uint64(l))
+	if m.Role != nil {
+		n += m.Role.Size()
+	}
 	if len(m.DefaultPrivilegesPerObject) > 0 {
 		for k, v := range m.DefaultPrivilegesPerObject {
 			_ = k
@@ -626,6 +725,25 @@ func (m *DefaultPrivilegesForRole) Size() (n int) {
 	return n
 }
 
+func (m *DefaultPrivilegesForRole_UserProto) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.UserProto)
+	n += 1 + l + sovPrivilege(uint64(l))
+	return n
+}
+func (m *DefaultPrivilegesForRole_ForAllRoles) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	n += 2
+	return n
+}
 func (m *DefaultPrivilegeDescriptor) Size() (n int) {
 	if m == nil {
 		return 0
@@ -636,15 +754,6 @@ func (m *DefaultPrivilegeDescriptor) Size() (n int) {
 		for _, e := range m.DefaultPrivilegesPerRole {
 			l = e.Size()
 			n += 1 + l + sovPrivilege(uint64(l))
-		}
-	}
-	if len(m.DefaultPrivilegesForAllRoles) > 0 {
-		for k, v := range m.DefaultPrivilegesForAllRoles {
-			_ = k
-			_ = v
-			l = v.Size()
-			mapEntrySize := 1 + sovPrivilege(uint64(k)) + 1 + l + sovPrivilege(uint64(l))
-			n += mapEntrySize + 1 + sovPrivilege(uint64(mapEntrySize))
 		}
 	}
 	return n
@@ -951,9 +1060,30 @@ func (m *DefaultPrivilegesForRole) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.UserProto = github_com_cockroachdb_cockroach_pkg_security.SQLUsernameProto(dAtA[iNdEx:postIndex])
+			m.Role = &DefaultPrivilegesForRole_UserProto{github_com_cockroachdb_cockroach_pkg_security.SQLUsernameProto(dAtA[iNdEx:postIndex])}
 			iNdEx = postIndex
 		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ForAllRoles", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilege
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			b := bool(v != 0)
+			m.Role = &DefaultPrivilegesForRole_ForAllRoles{b}
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field DefaultPrivilegesPerObject", wireType)
 			}
@@ -1151,121 +1281,6 @@ func (m *DefaultPrivilegeDescriptor) Unmarshal(dAtA []byte) error {
 			if err := m.DefaultPrivilegesPerRole[len(m.DefaultPrivilegesPerRole)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DefaultPrivilegesForAllRoles", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowPrivilege
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthPrivilege
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthPrivilege
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.DefaultPrivilegesForAllRoles == nil {
-				m.DefaultPrivilegesForAllRoles = make(map[github_com_cockroachdb_cockroach_pkg_sql_sem_tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor)
-			}
-			var mapkey uint32
-			mapvalue := &PrivilegeDescriptor{}
-			for iNdEx < postIndex {
-				entryPreIndex := iNdEx
-				var wire uint64
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return ErrIntOverflowPrivilege
-					}
-					if iNdEx >= l {
-						return io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					wire |= uint64(b&0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				fieldNum := int32(wire >> 3)
-				if fieldNum == 1 {
-					for shift := uint(0); ; shift += 7 {
-						if shift >= 64 {
-							return ErrIntOverflowPrivilege
-						}
-						if iNdEx >= l {
-							return io.ErrUnexpectedEOF
-						}
-						b := dAtA[iNdEx]
-						iNdEx++
-						mapkey |= uint32(b&0x7F) << shift
-						if b < 0x80 {
-							break
-						}
-					}
-				} else if fieldNum == 2 {
-					var mapmsglen int
-					for shift := uint(0); ; shift += 7 {
-						if shift >= 64 {
-							return ErrIntOverflowPrivilege
-						}
-						if iNdEx >= l {
-							return io.ErrUnexpectedEOF
-						}
-						b := dAtA[iNdEx]
-						iNdEx++
-						mapmsglen |= int(b&0x7F) << shift
-						if b < 0x80 {
-							break
-						}
-					}
-					if mapmsglen < 0 {
-						return ErrInvalidLengthPrivilege
-					}
-					postmsgIndex := iNdEx + mapmsglen
-					if postmsgIndex < 0 {
-						return ErrInvalidLengthPrivilege
-					}
-					if postmsgIndex > l {
-						return io.ErrUnexpectedEOF
-					}
-					mapvalue = &PrivilegeDescriptor{}
-					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
-						return err
-					}
-					iNdEx = postmsgIndex
-				} else {
-					iNdEx = entryPreIndex
-					skippy, err := skipPrivilege(dAtA[iNdEx:])
-					if err != nil {
-						return err
-					}
-					if (skippy < 0) || (iNdEx+skippy) < 0 {
-						return ErrInvalidLengthPrivilege
-					}
-					if (iNdEx + skippy) > postIndex {
-						return io.ErrUnexpectedEOF
-					}
-					iNdEx += skippy
-				}
-			}
-			m.DefaultPrivilegesForAllRoles[github_com_cockroachdb_cockroach_pkg_sql_sem_tree.AlterDefaultPrivilegesTargetObject(mapkey)] = *mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
