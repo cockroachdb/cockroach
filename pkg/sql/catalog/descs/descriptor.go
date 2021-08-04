@@ -212,6 +212,10 @@ func (tc *Collection) getByName(
 		return false, nil, err
 	}
 	if shouldReadFromStore {
+		// !!! HACK !!! schema not found. haven't fixed the kv fallback yet.
+		if txn.PrevMinTimestampBound != nil {
+			return false, nil, nil
+		}
 		return tc.kv.getByName(
 			ctx, txn, parentID, parentSchemaID, name, mutable,
 		)
