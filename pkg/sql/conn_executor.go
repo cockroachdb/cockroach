@@ -2158,23 +2158,22 @@ func isCommit(stmt tree.Statement) bool {
 	return ok
 }
 
+var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
+	"retriable MinTimestampBoundUnsatisfiableError",
+)
+
 func errIsRetriable(err error) bool {
 	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) ||
-		errors.HasType(err, (*scbuild.ConcurrentSchemaChangeError)(nil))
+		errors.HasType(err, (*scbuild.ConcurrentSchemaChangeError)(nil)) ||
+		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError)
 }
 
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
 // eventNonRetriableErr, depending on the error type.
 func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event, fsm.EventPayload) {
 	retriable := errIsRetriable(err)
-	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
-	if errors.As(err, &minTSErr) {
-		// TODO(XXX): exit condition.
-		retriable = true
-	}
 	if retriable {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
-
 		if canAutoRetry {
 			ex.extraTxnState.autoRetryReason = err
 		}
