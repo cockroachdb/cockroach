@@ -48,9 +48,11 @@ message PrivilegeDescriptor {
 // the list of UserPrivileges for that object.
 message DefaultPrivilegesForRole {
   option (gogoproto.equal) = true;
-  optional string user_proto = 1 [(gogoproto.nullable) = false,
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
-  map<uint32, PrivilegeDescriptor> default_privileges_per_object = 2 [(gogoproto.nullable) = false,
+  oneof role {
+    string user_proto = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+    bool for_all_roles = 2;
+  }
+  map<uint32, PrivilegeDescriptor> default_privileges_per_object = 3 [(gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject"];
 }
 
@@ -60,6 +62,4 @@ message DefaultPrivilegesForRole {
 message DefaultPrivilegeDescriptor {
   option (gogoproto.equal) = true;
   repeated DefaultPrivilegesForRole default_privileges_per_role = 1 [(gogoproto.nullable) = false];
-  map<uint32, PrivilegeDescriptor> default_privileges_for_all_roles = 2 [(gogoproto.nullable) = false,
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject"];
 }
