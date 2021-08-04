@@ -395,6 +395,7 @@
 <table><thead>
 <tr><td><code>IS NOT DISTINCT FROM</code></td><td>Return</td></tr>
 </thead><tbody>
+<tr><td>anyelement <code>IS NOT DISTINCT FROM</code> unknown</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>anyenum <code>IS NOT DISTINCT FROM</code> anyenum</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool</a> <code>IS NOT DISTINCT FROM</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code>IS NOT DISTINCT FROM</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool</a></td></tr>
