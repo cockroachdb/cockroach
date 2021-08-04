@@ -3699,19 +3699,41 @@ func TimestampToDecimal(ts hlc.Timestamp) apd.Decimal {
 	return res
 }
 
-// DecimalToInexactDTimestamp is the inverse of TimestampToDecimal. It converts
-// a decimal constructed from an hlc.Timestamp into an approximate DTimestamp
+// DecimalToInexactDTimestampTZ is the inverse of TimestampToDecimal. It converts
+// a decimal constructed from an hlc.Timestamp into an approximate DTimestampTZ
 // containing the walltime of the hlc.Timestamp.
-func DecimalToInexactDTimestamp(d *DDecimal) (*DTimestamp, error) {
+func DecimalToInexactDTimestampTZ(d *DDecimal) (*DTimestampTZ, error) {
+	ts, err := decimalToHLC(d)
+	if err != nil {
+		return nil, err
+	}
+	return MakeDTimestampTZ(timeutil.Unix(0, ts.WallTime), time.Microsecond)
+}
+
+func decimalToHLC(d *DDecimal) (hlc.Timestamp, error) {
 	var coef big.Int
 	coef.Set(&d.Decimal.Coeff)
 	// The physical portion of the HLC is stored shifted up by 10^10, so shift
 	// it down and clear out the logical component.
 	coef.Div(&coef, big10E10)
 	if !coef.IsInt64() {
-		return nil, pgerror.Newf(pgcode.DatetimeFieldOverflow, "timestamp value out of range: %s", d.String())
+		return hlc.Timestamp{}, pgerror.Newf(
+			pgcode.DatetimeFieldOverflow,
+			"timestamp value out of range: %s", d.String(),
+		)
 	}
-	return TimestampToInexactDTimestamp(hlc.Timestamp{WallTime: coef.Int64()}), nil
+	return hlc.Timestamp{WallTime: coef.Int64()}, nil
+}
+
+// DecimalToInexactDTimestamp is the inverse of TimestampToDecimal. It converts
+// a decimal constructed from an hlc.Timestamp into an approximate DTimestamp
+// containing the walltime of the hlc.Timestamp.
+func DecimalToInexactDTimestamp(d *DDecimal) (*DTimestamp, error) {
+	ts, err := decimalToHLC(d)
+	if err != nil {
+		return nil, err
+	}
+	return TimestampToInexactDTimestamp(ts), nil
 }
 
 // TimestampToDecimalDatum is the same as TimestampToDecimal, but

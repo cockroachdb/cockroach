@@ -2549,14 +2549,30 @@ nearest replica.`, defaultFollowerReadDuration),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return ctx.GetClusterTimestamp(), nil
 			},
-			Info: `Returns the logical time of the current transaction.
-
-This function is reserved for testing purposes by CockroachDB
-developers and its definition may change without prior notice.
+			Info: `Returns the logical time of the current transaction as
+a CockroachDB HLC in decimal form.
 
 Note that uses of this function disable server-side optimizations and
 may increase either contention or retry errors, or both.`,
 			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"hlc_to_timestamp": makeBuiltin(
+		tree.FunctionProperties{},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"hlc", types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				d := tree.MustBeDDecimal(args[0])
+				return tree.DecimalToInexactDTimestampTZ(&d)
+			},
+			Info: `Returns a TimestampTZ representation of a CockroachDB HLC in decimal form.
+
+Note that a TimestampTZ has less precision than a CockroachDB HLC. It is intended as
+a convenience function to display HLCs in a print-friendly form. Use the decimal
+value if you rely on the HLC for accuracy.`,
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 
