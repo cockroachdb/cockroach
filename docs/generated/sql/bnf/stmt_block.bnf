@@ -242,6 +242,7 @@ show_stmt ::=
 	| show_transactions_stmt
 	| show_users_stmt
 	| show_zone_stmt
+	| show_full_scans_stmt
 	| show_default_privileges_stmt
 
 truncate_stmt ::=
@@ -775,6 +776,9 @@ show_zone_stmt ::=
 	| 'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'PARTITION' partition_name 'OF' 'INDEX' table_index_name
 	| 'SHOW' 'ZONE' 'CONFIGURATIONS'
 	| 'SHOW' 'ALL' 'ZONE' 'CONFIGURATIONS'
+
+show_full_scans_stmt ::=
+	'SHOW' 'FULL' 'TABLE' 'SCANS'
 
 show_default_privileges_stmt ::=
 	'SHOW' 'DEFAULT' 'PRIVILEGES' opt_for_roles
