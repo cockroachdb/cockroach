@@ -1041,11 +1041,25 @@ type ExecutorConfig struct {
 	CollectionFactory *descs.CollectionFactory
 }
 
+// UpdateSystemVersionSettingHook provides a callback that allows us
+// update the cluster version inside the system.settings table. This hook
+// is aimed at mainly updating tenant pods, which will currently skip over
+// the existing migration logic for bumping version numbers (this logic is
+// stubbed out for them). As a result there is a potential danger of migrations
+// partially being completed without the version number being persisted to storage
+// for tenants. This hook allows the version number to bumped and saved at
+// each step.
+type UpdateSystemVersionSettingHook func(
+	ctx context.Context,
+	version clusterversion.ClusterVersion,
+) error
+
 // VersionUpgradeHook is used to run migrations starting in v21.1.
 type VersionUpgradeHook func(
 	ctx context.Context,
 	user security.SQLUsername,
 	from, to clusterversion.ClusterVersion,
+	updateSystemVersionSettings UpdateSystemVersionSettingHook,
 ) error
 
 // Organization returns the value of cluster.organization.
