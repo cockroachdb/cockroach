@@ -24,7 +24,8 @@ import (
 func interleavedTablesRemovedMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
-	rows, err := d.InternalExecutor.QueryRowEx(ctx, "check-for-interleaved", nil, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+	rows, err := d.InternalExecutor.QueryRowEx(ctx, "check-for-interleaved",
+		nil, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SELECT EXISTS(SELECT * FROM crdb_internal.interleaved);")
 	if err != nil {
 		return err

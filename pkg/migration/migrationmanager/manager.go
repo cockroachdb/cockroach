@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -96,7 +97,10 @@ var _ migration.JobDeps = (*Manager)(nil)
 // Migrate runs the set of migrations required to upgrade the cluster version
 // from the current version to the target one.
 func (m *Manager) Migrate(
-	ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion,
+	ctx context.Context,
+	user security.SQLUsername,
+	from, to clusterversion.ClusterVersion,
+	updateSystemVersionSetting sql.UpdateVersionSystemSettingHook,
 ) error {
 	// TODO(irfansharif): Should we inject every ctx here with specific labels
 	// for each migration, so they log distinctly?
@@ -226,7 +230,14 @@ func (m *Manager) Migrate(
 		}
 
 		// Finally, bump the real version cluster-wide.
-		if err := bumpClusterVersion(ctx, m.deps.Cluster, clusterVersion); err != nil {
+		err := bumpClusterVersion(ctx, m.deps.Cluster, clusterVersion)
+		if err != nil {
+			return err
+		}
+		// Bump up the cluster version for tenants, which
+		// will bump over individual version bumps.
+		err = updateSystemVersionSetting(ctx, clusterVersion)
+		if err != nil {
 			return err
 		}
 	}
