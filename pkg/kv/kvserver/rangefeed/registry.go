@@ -264,7 +264,7 @@ func (r *registration) outputLoop(ctx context.Context) error {
 	}
 }
 
-func (r *registration) runOutputLoop(ctx context.Context) {
+func (r *registration) runOutputLoop(ctx context.Context, _forStacks roachpb.RangeID) {
 	r.mu.Lock()
 	ctx, r.mu.outputLoopCancelFn = context.WithCancel(ctx)
 	r.mu.Unlock()
