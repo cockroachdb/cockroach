@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -92,7 +93,10 @@ var _ migration.JobDeps = (*Manager)(nil)
 // Migrate runs the set of migrations required to upgrade the cluster version
 // from the current version to the target one.
 func (m *Manager) Migrate(
-	ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion,
+	ctx context.Context,
+	user security.SQLUsername,
+	from, to clusterversion.ClusterVersion,
+	setCurrentVersion sql.SetCurrentVersionHook,
 ) error {
 	// TODO(irfansharif): Should we inject every ctx here with specific labels
 	// for each migration, so they log distinctly?
@@ -206,7 +210,7 @@ func (m *Manager) Migrate(
 			// version, and by design also supports the actual version (which is
 			// the direct successor of the fence).
 			fenceVersion := migration.FenceVersionFor(ctx, clusterVersion)
-			if err := bumpClusterVersion(ctx, m.c, fenceVersion); err != nil {
+			if err, _ := bumpClusterVersion(ctx, m.c, fenceVersion); err != nil {
 				return err
 			}
 		}
@@ -218,8 +222,17 @@ func (m *Manager) Migrate(
 		}
 
 		// Finally, bump the real version cluster-wide.
-		if err := bumpClusterVersion(ctx, m.c, clusterVersion); err != nil {
+		err, anyVersionBumped := bumpClusterVersion(ctx, m.c, clusterVersion)
+		if err != nil {
 			return err
+		}
+		if !anyVersionBumped {
+			// Bump up the cluster version for tenants, which
+			// will bump over individual version bumps.
+			err := setCurrentVersion(ctx, clusterVersion)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -230,15 +243,17 @@ func (m *Manager) Migrate(
 // until the cluster is stable.
 func bumpClusterVersion(
 	ctx context.Context, c migration.Cluster, clusterVersion clusterversion.ClusterVersion,
-) error {
+) (error, bool) {
 	req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
 	op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
+	anyVersionBumped := false
 	return forEveryNodeUntilClusterStable(ctx, op, c, func(
 		ctx context.Context, client serverpb.MigrationClient,
 	) error {
+		anyVersionBumped = true
 		_, err := client.BumpClusterVersion(ctx, req)
 		return err
-	})
+	}), anyVersionBumped
 }
 
 // bumpClusterVersion will invoke the ValidateTargetClusterVersion rpc on

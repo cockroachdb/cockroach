@@ -993,11 +993,19 @@ type ExecutorConfig struct {
 	CollectionFactory *descs.CollectionFactory
 }
 
+// SetCurrentVersionHook hook used to update the version both on
+// disk and in memory.
+type SetCurrentVersionHook func(
+	ctx context.Context,
+	version clusterversion.ClusterVersion,
+) error
+
 // VersionUpgradeHook is used to run migrations starting in v21.1.
 type VersionUpgradeHook func(
 	ctx context.Context,
 	user security.SQLUsername,
 	from, to clusterversion.ClusterVersion,
+	setCurrentVersion SetCurrentVersionHook,
 ) error
 
 // Organization returns the value of cluster.organization.

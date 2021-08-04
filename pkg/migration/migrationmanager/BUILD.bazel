@@ -21,6 +21,7 @@ go_library(
         "//pkg/security",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/sql/protoreflect",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
