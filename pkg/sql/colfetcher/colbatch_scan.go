@@ -237,7 +237,7 @@ func NewColBatchScan(
 	if aost := evalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
 		ts := aost.Timestamp
 		if aost.Timestamp.Less(table.GetModificationTime()) {
-			fmt.Printf("table modified at %#v (aost %#v); increasing ts\n", table.GetModificationTime(), ts)
+			fmt.Printf("table modified at %#v (aost %#v), v %#v; increasing ts\n", table.GetModificationTime(), ts, table.GetVersion())
 			ts = table.GetModificationTime()
 		}
 		bsHeader = &roachpb.BoundedStalenessHeader{
