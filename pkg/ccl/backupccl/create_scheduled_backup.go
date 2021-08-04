@@ -464,8 +464,7 @@ func setDependentSchedule(
 		return errors.Wrap(err, "marshaling args")
 	}
 	schedule.SetExecutionDetails(
-		schedule.ExecutorType(),
-		jobspb.ExecutionArguments{Args: any},
+		schedule.ExecutorType(), jobspb.ExecutionArguments{Args: any},
 	)
 	return schedule.Update(ctx, ex, txn)
 }
@@ -556,8 +555,7 @@ func makeBackupSchedule(
 		return nil, nil, err
 	}
 	sj.SetExecutionDetails(
-		tree.ScheduledBackupExecutor.InternalName(),
-		jobspb.ExecutionArguments{Args: any},
+		tree.ScheduledBackupExecutor.InternalName(), jobspb.ExecutionArguments{Args: any},
 	)
 
 	return sj, args, nil
