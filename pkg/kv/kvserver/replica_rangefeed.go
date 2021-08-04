@@ -221,7 +221,7 @@ func (r *Replica) rangeFeedWithRangeID(
 	// Register the stream with a catch-up iterator.
 	var catchUpIterFunc rangefeed.CatchupIteratorConstructor
 	if usingCatchupIter {
-		catchUpIterFunc = func() rangefeed.CatchupIterator {
+		catchUpIterFunc = func() *rangefeed.CatchupIterator {
 			return rangefeed.NewCatchupIterator(r.Engine(),
 				args, RangefeedTBIEnabled.Get(&r.store.cfg.Settings.SV), iterSemRelease)
 		}
