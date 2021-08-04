@@ -135,15 +135,15 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 
 	defaultPrivs := n.dbDesc.GetDefaultPrivileges()
 
-	var roles []descpb.AlterDefaultPrivilegesRole
+	var roles []descpb.DefaultPrivilegesRole
 	if n.n.ForAllRoles {
-		roles = append(roles, descpb.AlterDefaultPrivilegesRole{
+		roles = append(roles, descpb.DefaultPrivilegesRole{
 			ForAllRoles: true,
 		})
 	} else {
-		roles = make([]descpb.AlterDefaultPrivilegesRole, len(targetRoles))
+		roles = make([]descpb.DefaultPrivilegesRole, len(targetRoles))
 		for i, role := range targetRoles {
-			roles[i] = descpb.AlterDefaultPrivilegesRole{
+			roles[i] = descpb.DefaultPrivilegesRole{
 				Role: role,
 			}
 		}
