@@ -466,3 +466,104 @@ project
       ├── b.z:2::DECIMAL(10,3) [as=z:5, type=decimal]
       ├── b.z:2::DECIMAL(10,1) [as=z:6, type=decimal]
       └── b.z:2::DECIMAL(10,4) [as=z:7, type=decimal]
+
+build
+SELECT ARRAY[1,2] IS NULL
+----
+project
+ ├── columns: "?column?":1(bool!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[1,2] IS NULL [as="?column?":1, type=bool]
+
+# Tests with enum types.
+exec-ddl
+CREATE TYPE color AS ENUM ('red', 'green', 'blue')
+----
+
+exec-ddl
+CREATE TABLE colortab (k INT PRIMARY KEY, c color)
+----
+
+build
+SELECT * FROM colortab WHERE c = 'red'
+----
+project
+ ├── columns: k:1(int!null) c:2(color!null)
+ └── select
+      ├── columns: k:1(int!null) c:2(color!null) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── scan colortab
+      │    └── columns: k:1(int!null) c:2(color) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      └── filters
+           └── c:2 = 'red' [type=bool]
+
+build
+SELECT ARRAY['red', 'green']::color[]
+----
+project
+ ├── columns: array:1(color[]!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY['red','green']::color[] [as=array:1, type=color[]]
+
+norm
+SELECT ARRAY['red', 'green']::color[]
+----
+values
+ ├── columns: array:1(color[]!null)
+ └── (ARRAY['red','green'],) [type=tuple{color[]}]
+
+# Invalid label does not get folded.
+build
+SELECT ARRAY['foo']::color[]
+----
+project
+ ├── columns: array:1(color[]!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY['foo']::color[] [as=array:1, type=color[]]
+
+norm
+SELECT ARRAY['foo']::color[]
+----
+values
+ ├── columns: array:1(color[])
+ └── (ARRAY['foo']::color[],) [type=tuple{color[]}]
+
+# Regression tests for #68233.
+build
+SELECT (ARRAY[]::color[]) IS NULL
+----
+project
+ ├── columns: "?column?":1(bool!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[] IS NULL [as="?column?":1, type=bool]
+
+norm
+SELECT (ARRAY[]::color[]) IS NULL
+----
+values
+ ├── columns: "?column?":1(bool!null)
+ └── (false,) [type=tuple{bool}]
+
+build
+SELECT (ARRAY[]::color[]) IS NOT NULL
+----
+project
+ ├── columns: "?column?":1(bool!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[] IS NOT NULL [as="?column?":1, type=bool]
+
+norm
+SELECT (ARRAY[]::color[]) IS NOT NULL
+----
+values
+ ├── columns: "?column?":1(bool!null)
+ └── (true,) [type=tuple{bool}]
