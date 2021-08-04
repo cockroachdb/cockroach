@@ -325,6 +325,18 @@
 </span></td></tr></tbody>
 </table>
 
+### DECIMAL functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="hlc_to_timestamp"></a><code>hlc_to_timestamp(hlc: <a href="decimal.html">decimal</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns a TimestampTZ representation of a CockroachDB HLC in decimal form.</p>
+<p>Note that a TimestampTZ has less precision than a CockroachDB HLC. It is intended as
+a convenience function to display HLCs in a print-friendly form. Use the decimal
+value if you rely on the HLC for accuracy.</p>
+</span></td></tr></tbody>
+</table>
+
 ### Date and time functions
 
 <table>
@@ -2742,9 +2754,8 @@ The output can be used to recreate a database.’</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><a name="cluster_logical_timestamp"></a><code>cluster_logical_timestamp() &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Returns the logical time of the current transaction.</p>
-<p>This function is reserved for testing purposes by CockroachDB
-developers and its definition may change without prior notice.</p>
+<tr><td><a name="cluster_logical_timestamp"></a><code>cluster_logical_timestamp() &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Returns the logical time of the current transaction as
+a CockroachDB HLC in decimal form.</p>
 <p>Note that uses of this function disable server-side optimizations and
 may increase either contention or retry errors, or both.</p>
 </span></td></tr>
