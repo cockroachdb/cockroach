@@ -39,6 +39,9 @@ ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
 Stage 0
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 57
+    TableID: 55
   *scop.DropForeignKeyRef
     Name: fk_customers
     Outbound: true

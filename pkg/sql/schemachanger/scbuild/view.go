@@ -42,10 +42,21 @@ func (b *buildContext) maybeDropViewAndDependents(
 		DependedOnBy: make([]descpb.ID, 0, len(view.GetDependedOnBy())),
 		DependsOn:    make([]descpb.ID, 0, len(view.TableDesc().DependsOn)),
 	}
-	// Add dependencies in a order manner for reliable
+	// Add dependencies in an order manner for reliable
 	// unit testing.
 	for _, dep := range view.GetDependedOnBy() {
 		viewNode.DependedOnBy = append(viewNode.DependedOnBy, dep.ID)
+	}
+	// Clean up any back references to the tables.
+	for _, dep := range view.GetDependsOn() {
+		tableBackRef := &scpb.RelationDependedOnBy{
+			TableID:      dep,
+			DependedOnBy: viewNode.TableID,
+		}
+		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, tableBackRef); !exists {
+			b.addNode(scpb.Target_DROP,
+				tableBackRef)
+		}
 	}
 	viewNode.DependsOn = append(viewNode.DependsOn, view.TableDesc().DependsOn...)
 	sort.SliceStable(viewNode.DependsOn, func(i, j int) bool {
