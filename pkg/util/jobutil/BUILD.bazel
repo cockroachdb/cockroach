@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "jobutil",
+    srcs = ["job_utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/jobutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
