@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -199,10 +200,11 @@ const scheduleBackupOp = "CREATE SCHEDULE FOR BACKUP"
 // canChainProtectedTimestampRecords returns true if the schedule is eligible to
 // participate in the chaining of protected timestamp records between backup
 // jobs running as part of the schedule.
-// Currently, full cluster and table backups with revision history can enable
-// chaining, as the spans to be protected remain constant across all backups in
-// the chain. Unlike in database backups where a table could be created in
-// between backups thereby widening the scope of what is to be protected.
+// Currently, full cluster backups, tenant backups and table backups with
+// revision history can enable chaining, as the spans to be protected remain
+// constant across all backups in the chain. Unlike in database backups where a
+// table could be created in between backups thereby widening the scope of what
+// is to be protected.
 func canChainProtectedTimestampRecords(p sql.PlanHookState, eval *scheduledBackupEval) bool {
 	if !scheduledBackupGCProtectionEnabled.Get(&p.ExecCfg().Settings.SV) ||
 		!eval.BackupOptions.CaptureRevisionHistory {
@@ -227,9 +229,8 @@ func canChainProtectedTimestampRecords(p sql.PlanHookState, eval *scheduledBacku
 		}
 	}
 
-	// Return true if the backup has table targets.
-	// TODO(adityamaru): tenant targets might also work because we protect the entire keyspace.
-	return eval.Targets.Tables != nil
+	// Return true if the backup has table targets or is backing up a tenant.
+	return eval.Targets.Tables != nil || eval.Targets.Tenant != roachpb.TenantID{}
 }
 
 // doCreateBackupSchedule creates requested schedule (or schedules).
