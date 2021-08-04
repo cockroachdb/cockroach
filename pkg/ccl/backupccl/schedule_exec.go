@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -257,22 +258,63 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 		return nil
 	}
 
-	s, err := jobs.LoadScheduledJob(ctx, env, args.UnpauseOnSuccess, ex, txn)
+	unpausedSchedule, err := jobs.LoadScheduledJob(ctx, env, args.UnpauseOnSuccess, ex, txn)
 	if err != nil {
 		return err
 	}
-	s.ClearScheduleStatus()
-	if s.HasRecurringSchedule() {
-		if err := s.ScheduleNextRun(); err != nil {
+	unpausedSchedule.ClearScheduleStatus()
+	if unpausedSchedule.HasRecurringSchedule() {
+		if err := unpausedSchedule.ScheduleNextRun(); err != nil {
 			return err
 		}
 	}
-	if err := s.Update(ctx, ex, txn); err != nil {
+	unpausedArgs := &ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(unpausedSchedule.ExecutionArgs().Args, unpausedArgs); err != nil {
+		return errors.Wrap(err, "un-marshaling args")
+	}
+	if unpausedArgs.ChainProtectedTimestampRecords {
+		// We expect the full backup that is un-pausing the incremental schedule to
+		// have a pts record that it can pass on to the incremental schedule. If
+		// that is not the case pause the schedule and fail the backup job.
+		if !args.ChainProtectedTimestampRecords || args.ProtectedTimestampRecord == nil {
+			errMsg := fmt.Sprintf("schedule %d cannot chain protected timestamp records since"+
+				" prior schedule %d does not have a protected timestamp record", unpausedSchedule.ScheduleID(),
+				schedule.ScheduleID())
+			schedule.Pause()
+			schedule.SetScheduleStatus(errMsg)
+			e.metrics.NumFailed.Inc(1)
+			log.Errorf(ctx, "failed to chain protected timestamps: %q", errMsg)
+			return nil
+		}
+
+		// Full backup schedule stores its protected timestamp record in the
+		// incremental schedule so that the record can be used by the subsequent
+		// incremental backup job. It bootstraps the chaining of pts records which
+		// hereafter occurs on the incremental schedule.
+		ptsRecord := *args.ProtectedTimestampRecord
+		unpausedArgs.ProtectedTimestampRecord = &ptsRecord
+		any, err := pbtypes.MarshalAny(unpausedArgs)
+		if err != nil {
+			return errors.Wrap(err, "marshaling args")
+		}
+		unpausedSchedule.SetExecutionDetails(
+			unpausedSchedule.ExecutorType(),
+			jobspb.ExecutionArguments{Args: any},
+		)
+	}
+
+	if err := unpausedSchedule.Update(ctx, ex, txn); err != nil {
 		return err
 	}
 
 	// Clear UnpauseOnSuccess; caller updates schedule.
 	args.UnpauseOnSuccess = jobs.InvalidScheduleID
+
+	// Subsequent full backups do not need to concern themselves with chaining
+	// of pts records. The incremental schedule will continue the chaining of
+	// the records.
+	args.ProtectedTimestampRecord = nil
+	args.ChainProtectedTimestampRecords = false
 	any, err := pbtypes.MarshalAny(args)
 	if err != nil {
 		return errors.Wrap(err, "marshaling args")
