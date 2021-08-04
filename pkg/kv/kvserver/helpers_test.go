@@ -24,7 +24,6 @@ import (
 	"unsafe"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -51,10 +50,10 @@ func (s *Store) Transport() *RaftTransport {
 }
 
 func (s *Store) FindTargetAndTransferLease(
-	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, zone *zonepb.ZoneConfig,
+	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
 ) (bool, error) {
 	transferStatus, err := s.replicateQueue.shedLease(
-		ctx, repl, desc, zone, transferLeaseOptions{},
+		ctx, repl, desc, conf, transferLeaseOptions{},
 	)
 	return transferStatus == transferOK, err
 }

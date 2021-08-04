@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,7 +57,7 @@ func (r *Replica) Metrics(
 	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
-	zone := r.mu.zone
+	conf := r.mu.conf
 	raftLogSize := r.mu.raftLogSize
 	raftLogSizeTrusted := r.mu.raftLogSizeTrusted
 	r.mu.RUnlock()
@@ -73,7 +72,7 @@ func (r *Replica) Metrics(
 		ctx,
 		now.ToTimestamp(),
 		&r.store.cfg.RaftConfig,
-		zone,
+		conf,
 		livenessMap,
 		clusterNodes,
 		desc,
@@ -93,7 +92,7 @@ func calcReplicaMetrics(
 	_ context.Context,
 	_ hlc.Timestamp,
 	raftCfg *base.RaftConfig,
-	zone *zonepb.ZoneConfig,
+	conf roachpb.SpanConfig,
 	livenessMap liveness.IsLiveMap,
 	clusterNodes int,
 	desc *roachpb.RangeDescriptor,
@@ -122,7 +121,7 @@ func calcReplicaMetrics(
 	m.Ticking = ticking
 
 	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated = calcRangeCounter(
-		storeID, desc, leaseStatus, livenessMap, zone.GetNumVoters(), *zone.NumReplicas, clusterNodes)
+		storeID, desc, leaseStatus, livenessMap, conf.GetNumVoters(), conf.NumReplicas, clusterNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
@@ -268,7 +267,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) needsMergeBySizeRLocked() bool {
-	return r.mu.state.Stats.Total() < *r.mu.zone.RangeMinBytes
+	return r.mu.state.Stats.Total() < r.mu.conf.RangeMinBytes
 }
 
 func (r *Replica) needsRaftLogTruncationLocked() bool {
@@ -287,11 +286,11 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 // exceedsMultipleOfSplitSizeRLocked returns whether the current size of the
 // range exceeds the max size times mult. If so, the bytes overage is also
 // returned. Note that the max size is determined by either the current maximum
-// size as dictated by the zone config or a previous max size indicating that
+// size as dictated by the span config or a previous max size indicating that
 // the max size has changed relatively recently and thus we should not
 // backpressure for being over.
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool, bytesOver int64) {
-	maxBytes := *r.mu.zone.RangeMaxBytes
+	maxBytes := r.mu.conf.RangeMaxBytes
 	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
 		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
 	}

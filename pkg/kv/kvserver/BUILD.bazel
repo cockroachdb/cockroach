@@ -101,7 +101,6 @@ go_library(
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/config",
-        "//pkg/config/zonepb",
         "//pkg/docs",
         "//pkg/gossip",
         "//pkg/keys",

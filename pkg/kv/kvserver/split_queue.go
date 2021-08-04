@@ -78,7 +78,7 @@ func newSplitQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *splitQueue {
 			maxSize:              defaultQueueMaxSize,
 			maxConcurrency:       splitQueueConcurrency,
 			needsLease:           true,
-			needsSystemConfig:    true,
+			needsSystemConfig:    true, // XXX: Needs to be swapped out
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.SplitQueueSuccesses,
 			failures:             store.metrics.SplitQueueFailures,

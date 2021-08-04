@@ -154,7 +154,7 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 			repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: tc.bytes}
 			zoneConfig := zonepb.DefaultZoneConfigRef()
 			zoneConfig.RangeMinBytes = proto.Int64(tc.minBytes)
-			repl.SetZoneConfig(zoneConfig)
+			repl.SetSpanConfig(zoneConfig.AsSpanConfig())
 			shouldQ, priority := mq.shouldQueue(ctx, hlc.ClockTimestamp{}, repl, config.NewSystemConfig(zoneConfig))
 			if tc.expShouldQ != shouldQ {
 				t.Errorf("incorrect shouldQ: expected %v but got %v", tc.expShouldQ, shouldQ)

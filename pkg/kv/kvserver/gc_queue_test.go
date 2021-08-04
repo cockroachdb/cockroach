@@ -20,7 +20,6 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -109,7 +108,7 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 			GCBytesAge:      gcByteAge,
 		}
 		now := initialNow.Add(timePassed.Nanoseconds(), 0)
-		r := makeGCQueueScoreImpl(ctx, int64(seed), now, ms, zonepb.GCPolicy{TTLSeconds: ttlSec}, hlc.Timestamp{})
+		r := makeGCQueueScoreImpl(ctx, int64(seed), now, ms, time.Duration(ttlSec)*time.Second, hlc.Timestamp{})
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
 		result := !r.ShouldQueue || wouldHaveToDeleteSomething
 		if !result {
@@ -131,7 +130,7 @@ func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 			LiveBytes:         int64(liveBytes),
 			ValBytes:          int64(valBytes),
 			KeyBytes:          int64(keyBytes),
-		}, zonepb.GCPolicy{TTLSeconds: 60}, hlc.Timestamp{})
+		}, 60, hlc.Timestamp{})
 		return r.DeadFraction >= 0 && r.DeadFraction <= 1
 	}, &quick.Config{MaxCount: 1000}); err != nil {
 		t.Fatal(err)
@@ -155,7 +154,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 		r := makeGCQueueScoreImpl(
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
-			ms, zonepb.GCPolicy{TTLSeconds: 10000},
+			ms, 10000,
 			gcThresh,
 		)
 		require.True(t, r.ShouldQueue)
@@ -170,7 +169,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 		r := makeGCQueueScoreImpl(
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
-			ms, zonepb.GCPolicy{TTLSeconds: 10000},
+			ms, 10000,
 			gcThresh,
 		)
 		require.True(t, r.ShouldQueue)
@@ -181,7 +180,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	{
 		r := makeGCQueueScoreImpl(context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration},
-			ms, zonepb.GCPolicy{TTLSeconds: 10000},
+			ms, 10000,
 			gcThresh,
 		)
 		require.False(t, r.ShouldQueue)
@@ -302,9 +301,7 @@ func (cws *cachedWriteSimulator) shouldQueue(
 ) {
 	cws.t.Helper()
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
-	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, zonepb.GCPolicy{
-		TTLSeconds: int32(ttl.Seconds()),
-	}, hlc.Timestamp{})
+	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, ttl, hlc.Timestamp{})
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
 		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
 			b, r.ShouldQueue, prio, r.FinalScore, after, ttl, ms, r)
@@ -568,10 +565,11 @@ func TestGCQueueProcess(t *testing.T) {
 		if err != nil {
 			t.Fatalf("could not find zone config for range %s: %+v", tc.repl, err)
 		}
+		conf := zone.AsSpanConfig()
 
 		now := tc.Clock().Now()
-		newThreshold := gc.CalculateThreshold(now, *zone.GC)
-		return gc.Run(ctx, desc, snap, now, newThreshold, intentAgeThreshold, *zone.GC,
+		newThreshold := gc.CalculateThreshold(now, conf.TTL())
+		return gc.Run(ctx, desc, snap, now, newThreshold, intentAgeThreshold, conf.TTL(),
 			gc.NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil

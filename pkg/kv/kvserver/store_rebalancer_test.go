@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
@@ -82,7 +81,7 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 	for _, r := range ranges {
 		repl := &Replica{store: s}
 		repl.mu.state.Desc = &roachpb.RangeDescriptor{}
-		repl.mu.zone = s.cfg.DefaultZoneConfig
+		repl.mu.conf = s.cfg.DefaultSpanConfig
 		for _, storeID := range r.voters {
 			repl.mu.state.Desc.InternalReplicas = append(repl.mu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),
@@ -525,8 +524,8 @@ func TestChooseRangeToRebalance(t *testing.T) {
 				return true
 			}
 
-			s.cfg.DefaultZoneConfig.NumVoters = proto.Int32(int32(len(tc.voters)))
-			s.cfg.DefaultZoneConfig.NumReplicas = proto.Int32(int32(len(tc.voters) + len(tc.nonVoters)))
+			s.cfg.DefaultSpanConfig.NumVoters = int32(len(tc.voters))
+			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters) + len(tc.nonVoters))
 			loadRanges(
 				rr, s, []testRange{
 					{voters: tc.voters, nonVoters: tc.nonVoters, qps: tc.qps},

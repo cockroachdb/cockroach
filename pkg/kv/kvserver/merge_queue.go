@@ -112,7 +112,7 @@ func newMergeQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *mergeQueue {
 			// factor.
 			processTimeoutFunc:   makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 			needsLease:           true,
-			needsSystemConfig:    true,
+			needsSystemConfig:    true, // XXX: Needs to be swapped out.
 			acceptsUnsplitRanges: false,
 			successes:            store.metrics.MergeQueueSuccesses,
 			failures:             store.metrics.MergeQueueFailures,

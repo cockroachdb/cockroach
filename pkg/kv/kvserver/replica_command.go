@@ -2861,6 +2861,7 @@ func (s *Store) relocateOne(
 	if err != nil {
 		return nil, nil, err
 	}
+	conf := zone.AsSpanConfig()
 
 	storeList, _, _ := s.allocator.storePool.getStoreList(storeFilterNone)
 	storeMap := storeListToMap(storeList)
@@ -2904,7 +2905,7 @@ func (s *Store) relocateOne(
 		targetStore, _ := s.allocator.allocateTargetFromList(
 			ctx,
 			candidateStoreList,
-			zone,
+			conf,
 			existingVoters,
 			existingNonVoters,
 			s.allocator.scorerOptions(),
@@ -2975,7 +2976,7 @@ func (s *Store) relocateOne(
 		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
 		// may not want to do that due to constraints.
 		targetStore, _, err := s.allocator.removeTarget(
-			ctx, zone, args.targetsToRemove(), existingVoters,
+			ctx, conf, args.targetsToRemove(), existingVoters,
 			existingNonVoters, args.targetType,
 		)
 		if err != nil {

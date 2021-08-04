@@ -41,13 +41,9 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 		expectedSpanConfig roachpb.SpanConfig
 		expectedDeleted    bool
 	}
-
-	defaultSpanConfig, err := zonepb.DefaultZoneConfig().ToSpanConfig()
-	require.NoError(t, err)
-
+	defaultZoneConfig := zonepb.DefaultZoneConfig()
+	defaultSpanConfig := defaultZoneConfig.AsSpanConfig()
 	defaultSpanConfigWith := func(f func(roachpb.SpanConfig) roachpb.SpanConfig) roachpb.SpanConfig {
-		defaultSpanConfig, err := zonepb.DefaultZoneConfig().ToSpanConfig()
-		require.NoError(t, err)
 		return f(defaultSpanConfig)
 	}
 

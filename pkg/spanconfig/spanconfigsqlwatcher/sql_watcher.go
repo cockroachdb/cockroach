@@ -380,11 +380,8 @@ func (s *SQLWatcher) generateSpanConfigurationsForTable(
 	if err != nil {
 		return nil, err
 	}
-	spanConfig, err := zone.ToSpanConfig()
-	if err != nil {
-		return nil, err
-	}
 
+	spanConfig := zone.AsSpanConfig()
 	ret := make([]roachpb.SpanConfigEntry, 0)
 	tablePrefix := s.codec.TablePrefix(uint32(id))
 	prevEndKey := tablePrefix
@@ -418,10 +415,7 @@ func (s *SQLWatcher) generateSpanConfigurationsForTable(
 		}
 
 		// Add an entry for the subzone.
-		subzoneSpanConfig, err := zone.Subzones[zone.SubzoneSpans[i].SubzoneIndex].Config.ToSpanConfig()
-		if err != nil {
-			return nil, err
-		}
+		subzoneSpanConfig := zone.Subzones[zone.SubzoneSpans[i].SubzoneIndex].Config.AsSpanConfig()
 		ret = append(ret,
 			roachpb.SpanConfigEntry{
 				Span:   span,

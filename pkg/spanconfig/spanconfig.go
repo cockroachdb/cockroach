@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -83,3 +84,9 @@ type StoreReader interface {
 // TODO(zcfgs-pod): De-dup away sql updates by maintaining a similar
 // spanconfig.Store on the tenant/SQL watcher. Alternatively, fetch span configs
 // from KV each time to compare against.
+
+var EnabledSetting = settings.RegisterBoolSetting(
+	"spanconfig.enabled",
+	"enable the use of span configs",
+	false,
+)

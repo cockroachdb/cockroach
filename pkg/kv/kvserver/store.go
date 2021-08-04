@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -159,6 +158,25 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+// Minimum time interval between span config updates which will lead to
+// enqueuing replicas.
+var queueAdditionOnSpanConfigUpdateRate = settings.RegisterFloatSetting(
+	"kv.store.span_config_update.queue_add_rate",
+	"the rate (per second) at which the store will add, all replicas to the split and merge queue due to span config updates",
+	.5,
+	settings.NonNegativeFloat,
+)
+
+// Minimum time interval between span config updates which will lead to
+// enqueuing replicas. The default is relatively high to deal with startup
+// scenarios.
+var queueAdditionOnSpanConfigUpdateBurst = settings.RegisterIntSetting(
+	"kv.store.span_config_update.queue_add_burst",
+	"the burst rate at which the store will add all replicas to the split and merge queue due to span config updates",
+	32,
+	settings.NonNegativeInt,
+)
+
 // leaseTransferWait limits the amount of time a drain command waits for lease
 // and Raft leadership transfers.
 var leaseTransferWait = func() *settings.DurationSetting {
@@ -201,8 +219,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		DefaultZoneConfig:           zonepb.DefaultZoneConfigRef(),
-		DefaultSystemZoneConfig:     zonepb.DefaultSystemZoneConfigRef(),
+		DefaultSpanConfig:           roachpb.DefaultSpanConfig(),
+		DefaultSystemSpanConfig:     roachpb.DefaultSystemSpanConfig(),
 		Settings:                    st,
 		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
 		Clock:                       clock,
@@ -625,7 +643,8 @@ type Store struct {
 	computeInitialMetrics              sync.Once
 	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 
-	spanConfigStore spanconfig.Store
+	spanConfigStore                  spanconfig.Store
+	spanConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 }
 
 var _ kv.Sender = &Store{}
@@ -638,8 +657,8 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultZoneConfig       *zonepb.ZoneConfig
-	DefaultSystemZoneConfig *zonepb.ZoneConfig
+	DefaultSpanConfig       roachpb.SpanConfig
+	DefaultSystemSpanConfig roachpb.SpanConfig
 	Settings                *cluster.Settings
 	Clock                   *hlc.Clock
 	DB                      *kv.DB
@@ -921,6 +940,20 @@ func NewStore(
 	queueAdditionOnSystemConfigUpdateBurst.SetOnChange(&cfg.Settings.SV,
 		updateSystemConfigUpdateQueueLimits)
 
+	s.spanConfigUpdateQueueRateLimiter = quotapool.NewRateLimiter(
+		"SpanConfigUpdateQueue",
+		quotapool.Limit(queueAdditionOnSpanConfigUpdateRate.Get(&cfg.Settings.SV)),
+		queueAdditionOnSpanConfigUpdateBurst.Get(&cfg.Settings.SV))
+	updateSpanConfigUpdateQueueLimits := func(ctx context.Context) {
+		s.spanConfigUpdateQueueRateLimiter.UpdateLimit(
+			quotapool.Limit(queueAdditionOnSpanConfigUpdateRate.Get(&cfg.Settings.SV)),
+			queueAdditionOnSpanConfigUpdateBurst.Get(&cfg.Settings.SV))
+	}
+	queueAdditionOnSpanConfigUpdateRate.SetOnChange(&cfg.Settings.SV,
+		updateSpanConfigUpdateQueueLimits)
+	queueAdditionOnSpanConfigUpdateBurst.SetOnChange(&cfg.Settings.SV,
+		updateSpanConfigUpdateQueueLimits)
+
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
@@ -1134,12 +1167,12 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 					}
 
 					if needsLeaseTransfer {
-						desc, zone := r.DescAndZone()
+						desc, conf := r.DescAndSpanConfig()
 						transferStatus, err := s.replicateQueue.shedLease(
 							ctx,
 							r,
 							desc,
-							zone,
+							conf,
 							transferLeaseOptions{},
 						)
 						if transferStatus != transferOK {
@@ -1973,14 +2006,23 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 	shouldQueue := s.systemConfigUpdateQueueRateLimiter.AdmitN(1)
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		key := repl.Desc().StartKey
+		var conf roachpb.SpanConfig
 		zone, err := sysCfg.GetZoneConfigForKey(key)
 		if err != nil {
 			if log.V(1) {
 				log.Infof(context.TODO(), "failed to get zone config for key %s", key)
 			}
-			zone = s.cfg.DefaultZoneConfig
+			conf = s.cfg.DefaultSpanConfig
+		} else {
+			conf = zone.AsSpanConfig()
 		}
-		repl.SetZoneConfig(zone)
+		// XXX: Audit uses.
+		//  Plan:
+		//  1/ store everything as a span config, get used to reading things
+		//  in KV from span configs instead
+		//  2/ introduce a front end for the sys config span to return span configs
+		//  3/ swap out sys cfg span for other scfg store
+		repl.SetSpanConfig(conf)
 		if shouldQueue {
 			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
@@ -1996,16 +2038,65 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
 func (s *Store) onSpanConfigUpdate(update spanconfig.Update) {
-	// TODO(zcfgs-pod): Apply the span config update locally, updating the
-	// relevant replicas and queuing up the implied merge/split actions.
-
+	ctx := s.AnnotateCtx(context.Background())
 	if update.Deleted {
-		// TODO(zcfgs-pod): A spanconfig.StoreWriter interface is all that's
-		// needed here.
+		// XXX: Take in a spanconfig.StoreWriter interface here instead. Or do
+		// this at the level above?
 		s.spanConfigStore.SetSpanConfig(update.Entry.Span, roachpb.SpanConfig{})
 	} else {
 		s.spanConfigStore.SetSpanConfig(update.Entry.Span, update.Entry.Config)
 	}
+
+	log.Infof(ctx, "xxx: received update span=%s conf=%s deleted=%t", update.Entry.Span, update.Entry.Config.String(), update.Deleted)
+
+	// XXX: Audit all uses of system config span.
+	// XXX: Switch where the span configs are generated, at the source.
+
+	// We'll want to offer all replicas to the split and merge queues. Be a
+	// little careful about not spawning too many individual goroutines.
+
+	// For every range, update its span config and check if it needs to
+	// be split or merged.
+	// now := s.cfg.Clock.NowAsClockTimestamp()
+	// shouldQueue := s.spanConfigUpdateQueueRateLimiter.AdmitN(1)
+	// newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+	// 	ctx := repl.AnnotateCtx(ctx)
+	// 	// XXX: Should we get it just for the start key? Or the range's span?
+	// 	//
+	// 	// Option 1. Get it just for the start key. Then queue up the range for
+	// 	// split/merge, and ensure that post split/merge the range(s) apply the
+	// 	// right config.
+	// 	//
+	// 	// Option 2. Get it for the span. Ensure that the span is the same as
+	// 	// what we expect (contiguous, no splits). If not, queue for
+	// 	// splits/merge, and ensure range(s) apply the right config.
+	// 	//
+	// 	// Doing option 2 for now.
+	// 	replicaSpan := repl.Desc().RSpan().AsRawSpanWithNoLocals()
+	// 	spanConfigEntries := s.spanConfigStore.GetConfigsForSpan(replicaSpan)
+	// 	if len(spanConfigEntries) == 0 {
+	// 		// We don't have a span config for this replica.
+	// 		log.Warningf(ctx, "span config found, skipping")
+	// 		return true // more
+	// 	}
+	//
+	// 	if len(spanConfigEntries) > 1 || !spanConfigEntries[0].Span.Equal(replicaSpan) {
+	// 		if shouldQueue {
+	// 			s.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+	// 				h.MaybeAdd(ctx, repl, now)
+	// 			})
+	// 			s.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+	// 				h.MaybeAdd(ctx, repl, now)
+	// 			})
+	// 		}
+	//
+	// 		return true // more
+	// 	}
+	//
+	// 	spanConfig := spanConfigEntries[0].Config
+	// 	repl.SetSpanConfig(spanConfig)
+	// 	return true // more
+	// })
 }
 
 func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached bool) {

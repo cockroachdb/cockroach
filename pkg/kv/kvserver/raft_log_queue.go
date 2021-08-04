@@ -169,8 +169,8 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// efficient to catch up via a snapshot than via applying a long tail of log
 	// entries.
 	targetSize := r.store.cfg.RaftLogTruncationThreshold
-	if targetSize > *r.mu.zone.RangeMaxBytes {
-		targetSize = *r.mu.zone.RangeMaxBytes
+	if targetSize > r.mu.conf.RangeMaxBytes {
+		targetSize = r.mu.conf.RangeMaxBytes
 	}
 	raftStatus := r.raftStatusRLocked()
 

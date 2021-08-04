@@ -78,7 +78,7 @@ func (w *KVWatcher) WatchForKVUpdates(
 			return
 		}
 
-		if log.V(0) {
+		if log.V(1) {
 			log.Infof(ctx, "received span configuration update for %s (deleted=%t)", entry.Span, deleted)
 		}
 

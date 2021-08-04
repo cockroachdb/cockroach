@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/util/stop",
     ],
 )

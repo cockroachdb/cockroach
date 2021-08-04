@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -669,7 +668,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop(context.Background())
 
 	var rangeID roachpb.RangeID
-	gcTTLInSeconds := int64((24 * time.Hour).Seconds())
+	gcTTL := 24 * time.Hour
 	intentAgeThreshold := gc.IntentAgeThreshold.Default()
 
 	if len(args) > 3 {
@@ -679,10 +678,11 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if len(args) > 2 {
-		var err error
-		if gcTTLInSeconds, err = parsePositiveInt(args[2]); err != nil {
+		gcTTLInSeconds, err := parsePositiveInt(args[2])
+		if err != nil {
 			return errors.Wrapf(err, "unable to parse %v as TTL", args[2])
 		}
+		gcTTL = time.Duration(gcTTLInSeconds) * time.Second
 	}
 	if len(args) > 1 {
 		var err error
@@ -732,13 +732,12 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	for _, desc := range descs {
 		snap := db.NewSnapshot()
 		defer snap.Close()
-		policy := zonepb.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)}
 		now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		thresh := gc.CalculateThreshold(now, policy)
+		thresh := gc.CalculateThreshold(now, gcTTL)
 		info, err := gc.Run(
 			context.Background(),
 			&desc, snap,
-			now, thresh, intentAgeThreshold, policy,
+			now, thresh, intentAgeThreshold, gcTTL,
 			gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },

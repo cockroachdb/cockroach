@@ -696,8 +696,8 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 		return errors.Errorf("%s: failed to lookup zone config: %s", r, err)
 	}
 
-	r.SetZoneConfig(zone)
-	// TODO(zcfgs-pod): This is called post-range-split. We'll want to similarly
+	r.SetSpanConfig(zone.AsSpanConfig())
+	// XXX: This is called post-range-split. We'll want to similarly
 	// install the right span config sourced from the embedding store's local
 	// spanconfig.Storage. What if there's yet another split? How's that to be
 	// handled?

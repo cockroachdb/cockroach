@@ -12,6 +12,7 @@ package zonepb
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -199,20 +201,6 @@ func (c *Constraint) FromString(short string) error {
 // config has been specified.
 func NewZoneConfig() *ZoneConfig {
 	return &ZoneConfig{
-		InheritedConstraints:      true,
-		InheritedLeasePreferences: true,
-	}
-}
-
-// EmptyCompleteZoneConfig is the zone configuration where
-// all fields are set but set to their respective zero values.
-func EmptyCompleteZoneConfig() *ZoneConfig {
-	return &ZoneConfig{
-		NumReplicas:               proto.Int32(0),
-		NumVoters:                 proto.Int32(0),
-		RangeMinBytes:             proto.Int64(0),
-		RangeMaxBytes:             proto.Int64(0),
-		GC:                        &GCPolicy{TTLSeconds: 0},
 		InheritedConstraints:      true,
 		InheritedLeasePreferences: true,
 	}
@@ -1114,11 +1102,18 @@ func (z *ZoneConfig) EnsureFullyHydrated() error {
 	return nil
 }
 
-// ToSpanConfig converts a fully hydrated zone configuration to an equivalent
-// SpanConfig. It returns assertion errors if the zone config hasn't been fully
-// hydrated (fields have been filled in via parent zone config following
-// inheritance semantics).
-func (z ZoneConfig) ToSpanConfig() (roachpb.SpanConfig, error) {
+// AsSpanConfig converts a fully hydrated zone configuration to an equivalent
+// SpanConfig. It fatals if the zone config hasn't been fully hydrated (fields are
+// expected to have been inherited through parent zone configs).
+func (z *ZoneConfig) AsSpanConfig() roachpb.SpanConfig { // XXX: Audit uses; we should eventually be getting everything through the span config store.
+	spanConfig, err := z.toSpanConfig()
+	if err != nil {
+		log.Fatalf(context.Background(), "%v", err)
+	}
+	return spanConfig
+}
+
+func (z *ZoneConfig) toSpanConfig() (roachpb.SpanConfig, error) {
 	var sc roachpb.SpanConfig
 	var err error
 
@@ -1132,14 +1127,10 @@ func (z ZoneConfig) ToSpanConfig() (roachpb.SpanConfig, error) {
 	sc.GCTTL = z.GC.TTLSeconds
 
 	// GlobalReads is false by default.
-	sc.GlobalReads = false
 	if z.GlobalReads != nil {
 		sc.GlobalReads = *z.GlobalReads
 	}
 	sc.NumReplicas = *z.NumReplicas
-
-	// NumVoters = NumReplicas if NumVoters is unset.
-	sc.NumVoters = *z.NumReplicas
 	if z.NumVoters != nil {
 		sc.NumVoters = *z.NumVoters
 	}

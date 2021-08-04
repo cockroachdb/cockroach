@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1528,7 +1529,73 @@ func (c *ContentionEvent) String() string {
 	return redact.StringWithoutMarkers(c)
 }
 
+var emptySpanConfig = &SpanConfig{}
+
 // IsEmpty returns true if s is an empty SpanConfig.
-func (s SpanConfig) IsEmpty() bool {
-	return s.Equal(SpanConfig{})
+func (s *SpanConfig) IsEmpty() bool {
+	return s.Equal(emptySpanConfig)
+}
+
+func (s *SpanConfig) TTL() time.Duration {
+	return time.Duration(s.GCTTL) * time.Second
+}
+
+// GetNumVoters returns the number of voting replicas as defined in the
+// span config.
+func (s *SpanConfig) GetNumVoters() int32 {
+	if s.NumVoters != 0 {
+		return s.NumVoters
+	}
+	return s.NumReplicas
+}
+
+// GetNumNonVoters returns the number of non-voting replicas as defined in the
+// span config.
+func (s *SpanConfig) GetNumNonVoters() int32 {
+	return s.NumReplicas - s.GetNumVoters()
+}
+
+// StoreMatchesConstraint returns whether a store's attributes or node's
+// locality match the constraint's spec. It notably ignores whether the
+// constraint is required, prohibited, positive, or otherwise.
+func StoreMatchesConstraint(store StoreDescriptor, c Constraint) bool {
+	if c.Key == "" {
+		for _, attrs := range []Attributes{store.Attrs, store.Node.Attrs} {
+			for _, attr := range attrs.Attrs {
+				if attr == c.Value {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, tier := range store.Node.Locality.Tiers {
+		if c.Key == tier.Key && c.Value == tier.Value {
+			return true
+		}
+	}
+	return false
+}
+
+func DefaultSpanConfig() SpanConfig {
+	return SpanConfig{
+		NumReplicas:   3,
+		RangeMinBytes: 128 << 20, // 128 MB
+		RangeMaxBytes: 512 << 20, // 512 MB
+		// Use 25 hours instead of the previous 24 to make users successful by
+		// default. Users desiring to take incremental backups every 24h may
+		// incorrectly assume that the previous default 24h was sufficient to do
+		// that. But the equation for incremental backups is:
+		// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
+		// We think most new users' incremental backups will complete within an
+		// hour, and larger clusters will have more experienced operators and will
+		// understand how to change these settings if needed.
+		GCTTL: 25 * 60 * 60,
+	}
+}
+
+func DefaultSystemSpanConfig() SpanConfig {
+	conf := DefaultSpanConfig()
+	conf.NumReplicas = 5
+	return conf
 }

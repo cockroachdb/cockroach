@@ -299,7 +299,7 @@ type queueConfig struct {
 	// be needed in order to make it possible for the system config to become
 	// available (as observed in #16268), so the raft snapshot queue can't
 	// require the system config to already be available.
-	needsSystemConfig bool
+	needsSystemConfig bool // XXX: Deprecated. Replace with spanconfig.EnabledSetting
 	// acceptsUnsplitRanges controls whether this queue can process ranges that
 	// need to be split due to zone config settings. Ranges are checked before
 	// calling queueImpl.shouldQueue and queueImpl.process.
@@ -404,7 +404,7 @@ type baseQueue struct {
 	// it is contained. DANGER.
 	impl   queueImpl
 	store  *Store
-	gossip *gossip.Gossip
+	gossip *gossip.Gossip // XXX: Mock this entire thing out. Should generalize to the span config store
 	queueConfig
 	incoming         chan struct{} // Channel signaled when a new replica is added to the queue.
 	processSem       chan struct{}
@@ -661,7 +661,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	// it may not be and shouldQueue will be passed a nil realRepl. These tests
 	// know what they're getting into so that's fine.
 	realRepl, _ := repl.(*Replica)
-	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, cfg)
+	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, cfg) // XXX: Should use spanconfig.Store
 	if !should {
 		return
 	}
@@ -670,7 +670,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	}
 }
 
-func (bq *baseQueue) requiresSplit(
+func (bq *baseQueue) requiresSplit( // XXX: Use new spanconfig.Store
 	ctx context.Context, cfg *config.SystemConfig, repl replicaInQueue,
 ) bool {
 	if bq.acceptsUnsplitRanges {
