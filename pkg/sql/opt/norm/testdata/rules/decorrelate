@@ -2836,6 +2836,45 @@ group-by
       └── const-agg [as=y:2, outer=(2)]
            └── y:2
 
+# Right input of SemiJoin is Window.
+norm expect=TryDecorrelateSemiJoin
+SELECT *
+FROM xy
+WHERE EXISTS
+(
+    SELECT * FROM a WHERE EXISTS (SELECT max(i) OVER () FROM a WHERE f=y::float)
+)
+----
+project
+ ├── columns: x:1!null y:2
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── semi-join (hash)
+      ├── columns: x:1!null y:2 column20:20
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(20)
+      ├── project
+      │    ├── columns: column20:20 x:1!null y:2
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2), (2)-->(20)
+      │    ├── scan xy
+      │    │    ├── columns: x:1!null y:2
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections
+      │         └── y:2::FLOAT8 [as=column20:20, outer=(2), immutable]
+      ├── inner-join (cross)
+      │    ├── columns: f:14
+      │    ├── scan a
+      │    ├── scan a
+      │    │    └── columns: f:14
+      │    └── filters (true)
+      └── filters
+           └── column20:20 = f:14 [outer=(14,20), constraints=(/14: (/NULL - ]; /20: (/NULL - ]), fd=(14)==(20), (20)==(14)]
+
 # --------------------------------------------------
 # TryDecorrelateLimitOne
 # --------------------------------------------------
@@ -3161,6 +3200,259 @@ project
       │              └── k:5
       └── filters
            └── x:1 = k:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# --------------------------------------------------
+# TryDecorrelateLimit
+# --------------------------------------------------
+
+# With inner join.
+norm expect=TryDecorrelateLimit
+SELECT *
+FROM a
+WHERE EXISTS
+(
+    SELECT x
+    FROM xy
+    INNER JOIN (SELECT * FROM uv WHERE v=i LIMIT 3)
+    ON x=u
+)
+----
+group-by
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null u:12!null v:13!null row_num:16!null
+ │    ├── key: (1,12)
+ │    ├── fd: (1)-->(2-5), (12)-->(13), (2)==(13), (13)==(2), (8)==(12), (12)==(8), (1,12)-->(16)
+ │    ├── window partition=(1,8)
+ │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null u:12!null v:13!null row_num:16
+ │    │    ├── key: (1,8,12)
+ │    │    ├── fd: (1)-->(2-5), (12)-->(13), (2)==(13), (13)==(2)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null u:12!null v:13!null
+ │    │    │    ├── key: (1,8,12)
+ │    │    │    ├── fd: (1)-->(2-5), (12)-->(13), (2)==(13), (13)==(2)
+ │    │    │    ├── inner-join (hash)
+ │    │    │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 u:12!null v:13!null
+ │    │    │    │    ├── key: (1,12)
+ │    │    │    │    ├── fd: (1)-->(2-5), (12)-->(13), (2)==(13), (13)==(2)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    └── fd: (1)-->(2-5)
+ │    │    │    │    ├── scan uv
+ │    │    │    │    │    ├── columns: u:12!null v:13
+ │    │    │    │    │    ├── key: (12)
+ │    │    │    │    │    └── fd: (12)-->(13)
+ │    │    │    │    └── filters
+ │    │    │    │         └── v:13 = i:2 [outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
+ │    │    │    ├── scan xy
+ │    │    │    │    ├── columns: x:8!null
+ │    │    │    │    └── key: (8)
+ │    │    │    └── filters (true)
+ │    │    └── windows
+ │    │         └── row-number [as=row_num:16]
+ │    └── filters
+ │         ├── x:8 = u:12 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
+ │         └── row_num:16 <= 3 [outer=(16), constraints=(/16: (/NULL - /3]; tight)]
+ └── aggregations
+      ├── const-agg [as=i:2, outer=(2)]
+      │    └── i:2
+      ├── const-agg [as=f:3, outer=(3)]
+      │    └── f:3
+      ├── const-agg [as=s:4, outer=(4)]
+      │    └── s:4
+      └── const-agg [as=j:5, outer=(5)]
+           └── j:5
+
+# With inner join + ORDER BY.
+norm expect=TryDecorrelateLimit
+SELECT
+(
+    SELECT v
+    FROM uv
+    INNER JOIN (SELECT * FROM a WHERE i=x ORDER BY f LIMIT 3)
+    ON u=k
+    LIMIT 3
+)
+FROM xy
+----
+project
+ ├── columns: v:17
+ ├── ensure-distinct-on
+ │    ├── columns: x:1!null uv.v:6
+ │    ├── grouping columns: x:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6)
+ │    ├── left-join-apply
+ │    │    ├── columns: x:1!null u:5 uv.v:6 k:9 i:10 f:11 row_num:16
+ │    │    ├── key: (1,9)
+ │    │    ├── fd: (1,5)-->(6), (1,9)-->(10,11,16), (5)==(9), (9)==(5)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:1!null
+ │    │    │    └── key: (1)
+ │    │    ├── limit
+ │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11 row_num:16!null
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── cardinality: [0 - 3]
+ │    │    │    ├── key: (9)
+ │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11,16), (5)==(9), (9)==(5)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11 row_num:16!null
+ │    │    │    │    ├── outer: (1)
+ │    │    │    │    ├── key: (9)
+ │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11,16), (5)==(9), (9)==(5)
+ │    │    │    │    ├── limit hint: 3.00
+ │    │    │    │    ├── window partition=(5) ordering=+11 opt(5-8,10)
+ │    │    │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11 row_num:16
+ │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    ├── key: (5,9)
+ │    │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11)
+ │    │    │    │    │    ├── limit hint: 8999.57
+ │    │    │    │    │    ├── inner-join (cross)
+ │    │    │    │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11
+ │    │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    │    ├── key: (5,9)
+ │    │    │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11)
+ │    │    │    │    │    │    ├── scan uv
+ │    │    │    │    │    │    │    ├── columns: u:5!null uv.v:6
+ │    │    │    │    │    │    │    ├── key: (5)
+ │    │    │    │    │    │    │    └── fd: (5)-->(6)
+ │    │    │    │    │    │    ├── scan a
+ │    │    │    │    │    │    │    ├── columns: k:9!null i:10 f:11
+ │    │    │    │    │    │    │    ├── key: (9)
+ │    │    │    │    │    │    │    └── fd: (9)-->(10,11)
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── i:10 = x:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │    │    │    │    │    └── windows
+ │    │    │    │    │         └── row-number [as=row_num:16]
+ │    │    │    │    └── filters
+ │    │    │    │         ├── u:5 = k:9 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
+ │    │    │    │         └── row_num:16 <= 3 [outer=(16), constraints=(/16: (/NULL - /3]; tight)]
+ │    │    │    └── 3
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg [as=uv.v:6, outer=(6)]
+ │              └── uv.v:6
+ └── projections
+      └── uv.v:6 [as=v:17, outer=(6)]
+
+# No-op because the limit is one.
+norm expect-not=TryDecorrelateLimit
+SELECT *
+FROM a
+WHERE EXISTS
+(
+    SELECT x
+    FROM xy
+    INNER JOIN (SELECT * FROM uv WHERE v=i LIMIT 1)
+    ON x=u
+)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── inner-join (hash)
+ │    ├── columns: x:8!null u:12!null v:13
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (12)
+ │    ├── fd: (12)-->(13), (8)==(12), (12)==(8)
+ │    ├── scan xy
+ │    │    ├── columns: x:8!null
+ │    │    └── key: (8)
+ │    ├── scan uv
+ │    │    ├── columns: u:12!null v:13
+ │    │    ├── key: (12)
+ │    │    └── fd: (12)-->(13)
+ │    └── filters
+ │         └── x:8 = u:12 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
+ └── filters
+      └── v:13 = i:2 [outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
+
+# No-op because there is no correlation.
+norm expect-not=TryDecorrelateLimit
+SELECT * FROM xy
+INNER JOIN (SELECT * FROM uv LIMIT 3)
+ON x=u
+----
+inner-join (hash)
+ ├── columns: x:1!null y:2 u:5!null v:6
+ ├── cardinality: [0 - 3]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: (5)
+ ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── limit
+ │    ├── columns: u:5!null v:6
+ │    ├── cardinality: [0 - 3]
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6)
+ │    ├── scan uv
+ │    │    ├── columns: u:5!null v:6
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6)
+ │    │    └── limit hint: 3.00
+ │    └── 3
+ └── filters
+      └── x:1 = u:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# Don't match left joins.
+norm expect-not=TryDecorrelateLimit
+SELECT (SELECT x FROM xy WHERE y=i LIMIT 3) FROM a
+----
+project
+ ├── columns: x:12
+ ├── ensure-distinct-on
+ │    ├── columns: k:1!null xy.x:8
+ │    ├── grouping columns: k:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(8)
+ │    ├── left-join-apply
+ │    │    ├── columns: k:1!null i:2 xy.x:8 y:9
+ │    │    ├── key: (1,8)
+ │    │    ├── fd: (1)-->(2), (1,8)-->(9)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── limit
+ │    │    │    ├── columns: xy.x:8!null y:9!null
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── cardinality: [0 - 3]
+ │    │    │    ├── key: (8)
+ │    │    │    ├── fd: ()-->(9)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: xy.x:8!null y:9!null
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── key: (8)
+ │    │    │    │    ├── fd: ()-->(9)
+ │    │    │    │    ├── limit hint: 3.00
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    ├── columns: xy.x:8!null y:9
+ │    │    │    │    │    ├── key: (8)
+ │    │    │    │    │    ├── fd: (8)-->(9)
+ │    │    │    │    │    └── limit hint: 3.03
+ │    │    │    │    └── filters
+ │    │    │    │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    │    │    └── 3
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg [as=xy.x:8, outer=(8)]
+ │              └── xy.x:8
+ └── projections
+      └── xy.x:8 [as=x:12, outer=(8)]
 
 # --------------------------------------------------
 # TryDecorrelateMax1Row
