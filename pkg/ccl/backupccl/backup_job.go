@@ -269,16 +269,17 @@ func backup(
 		return nil
 	})
 
-	if err := distBackup(
-		ctx,
-		execCtx,
-		planCtx,
-		dsp,
-		progCh,
-		backupSpecs,
-	); err != nil {
-		return RowCount{}, err
-	}
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(progCh)
+		return distBackup(
+			ctx,
+			execCtx,
+			planCtx,
+			dsp,
+			progCh,
+			backupSpecs,
+		)
+	})
 
 	if err := g.Wait(); err != nil {
 		return RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))

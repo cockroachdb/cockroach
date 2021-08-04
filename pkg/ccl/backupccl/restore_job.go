@@ -650,6 +650,7 @@ func restore(
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
 	g.GoCtx(func(ctx context.Context) error {
+		defer close(requestFinishedCh)
 		// When a processor is done importing a span, it will send a progress update
 		// to progCh.
 		for progress := range progCh {
@@ -681,19 +682,20 @@ func restore(
 		return nil
 	})
 
-	// TODO(pbardea): Improve logging in processors.
-	if err := distRestore(
-		restoreCtx,
-		phs,
-		importSpanChunks,
-		pkIDs,
-		encryption,
-		rekeys,
-		endTime,
-		progCh,
-	); err != nil {
-		return emptyRowCount, err
-	}
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(progCh)
+
+		return distRestore(
+			restoreCtx,
+			phs,
+			importSpanChunks,
+			pkIDs,
+			encryption,
+			rekeys,
+			endTime,
+			progCh,
+		)
+	})
 
 	if err := g.Wait(); err != nil {
 		// This leaves the data that did get imported in case the user wants to

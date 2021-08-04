@@ -47,7 +47,6 @@ func distRestore(
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
 	ctx = logtags.AddTag(ctx, "restore-distsql", nil)
-	defer close(progCh)
 	var noTxn *kv.Txn
 
 	dsp := phs.DistSQLPlanner()
