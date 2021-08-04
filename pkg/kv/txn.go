@@ -94,6 +94,10 @@ type Txn struct {
 	// remaining just use the zero value. The set of code paths that initialize
 	// this are expected to expand over time.
 	admissionHeader roachpb.AdmissionHeader
+
+	// PrevMinTimestampBound is the minimum timestamp bound of the previous
+	// bounded staleness read. XXX
+	PrevMinTimestampBound *hlc.Timestamp
 }
 
 // NewTxn returns a new RootTxn.

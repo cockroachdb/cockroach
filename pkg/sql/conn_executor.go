@@ -2167,6 +2167,11 @@ func errIsRetriable(err error) bool {
 // eventNonRetriableErr, depending on the error type.
 func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event, fsm.EventPayload) {
 	retriable := errIsRetriable(err)
+	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
+	if errors.As(err, &minTSErr) {
+		// TODO(XXX): exit condition.
+		retriable = true
+	}
 	if retriable {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 
@@ -2357,6 +2362,15 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = &ex.extraTxnState.schemaChangerState
+
+	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
+	if err := ex.extraTxnState.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
+		fmt.Printf("resetting, setting min ts %#v\n", minTSErr.MinTimestampBound)
+		p := minTSErr.MinTimestampBound.Prev()
+		evalCtx.PrevMinTimestampBound = &p
+	} else {
+		evalCtx.PrevMinTimestampBound = nil
+	}
 }
 
 // getTransactionState retrieves a text representation of the given state.

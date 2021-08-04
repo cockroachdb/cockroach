@@ -116,7 +116,7 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			return nil, catalog.ErrDescriptorNotFound
 		}
 
-		desc, shouldReadFromStore, err := tc.leased.getByID(ctx, txn, id, setTxnDeadline)
+		desc, shouldReadFromStore, err := tc.leased.getByID(ctx, newWrappedTxn(txn), id, setTxnDeadline)
 		if err != nil {
 			return nil, err
 		}
@@ -207,7 +207,7 @@ func (tc *Collection) getByName(
 	}
 
 	desc, shouldReadFromStore, err := tc.leased.getByName(
-		ctx, txn, parentID, parentSchemaID, name)
+		ctx, newWrappedTxn(txn), parentID, parentSchemaID, name)
 	if err != nil {
 		return false, nil, err
 	}

@@ -861,6 +861,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, timeutil.Now())
 
+	if mtb := planner.ExtendedEvalContext().PrevMinTimestampBound; mtb != nil {
+		planner.txn.PrevMinTimestampBound = mtb
+	}
+
 	// If adminAuditLogging is enabled, we want to check for HasAdminRole
 	// before the deferred maybeLogStatement.
 	// We must check prior to execution in the case the txn is aborted due to

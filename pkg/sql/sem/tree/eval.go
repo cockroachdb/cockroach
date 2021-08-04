@@ -3558,6 +3558,10 @@ type EvalContext struct {
 
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc
+
+	// PrevMinTimestampBound is the minimum timestamp bound of the previous
+	// bounded staleness read. XXX
+	PrevMinTimestampBound *hlc.Timestamp
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
