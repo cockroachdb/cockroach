@@ -24,7 +24,7 @@
     "babel-polyfill": "^6.26.0",
     "classnames": "^2.2.5",
     "combokeys": "^2.4.6",
-    "connected-react-router": "^6.6.1",
+    "connected-react-router": "^6.9.1",
     "create-react-context": "^0.3.0",
     "highlight.js": "^10.6.0",
     "lodash": "^4.17.21",
