@@ -733,7 +733,9 @@ func (m *Manager) resolveName(
 		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
 		}
-		txn.SetFixedTimestamp(ctx, timestamp)
+		if err := txn.SetFixedTimestamp(ctx, timestamp); err != nil {
+			return err
+		}
 		var found bool
 		var err error
 		found, id, err = catalogkv.LookupObjectID(ctx, txn, m.storage.codec, parentID, parentSchemaID, name)

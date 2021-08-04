@@ -432,7 +432,9 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 	start := timeutil.Now()
 	var entries []rowenc.IndexEntry
 	if err := ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, readAsOf)
+		if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
+			return err
+		}
 
 		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
