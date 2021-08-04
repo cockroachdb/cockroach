@@ -18,6 +18,7 @@ go_library(
         "test_helpers.go",
         "testing_knobs.go",
         "update.go",
+        "utils.go",
         "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs",
