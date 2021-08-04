@@ -1,0 +1,19 @@
+exec-ddl
+CREATE TYPE color AS ENUM ('red', 'green', 'blue')
+----
+
+exec-ddl
+CREATE TABLE t (a INT, c color)
+----
+
+exec-ddl
+SHOW CREATE t
+----
+TABLE t
+ ├── a int
+ ├── c color
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX primary
+      └── rowid int not null default (unique_rowid()) [hidden]
