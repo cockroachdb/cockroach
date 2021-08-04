@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -73,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
@@ -2358,6 +2360,16 @@ var builtins = map[string]builtinDefinition{
 			Info:       "Convert an interval to a string assuming the Postgres IntervalStyle.",
 			Volatility: tree.VolatilityImmutable,
 		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"timestamp", types.Timestamp}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDTimestamp(args[0])
+				return tree.NewDString(tree.AsStringWithFlags(&ts, tree.FmtBareStrings)), nil
+			},
+			Info:       "Convert an timestamp to a string assuming the ISO, MDY DateStyle.",
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 
 	"to_char_with_style": makeBuiltin(
@@ -2381,6 +2393,24 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(buf.String()), nil
 			},
 			Info:       "Convert an interval to a string using the given IntervalStyle.",
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"timestamp", types.Timestamp}, {"datestyle", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDTimestamp(args[0])
+				dateStyleStr := string(tree.MustBeDString(args[1]))
+				ds, err := pgdate.ParseDateStyle(dateStyleStr, pgdate.DefaultDateStyle())
+				if err != nil {
+					return nil, err
+				}
+				if ds.Style != pgdate.Style_ISO {
+					return nil, unimplemented.NewWithIssue(41773, "only ISO style is supported")
+				}
+				return tree.NewDString(tree.AsStringWithFlags(&ts, tree.FmtBareStrings)), nil
+			},
+			Info:       "Convert an timestamp to a string assuming the string is formatted using the given DateStyle.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
@@ -3016,22 +3046,57 @@ may increase either contention or retry errors, or both.`,
 	// expressions or partial index predicates. Only absolute timestamps that do
 	// not depend on the current context are supported (relative timestamps like
 	// 'now' are not supported).
-	"parse_timestamp": makeBuiltin(defProps(),
-		tree.Overload{
-			Types:      tree.ArgTypes{{"string", types.String}},
-			ReturnType: tree.FixedReturnType(types.Timestamp),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				arg := string(tree.MustBeDString(args[0]))
-				ts, dependsOnContext, err := tree.ParseDTimestamp(ctx, arg, time.Microsecond)
+	"parse_timestamp": makeBuiltin(
+		defProps(),
+		stringOverload1(
+			func(ctx *tree.EvalContext, s string) (tree.Datum, error) {
+				ts, dependsOnContext, err := tree.ParseDTimestamp(
+					tree.NewParseTimeContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
+					s,
+					time.Microsecond,
+				)
 				if err != nil {
 					return nil, err
 				}
 				if dependsOnContext {
-					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "relative timestamps are not supported")
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"relative timestamps are not supported",
+					)
 				}
 				return ts, nil
 			},
-			Info:       "Convert a string containing an absolute timestamp to the corresponding timestamp.",
+			types.Timestamp,
+			"Convert a string containing an absolute timestamp to the corresponding timestamp assuming dates are in MDY format.",
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"string", types.String}, {"datestyle", types.String}},
+			ReturnType: tree.FixedReturnType(types.Timestamp),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arg := string(tree.MustBeDString(args[0]))
+				dateStyle := string(tree.MustBeDString(args[1]))
+				parseCtx, err := parseContextFromDateStyle(ctx, dateStyle)
+				if err != nil {
+					return nil, err
+				}
+				ts, dependsOnContext, err := tree.ParseDTimestamp(
+					parseCtx,
+					arg,
+					time.Microsecond,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if dependsOnContext {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"relative timestamps are not supported",
+					)
+				}
+				return ts, nil
+			},
+			Info:       "Convert a string containing an absolute timestamp to the corresponding timestamp assuming dates formatted using the given DateStyle.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
@@ -7945,4 +8010,20 @@ func arrayNumInvertedIndexEntries(
 		return nil, err
 	}
 	return tree.NewDInt(tree.DInt(len(keys))), nil
+}
+
+func parseContextFromDateStyle(
+	ctx *tree.EvalContext, dateStyleStr string,
+) (tree.ParseTimeContext, error) {
+	ds, err := pgdate.ParseDateStyle(dateStyleStr, pgdate.DefaultDateStyle())
+	if err != nil {
+		return nil, err
+	}
+	if ds.Style != pgdate.Style_ISO {
+		return nil, unimplemented.NewWithIssue(41773, "only ISO style is supported")
+	}
+	return tree.NewParseTimeContext(
+		ctx.GetTxnTimestamp(time.Microsecond).Time,
+		tree.NewParseTimeContextOptionDateStyle(ds),
+	), nil
 }
