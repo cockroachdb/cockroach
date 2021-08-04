@@ -357,6 +357,12 @@ var (
 	// gateway.
 	ScalarOperationCannotRunWithoutFullSessionContext = MakeCode("22C01")
 
+	// Section: Class 54 - Program Limit Exceeded (Cockroach extension)
+
+	// UnsatisfiableBoundedStaleness signals that the bounded staleness query
+	// cannot be satisfied.
+	UnsatisfiableBoundedStaleness = MakeCode("54C01")
+
 	// Class 55C - Object Not In Prerequisite State (Cockroach extension)
 
 	// SchemaChangeOccurred signals that a DDL change to the targets of a
