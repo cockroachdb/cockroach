@@ -631,49 +631,24 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 // pending, running, or paused status that started earlier than this one. If
 // there are, checkRunningJobs returns an error. If job is nil, checkRunningJobs
 // just checks if there are any pending, running, or paused CreateStats jobs.
-func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) (retErr error) {
-	var jobID jobspb.JobID
+func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) error {
+	jobID := jobspb.InvalidJobID
 	if job != nil {
 		jobID = job.ID()
 	}
-	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2, $3) ORDER BY created`
+	exists, err := jobs.RunningJobExists(ctx, jobID, p.ExecCfg().InternalExecutor, nil /* txn */, func(payload *jobspb.Payload) bool {
+		return payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats
+	})
 
-	it, err := p.ExecCfg().InternalExecutor.QueryIterator(
-		ctx,
-		"get-jobs",
-		nil, /* txn */
-		stmt,
-		jobs.StatusPending,
-		jobs.StatusRunning,
-		jobs.StatusPaused,
-	)
 	if err != nil {
 		return err
 	}
-	// We have to make sure to close the iterator since we might return from the
-	// for loop early (before Next() returns false).
-	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
-	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		row := it.Cur()
-		payload, err := jobs.UnmarshalPayload(row[1])
-		if err != nil {
-			return err
-		}
-
-		if payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats {
-			id := jobspb.JobID(*row[0].(*tree.DInt))
-			if id == jobID {
-				break
-			}
-
-			// This is not the first CreateStats job running. This job should fail
-			// so that the earlier job can succeed.
-			return stats.ConcurrentCreateStatsError
-		}
+	if exists {
+		return stats.ConcurrentCreateStatsError
 	}
-	return err
+
+	return nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
