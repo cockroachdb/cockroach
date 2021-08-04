@@ -5880,7 +5880,6 @@ show_fingerprints_stmt:
 show_full_scans_stmt:
   SHOW FULL TABLE SCANS
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowFullTableScans{}
   }
 
