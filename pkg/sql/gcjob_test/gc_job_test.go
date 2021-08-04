@@ -462,7 +462,7 @@ SELECT job_id
 	require.Equal(t, jobs.StatusSucceeded, status)
 }
 
-func TestDescriptionUpdateInDropDatabase(t *testing.T) {
+func TestDescriptionInDropCascade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -480,7 +480,7 @@ DROP DATABASE t CASCADE`)
 
 	query := `
 SELECT count(*) FROM [SHOW JOBS] 
- WHERE job_type = 'SCHEMA CHANGE GC' 
-   AND description LIKE 'GC for DROP DATABASE t CASCADE: removing FK fk_b_a %%'`
+ WHERE job_type = 'SCHEMA CHANGE GC'
+   AND description LIKE '% removing FK fk_b_a % in cascade'`
 	tdb.CheckQueryResultsRetry(t, query, [][]string{{"1"}})
 }

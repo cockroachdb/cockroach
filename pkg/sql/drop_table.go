@@ -350,7 +350,7 @@ func (p *planner) dropTableImpl(
 		if viewDesc.Dropped() {
 			continue
 		}
-		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, !droppingParent, "dropping dependent view", tree.DropCascade)
+		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, !droppingParent, "dropping dependent view in cascade", tree.DropCascade)
 		if err != nil {
 			return droppedViews, err
 		}
@@ -575,7 +575,7 @@ func (p *planner) removeFKForBackReference(
 	if err := removeFKForBackReferenceFromTable(originTableDesc, ref, tableDesc); err != nil {
 		return err
 	}
-	jobDesc := fmt.Sprintf("%s: removing FK %s for back-reference", p.stmt, ref.Name)
+	jobDesc := fmt.Sprintf("removing FK %s for back-reference in cascade", ref.Name)
 	return p.writeSchemaChange(ctx, originTableDesc, descpb.InvalidMutationID, jobDesc)
 }
 
@@ -633,7 +633,7 @@ func (p *planner) removeFKBackReference(
 	if err := removeFKBackReferenceFromTable(referencedTableDesc, ref.Name, tableDesc); err != nil {
 		return err
 	}
-	jobDesc := fmt.Sprintf("%s: removing FK %s back-reference", p.stmt, ref.Name)
+	jobDesc := fmt.Sprintf("removing FK %s back-reference in cascade", ref.Name)
 	return p.writeSchemaChange(ctx, referencedTableDesc, descpb.InvalidMutationID, jobDesc)
 }
 

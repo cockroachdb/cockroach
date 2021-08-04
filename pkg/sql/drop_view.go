@@ -239,7 +239,7 @@ func (p *planner) dropViewImpl(
 			// Check if the dependency was already marked as dropped,
 			// while dealing with any earlier dependent views.
 			if !dependentDesc.Dropped() {
-				cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, queueJob, "dropping dependent view", behavior)
+				cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, queueJob, "dropping dependent view in cascade", behavior)
 				if err != nil {
 					return cascadeDroppedViews, err
 				}

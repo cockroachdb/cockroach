@@ -193,13 +193,13 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 		desc := toDel.desc
 		var cascadedObjects []string
 		var err error
-		//TODO (sajjad): Add meaningful job descriptions instead of empty strings.
+
 		if desc.IsView() {
-			cascadedObjects, err = p.dropViewImpl(ctx, desc, false /* queueJob */, "", tree.DropCascade)
+			cascadedObjects, err = p.dropViewImpl(ctx, desc, false /* queueJob */, "dropping view in cascade", tree.DropCascade)
 		} else if desc.IsSequence() {
-			err = p.dropSequenceImpl(ctx, desc, false /* queueJob */, "", tree.DropCascade)
+			err = p.dropSequenceImpl(ctx, desc, false /* queueJob */, "dropping sequence in cascade", tree.DropCascade)
 		} else {
-			cascadedObjects, err = p.dropTableImpl(ctx, desc, true /* droppingParent */, "", tree.DropCascade)
+			cascadedObjects, err = p.dropTableImpl(ctx, desc, true /* droppingParent */, "dropping table in cascade", tree.DropCascade)
 		}
 		if err != nil {
 			return err
@@ -215,7 +215,7 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 		}
 		// Drop the types. Note that we set queueJob to be false because the types
 		// will be dropped in bulk as part of the DROP DATABASE job.
-		if err := p.dropTypeImpl(ctx, typ, "", false /* queueJob */); err != nil {
+		if err := p.dropTypeImpl(ctx, typ, "dropping type in cascade", false /* queueJob */); err != nil {
 			return err
 		}
 	}

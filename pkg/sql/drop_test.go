@@ -1368,7 +1368,7 @@ CREATE TABLE t.child(k INT PRIMARY KEY REFERENCES t.parent);
 	// Ensure the extra GC job that also gets queued succeeds.
 	testutils.SucceedsSoon(t, func() error {
 		var count int
-		sqlRun.QueryRow(t, `SELECT count(*) FROM [SHOW JOBS] WHERE description LIKE 'GC for DROP DATABASE t CASCADE: removing FK %%' AND status = 'succeeded'`).Scan(&count)
+		sqlRun.QueryRow(t, `SELECT count(*) FROM [SHOW JOBS] WHERE description LIKE 'removing FK % in cascade' AND status = 'succeeded'`).Scan(&count)
 		if count != 1 {
 			return errors.Newf("expected 1 result, got %d", count)
 		}
