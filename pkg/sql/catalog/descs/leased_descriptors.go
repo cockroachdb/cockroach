@@ -103,7 +103,6 @@ func (ld *leasedDescriptors) getByName(
 	}
 
 	readTimestamp := txn.ReadTimestamp()
-	fmt.Printf("attempting to read at %#v\n", readTimestamp)
 	ldesc, err := ld.lm.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
 	const setTxnDeadline = true
 	return ld.getResult(ctx, txn, setTxnDeadline, ldesc, err)

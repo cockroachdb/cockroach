@@ -236,13 +236,15 @@ func NewColBatchScan(
 	var bsHeader *roachpb.BoundedStalenessHeader
 	if aost := evalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
 		ts := aost.Timestamp
+		strict := aost.NearestOnly
 		if aost.Timestamp.Less(table.GetModificationTime()) {
 			fmt.Printf("table modified at %#v (aost %#v), v %#v; increasing ts\n", table.GetModificationTime(), ts, table.GetVersion())
 			ts = table.GetModificationTime()
+			strict = true
 		}
 		bsHeader = &roachpb.BoundedStalenessHeader{
 			MinTimestampBound:       ts,
-			MinTimestampBoundStrict: aost.NearestOnly,
+			MinTimestampBoundStrict: strict,
 		}
 		if evalCtx.PrevMinTimestampBound != nil {
 			bsHeader.MaxTimestampBound = *evalCtx.PrevMinTimestampBound
