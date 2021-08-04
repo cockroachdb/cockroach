@@ -57,7 +57,7 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 var RangefeedTBIEnabled = settings.RegisterBoolSetting(
 	"kv.rangefeed.catchup_scan_iterator_optimization.enabled",
 	"if true, rangefeeds will use time-bound iterators for catchup-scans when possible",
-	true,
+	false,
 )
 
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
@@ -221,7 +221,7 @@ func (r *Replica) rangeFeedWithRangeID(
 	// Register the stream with a catch-up iterator.
 	var catchUpIterFunc rangefeed.CatchupIteratorConstructor
 	if usingCatchupIter {
-		catchUpIterFunc = func() rangefeed.CatchupIterator {
+		catchUpIterFunc = func() *rangefeed.CatchupIterator {
 			return rangefeed.NewCatchupIterator(r.Engine(),
 				args, RangefeedTBIEnabled.Get(&r.store.cfg.Settings.SV), iterSemRelease)
 		}
