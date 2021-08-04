@@ -34,6 +34,7 @@ test           public       enum_a+b   public   USAGE
 test           public       enum_a+b   root     ALL
 test           public       enum_a+b   user1    USAGE
 test           schema_a     enum_b     admin    ALL
+test           schema_a     enum_b     public   USAGE
 test           schema_a     enum_b     root     ALL
 test           schema_a     enum_b     user1    ALL
 

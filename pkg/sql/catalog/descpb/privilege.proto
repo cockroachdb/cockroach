@@ -48,11 +48,38 @@ message PrivilegeDescriptor {
 // the list of UserPrivileges for that object.
 message DefaultPrivilegesForRole {
   option (gogoproto.equal) = true;
-  oneof role {
-    string user_proto = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
-    bool for_all_roles = 2;
+  // ExplicitRole represents when default privileges are defined for an
+  // explicit role.
+  message ExplicitRole {
+    option (gogoproto.equal) = true;
+    optional string user_proto = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto", (gogoproto.nullable) = false];
+    // These are special cases in Postgres. Public has USAGE on types and
+    // the creator role has ALL privileges by default.
+    // Under the default cases where all these bools are true, the role can be
+    // dropped, however for example alter default privileges revoke SELECT on tables
+    // for the role causes it to "own" default privileges as it is no longer
+    // the "default" case and the role cannot be dropped until the default case
+    // is met.
+    optional bool public_has_usage_on_types = 4 [(gogoproto.nullable) = false];
+    optional bool role_has_all_privileges_on_tables = 5 [(gogoproto.nullable) = false];
+    optional bool role_has_all_privileges_on_sequences = 6 [(gogoproto.nullable) = false];
+    optional bool role_has_all_privileges_on_schemas = 7 [(gogoproto.nullable) = false];
+    optional bool role_has_all_privileges_on_types = 8 [(gogoproto.nullable) = false];
   }
-  map<uint32, PrivilegeDescriptor> default_privileges_per_object = 3 [(gogoproto.nullable) = false,
+  // ForAllRoles represents when default privileges are defined
+  // using FOR ALL ROLES.
+  message ForAllRolesPseudoRole {
+    option (gogoproto.equal) = true;
+    // If for_all_roles is specified, we do not need flags to track if the
+    // role has privileges on tables/sequences/schemas and types as
+    // for_all_roles is not a real role and cannot have grants.
+    optional bool public_has_usage_on_types = 11 [(gogoproto.nullable) = false];
+  }
+  oneof role {
+    ExplicitRole explicit_role = 12;
+    ForAllRolesPseudoRole for_all_roles = 13;
+  }
+  map<uint32, PrivilegeDescriptor> default_privileges_per_object = 14 [(gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject"];
 }
 

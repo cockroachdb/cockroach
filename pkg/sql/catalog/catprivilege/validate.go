@@ -40,6 +40,11 @@ func ValidateSuperuserPrivileges(
 	)
 }
 
+// ValidateDefaultPrivileges validates default privileges.
+func ValidateDefaultPrivileges(p descpb.DefaultPrivilegeDescriptor) error {
+	return p.Validate()
+}
+
 func allowedSuperuserPrivileges(objectNameKey catalog.NameKey) privilege.List {
 	privs := SystemSuperuserPrivileges(objectNameKey)
 	if privs != nil {
