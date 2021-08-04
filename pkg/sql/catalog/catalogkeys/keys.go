@@ -122,6 +122,10 @@ func PrettyKey(valDirs []encoding.Direction, key roachpb.Key, skip int) string {
 
 // PrettySpan returns a human-readable representation of a span.
 func PrettySpan(valDirs []encoding.Direction, span roachpb.Span, skip int) string {
+	if valDirs == nil && skip == -1 {
+		return span.String()
+	}
+
 	var b strings.Builder
 	b.WriteString(PrettyKey(valDirs, span.Key, skip))
 	if span.EndKey != nil {

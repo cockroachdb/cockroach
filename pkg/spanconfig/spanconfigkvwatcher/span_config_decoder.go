@@ -25,25 +25,25 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// SpanConfigDecoder decodes rows from the span configurations table. It's not
+// spanConfigDecoder decodes rows from system.span_configurations. It's not
 // safe for concurrent use.
-type SpanConfigDecoder struct {
+type spanConfigDecoder struct {
 	alloc     rowenc.DatumAlloc
 	colIdxMap catalog.TableColMap
 }
 
-// NewSpanConfigDecoder instantiates a SpanConfigDecoder.
-func NewSpanConfigDecoder() *SpanConfigDecoder {
-	return &SpanConfigDecoder{
+// newSpanConfigDecoder instantiates a spanConfigDecoder.
+func newSpanConfigDecoder() *spanConfigDecoder {
+	return &spanConfigDecoder{
 		colIdxMap: row.ColIDtoRowIndexFromCols(
 			systemschema.SpanConfigurationsTable.PublicColumns(),
 		),
 	}
 }
 
-// Decode decodes a span config entry given a KV from the
+// decode a span config entry given a KV from the
 // system.span_configurations table.
-func (sd *SpanConfigDecoder) Decode(kv roachpb.KeyValue) (entry roachpb.SpanConfigEntry, _ error) {
+func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (entry roachpb.SpanConfigEntry, _ error) {
 	tbl := systemschema.SpanConfigurationsTable
 	// First we need to decode the start_key field from the index key.
 	{
@@ -110,4 +110,9 @@ func (sd *SpanConfigDecoder) Decode(kv roachpb.KeyValue) (entry roachpb.SpanConf
 	}
 
 	return entry, nil
+}
+
+// NewTestingDecoderFn exports the decoding routine for testing purposes.
+func NewTestingDecoderFn() func(roachpb.KeyValue) (roachpb.SpanConfigEntry, error) {
+	return newSpanConfigDecoder().decode
 }

@@ -12,11 +12,15 @@ package spanconfigstore
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/biogo/store/llrb"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -29,17 +33,28 @@ import (
 // most of what we want. We'd still have to over-write existing spans, and
 // coalesce adjacent ones, but seems more appropriate than the OrderedCache.
 type Store struct {
-	mu struct {
+	coalesce bool
+	mu       struct {
 		syncutil.RWMutex
 		cache *cache.OrderedCache
 	}
 }
 
-var _ spanconfig.Store = &Store{}
+var _ spanconfig.StoreWriter = &Store{}
+var _ spanconfig.StoreReader = &Store{}
 
 // New instantiates a span config store.
 func New() *Store {
-	s := &Store{}
+	s := &Store{coalesce: true}
+	s.mu.cache = cache.NewOrderedCache(cache.Config{
+		Policy: cache.CacheNone,
+	})
+	return s
+}
+
+// NewWithoutCoalesce instantiates a span config store.
+func NewWithoutCoalesce() *Store {
+	s := &Store{coalesce: false}
 	s.mu.cache = cache.NewOrderedCache(cache.Config{
 		Policy: cache.CacheNone,
 	})
@@ -65,36 +80,88 @@ func (a storeKey) Compare(b llrb.Comparable) int {
 	return bytes.Compare(a, b.(storeKey))
 }
 
-// SetSpanConfig is part of the spanconfig.Store interface.
-func (s *Store) SetSpanConfig(sp roachpb.Span, conf roachpb.SpanConfig) {
+// NeedsSplit is part of the spanconfig.StoreReader interface.
+func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+	return len(s.ComputeSplitKey(ctx, start, end)) > 0
+}
+
+// ComputeSplitKey is part of the spanconfig.StoreReader interface.
+func (s *Store) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
+	sp := roachpb.Span{Key: start.AsRawKey(), EndKey: end.AsRawKey()}
+	// XXX: How should we deal with the fact that there's no initial zcfg for
+	// timeseries data. So it's data that's not populated. How should that data
+	// behave? Default to system? Default to default? How
+
+	// We don't want to split within the system config span while we're still
+	// also using it for zone configs.
+	//
+	// TODO(zcfgs-pod): Once we've fully migrated over to using span configs, we
+	// can get rid of this special handling.
+	// XXX: One property we jave is that once tables are dropped, that keyrange
+	// will be merged into their left hand neighbors. With the old system, we
+	// left an empty range. Is that fine? It's certainly new.
+	if keys.SystemConfigSpan.Contains(sp) {
+		return nil
+	}
+	if keys.SystemConfigSpan.ContainsKey(sp.Key) {
+		return roachpb.RKey(keys.SystemConfigSpan.EndKey)
+	}
+
+	cfgs := s.getConfigsForSpan(sp)
+	if len(cfgs) <= 1 {
+		return nil
+	}
+
+	return roachpb.RKey(cfgs[1].Span.Key)
+}
+
+// GetSpanConfigForKey is part of the spanconfig.StoreReader interface.
+func (s *Store) GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error) {
+	sp := roachpb.Span{Key: key.AsRawKey(), EndKey: key.Next().AsRawKey()}
+	cfgs := s.getConfigsForSpan(sp)
+	if len(cfgs) == 0 {
+		// TODO(zcfgs-pod): Should the span configs infrastructure instead be
+		// fully covering? Right now it's not (like /Table/pseudo IDs). Even for
+		// manual splits like whe we create new tenants, we carve new ranges
+		// before the store sees configs for it.
+
+		log.Warningf(ctx, "span config not found for %s", key.String())
+		return zonepb.DefaultZoneConfigRef().AsSpanConfig(), nil
+	}
+	return cfgs[0].Config, nil
+}
+
+// Apply is part of the spanconfig.StoreWriter interface.
+func (s *Store) Apply(update spanconfig.Update) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	sp, delete := update.Entry.Span, update.Deleted
 	if !sp.Valid() {
 		panic("invalid span")
 	}
 
 	// Clear out all existing span configs overlapping with our own.
 	s.clearLocked(sp)
-
-	if conf.IsEmpty() {
-		// Nothing to do; empty span configs are delete operations.
+	if delete {
 		return
 	}
 
-	// Check to see if the adjacent span configs can be coalesced into.
+	conf := update.Entry.Config
 	startKey, endKey := sp.Key, sp.EndKey
+	if s.coalesce {
+		// Check to see if the adjacent span configs can be coalesced into.
+		next, found := s.getCeilEntryLocked(sp.EndKey) // check the span config to our right
+		if found && next.Span.Key.Equal(sp.EndKey) && next.Config.Equal(conf) {
+			s.clearLocked(next.Span)
+			endKey = next.Span.EndKey
+		}
 
-	next, found := s.getCeilEntryLocked(sp.EndKey) // check the span config to our right
-	if found && next.Span.Key.Equal(sp.EndKey) && next.Config.Equal(conf) {
-		s.clearLocked(next.Span)
-		endKey = next.Span.EndKey
-	}
-
-	prev, found := s.getFloorEntryLocked(sp.Key) // check the span config to our left
-	if found && prev.Span.EndKey.Equal(sp.Key) && prev.Config.Equal(conf) {
-		s.clearLocked(prev.Span)
-		startKey = prev.Span.Key
+		prev, found := s.getFloorEntryLocked(sp.Key) // check the span config to our left
+		if found && prev.Span.EndKey.Equal(sp.Key) && prev.Config.Equal(conf) {
+			s.clearLocked(prev.Span)
+			startKey = prev.Span.Key
+		}
 	}
 
 	// Finally, write the span config entry.
@@ -110,8 +177,75 @@ func (s *Store) SetSpanConfig(sp roachpb.Span, conf roachpb.SpanConfig) {
 	})
 }
 
-// GetConfigsForSpan is part of the spanconfig.Store interface.
-func (s *Store) GetConfigsForSpan(sp roachpb.Span) []roachpb.SpanConfigEntry {
+// Diff returns what spans would get deleted and added if applying the given
+// update. It does it without actually applying said update.
+func (s *Store) Diff(update spanconfig.Update) (toAdd []roachpb.SpanConfigEntry, toDelete []roachpb.Span) {
+	sp := update.Entry.Span
+	searchStartKey, searchEndKey := s.getSearchBoundsLocked(sp)
+	s.mu.cache.DoRangeEntry(func(e *cache.Entry) bool { // keyed by span start key, storing value span config entry
+		entry, _ := e.Value.(roachpb.SpanConfigEntry)
+		oldSpan, newSpan := entry.Span, update.Entry.Span
+		if !oldSpan.Overlaps(newSpan) { // skip non-overlapping ranges
+			return false
+		}
+
+		// A:		[----------------------)
+		// B:	            [--------------------)
+		//
+		// union:	[----------------------------)
+		// inter:	        [--------------)
+		// pre: 	[-------)
+		// post:	                       [-----)
+		union, intersection := oldSpan.Combine(newSpan), oldSpan.Intersect(newSpan)
+		pre := roachpb.Span{Key: union.Key, EndKey: intersection.Key}
+		post := roachpb.Span{Key: intersection.EndKey, EndKey: union.EndKey}
+
+		// Delete the overlapping span in its entirety. Below we'll re-add the
+		// non-intersecting parts of the span.
+		toDelete = append(toDelete, entry.Span)
+
+		if entry.Span.ContainsKey(sp.Key) { // entry contains the given span's start key
+			// entry:  [-----------------)
+			//
+			// sp:         [-------)
+			// sp:         [-------------)
+			// sp:         [--------------
+			// sp:     [-------)
+			// sp:     [-----------------)
+			// sp:     [------------------
+
+			// Re-add the non-intersecting spans, if any.
+			if pre.Valid() {
+				toAdd = append(toAdd, roachpb.SpanConfigEntry{Span: pre, Config: entry.Config})
+			}
+		}
+
+		if entry.Span.ContainsKey(sp.EndKey) { // entry contains the given span's end key
+			// entry:  [-----------------)
+			//
+			// sp:     ------------------)
+			// sp:     [-----------------)
+			// sp:               [-------)
+			// sp:     -------------)
+			// sp:     [------------)
+			// sp:        [---------)
+
+			// Re-add the non-intersecting spans, if any.
+			if post.Valid() {
+				toAdd = append(toAdd, roachpb.SpanConfigEntry{Span: post, Config: entry.Config})
+			}
+		}
+
+		return false
+	}, searchStartKey, searchEndKey)
+
+	if !update.Deleted {
+		toAdd = append(toAdd, update.Entry)
+	}
+	return toAdd, toDelete
+}
+
+func (s *Store) getConfigsForSpan(sp roachpb.Span) []roachpb.SpanConfigEntry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -138,14 +272,6 @@ func (s *Store) GetConfigsForSpan(sp roachpb.Span) []roachpb.SpanConfigEntry {
 		return false
 	}, searchStartKey, searchEndKey)
 	return res
-}
-
-// GetSplitsBetween is part of the spanconfig.Store interface.
-func (s *Store) GetSplitsBetween(start, end roachpb.Key) []roachpb.Key {
-	panic("unimplemented")
-	// TODO(zcfgs-pod): Need to make sure we populate static splits/span configs as startup
-	// migration. All splits in KV done through the system config span needs to
-	// be done here as well.
 }
 
 // clearLocked is used to clear out a given span from the underlying storage. At

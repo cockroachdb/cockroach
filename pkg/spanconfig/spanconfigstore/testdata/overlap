@@ -39,9 +39,21 @@ get span=[b,h)
 [c,d):C
 [g,h):A
 
+needs-split span=[b,h)
+----
+true
+
+compute-split span=[b,h)
+----
+c
+
 set span=[b,g) conf=A
 ----
 
 get span=[b,h)
 ----
 [b,h):A
+
+needs-split span=[b,h)
+----
+false

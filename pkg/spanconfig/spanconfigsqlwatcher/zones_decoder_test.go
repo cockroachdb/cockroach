@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigsqlwatcher_test
+package spanconfigsqlwatcher
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -89,9 +88,9 @@ func TestZonesDecoder(t *testing.T) {
 	// of this test.
 	rows = rows[initialCount:]
 
-	dec := spanconfigsqlwatcher.NewZonesDecoder(keys.SystemSQLCodec)
+	dec := newZonesDecoder(keys.SystemSQLCodec)
 	for i, row := range rows {
-		got, err := dec.DecodePrimaryKey(row.Key)
+		got, err := dec.decodePrimaryKey(row.Key)
 		require.NoError(t, err)
 
 		// system.zones has 2 column families, so for every entry that was upsurted

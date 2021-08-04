@@ -91,7 +91,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		repl.mu.Unlock()
 		zoneConfig := zonepb.DefaultZoneConfig()
 		zoneConfig.RangeMaxBytes = proto.Int64(test.maxBytes)
-		repl.SetZoneConfig(&zoneConfig)
+		repl.SetSpanConfig(zoneConfig.AsSpanConfig())
 
 		// Testing using shouldSplitRange instead of shouldQueue to avoid using the splitFinder
 		// This tests the merge queue behavior too as a result. For splitFinder tests,

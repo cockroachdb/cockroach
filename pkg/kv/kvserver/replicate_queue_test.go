@@ -1234,13 +1234,13 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 
 	// Set the zone preference for the replica to show that it has to be moved
 	// to the remote node.
-	desc, zone := leaseHolderRepl.DescAndZone()
-	newZone := *zone
-	newZone.LeasePreferences = []zonepb.LeasePreference{
+	desc, conf := leaseHolderRepl.DescAndSpanConfig()
+	newConf := conf
+	newConf.LeasePreferences = []roachpb.LeasePreference{
 		{
-			Constraints: []zonepb.Constraint{
+			Constraints: []roachpb.Constraint{
 				{
-					Type:  zonepb.Constraint_REQUIRED,
+					Type:  roachpb.Constraint_REQUIRED,
 					Value: fmt.Sprintf("n%d", remoteNodeID),
 				},
 			},
@@ -1270,7 +1270,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 			return err
 		}
 		transferred, err := leaseStore.FindTargetAndTransferLease(
-			ctx, leaseRepl, desc, &newZone)
+			ctx, leaseRepl, desc, newConf)
 		if err != nil {
 			return err
 		}

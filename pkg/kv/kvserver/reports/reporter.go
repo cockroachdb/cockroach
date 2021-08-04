@@ -53,6 +53,8 @@ var ReporterInterval = settings.RegisterDurationSetting(
 // Reporter periodically produces a couple of reports on the cluster's data
 // distribution: the system tables: replication_constraint_stats,
 // replication_stats_report and replication_critical_localities.
+//
+// TODO(zcfgs-pod): Replace usage of system config span with span config store.
 type Reporter struct {
 	// Contains the list of the stores of the current node
 	localStores *kvserver.Stores

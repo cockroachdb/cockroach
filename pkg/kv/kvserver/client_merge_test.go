@@ -4181,12 +4181,12 @@ func TestMergeQueue(t *testing.T) {
 		if l := lhs(); l == nil {
 			t.Fatal("left-hand side range not found")
 		} else {
-			l.SetZoneConfig(&zone)
+			l.SetSpanConfig(zone.AsSpanConfig())
 		}
 		if r := rhs(); r == nil {
 			t.Fatal("right-hand side range not found")
 		} else {
-			r.SetZoneConfig(&zone)
+			r.SetSpanConfig(zone.AsSpanConfig())
 		}
 	}
 
@@ -4228,7 +4228,7 @@ func TestMergeQueue(t *testing.T) {
 		reset(t)
 		zone := protoutil.Clone(&zoneConfig).(*zonepb.ZoneConfig)
 		*zone.RangeMinBytes *= 2
-		lhs().SetZoneConfig(zone)
+		lhs().SetSpanConfig(zone.AsSpanConfig())
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t, store, lhsStartKey, rhsStartKey)
 	})

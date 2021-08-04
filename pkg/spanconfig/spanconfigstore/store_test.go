@@ -8,9 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigstore_test
+package spanconfigstore
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"regexp"
@@ -18,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
@@ -120,14 +121,14 @@ func TestDatadriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
-		storage := spanconfigstore.New()
+		storage := New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var spanStr, confStr string
 			switch d.Cmd {
 			case "get":
 				d.ScanArgs(t, "span", &spanStr)
 				span := parseSpan(t, spanStr)
-				entries := storage.GetConfigsForSpan(span)
+				entries := storage.getConfigsForSpan(span)
 				var results []string
 				for _, entry := range entries {
 					results = append(results, printSpanConfigEntry(entry))
@@ -138,15 +139,32 @@ func TestDatadriven(t *testing.T) {
 				d.ScanArgs(t, "span", &spanStr)
 				d.ScanArgs(t, "conf", &confStr)
 				span, config := parseSpan(t, spanStr), parseConfig(t, confStr)
-				storage.SetSpanConfig(span, config)
+				entry := roachpb.SpanConfigEntry{Span: span, Config: config}
+				storage.Apply(spanconfig.Update{Entry: entry})
 				return ""
 
 			case "del":
 				d.ScanArgs(t, "span", &spanStr)
 				span := parseSpan(t, spanStr)
-				storage.SetSpanConfig(span, roachpb.SpanConfig{})
+				entry := roachpb.SpanConfigEntry{Span: span}
+				storage.Apply(spanconfig.Update{Entry: entry, Deleted: true})
 				return ""
 
+			case "needs-split":
+				d.ScanArgs(t, "span", &spanStr)
+				span := parseSpan(t, spanStr)
+				start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
+				result := storage.NeedsSplit(context.Background(), start, end)
+				return fmt.Sprintf("%t", result)
+
+			case "compute-split":
+				d.ScanArgs(t, "span", &spanStr)
+				span := parseSpan(t, spanStr)
+				start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
+				splitKey := storage.ComputeSplitKey(context.Background(), start, end)
+				return string(splitKey)
+			// case "get-for-key":
+			// 	return ""
 			default:
 				return "unknown command"
 			}
@@ -164,7 +182,7 @@ func TestRandomized(t *testing.T) {
 
 	randutil.SeedForTests()
 
-	storage := spanconfigstore.New()
+	storage := New()
 	alphabet := "abcdefghijklmnopqrstuvwxyz"
 	configs := "ABCDEF"
 	ops := []string{"set", "del"}
@@ -199,13 +217,15 @@ func TestRandomized(t *testing.T) {
 		switch op {
 		case "set":
 			t.Logf("set sp=%s conf=%s", printSpan(sp), printSpanConfig(conf))
-			storage.SetSpanConfig(sp, conf)
+			entry := roachpb.SpanConfigEntry{Span: sp, Config: conf}
+			storage.Apply(spanconfig.Update{Entry: entry})
 			if testSpan.Overlaps(sp) {
 				expConfig, expFound = conf, true
 			}
 		case "del":
 			t.Logf("del sp=%s", printSpan(sp))
-			storage.SetSpanConfig(sp, roachpb.SpanConfig{})
+			entry := roachpb.SpanConfigEntry{Span: sp}
+			storage.Apply(spanconfig.Update{Entry: entry, Deleted: true})
 			if testSpan.Overlaps(sp) {
 				expConfig, expFound = roachpb.SpanConfig{}, false
 			}
@@ -214,7 +234,7 @@ func TestRandomized(t *testing.T) {
 		}
 	}
 
-	gotConfigs := storage.GetConfigsForSpan(testSpan)
+	gotConfigs := storage.getConfigsForSpan(testSpan)
 	if !expFound {
 		require.Len(t, gotConfigs, 0)
 	} else {
@@ -227,7 +247,7 @@ func TestRandomized(t *testing.T) {
 	}
 
 	var last roachpb.SpanConfigEntry
-	for i, cur := range storage.GetConfigsForSpan(parseSpan(t, "[a,z)")) {
+	for i, cur := range storage.getConfigsForSpan(parseSpan(t, "[a,z)")) {
 		if i == 0 {
 			last = cur
 			continue

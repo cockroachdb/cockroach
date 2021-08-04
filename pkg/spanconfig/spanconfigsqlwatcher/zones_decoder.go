@@ -21,21 +21,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ZonesDecoder decodes rows from system.zones. It's not safe for concurrent use.
-type ZonesDecoder struct {
+// zonesDecoder decodes rows from system.zones. It's not safe for concurrent use.
+type zonesDecoder struct {
 	alloc rowenc.DatumAlloc
 	codec keys.SQLCodec
 }
 
-// NewZonesDecoder instantiates a ZonesDecoder.
-func NewZonesDecoder(codec keys.SQLCodec) *ZonesDecoder {
-	return &ZonesDecoder{
+// newZonesDecoder instantiates a zonesDecoder.
+func newZonesDecoder(codec keys.SQLCodec) *zonesDecoder {
+	return &zonesDecoder{
 		codec: codec,
 	}
 }
 
-// DecodePrimaryKey decodes the primary key (descriptor ID) from the system.zones table.
-func (zd *ZonesDecoder) DecodePrimaryKey(key roachpb.Key) (descpb.ID, error) {
+// decodePrimaryKey decodes the primary key (descriptor ID) from the system.zones table.
+func (zd *zonesDecoder) decodePrimaryKey(key roachpb.Key) (descpb.ID, error) {
 	// Decode the descriptor ID from the key.
 	tbl := systemschema.ZonesTable
 	types := []*types.T{tbl.PublicColumns()[0].GetType()}

@@ -340,6 +340,7 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
