@@ -294,6 +294,11 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 
 	s, err := jobs.LoadScheduledJob(ctx, env, args.UnpauseOnSuccess, ex, txn)
 	if err != nil {
+		if jobs.HasScheduledJobNotFoundError(err) {
+			log.Warningf(ctx, "cannot find schedule %d to unpause; it may have been dropped",
+				args.UnpauseOnSuccess)
+			return nil
+		}
 		return err
 	}
 	s.ClearScheduleStatus()
@@ -314,7 +319,8 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	}
 	schedule.SetExecutionDetails(
 		schedule.ExecutorType(),
-		jobspb.ExecutionArguments{Args: any},
+		jobspb.ExecutionArguments{Args: any,
+			ProtectedTimestampRecord: schedule.ExecutionArgs().ProtectedTimestampRecord},
 	)
 
 	return nil

@@ -465,7 +465,8 @@ func setDependentSchedule(
 	}
 	schedule.SetExecutionDetails(
 		schedule.ExecutorType(),
-		jobspb.ExecutionArguments{Args: any},
+		jobspb.ExecutionArguments{Args: any,
+			ProtectedTimestampRecord: schedule.ExecutionArgs().ProtectedTimestampRecord},
 	)
 	return schedule.Update(ctx, ex, txn)
 }
@@ -557,7 +558,8 @@ func makeBackupSchedule(
 	}
 	sj.SetExecutionDetails(
 		tree.ScheduledBackupExecutor.InternalName(),
-		jobspb.ExecutionArguments{Args: any},
+		jobspb.ExecutionArguments{Args: any,
+			ProtectedTimestampRecord: sj.ExecutionArgs().ProtectedTimestampRecord},
 	)
 
 	return sj, args, nil
