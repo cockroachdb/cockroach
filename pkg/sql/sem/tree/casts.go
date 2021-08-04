@@ -175,10 +175,19 @@ var validCasts = []castInfo{
 	{from: types.Box2DFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.GeographyFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.BytesFamily, to: types.StringFamily, volatility: VolatilityStable},
-	{from: types.TimestampFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{
-		from: types.TimestampTZFamily, to: types.StringFamily, volatility: VolatilityStable,
-		volatilityHint: "TIMESTAMPTZ to STRING casts depend on the current timezone; consider using (t AT TIME ZONE 'UTC')::STRING instead.",
+		from:       types.TimestampFamily,
+		to:         types.StringFamily,
+		volatility: VolatilityImmutable,
+		volatilityHint: "TIMESTAMP to STRING casts are dependent on DateStyle; consider " +
+			"using to_char(timestamp) instead.",
+	},
+	{
+		from:       types.TimestampTZFamily,
+		to:         types.StringFamily,
+		volatility: VolatilityStable,
+		volatilityHint: "TIMESTAMPTZ to STRING casts depend on the current timezone; consider " +
+			"using to_char(t AT TIME ZONE 'UTC') instead.",
 	},
 	{
 		from:           types.IntervalFamily,
@@ -187,7 +196,13 @@ var validCasts = []castInfo{
 		volatilityHint: "INTERVAL to STRING casts depends on IntervalStyle; consider using to_char_with_style(interval, 'postgres')",
 	},
 	{from: types.UuidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
-	{from: types.DateFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{
+		from:       types.DateFamily,
+		to:         types.StringFamily,
+		volatility: VolatilityImmutable,
+		volatilityHint: "DATE to STRING casts are dependent on DateStyle; consider " +
+			"using to_char(date) instead.",
+	},
 	{from: types.TimeFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.TimeTZFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.OidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
@@ -233,7 +248,12 @@ var validCasts = []castInfo{
 
 	// Casts to DateFamily.
 	{from: types.UnknownFamily, to: types.DateFamily, volatility: VolatilityImmutable},
-	{from: types.StringFamily, to: types.DateFamily, volatility: VolatilityStable},
+	{
+		from:           types.StringFamily,
+		to:             types.DateFamily,
+		volatility:     VolatilityStable,
+		volatilityHint: "STRING to DATE casts depend on session DateStyle; use parse_date(string) instead",
+	},
 	{from: types.CollatedStringFamily, to: types.DateFamily, volatility: VolatilityStable},
 	{from: types.DateFamily, to: types.DateFamily, volatility: VolatilityImmutable},
 	{from: types.TimestampFamily, to: types.DateFamily, volatility: VolatilityImmutable},
@@ -242,7 +262,12 @@ var validCasts = []castInfo{
 
 	// Casts to TimeFamily.
 	{from: types.UnknownFamily, to: types.TimeFamily, volatility: VolatilityImmutable},
-	{from: types.StringFamily, to: types.TimeFamily, volatility: VolatilityStable},
+	{
+		from:           types.StringFamily,
+		to:             types.TimeFamily,
+		volatility:     VolatilityStable,
+		volatilityHint: "STRING to TIME casts depend on session DateStyle; use parse_time(string) instead",
+	},
 	{from: types.CollatedStringFamily, to: types.TimeFamily, volatility: VolatilityStable},
 	{from: types.TimeFamily, to: types.TimeFamily, volatility: VolatilityImmutable},
 	{from: types.TimeTZFamily, to: types.TimeFamily, volatility: VolatilityImmutable},
@@ -252,7 +277,12 @@ var validCasts = []castInfo{
 
 	// Casts to TimeTZFamily.
 	{from: types.UnknownFamily, to: types.TimeTZFamily, volatility: VolatilityImmutable},
-	{from: types.StringFamily, to: types.TimeTZFamily, volatility: VolatilityStable},
+	{
+		from:           types.StringFamily,
+		to:             types.TimeTZFamily,
+		volatility:     VolatilityStable,
+		volatilityHint: "STRING to TIMETZ casts depend on session DateStyle; use parse_timetz(string) instead",
+	},
 	{from: types.CollatedStringFamily, to: types.TimeTZFamily, volatility: VolatilityStable},
 	{from: types.TimeFamily, to: types.TimeTZFamily, volatility: VolatilityStable},
 	{from: types.TimeTZFamily, to: types.TimeTZFamily, volatility: VolatilityImmutable},
@@ -262,7 +292,8 @@ var validCasts = []castInfo{
 	{from: types.UnknownFamily, to: types.TimestampFamily, volatility: VolatilityImmutable},
 	{
 		from: types.StringFamily, to: types.TimestampFamily, volatility: VolatilityStable,
-		volatilityHint: "STRING to TIMESTAMP casts are context-dependent because of relative timestamp strings like 'now'; use parse_timestamp() instead.",
+		volatilityHint: "STRING to TIMESTAMP casts are context-dependent because of relative timestamp strings " +
+			"like 'now' and session settings such as DateStyle; use parse_timestamp(string) instead.",
 	},
 	{from: types.CollatedStringFamily, to: types.TimestampFamily, volatility: VolatilityStable},
 	{from: types.DateFamily, to: types.TimestampFamily, volatility: VolatilityImmutable},
@@ -359,8 +390,7 @@ func init() {
 		key := castsMapKey{from: c.from, to: c.to}
 		castsMap[key] = c
 
-		if c.from == types.IntervalFamily && (c.to == types.StringFamily || c.to == types.CollatedStringFamily) ||
-			c.to == types.IntervalFamily && (c.from == types.StringFamily || c.from == types.CollatedStringFamily) {
+		if isDateStyleCastAffected(c.from, c.to) || isIntervalStyleCastAffected(c.from, c.to) {
 			cCopy := *c
 			cCopy.volatility = VolatilityStable
 			styleCastsMap[key] = &cCopy
@@ -368,12 +398,49 @@ func init() {
 	}
 }
 
+func isIntervalStyleCastAffected(from, to types.Family) bool {
+	switch from {
+	case types.StringFamily, types.CollatedStringFamily:
+		switch to {
+		case types.IntervalFamily:
+			return true
+		}
+	case types.IntervalFamily:
+		switch to {
+		case types.StringFamily, types.CollatedStringFamily:
+			return true
+		}
+	}
+	return false
+}
+
+func isDateStyleCastAffected(from, to types.Family) bool {
+	switch from {
+	case types.StringFamily, types.CollatedStringFamily:
+		switch to {
+		case types.TimeFamily,
+			types.TimeTZFamily,
+			types.DateFamily,
+			types.TimestampFamily:
+			return true
+		}
+	case types.DateFamily,
+		types.TimestampFamily:
+		switch to {
+		case types.StringFamily, types.CollatedStringFamily:
+			return true
+		}
+	}
+	return false
+}
+
 // lookupCast returns the information for a valid cast.
 // Returns nil if this is not a valid cast.
 // Does not handle array and tuple casts.
-func lookupCast(from, to types.Family, intervalStyleEnabled bool) *castInfo {
+func lookupCast(from, to types.Family, intervalStyleEnabled bool, dateStyleEnabled bool) *castInfo {
 	k := castsMapKey{from: from, to: to}
-	if intervalStyleEnabled && (from == types.IntervalFamily || to == types.IntervalFamily) {
+	if (intervalStyleEnabled && isIntervalStyleCastAffected(from, to)) ||
+		(dateStyleEnabled && isDateStyleCastAffected(from, to)) {
 		if r, ok := styleCastsMap[k]; ok {
 			return r
 		}
@@ -413,7 +480,12 @@ func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Vol
 		return maxVolatility, true
 	}
 
-	cast := lookupCast(fromFamily, toFamily, sd != nil && sd.IntervalStyleEnabled)
+	cast := lookupCast(
+		fromFamily,
+		toFamily,
+		sd != nil && sd.IntervalStyleEnabled,
+		sd != nil && sd.DateStyleEnabled,
+	)
 	if cast == nil {
 		return 0, false
 	}

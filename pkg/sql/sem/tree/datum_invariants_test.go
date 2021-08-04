@@ -28,6 +28,7 @@ func TestAllTypesCastableToString(t *testing.T) {
 			types.String,
 			true,  /* allowStable */
 			false, /* intervalStyleEnabled */
+			false, /* dateStyleEnabled */
 		); err != nil {
 			t.Errorf("%s is not castable to STRING, all types should be", typ)
 		}
@@ -44,6 +45,7 @@ func TestAllTypesCastableFromString(t *testing.T) {
 			typ,
 			true,  /* allowStable */
 			false, /* intervalStyleEnabled */
+			false, /* dateStyleEnabled */
 		); err != nil {
 			t.Errorf("%s is not castable from STRING, all types should be", typ)
 		}
