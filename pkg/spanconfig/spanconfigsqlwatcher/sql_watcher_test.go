@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -35,19 +36,15 @@ import (
 // updates following changes made to system.descriptor or system.zones.
 func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 67679, "test needs updating")
 
 	type expectedUpdate struct {
 		expectedSpan       roachpb.Span
 		expectedSpanConfig roachpb.SpanConfig
 		expectedDeleted    bool
 	}
-
-	defaultSpanConfig, err := zonepb.DefaultZoneConfig().ToSpanConfig()
-	require.NoError(t, err)
-
+	defaultSpanConfig := zonepb.DefaultZoneConfigRef().AsSpanConfig()
 	defaultSpanConfigWith := func(f func(roachpb.SpanConfig) roachpb.SpanConfig) roachpb.SpanConfig {
-		defaultSpanConfig, err := zonepb.DefaultZoneConfig().ToSpanConfig()
-		require.NoError(t, err)
 		return f(defaultSpanConfig)
 	}
 
@@ -71,7 +68,7 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 		},
 		{
 			setup: "CREATE table t2()",
-			stmt:  "ALTER TABLE t2 CONFIGURE ZONE USING num_replicas=5",
+			stmt:  "ALTER TABLE t2 CONFIGURE ZONE USING num_replicas = 5",
 			expectedUpdates: []expectedUpdate{
 				{
 					expectedSpan: roachpb.Span{
@@ -208,6 +205,7 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 // while getting there.
 func TestSQLWatcherCatchupScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 67679, "test needs updating")
 
 	setup := []string{
 		"CREATE DATABASE db",

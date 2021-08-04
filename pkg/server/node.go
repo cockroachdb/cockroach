@@ -1448,21 +1448,9 @@ func (n *Node) UpdateSpanConfigs(
 		return req.SpansToDelete[i].Key.Compare(req.SpansToDelete[j].Key) < 0
 	})
 
-	// TODO(zcfgs-pod): Instead of simply upserting/deleting into the table, we
-	// could "absorb" into the existing state -- it would make for simpler
-	// client-side operations. Given an initial state, and sets of span configs
-	// to delete and upsert, we could do the following:
-	//
-	// Initial      [--------A-------)     [-------B------)[---------C---------)
-	// -------------------------------------------------------------------------
-	// Update(+)         [----D------)         [-------B------)
-	// Delete(-)                                                         [-----)
-	// -------------------------------------------------------------------------
-	//              [-A-)[----D------)     [---------B--------)[----C----)
-
 	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for _, span := range req.SpansToDelete {
-			n, err := n.sqlExec.ExecEx(ctx, "update-span-cfgs", txn,
+			n, err := n.sqlExec.ExecEx(ctx, "delete-span-cfgs", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				"DELETE FROM system.span_configurations WHERE start_key = $1 AND end_key = $2",
 				span.Key, span.EndKey,
@@ -1471,7 +1459,7 @@ func (n *Node) UpdateSpanConfigs(
 				return err
 			}
 			if n != 1 {
-				return errors.AssertionFailedf("expected to delete single row, deleted %d", n)
+				return errors.AssertionFailedf("expected to delete single row, deleted %d (span=%s)", n, span)
 			}
 		}
 
@@ -1500,6 +1488,31 @@ func (n *Node) UpdateSpanConfigs(
 				return err
 			}
 			if count := int64(tree.MustBeDInt(datums[0])); count != 1 {
+				it, err := n.sqlExec.QueryIteratorEx(ctx, "get-span-cfgs", txn,
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+					`SELECT start_key, end_key, config FROM system.span_configurations
+			WHERE $1 < end_key AND start_key < $2`,
+					scfg.Span.Key, scfg.Span.EndKey,
+				)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = it.Close() }()
+
+				var ok bool
+				for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+					row := it.Cur()
+
+					span := roachpb.Span{
+						Key:    []byte(*row[0].(*tree.DBytes)),
+						EndKey: []byte(*row[1].(*tree.DBytes)),
+					}
+					log.Warningf(ctx, "found span = %s", span.String())
+				}
+				if err != nil {
+					return err
+				}
+
 				return errors.AssertionFailedf("expected to find single row containing %s, found %d", scfg.Span, count)
 			}
 		}

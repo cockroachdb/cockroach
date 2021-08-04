@@ -12,15 +12,16 @@ package zonepb
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -199,20 +200,6 @@ func (c *Constraint) FromString(short string) error {
 // config has been specified.
 func NewZoneConfig() *ZoneConfig {
 	return &ZoneConfig{
-		InheritedConstraints:      true,
-		InheritedLeasePreferences: true,
-	}
-}
-
-// EmptyCompleteZoneConfig is the zone configuration where
-// all fields are set but set to their respective zero values.
-func EmptyCompleteZoneConfig() *ZoneConfig {
-	return &ZoneConfig{
-		NumReplicas:               proto.Int32(0),
-		NumVoters:                 proto.Int32(0),
-		RangeMinBytes:             proto.Int64(0),
-		RangeMaxBytes:             proto.Int64(0),
-		GC:                        &GCPolicy{TTLSeconds: 0},
 		InheritedConstraints:      true,
 		InheritedLeasePreferences: true,
 	}
@@ -975,37 +962,6 @@ func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) (*Subzone, int32) {
 	return nil, -1
 }
 
-// GetNumVoters returns the number of voting replicas for the given zone config.
-//
-// This method will panic if called on a ZoneConfig with an uninitialized
-// NumReplicas attribute.
-func (z *ZoneConfig) GetNumVoters() int32 {
-	if z.NumReplicas == nil {
-		panic("NumReplicas must not be nil")
-	}
-	if z.NumVoters != nil && *z.NumVoters != 0 {
-		return *z.NumVoters
-	}
-	return *z.NumReplicas
-}
-
-// GetNumNonVoters returns the number of non-voting replicas as defined in the
-// zone config.
-//
-// This method will panic if called on a ZoneConfig with an uninitialized
-// NumReplicas attribute.
-func (z *ZoneConfig) GetNumNonVoters() int32 {
-	if z.NumReplicas == nil {
-		panic("NumReplicas must not be nil")
-	}
-	if z.NumVoters != nil && *z.NumVoters != 0 {
-		return *z.NumReplicas - *z.NumVoters
-	}
-	// `num_voters` hasn't been explicitly configured. Every replica should be a
-	// voting replica.
-	return 0
-}
-
 // SetSubzone installs subzone into the ZoneConfig, overwriting any existing
 // subzone with the same IndexID and PartitionName.
 func (z *ZoneConfig) SetSubzone(subzone Subzone) {
@@ -1114,11 +1070,18 @@ func (z *ZoneConfig) EnsureFullyHydrated() error {
 	return nil
 }
 
-// ToSpanConfig converts a fully hydrated zone configuration to an equivalent
-// SpanConfig. It returns assertion errors if the zone config hasn't been fully
-// hydrated (fields have been filled in via parent zone config following
-// inheritance semantics).
-func (z ZoneConfig) ToSpanConfig() (roachpb.SpanConfig, error) {
+// AsSpanConfig converts a fully hydrated zone configuration to an equivalent
+// SpanConfig. It fatals if the zone config hasn't been fully hydrated (fields are
+// expected to have been cascaded through parent zone configs).
+func (z *ZoneConfig) AsSpanConfig() roachpb.SpanConfig {
+	spanConfig, err := z.toSpanConfig()
+	if err != nil {
+		log.Fatalf(context.Background(), "%v", err)
+	}
+	return spanConfig
+}
+
+func (z *ZoneConfig) toSpanConfig() (roachpb.SpanConfig, error) {
 	var sc roachpb.SpanConfig
 	var err error
 
@@ -1132,14 +1095,10 @@ func (z ZoneConfig) ToSpanConfig() (roachpb.SpanConfig, error) {
 	sc.GCTTL = z.GC.TTLSeconds
 
 	// GlobalReads is false by default.
-	sc.GlobalReads = false
 	if z.GlobalReads != nil {
 		sc.GlobalReads = *z.GlobalReads
 	}
 	sc.NumReplicas = *z.NumReplicas
-
-	// NumVoters = NumReplicas if NumVoters is unset.
-	sc.NumVoters = *z.NumReplicas
 	if z.NumVoters != nil {
 		sc.NumVoters = *z.NumVoters
 	}
@@ -1245,9 +1204,4 @@ func (c *Constraint) GetKey() string {
 // GetValue is part of the cat.Constraint interface.
 func (c *Constraint) GetValue() string {
 	return c.Value
-}
-
-// TTL returns the implies TTL as a time.Duration.
-func (m *GCPolicy) TTL() time.Duration {
-	return time.Duration(m.TTLSeconds) * time.Second
 }

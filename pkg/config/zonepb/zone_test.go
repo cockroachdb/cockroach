@@ -1123,7 +1123,7 @@ func TestDefaultRangeSizesAreSane(t *testing.T) {
 }
 
 // TestZoneConfigToSpanConfigConversion tests zone configurations are correctly
-// translated to span configurations using `ToSpanConfig`.
+// translated to span configurations using `toSpanConfig`.
 func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 	testCases := []struct {
 		zoneConfig       ZoneConfig
@@ -1183,7 +1183,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				RangeMaxBytes:    200000,
 				GCTTL:            2400,
 				GlobalReads:      false,
-				NumVoters:        3,
+				NumVoters:        0,
 				NumReplicas:      3,
 				Constraints:      []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{},
@@ -1206,7 +1206,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				RangeMaxBytes:    200000,
 				GCTTL:            2400,
 				GlobalReads:      true,
-				NumVoters:        3,
+				NumVoters:        0,
 				NumReplicas:      3,
 				Constraints:      []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{},
@@ -1229,7 +1229,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				RangeMaxBytes:    200000,
 				GCTTL:            2400,
 				GlobalReads:      false,
-				NumVoters:        3,
+				NumVoters:        0,
 				NumReplicas:      3,
 				Constraints:      []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{},
@@ -1285,7 +1285,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				RangeMaxBytes: 200000,
 				GCTTL:         2400,
 				GlobalReads:   false,
-				NumVoters:     3,
+				NumVoters:     0,
 				NumReplicas:   3,
 				Constraints: []roachpb.ConstraintsConjunction{
 					{
@@ -1331,7 +1331,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				RangeMaxBytes: 200000,
 				GCTTL:         2400,
 				GlobalReads:   false,
-				NumVoters:     3,
+				NumVoters:     0,
 				NumReplicas:   3,
 				Constraints:   []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{
@@ -1381,7 +1381,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				RangeMaxBytes:    200000,
 				GCTTL:            2400,
 				GlobalReads:      false,
-				NumVoters:        3,
+				NumVoters:        0,
 				NumReplicas:      3,
 				Constraints:      []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{},
@@ -1406,7 +1406,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		spanConfig, err := tc.zoneConfig.ToSpanConfig()
+		spanConfig, err := tc.zoneConfig.toSpanConfig()
 		if tc.errorStr != "" {
 			require.Error(t, err, tc.errorStr)
 			testutils.IsError(err, tc.errorStr)

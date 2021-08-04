@@ -68,13 +68,15 @@ type Store interface {
 
 // StoreWriter is the write-only portion of the Store interface.
 type StoreWriter interface {
-	SetSpanConfig(span roachpb.Span, conf roachpb.SpanConfig)
+	Apply(update Update) // TODO(zcfgs-pod): Could instead split into into two methods -- delete and update.
 }
 
-// StoreReader is the read-only portion of the Store interface.
+// StoreReader is the read-only portion of the Store interface. It's an adaptor
+// interface implemented by both config.SystemConfig and spanconfig.Store.
 type StoreReader interface {
-	GetConfigsForSpan(span roachpb.Span) []roachpb.SpanConfigEntry
-	GetSplitsBetween(start, end roachpb.Key) []roachpb.Key
+	NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool
+	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey
+	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
 // TODO(zcfgs-pod): In the restore path we need to make sure we do a full

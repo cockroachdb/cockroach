@@ -24,7 +24,6 @@ import (
 	"unsafe"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -51,10 +51,10 @@ func (s *Store) Transport() *RaftTransport {
 }
 
 func (s *Store) FindTargetAndTransferLease(
-	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, zone *zonepb.ZoneConfig,
+	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
 ) (bool, error) {
 	transferStatus, err := s.replicateQueue.shedLease(
-		ctx, repl, desc, zone, transferLeaseOptions{},
+		ctx, repl, desc, conf, transferLeaseOptions{},
 	)
 	return transferStatus == transferOK, err
 }
@@ -168,6 +168,12 @@ func (s *Store) SetReplicaScannerActive(active bool) {
 // the replica's Raft group into existence.
 func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.enqueueRaftUpdateCheck(rangeID)
+}
+
+// InjectSpanConfigUpdate injects the given span config update for testing
+// purposes.
+func (s *Store) InjectSpanConfigUpdate(update spanconfig.Update) {
+	s.onSpanConfigUpdate(update)
 }
 
 func manualQueue(s *Store, q queueImpl, repl *Replica) error {

@@ -89,13 +89,13 @@ func TestZonesDecoder(t *testing.T) {
 	// of this test.
 	rows = rows[initialCount:]
 
-	dec := spanconfigsqlwatcher.NewZonesDecoder(keys.SystemSQLCodec)
 	for i, row := range rows {
-		got, err := dec.DecodePrimaryKey(row.Key)
+		got, err := spanconfigsqlwatcher.NewTestingDecoderFn(keys.SystemSQLCodec)(row.Key)
 		require.NoError(t, err)
 
-		// system.zones has 2 column families, so for every entry that was upsurted
-		// into the table we expect there to be 2 rows corresponding to it.
+		// system.zones has 2 column families, so for every entry that was
+		// upserted into the table we expect there to be 2 rows corresponding to
+		// it.
 		require.Equal(t, entries[i/2].id, got)
 	}
 }

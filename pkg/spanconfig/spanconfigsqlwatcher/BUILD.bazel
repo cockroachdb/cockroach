@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
@@ -40,8 +41,8 @@ go_test(
         "sql_watcher_test.go",
         "zones_decoder_test.go",
     ],
+    embed = [":spanconfigsqlwatcher"],
     deps = [
-        ":spanconfigsqlwatcher",
         "//pkg/base",
         "//pkg/config/zonepb",
         "//pkg/jobs",

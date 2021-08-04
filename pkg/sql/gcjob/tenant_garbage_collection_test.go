@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -48,13 +49,26 @@ func TestGCTenant(t *testing.T) {
 		dropTenID        = 11
 		nonexistentTenID = 12
 	)
+
+	activeTenInfo := &descpb.TenantInfo{ID: activeTenID}
+	dropTenInfo := &descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP}
+
 	require.NoError(t, sql.CreateTenantRecord(
 		ctx, &execCfg, nil, /* txn */
-		&descpb.TenantInfo{ID: activeTenID}),
+		activeTenInfo),
 	)
+	require.NoError(t, sql.CreateTenantSpanConfig(
+		ctx, &execCfg, nil, /* txn */
+		activeTenInfo, zonepb.DefaultZoneConfigRef().AsSpanConfig()),
+	)
+
 	require.NoError(t, sql.CreateTenantRecord(
 		ctx, &execCfg, nil, /* txn */
-		&descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP}),
+		dropTenInfo),
+	)
+	require.NoError(t, sql.CreateTenantSpanConfig(
+		ctx, &execCfg, nil, /* txn */
+		dropTenInfo, zonepb.DefaultZoneConfigRef().AsSpanConfig()),
 	)
 
 	t.Run("unexpected progress state", func(t *testing.T) {

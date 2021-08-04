@@ -4307,6 +4307,32 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// Return a pretty key for a given raw key, skipping the specified number of
+	// fields.
+	"crdb_internal.pretty_span": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"raw_key_start", types.Bytes},
+				{"raw_key_end", types.Bytes},
+				{"skip_fields", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				span := roachpb.Span{
+					Key:    roachpb.Key(tree.MustBeDBytes(args[0])),
+					EndKey: roachpb.Key(tree.MustBeDBytes(args[1])),
+				}
+				skip := int(tree.MustBeDInt(args[2]))
+				return tree.NewDString(catalogkeys.PrettySpan(nil /* valDirs */, span, skip)), nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	// Return statistics about a range.
 	"crdb_internal.range_stats": makeBuiltin(
 		tree.FunctionProperties{

@@ -190,7 +190,7 @@ func zoneConfigHook(
 	cfg *config.SystemConfig, id config.SystemTenantObjectID,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
-		// TODO(zcfg-pods): This is the only remaining reference to
+		// TODO(zcfgs-pods): This is the only remaining reference to
 		// SystemTenantObjectID in the SQL package now and is called by KV. KV won't
 		// need to call in using this hook after it learns how to read span configs.
 		// Until then, we're being extra careful to ensure that the key being looked

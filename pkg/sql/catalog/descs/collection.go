@@ -300,7 +300,7 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 	if !found {
 		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
 	}
-	// TODO(zcfg-pod): Is there a better way to get all descriptors under a
+	// TODO(zcfgs-pod): Is there a better way to get all descriptors under a
 	// database or must we load all descriptors in memory?
 	descs, err := tc.GetAllDescriptors(ctx, txn)
 	if err != nil {

@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -1064,6 +1066,122 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		if rngStart.Equal(tableBoundary) || !rngEnd.Equal(roachpb.RKeyMax) {
 			return errors.Errorf("range %s has not yet split", repl)
 		}
+		return nil
+	})
+}
+
+// TestSpanConfigUpdateAppearsOnReplica checks that a span config update
+// targeting a specific range gets installed on the replica.
+func TestSpanConfigUpdateAppearsOnReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Enable the span configs infrastructure.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExperimentalSpanConfigsEnabled.Override(ctx, &st.SV, true)
+
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{},
+		},
+	})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	key, err := s.ScratchRange()
+	require.NoError(t, err)
+	scratchRng := store.LookupReplica(keys.MustAddr(key))
+
+	desc, conf := scratchRng.DescAndSpanConfig()
+	conf.RangeMaxBytes = 1 << 16 // overwrite max bytes
+
+	// Inject a span config update for the test range.
+	store.InjectSpanConfigUpdate(spanconfig.Update{
+		Entry: roachpb.SpanConfigEntry{
+			Span:   desc.RSpan().AsRawSpanWithNoLocals(),
+			Config: conf,
+		},
+	})
+
+	// Verify that the range observes the new span config.
+	testutils.SucceedsSoon(t, func() error {
+		newConf := store.LookupReplica(keys.MustAddr(key)).SpanConfig()
+		if !newConf.Equal(conf) {
+			return errors.New("expected new span config on replica")
+		}
+		return nil
+	})
+}
+
+// TestSpanConfigUpdateInducesSplit checks that a span config update
+// targeting only part of an existing range induces a split.
+func TestSpanConfigUpdateInducesSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Enable the span configs infrastructure.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExperimentalSpanConfigsEnabled.Override(ctx, &st.SV, true)
+
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{},
+		},
+	})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	key, err := s.ScratchRange()
+	require.NoError(t, err)
+
+	initialRange := store.LookupReplica(keys.MustAddr(key))
+	desc, conf := initialRange.DescAndSpanConfig()
+	initialSpan := desc.RSpan().AsRawSpanWithNoLocals()
+
+	// Inject a span config update for the initial range's key span.
+	store.InjectSpanConfigUpdate(spanconfig.Update{
+		Entry: roachpb.SpanConfigEntry{
+			Span:   initialSpan,
+			Config: conf,
+		},
+	})
+
+	// Inject a different span config update for the left half.
+	leftSpan, rightSpan := initialSpan.SplitOnKey(key.Next().Next())
+	conf.RangeMaxBytes = 4200 // overwrite max bytes
+	store.InjectSpanConfigUpdate(spanconfig.Update{
+		Entry: roachpb.SpanConfigEntry{
+			Span:   leftSpan,
+			Config: conf,
+		},
+	})
+
+	require.Nil(t, store.ForceSplitScanAndProcess())
+
+	// Verify that we observe a split.
+	testutils.SucceedsSoon(t, func() error {
+		rightRange := store.LookupReplica(roachpb.RKey(rightSpan.Key))
+		if rightRange.RangeID == initialRange.RangeID {
+			return errors.Errorf("expected new range created by split")
+		}
+
+		leftConf := store.LookupReplica(roachpb.RKey(leftSpan.Key)).SpanConfig()
+		if !leftConf.Equal(conf) {
+			return errors.New("expected new span config on replica")
+		}
+
 		return nil
 	})
 }

@@ -51,6 +51,7 @@ go_test(
     embed = [":gcjob"],
     deps = [
         "//pkg/base",
+        "//pkg/config/zonepb",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
