@@ -451,18 +451,20 @@ type Pebble struct {
 	attrs   roachpb.Attributes
 	// settings must be non-nil if this Pebble instance will be used to write
 	// intents.
-	settings      *cluster.Settings
-	statsHandler  EncryptionStatsHandler
-	fileRegistry  *PebbleFileRegistry
-	eventListener *pebble.EventListener
+	settings     *cluster.Settings
+	statsHandler EncryptionStatsHandler
+	fileRegistry *PebbleFileRegistry
 
 	// Stats updated by pebble.EventListener invocations, and returned in
-	// GetStats. Updated and retrieved atomically.
-	diskSlowCount, diskStallCount uint64
+	// GetMetrics. Updated and retrieved atomically.
+	writeStallCount int64
+	diskSlowCount   int64
+	diskStallCount  int64
 
 	// Relevant options copied over from pebble.Options.
-	fs     vfs.FS
-	logger pebble.Logger
+	fs            vfs.FS
+	logger        pebble.Logger
+	eventListener *pebble.EventListener
 
 	wrappedIntentWriter intentDemuxWriter
 
@@ -573,10 +575,6 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		ctx:   logCtx,
 		depth: 1,
 	}
-	cfg.Opts.EventListener = pebble.MakeLoggingEventListener(pebbleLogger{
-		ctx:   logCtx,
-		depth: 2, // skip over the EventListener stack frame
-	})
 	p := &Pebble{
 		path:             cfg.Dir,
 		auxDir:           auxDir,
@@ -589,7 +587,13 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		logger:           cfg.Opts.Logger,
 		storeIDPebbleLog: storeIDContainer,
 	}
-	p.connectEventMetrics(ctx, &cfg.Opts.EventListener)
+	cfg.Opts.EventListener = pebble.TeeEventListener(
+		pebble.MakeLoggingEventListener(pebbleLogger{
+			ctx:   logCtx,
+			depth: 2, // skip over the EventListener stack frame
+		}),
+		p.makeMetricEventListener(ctx),
+	)
 	p.eventListener = &cfg.Opts.EventListener
 	p.wrappedIntentWriter = wrapIntentWriter(ctx, p, cfg.Settings, true /* isLongLived */)
 
@@ -602,31 +606,33 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	return p, nil
 }
 
-func (p *Pebble) connectEventMetrics(ctx context.Context, eventListener *pebble.EventListener) {
-	oldDiskSlow := eventListener.DiskSlow
-
-	eventListener.DiskSlow = func(info pebble.DiskSlowInfo) {
-		oldDiskSlow(info)
-		maxSyncDuration := maxSyncDurationDefault
-		fatalOnExceeded := maxSyncDurationFatalOnExceededDefault
-		if p.settings != nil {
-			maxSyncDuration = MaxSyncDuration.Get(&p.settings.SV)
-			fatalOnExceeded = MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
-		}
-		if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
-			atomic.AddUint64(&p.diskStallCount, 1)
-			// Note that the below log messages go to the main cockroach log, not
-			// the pebble-specific log.
-			if fatalOnExceeded {
-				log.Fatalf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
-					info.Path, redact.Safe(info.Duration.Seconds()))
-			} else {
-				log.Errorf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
-					info.Path, redact.Safe(info.Duration.Seconds()))
+func (p *Pebble) makeMetricEventListener(ctx context.Context) pebble.EventListener {
+	return pebble.EventListener{
+		WriteStallBegin: func(info pebble.WriteStallBeginInfo) {
+			atomic.AddInt64(&p.writeStallCount, 1)
+		},
+		DiskSlow: func(info pebble.DiskSlowInfo) {
+			maxSyncDuration := maxSyncDurationDefault
+			fatalOnExceeded := maxSyncDurationFatalOnExceededDefault
+			if p.settings != nil {
+				maxSyncDuration = MaxSyncDuration.Get(&p.settings.SV)
+				fatalOnExceeded = MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
 			}
-			return
-		}
-		atomic.AddUint64(&p.diskSlowCount, 1)
+			if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
+				atomic.AddInt64(&p.diskStallCount, 1)
+				// Note that the below log messages go to the main cockroach log, not
+				// the pebble-specific log.
+				if fatalOnExceeded {
+					log.Fatalf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
+						info.Path, redact.Safe(info.Duration.Seconds()))
+				} else {
+					log.Errorf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
+						info.Path, redact.Safe(info.Duration.Seconds()))
+				}
+				return
+			}
+			atomic.AddInt64(&p.diskSlowCount, 1)
+		},
 	}
 }
 
@@ -1042,9 +1048,10 @@ func (p *Pebble) Flush() error {
 func (p *Pebble) GetMetrics() Metrics {
 	m := p.db.Metrics()
 	return Metrics{
-		Metrics:        m,
-		DiskSlowCount:  int64(atomic.LoadUint64(&p.diskSlowCount)),
-		DiskStallCount: int64(atomic.LoadUint64(&p.diskStallCount)),
+		Metrics:         m,
+		WriteStallCount: atomic.LoadInt64(&p.writeStallCount),
+		DiskSlowCount:   atomic.LoadInt64(&p.diskSlowCount),
+		DiskStallCount:  atomic.LoadInt64(&p.diskStallCount),
 	}
 }
 
