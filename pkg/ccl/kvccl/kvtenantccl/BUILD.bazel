@@ -46,6 +46,8 @@ go_test(
         "//pkg/config",
         "//pkg/gossip",
         "//pkg/kv/kvclient/kvtenant",
+        "//pkg/migration",
+        "//pkg/migration/migrations",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/security",
