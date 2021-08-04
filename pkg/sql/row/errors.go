@@ -45,20 +45,31 @@ func (f *singleKVFetcher) nextBatch(
 	return true, f.kvs[:], nil, nil
 }
 
-// ConvertBatchError returns a user friendly constraint violation error.
+// ConvertBatchError attempts to map a key-value error generated during a
+// key-value batch operating over the specified table to a user friendly SQL
+// error.
 func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch) error {
 	origPErr := b.MustPErr()
-	if origPErr.Index == nil {
-		return origPErr.GoError()
-	}
-	j := origPErr.Index.Index
-	if j >= int32(len(b.Results)) {
-		return errors.AssertionFailedf("index %d outside of results: %+v", j, b.Results)
-	}
-	result := b.Results[j]
-	if cErr, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {
+	switch v := origPErr.GetDetail().(type) {
+	case *roachpb.MinTimestampBoundUnsatisfiableError:
+		return pgerror.WithCandidateCode(
+			origPErr.GoError(),
+			pgcode.UnsatisfiableBoundedStaleness,
+		)
+	case *roachpb.ConditionFailedError:
+		if origPErr.Index == nil {
+			break
+		}
+		j := origPErr.Index.Index
+		if j >= int32(len(b.Results)) {
+			return errors.AssertionFailedf("index %d outside of results: %+v", j, b.Results)
+		}
+		result := b.Results[j]
+		if len(result.Rows) == 0 {
+			break
+		}
 		key := result.Rows[0].Key
-		return NewUniquenessConstraintViolationError(ctx, tableDesc, key, cErr.ActualValue)
+		return NewUniquenessConstraintViolationError(ctx, tableDesc, key, v.ActualValue)
 	}
 	return origPErr.GoError()
 }
@@ -81,6 +92,13 @@ func ConvertFetchError(ctx context.Context, descForKey KeyToDescTranslator, err 
 		key := wiErr.Intents[0].Key
 		desc, _ := descForKey.KeyToDesc(key)
 		return NewLockNotAvailableError(ctx, desc, key)
+	}
+	var bsErr *roachpb.MinTimestampBoundUnsatisfiableError
+	if errors.As(err, &bsErr) {
+		return pgerror.WithCandidateCode(
+			err,
+			pgcode.UnsatisfiableBoundedStaleness,
+		)
 	}
 	return err
 }
