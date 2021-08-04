@@ -54,6 +54,19 @@ message DefaultPrivilegesForRole {
   }
   map<uint32, PrivilegeDescriptor> default_privileges_per_object = 3 [(gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject"];
+  // These are special cases in Postgres. Public has USAGE on types and
+  // role has ALL privileges by default.
+  // Under the default cases where all these bools are true, the role can be
+  // dropped, however for example alter default privileges revoke SELECT on tables
+  // for the role causes it to "own" default privileges as it is no longer
+  // the "default" case and the role cannot be dropped until the default case
+  // is met.
+  required bool public_has_usage_on_types = 4 [(gogoproto.nullable) = false];
+  required bool role_has_all_privileges_on_tables = 5 [(gogoproto.nullable) = false];
+  required bool role_has_all_privileges_on_sequences = 6 [(gogoproto.nullable) = false];
+  required bool role_has_all_privileges_on_schemas = 7 [(gogoproto.nullable) = false];
+  required bool role_has_all_privileges_on_types = 8 [(gogoproto.nullable) = false];
+
 }
 
 // DefaultPrivilegeDescriptor describes the set of default privileges for a

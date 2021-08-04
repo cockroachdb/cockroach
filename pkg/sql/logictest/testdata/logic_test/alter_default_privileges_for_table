@@ -150,14 +150,15 @@ USE d;
 statement ok
 CREATE TABLE t5()
 
+# testuser has ALL privileges since by default, ALL is defined as a default
+# privilege for the creator role of an object..
 query TTTTT colnames
 SHOW GRANTS ON t5
 ----
 database_name  schema_name  table_name  grantee    privilege_type
 d              public       t5          admin      ALL
 d              public       t5          root       ALL
-d              public       t5          testuser   CREATE
-d              public       t5          testuser   SELECT
+d              public       t5          testuser   ALL
 d              public       t5          testuser2  SELECT
 
 user root
@@ -182,7 +183,7 @@ SHOW GRANTS ON t6
 database_name  schema_name  table_name  grantee   privilege_type
 d              public       t6          admin     ALL
 d              public       t6          root      ALL
-d              public       t6          testuser  CREATE
+d              public       t6          testuser  ALL
 
 user root
 
@@ -273,7 +274,7 @@ SHOW GRANTS ON t10
 database_name  schema_name  table_name  grantee    privilege_type
 d              public       t10         admin      ALL
 d              public       t10         root       ALL
-d              public       t10         testuser   CREATE
+d              public       t10         testuser   ALL
 d              public       t10         testuser2  SELECT
 d              public       t10         testuser3  SELECT
 
@@ -304,7 +305,7 @@ SHOW GRANTS ON t12
 database_name  schema_name  table_name  grantee   privilege_type
 d              public       t12         admin     ALL
 d              public       t12         root      ALL
-d              public       t12         testuser  CREATE
+d              public       t12         testuser  ALL
 
 # Cannot specify PUBLIC as the target role.
 statement error pq: user or role public does not exist
