@@ -12,8 +12,15 @@ import "./feedbackSurveyLink.styl";
 const FeedBackSurveyLink = () => {
   const singleVersion = useSelector(singleVersionSelector);
   const clusterId = useSelector(clusterIdSelector);
-  return (
-    <div className="feedback-survey-link">
+  const feedbackLink = new URL("https://www.cockroachlabs.com/survey/");
+  feedbackLink.searchParams.append("clusterId", clusterId);
+  feedbackLink.searchParams.append("clusterVersion", singleVersion);
+
+  return clusterId && singleVersion ? (
+    <div
+      className="feedback-survey-link"
+      onClick={() => window.open(feedbackLink.toString())}
+    >
       <div
         className="image-container"
         title="Share Feedback"
@@ -21,6 +28,8 @@ const FeedBackSurveyLink = () => {
       />
       <div className="feedback-survey-link__title">Share feedback</div>
     </div>
+  ) : (
+    <></>
   );
 };
 
