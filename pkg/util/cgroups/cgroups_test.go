@@ -20,7 +20,102 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCgroupsGetMemory(t *testing.T) {
+func TestCgroupsGetMemoryUsage(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		paths  map[string]string
+		errMsg string
+		value  int64
+		warn   string
+	}{
+		{
+			name:   "fails to find cgroup version when cgroup file is not present",
+			errMsg: "failed to read memory cgroup from cgroups file:",
+		},
+		{
+			name: "doesn't detect value for cgroup v1 without memory controller",
+			paths: map[string]string{
+				"/proc/self/cgroup":    v1CgroupWithoutMemoryController,
+				"/proc/self/mountinfo": v1MountsWithoutMemController,
+			},
+			warn:  "no cgroup memory controller detected",
+			value: 0,
+		},
+		{
+			name: "fails to find mount details when mountinfo is not present",
+			paths: map[string]string{
+				"/proc/self/cgroup": v1CgroupWithMemoryController,
+			},
+			errMsg: "failed to read mounts info from file:",
+		},
+		{
+			name: "fails to find cgroup v1 version when there is no memory mount",
+			paths: map[string]string{
+				"/proc/self/cgroup":    v1CgroupWithMemoryController,
+				"/proc/self/mountinfo": v1MountsWithoutMemController,
+			},
+			errMsg: "failed to detect cgroup root mount and version",
+			value:  0,
+		},
+		{
+			name: "fetches the usage for cgroup v1",
+			paths: map[string]string{
+				"/proc/self/cgroup":                           v1CgroupWithMemoryController,
+				"/proc/self/mountinfo":                        v1MountsWithMemController,
+				"/sys/fs/cgroup/memory/memory.usage_in_bytes": v1MemoryUsageInBytes,
+			},
+			value: 276328448,
+		},
+		{
+			name: "fetches the value for cgroup v1 when the NS relative paths of mount and cgroup don't match",
+			paths: map[string]string{
+				"/proc/self/cgroup":    v1CgroupWithMemoryControllerNS,
+				"/proc/self/mountinfo": v1MountsWithMemControllerNS,
+				"/sys/fs/cgroup/memory/cgroup_test/memory.usage_in_bytes": v1MemoryUsageInBytes,
+			},
+			value: 276328448,
+		},
+		{
+			name: "fails when the memory.current file is missing for cgroup v2",
+			paths: map[string]string{
+				"/proc/self/cgroup":    v2CgroupWithMemoryController,
+				"/proc/self/mountinfo": v2Mounts,
+			},
+			errMsg: "can't read memory.current from cgroup v2",
+		},
+		{
+			name: "fails when unable to parse value for cgroup v2",
+			paths: map[string]string{
+				"/proc/self/cgroup":    v2CgroupWithMemoryController,
+				"/proc/self/mountinfo": v2Mounts,
+				"/sys/fs/cgroup/machine.slice/libpod-f1c6b44c0d61f273952b8daecf154cee1be2d503b7e9184ebf7fcaf48e139810.scope/memory.current": "unparsable\n",
+			},
+			errMsg: "failed to parse value in memory.current from cgroup v2",
+		},
+		{
+			name: "fetches the usage for cgroup v2",
+			paths: map[string]string{
+				"/proc/self/cgroup":    v2CgroupWithMemoryController,
+				"/proc/self/mountinfo": v2Mounts,
+				"/sys/fs/cgroup/machine.slice/libpod-f1c6b44c0d61f273952b8daecf154cee1be2d503b7e9184ebf7fcaf48e139810.scope/memory.current": "276328448",
+			},
+			value: 276328448,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := createFiles(t, tc.paths)
+			defer func() { _ = os.RemoveAll(dir) }()
+
+			limit, warn, err := getCgroupMemUsage(dir)
+			require.True(t, testutils.IsError(err, tc.errMsg),
+				"%v %v", err, tc.errMsg)
+			require.Regexp(t, tc.warn, warn)
+			require.Equal(t, tc.value, limit)
+		})
+	}
+}
+
+func TestCgroupsGetMemoryLimit(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		paths  map[string]string
@@ -81,7 +176,7 @@ func TestCgroupsGetMemory(t *testing.T) {
 				"/proc/self/cgroup":    v2CgroupWithMemoryController,
 				"/proc/self/mountinfo": v2Mounts,
 			},
-			errMsg: "can't read available memory from cgroup v2",
+			errMsg: "can't read memory.max from cgroup v2",
 		},
 		{
 			name: "fails when unable to parse limit for cgroup v2",
@@ -90,7 +185,7 @@ func TestCgroupsGetMemory(t *testing.T) {
 				"/proc/self/mountinfo": v2Mounts,
 				"/sys/fs/cgroup/machine.slice/libpod-f1c6b44c0d61f273952b8daecf154cee1be2d503b7e9184ebf7fcaf48e139810.scope/memory.max": "unparsable\n",
 			},
-			errMsg: "can't parse available memory from cgroup v2 in",
+			errMsg: "failed to parse value in memory.max from cgroup v2",
 		},
 		{
 			name: "fetches the limit for cgroup v2",
@@ -115,7 +210,7 @@ func TestCgroupsGetMemory(t *testing.T) {
 			dir := createFiles(t, tc.paths)
 			defer func() { _ = os.RemoveAll(dir) }()
 
-			limit, warn, err := getCgroupMem(dir)
+			limit, warn, err := getCgroupMemLimit(dir)
 			require.True(t, testutils.IsError(err, tc.errMsg),
 				"%v %v", err, tc.errMsg)
 			require.Regexp(t, tc.warn, warn)
@@ -596,6 +691,7 @@ total_inactive_file 1363746816
 total_active_file 308867072
 total_unevictable 0
 `
+	v1MemoryUsageInBytes = "276328448"
 
 	// Both /proc/<pid>/mountinfo and /proc/<pid>/cgroup will show the mount and the cgroup relative to the cgroup NS root
 	// This tests the case where the memory controller mount and the cgroup are not exactly the same (as is with k8s pods).
