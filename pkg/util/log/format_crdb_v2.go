@@ -114,24 +114,34 @@ reliably that no counter was present.
 
 Example single-line unstructured entry:
 
-     I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23  started with engine type ‹2›
+~~~
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23  started with engine type ‹2›
+~~~
 
 Example multi-line unstructured entry:
 
-     I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40  node startup completed:
-     I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40 +CockroachDB node starting at 2021-01-16 21:49 (took 0.0s)
+~~~
+I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40  node startup completed:
+I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40 +CockroachDB node starting at 2021-01-16 21:49 (took 0.0s)
+~~~
 
 Example structured entry:
 
-     I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
+~~~
+I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
+~~~
 
 Example long entries broken up into multiple lines:
 
-     I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa....
-     I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+~~~
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa....
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+~~~
 
-     I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 ={"Timestamp":1610833757080706620,"EventTy...
-     I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 |pe":"node_restart"}
+~~~
+I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 ={"Timestamp":1610833757080706620,"EventTy...
+I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 |pe":"node_restart"}
+~~~
 
 ### Backward-compatibility notes
 
