@@ -320,6 +320,44 @@ const (
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	V21_1
 
+	// v21.1PLUS release. This is a special v21.1.x release with extra changes,
+	// used internally for the 2021 serverless offering.
+	Start21_1PLUS
+
+	// v21.2 versions.
+	//
+	// Start21_2 demarcates work towards CockroachDB v21.2.
+	Start21_2
+	// JoinTokensTable adds the system table for storing ephemeral generated
+	// join tokens.
+	JoinTokensTable
+	// AcquisitionTypeInLeaseHistory augments the per-replica lease history to
+	// include the type of lease acquisition event that resulted in that replica's
+	// current lease.
+	AcquisitionTypeInLeaseHistory
+	// SerializeViewUDTs serializes user defined types used in views to allow
+	// for renaming of the referenced types.
+	SerializeViewUDTs
+	// ExpressionIndexes is when expression indexes are supported.
+	ExpressionIndexes
+	// DeleteDeprecatedNamespaceTableDescriptorMigration deletes the descriptor at ID=2.
+	DeleteDeprecatedNamespaceTableDescriptorMigration
+	// FixDescriptors is for the migration to fix all descriptors.
+	FixDescriptors
+	// SQLStatsTable adds the system tables for storing persisted SQL statistics
+	// for statements and transactions.
+	SQLStatsTable
+	// DatabaseRoleSettings adds the system table for storing per-user and
+	// per-role default session settings.
+	DatabaseRoleSettings
+	// TenantUsageTable adds the system table for tracking tenant usage.
+	TenantUsageTable
+	// SQLInstancesTable adds the system table for storing SQL instance information
+	// per tenant.
+	SQLInstancesTable
+	// Can return new retryable rangefeed errors without crashing the client
+	NewRetryableRangefeedErrors
+
 	// Step (1): Add new versions here.
 )
 
@@ -525,6 +563,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     V21_1,
 		Version: roachpb.Version{Major: 21, Minor: 1},
 	},
+	{
+		Key:     NewRetryableRangefeedErrors,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
+	},
+
 	// Step (2): Add new versions here.
 })
 
