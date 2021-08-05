@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -175,7 +176,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Override default zone config.
-	cfg := roachpb.DefaultSpanConfig()
+	cfg := zonepb.DefaultZoneConfigRef().AsSpanConfig()
 	cfg.RangeMaxBytes = 1 << 18
 
 	// Manually create the local test cluster so that the split queue

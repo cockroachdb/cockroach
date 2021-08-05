@@ -1448,18 +1448,6 @@ func (n *Node) UpdateSpanConfigs(
 		return req.SpansToDelete[i].Key.Compare(req.SpansToDelete[j].Key) < 0
 	})
 
-	// TODO(zcfgs-pod): Instead of simply upserting/deleting into the table, we
-	// could "absorb" into the existing state -- it would make for simpler
-	// client-side operations. Given an initial state, and sets of span configs
-	// to delete and upsert, we could do the following:
-	//
-	// Initial      [--------A-------)     [-------B------)[---------C---------)
-	// -------------------------------------------------------------------------
-	// Update(+)         [----D------)         [-------B------)
-	// Delete(-)                                                         [-----)
-	// -------------------------------------------------------------------------
-	//              [-A-)[----D------)     [---------B--------)[----C----)
-
 	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for _, span := range req.SpansToDelete {
 			n, err := n.sqlExec.ExecEx(ctx, "update-span-cfgs", txn,
@@ -1471,7 +1459,7 @@ func (n *Node) UpdateSpanConfigs(
 				return err
 			}
 			if n != 1 {
-				return errors.AssertionFailedf("expected to delete single row, deleted %d", n)
+				return errors.AssertionFailedf("expected to delete single row, deleted %d (span=%s)", n, span)
 			}
 		}
 

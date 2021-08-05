@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -1536,6 +1537,7 @@ func (s *SpanConfig) IsEmpty() bool {
 	return s.Equal(emptySpanConfig)
 }
 
+// TTL returns the implies TTL as a time.Duration.
 func (s *SpanConfig) TTL() time.Duration {
 	return time.Duration(s.GCTTL) * time.Second
 }
@@ -1577,25 +1579,31 @@ func StoreMatchesConstraint(store StoreDescriptor, c Constraint) bool {
 	return false
 }
 
-func DefaultSpanConfig() SpanConfig {
-	return SpanConfig{
-		NumReplicas:   3,
-		RangeMinBytes: 128 << 20, // 128 MB
-		RangeMaxBytes: 512 << 20, // 512 MB
-		// Use 25 hours instead of the previous 24 to make users successful by
-		// default. Users desiring to take incremental backups every 24h may
-		// incorrectly assume that the previous default 24h was sufficient to do
-		// that. But the equation for incremental backups is:
-		// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
-		// We think most new users' incremental backups will complete within an
-		// hour, and larger clusters will have more experienced operators and will
-		// understand how to change these settings if needed.
-		GCTTL: 25 * 60 * 60,
+func (c Constraint) String() string {
+	var str string
+	switch c.Type {
+	case Constraint_REQUIRED:
+		str += "+"
+	case Constraint_PROHIBITED:
+		str += "-"
 	}
+	if len(c.Key) > 0 {
+		str += c.Key + "="
+	}
+	str += c.Value
+	return str
 }
 
-func DefaultSystemSpanConfig() SpanConfig {
-	conf := DefaultSpanConfig()
-	conf.NumReplicas = 5
-	return conf
+func (c ConstraintsConjunction) String() string {
+	var sb strings.Builder
+	for i, cons := range c.Constraints {
+		if i > 0 {
+			sb.WriteRune(',')
+		}
+		sb.WriteString(cons.String())
+	}
+	if c.NumReplicas != 0 {
+		fmt.Fprintf(&sb, ":%d", c.NumReplicas)
+	}
+	return sb.String()
 }

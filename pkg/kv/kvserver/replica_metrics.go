@@ -299,5 +299,6 @@ func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool
 	if maxBytes <= 0 || size <= maxSize {
 		return false, 0
 	}
+
 	return true, size - maxSize
 }

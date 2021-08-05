@@ -78,6 +78,16 @@ type StoreReader interface {
 	GetSplitsBetween(start, end roachpb.Key) []roachpb.Key
 }
 
+// QueueReader is a an adaptor interface implemented by both the system config
+// span and spanconfig.Stores.
+//
+// TODO(zcfgs-pod): Merge this into the StoreReader interface.
+type QueueReader interface {
+	NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool
+	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey
+	GetSpanConfigForKey(key roachpb.RKey) (roachpb.SpanConfig, error)
+}
+
 // TODO(zcfgs-pod): In the restore path we need to make sure we do a full
 // reconciliation pass pre-restore (?). Was mentioned in some pod meeting.
 
@@ -85,8 +95,12 @@ type StoreReader interface {
 // spanconfig.Store on the tenant/SQL watcher. Alternatively, fetch span configs
 // from KV each time to compare against.
 
+// EnabledSetting is a hidden cluster setting to enable the use of the span
+// configs infrastructure in KV.
 var EnabledSetting = settings.RegisterBoolSetting(
-	"spanconfig.enabled",
+	"spanconfig.experimental.enabled",
 	"enable the use of span configs",
 	false,
 )
+
+var _ = EnabledSetting // XXX: silence unused check.

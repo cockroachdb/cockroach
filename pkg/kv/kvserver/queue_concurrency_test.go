@@ -17,10 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,13 +72,13 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		cfg: StoreConfig{
 			Clock:             hlc.NewClock(hlc.UnixNano, time.Second),
 			AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
-			DefaultSpanConfig: roachpb.DefaultSpanConfig(),
+			DefaultSpanConfig: zonepb.DefaultZoneConfigRef().AsSpanConfig(),
 		},
 	}
 
 	// Set up a queue impl that will return random results from processing.
 	impl := fakeQueueImpl{
-		pr: func(context.Context, *Replica, *config.SystemConfig) (bool, error) {
+		pr: func(context.Context, *Replica, spanconfig.QueueReader) (bool, error) {
 			n := rand.Intn(4)
 			if n == 0 {
 				return true, nil
@@ -89,7 +90,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 			return false, &testPurgatoryError{}
 		},
 	}
-	bq := newBaseQueue("test", impl, store, nil /* Gossip */, cfg)
+	bq := newBaseQueue("test", impl, store, cfg)
 	bq.getReplica = func(id roachpb.RangeID) (replicaInQueue, error) {
 		return &fakeReplica{rangeID: id}, nil
 	}
@@ -127,19 +128,19 @@ func TestBaseQueueConcurrent(t *testing.T) {
 }
 
 type fakeQueueImpl struct {
-	pr func(context.Context, *Replica, *config.SystemConfig) (processed bool, err error)
+	pr func(context.Context, *Replica, spanconfig.QueueReader) (processed bool, err error)
 }
 
 func (fakeQueueImpl) shouldQueue(
-	context.Context, hlc.ClockTimestamp, *Replica, *config.SystemConfig,
+	context.Context, hlc.ClockTimestamp, *Replica, spanconfig.QueueReader,
 ) (shouldQueue bool, priority float64) {
 	return rand.Intn(5) != 0, 1.0
 }
 
 func (fq fakeQueueImpl) process(
-	ctx context.Context, repl *Replica, cfg *config.SystemConfig,
+	ctx context.Context, repl *Replica, confReader spanconfig.QueueReader,
 ) (bool, error) {
-	return fq.pr(ctx, repl, cfg)
+	return fq.pr(ctx, repl, confReader)
 }
 
 func (fakeQueueImpl) timer(time.Duration) time.Duration {

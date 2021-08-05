@@ -135,7 +135,8 @@ type BaseConfig struct {
 
 	// DefaultZoneConfig is used to set the default zone config inside the server.
 	// It can be overridden during tests by setting the DefaultZoneConfigOverride
-	// server testing knob. // XXX: Document, used to seed the spanconfig default, and bootstrap metadata, and gossip.
+	// server testing knob. It's used to seed the default span config stores are
+	// initialized with, to initialize gossip, and to bootstrap the metadata schemas.
 	DefaultZoneConfig zonepb.ZoneConfig
 
 	// Locality is a description of the topography of the server.

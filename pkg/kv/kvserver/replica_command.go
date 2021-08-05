@@ -2853,15 +2853,14 @@ func (s *Store) relocateOne(
 			`range %s was either in a joint configuration or had learner replicas: %v`, desc, desc.Replicas())
 	}
 
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
-	if sysCfg == nil {
-		return nil, nil, fmt.Errorf("no system config available, unable to perform RelocateRange")
+	confReader, err := s.GetConfReader()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "unable to retrieve conf reader, can't perform RelocateRange")
 	}
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
+	conf, err := confReader.GetSpanConfigForKey(desc.StartKey)
 	if err != nil {
 		return nil, nil, err
 	}
-	conf := zone.AsSpanConfig()
 
 	storeList, _, _ := s.allocator.storePool.getStoreList(storeFilterNone)
 	storeMap := storeListToMap(storeList)

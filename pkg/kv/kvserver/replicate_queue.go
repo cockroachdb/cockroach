@@ -19,12 +19,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -168,7 +168,7 @@ type replicateQueue struct {
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
-func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *replicateQueue {
+func newReplicateQueue(store *Store, allocator Allocator) *replicateQueue {
 	rq := &replicateQueue{
 		metrics:    makeReplicateQueueMetrics(),
 		allocator:  allocator,
@@ -176,11 +176,11 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
-		"replicate", rq, store, g,
+		"replicate", rq, store,
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
-			needsSystemConfig:    true, // XXX: Needs to be swapped out.
+			needsSystemConfig:    true,
 			acceptsUnsplitRanges: store.TestingKnobs().ReplicateQueueAcceptsUnsplit,
 			// The processing of the replicate queue often needs to send snapshots
 			// so we use the raftSnapshotQueueTimeoutFunc. This function sets a
@@ -204,7 +204,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 
 	// Register gossip and node liveness callbacks to signal that
 	// replicas in purgatory might be retried.
-	if g != nil { // gossip is nil for some unittests
+	if g := store.cfg.Gossip; g != nil { // gossip is nil for some unittests
 		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ roachpb.Value) {
 			if !rq.store.IsStarted() {
 				return
@@ -228,8 +228,8 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 }
 
 func (rq *replicateQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ *config.SystemConfig,
-) (shouldQ bool, priority float64) {
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.QueueReader,
+) (shouldQueue bool, priority float64) {
 	desc, conf := repl.DescAndSpanConfig()
 	action, priority := rq.allocator.ComputeAction(ctx, conf, desc)
 
@@ -295,7 +295,7 @@ func (rq *replicateQueue) shouldQueue(
 }
 
 func (rq *replicateQueue) process(
-	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig,
+	ctx context.Context, repl *Replica, _ spanconfig.QueueReader,
 ) (processed bool, err error) {
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
@@ -326,7 +326,7 @@ func (rq *replicateQueue) process(
 			}
 
 			if testingAggressiveConsistencyChecks {
-				if _, err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
+				if _, err := rq.store.consistencyQueue.process(ctx, repl, nil); err != nil {
 					log.Warningf(ctx, "%v", err)
 				}
 			}

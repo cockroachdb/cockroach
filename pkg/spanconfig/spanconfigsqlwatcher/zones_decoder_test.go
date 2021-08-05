@@ -89,9 +89,9 @@ func TestZonesDecoder(t *testing.T) {
 	// of this test.
 	rows = rows[initialCount:]
 
-	dec := spanconfigsqlwatcher.NewZonesDecoder(keys.SystemSQLCodec)
+	dec := spanconfigsqlwatcher.newZonesDecoder(keys.SystemSQLCodec)
 	for i, row := range rows {
-		got, err := dec.DecodePrimaryKey(row.Key)
+		got, err := dec.decodePrimaryKey(row.Key)
 		require.NoError(t, err)
 
 		// system.zones has 2 column families, so for every entry that was upsurted

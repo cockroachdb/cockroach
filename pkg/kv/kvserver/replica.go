@@ -538,14 +538,19 @@ type Replica struct {
 		// the request. See the comment on the struct for more details.
 		cachedProtectedTS cachedProtectedTimestampState
 
-		// largestPreviousMaxRangeSizeBytes tracks a previous zone.RangeMaxBytes
-		// which exceeded the current zone.RangeMaxBytes to help defeat the range
+		// largestPreviousMaxRangeSizeBytes tracks a previous conf.RangeMaxBytes
+		// which exceeded the current conf.RangeMaxBytes to help defeat the range
 		// backpressure mechanism in cases where a user reduces the configured range
 		// size. It is set when the span config changes to a smaller value and the
 		// current range size exceeds the new value. It is cleared after the range's
-		// size drops below its current zone.MaxRangeBytes or if the
-		// zone.MaxRangeBytes increases to surpass the current value.
+		// size drops below its current conf.MaxRangeBytes or if the
+		// conf.MaxRangeBytes increases to surpass the current value.
 		largestPreviousMaxRangeSizeBytes int64
+		// spanConfigExplicitlySet tracks whether a span config was explicitly set
+		// on this replica (as opposed to it having initialized with the default
+		// span config). It's used to reason about
+		// largestPreviousMaxRangeSizeBytes.
+		spanConfigExplicitlySet bool
 
 		// failureToGossipSystemConfig is set to true when the leaseholder of the
 		// range containing the system config span fails to gossip due to an
@@ -687,27 +692,25 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
 	if r.isInitializedRLocked() && !r.mu.conf.IsEmpty() && !conf.IsEmpty() {
 		total := r.mu.state.Stats.Total()
 
-		// Set largestPreviousMaxRangeSizeBytes if the current range size is above
-		// the new limit and we don't already have a larger value. Reset it if
-		// the new limit is larger than the current largest we're aware of.
-		if total > conf.RangeMaxBytes &&
-			conf.RangeMaxBytes < r.mu.conf.RangeMaxBytes &&
+		// Set largestPreviousMaxRangeSizeBytes if the current range size is
+		// greater than the new limit, if the limit has decreased from what we
+		// last remember, and we don't already have a larger value.
+		if total > conf.RangeMaxBytes && conf.RangeMaxBytes < r.mu.conf.RangeMaxBytes &&
 			r.mu.largestPreviousMaxRangeSizeBytes < r.mu.conf.RangeMaxBytes &&
-			// Check to make sure that we're replacing a real zone config. Otherwise
-			// the default value would prevent backpressure until the range was
-			// larger than the default value. When the store starts up it sets the
-			// zone for the replica to this default value; later on it overwrites it
-			// with a new instance even if the value is the same as the default.
-			!r.mu.conf.Equal(r.store.cfg.DefaultSpanConfig) &&
-			!r.mu.conf.Equal(r.store.cfg.DefaultSystemSpanConfig) {
-
+			// We also want to make sure that we're replacing a real span config.
+			// If we didn't have this check, the default value would prevent
+			// backpressure until the range got larger than it.
+			r.mu.spanConfigExplicitlySet {
 			r.mu.largestPreviousMaxRangeSizeBytes = r.mu.conf.RangeMaxBytes
 		} else if r.mu.largestPreviousMaxRangeSizeBytes > 0 &&
 			r.mu.largestPreviousMaxRangeSizeBytes < conf.RangeMaxBytes {
+			// Reset it if the new limit is larger than the largest we were
+			// aware of.
 			r.mu.largestPreviousMaxRangeSizeBytes = 0
 		}
 	}
-	r.mu.conf = conf
+
+	r.mu.conf, r.mu.spanConfigExplicitlySet = conf, true
 }
 
 // IsFirstRange returns true if this is the first range.

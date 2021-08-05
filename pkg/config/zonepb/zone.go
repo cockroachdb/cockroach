@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -963,37 +962,6 @@ func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) (*Subzone, int32) {
 	return nil, -1
 }
 
-// GetNumVoters returns the number of voting replicas for the given zone config.
-//
-// This method will panic if called on a ZoneConfig with an uninitialized
-// NumReplicas attribute.
-func (z *ZoneConfig) GetNumVoters() int32 {
-	if z.NumReplicas == nil {
-		panic("NumReplicas must not be nil")
-	}
-	if z.NumVoters != nil && *z.NumVoters != 0 {
-		return *z.NumVoters
-	}
-	return *z.NumReplicas
-}
-
-// GetNumNonVoters returns the number of non-voting replicas as defined in the
-// zone config.
-//
-// This method will panic if called on a ZoneConfig with an uninitialized
-// NumReplicas attribute.
-func (z *ZoneConfig) GetNumNonVoters() int32 {
-	if z.NumReplicas == nil {
-		panic("NumReplicas must not be nil")
-	}
-	if z.NumVoters != nil && *z.NumVoters != 0 {
-		return *z.NumReplicas - *z.NumVoters
-	}
-	// `num_voters` hasn't been explicitly configured. Every replica should be a
-	// voting replica.
-	return 0
-}
-
 // SetSubzone installs subzone into the ZoneConfig, overwriting any existing
 // subzone with the same IndexID and PartitionName.
 func (z *ZoneConfig) SetSubzone(subzone Subzone) {
@@ -1104,8 +1072,8 @@ func (z *ZoneConfig) EnsureFullyHydrated() error {
 
 // AsSpanConfig converts a fully hydrated zone configuration to an equivalent
 // SpanConfig. It fatals if the zone config hasn't been fully hydrated (fields are
-// expected to have been inherited through parent zone configs).
-func (z *ZoneConfig) AsSpanConfig() roachpb.SpanConfig { // XXX: Audit uses; we should eventually be getting everything through the span config store.
+// expected to have been cascaded through parent zone configs).
+func (z *ZoneConfig) AsSpanConfig() roachpb.SpanConfig {
 	spanConfig, err := z.toSpanConfig()
 	if err != nil {
 		log.Fatalf(context.Background(), "%v", err)
@@ -1236,9 +1204,4 @@ func (c *Constraint) GetKey() string {
 // GetValue is part of the cat.Constraint interface.
 func (c *Constraint) GetValue() string {
 	return c.Value
-}
-
-// TTL returns the implies TTL as a time.Duration.
-func (m *GCPolicy) TTL() time.Duration {
-	return time.Duration(m.TTLSeconds) * time.Second
 }

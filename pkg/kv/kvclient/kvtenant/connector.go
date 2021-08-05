@@ -72,7 +72,7 @@ type ConnectorConfig struct {
 	AmbientCtx        log.AmbientContext
 	RPCContext        *rpc.Context
 	RPCRetryOptions   retry.Options
-	DefaultZoneConfig *zonepb.ZoneConfig // XXX: Check usages.
+	DefaultZoneConfig *zonepb.ZoneConfig
 }
 
 // ConnectorFactory constructs a new tenant Connector from the provide network

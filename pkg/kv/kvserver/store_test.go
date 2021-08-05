@@ -1366,12 +1366,13 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	}
 
 	// Set zone configs.
-	config.TestingSetZoneConfig(
-		config.SystemTenantObjectID(baseID), zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(1 << 20)},
-	)
-	config.TestingSetZoneConfig(
-		config.SystemTenantObjectID(baseID+2), zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(2 << 20)},
-	)
+	zoneA := zonepb.DefaultZoneConfig()
+	zoneA.RangeMaxBytes = proto.Int64(1 << 20)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(baseID), zoneA)
+
+	zoneB := zonepb.DefaultZoneConfig()
+	zoneB.RangeMaxBytes = proto.Int64(2 << 20)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(baseID+2), zoneB)
 
 	// Despite faking the zone configs, we still need to have a system config
 	// entry so that the store picks up the new zone configs. This new system

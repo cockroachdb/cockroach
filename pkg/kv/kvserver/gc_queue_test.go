@@ -561,11 +561,10 @@ func TestGCQueueProcess(t *testing.T) {
 		desc := tc.repl.Desc()
 		defer snap.Close()
 
-		zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+		conf, err := cfg.GetSpanConfigForKey(desc.StartKey)
 		if err != nil {
 			t.Fatalf("could not find zone config for range %s: %+v", tc.repl, err)
 		}
-		conf := zone.AsSpanConfig()
 
 		now := tc.Clock().Now()
 		newThreshold := gc.CalculateThreshold(now, conf.TTL())
@@ -589,7 +588,7 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	// Process through a scan queue.
-	gcQ := newGCQueue(tc.store, tc.gossip)
+	gcQ := newGCQueue(tc.store)
 	processed, err := gcQ.process(ctx, tc.repl, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -822,7 +821,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	}
 
 	// Run GC.
-	gcQ := newGCQueue(tc.store, tc.gossip)
+	gcQ := newGCQueue(tc.store)
 	cfg := tc.gossip.GetSystemConfig()
 	if cfg == nil {
 		t.Fatal("config not set")
@@ -957,12 +956,12 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 
 	// Process through GC queue.
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("config not set")
+	confReader, err := tc.store.GetConfReader()
+	if err != nil {
+		t.Fatal(err)
 	}
-	gcQ := newGCQueue(tc.store, tc.gossip)
-	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	gcQ := newGCQueue(tc.store)
+	processed, err := gcQ.process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1018,14 +1017,14 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 		}
 	}
 
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("config not set")
+	confReader, err := tc.store.GetConfReader()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// Process through a scan queue.
-	gcQ := newGCQueue(tc.store, tc.gossip)
-	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	gcQ := newGCQueue(tc.store)
+	processed, err := gcQ.process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1123,17 +1122,17 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	}
 
 	// Forward the clock past the default GC time.
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("config not set")
-	}
-	zone, err := cfg.GetZoneConfigForKey(roachpb.RKey("key"))
+	confReader, err := tc.store.GetConfReader()
 	if err != nil {
-		t.Fatalf("could not find zone config for range %s", err)
+		t.Fatal(err)
 	}
-	tc.manualClock.Increment(int64(zone.GC.TTLSeconds)*1e9 + 1)
-	gcQ := newGCQueue(tc.store, tc.gossip)
-	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	conf, err := confReader.GetSpanConfigForKey(roachpb.RKey("key"))
+	if err != nil {
+		t.Fatalf("could not find span config for range %s", err)
+	}
+	tc.manualClock.Increment(int64(conf.TTL().Nanoseconds()) + 1)
+	gcQ := newGCQueue(tc.store)
+	processed, err := gcQ.process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}

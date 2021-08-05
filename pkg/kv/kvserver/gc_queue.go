@@ -18,11 +18,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -92,10 +91,10 @@ type gcQueue struct {
 }
 
 // newGCQueue returns a new instance of gcQueue.
-func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
+func newGCQueue(store *Store) *gcQueue {
 	gcq := &gcQueue{}
 	gcq.baseQueue = newBaseQueue(
-		"gc", gcq, store, gossip,
+		"gc", gcq, store,
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
@@ -151,7 +150,7 @@ func (r gcQueueScore) String() string {
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (gcq *gcQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ *config.SystemConfig,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.QueueReader,
 ) (bool, float64) {
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score.
@@ -438,7 +437,7 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
 func (gcq *gcQueue) process(
-	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig,
+	ctx context.Context, repl *Replica, _ spanconfig.QueueReader,
 ) (processed bool, err error) {
 	// Lookup the descriptor and GC policy for the zone containing this key range.
 	desc, conf := repl.DescAndSpanConfig()

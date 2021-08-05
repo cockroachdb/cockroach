@@ -17,12 +17,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -249,15 +248,13 @@ type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
 	// The Replica is guaranteed to be initialized.
-	shouldQueue(
-		context.Context, hlc.ClockTimestamp, *Replica, *config.SystemConfig,
-	) (shouldQueue bool, priority float64)
+	shouldQueue(context.Context, hlc.ClockTimestamp, *Replica, spanconfig.QueueReader) (shouldQueue bool, priority float64)
 
 	// process accepts a replica, and the system config and executes
 	// queue-specific work on it. The Replica is guaranteed to be initialized.
 	// We return a boolean to indicate if the Replica was processed successfully
 	// (vs. it being being a no-op or an error).
-	process(context.Context, *Replica, *config.SystemConfig) (processed bool, err error)
+	process(context.Context, *Replica, spanconfig.QueueReader) (processed bool, err error)
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue. The duration of the last processing of a replica
@@ -299,7 +296,7 @@ type queueConfig struct {
 	// be needed in order to make it possible for the system config to become
 	// available (as observed in #16268), so the raft snapshot queue can't
 	// require the system config to already be available.
-	needsSystemConfig bool // XXX: Deprecated. Replace with spanconfig.EnabledSetting
+	needsSystemConfig bool // XXX: Deprecated, swap out using with spanconfig.EnabledSetting
 	// acceptsUnsplitRanges controls whether this queue can process ranges that
 	// need to be split due to zone config settings. Ranges are checked before
 	// calling queueImpl.shouldQueue and queueImpl.process.
@@ -404,7 +401,6 @@ type baseQueue struct {
 	// it is contained. DANGER.
 	impl   queueImpl
 	store  *Store
-	gossip *gossip.Gossip // XXX: Mock this entire thing out. Should generalize to the span config store
 	queueConfig
 	incoming         chan struct{} // Channel signaled when a new replica is added to the queue.
 	processSem       chan struct{}
@@ -429,7 +425,7 @@ type baseQueue struct {
 // replicas can still be added; their addition simply removes the lowest
 // priority replica.
 func newBaseQueue(
-	name string, impl queueImpl, store *Store, gossip *gossip.Gossip, cfg queueConfig,
+	name string, impl queueImpl, store *Store, cfg queueConfig,
 ) *baseQueue {
 	// Use the default process timeout if none specified.
 	if cfg.processTimeoutFunc == nil {
@@ -457,7 +453,6 @@ func newBaseQueue(
 		name:             name,
 		impl:             impl,
 		store:            store,
-		gossip:           gossip,
 		queueConfig:      cfg,
 		incoming:         make(chan struct{}, 1),
 		processSem:       make(chan struct{}, cfg.maxConcurrency),
@@ -607,15 +602,16 @@ func (bq *baseQueue) AddAsync(ctx context.Context, repl replicaInQueue, prio flo
 func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp) {
 	ctx = repl.AnnotateCtx(ctx)
 	// Load the system config if it's needed.
-	var cfg *config.SystemConfig
+	var confReader spanconfig.QueueReader
 	if bq.needsSystemConfig {
 		// TODO(zcfgs-pod): instead accessing the system config directly, we'll
 		// want to expose a thin read-only interface into the per-store
 		// spanconfig.Store.
-		cfg = bq.gossip.GetSystemConfig()
-		if cfg == nil {
-			if log.V(1) {
-				log.Infof(ctx, "no system config available. skipping")
+		var err error
+		confReader, err = bq.store.GetConfReader()
+		if err != nil {
+			if errors.Is(err, errSysCfgUnavailable) && log.V(0) {
+					log.Warningf(ctx, "unable to retrieve system config, skipping: %v", err)
 			}
 			return
 		}
@@ -637,7 +633,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		repl.maybeInitializeRaftGroup(ctx)
 	}
 
-	if cfg != nil && bq.requiresSplit(ctx, cfg, repl) {
+	if confReader != nil && bq.requiresSplit(ctx, confReader, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(1) {
@@ -661,7 +657,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	// it may not be and shouldQueue will be passed a nil realRepl. These tests
 	// know what they're getting into so that's fine.
 	realRepl, _ := repl.(*Replica)
-	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, cfg) // XXX: Should use spanconfig.Store
+	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, confReader)
 	if !should {
 		return
 	}
@@ -670,14 +666,14 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	}
 }
 
-func (bq *baseQueue) requiresSplit( // XXX: Use new spanconfig.Store
-	ctx context.Context, cfg *config.SystemConfig, repl replicaInQueue,
+func (bq *baseQueue) requiresSplit(
+	ctx context.Context, confReader spanconfig.QueueReader, repl replicaInQueue,
 ) bool {
 	if bq.acceptsUnsplitRanges {
 		return false
 	}
 	desc := repl.Desc()
-	return cfg.NeedsSplit(ctx, desc.StartKey, desc.EndKey)
+	return confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey)
 }
 
 // addInternal adds the replica the queue with specified priority. If
@@ -905,16 +901,21 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 // ctx should already be annotated by repl.AnnotateCtx().
 func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) error {
 	// Load the system config if it's needed.
-	var cfg *config.SystemConfig
+	var confReader spanconfig.QueueReader
 	if bq.needsSystemConfig {
-		cfg = bq.gossip.GetSystemConfig()
-		if cfg == nil {
-			log.VEventf(ctx, 1, "no system config available. skipping")
+		var err error
+		confReader, err = bq.store.GetConfReader()
+		if err == errSysCfgUnavailable {
+			if log.V(1) {
+				log.Warningf(ctx, "unable to retrieve system config, skipping: %v", err)
+			}
 			return nil
+		} else if err != nil {
+			return err
 		}
 	}
 
-	if cfg != nil && bq.requiresSplit(ctx, cfg, repl) {
+	if confReader != nil && bq.requiresSplit(ctx, confReader, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		log.VEventf(ctx, 3, "split needed; skipping")
@@ -964,7 +965,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			// it may not be and shouldQueue will be passed a nil realRepl. These tests
 			// know what they're getting into so that's fine.
 			realRepl, _ := repl.(*Replica)
-			processed, err := bq.impl.process(ctx, realRepl, cfg)
+			processed, err := bq.impl.process(ctx, realRepl, confReader)
 			if err != nil {
 				return err
 			}

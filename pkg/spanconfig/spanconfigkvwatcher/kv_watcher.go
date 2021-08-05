@@ -55,7 +55,7 @@ func (w *KVWatcher) WatchForKVUpdates(
 		Key:    spanConfigTableStart,
 		EndKey: spanConfigTableStart.PrefixEnd(),
 	}
-	rowDecoder := NewSpanConfigDecoder()
+	rowDecoder := newSpanConfigDecoder()
 
 	handleUpdate := func(
 		ctx context.Context, ev *roachpb.RangeFeedValue,
@@ -69,7 +69,7 @@ func (w *KVWatcher) WatchForKVUpdates(
 		} else {
 			value = ev.Value
 		}
-		entry, err := rowDecoder.Decode(roachpb.KeyValue{
+		entry, err := rowDecoder.decode(roachpb.KeyValue{
 			Key:   ev.Key,
 			Value: value,
 		})

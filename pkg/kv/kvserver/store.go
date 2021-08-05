@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -219,8 +220,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		DefaultSpanConfig:           roachpb.DefaultSpanConfig(),
-		DefaultSystemSpanConfig:     roachpb.DefaultSystemSpanConfig(),
+		DefaultSpanConfig:           zonepb.DefaultZoneConfigRef().AsSpanConfig(),
+		DefaultSystemSpanConfig:     zonepb.DefaultSystemZoneConfigRef().AsSpanConfig(),
 		Settings:                    st,
 		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
 		Clock:                       clock,
@@ -643,7 +644,7 @@ type Store struct {
 	computeInitialMetrics              sync.Once
 	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 
-	spanConfigStore                  spanconfig.Store
+	spanConfigStore                  *spanconfigstore.Store
 	spanConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 }
 
@@ -960,14 +961,14 @@ func NewStore(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
-		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
-		s.mergeQueue = newMergeQueue(s, s.db, s.cfg.Gossip)
-		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
-		s.replicateQueue = newReplicateQueue(s, s.cfg.Gossip, s.allocator)
-		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
-		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
-		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.cfg.Gossip)
-		s.consistencyQueue = newConsistencyQueue(s, s.cfg.Gossip)
+		s.gcQueue = newGCQueue(s)
+		s.mergeQueue = newMergeQueue(s, s.db )
+		s.splitQueue = newSplitQueue(s, s.db )
+		s.replicateQueue = newReplicateQueue(s,  s.allocator)
+		s.replicaGCQueue = newReplicaGCQueue(s, s.db )
+		s.raftLogQueue = newRaftLogQueue(s, s.db )
+		s.raftSnapshotQueue = newRaftSnapshotQueue(s )
+		s.consistencyQueue = newConsistencyQueue(s)
 		// NOTE: If more queue types are added, please also add them to the list of
 		// queues on the EnqueueRange debug page as defined in
 		// pkg/ui/src/views/reports/containers/enqueueRange/index.tsx
@@ -980,7 +981,7 @@ func NewStore(
 		}
 		if tsDS != nil {
 			s.tsMaintenanceQueue = newTimeSeriesMaintenanceQueue(
-				s, s.db, s.cfg.Gossip, tsDS,
+				s, s.db, tsDS,
 			)
 			s.scanner.AddQueues(s.tsMaintenanceQueue)
 		}
@@ -1784,6 +1785,25 @@ func (s *Store) startGossip() {
 	}
 }
 
+var errSysCfgUnavailable = errors.New("system config not available in gossip")
+
+// GetConfReader exposes access to a configuration reader.
+func (s *Store) GetConfReader() (spanconfig.QueueReader, error) {
+	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
+		return nil, errSysCfgUnavailable
+	}
+
+	if spanconfig.EnabledSetting.Get(&s.ClusterSettings().SV) {
+		return s.spanConfigStore, nil
+	}
+
+	sysCfg := s.cfg.Gossip.GetSystemConfig()
+	if sysCfg == nil {
+		return nil, errSysCfgUnavailable
+	}
+	return sysCfg, nil
+}
+
 // startLeaseRenewer runs an infinite loop in a goroutine which regularly
 // checks whether the store has any expiration-based leases that should be
 // proactively renewed and attempts to continue renewing them.
@@ -2006,22 +2026,13 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 	shouldQueue := s.systemConfigUpdateQueueRateLimiter.AdmitN(1)
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		key := repl.Desc().StartKey
-		var conf roachpb.SpanConfig
-		zone, err := sysCfg.GetZoneConfigForKey(key)
+		conf, err := sysCfg.GetSpanConfigForKey(key)
 		if err != nil {
 			if log.V(1) {
-				log.Infof(context.TODO(), "failed to get zone config for key %s", key)
+				log.Infof(context.TODO(), "failed to get span config for key %s", key)
 			}
 			conf = s.cfg.DefaultSpanConfig
-		} else {
-			conf = zone.AsSpanConfig()
 		}
-		// XXX: Audit uses.
-		//  Plan:
-		//  1/ store everything as a span config, get used to reading things
-		//  in KV from span configs instead
-		//  2/ introduce a front end for the sys config span to return span configs
-		//  3/ swap out sys cfg span for other scfg store
 		repl.SetSpanConfig(conf)
 		if shouldQueue {
 			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
@@ -2040,8 +2051,8 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 func (s *Store) onSpanConfigUpdate(update spanconfig.Update) {
 	ctx := s.AnnotateCtx(context.Background())
 	if update.Deleted {
-		// XXX: Take in a spanconfig.StoreWriter interface here instead. Or do
-		// this at the level above?
+		// TODO(zcfgs-pod): Take in a spanconfig.StoreWriter interface here
+		// instead. Or do this at the level above.
 		s.spanConfigStore.SetSpanConfig(update.Entry.Span, roachpb.SpanConfig{})
 	} else {
 		s.spanConfigStore.SetSpanConfig(update.Entry.Span, update.Entry.Config)
@@ -2049,8 +2060,29 @@ func (s *Store) onSpanConfigUpdate(update spanconfig.Update) {
 
 	log.Infof(ctx, "xxx: received update span=%s conf=%s deleted=%t", update.Entry.Span, update.Entry.Config.String(), update.Deleted)
 
-	// XXX: Audit all uses of system config span.
-	// XXX: Switch where the span configs are generated, at the source.
+	now := s.cfg.Clock.NowAsClockTimestamp()
+	shouldQueue := s.systemConfigUpdateQueueRateLimiter.AdmitN(1)
+	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+		key := repl.Desc().StartKey
+		conf, err := s.spanConfigStore.GetSpanConfigForKey(key)
+		if err != nil {
+			if log.V(1) {
+				log.Infof(context.TODO(), "failed to get span config for key %s", key)
+			}
+			conf = s.cfg.DefaultSpanConfig
+		}
+		repl.SetSpanConfig(conf)
+		if shouldQueue {
+			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+			s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+		}
+		return true // more
+	})
+
 
 	// We'll want to offer all replicas to the split and merge queues. Be a
 	// little careful about not spawning too many individual goroutines.
@@ -2913,10 +2945,11 @@ func (s *Store) ManuallyEnqueue(
 		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
-	if sysCfg == nil {
-		return nil, nil, errors.New("cannot run queue without a valid system config; make sure the cluster " +
-			"has been initialized and all nodes connected to it")
+	confReader, err := s.GetConfReader()
+	if err != nil {
+		return nil, nil, errors.Wrap(err,
+			"unable to retrieve conf reader, cannot run queue; make sure " +
+			"the cluster has been initialized and all nodes connected to it")
 	}
 
 	// Many queues are only meant to be run on leaseholder replicas, so attempt to
@@ -2937,7 +2970,7 @@ func (s *Store) ManuallyEnqueue(
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
-		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, sysCfg)
+		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
 			return collect(), nil, nil
@@ -2945,7 +2978,7 @@ func (s *Store) ManuallyEnqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := queue.process(ctx, repl, sysCfg)
+	processed, processErr := queue.process(ctx, repl, confReader)
 	log.Eventf(ctx, "processed: %t", processed)
 	return collect(), processErr, nil
 }

@@ -134,9 +134,10 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
+	cfg.Gossip = g
 	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-	rq := newReplicateQueue(s, g, a)
+	rq := newReplicateQueue(s, a)
 	rr := newReplicaRankings()
 
 	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
@@ -218,9 +219,10 @@ func TestChooseRangeToRebalance(t *testing.T) {
 
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
+	cfg.Gossip = g
 	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-	rq := newReplicateQueue(s, g, a)
+	rq := newReplicateQueue(s, a)
 	rr := newReplicaRankings()
 
 	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
@@ -579,9 +581,10 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
+	cfg.Gossip = g
 	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-	rq := newReplicateQueue(s, g, a)
+	rq := newReplicateQueue(s, a)
 	rr := newReplicaRankings()
 
 	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)

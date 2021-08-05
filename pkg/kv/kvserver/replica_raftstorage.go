@@ -681,22 +681,22 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	// the original range wont work as the original and new ranges might belong
 	// to different zones.
 	// Load the system config.
-	cfg := r.store.Gossip().GetSystemConfig()
-	if cfg == nil {
+	confReader, err := r.store.GetConfReader()
+	if err != nil {
 		// This could be before the system config was ever gossiped,
 		// or it expired. Let the gossip callback set the info.
 		ctx := r.AnnotateCtx(context.TODO())
-		log.Warningf(ctx, "no system config available, cannot determine range MaxBytes")
+		log.Warningf(ctx, "unable to retrieve conf reader, cannot determine range MaxBytes")
 		return nil
 	}
 
-	// Find zone config for this range.
-	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	// Find span config for this range.
+	conf, err := confReader.GetSpanConfigForKey(desc.StartKey)
 	if err != nil {
-		return errors.Errorf("%s: failed to lookup zone config: %s", r, err)
+		return errors.Errorf("%s: failed to lookup span config: %s", r, err)
 	}
 
-	r.SetSpanConfig(zone.AsSpanConfig())
+	r.SetSpanConfig(conf)
 	// XXX: This is called post-range-split. We'll want to similarly
 	// install the right span config sourced from the embedding store's local
 	// spanconfig.Storage. What if there's yet another split? How's that to be

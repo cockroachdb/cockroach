@@ -218,9 +218,9 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(ctx context.Context) (<-chan desc
 		EndKey: zoneTableStart.PrefixEnd(),
 	}
 
+	decoder := newZonesDecoder(s.codec)
 	handleEvent := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
-		decoder := NewZonesDecoder(s.codec)
-		descID, err := decoder.DecodePrimaryKey(ev.Key)
+		descID, err := decoder.decodePrimaryKey(ev.Key)
 		if err != nil {
 			logcrash.ReportOrPanic(
 				ctx,
@@ -237,11 +237,14 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(ctx context.Context) (<-chan desc
 		}
 	}
 	rf, err := s.rangeFeedFactory.RangeFeed(
-		ctx,
-		"sql-watcher-zones-rangefeed",
-		zoneTableSpan,
-		s.clock.Now(),
-		handleEvent,
+		ctx, "sql-watcher-zones-rangefeed", zoneTableSpan, s.clock.Now(), handleEvent,
+		rangefeed.WithInitialScan(nil),
+		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
+			// TODO(zcfgs-pod): Are there errors that should prevent us from
+			// retrying again? The setting watcher considers grpc auth errors as
+			// permanent.
+			return false
+		}),
 	)
 	if err != nil {
 		return nil, err
@@ -336,6 +339,11 @@ func (s *SQLWatcher) onDescIDUpdate(
 					// config entry only needs to be removed when the descriptor is
 					// deleted, not when it is dropped, so we set the Deleted flag only if
 					// no descriptor with the given ID exists.
+
+					if isPseudoTableID(id) {
+						updates = append(updates, update)
+						continue
+					}
 					_, err := descsCol.GetImmutableDescriptorByID(ctx, txn, descID, tree.CommonLookupFlags{
 						AvoidCached:    true,
 						IncludeDropped: true,
@@ -364,12 +372,22 @@ func (s *SQLWatcher) onDescIDUpdate(
 	return nil
 }
 
+// isPseudoTableID returns true if id is in keys.PseudoTableIDs.
+func isPseudoTableID(id descpb.ID) bool {
+	for _, pseudoTableID := range keys.PseudoTableIDs {
+		if uint32(id) == pseudoTableID {
+			return true
+		}
+	}
+	return false
+}
+
 // generateSpanConfigurationsForTable generates the span configurations
 // corresponding to the given tableID. It uses a transactional view of
 // system.zones and system.descriptors to do so.
 func (s *SQLWatcher) generateSpanConfigurationsForTable(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
-) ([]roachpb.SpanConfigEntry, error) {
+) (rets []roachpb.SpanConfigEntry, _ error) {
 	copyKey := func(k roachpb.Key) roachpb.Key {
 		k2 := make([]byte, len(k))
 		copy(k2, k)
@@ -380,9 +398,48 @@ func (s *SQLWatcher) generateSpanConfigurationsForTable(
 	if err != nil {
 		return nil, err
 	}
-
 	spanConfig := zone.AsSpanConfig()
+
 	ret := make([]roachpb.SpanConfigEntry, 0)
+	if isPseudoTableID(id) || id == keys.RootNamespaceID {
+		var spans []roachpb.Span
+		switch id {
+		case keys.MetaRangesID:
+			spans = append(spans, roachpb.Span{
+				Key:    roachpb.KeyMin,
+				EndKey: keys.MetaMax,
+			})
+		case keys.LivenessRangesID:
+			spans = append(spans, keys.NodeLivenessSpan)
+		case keys.TimeseriesRangesID:
+			spans = append(spans, keys.TimeseriesSpan)
+		case keys.SystemRangesID:
+			spans = append(spans, roachpb.Span{
+				Key:    keys.SystemPrefix,
+				EndKey: keys.NodeLivenessSpan.Key,
+			})
+			spans = append(spans, roachpb.Span{
+				Key:    keys.NodeLivenessSpan.EndKey,
+				EndKey: keys.TimeseriesSpan.Key,
+			})
+			spans = append(spans, roachpb.Span{
+				Key:    keys.TimeseriesSpan.EndKey,
+				EndKey: keys.SystemMax,
+			})
+		case keys.TenantsRangesID, keys.RootNamespaceID:
+		}
+
+		for _, span := range spans {
+			ret = append(ret,
+				roachpb.SpanConfigEntry{
+					Span:   span,
+					Config: spanConfig,
+				},
+			)
+		}
+		return ret, nil
+	}
+
 	tablePrefix := s.codec.TablePrefix(uint32(id))
 	prevEndKey := tablePrefix
 	for i := range zone.SubzoneSpans {

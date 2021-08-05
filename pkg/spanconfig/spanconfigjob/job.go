@@ -44,7 +44,6 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	rc := execCtx.ConfigReconciliationJobDeps()
 
 	var updateCh <-chan spanconfig.Update
-
 	maxAttempts := 100
 	err := retry.WithMaxAttempts(
 		ctx,
@@ -58,9 +57,9 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			var err error
 			updateCh, err = rc.WatchForSQLUpdates(ctx)
 			if err != nil {
-				log.Errorf(ctx, "error initializing SQL Watcher: %v", err)
+				log.Errorf(ctx, "error initializing sql watcher: %v", err)
 			}
-			log.Infof(ctx, "successfully initialized SQL Watcher")
+			log.Infof(ctx, "successfully initialized sql watcher")
 			return err
 		})
 	if err != nil {
@@ -81,11 +80,26 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			if update.Deleted {
 				toDelete = append(toDelete, update.Entry.Span)
 			} else {
-				toUpdate = append(toUpdate, roachpb.SpanConfigEntry{
-					Span:   update.Entry.Span,
-					Config: update.Entry.Config,
-				})
+				toUpdate = append(toUpdate, update.Entry)
 			}
+
+			// TODO(zcfgs-pod): Instead of blindly upserting/deleting into the table, we
+			// want to "absorb" into the existing state. Given an initial state, and
+			// sets of span configs to delete and upsert, we could do the following:
+			//
+			// Initial      [--------A-------)     [-------B------)[---------C---------)
+			// -------------------------------------------------------------------------
+			// Update(+)         [----D------)         [-------B------)
+			// Delete(-)                                                         [-----)
+			// -------------------------------------------------------------------------
+			//              [-A-)[----D------)     [---------B--------)[----C----)
+			//
+			// We can populate our initial state from KV when first resumed, by
+			// fetching it all from KV. On subsequent updates/deletes, we'll keep
+			// data structure (spanconfig.Store) up-to-date. In the example above
+			// we'll have to nuke the original spans entirely and replace with the
+			// new ones.
+
 			if err := rc.UpdateSpanConfigEntries(ctx, toUpdate, toDelete); err != nil {
 				log.Errorf(ctx, "config reconciliation error: %v", err)
 			}

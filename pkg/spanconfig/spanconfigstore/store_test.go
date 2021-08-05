@@ -11,6 +11,7 @@
 package spanconfigstore_test
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"regexp"
@@ -147,6 +148,21 @@ func TestDatadriven(t *testing.T) {
 				storage.SetSpanConfig(span, roachpb.SpanConfig{})
 				return ""
 
+			case "needs-split":
+				d.ScanArgs(t, "span", &spanStr)
+				span := parseSpan(t, spanStr)
+				start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
+				result := storage.NeedsSplit(context.Background(), start, end)
+				return fmt.Sprintf("%t", result)
+
+			case "compute-split":
+				d.ScanArgs(t, "span", &spanStr)
+				span := parseSpan(t, spanStr)
+				start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
+				splitKey := storage.ComputeSplitKey(context.Background(), start, end)
+				return string(splitKey)
+			// case "get-for-key":
+			// 	return ""
 			default:
 				return "unknown command"
 			}

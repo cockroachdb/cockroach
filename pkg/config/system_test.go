@@ -612,11 +612,11 @@ func TestGetZoneConfigForKey(t *testing.T) {
 			_ *config.SystemConfig, id config.SystemTenantObjectID,
 		) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 			objectID = id
-			return &zonepb.ZoneConfig{}, nil, false, nil
+			return cfg.DefaultZoneConfig, nil, false, nil
 		}
-		_, err := cfg.GetZoneConfigForKey(tc.key)
+		_, err := cfg.GetSpanConfigForKey(tc.key)
 		if err != nil {
-			t.Errorf("#%d: GetZoneConfigForKey(%v) got error: %v", tcNum, tc.key, err)
+			t.Errorf("#%d: GetSpanConfigForKey(%v) got error: %v", tcNum, tc.key, err)
 		}
 		if objectID != tc.expectedID {
 			t.Errorf("#%d: GetZoneConfigForKey(%v) got %d; want %d", tcNum, tc.key, objectID, tc.expectedID)

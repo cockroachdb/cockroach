@@ -69,13 +69,13 @@ func TestSpanConfigDecoder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(rows), len(entries))
 
-	dec := spanconfigkvwatcher.NewSpanConfigDecoder()
+	decode := spanconfigkvwatcher.NewTestingDecoderFn()
 	for i, row := range rows {
 		kv := roachpb.KeyValue{
 			Key:   row.Key,
 			Value: *row.Value,
 		}
-		got, err := dec.Decode(kv)
+		got, err := decode(kv)
 		require.NoError(t, err)
 
 		require.Truef(t, entries[i].Span.Equal(got.Span),

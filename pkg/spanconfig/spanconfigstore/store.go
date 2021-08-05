@@ -12,8 +12,10 @@ package spanconfigstore
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/biogo/store/llrb"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
@@ -35,7 +37,35 @@ type Store struct {
 	}
 }
 
+// NeedsSplit is part of the spanconfig.QueueReader interface.
+func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+	return s.ComputeSplitKey(ctx, start, end) != nil
+}
+
+// ComputeSplitKey is part of the spanconfig.QueueReader interface.
+func (s *Store) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
+	sp := roachpb.RSpan{Key: start, EndKey: end}.AsRawSpanWithNoLocals()
+	cfgs := s.GetConfigsForSpan(sp)
+	if len(cfgs) == 0 || len(cfgs) == 1 {
+		return nil
+	}
+
+	return roachpb.RKey(cfgs[1].Span.Key)
+}
+
+// GetSpanConfigForKey is part of the spanconfig.QueueReader interface.
+func (s *Store) GetSpanConfigForKey(key roachpb.RKey) (roachpb.SpanConfig, error) {
+	sp := roachpb.Span{Key: key.AsRawKey(), EndKey: key.Next().AsRawKey()}
+	cfgs := s.GetConfigsForSpan(sp)
+	if len(cfgs) == 0 {
+		return zonepb.DefaultZoneConfigRef().AsSpanConfig(), nil
+		// return roachpb.SpanConfig{}	, errors.New("span config not found") // should return default?
+	}
+	return cfgs[0].Config, nil
+}
+
 var _ spanconfig.Store = &Store{}
+var _ spanconfig.QueueReader = &Store{}
 
 // New instantiates a span config store.
 func New() *Store {
@@ -142,10 +172,11 @@ func (s *Store) GetConfigsForSpan(sp roachpb.Span) []roachpb.SpanConfigEntry {
 
 // GetSplitsBetween is part of the spanconfig.Store interface.
 func (s *Store) GetSplitsBetween(start, end roachpb.Key) []roachpb.Key {
-	panic("unimplemented")
 	// TODO(zcfgs-pod): Need to make sure we populate static splits/span configs as startup
 	// migration. All splits in KV done through the system config span needs to
 	// be done here as well.
+	panic("unimplemented")
+
 }
 
 // clearLocked is used to clear out a given span from the underlying storage. At

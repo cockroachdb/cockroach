@@ -37,7 +37,7 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 	defer stopper.Stop(ctx)
 	testCtx.Start(t, stopper)
 
-	mq := newMergeQueue(testCtx.store, testCtx.store.DB(), testCtx.gossip)
+	mq := newMergeQueue(testCtx.store, testCtx.store.DB())
 	kvserverbase.MergeQueueEnabled.Override(ctx, &testCtx.store.ClusterSettings().SV, true)
 
 	tableKey := func(i uint32) []byte {

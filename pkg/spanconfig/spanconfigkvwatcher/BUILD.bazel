@@ -37,8 +37,8 @@ go_test(
         "main_test.go",
         "span_config_decoder_test.go",
     ],
+    embed = [":spanconfigkvwatcher"],
     deps = [
-        ":spanconfigkvwatcher",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",

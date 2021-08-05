@@ -294,6 +294,15 @@ func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*zonepb.ZoneConfig
 	return s.getZoneConfigForKey(DecodeKeyIntoZoneIDAndSuffix(key))
 }
 
+// GetSpanConfigForKey looks of the span config for the given key.
+func (s *SystemConfig) GetSpanConfigForKey(key roachpb.RKey) (roachpb.SpanConfig, error) {
+	zone, err := s.GetZoneConfigForKey(key)
+	if err != nil {
+		return roachpb.SpanConfig{}, err
+	}
+	return zone.AsSpanConfig(), nil
+}
+
 // DecodeKeyIntoZoneIDAndSuffix figures out the zone that the key belongs to.
 func DecodeKeyIntoZoneIDAndSuffix(key roachpb.RKey) (id SystemTenantObjectID, keySuffix []byte) {
 	objectID, keySuffix, ok := DecodeSystemTenantObjectID(key)
@@ -433,6 +442,12 @@ var staticSplits = []roachpb.RKey{
 	roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), // end of timeseries span
 	roachpb.RKey(keys.TableDataMin),                 // end of system ranges / start of system config tables
 }
+
+// XXX: How are we deriving these static splits in KV with the new
+// infrastructure? addZoneConfigKVsToSchema. We need to make sure that
+// 	(a) we have the same static split points through span configs, and
+//  (b) we don't ever not split on those boundaries, regardless of how early in
+//      the crdb start up process it happens
 
 // StaticSplits are predefined split points in the system keyspace.
 // Corresponding ranges are created at cluster bootstrap time.
