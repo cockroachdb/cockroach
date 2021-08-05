@@ -707,17 +707,16 @@ func (db *DB) Migrate(ctx context.Context, begin, end interface{}, version roach
 // issued over. See documentation on QueryResolvedTimestampRequest for details
 // about the meaning and semantics of this resolved timestamp.
 //
-// If local is false, the request will always be routed to the leaseholder(s) of
-// the range(s) that it targets. If local is true, the request will be routed to
+// If nearest is false, the request will always be routed to the leaseholder(s) of
+// the range(s) that it targets. If nearest is true, the request will be routed to
 // the nearest replica(s) of the range(s) that it targets.
 func (db *DB) QueryResolvedTimestamp(
-	ctx context.Context, begin, end interface{}, local bool,
+	ctx context.Context, begin, end interface{}, nearest bool,
 ) (hlc.Timestamp, error) {
 	b := &Batch{}
 	b.queryResolvedTimestamp(begin, end)
-	b.Header.ReadConsistency = roachpb.READ_UNCOMMITTED
-	if local {
-		b.Header.ReadConsistency = roachpb.INCONSISTENT
+	if nearest {
+		b.Header.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
 	}
 	if err := getOneErr(db.Run(ctx, b), b); err != nil {
 		return hlc.Timestamp{}, err

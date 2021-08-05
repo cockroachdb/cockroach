@@ -1292,7 +1292,7 @@ func (r *Replica) checkExecutionCanProceed(
 	}
 
 	// Is the lease valid?
-	if !ba.ReadConsistency.RequiresReadLease() {
+	if ba.ReadConsistency == roachpb.INCONSISTENT {
 		// For INCONSISTENT requests, we don't need the lease.
 		st = kvserverpb.LeaseStatus{
 			Now: now,
