@@ -243,11 +243,27 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
+					nextStatus: scpb.Status_SYNTHETICALLY_DROPPED,
+					op: func(this *scpb.Database) scop.Op {
+						return &scop.MarkDescriptorAsDroppedSynthetically{
+							DescID: this.DatabaseID,
+						}
+					},
+				},
+			},
+			scpb.Status_SYNTHETICALLY_DROPPED: {
+				{
+					predicate: func(this *scpb.Database, flags Params) bool {
+						return flags.ExecutionPhase == PreCommitPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.DatabaseID)
+					},
+				},
+				{
 					nextStatus: scpb.Status_DELETE_ONLY,
 					op: func(this *scpb.Database) []scop.Op {
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
-								TableID: this.DatabaseID,
+								DescID: this.DatabaseID,
 							},
 						}
 						return ops
@@ -257,7 +273,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_DELETE_ONLY: {
 				{
 					predicate: func(this *scpb.Database, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.DatabaseID)
 					},
 				},
@@ -309,11 +325,27 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
+					nextStatus: scpb.Status_SYNTHETICALLY_DROPPED,
+					op: func(this *scpb.Schema) scop.Op {
+						return &scop.MarkDescriptorAsDroppedSynthetically{
+							DescID: this.SchemaID,
+						}
+					},
+				},
+			},
+			scpb.Status_SYNTHETICALLY_DROPPED: {
+				{
+					predicate: func(this *scpb.Schema, flags Params) bool {
+						return flags.ExecutionPhase == PreCommitPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.SchemaID)
+					},
+				},
+				{
 					nextStatus: scpb.Status_DELETE_ONLY,
 					op: func(this *scpb.Schema) []scop.Op {
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
-								TableID: this.SchemaID,
+								DescID: this.SchemaID,
 							},
 						}
 						return ops
@@ -323,7 +355,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_DELETE_ONLY: {
 				{
 					predicate: func(this *scpb.Schema, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.SchemaID)
 					},
 				},
@@ -377,7 +409,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.RelationDependedOnBy, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -400,7 +432,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.TypeReference, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TypeID) &&
 							!flags.CreatedDescriptorIDs.Contains(this.DescID)
 					},
@@ -443,7 +475,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.DefaultExpression, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -467,10 +499,10 @@ var rules = map[scpb.Element]targetRules{
 	},
 	(*scpb.Type)(nil): {
 		deps: targetDepRules{
-			scpb.Status_PUBLIC: {
+			scpb.Status_SYNTHETICALLY_DROPPED: {
 				{
 					dirPredicate: sameDirection,
-					thatStatus:   scpb.Status_DELETE_ONLY,
+					thatStatus:   scpb.Status_ABSENT,
 					predicate:    typeHasReference,
 				},
 			},
@@ -484,11 +516,27 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
+					nextStatus: scpb.Status_SYNTHETICALLY_DROPPED,
+					op: func(this *scpb.Type) scop.Op {
+						return &scop.MarkDescriptorAsDroppedSynthetically{
+							DescID: this.TypeID,
+						}
+					},
+				},
+			},
+			scpb.Status_SYNTHETICALLY_DROPPED: {
+				{
+					predicate: func(this *scpb.Type, flags Params) bool {
+						return flags.ExecutionPhase == PreCommitPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TypeID)
+					},
+				},
+				{
 					nextStatus: scpb.Status_DELETE_ONLY,
 					op: func(this *scpb.Type) []scop.Op {
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
-								TableID: this.TypeID,
+								DescID: this.TypeID,
 							},
 						}
 						return ops
@@ -498,7 +546,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_DELETE_ONLY: {
 				{
 					predicate: func(this *scpb.Type, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TypeID)
 					},
 				},
@@ -518,7 +566,7 @@ var rules = map[scpb.Element]targetRules{
 	},
 	(*scpb.Sequence)(nil): {
 		deps: targetDepRules{
-			scpb.Status_PUBLIC: {
+			scpb.Status_SYNTHETICALLY_DROPPED: {
 				{
 					dirPredicate: sameDirection,
 					thatStatus:   scpb.Status_ABSENT,
@@ -536,12 +584,29 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
+					nextStatus:    scpb.Status_SYNTHETICALLY_DROPPED,
+					nonRevertible: true,
+					op: func(this *scpb.Sequence) scop.Op {
+						return &scop.MarkDescriptorAsDroppedSynthetically{
+							DescID: this.SequenceID,
+						}
+					},
+				},
+			},
+			scpb.Status_SYNTHETICALLY_DROPPED: {
+				{
+					predicate: func(this *scpb.Sequence, flags Params) bool {
+						return flags.ExecutionPhase == PreCommitPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.SequenceID)
+					},
+				},
+				{
 					nextStatus:    scpb.Status_ABSENT,
 					nonRevertible: true,
 					op: func(this *scpb.Sequence) []scop.Op {
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
-								TableID: this.SequenceID,
+								DescID: this.SequenceID,
 							},
 							&scop.DrainDescriptorName{
 								TableID: this.SequenceID,
@@ -582,12 +647,29 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
+					nextStatus:    scpb.Status_SYNTHETICALLY_DROPPED,
+					nonRevertible: true,
+					op: func(this *scpb.View) scop.Op {
+						return &scop.MarkDescriptorAsDroppedSynthetically{
+							DescID: this.TableID,
+						}
+					},
+				},
+			},
+			scpb.Status_SYNTHETICALLY_DROPPED: {
+				{
+					predicate: func(this *scpb.View, flags Params) bool {
+						return flags.ExecutionPhase == PreCommitPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
 					nextStatus:    scpb.Status_ABSENT,
 					nonRevertible: true,
 					op: func(this *scpb.View) []scop.Op {
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
-								TableID: this.TableID,
+								DescID: this.TableID,
 							},
 							&scop.DrainDescriptorName{TableID: this.TableID},
 							&scop.CreateGcJobForDescriptor{
@@ -607,7 +689,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.OutboundForeignKey, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.OriginID)
 					},
 				},
@@ -631,7 +713,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.InboundForeignKey, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.OriginID)
 					},
 				},
@@ -651,7 +733,7 @@ var rules = map[scpb.Element]targetRules{
 	},
 	(*scpb.Table)(nil): {
 		deps: targetDepRules{
-			scpb.Status_PUBLIC: {
+			scpb.Status_SYNTHETICALLY_DROPPED: {
 				{
 					dirPredicate: sameDirection,
 					thatStatus:   scpb.Status_ABSENT,
@@ -704,12 +786,29 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
+					nextStatus:    scpb.Status_SYNTHETICALLY_DROPPED,
+					nonRevertible: false,
+					op: func(this *scpb.Table) scop.Op {
+						return &scop.MarkDescriptorAsDroppedSynthetically{
+							DescID: this.TableID,
+						}
+					},
+				},
+			},
+			scpb.Status_SYNTHETICALLY_DROPPED: {
+				{
+					predicate: func(this *scpb.Table, flags Params) bool {
+						return flags.ExecutionPhase == PreCommitPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
 					nextStatus:    scpb.Status_ABSENT,
 					nonRevertible: true,
 					op: func(this *scpb.Table) []scop.Op {
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
-								TableID: this.TableID,
+								DescID: this.TableID,
 							},
 							&scop.DrainDescriptorName{TableID: this.TableID},
 							&scop.CreateGcJobForDescriptor{

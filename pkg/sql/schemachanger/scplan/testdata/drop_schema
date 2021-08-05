@@ -55,22 +55,22 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 58}, ABSENT]
 - from: [Schema:{DescID: 52}, DELETE_ONLY]
   to:   [View:{DescID: 61}, ABSENT]
-- from: [Sequence:{DescID: 53}, PUBLIC]
+- from: [Sequence:{DescID: 53}, TXN_DROPPED]
   to:   [DefaultExpression:{DescID: 54, ColumnID: 3}, ABSENT]
-- from: [Table:{DescID: 54}, PUBLIC]
+- from: [Table:{DescID: 54}, TXN_DROPPED]
   to:   [DefaultExpression:{DescID: 54, ColumnID: 1}, ABSENT]
-- from: [Table:{DescID: 54}, PUBLIC]
+- from: [Table:{DescID: 54}, TXN_DROPPED]
   to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT]
-- from: [Table:{DescID: 54}, PUBLIC]
+- from: [Table:{DescID: 54}, TXN_DROPPED]
   to:   [DefaultExpression:{DescID: 54, ColumnID: 3}, ABSENT]
-- from: [Table:{DescID: 54}, PUBLIC]
+- from: [Table:{DescID: 54}, TXN_DROPPED]
   to:   [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT]
-- from: [Table:{DescID: 54}, PUBLIC]
+- from: [Table:{DescID: 54}, TXN_DROPPED]
   to:   [View:{DescID: 55}, ABSENT]
-- from: [Type:{DescID: 59}, PUBLIC]
-  to:   [TypeReference:{DescID: 61, ReferencedDescID: 59}, DELETE_ONLY]
-- from: [Type:{DescID: 60}, PUBLIC]
-  to:   [TypeReference:{DescID: 61, ReferencedDescID: 60}, DELETE_ONLY]
+- from: [Type:{DescID: 59}, TXN_DROPPED]
+  to:   [TypeReference:{DescID: 61, ReferencedDescID: 59}, ABSENT]
+- from: [Type:{DescID: 60}, TXN_DROPPED]
+  to:   [TypeReference:{DescID: 61, ReferencedDescID: 60}, ABSENT]
 - from: [View:{DescID: 55}, ABSENT]
   to:   [View:{DescID: 56}, ABSENT]
 - from: [View:{DescID: 55}, ABSENT]
@@ -132,59 +132,82 @@ Stage 0
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 54
     TableID: 53
-  *scop.MarkDescriptorAsDropped
-    TableID: 59
-  *scop.MarkDescriptorAsDropped
-    TableID: 60
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 59
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 60
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 52
 Stage 1
   *scop.MarkDescriptorAsDropped
-    TableID: 52
-Stage 2
+    DescID: 59
   *scop.MarkDescriptorAsDropped
-    TableID: 53
+    DescID: 60
+Stage 2
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 53
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 55
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 56
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 57
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 58
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 61
+  *scop.DrainDescriptorName
+    TableID: 59
+  *scop.DrainDescriptorName
+    TableID: 60
+Stage 3
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 54
+Stage 4
+  *scop.MarkDescriptorAsDropped
+    DescID: 52
+Stage 5
+  *scop.MarkDescriptorAsDropped
+    DescID: 53
   *scop.DrainDescriptorName
     TableID: 53
   *scop.CreateGcJobForDescriptor
     DescID: 53
   *scop.MarkDescriptorAsDropped
-    TableID: 55
+    DescID: 55
   *scop.DrainDescriptorName
     TableID: 55
   *scop.CreateGcJobForDescriptor
     DescID: 55
   *scop.MarkDescriptorAsDropped
-    TableID: 56
+    DescID: 56
   *scop.DrainDescriptorName
     TableID: 56
   *scop.CreateGcJobForDescriptor
     DescID: 56
   *scop.MarkDescriptorAsDropped
-    TableID: 57
+    DescID: 57
   *scop.DrainDescriptorName
     TableID: 57
   *scop.CreateGcJobForDescriptor
     DescID: 57
   *scop.MarkDescriptorAsDropped
-    TableID: 58
+    DescID: 58
   *scop.DrainDescriptorName
     TableID: 58
   *scop.CreateGcJobForDescriptor
     DescID: 58
   *scop.MarkDescriptorAsDropped
-    TableID: 61
+    DescID: 61
   *scop.DrainDescriptorName
     TableID: 61
   *scop.CreateGcJobForDescriptor
     DescID: 61
   *scop.MarkDescriptorAsDropped
-    TableID: 54
+    DescID: 54
   *scop.DrainDescriptorName
     TableID: 54
   *scop.CreateGcJobForDescriptor
     DescID: 54
-  *scop.DrainDescriptorName
-    TableID: 59
-  *scop.DrainDescriptorName
-    TableID: 60
   *scop.DrainDescriptorName
     TableID: 52

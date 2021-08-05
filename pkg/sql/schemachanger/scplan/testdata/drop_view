@@ -14,8 +14,11 @@ Stage 0
     DependedOnBy: 53
     TableID: 52
 Stage 1
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 53
+Stage 2
   *scop.MarkDescriptorAsDropped
-    TableID: 53
+    DescID: 53
   *scop.DrainDescriptorName
     TableID: 53
   *scop.CreateGcJobForDescriptor
@@ -74,32 +77,43 @@ Stage 0
     DescID: 59
     TypeID: 58
 Stage 1
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 53
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 54
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 55
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 56
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 59
+Stage 2
   *scop.MarkDescriptorAsDropped
-    TableID: 53
+    DescID: 53
   *scop.DrainDescriptorName
     TableID: 53
   *scop.CreateGcJobForDescriptor
     DescID: 53
   *scop.MarkDescriptorAsDropped
-    TableID: 54
+    DescID: 54
   *scop.DrainDescriptorName
     TableID: 54
   *scop.CreateGcJobForDescriptor
     DescID: 54
   *scop.MarkDescriptorAsDropped
-    TableID: 55
+    DescID: 55
   *scop.DrainDescriptorName
     TableID: 55
   *scop.CreateGcJobForDescriptor
     DescID: 55
   *scop.MarkDescriptorAsDropped
-    TableID: 56
+    DescID: 56
   *scop.DrainDescriptorName
     TableID: 56
   *scop.CreateGcJobForDescriptor
     DescID: 56
   *scop.MarkDescriptorAsDropped
-    TableID: 59
+    DescID: 59
   *scop.DrainDescriptorName
     TableID: 59
   *scop.CreateGcJobForDescriptor

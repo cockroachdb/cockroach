@@ -85,47 +85,46 @@ Stage 0
     DependedOnBy: 55
     TableID: 54
 Stage 1
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 57
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 56
+Stage 2
   *scop.MarkDescriptorAsDropped
-    TableID: 57
+    DescID: 57
   *scop.DrainDescriptorName
     TableID: 57
   *scop.CreateGcJobForDescriptor
     DescID: 57
   *scop.MarkDescriptorAsDropped
-    TableID: 56
+    DescID: 56
   *scop.DrainDescriptorName
     TableID: 56
   *scop.CreateGcJobForDescriptor
     DescID: 56
-  *scop.MarkDescriptorAsDropped
-    TableID: 55
-  *scop.DrainDescriptorName
-    TableID: 55
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
 
 deps
 DROP TABLE defaultdb.shipments CASCADE;
 ----
 - from: [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, ABSENT]
   to:   [Sequence:{DescID: 56}, DELETE_ONLY]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [Table:{DescID: 55}, TXN_DROPPED]
   to:   [DefaultExpression:{DescID: 55, ColumnID: 1}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [Table:{DescID: 55}, TXN_DROPPED]
   to:   [DefaultExpression:{DescID: 55, ColumnID: 2}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [Table:{DescID: 55}, TXN_DROPPED]
   to:   [DefaultExpression:{DescID: 55, ColumnID: 3}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [Table:{DescID: 55}, TXN_DROPPED]
   to:   [DefaultExpression:{DescID: 55, ColumnID: 4}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [Table:{DescID: 55}, TXN_DROPPED]
   to:   [DefaultExpression:{DescID: 55, ColumnID: 5}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [Table:{DescID: 55}, TXN_DROPPED]
   to:   [OutboundForeignKey:{DescID: 55, ReferencedDescID: 52, ElementName: "fk_customers"}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [Table:{DescID: 55}, TXN_DROPPED]
   to:   [OutboundForeignKey:{DescID: 55, ReferencedDescID: 53, ElementName: "fk_orders"}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [Table:{DescID: 55}, TXN_DROPPED]
   to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [Table:{DescID: 55}, TXN_DROPPED]
   to:   [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, ABSENT]
-- from: [Table:{DescID: 55}, PUBLIC]
+- from: [Table:{DescID: 55}, TXN_DROPPED]
   to:   [View:{DescID: 57}, ABSENT]

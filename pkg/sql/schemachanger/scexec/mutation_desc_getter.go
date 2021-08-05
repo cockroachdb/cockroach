@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -106,6 +107,22 @@ func (m *mutationDescGetter) SubmitDrainedNames(
 			ba.Del(catalogkeys.EncodeNameKey(codec, drain))
 		}
 	}
+	return nil
+}
+
+func (m *mutationDescGetter) MarkDescriptorAsDroppedInTxn(ctx context.Context, id descpb.ID) error {
+	table, err := m.descs.GetImmutableDescriptorByID(ctx, m.txn, id, tree.CommonLookupFlags{Required: true})
+	if err != nil {
+		return err
+	}
+	droppedDesc := catalogkv.NewBuilderWithMVCCTimestamp(table.DescriptorProto(), m.txn.ReadTimestamp()).BuildExistingMutable()
+	droppedDesc.SetDropped()
+	m.descs.AddSyntheticDescriptor(droppedDesc)
+	return nil
+}
+
+func (m *mutationDescGetter) RemoveSyntheticDescFromTxn(_ context.Context, id descpb.ID) error {
+	m.descs.RemoveSyntheticDescriptorForTxn(id)
 	return nil
 }
 

@@ -24,13 +24,21 @@ func makeSyntheticDescriptors() syntheticDescriptors {
 	return syntheticDescriptors{descs: nstree.MakeMap()}
 }
 
+func (sd *syntheticDescriptors) add(desc catalog.Descriptor) {
+	if mut, ok := desc.(catalog.MutableDescriptor); ok {
+		desc = mut.ImmutableCopy()
+		sd.descs.Upsert(desc)
+	}
+}
+
+func (sd *syntheticDescriptors) remove(id descpb.ID) {
+	sd.descs.Remove(id)
+}
+
 func (sd *syntheticDescriptors) set(descs []catalog.Descriptor) {
 	sd.descs.Clear()
 	for _, desc := range descs {
-		if mut, ok := desc.(catalog.MutableDescriptor); ok {
-			desc = mut.ImmutableCopy()
-		}
-		sd.descs.Upsert(desc)
+		sd.add(desc)
 	}
 }
 
