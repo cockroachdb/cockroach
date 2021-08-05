@@ -200,7 +200,7 @@ func StartTenant(
 	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
 	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 
-	if err := args.costController.Start(ctx, args.stopper); err != nil {
+	if err := args.costController.Start(ctx, args.stopper, status.GetUserCPUSeconds); err != nil {
 		return nil, "", "", err
 	}
 
@@ -417,7 +417,9 @@ type noopTenantSideCostController struct{}
 
 var _ multitenant.TenantSideCostController = noopTenantSideCostController{}
 
-func (noopTenantSideCostController) Start(ctx context.Context, stopper *stop.Stopper) error {
+func (noopTenantSideCostController) Start(
+	ctx context.Context, stopper *stop.Stopper, cpuSecsFn multitenant.CPUSecsFn,
+) error {
 	return nil
 }
 
