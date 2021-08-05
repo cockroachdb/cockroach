@@ -236,6 +236,7 @@ func TestStorage(t *testing.T) {
 			require.True(t, isAlive)
 			require.Equal(t, int64(1), metrics.IsAliveCacheMisses.Count())
 			require.Equal(t, int64(0), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(0), metrics.SessionsDeleted.Count())
 		}
 		// Advance to the point where the session is expired.
 		timeSource.Advance(time.Second + time.Nanosecond)
@@ -246,6 +247,7 @@ func TestStorage(t *testing.T) {
 			require.False(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
 			require.Equal(t, int64(0), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(1), metrics.SessionsDeleted.Count())
 		}
 		// Ensure that the fact that it is no longer alive is cached.
 		{
@@ -254,6 +256,7 @@ func TestStorage(t *testing.T) {
 			require.False(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
 			require.Equal(t, int64(1), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(1), metrics.SessionsDeleted.Count())
 		}
 		// Ensure it cannot be updated.
 		{
