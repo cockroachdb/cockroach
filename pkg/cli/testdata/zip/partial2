@@ -30,6 +30,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [cluster] retrieving SQL data for crdb_internal.partitions... writing output: debug/crdb_internal.partitions.txt... done
 [cluster] retrieving SQL data for crdb_internal.zones... writing output: debug/crdb_internal.zones.txt... done
 [cluster] retrieving SQL data for crdb_internal.invalid_objects... writing output: debug/crdb_internal.invalid_objects.txt... done
+[cluster] retrieving SQL data for crdb_internal.index_usage_statistics... writing output: debug/crdb_internal.index_usage_statistics.txt... done
 [cluster] requesting nodes... received response... converting to JSON... writing binary output: debug/nodes.json... done
 [cluster] requesting liveness... received response... converting to JSON... writing binary output: debug/liveness.json... done
 [node 1] node status... converting to JSON... writing binary output: debug/nodes/1/status.json... done
