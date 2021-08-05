@@ -68,18 +68,6 @@ var (
 		time.Minute*5,
 		settings.NonNegativeDuration,
 	)
-	alwaysWriteInProc = settings.RegisterBoolSetting(
-		"bulkio.backup.proxy_file_writes.enabled",
-		"return files to the backup coordination processes to write to "+
-			"external storage instead of writing them directly from the storage layer",
-		false,
-	)
-	smallFileSize = settings.RegisterByteSizeSetting(
-		"bulkio.backup.merge_file_size",
-		"size under which backup files will be forwarded to another node to be merged with other smaller files "+
-			"(and implies files will be buffered in-memory until this size before being written to backup storage)",
-		16<<20,
-		settings.NonNegativeInt,
 	targetFileSize = settings.RegisterByteSizeSetting(
 		"bulkio.backup.file_size",
 		"target file size",
@@ -230,9 +218,6 @@ func runBackupProcessor(
 		storageConfByLocalityKV[kv] = &conf
 	}
 
-	// If this is a tenant backup, we need to write the file from the SQL layer.
-	writeSSTsInProcessor := !flowCtx.Cfg.Codec.ForSystemTenant() || alwaysWriteInProc.Get(&clusterSettings.SV)
-
 	returnedSSTs := make(chan returnedSST, 1)
 
 	grp := ctxgroup.WithContext(ctx)
@@ -268,14 +253,8 @@ func runBackupProcessor(
 						StartTime:                           span.start,
 						EnableTimeBoundIteratorOptimization: useTBI.Get(&clusterSettings.SV),
 						MVCCFilter:                          spec.MVCCFilter,
-						ReturnSstBelowSize:                  smallFileSize.Get(&clusterSettings.SV),
 						TargetFileSize:                      storageccl.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
-					}
-					if writeSSTsInProcessor {
-						req.ReturnSST = true
-					} else {
-						req.Storage = defaultConf
-						req.Encryption = spec.Encryption
+						ReturnSST:                           true,
 					}
 
 					// If we're doing re-attempts but are not yet in the priority regime,
@@ -404,10 +383,7 @@ func runBackupProcessor(
 						Duration:      duration.String(),
 						FileSummaries: make([]RowCount, 0),
 					}
-					var numFiles int
-					files := make([]BackupManifest_File, 0)
 					for i, file := range res.Files {
-						numFiles++
 						f := BackupManifest_File{
 							Span:        file.Span,
 							Path:        file.Path,
@@ -422,47 +398,22 @@ func runBackupProcessor(
 						// If this file reply has an inline SST, push it to the
 						// ch for the writer goroutine to handle. Otherwise, go
 						// ahead and record the file for progress reporting.
-						if len(file.SST) > 0 {
-							exportResponseTraceEvent.HasReturnedSSTs = true
-							ret := returnedSST{f: f, sst: file.SST, revStart: res.StartTime}
-							// If multiple files were returned for this span, only one -- the
-							// last -- should count as completing the requested span.
-							if i == len(res.Files)-1 {
-								ret.completedSpans = completedSpans
-							}
-							select {
-							case returnedSSTs <- ret:
-							case <-ctxDone:
-								return ctx.Err()
-							}
-						} else {
-							files = append(files, f)
+						exportResponseTraceEvent.HasReturnedSSTs = true
+						ret := returnedSST{f: f, sst: file.SST, revStart: res.StartTime}
+						// If multiple files were returned for this span, only one -- the
+						// last -- should count as completing the requested span.
+						if i == len(res.Files)-1 {
+							ret.completedSpans = completedSpans
+						}
+						select {
+						case returnedSSTs <- ret:
+						case <-ctxDone:
+							return ctx.Err()
 						}
 					}
-					exportResponseTraceEvent.NumFiles = int32(numFiles)
+					exportResponseTraceEvent.NumFiles = int32(len(res.Files))
 					backupProcessorSpan.RecordStructured(exportResponseTraceEvent)
 
-					// If we have replies for exported files (as oppposed to the
-					// ones with inline SSTs we had to forward to the uploader
-					// goroutine), we can report them as progress completed.
-					if len(files) > 0 {
-						progDetails := BackupManifest_Progress{
-							RevStartTime:   res.StartTime,
-							Files:          files,
-							CompletedSpans: completedSpans,
-						}
-						var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-						details, err := gogotypes.MarshalAny(&progDetails)
-						if err != nil {
-							return err
-						}
-						prog.ProgressDetails = *details
-						select {
-						case <-ctx.Done():
-							return ctx.Err()
-						case progCh <- prog:
-						}
-					}
 				default:
 					// No work left to do, so we can exit. Note that another worker could
 					// still be running and may still push new work (a retry) on to todo but

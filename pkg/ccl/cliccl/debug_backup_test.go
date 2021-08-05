@@ -417,7 +417,7 @@ func TestExportDataWithMultipleRanges(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	// the small test-case will get entirely buffered/merged by small-file merging
 	// and mean there one only be a single file.
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_size = '0'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '1'`)
 	sqlDB.Exec(t, `CREATE DATABASE testDB`)
 	sqlDB.Exec(t, `USE testDB`)
 	sqlDB.Exec(t, `CREATE TABLE fooTable(id int PRIMARY KEY)`)

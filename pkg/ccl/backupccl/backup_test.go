@@ -1502,7 +1502,8 @@ func checkInProgressBackupRestore(
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 	// the small test-case will get entirely buffered/merged by small-file merging
 	// and not report any progress in the meantime unless it is disabled.
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_size = '0'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '1'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1'`)
 
 	var totalExpectedBackupRequests int
 	// mergedRangeQuery calculates the number of spans we expect PartitionSpans to
