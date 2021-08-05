@@ -40,10 +40,12 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 	if n.Jobs == nil {
 		// Display all [only automatic] jobs without selecting specific jobs.
 		if n.Automatic {
-			typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
+			typePredicate = fmt.Sprintf("job_type = '%s' OR job_type = '%s'",
+				jobspb.TypeAutoCreateStats, jobspb.TypeAutoSpanConfigReconciliation)
 		} else {
 			typePredicate = fmt.Sprintf(
-				"(job_type IS NULL OR job_type != '%s')", jobspb.TypeAutoCreateStats,
+				"(job_type IS NULL OR (job_type != '%s' AND job_type != '%s'))",
+				jobspb.TypeAutoCreateStats, jobspb.TypeAutoSpanConfigReconciliation,
 			)
 		}
 		// The query intends to present:
@@ -61,13 +63,17 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
 	if n.Block {
+		// The AutoSpanConfigReconciliation job is never meant to complete so we
+		// explicitly exclude it here via the WHERE clause. This is required because
+		// we don't have control over which filter is applied first.
 		sqlStmt = fmt.Sprintf(
 			`SELECT * FROM [%s]
 			 WHERE
+					job_type != '%s' AND
 			    IF(finished IS NULL,
 			      IF(pg_sleep(1), crdb_internal.force_retry('24h'), 0),
 			      0
-			    ) = 0`, sqlStmt)
+			    ) = 0`, sqlStmt, jobspb.TypeAutoSpanConfigReconciliation)
 	}
 	return parse(sqlStmt)
 }
