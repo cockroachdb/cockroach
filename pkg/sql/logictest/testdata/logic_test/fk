@@ -3635,3 +3635,20 @@ CREATE TABLE partial_parent (p INT, UNIQUE INDEX (p) WHERE p > 100)
 
 statement error there is no unique constraint matching given keys for referenced table partial_parent
 CREATE TABLE partial_child (p INT REFERENCES partial_parent (p))
+
+# Regression test for #68307.
+statement ok
+CREATE TABLE t1 (a INT8 PRIMARY KEY);
+CREATE TABLE t2 (a INT8 PRIMARY KEY);
+CREATE TABLE t3 (a INT8 PRIMARY KEY, b INT8 REFERENCES t1 (a), c INT8 REFERENCES t2 (a));
+INSERT INTO t1 VALUES (1);
+INSERT INTO t2 VALUES (1);
+
+statement error violates foreign key constraint "fk_b_ref_t1"
+INSERT INTO t3 VALUES (1, 1, 1), (2, 2, NULL)
+
+statement error violates foreign key constraint "fk_c_ref_t2"
+INSERT INTO t3 VALUES (1, 1, 1), (2, NULL, 2)
+
+statement ok
+DROP TABLE t3, t1, t2

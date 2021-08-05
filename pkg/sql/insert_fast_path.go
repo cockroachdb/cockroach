@@ -173,8 +173,8 @@ func (r *insertFastPathRun) addFKChecks(
 				return c.errorForRow(inputRow)
 			}
 			// We have a row with only NULLS, or a row with some NULLs and match
-			// method PARTIAL. We can ignore this row.
-			return nil
+			// method PARTIAL. We can skip this FK check for this row.
+			continue
 		}
 
 		span, err := c.generateSpan(inputRow)
