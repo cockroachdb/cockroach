@@ -352,7 +352,7 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 		return
 	}
 
-	// Loop with ticker for periodic heartbeats.
+	// Loop with timer for periodic heartbeats.
 	for {
 		select {
 		case <-tickChan:

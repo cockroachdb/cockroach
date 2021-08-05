@@ -829,6 +829,12 @@ var charts = []sectionDescription{
 				Percentiles: false,
 				Metrics:     []string{"requests.slow.distsender"},
 			},
+			{
+				Title:       "Stuck rangefeed ranges",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"distsender.rangefeed.slow_range_restarts"},
+			},
 		},
 	},
 	{
