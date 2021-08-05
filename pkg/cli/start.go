@@ -823,10 +823,14 @@ If problems persist, please see %s.`
 			// the shutdown, they will need to make it ungraceful
 			// via a 2nd signal.
 			for {
+				var prevRemaining = remaining
 				remaining, _, err := s.Drain(drainCtx)
 				if err != nil {
 					log.Ops.Errorf(drainCtx, "graceful drain failed: %v", err)
 					break
+				}
+				if remaining == prevRemaining {
+					verbose = true
 				}
 				if remaining == 0 {
 					// No more work to do.
