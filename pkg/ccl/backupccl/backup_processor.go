@@ -458,7 +458,7 @@ func runBackupProcessor(
 							ret := returnedSST{f: f, sst: file.SST, revStart: res.StartTime}
 							// If multiple files were returned for this span, only one -- the
 							// last -- should count as completing the requested span.
-							if i == len(files)-1 {
+							if i == len(res.Files)-1 {
 								ret.completedSpans = completedSpans
 							}
 							select {
