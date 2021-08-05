@@ -893,7 +893,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 
 	// the small test-case will get entirely buffered/merged by small-file merging
 	// and not report any progress in the meantime unless it is disabled.
-	srcDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_size = '0'`)
+	srcDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '1'`)
 
 	// Take a backup that we'll use to create an OFFLINE descriptor.
 	srcDB.Exec(t, `CREATE INDEX new_idx ON data.bank (balance)`)
