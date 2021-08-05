@@ -57,22 +57,23 @@ type leasedDescriptors struct {
 }
 
 type wrappedTxn struct {
-	txn *kv.Txn
+	txn                   *kv.Txn
+	prevMinTimestampBound *hlc.Timestamp
 }
 
-func newWrappedTxn(txn *kv.Txn) deadlineHolder {
-	return &wrappedTxn{txn: txn}
+func newWrappedTxn(txn *kv.Txn, prevMinTimestampBound *hlc.Timestamp) deadlineHolder {
+	return &wrappedTxn{txn: txn, prevMinTimestampBound: prevMinTimestampBound}
 }
 
 func (w *wrappedTxn) ReadTimestamp() hlc.Timestamp {
-	if w.txn.PrevMinTimestampBound != nil {
-		return *w.txn.PrevMinTimestampBound
+	if w.prevMinTimestampBound != nil {
+		return *w.prevMinTimestampBound
 	}
 	return w.txn.ReadTimestamp()
 }
 
 func (w *wrappedTxn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) error {
-	if w.txn.PrevMinTimestampBound != nil {
+	if w.prevMinTimestampBound != nil {
 		return nil
 	}
 	return w.txn.UpdateDeadline(ctx, deadline)

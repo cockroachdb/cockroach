@@ -2365,8 +2365,10 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	if err := ex.extraTxnState.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
 		fmt.Printf("resetting, setting min ts %#v\n", minTSErr.MinTimestampBound)
 		p := minTSErr.MinTimestampBound.Prev()
+		ex.extraTxnState.descCollection.PrevMinTimestampBound = &p
 		evalCtx.PrevMinTimestampBound = &p
 	} else {
+		ex.extraTxnState.descCollection.PrevMinTimestampBound = nil
 		evalCtx.PrevMinTimestampBound = nil
 		evalCtx.AsOfSystemTime = nil
 	}
