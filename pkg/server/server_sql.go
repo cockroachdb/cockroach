@@ -51,6 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -798,6 +800,22 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.VersionUpgradeHook = migrationMgr.Migrate
 	}
 
+	{
+		// Instantiate a span config manager; it exposes a hook to idempotently
+		// create the span config reconciliation job and captures all relevant job
+		// dependencies.
+		knobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+		reconciliationMgr := spanconfigmanager.New(
+			cfg.db,
+			jobRegistry,
+			cfg.circularInternalExecutor,
+			cfg.stopper,
+			knobs,
+		)
+		execCfg.SpanConfigReconciliationJobDeps = reconciliationMgr
+		execCfg.StartSpanConfigReconciliationJobHook = reconciliationMgr.StartJobIfNoneExists
+	}
+
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
@@ -993,6 +1011,40 @@ func (s *SQLServer) preStart(
 	s.startupMigrationsMgr = startupMigrationsMgr // only for testing via TestServer
 
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
+		return err
+	}
+
+	// Start a background task that starts the auto span config reconciliation job.
+	// The background task also periodically (as dictated by a cluster setting)
+	// checks to ensure that the job exists. We don't expect this to happen, but
+	// if does, we want to start it again.
+	if err := s.stopper.RunAsyncTask(ctx, "start-span-config-reconciliation-job",
+		func(ctx context.Context) {
+			nextTick := timeutil.Now()
+			for {
+				nextTickCh := time.After(nextTick.Sub(timeutil.Now()))
+				select {
+				case <-nextTickCh:
+					// Idempotently start the span config reconciliation job if the
+					// cluster version allows for it.
+					if s.execCfg.Settings.Version.IsActive(ctx, clusterversion.AutoSpanConfigReconciliationJob) {
+						_ = s.execCfg.StartSpanConfigReconciliationJobHook(ctx)
+					}
+				case <-s.stopper.ShouldQuiesce():
+					return
+				case <-ctx.Done():
+					return
+				}
+				nextTick = nextTick.Add(
+					spanconfig.CheckAndStartReconciliationJobInterval.Get(&s.execCfg.Settings.SV),
+				)
+				log.Infof(
+					ctx,
+					"next check to ensure span config reconciliation job exists scheduled %s",
+					nextTick.String(),
+				)
+			}
+		}); err != nil {
 		return err
 	}
 

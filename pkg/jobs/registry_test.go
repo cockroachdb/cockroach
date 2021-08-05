@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -121,7 +122,15 @@ func TestRegistryGC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				// disable the automatic span config job creation to reduce the noise
+				// when querying system.jobs.
+				ManagerDisableJobCreation: true,
+			},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -260,7 +269,15 @@ func TestRegistryGCPagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				// disable the automatic span config job creation to reduce the noise
+				// when querying system.jobs.
+				ManagerDisableJobCreation: true,
+			},
+		},
+	})
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(ctx)
 

@@ -206,6 +206,7 @@
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
 /pkg/security/               @cockroachdb/server-prs
 /pkg/settings/               @cockroachdb/server-prs
+/pkg/spanconfig/             @cockroachdb/multiregion
 /pkg/sql/                    @cockroachdb/sql-queries-noreview
 /pkg/startupmigrations/      @cockroachdb/sql-queries-noreview
 /pkg/streaming/              @cockroachdb/bulk-prs

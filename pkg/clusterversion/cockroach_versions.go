@@ -271,6 +271,9 @@ const (
 	SQLInstancesTable
 	// Can return new retryable rangefeed errors without crashing the client
 	NewRetryableRangefeedErrors
+	// AutoSpanConfigReconciliationJob adds the AutoSpanConfigReconciliationJob
+	// type.
+	AutoSpanConfigReconciliationJob
 
 	// Step (1): Add new versions here.
 )
@@ -439,6 +442,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     NewRetryableRangefeedErrors,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
+	},
+	{
+		Key:     AutoSpanConfigReconciliationJob,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 126},
 	},
 
 	// Step (2): Add new versions here.
