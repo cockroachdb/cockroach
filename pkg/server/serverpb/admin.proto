@@ -402,6 +402,8 @@ message DrainRequest {
   // shutdown for an explanation of the interaction between the two.
   // do_drain is also implied by a non-nil deprecated_probe_indicator.
   bool do_drain = 4;
+  // When true, more detailed information is logged during the drain phase.
+  bool verbose = 5;
 }
 
 // DrainResponse is the response to a successful DrainRequest.

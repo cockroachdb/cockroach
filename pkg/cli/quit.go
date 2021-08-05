@@ -119,9 +119,7 @@ func doDrain(
 	return
 }
 
-func doDrainNoTimeout(
-	ctx context.Context, c serverpb.AdminClient,
-) (hardError, remainingWork bool, err error) {
+func doDrainNoTimeout(ctx context.Context, c serverpb.AdminClient) (hardError, _ bool, err error) {
 	defer func() {
 		if server.IsWaitingForInit(err) {
 			log.Infof(ctx, "%v", err)
@@ -129,8 +127,12 @@ func doDrainNoTimeout(
 		}
 	}()
 
-	remainingWork = true
-	for {
+	var (
+		remaining     = ^uint64(0)
+		prevRemaining = ^uint64(0)
+		verbose       = false
+	)
+	for ; ; prevRemaining = remaining {
 		// Tell the user we're starting to drain. This enables the user to
 		// mentally prepare for something to take some time, as opposed to
 		// wondering why nothing is happening.
@@ -141,10 +143,11 @@ func doDrainNoTimeout(
 		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
 			DoDrain:  true,
 			Shutdown: false,
+			Verbose:  verbose,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "\n") // finish the line started above.
-			return !grpcutil.IsTimeout(err), remainingWork, errors.Wrap(err, "error sending drain request")
+			return !grpcutil.IsTimeout(err), remaining > 0, errors.Wrap(err, "error sending drain request")
 		}
 		for {
 			resp, err := stream.Recv()
@@ -156,28 +159,28 @@ func doDrainNoTimeout(
 				// Unexpected error.
 				fmt.Fprintf(stderr, "\n") // finish the line started above.
 				log.Infof(ctx, "graceful shutdown failed: %v", err)
-				return false, remainingWork, err
+				return false, remaining > 0, err
 			}
 
 			if resp.IsDraining {
 				// We want to assert that the node is quitting, and tell the
 				// story about how much work was performed in logs for
 				// debugging.
+				remaining = resp.DrainRemainingIndicator
 				finalString := ""
-				if resp.DrainRemainingIndicator == 0 {
+				if remaining == 0 {
 					finalString = " (complete)"
 				}
+
 				// We use stderr so that 'cockroach quit''s stdout remains a
 				// simple 'ok' in case of success (for compatibility with
 				// scripts).
-				fmt.Fprintf(stderr, "remaining: %d%s\n",
-					resp.DrainRemainingIndicator, finalString)
-				remainingWork = resp.DrainRemainingIndicator > 0
+				fmt.Fprintf(stderr, "remaining: %d%s\n", remaining, finalString)
 			} else {
 				// Either the server has decided it wanted to stop quitting; or
 				// we're running a pre-20.1 node which doesn't populate IsDraining.
 				// In either case, we need to stop sending drain requests.
-				remainingWork = false
+				remaining = 0
 				fmt.Fprintf(stderr, "done\n")
 			}
 
@@ -190,14 +193,22 @@ func doDrainNoTimeout(
 			// Iterate until end of stream, which indicates the drain is
 			// complete.
 		}
-		if !remainingWork {
+		if remaining == 0 {
+			// No more work to do.
 			break
 		}
+
+		// If range lease transfer stalls or the number of remaining leases
+		// somehow increases, verbosity is set to help with troubleshooting.
+		if !verbose && remaining >= prevRemaining {
+			verbose = true
+		}
+
 		// Avoid a busy wait with high CPU/network usage if the server
 		// replies with an incomplete drain too quickly.
 		time.Sleep(200 * time.Millisecond)
 	}
-	return false, remainingWork, nil
+	return false, remaining > 0, nil
 }
 
 // doShutdown attempts to trigger a server shutdown *without*
