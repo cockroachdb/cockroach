@@ -152,3 +152,108 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestDistSenderRangeFeedRestartsStuckRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rangefeedCtx, cancelRangefeed := context.WithCancel(context.Background())
+	defer cancelRangefeed()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:    1,
+		Generation: 1,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+		},
+	}
+	for _, repl := range desc.InternalReplicas {
+		require.NoError(t, g.AddInfoProto(
+			gossip.MakeNodeIDKey(repl.NodeID),
+			newNodeDesc(repl.NodeID),
+			gossip.NodeDescriptorTTL,
+		))
+	}
+
+	// Enable rangefeed watchdog and make it run very frequently.
+	st := cluster.MakeTestingClusterSettings()
+	enableRangefeedWatchdog.Override(rangefeedCtx, &st.SV, true)
+	restartRangefeedThreshold.Override(rangefeedCtx, &st.SV, 5*time.Millisecond)
+	watchdogPace.Override(rangefeedCtx, &st.SV, 10*time.Millisecond)
+
+	ctrl := gomock.NewController(t)
+	transport := NewMockTransport(ctrl)
+	transport.EXPECT().IsExhausted().Return(false).Times(2)
+	transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0]).Times(2)
+
+	// 2 attempts to create RPC client are made -- the first one will fail
+	// (its context will be canceled, and the second call succeeds).
+	var streamCtx context.Context
+	client := roachpb.NewMockInternalClient(ctrl)
+	transport.EXPECT().NextInternalClient(gomock.Any()).DoAndReturn(
+		func(arg interface{}) (context.Context, roachpb.InternalClient, error) {
+			streamCtx = arg.(context.Context)
+			return streamCtx, client, nil
+		},
+	).Times(2)
+	transport.EXPECT().Release().Times(2)
+
+	stream := roachpb.NewMockInternal_RangeFeedClient(ctrl)
+	gomock.InOrder(
+		// The first time we call Recv, we'll block, waiting for stream context cancellation.
+		stream.EXPECT().Recv().DoAndReturn(func() (*roachpb.RangeFeedEvent, error) {
+			select {
+			case <-streamCtx.Done():
+				// Once we've seen our cancellation, slow down watchdog so that it doesn't
+				// keep killing streamCtx.
+				restartRangefeedThreshold.Override(rangefeedCtx, &st.SV, 10*time.Minute)
+			}
+			return nil, streamCtx.Err()
+		}),
+
+		// The second time, we'll just succeed immediately and indicate the end of the stream.
+		stream.EXPECT().Recv().Do(cancelRangefeed).Return(nil, io.EOF),
+	)
+
+	// Each call to client/transport/etc expected to happen twice -- once when we
+	// cancel the stream due to "slow" range feed, and the second time when we return io.EOF
+	client.EXPECT().RangeFeed(gomock.Any(), gomock.Any()).Return(stream, nil).Times(2)
+
+	rangeDB := rangecache.NewMockRangeDescriptorDB(ctrl)
+	cachedLease := roachpb.Lease{
+		Replica:  desc.InternalReplicas[0],
+		Sequence: 1,
+	}
+
+	ds := NewDistSender(DistSenderConfig{
+		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:           clock,
+		NodeDescs:       g,
+		RPCRetryOptions: &retry.Options{MaxRetries: 10},
+		RPCContext:      rpcContext,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: func(SendOptions, *nodedialer.Dialer, ReplicaSlice) (Transport, error) {
+				return transport, nil
+			},
+		},
+		RangeDescriptorDB: rangeDB,
+		NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+		Settings:          st,
+	})
+	ds.rangeCache.Insert(rangefeedCtx, roachpb.RangeInfo{
+		Desc:  desc,
+		Lease: cachedLease,
+	})
+
+	err := ds.RangeFeed(rangefeedCtx, roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}, clock.Now(), false, nil)
+	require.Error(t, err)
+}
