@@ -10,7 +10,10 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/errors"
+)
 
 // AlterDefaultPrivileges represents an ALTER DEFAULT PRIVILEGES statement.
 type AlterDefaultPrivileges struct {
@@ -78,6 +81,21 @@ const (
 	Types     AlterDefaultPrivilegesTargetObject = 3
 	Schemas   AlterDefaultPrivilegesTargetObject = 4
 )
+
+func (t AlterDefaultPrivilegesTargetObject) String() string {
+	switch t {
+	case Tables:
+		return "tables"
+	case Sequences:
+		return "sequences"
+	case Types:
+		return "types"
+	case Schemas:
+		return "schemas"
+	default:
+		panic(errors.AssertionFailedf("unknown AlterDefaultPrivilegesTargetObject value: %d", t))
+	}
+}
 
 // AbbreviatedGrant represents an the GRANT part of an
 // ALTER DEFAULT PRIVILEGES statement.

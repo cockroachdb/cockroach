@@ -16,6 +16,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [cluster] retrieving SQL data for crdb_internal.cluster_sessions... writing output: debug/crdb_internal.cluster_sessions.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_settings... writing output: debug/crdb_internal.cluster_settings.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_transactions... writing output: debug/crdb_internal.cluster_transactions.txt... done
+[cluster] retrieving SQL data for crdb_internal.default_privileges... writing output: debug/crdb_internal.default_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.jobs... writing output: debug/crdb_internal.jobs.txt... done
 [cluster] retrieving SQL data for system.jobs... writing output: debug/system.jobs.txt... done
 [cluster] retrieving SQL data for system.descriptor... writing output: debug/system.descriptor.txt... done

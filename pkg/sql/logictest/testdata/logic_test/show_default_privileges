@@ -1,0 +1,157 @@
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO PUBLIC;
+ALTER DEFAULT PRIVILEGES GRANT USAGE ON TYPES TO PUBLIC;
+ALTER DEFAULT PRIVILEGES GRANT USAGE ON SCHEMAS TO PUBLIC;
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON SEQUENCES TO PUBLIC;
+
+query TTTT
+SHOW DEFAULT PRIVILEGES
+----
+root  schemas    public  USAGE
+root  sequences  public  SELECT
+root  tables     public  SELECT
+root  types      public  USAGE
+
+statement ok
+CREATE USER foo
+
+statement ok
+CREATE USER bar
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO foo, bar;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO foo, bar;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO foo, bar;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO foo, bar;
+
+query TTTT
+SHOW DEFAULT PRIVILEGES
+----
+root  schemas    bar     ALL
+root  schemas    foo     ALL
+root  schemas    public  USAGE
+root  sequences  bar     ALL
+root  sequences  foo     ALL
+root  sequences  public  SELECT
+root  tables     bar     ALL
+root  tables     foo     ALL
+root  tables     public  SELECT
+root  types      bar     ALL
+root  types      foo     ALL
+root  types      public  USAGE
+
+statement ok
+GRANT foo, bar TO root;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON TABLES TO foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON TYPES TO foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SCHEMAS TO foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SEQUENCES TO foo, bar;
+
+query TTTT
+SHOW DEFAULT PRIVILEGES
+----
+root  schemas    bar     ALL
+root  schemas    foo     ALL
+root  schemas    public  USAGE
+root  sequences  bar     ALL
+root  sequences  foo     ALL
+root  sequences  public  SELECT
+root  tables     bar     ALL
+root  tables     foo     ALL
+root  tables     public  SELECT
+root  types      bar     ALL
+root  types      foo     ALL
+root  types      public  USAGE
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TABLES FROM foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TYPES FROM foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SCHEMAS FROM foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SEQUENCES FROM foo, bar;
+
+query TTTT
+SHOW DEFAULT PRIVILEGES
+----
+root  schemas    bar     ALL
+root  schemas    foo     ALL
+root  schemas    public  USAGE
+root  sequences  bar     ALL
+root  sequences  foo     ALL
+root  sequences  public  SELECT
+root  tables     bar     ALL
+root  tables     foo     ALL
+root  tables     public  SELECT
+root  types      bar     ALL
+root  types      foo     ALL
+root  types      public  USAGE
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM foo, bar, public;
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM foo, bar, public;
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM foo, bar, public;
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM foo, bar, public;
+
+query TTTT
+SHOW DEFAULT PRIVILEGES
+----
+root  tables  bar  CREATE
+root  tables  bar  DELETE
+root  tables  bar  DROP
+root  tables  bar  GRANT
+root  tables  bar  INSERT
+root  tables  bar  UPDATE
+root  tables  bar  ZONECONFIG
+root  tables  foo  CREATE
+root  tables  foo  DELETE
+root  tables  foo  DROP
+root  tables  foo  GRANT
+root  tables  foo  INSERT
+root  tables  foo  UPDATE
+root  tables  foo  ZONECONFIG
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM foo, bar, public;
+ALTER DEFAULT PRIVILEGES GRANT GRANT, DROP, ZONECONFIG ON TABLES TO foo;
+
+query TTTT
+SHOW DEFAULT PRIVILEGES
+----
+root  tables  foo  DROP
+root  tables  foo  GRANT
+root  tables  foo  ZONECONFIG
+
+# Create a second database.
+statement ok
+CREATE DATABASE test2;
+use test2;
+CREATE USER testuser2;
+
+statement ok
+GRANT testuser TO root;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT GRANT, DROP, ZONECONFIG ON TABLES TO foo;
+
+query TTTT
+SHOW DEFAULT PRIVILEGES
+----
+
+query TTTT
+SHOW DEFAULT PRIVILEGES FOR ROLE testuser
+----
+testuser  tables  foo  DROP
+testuser  tables  foo  GRANT
+testuser  tables  foo  ZONECONFIG
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT GRANT, DROP, ZONECONFIG ON TABLES TO foo;
+
+query TTTT
+SHOW DEFAULT PRIVILEGES FOR ROLE root, testuser
+----
+root      tables  foo  DROP
+root      tables  foo  GRANT
+root      tables  foo  ZONECONFIG
+testuser  tables  foo  DROP
+testuser  tables  foo  GRANT
+testuser  tables  foo  ZONECONFIG

@@ -144,6 +144,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalLostTableDescriptors:             crdbLostTableDescriptors,
 		catconstants.CrdbInternalClusterInflightTracesTable:       crdbInternalClusterInflightTracesTable,
 		catconstants.CrdbInternalRegionsTable:                     crdbInternalRegionsTable,
+		catconstants.CrdbInternalDefaultPrivilegesTable:           crdbInternalDefaultPrivilegesTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -4836,5 +4837,49 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			return err
 		}
 		return nil
+	},
+}
+
+var crdbInternalDefaultPrivilegesTable = virtualSchemaTable{
+	comment: `virtual table with default privileges`,
+	schema: `
+CREATE TABLE crdb_internal.default_privileges (
+	database_name   STRING NOT NULL,
+	schema_name     STRING,
+	role            STRING NOT NULL,
+	object_type     STRING NOT NULL,
+	grantee         STRING NOT NULL,
+	privilege_type  STRING NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
+			func(descriptor catalog.DatabaseDescriptor) error {
+				if descriptor.GetDefaultPrivileges() == nil {
+					return nil
+				}
+				for _, defaultPrivs := range descriptor.GetDefaultPrivileges().DefaultPrivilegesPerRole {
+					for objectType, privs := range defaultPrivs.DefaultPrivilegesPerObject {
+						privilegeObjectType := targetObjectToPrivilegeObject[objectType]
+						for _, userPrivs := range privs.Users {
+							privList := privilege.ListFromBitField(userPrivs.Privileges, privilegeObjectType)
+							for _, priv := range privList {
+								if err := addRow(
+									tree.NewDString(descriptor.GetName()),
+									// When the schema_name is NULL, that means the default
+									// privileges are defined at the database level.
+									tree.DNull, /* schema is currently always nil. See: #67376 */
+									tree.NewDString(defaultPrivs.UserProto.Decode().Normalized()),
+									tree.NewDString(objectType.String()),
+									tree.NewDString(userPrivs.User().Normalized()),
+									tree.NewDString(priv.String()),
+								); err != nil {
+									return err
+								}
+							}
+						}
+					}
+				}
+				return nil
+			})
 	},
 }

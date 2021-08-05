@@ -832,3 +832,25 @@ func (n *ShowSchedules) Format(ctx *FmtCtx) {
 		ctx.Printf(" FOR %s", n.ExecutorType.UserName())
 	}
 }
+
+// ShowDefaultPrivileges represents a SHOW DEFAULT PRIVILEGES statement.
+type ShowDefaultPrivileges struct {
+	Roles NameList
+}
+
+var _ Statement = &ShowDefaultPrivileges{}
+
+// Format implements the NodeFormatter interface.
+func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW DEFAULT PRIVILEGES ")
+	if len(n.Roles) > 0 {
+		ctx.WriteString("FOR ROLE ")
+		for i, role := range n.Roles {
+			if i > 0 {
+				ctx.WriteString(", ")
+			}
+			ctx.FormatNode(&role)
+		}
+		ctx.WriteString(" ")
+	}
+}

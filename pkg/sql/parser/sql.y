@@ -1045,6 +1045,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> show_create_schedules_stmt
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
+%type <tree.Statement> show_default_privileges_stmt
 %type <tree.Statement> show_enums_stmt
 %type <tree.Statement> show_fingerprints_stmt
 %type <tree.Statement> show_grants_stmt
@@ -4816,6 +4817,7 @@ show_stmt:
 | SHOW error                 // SHOW HELP: SHOW
 | show_last_query_stats_stmt
 | show_full_scans_stmt
+| show_default_privileges_stmt // EXTEND WITH HELP: SHOW DEFAULT PRIVILEGES
 
 // Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
 // since there will be no open cursors.
@@ -5050,6 +5052,17 @@ show_databases_stmt:
     $$.val = &tree.ShowDatabases{WithComment: $3.bool()}
   }
 | SHOW DATABASES error // SHOW HELP: SHOW DATABASES
+
+// %Help: SHOW DEFAULT PRIVILEGES - list default privileges
+// %Category: DDL
+// %Text: SHOW DEFAULT PRIVILEGES
+show_default_privileges_stmt:
+  SHOW DEFAULT PRIVILEGES opt_for_roles {
+    $$.val = &tree.ShowDefaultPrivileges{
+      Roles: $4.nameList(),
+    }
+}
+| SHOW DEFAULT PRIVILEGES error // SHOW HELP: SHOW DEFAULT PRIVILEGES
 
 // %Help: SHOW ENUMS - list enums
 // %Category: Misc

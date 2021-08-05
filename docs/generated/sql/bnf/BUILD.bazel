@@ -180,6 +180,7 @@ genrule(
         "show_constraints_stmt.bnf",
         "show_create_stmt.bnf",
         "show_databases_stmt.bnf",
+        "show_default_privileges_stmt.bnf",
         "show_enums.bnf",
         "show_grants_stmt.bnf",
         "show_index.bnf",
