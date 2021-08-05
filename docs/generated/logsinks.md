@@ -22,11 +22,13 @@ configurable logging directory.
 
 The configuration key under the `sinks` key in the YAML
 configuration is `file-groups`. Example configuration:
-
+    
+    ~~~
     sinks:
        file-groups:           # file group configurations start here
           health:             # defines one group called "health"
              channels: HEALTH
+    ~~~
 
 Each generated log file is prefixed by the name of the process,
 followed by the name of the group, separated by a hyphen. For example,
@@ -44,23 +46,23 @@ the configurations set in the `file-defaults` section.
 
 For example:
 
-     file-defaults:
-         redactable: false # default: disable redaction markers
-         dir: logs
-     sinks:
-       file-groups:
-         health:
-            channels: HEALTH
-            # This sink has redactable set to false,
-            # as the setting is inherited from file-defaults
-            # unless overridden here.
-            #
-            # Example override:
-            dir: health-logs # override the default 'logs'
+    ~~~    
+    file-defaults:
+        redactable: false # default: disable redaction markers
+        dir: logs
+    sinks:
+      file-groups:
+        health:
+           channels: HEALTH
+           # This sink has redactable set to false,
+           # as the setting is inherited from file-defaults
+           # unless overridden here.
+           #
+           # Example override:
+           dir: health-logs # override the default 'logs'
+    ~~~
 
-{{site.data.alerts.callout_success}}
 Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
-{{site.data.alerts.end}}
 
 
 
