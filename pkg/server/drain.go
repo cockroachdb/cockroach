@@ -62,7 +62,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 
 	res := serverpb.DrainResponse{}
 	if doDrain {
-		remaining, info, err := s.server.Drain(ctx)
+		remaining, info, err := s.server.Drain(ctx, req.Verbose)
 		if err != nil {
 			log.Ops.Errorf(ctx, "drain failed: %v", err)
 			return err
@@ -137,7 +137,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 // shutdown code in cli/start.go; however, this is a mis-design. The
 // start code should use the Drain() RPC like quit does.
 func (s *Server) Drain(
-	ctx context.Context,
+	ctx context.Context, verbose bool,
 ) (remaining uint64, info redact.RedactableString, err error) {
 	reports := make(map[redact.SafeString]int)
 	var mu syncutil.Mutex
@@ -164,21 +164,23 @@ func (s *Server) Drain(
 		}
 	}()
 
-	if err := s.doDrain(ctx, reporter); err != nil {
+	if err = s.doDrain(ctx, reporter, verbose); err != nil {
 		return 0, "", err
 	}
 
 	return
 }
 
-func (s *Server) doDrain(ctx context.Context, reporter func(int, redact.SafeString)) error {
+func (s *Server) doDrain(
+	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
+) (err error) {
 	// First drain all clients and SQL leases.
-	if err := s.drainClients(ctx, reporter); err != nil {
+	if err = s.drainClients(ctx, reporter); err != nil {
 		return err
 	}
 	// Finally, mark the node as draining in liveness and drain the
 	// range leases.
-	return s.drainNode(ctx, reporter)
+	return s.drainNode(ctx, reporter, verbose)
 }
 
 // isDraining returns true if either clients are being drained
@@ -219,9 +221,11 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 
 // drainNode initiates the draining mode for the node, which
 // starts draining range leases.
-func (s *Server) drainNode(ctx context.Context, reporter func(int, redact.SafeString)) error {
-	if err := s.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
+func (s *Server) drainNode(
+	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
+) (err error) {
+	if err = s.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
 		return err
 	}
-	return s.node.SetDraining(true /* drain */, reporter)
+	return s.node.SetDraining(true /* drain */, reporter, verbose)
 }
