@@ -269,6 +269,8 @@ const (
 	// SQLInstancesTable adds the system table for storing SQL instance information
 	// per tenant.
 	SQLInstancesTable
+	// Can return new retryable rangefeed errors without crashing the client
+	NewRetryableRangefeedErrors
 
 	// Step (1): Add new versions here.
 )
@@ -433,6 +435,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SQLInstancesTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 122},
+	},
+	{
+		Key:     NewRetryableRangefeedErrors,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
 	},
 
 	// Step (2): Add new versions here.
