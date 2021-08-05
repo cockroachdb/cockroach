@@ -275,7 +275,9 @@ func (ex *connExecutor) populatePrepared(
 				"bounded staleness queries do not yet work with prepared statements",
 			)
 		}
-		txn.SetFixedTimestamp(ctx, asOf.Timestamp)
+		if err := txn.SetFixedTimestamp(ctx, asOf.Timestamp); err != nil {
+			return 0, err
+		}
 	}
 
 	// PREPARE has a limited subset of statements it can be run with. Postgres

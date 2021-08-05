@@ -65,6 +65,10 @@ type StatsMetrics struct {
 	ReportedSQLStatsMemoryCurBytesCount *metric.Gauge
 
 	DiscardedStatsCount *metric.Counter
+
+	SQLStatsFlushStarted  *metric.Counter
+	SQLStatsFlushFailure  *metric.Counter
+	SQLStatsFlushDuration *metric.Histogram
 }
 
 // StatsMetrics is part of the metric.Struct interface.

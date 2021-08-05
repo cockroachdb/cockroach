@@ -211,9 +211,12 @@ func (s storage) getForExpiration(
 	ctx context.Context, expiration hlc.Timestamp, id descpb.ID,
 ) (catalog.Descriptor, error) {
 	var desc catalog.Descriptor
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		prevTimestamp := expiration.Prev()
-		txn.SetFixedTimestamp(ctx, prevTimestamp)
+		err := txn.SetFixedTimestamp(ctx, prevTimestamp)
+		if err != nil {
+			return err
+		}
 		desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, s.codec, id)
 		if err != nil {
 			return err

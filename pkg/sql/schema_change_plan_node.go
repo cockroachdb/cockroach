@@ -84,7 +84,9 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 		if err := p.ExecCfg().CollectionFactory.Txn(
 			ctx, p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
 			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-				txn.SetFixedTimestamp(ctx, now)
+				if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+					return err
+				}
 				table, err := descriptors.GetImmutableTableByID(ctx, txn, descID,
 					tree.ObjectLookupFlags{
 						CommonLookupFlags: tree.CommonLookupFlags{

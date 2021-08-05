@@ -303,7 +303,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	update := func(catalog.MutableDescriptor) error { return nil }
 	logEvent := func(txn *kv.Txn) error {
 		txn2 := kvDB.NewTxn(ctx, "future-read")
-		txn2.SetFixedTimestamp(ctx, futureTime.Prev())
+		if err := txn2.SetFixedTimestamp(ctx, futureTime.Prev()); err != nil {
+			return err
+		}
 		if _, err := txn2.Get(ctx, "key"); err != nil {
 			return errors.Wrap(err, "read from other txn in future")
 		}

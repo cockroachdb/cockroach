@@ -328,7 +328,9 @@ func spansForAllTableIndexes(
 	checkForKVInBounds := func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
 		var foundKV bool
 		err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			txn.SetFixedTimestamp(ctx, endTime)
+			if err := txn.SetFixedTimestamp(ctx, endTime); err != nil {
+				return err
+			}
 			res, err := txn.Scan(ctx, start, end, 1 /* maxRows */)
 			if err != nil {
 				return err

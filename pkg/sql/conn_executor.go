@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -321,7 +322,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* reportedProvider */
 	)
 	reportedSQLStatsController := reportedSQLStats.GetController(cfg.SQLStatusServer)
-	sqlStats := sslocal.New(
+	memSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
@@ -331,14 +332,11 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.SQLStatReset,
 		reportedSQLStats,
 	)
-	sqlStatsController := sqlStats.GetController(cfg.SQLStatusServer)
 	s := &Server{
 		cfg:                     cfg,
 		Metrics:                 metrics,
 		InternalMetrics:         makeMetrics(cfg, true /* internal */),
 		pool:                    pool,
-		sqlStats:                sqlStats,
-		sqlStatsController:      sqlStatsController,
 		reportedStats:           reportedSQLStats,
 		reportedStatsController: reportedSQLStatsController,
 		reCache:                 tree.NewRegexpCache(512),
@@ -349,6 +347,20 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		}),
 	}
 
+	sqlStatsInternalExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
+	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
+		Settings:         s.cfg.Settings,
+		InternalExecutor: &sqlStatsInternalExecutor,
+		KvDB:             cfg.DB,
+		SQLIDContainer:   cfg.NodeID,
+		Knobs:            cfg.SQLStatsTestingKnobs,
+		FlushCounter:     metrics.StatsMetrics.SQLStatsFlushStarted,
+		FailureCounter:   metrics.StatsMetrics.SQLStatsFlushFailure,
+		FlushDuration:    metrics.StatsMetrics.SQLStatsFlushDuration,
+	}, memSQLStats)
+
+	s.sqlStats = persistedSQLStats
+	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
 	return s
 }
 
@@ -395,7 +407,12 @@ func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
 			),
 			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(
 				getMetricMeta(MetaReportedSQLStatsMemCurBytes, internal)),
-			DiscardedStatsCount: metric.NewCounter(getMetricMeta(MetaDiscardedSQLStats, internal)),
+			DiscardedStatsCount:  metric.NewCounter(getMetricMeta(MetaDiscardedSQLStats, internal)),
+			SQLStatsFlushStarted: metric.NewCounter(getMetricMeta(MetaSQLStatsFlushStarted, internal)),
+			SQLStatsFlushFailure: metric.NewCounter(getMetricMeta(MetaSQLStatsFlushFailure, internal)),
+			SQLStatsFlushDuration: metric.NewLatency(
+				getMetricMeta(MetaSQLStatsFlushDuration, internal), 6*metricsSampleInterval,
+			),
 		},
 	}
 }
@@ -416,6 +433,11 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 // sql.Server's SQL Stats.
 func (s *Server) GetSQLStatsController() *sslocal.Controller {
 	return s.sqlStatsController
+}
+
+// GetSQLStatsProvider returns the provider for the sqlstats subsystem.
+func (s *Server) GetSQLStatsProvider() sqlstats.Provider {
+	return s.sqlStats
 }
 
 // GetReportedSQLStatsController returns the sqlstats.Controller for the current
@@ -442,7 +464,7 @@ func (s *Server) GetUnscrubbedStmtStats(
 	ctx context.Context,
 ) ([]roachpb.CollectedStatementStatistics, error) {
 	var stmtStats []roachpb.CollectedStatementStatistics
-	stmtStatsVisitor := func(stat *roachpb.CollectedStatementStatistics) error {
+	stmtStatsVisitor := func(_ context.Context, stat *roachpb.CollectedStatementStatistics) error {
 		stmtStats = append(stmtStats, *stat)
 		return nil
 	}
@@ -462,7 +484,7 @@ func (s *Server) GetUnscrubbedTxnStats(
 	ctx context.Context,
 ) ([]roachpb.CollectedTransactionStatistics, error) {
 	var txnStats []roachpb.CollectedTransactionStatistics
-	txnStatsVisitor := func(_ roachpb.TransactionFingerprintID, stat *roachpb.CollectedTransactionStatistics) error {
+	txnStatsVisitor := func(_ context.Context, _ roachpb.TransactionFingerprintID, stat *roachpb.CollectedTransactionStatistics) error {
 		txnStats = append(txnStats, *stat)
 		return nil
 	}
@@ -490,7 +512,7 @@ func (s *Server) getScrubbedStmtStats(
 	salt := ClusterSecret.Get(&s.cfg.Settings.SV)
 
 	var scrubbedStats []roachpb.CollectedStatementStatistics
-	stmtStatsVisitor := func(stat *roachpb.CollectedStatementStatistics) error {
+	stmtStatsVisitor := func(_ context.Context, stat *roachpb.CollectedStatementStatistics) error {
 		// Scrub the statement itself.
 		scrubbedQueryStr, ok := scrubStmtStatKey(s.cfg.VirtualSchemas, stat.Key.Query)
 
@@ -2204,7 +2226,9 @@ func (ex *connExecutor) setTransactionModes(
 		return errors.AssertionFailedf("expected an evaluated AS OF timestamp")
 	}
 	if !asOfTs.IsEmpty() {
-		ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs)
+		if err := ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs); err != nil {
+			return err
+		}
 		ex.state.sqlTimestamp = asOfTs.GoTime()
 		if rwMode == tree.UnspecifiedReadWriteMode {
 			rwMode = tree.ReadOnly

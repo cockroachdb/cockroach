@@ -247,7 +247,9 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 	}
 
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, ts)
+		if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
+			return err
+		}
 
 		// Create an internal planner as the planner used to serve the user query
 		// would have committed by this point.

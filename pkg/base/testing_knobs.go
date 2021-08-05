@@ -39,4 +39,5 @@ type TestingKnobs struct {
 	BackupRestore           ModuleTestingKnobs
 	MigrationManager        ModuleTestingKnobs
 	IndexUsageStatsKnobs    ModuleTestingKnobs
+	SQLStatsKnobs           ModuleTestingKnobs
 }

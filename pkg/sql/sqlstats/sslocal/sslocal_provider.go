@@ -125,14 +125,14 @@ func (s *SQLStats) GetLastReset() time.Time {
 
 // IterateStatementStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateStatementStats(
-	_ context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
+	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
 ) error {
 	appNames := s.getAppNames(options.SortedAppNames)
 
 	for _, appName := range appNames {
 		statsContainer := s.getStatsForApplication(appName)
 
-		err := statsContainer.IterateStatementStats(appName, options.SortedKey, visitor)
+		err := statsContainer.IterateStatementStats(ctx, appName, options.SortedKey, visitor)
 		if err != nil {
 			return fmt.Errorf("sql stats iteration abort: %s", err)
 		}
@@ -142,14 +142,14 @@ func (s *SQLStats) IterateStatementStats(
 
 // IterateTransactionStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateTransactionStats(
-	_ context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
+	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
 ) error {
 	appNames := s.getAppNames(options.SortedAppNames)
 
 	for _, appName := range appNames {
 		statsContainer := s.getStatsForApplication(appName)
 
-		err := statsContainer.IterateTransactionStats(appName, options.SortedKey, visitor)
+		err := statsContainer.IterateTransactionStats(ctx, appName, options.SortedKey, visitor)
 		if err != nil {
 			return fmt.Errorf("sql stats iteration abort: %s", err)
 		}

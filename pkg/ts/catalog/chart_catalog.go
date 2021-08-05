@@ -1785,6 +1785,30 @@ var charts = []sectionDescription{
 				Title:   "Number of internal fingerprint statistics being discarded",
 				Metrics: []string{"sql.stats.discarded.current.internal"},
 			},
+			{
+				Title:   "Number of times SQL Stats are flushed to persistent storage",
+				Metrics: []string{"sql.stats.flush.count"},
+			},
+			{
+				Title:   "Number of errors encountered when flushing SQL Stats",
+				Metrics: []string{"sql.stats.flush.error"},
+			},
+			{
+				Title:   "Time took to complete SQL Stats flush",
+				Metrics: []string{"sql.stats.flush.duration"},
+			},
+			{
+				Title:   "Number of times internal SQL Stats are flushed to persistent storage",
+				Metrics: []string{"sql.stats.flush.count.internal"},
+			},
+			{
+				Title:   "Number of errors encountered when flushing internal SQL Stats",
+				Metrics: []string{"sql.stats.flush.error.internal"},
+			},
+			{
+				Title:   "Time took to complete internal SQL Stats flush",
+				Metrics: []string{"sql.stats.flush.duration.internal"},
+			},
 		},
 	},
 	{

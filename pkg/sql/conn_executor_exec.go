@@ -588,7 +588,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		if asOf != nil {
 			p.extendedEvalCtx.AsOfSystemTime = asOf
 			p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
-			ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp)
+			if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
+				return makeErrEvent(err)
+			}
 		}
 	} else {
 		// If we're in an explicit txn, we allow AOST but only if it matches with

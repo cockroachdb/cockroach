@@ -101,8 +101,10 @@ func (c *rowFetcherCache) TableDescForKey(
 			// descs.Collection directly here.
 			// TODO (SQL Schema): #53751.
 			if err := c.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				txn.SetFixedTimestamp(ctx, ts)
-				var err error
+				err := txn.SetFixedTimestamp(ctx, ts)
+				if err != nil {
+					return err
+				}
 				tableDesc, err = c.collection.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
 				return err
 			}); err != nil {
