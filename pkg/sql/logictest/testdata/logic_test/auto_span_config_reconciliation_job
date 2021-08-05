@@ -1,0 +1,28 @@
+# Ensure there's a single auto span config reconciliation job in the system,
+# and that it's running.
+query ITT colnames
+SELECT count(*), job_type, status FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION' GROUP BY (job_type, status)
+----
+count  job_type                         status
+1      AUTO SPAN CONFIG RECONCILIATION  running
+
+let $job_id
+SELECT job_id FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION'
+
+# Ensure that the reconciliation job does not appear in SHOW JOBS.
+query I colnames
+SELECT count(*) FROM [SHOW JOBS] WHERE job_id = $job_id
+----
+count
+0
+
+# Ensure that the job is not cancelable.
+statement error not cancelable
+CANCEL JOB $job_id
+
+# The job should still be running.
+query T colnames
+SELECT status FROM [SHOW AUTOMATIC JOBS] WHERE job_id = $job_id
+----
+status
+running

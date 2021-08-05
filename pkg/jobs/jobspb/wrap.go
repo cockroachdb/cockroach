@@ -66,7 +66,7 @@ func (p *Payload) Type() Type {
 const AutoStatsName = "__auto__"
 
 // AutomaticJobTypes is a list of automatic job types that currently exist.
-var AutomaticJobTypes = [2]Type{TypeAutoCreateStats, TypeAutoSpanConfigReconciliation}
+var AutomaticJobTypes = [...]Type{TypeAutoCreateStats, TypeAutoSpanConfigReconciliation}
 
 // DetailsType returns the type for a payload detail.
 func DetailsType(d isPayload_Details) Type {

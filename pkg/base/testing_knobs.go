@@ -40,4 +40,5 @@ type TestingKnobs struct {
 	MigrationManager        ModuleTestingKnobs
 	IndexUsageStatsKnobs    ModuleTestingKnobs
 	SQLStatsKnobs           ModuleTestingKnobs
+	SpanConfig              ModuleTestingKnobs
 }
