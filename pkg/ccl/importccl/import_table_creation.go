@@ -122,6 +122,12 @@ func MakeTestingSimpleTableDescriptor(
 	return MakeSimpleTableDescriptor(ctx, semaCtx, st, create, db, sc, tableID, fks, walltime)
 }
 
+func makeSemaCtxWithoutTypeResolver(semaCtx *tree.SemaContext) *tree.SemaContext {
+	semaCtxCopy := *semaCtx
+	semaCtxCopy.TypeResolver = nil
+	return &semaCtxCopy
+}
+
 // MakeSimpleTableDescriptor creates a tabledesc.Mutable from a CreateTable
 // parse node without the full machinery. Many parts of the syntax are
 // unsupported (see the implementation and TestMakeSimpleTableDescriptorErrors
