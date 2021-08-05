@@ -320,7 +320,8 @@ const (
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	V21_1
 
-	// Step (1): Add new versions here.
+	// Can return new retryable rangefeed errors without crashing the client
+	NewRetryableRangefeedErrors
 )
 
 // versionsSingleton lists all historical versions here in chronological order,
@@ -524,6 +525,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     V21_1,
 		Version: roachpb.Version{Major: 21, Minor: 1},
+	},
+	{
+		Key:     NewRetryableRangefeedErrors,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
 	},
 	// Step (2): Add new versions here.
 })
