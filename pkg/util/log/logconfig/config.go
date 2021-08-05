@@ -191,9 +191,11 @@ type SinkConfig struct {
 // The configuration key under the `sinks` key in the YAML configuration
 // is `stderr`. Example configuration:
 //
+//		 ~~~
 //     sinks:
 //        stderr:           # standard error sink configuration starts here
 //           channels: DEV
+//		 ~~~
 //
 // {{site.data.alerts.callout_info}}
 // The server start-up messages are still emitted at the start of the standard error
@@ -353,10 +355,12 @@ type FileDefaults struct {
 // The configuration key under the `sinks` key in the YAML
 // configuration is `file-groups`. Example configuration:
 //
+//		 ~~~
 //     sinks:
 //        file-groups:           # file group configurations start here
 //           health:             # defines one group called "health"
 //              channels: HEALTH
+//		 ~~~
 //
 // Each generated log file is prefixed by the name of the process,
 // followed by the name of the group, separated by a hyphen. For example,
@@ -367,13 +371,14 @@ type FileDefaults struct {
 // The files are named so that a lexicographical sort of the
 // directory contents presents the file in creation order.
 //
-// A symlink (e.g. `cockroach-health.log`) for each group points to the latest generated log file.
+// A symlink (e.g., `cockroach-health.log`) for each group points to the latest generated log file.
 //
 // Every new file group sink configured automatically inherits
 // the configurations set in the `file-defaults` section.
 //
 // For example:
 //
+//		  ~~~
 //      file-defaults:
 //          redactable: false # default: disable redaction markers
 //          dir: logs
@@ -387,10 +392,9 @@ type FileDefaults struct {
 //             #
 //             # Example override:
 //             dir: health-logs # override the default 'logs'
+//		  ~~~
 //
-// {{site.data.alerts.callout_success}}
 // Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
-// {{site.data.alerts.end}}
 //
 type FileSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
