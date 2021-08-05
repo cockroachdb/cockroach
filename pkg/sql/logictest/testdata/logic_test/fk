@@ -3791,3 +3791,20 @@ statement error insert on table "reference_constraint_different_order_child" vio
 INSERT
 INTO reference_constraint_different_order_child
 VALUES (99, 1, 2, 3, 'child_val')
+
+# Regression test for #68307.
+statement ok
+CREATE TABLE t1 (a INT8 PRIMARY KEY);
+CREATE TABLE t2 (a INT8 PRIMARY KEY);
+CREATE TABLE t3 (a INT8 PRIMARY KEY, b INT8 REFERENCES t1 (a), c INT8 REFERENCES t2 (a));
+INSERT INTO t1 VALUES (1);
+INSERT INTO t2 VALUES (1);
+
+statement error violates foreign key constraint "fk_b_ref_t1"
+INSERT INTO t3 VALUES (1, 1, 1), (2, 2, NULL)
+
+statement error violates foreign key constraint "fk_c_ref_t2"
+INSERT INTO t3 VALUES (1, 1, 1), (2, NULL, 2)
+
+statement ok
+DROP TABLE t3, t1, t2
