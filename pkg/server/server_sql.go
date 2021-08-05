@@ -51,6 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -798,6 +800,23 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.VersionUpgradeHook = migrationMgr.Migrate
 	}
 
+	{
+		// Instantiate a span config manager which exposes a hook to start the auto
+		// span config reconciliation during server startup. The span config manager
+		// provides the reconciliation job with access to dependencies it needs to
+		// perform its task. The job does so through the executor config.
+		knobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+		reconciliationMgr := spanconfigmanager.New(
+			cfg.db,
+			jobRegistry,
+			cfg.circularInternalExecutor,
+			cfg.stopper,
+			knobs,
+		)
+		execCfg.SpanConfigReconciliationJobDeps = reconciliationMgr
+		execCfg.StartSpanConfigReconciliationJobHook = reconciliationMgr.StartJobIfNoneExists
+	}
+
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
@@ -995,6 +1014,9 @@ func (s *SQLServer) preStart(
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
 		return err
 	}
+
+	// Create and start the span config reconciliation job if none exist.
+	_ = s.execCfg.StartSpanConfigReconciliationJobHook(ctx)
 
 	var bootstrapVersion roachpb.Version
 	if s.execCfg.Codec.ForSystemTenant() {
