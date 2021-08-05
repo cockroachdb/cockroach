@@ -101,6 +101,7 @@ var retiredSettings = map[string]struct{}{
 	"kv.tenant_rate_limiter.write_cost_per_megabyte":                 {},
 	"kv.transaction.write_pipelining_max_outstanding_size":           {},
 	"sql.defaults.optimizer_improve_disjunction_selectivity.enabled": {},
+	"bulkio.backup.proxy_file_writes.enabled":                        {},
 }
 
 // register adds a setting to the registry.
