@@ -687,3 +687,15 @@ func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
 	from.PacketsRecv -= sub.PacketsRecv
 	from.PacketsSent -= sub.PacketsSent
 }
+
+// GetUserCPUSeconds returns the cumulative User CPU time for this process, in
+// seconds.
+func GetUserCPUSeconds(ctx context.Context) float64 {
+	pid := os.Getpid()
+	cpuTime := gosigar.ProcTime{}
+	if err := cpuTime.Get(pid); err != nil {
+		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
+	}
+	// cpuTime.User is in milliseconds; convert to seconds.
+	return float64(cpuTime.User) * 1e-3
+}

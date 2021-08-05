@@ -10,8 +10,10 @@ package tenantcostclient_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -58,13 +61,18 @@ type testState struct {
 	stopper    *stop.Stopper
 	provider   *testProvider
 	controller multitenant.TenantSideCostController
+
+	// cpuUsage, accessed using atomic.
+	cpuUsage time.Duration
 }
 
 func (ts *testState) start(t *testing.T) {
+	ctx := context.Background()
+
 	ts.settings = cluster.MakeTestingClusterSettings()
-	tenantcostclient.TargetPeriodSetting.Override(
-		context.Background(), &ts.settings.SV, time.Millisecond,
-	)
+	tenantcostclient.TargetPeriodSetting.Override(ctx, &ts.settings.SV, time.Millisecond)
+	tenantcostclient.CPUUsageAllowance.Override(ctx, &ts.settings.SV, 0)
+
 	ts.stopper = stop.NewStopper()
 	var err error
 	ts.provider = newTestProvider()
@@ -76,7 +84,11 @@ func (ts *testState) start(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.controller.Start(context.Background(), ts.stopper); err != nil {
+	cpuUsageFn := func(context.Context) float64 {
+		usage := time.Duration(atomic.LoadInt64((*int64)(&ts.cpuUsage)))
+		return usage.Seconds()
+	}
+	if err := ts.controller.Start(ctx, ts.stopper, cpuUsageFn); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -89,6 +101,7 @@ var testStateCommands = map[string]func(*testState, *testing.T, *datadriven.Test
 	"read-request":  (*testState).readRequest,
 	"read-response": (*testState).readResponse,
 	"write-request": (*testState).writeRequest,
+	"cpu":           (*testState).cpu,
 	"usage":         (*testState).usage,
 }
 
@@ -128,6 +141,15 @@ func (ts *testState) writeRequest(t *testing.T, d *datadriven.TestData) string {
 	if err := ts.controller.OnRequestWait(context.Background(), info); err != nil {
 		d.Fatalf(t, "%v", err)
 	}
+	return ""
+}
+
+func (ts *testState) cpu(t *testing.T, d *datadriven.TestData) string {
+	duration, err := time.ParseDuration(d.Input)
+	if err != nil {
+		d.Fatalf(t, "error parsing cpu duration: %v", err)
+	}
+	atomic.AddInt64((*int64)(&ts.cpuUsage), int64(duration))
 	return ""
 }
 
@@ -207,6 +229,7 @@ func TestConsumption(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, time.Millisecond)
+	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, 0)
 
 	testProvider := newTestProvider()
 
@@ -249,4 +272,12 @@ func TestConsumption(t *testing.T) {
 		}
 		r.Exec(t, "DELETE FROM t WHERE true")
 	}
+	// Make sure some CPU usage is reported.
+	testutils.SucceedsSoon(t, func() error {
+		c := testProvider.waitForConsumption()
+		if c.SQLPodsCPUSeconds == 0 {
+			return errors.New("no CPU usage reported")
+		}
+		return nil
+	})
 }
