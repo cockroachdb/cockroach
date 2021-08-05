@@ -1534,7 +1534,13 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 func getLeaseInfo(
 	ctx context.Context, db *kv.DB, key roachpb.Key,
 ) (*roachpb.LeaseInfoResponse, error) {
-	header := roachpb.Header{ReadConsistency: roachpb.INCONSISTENT}
+	header := roachpb.Header{
+		// INCONSISTENT read with a NEAREST routing policy, since we want to make
+		// sure that the node used to send this is the one that processes the
+		// command, regardless of whether it is the leaseholder.
+		ReadConsistency: roachpb.INCONSISTENT,
+		RoutingPolicy:   roachpb.RoutingPolicy_NEAREST,
+	}
 	leaseInfoReq := &roachpb.LeaseInfoRequest{RequestHeader: roachpb.RequestHeader{Key: key}}
 	reply, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, leaseInfoReq)
 	if pErr != nil {
