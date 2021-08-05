@@ -124,6 +124,12 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderSlowRangefeedRanges = metric.Metadata{
+		Name:        "distsender.rangefeed.slow_range_restarts",
+		Help:        "Number of ranges for which rangefeed restarted due to slow responsiveness",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
@@ -185,6 +191,7 @@ type DistSenderMetrics struct {
 	SlowRPCs                *metric.Gauge
 	MethodCounts            [roachpb.NumMethods]*metric.Counter
 	ErrCounts               [roachpb.NumErrors]*metric.Counter
+	SlowRangeFeedRanges     *metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -200,6 +207,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		InLeaseTransferBackoffs: metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
 		RangeLookups:            metric.NewCounter(metaDistSenderRangeLookups),
 		SlowRPCs:                metric.NewGauge(metaDistSenderSlowRPCs),
+		SlowRangeFeedRanges:     metric.NewCounter(metaDistSenderSlowRangefeedRanges),
 	}
 	for i := range m.MethodCounts {
 		method := roachpb.Method(i).String()
