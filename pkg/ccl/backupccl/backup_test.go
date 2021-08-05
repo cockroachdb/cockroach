@@ -514,7 +514,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		return strings.Replace(location, LocalFoo, filepath.Join(dir, "foo"), 1)
 	}
 
-	hasSSTs := func(location string) bool {
+	hasSSTs := func(t *testing.T, location string) bool {
 		sstMatcher := regexp.MustCompile(`\d+\.sst`)
 		subDir := filepath.Join(locationToDir(location), "data")
 		files, err := ioutil.ReadDir(subDir)
@@ -533,13 +533,13 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 	requireHasSSTs := func(t *testing.T, locations ...string) {
 		for _, location := range locations {
-			require.True(t, hasSSTs(location))
+			require.True(t, hasSSTs(t, location))
 		}
 	}
 
 	requireHasNoSSTs := func(t *testing.T, locations ...string) {
 		for _, location := range locations {
-			require.False(t, hasSSTs(location))
+			require.False(t, hasSSTs(t, location))
 		}
 	}
 
@@ -1502,7 +1502,8 @@ func checkInProgressBackupRestore(
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 	// the small test-case will get entirely buffered/merged by small-file merging
 	// and not report any progress in the meantime unless it is disabled.
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_size = '0'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '1'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1'`)
 
 	var totalExpectedBackupRequests int
 	// mergedRangeQuery calculates the number of spans we expect PartitionSpans to
@@ -7370,7 +7371,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/timeout'")
 	require.True(t, testutils.IsError(err,
-		"timeout: operation \"ExportRequest for span /Table/53/{1-2}\" timed out after 3s: context"+
+		"timeout: operation \"ExportRequest for span /Table/53/.*\" timed out after 3s: context"+
 			" deadline exceeded"))
 }
 
