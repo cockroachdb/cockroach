@@ -81,6 +81,11 @@ var (
 		16<<20,
 		settings.NonNegativeInt,
 	)
+	targetFileSize = settings.RegisterByteSizeSetting(
+		"bulkio.backup.file_size",
+		"target file size",
+		128<<20,
+	)
 	smallFileBuffer = settings.RegisterByteSizeSetting(
 		"bulkio.backup.merge_file_buffer_size",
 		"size limit used when buffering backup files before merging them",
@@ -211,8 +216,8 @@ func runBackupProcessor(
 		spanIdx++
 	}
 
-	targetFileSize := storageccl.ExportRequestTargetFileSize.Get(&clusterSettings.SV)
-
+	// For all backups, partitioned or not, the main BACKUP manifest is stored at
+	// details.URI.
 	defaultConf, err := cloud.ExternalStorageConfFromURI(spec.DefaultURI, spec.User())
 	if err != nil {
 		return err
@@ -300,8 +305,8 @@ func runBackupProcessor(
 						StartTime:                           span.start,
 						EnableTimeBoundIteratorOptimization: useTBI.Get(&clusterSettings.SV),
 						MVCCFilter:                          spec.MVCCFilter,
-						TargetFileSize:                      targetFileSize,
 						ReturnSstBelowSize:                  smallFileSize.Get(&clusterSettings.SV),
+						TargetFileSize:                      storageccl.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
 					}
 					if writeSSTsInProcessor {
 						req.ReturnSST = true
@@ -510,11 +515,10 @@ func runBackupProcessor(
 	// contents to cloud storage.
 	grp.GoCtx(func(ctx context.Context) error {
 		sinkConf := sstSinkConf{
-			id:             flowCtx.NodeID.SQLInstanceID(),
-			enc:            spec.Encryption,
-			targetFileSize: targetFileSize,
-			progCh:         progCh,
-			settings:       &flowCtx.Cfg.Settings.SV,
+			id:       flowCtx.NodeID.SQLInstanceID(),
+			enc:      spec.Encryption,
+			progCh:   progCh,
+			settings: &flowCtx.Cfg.Settings.SV,
 		}
 
 		storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest)
@@ -545,11 +549,10 @@ func runBackupProcessor(
 }
 
 type sstSinkConf struct {
-	progCh         chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-	targetFileSize int64
-	enc            *roachpb.FileEncryptionOptions
-	id             base.SQLInstanceID
-	settings       *settings.Values
+	progCh   chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+	enc      *roachpb.FileEncryptionOptions
+	id       base.SQLInstanceID
+	settings *settings.Values
 }
 
 type sstSink struct {
@@ -772,7 +775,7 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 	s.flushedSize += int64(len(resp.sst))
 
 	// If our accumulated SST is now big enough, flush it.
-	if s.flushedSize > s.conf.targetFileSize {
+	if s.flushedSize > targetFileSize.Get(s.conf.settings) {
 		s.stats.sizeFlushes++
 		log.VEventf(ctx, 2, "flushing backup file %s with size %d", s.outName, s.flushedSize)
 		if err := s.flushFile(ctx); err != nil {
