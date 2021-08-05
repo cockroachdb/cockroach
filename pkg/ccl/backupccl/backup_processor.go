@@ -703,10 +703,16 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 
 	// If this span starts before the last buffered span ended, we need to flush
 	// since it overlaps but SSTWriter demands writes in-order.
-	if len(s.flushedFiles) > 0 && span.Key.Compare(s.flushedFiles[len(s.flushedFiles)-1].Span.EndKey) < 0 {
-		s.stats.oooFlushes++
-		if err := s.flushFile(ctx); err != nil {
-			return err
+	if len(s.flushedFiles) > 0 {
+		last := s.flushedFiles[len(s.flushedFiles)-1].Span.EndKey
+		if span.Key.Compare(last) < 0 {
+			log.VEventf(ctx, 1, "flushing backup file %s of size %d because span %s cannot append before %s",
+				s.outName, s.flushedSize, span, last,
+			)
+			s.stats.oooFlushes++
+			if err := s.flushFile(ctx); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -716,6 +722,8 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 			return err
 		}
 	}
+
+	log.VEventf(ctx, 2, "writing %s to backup file %s", span, s.outName)
 
 	// Copy SST content.
 	sst, err := storage.NewMemSSTIterator(resp.sst, false)
@@ -766,9 +774,12 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 	// If our accumulated SST is now big enough, flush it.
 	if s.flushedSize > s.conf.targetFileSize {
 		s.stats.sizeFlushes++
+		log.VEventf(ctx, 2, "flushing backup file %s with size %d", s.outName, s.flushedSize)
 		if err := s.flushFile(ctx); err != nil {
 			return err
 		}
+	} else {
+		log.VEventf(ctx, 3, "continuing to write to backup file %s of size %d", s.outName, s.flushedSize)
 	}
 	return nil
 }
