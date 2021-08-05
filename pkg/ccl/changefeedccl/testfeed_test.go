@@ -437,27 +437,29 @@ type depInjector struct {
 }
 
 // newDepInjector configures specified server with necessary hooks and knobs.
-func newDepInjector(s feedInjectable) *depInjector {
+func newDepInjector(srvs ...feedInjectable) *depInjector {
 	di := &depInjector{
 		startedJobs: make(map[jobspb.JobID]*jobFeed),
 	}
 	di.cond = sync.NewCond(di)
 
-	// Arrange for our wrapped sink to be instantiated.
-	s.DistSQLServer().(*distsql.ServerImpl).TestingKnobs.Changefeed.(*TestingKnobs).WrapSink =
-		func(s Sink, jobID jobspb.JobID) Sink {
-			f := di.getJobFeed(jobID)
-			return f.makeSink(s)
-		}
+	for _, s := range srvs {
+		// Arrange for our wrapped sink to be instantiated.
+		s.DistSQLServer().(*distsql.ServerImpl).TestingKnobs.Changefeed.(*TestingKnobs).WrapSink =
+			func(s Sink, jobID jobspb.JobID) Sink {
+				f := di.getJobFeed(jobID)
+				return f.makeSink(s)
+			}
 
-	// Arrange for error reporting resumer to be used.
-	s.JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs =
-		map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeChangefeed: func(raw jobs.Resumer) jobs.Resumer {
-				f := di.getJobFeed(raw.(*changefeedResumer).job.ID())
-				return &reportErrorResumer{wrapped: raw, jobFailed: f.jobFailed}
-			},
-		}
+		// Arrange for error reporting resumer to be used.
+		s.JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs =
+			map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeChangefeed: func(raw jobs.Resumer) jobs.Resumer {
+					f := di.getJobFeed(raw.(*changefeedResumer).job.ID())
+					return &reportErrorResumer{wrapped: raw, jobFailed: f.jobFailed}
+				},
+			}
+	}
 
 	return di
 }
@@ -1049,6 +1051,24 @@ func makeKafkaFeedFactory(
 			s:  srv,
 			db: db,
 			di: newDepInjector(srv),
+		},
+	}
+}
+
+// makeKafkaFeedFactoryForCluster returns a TestFeedFactory
+// implementation using the `kafka` uri.
+func makeKafkaFeedFactoryForCluster(
+	c serverutils.TestClusterInterface, db *gosql.DB,
+) cdctest.TestFeedFactory {
+	servers := make([]feedInjectable, c.NumServers())
+	for i := 0; i < c.NumServers(); i++ {
+		servers[i] = c.Server(i)
+	}
+	return &kafkaFeedFactory{
+		enterpriseFeedFactory: enterpriseFeedFactory{
+			s:  c.Server(0),
+			db: db,
+			di: newDepInjector(servers...),
 		},
 	}
 }
