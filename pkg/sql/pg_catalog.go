@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
@@ -2835,12 +2836,39 @@ var pgCatalogShmemAllocationsTable = virtualSchemaTable{
 }
 
 var pgCatalogDbRoleSettingTable = virtualSchemaTable{
-	comment: "pg_db_role_setting was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogDbRoleSetting,
+	comment: `contains the default values that have been configured for session variables
+https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html`,
+	schema: vtable.PgCatalogDbRoleSetting,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		rows, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBufferedEx(
+			ctx,
+			"select-db-role-settings",
+			p.EvalContext().Txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			`SELECT database_id, role_name, settings FROM system.public.database_role_settings`,
+		)
+		if err != nil {
+			return err
+		}
+		h := makeOidHasher()
+		for _, row := range rows {
+			databaseID := tree.MustBeDOid(row[0])
+			roleName := tree.MustBeDString(row[1])
+			roleID := oidZero
+			if roleName != "" {
+				roleID = h.UserOid(security.MakeSQLUsernameFromPreNormalizedString(string(roleName)))
+			}
+			settings := tree.MustBeDArray(row[2])
+			if err := addRow(
+				settings,
+				databaseID,
+				roleID,
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogTimezoneNamesTable = virtualSchemaTable{
