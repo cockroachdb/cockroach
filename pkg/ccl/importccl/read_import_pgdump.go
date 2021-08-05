@@ -370,7 +370,10 @@ func createPostgresTables(
 			return nil, err
 		}
 		removeDefaultRegclass(create)
-		desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), p.SemaCtx(), p.ExecCfg().Settings,
+		// Bundle imports do not support user defined types, and so we nil out the
+		// type resolver to protect against unexpected behavior on UDT resolution.
+		semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
+		desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), semaCtxPtr, p.ExecCfg().Settings,
 			create, parentDB, schema, getNextPlaceholderDescID(), fks, walltime)
 		if err != nil {
 			return nil, err
@@ -858,6 +861,9 @@ func readPostgresStmt(
 			return unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
 		}
 		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
+	case *tree.CreateType:
+		return errors.New("IMPORT PGDUMP does not support user defined types; please" +
+			" remove all CREATE TYPE statements and their usages from the dump file")
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
 			return stmt
