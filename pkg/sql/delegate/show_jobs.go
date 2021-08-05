@@ -52,11 +52,11 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 				if i != 0 {
 					predicate.WriteString(", ")
 				}
-				predicate.WriteString("'")
+				predicate.WriteByte('\'')
 				predicate.WriteString(jobType.String())
-				predicate.WriteString("'")
+				predicate.WriteByte('\'')
 			}
-			predicate.WriteString(")")
+			predicate.WriteByte(')')
 			typePredicate = predicate.String()
 		}
 
