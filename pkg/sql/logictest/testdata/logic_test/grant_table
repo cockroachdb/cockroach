@@ -51,6 +51,7 @@ test           crdb_internal       gossip_liveness                        public
 test           crdb_internal       gossip_network                         public   SELECT
 test           crdb_internal       gossip_nodes                           public   SELECT
 test           crdb_internal       index_columns                          public   SELECT
+test           crdb_internal       index_usage_statistics                 public   SELECT
 test           crdb_internal       interleaved                            public   SELECT
 test           crdb_internal       invalid_objects                        public   SELECT
 test           crdb_internal       jobs                                   public   SELECT

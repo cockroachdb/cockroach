@@ -149,7 +149,7 @@ func TestIndexUsageStatisticsSubsystem(t *testing.T) {
 	t.Run("point lookup", func(t *testing.T) {
 		actualEntryCount := 0
 		for _, index := range indices {
-			stats := localIndexUsage.Get(index)
+			stats := localIndexUsage.Get(index.TableID, index.IndexID)
 			require.NotNil(t, stats)
 
 			actualEntryCount++

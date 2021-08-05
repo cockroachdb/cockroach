@@ -569,6 +569,7 @@ gossip_liveness                        NULL
 gossip_network                         NULL
 gossip_nodes                           NULL
 index_columns                          NULL
+index_usage_statistics                 NULL
 interleaved                            NULL
 invalid_objects                        NULL
 jobs                                   NULL
