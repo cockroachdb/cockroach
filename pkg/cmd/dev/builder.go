@@ -43,7 +43,7 @@ func (d *dev) builder(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return d.exec.CommandContextNoRecord(ctx, "docker", args...)
+	return d.exec.CommandContextInheritingStdStreams(ctx, "docker", args...)
 }
 
 func (d *dev) ensureDockerVolume(ctx context.Context, volume string) error {
