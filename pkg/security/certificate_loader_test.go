@@ -167,6 +167,13 @@ func makeTestCert(
 func TestNamingScheme(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	permissionRequirement := ".* exceeds -rwx------"
+
+	processID := os.Getuid()
+	if processID == 0 {
+		permissionRequirement = "exceeds -rwxr-----"
+	}
+
 	fullKeyUsage := x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature
 	// Build a few certificates. These are barebones since we only need to check our custom validation,
 	// not chain verification.
@@ -263,14 +270,14 @@ func TestNamingScheme(t *testing.T) {
 				{"node.crt", 0777, goodNodeCert},
 				{"node.key", 0704, []byte{}},
 				{"client.root.crt", 0777, goodRootCert},
-				{"client.root.key", 0740, []byte{}},
+				{"client.root.key", 0704, []byte{}},
 			},
 			certs: []security.CertInfo{
 				{FileUsage: security.CAPem, Filename: "ca.crt", FileContents: caCert},
 				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
-					Error: errors.New(".* exceeds -rwx------")},
+					Error: errors.New(permissionRequirement)},
 				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New(".* exceeds -rwx------")},
+					Error: errors.New(permissionRequirement)},
 			},
 			skipWindows: true,
 		},

@@ -23,7 +23,7 @@ import (
 )
 
 func TestGetFileACLInfo(t *testing.T) {
-	certsDir, err := ioutil.TempDir("", "certs_test")
+	certsDir, err := ioutil.TempDir("", "acl_test")
 	if err != nil {
 		t.Fatal(err)
 	}
