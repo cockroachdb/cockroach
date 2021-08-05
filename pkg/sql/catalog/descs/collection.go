@@ -342,6 +342,19 @@ func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
 	tc.synthetic.set(descs)
 }
 
+// AddSyntheticDescriptorForTxn replaces a descriptor with a synthetic
+// one temporarily for a given transaction. This synthetic descriptor
+// will be immutable.
+func (tc *Collection) AddSyntheticDescriptorForTxn(desc catalog.Descriptor) {
+	tc.synthetic.add(desc)
+}
+
+// RemoveSyntheticDescriptorForTxn removes a synthetic descriptor
+// override that temporarily exists for a given transaction.
+func (tc *Collection) RemoveSyntheticDescriptorForTxn(id descpb.ID) {
+	tc.synthetic.remove(id)
+}
+
 func (tc *Collection) codec() keys.SQLCodec {
 	return tc.kv.codec
 }

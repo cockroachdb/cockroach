@@ -36,6 +36,14 @@ type DescriptorReader interface {
 	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
 }
 
+// SyntheticDescriptorWriter encapsulates logic for
+// injecting synthetic descriptors only in the current
+// transaction.
+type SyntheticDescriptorWriter interface {
+	MarkDescriptorAsDroppedInTxn(ctx context.Context, id descpb.ID) error
+	RemoveSyntheticDescFromTxn(ctx context.Context, id descpb.ID) error
+}
+
 // NamespaceWriter encapsulates operations used to manipulate
 // namespaces.
 type NamespaceWriter interface {
@@ -52,6 +60,7 @@ type CommentWriter interface {
 // namespaces, comments to help support schema changer mutations.
 type Catalog interface {
 	DescriptorReader
+	SyntheticDescriptorWriter
 	NamespaceWriter
 	CommentWriter
 }
@@ -224,13 +233,26 @@ func (m *visitor) CreateGcJobForDescriptor(
 func (m *visitor) MarkDescriptorAsDropped(
 	ctx context.Context, op scop.MarkDescriptorAsDropped,
 ) error {
+	// Before we can mutate the descriptor, drop any synthetic
+	// one that inserted.
+	err := m.catalog.RemoveSyntheticDescFromTxn(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	// Mark the descriptor as dropped.
 	descriptor, err := m.catalog.GetAnyDescriptorByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	// Mark table as dropped
 	descriptor.SetDropped()
 	return nil
+}
+
+func (m *visitor) MarkDescriptorAsDroppedInTxn(
+	ctx context.Context, op scop.MarkDescriptorAsDroppedInTxn,
+) error {
+	// Mark table as dropped inside the current txn.
+	return m.catalog.MarkDescriptorAsDroppedInTxn(ctx, op.TableID)
 }
 
 func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescriptorName) error {

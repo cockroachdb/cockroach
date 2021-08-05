@@ -6,6 +6,9 @@ ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 52
+Stage 1
   *scop.MarkDescriptorAsDropped
     TableID: 52
   *scop.DrainDescriptorName
@@ -36,6 +39,9 @@ Stage 0
   *scop.UpdateRelationDeps
     TableID: 54
 Stage 1
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 52
+Stage 2
   *scop.MarkDescriptorAsDropped
     TableID: 52
   *scop.DrainDescriptorName

@@ -14,6 +14,9 @@ Stage 0
     DependedOnBy: 53
     TableID: 52
 Stage 1
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 53
+Stage 2
   *scop.MarkDescriptorAsDropped
     TableID: 53
   *scop.DrainDescriptorName
@@ -74,6 +77,17 @@ Stage 0
     DescID: 59
     TypeID: 58
 Stage 1
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 53
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 54
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 55
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 56
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 59
+Stage 2
   *scop.MarkDescriptorAsDropped
     TableID: 53
   *scop.DrainDescriptorName

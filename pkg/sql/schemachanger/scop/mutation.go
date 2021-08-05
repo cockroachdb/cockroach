@@ -66,6 +66,13 @@ type CreateGcJobForDescriptor struct {
 	DescID descpb.ID
 }
 
+// MarkDescriptorAsDroppedInTxn marks a descriptor as dropped within
+// a transaction by injecting a synthetic descriptor.
+type MarkDescriptorAsDroppedInTxn struct {
+	mutationOp
+	TableID descpb.ID
+}
+
 // MarkDescriptorAsDropped marks a descriptor as dropped.
 type MarkDescriptorAsDropped struct {
 	mutationOp

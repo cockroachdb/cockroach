@@ -33,6 +33,9 @@ import (
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, bool, error) {
 	// TODO(ajwerner): Call featureflag.CheckEnabled appropriately.
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
+	// When new schema changer is on we wil not support it for explicit
+	// transaction, since we don't know if subsequent statements don't
+	// support it.
 	if mode == sessiondata.UseNewSchemaChangerOff ||
 		(mode == sessiondata.UseNewSchemaChangerOn && !p.extendedEvalCtx.TxnImplicit) {
 		return nil, false, nil

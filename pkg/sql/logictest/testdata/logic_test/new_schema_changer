@@ -640,6 +640,36 @@ statement error database "db1" is not empty and CASCADE was not specified
 DROP DATABASE db1
 
 statement ok
+SET experimental_use_new_schema_changer = 'unsafe_always'
+
+# Sanity check: Things are properly executed in post commit. We should
+# be able to select from tables/views/sequences still
+statement ok
+BEGIN
+
+statement ok
+DROP DATABASE db1 CASCADE
+
+statement ok
+ROLLBACK
+
+statement ok
+SELECT * from db1.sc1.v1
+
+statement ok
+SELECT * from db1.sc1.t1
+
+statement ok
+SELECT * from db1.sc1.sq1
+
+statement ok
+SELECT 'a'::db1.sc1.typ::string
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+# Actually drop the database now.
+statement ok
 DROP DATABASE db1 CASCADE
 
 # Tests for computed column rewrites.

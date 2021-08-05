@@ -6,11 +6,16 @@ ops
 DROP TYPE defaultdb.typ
 ----
 Stage 0
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 52
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 53
+Stage 1
   *scop.MarkDescriptorAsDropped
     TableID: 52
   *scop.MarkDescriptorAsDropped
     TableID: 53
-Stage 1
+Stage 2
   *scop.DrainDescriptorName
     TableID: 52
   *scop.DrainDescriptorName

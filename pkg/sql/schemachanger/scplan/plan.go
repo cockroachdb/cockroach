@@ -39,6 +39,8 @@ const (
 	PreCommitPhase
 	// PostCommitPhase refers to execution of ops occurring after the user
 	// transaction has committed (i.e., in the async schema change job).
+	// Note: Planning rules cannot ever be in this phase, since all those operations
+	// should be executed in pre-commit.
 	PostCommitPhase
 )
 

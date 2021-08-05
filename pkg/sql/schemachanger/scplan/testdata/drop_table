@@ -84,7 +84,20 @@ Stage 0
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 55
     TableID: 54
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 55
 Stage 1
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 57
+  *scop.MarkDescriptorAsDroppedInTxn
+    TableID: 56
+  *scop.MarkDescriptorAsDropped
+    TableID: 55
+  *scop.DrainDescriptorName
+    TableID: 55
+  *scop.CreateGcJobForDescriptor
+    DescID: 55
+Stage 2
   *scop.MarkDescriptorAsDropped
     TableID: 57
   *scop.DrainDescriptorName
@@ -97,12 +110,6 @@ Stage 1
     TableID: 56
   *scop.CreateGcJobForDescriptor
     DescID: 56
-  *scop.MarkDescriptorAsDropped
-    TableID: 55
-  *scop.DrainDescriptorName
-    TableID: 55
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
 
 deps
 DROP TABLE defaultdb.shipments CASCADE;

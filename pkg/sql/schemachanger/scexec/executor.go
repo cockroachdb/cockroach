@@ -281,12 +281,15 @@ func UpdateDescriptorJobIDs(
 			return err
 		}
 		// Currently all "locking" schema changes are on tables. This will probably
-		// need to be expanded at least to types.
+		// need to be expanded at least to types. Synthetic descriptors are intentionally
+		// ignore, since we may inject these in the statement phase to mark things as
+		// dropped for example.
 		table, err := descriptors.GetMutableTableByID(ctx, txn, id,
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					Required:       true,
-					IncludeDropped: true},
+					IncludeDropped: true,
+					AvoidSynthetic: true},
 			})
 		if err != nil {
 			return err
