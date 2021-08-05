@@ -665,8 +665,3 @@ CREATE TABLE public.trewrite (
    CONSTRAINT new_primary_key PRIMARY KEY (k ASC),
    FAMILY fam_0_k_ts (k, ts, c)
 )
-
-# Works around view back references to tables not being cleaned up.
-# see issue #66677
-statement ok
-SET experimental_use_new_schema_changer = 'off'

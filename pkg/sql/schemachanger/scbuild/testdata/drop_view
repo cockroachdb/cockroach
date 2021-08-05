@@ -9,6 +9,11 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 build
 DROP VIEW defaultdb.v1
 ----
+- DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
+  state: PUBLIC
+  details:
+    dependedOn: 53
+    tableId: 52
 - DROP View:{DescID: 53}
   state: PUBLIC
   details:
@@ -40,6 +45,36 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 build
 DROP VIEW defaultdb.v1 CASCADE
 ----
+- DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
+  state: PUBLIC
+  details:
+    dependedOn: 53
+    tableId: 52
+- DROP RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}
+  state: PUBLIC
+  details:
+    dependedOn: 54
+    tableId: 53
+- DROP RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}
+  state: PUBLIC
+  details:
+    dependedOn: 55
+    tableId: 53
+- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
+  state: PUBLIC
+  details:
+    dependedOn: 55
+    tableId: 54
+- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}
+  state: PUBLIC
+  details:
+    dependedOn: 56
+    tableId: 54
+- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}
+  state: PUBLIC
+  details:
+    dependedOn: 59
+    tableId: 56
 - DROP TypeReference:{DescID: 59, ReferencedDescID: 57}
   state: PUBLIC
   details:
