@@ -186,8 +186,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 		args = append(args, "--test_output", "errors")
 	}
 
-	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
-	return err
+	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }
 
 func (d *dev) runLogicTest(cmd *cobra.Command) error {
