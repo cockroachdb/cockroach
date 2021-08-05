@@ -13,6 +13,7 @@ package opt_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"reflect"
 	"testing"
 
@@ -248,6 +249,7 @@ func TestMetadataTables(t *testing.T) {
 			cat.Visible,
 			nil, /* defaultExpr */
 			nil, /* computedExpr */
+			descpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN, /* generatedAsIDType */
 		)
 		return c
 	}

@@ -11,6 +11,7 @@
 package cat
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -35,6 +36,7 @@ type Column struct {
 	defaultExpr                 string
 	computedExpr                string
 	invertedSourceColumnOrdinal int
+	generatedAsIdentityType     descpb.GeneratedAsIdentityType
 }
 
 // Ordinal returns the position of the column in its table. The following always
@@ -201,6 +203,7 @@ func (c *Column) Init(
 	visibility ColumnVisibility,
 	defaultExpr *string,
 	computedExpr *string,
+	generatedAsIDType descpb.GeneratedAsIdentityType,
 ) {
 	if kind == Inverted {
 		panic(errors.AssertionFailedf("incorrect init method"))
@@ -219,6 +222,7 @@ func (c *Column) Init(
 		nullable:                    nullable,
 		visibility:                  visibility,
 		invertedSourceColumnOrdinal: -1,
+		generatedAsIdentityType:     generatedAsIDType,
 	}
 	if defaultExpr != nil {
 		c.defaultExpr = *defaultExpr
@@ -272,4 +276,10 @@ func (c *Column) InitVirtualComputed(
 		virtualComputed:             true,
 		invertedSourceColumnOrdinal: -1,
 	}
+}
+
+// IsGeneratedAlways returns true
+// if the column is not allowed for explicit write (write without any additional tokens)
+func (c *Column) IsGeneratedAlways() bool {
+	return c.generatedAsIdentityType == descpb.GeneratedAsIdentityType_GENERATED_ALWAYS
 }
