@@ -182,6 +182,7 @@ ALL_TESTS = [
     "//pkg/server/tracedumper:tracedumper_test",
     "//pkg/server:server_test",
     "//pkg/settings:settings_test",
+    "//pkg/spanconfig/spanconfigmanager:spanconfigmanager_test",
     "//pkg/sql/catalog/catalogkeys:catalogkeys_test",
     "//pkg/sql/catalog/catalogkv:catalogkv_test",
     "//pkg/sql/catalog/catformat:catformat_test",

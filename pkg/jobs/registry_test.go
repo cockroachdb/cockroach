@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -130,7 +131,17 @@ func TestRegistryGC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				// This test directly modifies `system.jobs` and makes over its contents
+				// by querying it. We disable the auto span config reconciliation job
+				// from getting created so that we don't have to special case it in the
+				// test itself.
+				ManagerDisableJobCreation: true,
+			},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -269,7 +280,17 @@ func TestRegistryGCPagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				// This test directly modifies `system.jobs` and makes over its contents
+				// by querying it. We disable the auto span config reconciliation job
+				// from getting created so that we don't have to special case it in the
+				// test itself.
+				ManagerDisableJobCreation: true,
+			},
+		},
+	})
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(ctx)
 
@@ -476,6 +497,13 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			Settings: cs,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: knobs,
+				SpanConfig: &spanconfig.TestingKnobs{
+					// This test directly modifies `system.jobs` and makes over its contents
+					// by querying it. We disable the auto span config reconciliation job
+					// from getting created so that we don't have to special case it in the
+					// test itself.
+					ManagerDisableJobCreation: true,
+				},
 			},
 		}
 		var sqlDB *gosql.DB

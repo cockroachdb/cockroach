@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -98,6 +99,7 @@ type PlanHookState interface {
 	CreateSchemaNamespaceEntry(ctx context.Context, schemaNameKey roachpb.Key,
 		schemaID descpb.ID) error
 	MigrationJobDeps() migration.JobDeps
+	SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 }
 
