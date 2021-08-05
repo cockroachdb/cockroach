@@ -14,16 +14,20 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -57,6 +61,10 @@ func (ds *DistSender) RangeFeed(
 		return err
 	}
 
+	wd := &rangeFeedWatchdog{}
+	wd.init(ds)
+	defer wd.stop()
+
 	g := ctxgroup.WithContext(ctx)
 	// Goroutine that processes subdivided ranges and creates a rangefeed for
 	// each.
@@ -67,8 +75,10 @@ func (ds *DistSender) RangeFeed(
 			case sri := <-rangeCh:
 				// Spawn a child goroutine to process this feed.
 				g.GoCtx(func(ctx context.Context) error {
-					return ds.partialRangeFeed(ctx, &sri, withDiff, rangeCh, eventCh)
+					return wd.partialRangeFeedWithLivenessRestart(ctx, sri.rs, sri.ts, sri.token, withDiff, rangeCh, eventCh)
 				})
+			case <-wd.C:
+				wd.restartSlowRanges()
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -81,6 +91,161 @@ func (ds *DistSender) RangeFeed(
 	})
 
 	return g.Wait()
+}
+
+var enableRangefeedWatchdog = settings.RegisterBoolSetting(
+	"kv.dist_sender.enable_rangefeed_watchdog",
+	"when set, starts a watcher for rangefeed which monitors rangefeed closed time stamps, "+
+		"and restarts rangefeed if those checkpoints do not advance",
+	false,
+)
+var restartRangefeedThreshold = settings.RegisterDurationSetting(
+	"kv.dist_sender.rangefeed_watchdog_timeout",
+	"restart rangefeed if the range does not publish closed timestamp for "+
+		"longer than this threshold; 0 selects a reasonable default",
+	0,
+	settings.NonNegativeDuration,
+)
+var watchdogPace = settings.RegisterDurationSetting(
+	"kv.dist_sender.rangefeed_watchdog_pace",
+	"how often the set of all rangefeed is checked for liveness",
+	10*time.Minute,
+	func(d time.Duration) error {
+		if d < 5*time.Second {
+			return errors.Newf("must be at least 5 seconds")
+		}
+		return nil
+	},
+)
+
+// activeRangeFeed structure is used by rangeFeedWatchdog to monitor
+// rangefeed streams.
+type activeRangeFeed struct {
+	syncutil.Mutex
+	checkpoint hlc.Timestamp
+}
+
+func (a *activeRangeFeed) onCheckpoint(ts hlc.Timestamp) {
+	a.Lock()
+	defer a.Unlock()
+	a.checkpoint = ts
+}
+
+func (a *activeRangeFeed) checkpointTime() time.Time {
+	a.Lock()
+	defer a.Unlock()
+	return a.checkpoint.GoTime()
+}
+
+// rangeFeeedWatchdog is responsible for watching over the health of the
+// rangefeed ranges.
+type rangeFeedWatchdog struct {
+	ds *DistSender
+
+	// C is the time channel pacing the frequency of
+	// watchdog operation.
+	// It is left nil if the watchdog is disabled.
+	C <-chan time.Time
+
+	// All members below are initialized iff C != nil.
+
+	ticker     *timeutil.Timer
+	tickerPace time.Duration
+	// Map of ranges (activeRangeFeed* -> context.CancelFunc) watched by this watchdog.
+	// TODO(yevgeniy): Expose iterating the partialRangeFeed structures
+	//  through here and then hook up iterating these things off of the
+	//  DistSender in a crdb_internal virtual table.
+	ranges sync.Map
+}
+
+func (wd *rangeFeedWatchdog) init(ds *DistSender) {
+	wd.ds = ds
+	if enableRangefeedWatchdog.Get(&ds.st.SV) {
+		wd.ticker = timeutil.NewTimer()
+		wd.tickerPace = watchdogPace.Get(&wd.ds.st.SV)
+		wd.ticker.Reset(wd.tickerPace)
+		wd.C = wd.ticker.C
+	}
+}
+
+func (wd *rangeFeedWatchdog) stop() {
+	if wd.ticker != nil {
+		wd.ticker.Stop()
+	}
+}
+
+func (wd *rangeFeedWatchdog) restartThreshold() time.Duration {
+	threshold := restartRangefeedThreshold.Get(&wd.ds.st.SV)
+	if threshold == 0 {
+		// TODO(yevgeniy): Perhaps we can default to a function of closedts.SideTransportCloseInterval
+		return 10 * time.Minute
+	}
+	return threshold
+}
+
+// restartSlowRanges is responsible for restarting rangescans for ranges from
+// which we have not heard any updates in a long time.
+// Note: Restarts as performed by this method paper over the underlying problem, and
+// a potential bug in a system.  However, this seems to be more of a defensive mechanism
+// to guard against potential issues introduced downstream (e.g. KV, or closed time stamp, etc).
+// TODO(yevgeniy): Perhaps we can remove this hack at some point.
+func (wd *rangeFeedWatchdog) restartSlowRanges() {
+	wd.ticker.Read = true
+	if newPace := watchdogPace.Get(&wd.ds.st.SV); newPace != wd.tickerPace {
+		wd.ticker.Reset(newPace)
+	}
+
+	tooLong := wd.restartThreshold()
+	wd.ranges.Range(func(k, v interface{}) (continueMatch bool) {
+		if timeutil.Since(k.(*activeRangeFeed).checkpointTime()) > tooLong {
+			v.(context.CancelFunc)()
+			wd.ds.metrics.SlowRangeFeedRanges.Inc(1)
+		}
+		return true
+	})
+}
+
+// partialRangeFeedWithLivenessRestart executes partial rangefeed.
+// If the watchdog enabled, arranges for cancellation context to be set so that
+// restartSlowRanges can cancel range feeds that appear to be stuck.
+func (wd *rangeFeedWatchdog) partialRangeFeedWithLivenessRestart(
+	ctx context.Context,
+	rs roachpb.RSpan,
+	ts hlc.Timestamp,
+	token rangecache.EvictionToken,
+	withDiff bool,
+	rangeCh chan<- singleRangeInfo,
+	eventCh chan<- *roachpb.RangeFeedEvent,
+) error {
+	if wd.C == nil {
+		// Watchdog disabled.
+		return wd.ds.partialRangeFeed(ctx, rs, ts, token, withDiff, rangeCh, eventCh, nil)
+	}
+
+	active := &activeRangeFeed{}
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer func() {
+		cancelStream()
+		wd.ranges.Delete(active)
+	}()
+
+	for {
+		wd.ranges.Store(active, cancelStream)
+
+		err := wd.ds.partialRangeFeed(
+			streamCtx, rs, ts, token, withDiff, rangeCh, eventCh, active.onCheckpoint)
+		if err == nil {
+			return nil
+		}
+
+		wasStuck := streamCtx.Err() != nil && ctx.Err() == nil
+		if !wasStuck {
+			return err
+		}
+		// Cancel previous stream context, and reset stream context for the next attempt.
+		cancelStream()
+		streamCtx, cancelStream = context.WithCancel(ctx)
+	}
 }
 
 func (ds *DistSender) divideAndSendRangeFeedToRanges(
@@ -122,21 +287,23 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 // this rangefeed, or subdividing the range further in the event of a split.
 func (ds *DistSender) partialRangeFeed(
 	ctx context.Context,
-	rangeInfo *singleRangeInfo,
+	rs roachpb.RSpan,
+	ts hlc.Timestamp,
+	token rangecache.EvictionToken,
 	withDiff bool,
 	rangeCh chan<- singleRangeInfo,
 	eventCh chan<- *roachpb.RangeFeedEvent,
+	onCheckpoint onCheckpointCb,
 ) error {
 	// Bound the partial rangefeed to the partial span.
-	span := rangeInfo.rs.AsRawSpanWithNoLocals()
-	ts := rangeInfo.ts
+	span := rs.AsRawSpanWithNoLocals()
 
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
 		// If we've cleared the descriptor on a send failure, re-lookup.
-		if !rangeInfo.token.Valid() {
+		if !token.Valid() {
 			var err error
-			ri, err := ds.getRoutingInfo(ctx, rangeInfo.rs.Key, rangecache.EvictionToken{}, false)
+			ri, err := ds.getRoutingInfo(ctx, rs.Key, rangecache.EvictionToken{}, false)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 				if !rangecache.IsRangeLookupErrorRetryable(err) {
@@ -144,11 +311,11 @@ func (ds *DistSender) partialRangeFeed(
 				}
 				continue
 			}
-			rangeInfo.token = ri
+			token = ri
 		}
 
 		// Establish a RangeFeed for a single Range.
-		maxTS, err := ds.singleRangeFeed(ctx, span, ts, withDiff, rangeInfo.token.Desc(), eventCh)
+		maxTS, err := ds.singleRangeFeed(ctx, span, ts, withDiff, token.Desc(), eventCh, onCheckpoint)
 
 		// Forward the timestamp in case we end up sending it again.
 		ts.Forward(maxTS)
@@ -166,13 +333,13 @@ func (ds *DistSender) partialRangeFeed(
 				// retry.
 			case IsSendError(err), errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)):
 				// Evict the descriptor from the cache and reload on next attempt.
-				rangeInfo.token.Evict(ctx)
-				rangeInfo.token = rangecache.EvictionToken{}
+				token.Evict(ctx)
+				token = rangecache.EvictionToken{}
 				continue
 			case errors.HasType(err, (*roachpb.RangeKeyMismatchError)(nil)):
 				// Evict the descriptor from the cache.
-				rangeInfo.token.Evict(ctx)
-				return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
+				token.Evict(ctx)
+				return ds.divideAndSendRangeFeedToRanges(ctx, rs, ts, rangeCh)
 			case errors.HasType(err, (*roachpb.RangeFeedRetryError)(nil)):
 				var t *roachpb.RangeFeedRetryError
 				if ok := errors.As(err, &t); !ok {
@@ -190,8 +357,8 @@ func (ds *DistSender) partialRangeFeed(
 					roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
 					roachpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER:
 					// Evict the descriptor from the cache.
-					rangeInfo.token.Evict(ctx)
-					return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
+					token.Evict(ctx)
+					return ds.divideAndSendRangeFeedToRanges(ctx, rs, ts, rangeCh)
 				default:
 					return errors.AssertionFailedf("unrecognized retriable error type: %T", err)
 				}
@@ -202,6 +369,8 @@ func (ds *DistSender) partialRangeFeed(
 	}
 	return ctx.Err()
 }
+
+type onCheckpointCb func(timestamp hlc.Timestamp)
 
 // singleRangeFeed gathers and rearranges the replicas, and makes a RangeFeed
 // RPC call. Results will be sent on the provided channel. Returns the timestamp
@@ -216,6 +385,7 @@ func (ds *DistSender) singleRangeFeed(
 	withDiff bool,
 	desc *roachpb.RangeDescriptor,
 	eventCh chan<- *roachpb.RangeFeedEvent,
+	onCheckpoint onCheckpointCb,
 ) (hlc.Timestamp, error) {
 	args := roachpb.RangeFeedRequest{
 		Span: span,
@@ -278,6 +448,9 @@ func (ds *DistSender) singleRangeFeed(
 			case *roachpb.RangeFeedCheckpoint:
 				if t.Span.Contains(args.Span) {
 					args.Timestamp.Forward(t.ResolvedTS)
+					if onCheckpoint != nil {
+						onCheckpoint(args.Timestamp)
+					}
 				}
 			case *roachpb.RangeFeedError:
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
