@@ -16,17 +16,17 @@ is_custom_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo ""
 
 if [[ -z "${DRY_RUN}" ]] ; then
   bucket="${BUCKET-cockroach-builds}"
-  google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS
-  gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
+  google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
+  gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
+  # Used for docker login for gcloud
+  gcr_hostname="us-docker.pkg.dev"
 else
   bucket="${BUCKET:-cockroach-builds-test}"
   google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
   gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
   build_name="${build_name}.dryrun"
+  gcr_hostname="us.gcr.io"
 fi
-
-# Used for docker login for gcloud
-gcr_hostname="us.gcr.io"
 
 cat << EOF
 
