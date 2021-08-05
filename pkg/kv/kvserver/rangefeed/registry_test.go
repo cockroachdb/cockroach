@@ -177,6 +177,17 @@ func TestRegistrationBasic(t *testing.T) {
 	disconnectReg.disconnect(discErr)
 	err := <-disconnectReg.errC
 	require.Equal(t, discErr, err)
+	require.Equal(t, 2, len(disconnectReg.stream.Events()))
+
+	// External Disconnect before output loop.
+	disconnectEarlyReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, false)
+	disconnectEarlyReg.publish(ev1)
+	disconnectEarlyReg.publish(ev2)
+	disconnectEarlyReg.disconnect(discErr)
+	go disconnectEarlyReg.runOutputLoop(context.Background(), 0)
+	err = <-disconnectEarlyReg.errC
+	require.Equal(t, discErr, err)
+	require.Equal(t, 0, len(disconnectEarlyReg.stream.Events()))
 
 	// Overflow.
 	overflowReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, false)

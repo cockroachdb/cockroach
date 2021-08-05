@@ -1943,6 +1943,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 		return err
 	}
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
+	ot.semaCtx.TypeResolver = ot.catalog
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
 	return b.Build()
 }
