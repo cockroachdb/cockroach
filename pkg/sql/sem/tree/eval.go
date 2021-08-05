@@ -2323,6 +2323,13 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 			isPreferred: true,
 			Volatility:  VolatilityLeakProof,
 		},
+		&CmpOp{
+			LeftType:     types.AnyArray,
+			RightType:    types.Unknown,
+			Fn:           cmpOpScalarIsFn,
+			NullableArgs: true,
+			Volatility:   VolatilityLeakProof,
+		},
 		// Single-type comparisons.
 		makeIsFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
 		makeIsFn(types.Bool, types.Bool, VolatilityLeakProof),

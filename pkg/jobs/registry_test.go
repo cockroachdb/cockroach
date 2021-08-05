@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -275,4 +277,73 @@ func TestRegistryGCPagination(t *testing.T) {
 	var count int
 	db.QueryRow(t, `SELECT count(1) FROM system.jobs`).Scan(&count)
 	require.Zero(t, count)
+}
+
+func TestBatchJobsCreation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, test := range []struct {
+		name      string
+		batchSize int
+	}{
+		{"small batch", 10},
+		{"medium batch", 501},
+		{"large batch", 1001},
+		{"extra large batch", 5001},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			{
+				if test.batchSize > 10 {
+					skip.UnderStress(t, "skipping stress test for batch size ", test.batchSize)
+					skip.UnderRace(t, "skipping test for batch size ", test.batchSize)
+				}
+
+				args := base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
+					},
+				}
+
+				ctx := context.Background()
+				s, sqlDB, kvDB := serverutils.StartServer(t, args)
+				tdb := sqlutils.MakeSQLRunner(sqlDB)
+				defer s.Stopper().Stop(ctx)
+				r := s.JobRegistry().(*Registry)
+
+				RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+					return FakeResumer{
+						OnResume: func(ctx context.Context) error {
+							return nil
+						},
+					}
+				})
+
+				// Create a batch of job specifications.
+				var records []*Record
+				for i := 0; i < test.batchSize; i++ {
+					records = append(records, &Record{
+						JobID:    r.MakeJobID(),
+						Details:  jobspb.ImportDetails{},
+						Progress: jobspb.ImportProgress{},
+					})
+				}
+				// Create jobs in a batch.
+				var jobIDs []jobspb.JobID
+				require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					var err error
+					jobIDs, err = r.CreateJobsWithTxn(ctx, txn, records)
+					return err
+				}))
+				require.Equal(t, len(jobIDs), test.batchSize)
+				// Wait for the jobs to complete.
+				tdb.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW JOBS]",
+					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
+				for _, id := range jobIDs {
+					tdb.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = '%d'", id),
+						[][]string{{"succeeded"}})
+				}
+			}
+		})
+	}
 }

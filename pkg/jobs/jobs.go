@@ -87,6 +87,7 @@ type CreatedByInfo struct {
 
 // Record bundles together the user-managed fields in jobspb.Payload.
 type Record struct {
+	JobID         jobspb.JobID
 	Description   string
 	Statements    []string
 	Username      security.SQLUsername
@@ -102,6 +103,22 @@ type Record struct {
 	// CreatedBy, if set, annotates this record with the information on
 	// this job creator.
 	CreatedBy *CreatedByInfo
+}
+
+// AppendDescription appends description to this records Description with a
+// ';' separator.
+func (r *Record) AppendDescription(description string) {
+	if len(r.Description) == 0 {
+		r.Description = description
+		return
+	}
+	r.Description = r.Description + ";" + description
+}
+
+// SetNonCancelable sets NonCancelable of this Record to the value returned from
+// updateFn.
+func (r *Record) SetNonCancelable(ctx context.Context, updateFn NonCancelableUpdateFn) {
+	r.NonCancelable = updateFn(ctx, r.NonCancelable)
 }
 
 // StartableJob is a job created with a transaction to be started later.
@@ -311,45 +328,10 @@ func (j *Job) RunningStatus(
 	})
 }
 
-// SetDescription updates the description of a created job.
-func (j *Job) SetDescription(ctx context.Context, txn *kv.Txn, updateFn DescriptionUpdateFn) error {
-	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		prev := md.Payload.Description
-		desc, err := updateFn(ctx, prev)
-		if err != nil {
-			return err
-		}
-		if prev != desc {
-			md.Payload.Description = desc
-			ju.UpdatePayload(md.Payload)
-		}
-		return nil
-	})
-}
-
-// SetNonCancelable updates the NonCancelable field of a created job.
-func (j *Job) SetNonCancelable(
-	ctx context.Context, txn *kv.Txn, updateFn NonCancelableUpdateFn,
-) error {
-	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		prev := md.Payload.Noncancelable
-		newStatus := updateFn(ctx, prev)
-		if prev != newStatus {
-			md.Payload.Noncancelable = newStatus
-			ju.UpdatePayload(md.Payload)
-		}
-		return nil
-	})
-}
-
 // RunningStatusFn is a callback that computes a job's running status
 // given its details. It is safe to modify details in the callback; those
 // modifications will be automatically persisted to the database record.
 type RunningStatusFn func(ctx context.Context, details jobspb.Details) (RunningStatus, error)
-
-// DescriptionUpdateFn is a callback that computes a job's description
-// given its current one.
-type DescriptionUpdateFn func(ctx context.Context, description string) (string, error)
 
 // NonCancelableUpdateFn is a callback that computes a job's non-cancelable
 // status given its current one.
