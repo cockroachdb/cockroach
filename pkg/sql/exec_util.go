@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -1012,7 +1013,20 @@ type ExecutorConfig struct {
 
 	// CollectionFactory is used to construct a descs.Collection.
 	CollectionFactory *descs.CollectionFactory
+
+	// SpanConfigReconciliationJobDeps is used to drive the span config
+	// reconciliation job.
+	SpanConfigReconciliationJobDeps spanconfig.ReconciliationDependencies
+
+	// StartSpanConfigReconciliationJobHook is called during the SQL server
+	// startup process, to idempotently create and start a span config
+	// reconciliation for the tenant if none exists.
+	StartSpanConfigReconciliationJobHook StartSpanConfigReconciliationJobHook
 }
+
+// StartSpanConfigReconciliationJobHook is used to create and start the span
+// config reconciliation job, if none exists.
+type StartSpanConfigReconciliationJobHook func(ctx context.Context)
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.
 type VersionUpgradeHook func(

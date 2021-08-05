@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanconfigmanager",
+    srcs = ["manager.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/security",
+        "//pkg/spanconfig",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+    ],
+)
+
+go_test(
+    name = "spanconfigmanager_test",
+    srcs = [
+        "main_test.go",
+        "manager_test.go",
+    ],
+    deps = [
+        ":spanconfigmanager",
+        "//pkg/base",
+        "//pkg/jobs",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/spanconfig",
+        "//pkg/sql",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -274,6 +274,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql/authentication",
         "//pkg/sql/backfill",
         "//pkg/sql/catalog",
