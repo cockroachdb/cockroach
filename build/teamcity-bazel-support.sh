@@ -18,6 +18,10 @@ run_bazel() {
 
     # Set up volumes.
     vols="--volume /home/agent/.bazelcache:/root/.cache/bazel"
+    # TeamCity uses git alternates, so make sure we mount the path to the real
+    # git objects.
+    teamcity_alternates="/home/agent/system/git"
+    vols="${vols} --volume ${teamcity_alternates}:${teamcity_alternates}:ro"
 
     workspace_vol="--volume ${root}:/go/src/github.com/cockroachdb/cockroach"
     if [ -z "${TEAMCITY_BAZEL_SUPPORT_GENERATE:-}" ]
