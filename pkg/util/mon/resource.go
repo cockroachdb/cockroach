@@ -33,13 +33,17 @@ var MemoryResource Resource = memoryResource{}
 func (m memoryResource) NewBudgetExceededError(
 	requestedBytes int64, reservedBytes int64, budgetBytes int64,
 ) error {
-	return pgerror.WithCandidateCode(
+	err := pgerror.WithCandidateCode(
 		errors.Newf(
 			"memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
 			errors.Safe(requestedBytes),
 			errors.Safe(reservedBytes),
 			errors.Safe(budgetBytes),
 		), pgcode.OutOfMemory)
+	if budgetBytes == 0 {
+		panic(err)
+	}
+	return err
 }
 
 // diskResource is a Resource that represents disk.
