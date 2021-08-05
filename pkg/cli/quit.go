@@ -139,6 +139,7 @@ func doDrainNoTimeout(
 		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
 			DoDrain:  true,
 			Shutdown: false,
+			Verbose:  verbose,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "\n") // finish the line started above.
