@@ -53,6 +53,9 @@ const (
 	// TypeResolved indicates that the Resolved method on the Event will be
 	// meaningful.
 	TypeResolved
+
+	// TypeUnknown indicates the event could not be parsed. Will fail the feed.
+	TypeUnknown
 )
 
 // Event represents an event emitted by a kvfeed. It is either a KV or a
@@ -73,8 +76,7 @@ func (b *Event) Type() Type {
 	if b.resolved != nil {
 		return TypeResolved
 	}
-	log.Fatalf(context.TODO(), "found event with unknown type: %+v", *b)
-	return 0 // unreachable
+	return TypeUnknown
 }
 
 // ApproximateSize returns events approximate size in bytes.
@@ -132,8 +134,9 @@ func (b *Event) Timestamp() hlc.Timestamp {
 		}
 		return b.kv.Value.Timestamp
 	default:
-		log.Fatalf(context.TODO(), "unknown event type")
-		return hlc.Timestamp{} // unreachable
+		log.Warningf(context.TODO(),
+			"setting empty timestamp for unknown event type")
+		return hlc.Timestamp{}
 	}
 }
 
@@ -147,8 +150,9 @@ func (b *Event) MVCCTimestamp() hlc.Timestamp {
 	case TypeKV:
 		return b.kv.Value.Timestamp
 	default:
-		log.Fatalf(context.TODO(), "unknown event type")
-		return hlc.Timestamp{} // unreachable
+		log.Warningf(context.TODO(),
+			"setting empty timestamp for unknown event type")
+		return hlc.Timestamp{}
 	}
 }
 

@@ -277,7 +277,7 @@ func (f *kvFeed) scanIfShould(
 				}
 			}
 			if !scanTime.Equal(ev.After.GetModificationTime()) {
-				log.Fatalf(ctx, "found event in shouldScan which did not occur at the scan time %v: %v",
+				return errors.AssertionFailedf("found event in shouldScan which did not occur at the scan time %v: %v",
 					scanTime, ev)
 			}
 		}
@@ -348,8 +348,8 @@ func (f *kvFeed) runUntilTableEvent(
 	// recreate the rangefeeds.
 	err = g.Wait()
 	if err == nil {
-		log.Fatalf(ctx, "feed exited with no error and no scan boundary")
-		return hlc.Timestamp{}, nil // unreachable
+		return hlc.Timestamp{},
+			errors.AssertionFailedf("feed exited with no error and no scan boundary")
 	} else if tErr := (*errBoundaryReached)(nil); errors.As(err, &tErr) {
 		// TODO(ajwerner): iterate the spans and add a Resolved timestamp.
 		// We'll need to do this to ensure that a resolved timestamp propagates
@@ -366,6 +366,14 @@ type errBoundaryReached struct {
 
 func (e *errBoundaryReached) Error() string {
 	return "scan boundary reached: " + e.String()
+}
+
+type errUnknownEvent struct {
+	kvevent.Event
+}
+
+func (e *errUnknownEvent) Error() string {
+	return "unknown event type"
 }
 
 // copyFromSourceToSinkUntilTableEvents will pull read entries from source and
@@ -427,8 +435,7 @@ func copyFromSourceToSinkUntilTableEvent(
 				}
 				return true, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp), nil
 			default:
-				log.Fatal(ctx, "unknown event type")
-				return false, false, nil
+				return false, false, &errUnknownEvent{e}
 			}
 		}
 		addEntry = func(e kvevent.Event) error {
@@ -446,8 +453,7 @@ func copyFromSourceToSinkUntilTableEvent(
 				}
 				return sink.AddResolved(ctx, resolved.Span, resolved.Timestamp, jobspb.ResolvedSpan_NONE)
 			default:
-				log.Fatal(ctx, "unknown event type")
-				return nil
+				return &errUnknownEvent{e}
 			}
 		}
 	)
