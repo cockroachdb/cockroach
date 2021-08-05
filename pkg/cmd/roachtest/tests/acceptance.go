@@ -68,6 +68,7 @@ func registerAcceptance(r registry.Registry) {
 			{name: "cli/node-status", fn: runCLINodeStatus},
 			{name: "cluster-init", fn: runClusterInit},
 			{name: "rapid-restart", fn: runRapidRestart},
+			{name: "slow-drain", fn: runSlowDrain, numNodes: 6, timeout: 30 * time.Minute},
 			{name: "status-server", fn: runStatusServer},
 		},
 	}
