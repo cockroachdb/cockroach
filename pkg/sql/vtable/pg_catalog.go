@@ -989,8 +989,9 @@ CREATE TABLE pg_catalog.pg_shmem_allocations (
 	allocated_size INT
 )`
 
-// PgCatalogDbRoleSetting is an empty table created by pg_catalog_test
-// and is currently unimplemented.
+// PgCatalogDbRoleSetting contains the default values that have been configured
+// for session variables, for each role and database combination. This table
+// contains the same data no matter which database the current session is using.
 const PgCatalogDbRoleSetting = `
 CREATE TABLE pg_catalog.pg_db_role_setting (
 	setconfig STRING[],

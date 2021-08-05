@@ -22,6 +22,20 @@ database_id  role_name      settings
 53           ·              {application_name=c}
 53           test_set_role  {application_name=b}
 
+# Defaults should be in pg_catalog too.
+query OOTTT colnames
+SELECT setdatabase, setrole, d.datname, r.rolname, setconfig
+FROM pg_catalog.pg_db_role_setting
+LEFT JOIN pg_catalog.pg_database d ON setdatabase = d.oid
+LEFT JOIN pg_catalog.pg_roles r ON setrole = r.oid
+ORDER BY 1, 2
+----
+setdatabase  setrole    datname      rolname        setconfig
+0            0          NULL         NULL           {application_name=d}
+0            265380634  NULL         test_set_role  {application_name=a}
+53           0          test_set_db  NULL           {application_name=c}
+53           265380634  test_set_db  test_set_role  {application_name=b}
+
 statement ok
 ALTER ROLE test_set_role SET backslash_quote = 'safe_encoding'
 
