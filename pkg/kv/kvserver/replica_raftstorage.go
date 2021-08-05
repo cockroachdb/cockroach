@@ -575,21 +575,14 @@ func snapshot(
 		return OutgoingSnapshot{}, errors.Mark(errors.Errorf("couldn't find range descriptor"), errMarkSnapshotError)
 	}
 
-	// Read the range metadata from the snapshot instead of the members
-	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := rsl.LoadAppliedIndex(ctx, snap)
-	if err != nil {
-		return OutgoingSnapshot{}, err
-	}
-
-	term, err := term(ctx, rsl, snap, rangeID, eCache, appliedIndex)
-	if err != nil {
-		return OutgoingSnapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
-	}
-
 	state, err := rsl.Load(ctx, snap, &desc)
 	if err != nil {
 		return OutgoingSnapshot{}, err
+	}
+
+	term, err := term(ctx, rsl, snap, rangeID, eCache, state.RaftAppliedIndex)
+	if err != nil {
+		return OutgoingSnapshot{}, errors.Errorf("failed to fetch term of %d: %s", state.RaftAppliedIndex, err)
 	}
 
 	// Intentionally let this iterator and the snapshot escape so that the
@@ -606,7 +599,7 @@ func snapshot(
 		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
 			Metadata: raftpb.SnapshotMetadata{
-				Index: appliedIndex,
+				Index: state.RaftAppliedIndex,
 				Term:  term,
 				// Synthesize our raftpb.ConfState from desc.
 				ConfState: desc.Replicas().ConfState(),
