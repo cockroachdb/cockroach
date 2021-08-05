@@ -3174,7 +3174,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		}
 		mkStaleTxn = func() *kv.Txn {
 			txn := db.NewTxn(ctx, "foo")
-			txn.SetFixedTimestamp(ctx, tenSecondsAgo)
+			require.NoError(t, txn.SetFixedTimestamp(ctx, tenSecondsAgo))
 			return txn
 		}
 		getRejectedMsg = func() string {

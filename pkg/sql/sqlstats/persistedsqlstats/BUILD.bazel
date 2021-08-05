@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "persistedsqlstats",
+    srcs = [
+        "cluster_settings.go",
+        "flush.go",
+        "provider.go",
+        "test_utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/sql/sqlstats/sslocal",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "persistedsqlstats_test",
+    srcs = [
+        "flush_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        ":persistedsqlstats",
+        "//pkg/base",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/sqlstats",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

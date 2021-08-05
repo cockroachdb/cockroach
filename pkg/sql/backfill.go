@@ -186,7 +186,9 @@ func (sc *SchemaChanger) fixedTimestampTxn(
 	retryable func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error,
 ) error {
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-		txn.SetFixedTimestamp(ctx, readAsOf)
+		if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
+			return err
+		}
 		return retryable(ctx, txn, descriptors)
 	})
 }

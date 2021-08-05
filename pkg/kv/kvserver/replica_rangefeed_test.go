@@ -220,7 +220,9 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Insert a second key transactionally.
 	ts3 := initTime.Add(0, 3)
 	if err := store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, ts3)
+		if err := txn.SetFixedTimestamp(ctx, ts3); err != nil {
+			return err
+		}
 		return txn.Put(ctx, roachpb.Key("m"), []byte("val3"))
 	}); err != nil {
 		t.Fatal(err)
@@ -240,7 +242,9 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Update the originally incremented key transactionally.
 	ts5 := initTime.Add(0, 5)
 	if err := store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, ts5)
+		if err := txn.SetFixedTimestamp(ctx, ts5); err != nil {
+			return err
+		}
 		_, err := txn.Inc(ctx, incArgs.Key, 7)
 		return err
 	}); err != nil {

@@ -98,7 +98,9 @@ func (ib *IndexBackfillPlanner) scanTargetSpansToPushTimestampCache(
 ) error {
 	const pageSize = 10000
 	return ib.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, backfillTimestamp)
+		if err := txn.SetFixedTimestamp(ctx, backfillTimestamp); err != nil {
+			return err
+		}
 		for _, span := range targetSpans {
 			// TODO(dt): a Count() request would be nice here if the target isn't
 			// empty, since we don't need to drag all the results back just to
