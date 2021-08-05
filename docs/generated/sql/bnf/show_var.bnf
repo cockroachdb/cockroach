@@ -30,3 +30,4 @@ show_stmt ::=
 	| show_transactions_stmt
 	| show_users_stmt
 	| show_zone_stmt
+	| show_default_privileges_stmt

@@ -325,6 +325,8 @@ func TestContextualHelp(t *testing.T) {
 
 		{`SHOW DATABASES ??`, `SHOW DATABASES`},
 
+		{`SHOW DEFAULT PRIVILEGES ??`, `SHOW DEFAULT PRIVILEGES`},
+
 		{`SHOW ENUMS ??`, `SHOW ENUMS`},
 		{`SHOW TYPES ??`, `SHOW TYPES`},
 

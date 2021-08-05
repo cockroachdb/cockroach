@@ -236,6 +236,7 @@ show_stmt ::=
 	| show_transactions_stmt
 	| show_users_stmt
 	| show_zone_stmt
+	| show_default_privileges_stmt
 
 truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
@@ -751,6 +752,9 @@ show_zone_stmt ::=
 	| 'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'PARTITION' partition_name 'OF' 'INDEX' table_index_name
 	| 'SHOW' 'ZONE' 'CONFIGURATIONS'
 	| 'SHOW' 'ALL' 'ZONE' 'CONFIGURATIONS'
+
+show_default_privileges_stmt ::=
+	'SHOW' 'DEFAULT' 'PRIVILEGES' opt_for_roles
 
 opt_table ::=
 	'TABLE'
@@ -1608,6 +1612,10 @@ opt_partition ::=
 partition_name ::=
 	unrestricted_name
 
+opt_for_roles ::=
+	'FOR' role_or_group_or_user name_list
+	| 
+
 relation_expr ::=
 	table_name
 	| table_name '*'
@@ -1803,10 +1811,6 @@ schema_name ::=
 opt_add_val_placement ::=
 	'BEFORE' 'SCONST'
 	| 'AFTER' 'SCONST'
-	| 
-
-opt_for_roles ::=
-	'FOR' role_or_group_or_user name_list
 	| 
 
 opt_in_schemas ::=

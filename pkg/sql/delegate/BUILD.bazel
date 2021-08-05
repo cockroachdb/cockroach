@@ -9,6 +9,7 @@ go_library(
         "show_changefeed_jobs.go",
         "show_database_indexes.go",
         "show_databases.go",
+        "show_default_privileges.go",
         "show_enums.go",
         "show_full_table_scans.go",
         "show_grants.go",
