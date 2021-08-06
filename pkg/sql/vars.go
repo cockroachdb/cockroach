@@ -183,7 +183,7 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.SessionData.NoticeDisplaySeverity.String()
+			return pgnotice.DisplaySeverity(evalCtx.SessionData.NoticeDisplaySeverity).String()
 		},
 		GlobalDefault: func(_ *settings.Values) string { return "notice" },
 	},
