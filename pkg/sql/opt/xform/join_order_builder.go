@@ -357,7 +357,7 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 		jb.joinCount++
 
 		flags := t.Private().(*memo.JoinPrivate).Flags
-		if !flags.Empty() || jb.joinCount > jb.evalCtx.SessionData.ReorderJoinsLimit {
+		if !flags.Empty() || jb.joinCount > int(jb.evalCtx.SessionData.ReorderJoinsLimit) {
 			// If the join has flags or the join limit has been reached, we can't
 			// reorder. Simply treat the join as a base relation.
 			jb.addBaseRelation(t)

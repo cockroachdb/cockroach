@@ -142,7 +142,7 @@ type LocalOnlySessionData struct {
 	DistSQLMode DistSQLExecMode
 	// OptimizerFKCascadesLimit is the maximum number of cascading operations that
 	// are run for a single query.
-	OptimizerFKCascadesLimit int
+	OptimizerFKCascadesLimit int64
 	// ResultsBufferSize specifies the size at which the pgwire results buffer
 	// will self-flush.
 	ResultsBufferSize int64
@@ -167,12 +167,12 @@ type LocalOnlySessionData struct {
 	IdleInTransactionSessionTimeout time.Duration
 	// ReorderJoinsLimit indicates the number of joins at which the optimizer should
 	// stop attempting to reorder.
-	ReorderJoinsLimit int
+	ReorderJoinsLimit int64
 	// DefaultTxnPriority indicates the default priority of newly created
 	// transactions.
 	// NOTE: we'd prefer to use tree.UserPriority here, but doing so would
 	// introduce a package dependency cycle.
-	DefaultTxnPriority int
+	DefaultTxnPriority int64
 	// DefaultTxnReadOnly indicates the default read-only status of newly
 	// created transactions.
 	DefaultTxnReadOnly bool
