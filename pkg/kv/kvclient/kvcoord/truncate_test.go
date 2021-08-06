@@ -145,8 +145,14 @@ func TestTruncate(t *testing.T) {
 		}
 
 		original := roachpb.BatchRequest{Requests: make([]roachpb.RequestUnion, len(goldenOriginal.Requests))}
+
+		baPlus := batchReqPlus{
+			BatchRequest:  original,
+			startKeyAddrs: make([]roachpb.Key, len(goldenOriginal.Requests)),
+		}
 		for i, request := range goldenOriginal.Requests {
-			original.Requests[i].MustSetInner(request.GetInner().ShallowCopy())
+			baPlus.Requests[i].MustSetInner(request.GetInner().ShallowCopy())
+			baPlus.startKeyAddrs[i] = request.GetInner().Header().Key
 		}
 
 		desc := &roachpb.RangeDescriptor{
@@ -164,7 +170,7 @@ func TestTruncate(t *testing.T) {
 			t.Errorf("%d: intersection failure: %v", i, err)
 			continue
 		}
-		ba, pos, err := truncate(original, rs)
+		ba, pos, err := truncate(baPlus, rs)
 		if err != nil || test.err != "" {
 			if !testutils.IsError(err, test.err) {
 				t.Errorf("%d: %v (expected: %q)", i, err, test.err)

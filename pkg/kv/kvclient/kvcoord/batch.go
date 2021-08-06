@@ -28,9 +28,12 @@ var emptySpan = roachpb.Span{}
 // rs = [a,bb],
 //
 // then truncate(ba,rs) returns a batch (Put[a], Put[b]) and positions [0,2].
-func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, []int, error) {
-	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
+func truncate(ba batchReqPlus, rs roachpb.RSpan) (batchReqPlus, []int, error) {
+	truncateOne := func(pos int, args roachpb.Request) (bool, roachpb.Span, error) {
 		header := args.Header().Span()
+		// Set the header's start key to the remainder of the span of this request
+		// that we haven't yet processed.
+		header.Key = ba.startKeyAddrs[pos]
 		if !roachpb.IsRange(args) {
 			// This is a point request.
 			if len(header.EndKey) > 0 {
@@ -43,6 +46,8 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 			if !rs.ContainsKey(keyAddr) {
 				return false, emptySpan, nil
 			}
+			// Consume the request so that next time we can ignore it.
+			ba.startKeyAddrs[pos] = nil
 			return true, header, nil
 		}
 		// We're dealing with a range-spanning request.
@@ -71,7 +76,10 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 				// address to rs.Key.
 				header.Key = keys.MakeRangeKeyPrefix(rs.Key)
 			}
+		} else {
+
 		}
+		var consumedKey = false
 		if !endKeyAddr.Less(rs.EndKey) {
 			// rs.EndKey can't be local because it contains range split points, which
 			// are never local.
@@ -82,11 +90,23 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 				// address to rs.EndKey.
 				header.EndKey = keys.MakeRangeKeyPrefix(rs.EndKey)
 			}
+			// Next time we look at this request, we'll only have to consider the
+			// right-hand side of the span that we just processed, since we've chopped
+			// off the left side already.
+			ba.startKeyAddrs[pos] = header.EndKey
+		} else {
+			// We're not editing the EndKey. This means that we're completely finished
+			// processing the span in the current request, so we consume it and can
+			// avoid looking at the current request for future iterations of truncate.
+			consumedKey = true
 		}
 		// Check whether the truncation has left any keys in the range. If not,
 		// we need to cut it out of the request.
 		if header.Key.Compare(header.EndKey) >= 0 {
 			return false, emptySpan, nil
+		}
+		if consumedKey {
+			ba.startKeyAddrs[pos] = nil
 		}
 		return true, header, nil
 	}
@@ -98,7 +118,11 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 	truncBA := ba
 	truncBA.Requests = nil
 	for pos, arg := range ba.Requests {
-		hasRequest, newSpan, err := truncateOne(arg.GetInner())
+		// We can skip a given request if it has been fully consumed.
+		if ba.startKeyAddrs[pos] == nil {
+			continue
+		}
+		hasRequest, newSpan, err := truncateOne(pos, arg.GetInner())
 		if hasRequest {
 			// Keep the old one. If we must adjust the header, must copy.
 			inner := ba.Requests[pos].GetInner()
@@ -115,7 +139,7 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 			positions = append(positions, pos)
 		}
 		if err != nil {
-			return roachpb.BatchRequest{}, nil, err
+			return batchReqPlus{}, nil, err
 		}
 	}
 	return truncBA, positions, nil
@@ -132,12 +156,17 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 //
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'roachpb'.
-func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
+func prev(ba batchReqPlus, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMin
-	for _, union := range ba.Requests {
+	for i, union := range ba.Requests {
+		startKey := ba.startKeyAddrs[i]
+		if startKey == nil {
+			// We've already completely consumed the request at this position.
+			continue
+		}
 		inner := union.GetInner()
 		h := inner.Header()
-		addr, err := keys.Addr(h.Key)
+		addr, err := keys.Addr(startKey)
 		if err != nil {
 			return nil, err
 		}
@@ -189,6 +218,14 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	return candidate, nil
 }
 
+type batchReqPlus struct {
+	roachpb.BatchRequest
+
+	// startKeyAddrs is the start key of the remaining unsent segment of the span
+	// of the ith request in the BatchRequest.
+	startKeyAddrs []roachpb.Key
+}
+
 // next gives the left boundary of the union of all requests which don't affect
 // keys less than the given key. Note that the left boundary is inclusive, that
 // is, the returned RKey is the inclusive left endpoint of the keys the request
@@ -200,12 +237,18 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 //
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func next(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
+func next(ba batchReqPlus, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMax
-	for _, union := range ba.Requests {
+	for i, union := range ba.Requests {
+		startKey := ba.startKeyAddrs[i]
+		if startKey == nil {
+			// We've already completely consumed the request at this position.
+			continue
+		}
+
 		inner := union.GetInner()
 		h := inner.Header()
-		addr, err := keys.Addr(h.Key)
+		addr, err := keys.Addr(startKey)
 		if err != nil {
 			return nil, err
 		}

@@ -749,6 +749,7 @@ func (ds *DistSender) Send(
 	rplChunks := singleRplChunk[:0:1]
 
 	errIdxOffset := 0
+	var startKeyAddrs []roachpb.Key
 	for len(parts) > 0 {
 		part := parts[0]
 		ba.Requests = part
@@ -772,10 +773,28 @@ func (ds *DistSender) Send(
 
 		var rpl *roachpb.BatchResponse
 		var pErr *roachpb.Error
-		if withParallelCommit {
-			rpl, pErr = ds.divideAndSendParallelCommit(ctx, ba, rs, 0 /* batchIdx */)
+		// Create a list of the start keys of each of the requests in
+		// the batch. We'll use this to avoid re-examining requests that we've
+		// already examined. When we "truncate" the batch to a particular range,
+		// we edit the startKey of the ith command if we've truncated that ith
+		// request's span down from the left.
+		// If a request's span shrinks to 0, we set it to nil.
+		if cap(startKeyAddrs) >= len(ba.Requests) {
+			startKeyAddrs = startKeyAddrs[:len(ba.Requests)]
 		} else {
-			rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, 0 /* batchIdx */)
+			startKeyAddrs = make([]roachpb.Key, len(ba.Requests))
+		}
+		for i := range ba.Requests {
+			startKeyAddrs[i] = ba.Requests[i].GetInner().Header().Key
+		}
+		baPlus := batchReqPlus{
+			BatchRequest:  ba,
+			startKeyAddrs: startKeyAddrs,
+		}
+		if withParallelCommit {
+			rpl, pErr = ds.divideAndSendParallelCommit(ctx, baPlus, rs, 0 /* batchIdx */)
+		} else {
+			rpl, pErr = ds.divideAndSendBatchToRanges(ctx, baPlus, rs, withCommit, 0 /* batchIdx */)
 		}
 
 		if pErr == errNo1PCTxn {
@@ -867,7 +886,7 @@ type response struct {
 // method is never invoked recursively, but it is exposed to maintain symmetry
 // with divideAndSendBatchToRanges.
 func (ds *DistSender) divideAndSendParallelCommit(
-	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
+	ctx context.Context, ba batchReqPlus, rs roachpb.RSpan, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Search backwards, looking for the first pre-commit QueryIntent.
 	swapIdx := -1
@@ -1117,7 +1136,7 @@ func mergeErrors(pErr1, pErr2 *roachpb.Error) *roachpb.Error {
 // batch. Either way, if this is true then sendToReplicas will need
 // to handle errors differently.
 func (ds *DistSender) divideAndSendBatchToRanges(
-	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, withCommit bool, batchIdx int,
+	ctx context.Context, ba batchReqPlus, rs roachpb.RSpan, withCommit bool, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Clone the BatchRequest's transaction so that future mutations to the
 	// proto don't affect the proto in this batch.
@@ -1142,7 +1161,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
 		resp := ds.sendPartialBatch(
-			ctx, ba, rs, ri.Token(), withCommit, batchIdx, false, /* needsTruncate */
+			ctx, ba, rs, ri.Token(), withCommit, batchIdx, nil, /* positions */
 		)
 		return resp.reply, resp.pErr
 	}
@@ -1177,7 +1196,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}
 	// Make sure the CanForwardReadTimestamp flag is set to false, if necessary.
-	unsetCanForwardReadTimestampFlag(ctx, &ba)
+	unsetCanForwardReadTimestampFlag(ctx, &ba.BatchRequest)
 
 	// Make an empty slice of responses which will be populated with responses
 	// as they come in via Combine().
@@ -1236,7 +1255,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 
 		if pErr == nil && couldHaveSkippedResponses {
-			fillSkippedResponses(ba, br, seekKey, resumeReason)
+			fillSkippedResponses(ba.BatchRequest, br, seekKey, resumeReason)
 		}
 	}()
 
@@ -1298,12 +1317,20 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// Send the next partial batch to the first range in the "rs" span.
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
+		// Truncate the batch.
+		var positions []int
+		var curBatch batchReqPlus
+		curBatch, positions, err = ds.truncateBatch(ba, rs, ri.Token())
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
 		if canParallelize && !lastRange && !ds.disableParallelBatches &&
-			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Token(), withCommit, batchIdx, responseCh) {
+			// Truncate the batch.
+			ds.sendPartialBatchAsync(ctx, curBatch, rs, ri.Token(), withCommit, batchIdx, positions, responseCh) {
 			// Sent the batch asynchronously.
 		} else {
 			resp := ds.sendPartialBatch(
-				ctx, ba, rs, ri.Token(), withCommit, batchIdx, true, /* needsTruncate */
+				ctx, curBatch, rs, ri.Token(), withCommit, batchIdx, positions,
 			)
 			responseCh <- resp
 			if resp.pErr != nil {
@@ -1378,11 +1405,12 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 // sent.
 func (ds *DistSender) sendPartialBatchAsync(
 	ctx context.Context,
-	ba roachpb.BatchRequest,
+	ba batchReqPlus,
 	rs roachpb.RSpan,
 	routing rangecache.EvictionToken,
 	withCommit bool,
 	batchIdx int,
+	positions []int,
 	responseCh chan response,
 ) bool {
 	if err := ds.rpcContext.Stopper.RunAsyncTaskEx(
@@ -1396,7 +1424,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
 			responseCh <- ds.sendPartialBatch(
-				ctx, ba, rs, routing, withCommit, batchIdx, true, /* needsTruncate */
+				ctx, ba, rs, routing, withCommit, batchIdx, positions,
 			)
 		},
 	); err != nil {
@@ -1427,6 +1455,25 @@ func slowRangeRPCReturnWarningStr(s *redact.StringBuilder, dur time.Duration, at
 	s.Printf("slow RPC finished after %.2fs (%d attempts)", dur.Seconds(), attempts)
 }
 
+func (ds *DistSender) truncateBatch(
+	ba batchReqPlus, rs roachpb.RSpan, routingTok rangecache.EvictionToken,
+) (ret batchReqPlus, positions []int, err error) {
+	// Truncate the request to range descriptor.
+	rs, err = rs.Intersect(routingTok.Desc())
+	if err != nil {
+		return ret, nil, err
+	}
+	ba, positions, err = truncate(ba, rs)
+	if err != nil {
+		return ret, nil, err
+	}
+	if len(positions) == 0 {
+		// This shouldn't happen in the wild, but some tests exercise it.
+		return ret, nil, errors.Newf("truncation resulted in empty batch on %s: %s", rs, ba)
+	}
+	return ba, positions, err
+}
+
 // sendPartialBatch sends the supplied batch to the range specified by
 // desc. The batch request is first truncated so that it contains only
 // requests which intersect the range descriptor and keys for each
@@ -1440,12 +1487,12 @@ func slowRangeRPCReturnWarningStr(s *redact.StringBuilder, dur time.Duration, at
 // descriptor.
 func (ds *DistSender) sendPartialBatch(
 	ctx context.Context,
-	ba roachpb.BatchRequest,
+	ba batchReqPlus,
 	rs roachpb.RSpan,
 	routingTok rangecache.EvictionToken,
 	withCommit bool,
 	batchIdx int,
-	needsTruncate bool,
+	positions []int,
 ) response {
 	if batchIdx == 1 {
 		ds.metrics.PartialBatchCount.Inc(2) // account for first batch
@@ -1455,27 +1502,8 @@ func (ds *DistSender) sendPartialBatch(
 	var reply *roachpb.BatchResponse
 	var pErr *roachpb.Error
 	var err error
-	var positions []int
 
 	isReverse := ba.IsReverse()
-
-	if needsTruncate {
-		// Truncate the request to range descriptor.
-		rs, err = rs.Intersect(routingTok.Desc())
-		if err != nil {
-			return response{pErr: roachpb.NewError(err)}
-		}
-		ba, positions, err = truncate(ba, rs)
-		if len(positions) == 0 && err == nil {
-			// This shouldn't happen in the wild, but some tests exercise it.
-			return response{
-				pErr: roachpb.NewErrorf("truncation resulted in empty batch on %s: %s", rs, ba),
-			}
-		}
-		if err != nil {
-			return response{pErr: roachpb.NewError(err)}
-		}
-	}
 
 	// Start a retry loop for sending the batch to the range. Each iteration of
 	// this loop uses a new descriptor. Attempts to send to multiple replicas in
@@ -1523,13 +1551,13 @@ func (ds *DistSender) sendPartialBatch(
 		}
 
 		prevTok = routingTok
-		reply, err = ds.sendToReplicas(ctx, ba, routingTok, withCommit)
+		reply, err = ds.sendToReplicas(ctx, ba.BatchRequest, routingTok, withCommit)
 
 		const slowDistSenderThreshold = time.Minute
 		if dur := timeutil.Since(tBegin); dur > slowDistSenderThreshold && !tBegin.IsZero() {
 			{
 				var s redact.StringBuilder
-				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
+				slowRangeRPCWarningStr(&s, ba.BatchRequest, dur, attempts, routingTok.Desc(), err, reply)
 				log.Warningf(ctx, "slow range RPC: %v", &s)
 			}
 			// If the RPC wasn't successful, defer the logging of a message once the

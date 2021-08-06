@@ -164,17 +164,23 @@ func TestBatchPrevNext(t *testing.T) {
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
 			var ba roachpb.BatchRequest
-			for _, span := range test.spans {
+			startKeyAddrs := make([]roachpb.Key, len(test.spans))
+			for i, span := range test.spans {
 				args := &roachpb.ScanRequest{}
 				args.Key, args.EndKey = span.Key, span.EndKey
 				ba.Add(args)
+				startKeyAddrs[i] = span.Key
 			}
-			if next, err := next(ba, roachpb.RKey(test.key)); err != nil {
+			baPlus := batchReqPlus{
+				BatchRequest:  ba,
+				startKeyAddrs: startKeyAddrs,
+			}
+			if next, err := next(baPlus, roachpb.RKey(test.key)); err != nil {
 				t.Error(err)
 			} else if !bytes.Equal(next, roachpb.Key(test.expFW)) {
 				t.Errorf("next: expected %q, got %q", test.expFW, next)
 			}
-			if prev, err := prev(ba, roachpb.RKey(test.key)); err != nil {
+			if prev, err := prev(baPlus, roachpb.RKey(test.key)); err != nil {
 				t.Error(err)
 			} else if !bytes.Equal(prev, roachpb.Key(test.expBW)) {
 				t.Errorf("prev: expected %q, got %q", test.expBW, prev)
