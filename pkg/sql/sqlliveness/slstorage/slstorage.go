@@ -270,7 +270,9 @@ func (s *Storage) isAlive(
 func (s *Storage) deleteOrFetchSession(
 	ctx context.Context, sid sqlliveness.SessionID, prevExpiration hlc.Timestamp,
 ) (alive bool, expiration hlc.Timestamp, err error) {
+	var deleted bool
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		deleted = false
 		k := s.makeSessionKey(sid)
 		kv, err := txn.Get(ctx, k)
 		if err != nil {
@@ -291,11 +293,16 @@ func (s *Storage) deleteOrFetchSession(
 		}
 
 		// The session is expired and needs to be deleted.
+		deleted = true
 		expiration = hlc.Timestamp{}
 		return txn.Del(ctx, k)
 	}); err != nil {
 		return false, hlc.Timestamp{}, errors.Wrapf(err,
 			"could not query session id: %s", sid)
+	}
+	if deleted {
+		s.metrics.SessionsDeleted.Inc(1)
+		log.Infof(ctx, "deleted session %s which expired at %s", sid, prevExpiration)
 	}
 	return alive, expiration, nil
 }
