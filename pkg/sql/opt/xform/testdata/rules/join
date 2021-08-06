@@ -5424,17 +5424,14 @@ CREATE INDEX v3_partial ON virt (v3) WHERE v3 > 0
 ----
 
 # Covering case with a more complex partial index predicate that references the
-# indexed virtual column. We do not handle this case yet.
-# TODO(mgartner): There is a minor bug in the interaction of the normalization
-# rules PushFilterIntoJoinLeftAndRight and PushSelectIntoInlinableProject that
-# creates duplicate filters. These duplicate filter prevent a lookup join from
-# being generated.
+# indexed virtual column.
 opt
 SELECT m, virt.k, virt.v3 FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0 AND m > 0
 ----
-inner-join (hash)
+inner-join (lookup virt@v3_partial,partial)
  ├── columns: m:1!null k:6!null v3:11!null
  ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [11]
  ├── immutable
  ├── fd: (6)-->(11), (1)==(11), (11)==(1)
  ├── select
@@ -5443,59 +5440,32 @@ inner-join (hash)
  │    │    └── columns: m:1
  │    └── filters
  │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
- ├── project
- │    ├── columns: v3:11 k:6!null
- │    ├── immutable
- │    ├── key: (6)
- │    ├── fd: (6)-->(11)
- │    ├── index-join virt
- │    │    ├── columns: k:6!null i:7 j:8!null
- │    │    ├── immutable
- │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7,8)
- │    │    └── scan virt@v3_partial,partial
- │    │         ├── columns: k:6!null
- │    │         ├── constraint: /11/6: [/1 - ]
- │    │         └── key: (6)
- │    └── projections
- │         └── i:7 + j:8 [as=v3:11, outer=(7,8), immutable]
- └── filters
-      └── m:1 = v3:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+ └── filters (true)
 
 # Non-covering case with a more complex partial index predicate that references
-# the indexed virtual column. We do not handle this case yet.
-# TODO(mgartner): There is a minor bug in the interaction of the normalization
-# rules PushFilterIntoJoinLeftAndRight and PushSelectIntoInlinableProject that
-# creates duplicate filters. These duplicate filter prevent a lookup join from
-# being generated.
+# the indexed virtual column.
 opt
 SELECT m, virt.i, virt.v3 FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0 AND m > 0
 ----
-inner-join (hash)
+inner-join (lookup virt)
  ├── columns: m:1!null i:7 v3:11!null
- ├── flags: force lookup join (into right side)
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
  ├── immutable
  ├── fd: (1)==(11), (11)==(1)
- ├── select
- │    ├── columns: m:1!null
- │    ├── scan small
- │    │    └── columns: m:1
- │    └── filters
- │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
- ├── project
- │    ├── columns: v3:11 i:7
- │    ├── immutable
- │    ├── index-join virt
- │    │    ├── columns: i:7 j:8!null
- │    │    ├── immutable
- │    │    └── scan virt@v3_partial,partial
- │    │         ├── columns: k:6!null
- │    │         ├── constraint: /11/6: [/1 - ]
- │    │         └── key: (6)
- │    └── projections
- │         └── i:7 + j:8 [as=v3:11, outer=(7,8), immutable]
- └── filters
-      └── m:1 = v3:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+ ├── inner-join (lookup virt@v3_partial,partial)
+ │    ├── columns: m:1!null k:6!null v3:11!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [11]
+ │    ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+ │    ├── select
+ │    │    ├── columns: m:1!null
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1
+ │    │    └── filters
+ │    │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    └── filters (true)
+ └── filters (true)
 
 exec-ddl
 DROP INDEX v3_partial
