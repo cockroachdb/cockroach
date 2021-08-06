@@ -21,26 +21,16 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recorder"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recording"
 )
 
-// Exec is a convenience wrapper around the stdlib os/exec package. It lets us:
-//
-// (a) mock all instances where we shell out, for tests, and
-// (b) capture all instances of shelling out that take place during execution
-//
-// We achieve (a) by embedding a Recorder, and either replaying from it if
-// configured to do so, or "doing the real thing" and recording the fact into
-// the Recorder for future playback.
-//
-// For (b), each operation is logged (if configured to do so). These messages
-// can be captured by the caller and compared against what is expected.
+// Exec is a convenience wrapper around the stdlib os/exec package. It lets us
+// mock all instances where we shell out for tests.
 type Exec struct {
 	dir            string
 	logger         *log.Logger
 	stdout, stderr io.Writer
-	*recorder.Recorder
+	*recording.Recording
 }
 
 // New returns a new Exec with the given options.
@@ -83,17 +73,10 @@ func WithStdOutErr(stdout, stderr io.Writer) func(e *Exec) {
 	}
 }
 
-// WithRecorder configures Exec to use the provided recorder.
-func WithRecorder(r *recorder.Recorder) func(e *Exec) {
+// WithRecording configures Exec to use the provided recording.
+func WithRecording(r *recording.Recording) func(e *Exec) {
 	return func(e *Exec) {
-		e.Recorder = r
-	}
-}
-
-// WithWorkingDir configures Exec to use the provided working directory.
-func WithWorkingDir(dir string) func(e *Exec) {
-	return func(e *Exec) {
-		e.dir = dir
+		e.Recording = r
 	}
 }
 
@@ -120,11 +103,11 @@ func (e *Exec) CommandContextWithInput(
 	return e.commandContextImpl(ctx, r, false, name, args...)
 }
 
-// CommandContextNoRecord is like CommandContext, but doesn't capture stdout.
-// To be used when we want to run a subprocess but deliberately want to pass
-// stdin, stdout, and stderr right to the terminal. Note that this can't be
-// used for recording and the process will panic if you try to record with it.
-func (e *Exec) CommandContextNoRecord(ctx context.Context, name string, args ...string) error {
+// CommandContextInheritingStdStreams is like CommandContext, but stdin,
+// stdout, and stderr are passed directly to the terminal.
+func (e *Exec) CommandContextInheritingStdStreams(
+	ctx context.Context, name string, args ...string,
+) error {
 	var command string
 	if len(args) > 0 {
 		command = fmt.Sprintf("%s %s", name, strings.Join(args, " "))
@@ -133,11 +116,7 @@ func (e *Exec) CommandContextNoRecord(ctx context.Context, name string, args ...
 	}
 	e.logger.Print(command)
 
-	if e.Recorder != nil && e.Recorder.Recording() {
-		return errors.New("Can't call CommandContextNoRecord while recording")
-	}
-
-	if e.Recorder == nil {
+	if e.Recording == nil {
 		// Do the real thing.
 		cmd := exec.CommandContext(ctx, name, args...)
 		cmd.Stdin = os.Stdin
@@ -164,23 +143,16 @@ func (e *Exec) LookPath(path string) (string, error) {
 	command := fmt.Sprintf("which %s", path)
 	e.logger.Print(command)
 
-	var fullPath string
-	if e.Recorder == nil || e.Recorder.Recording() {
+	if e.Recording == nil {
 		// Do the real thing.
 		var err error
-		fullPath, err = exec.LookPath(path)
+		fullPath, err := exec.LookPath(path)
 		if err != nil {
 			return "", err
 		}
-	}
-
-	if e.Recorder == nil {
 		return fullPath, nil
 	}
 
-	if e.Recording() {
-		return fullPath, e.record(command, fullPath)
-	}
 	ret, err := e.replay(command)
 	return ret, err
 }
@@ -197,7 +169,7 @@ func (e *Exec) commandContextImpl(
 	e.logger.Print(command)
 
 	var buffer bytes.Buffer
-	if e.Recorder == nil || e.Recorder.Recording() {
+	if e.Recording == nil {
 		// Do the real thing.
 		cmd := exec.CommandContext(ctx, name, args...)
 		if silent {
@@ -218,16 +190,6 @@ func (e *Exec) commandContextImpl(
 		if err := cmd.Wait(); err != nil {
 			return nil, err
 		}
-	}
-
-	if e.Recorder == nil {
-		return buffer.Bytes(), nil
-	}
-
-	if e.Recording() {
-		if err := e.record(command, buffer.String()); err != nil {
-			return nil, err
-		}
 		return buffer.Bytes(), nil
 	}
 
@@ -240,9 +202,9 @@ func (e *Exec) commandContextImpl(
 }
 
 // replay replays the specified command, erroring out if it's mismatched with
-// what the recorder plays back next. It returns the recorded output.
+// what the recording plays back next. It returns the recorded output.
 func (e *Exec) replay(command string) (output string, err error) {
-	found, err := e.Recorder.Next(func(op recorder.Operation) error {
+	found, err := e.Recording.Next(func(op recording.Operation) error {
 		if op.Command != command {
 			return fmt.Errorf("expected %q, got %q", op.Command, command)
 		}
@@ -256,14 +218,4 @@ func (e *Exec) replay(command string) (output string, err error) {
 		return "", fmt.Errorf("recording for %q not found", command)
 	}
 	return output, nil
-}
-
-// record records the specified command with the corresponding output.
-func (e *Exec) record(command, output string) error {
-	op := recorder.Operation{
-		Command: command,
-		Output:  output,
-	}
-
-	return e.Record(op)
 }

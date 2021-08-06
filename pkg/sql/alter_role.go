@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -179,7 +179,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		opName,
 		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", authentication.UsersTableName),
+		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		normalizedUsername,
 	)
 	if err != nil {
@@ -248,7 +248,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
 			// Bump user table versions to force a refresh of AuthInfo cache.
 			if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
 				return err
@@ -298,7 +298,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		optStrs[i] = n.roleOptions[i].String()
 	}
 
-	if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
 		// Bump role_options table versions to force a refresh of AuthInfo cache.
 		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 			return err
@@ -467,18 +467,20 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 
 	var deleteQuery = fmt.Sprintf(
 		`DELETE FROM %s WHERE database_id = $1 AND role_name = $2`,
-		authentication.DatabaseRoleSettingsTableName,
+		sessioninit.DatabaseRoleSettingsTableName,
 	)
 	var upsertQuery = fmt.Sprintf(
 		`UPSERT INTO %s (database_id, role_name, settings) VALUES ($1, $2, $3)`,
-		authentication.DatabaseRoleSettingsTableName,
+		sessioninit.DatabaseRoleSettingsTableName,
 	)
 
 	// Instead of inserting an empty settings array, this function will make
 	// sure the row is deleted instead.
 	upsertOrDeleteFunc := func(newSettings []string) error {
+		var rowsAffected int
+		var internalExecErr error
 		if newSettings == nil {
-			_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -487,11 +489,8 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				n.dbDescID,
 				roleName,
 			)
-			if err != nil {
-				return err
-			}
 		} else {
-			_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -501,11 +500,23 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				roleName,
 				newSettings,
 			)
-			if err != nil {
+		}
+		if internalExecErr != nil {
+			return internalExecErr
+		}
+
+		if rowsAffected > 0 && sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+			// Bump database_role_settings table versions to force a refresh of AuthInfo cache.
+			if err := params.p.bumpDatabaseRoleSettingsTableVersion(params.ctx); err != nil {
 				return err
 			}
 		}
-		return nil
+		return params.p.logEvent(params.ctx,
+			0, /* no target */
+			&eventpb.AlterRole{
+				RoleName: roleName.Normalized(),
+				Options:  []string{roleoption.DEFAULTSETTINGS.String()},
+			})
 	}
 
 	if n.setVarKind == resetAllVars {
@@ -532,16 +543,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 
 	newSetting := fmt.Sprintf("%s=%s", n.varName, strVal)
 	newSettings = append(newSettings, newSetting)
-	if err := upsertOrDeleteFunc(newSettings); err != nil {
-		return err
-	}
-
-	return params.p.logEvent(params.ctx,
-		0, /* no target */
-		&eventpb.AlterRole{
-			RoleName: roleName.Normalized(),
-			Options:  []string{roleoption.DEFAULTSETTINGS.String()},
-		})
+	return upsertOrDeleteFunc(newSettings)
 }
 
 // getRoleName resolves the roleName and performs additional validation
@@ -578,7 +580,7 @@ func (n *alterRoleSetNode) getRoleName(
 		opName,
 		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", authentication.UsersTableName),
+		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		roleName,
 	)
 	if err != nil {
@@ -609,7 +611,7 @@ func (n *alterRoleSetNode) makeNewSettings(
 ) (hasOldSettings bool, newSettings []string, err error) {
 	var selectQuery = fmt.Sprintf(
 		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,
-		authentication.DatabaseRoleSettingsTableName,
+		sessioninit.DatabaseRoleSettingsTableName,
 	)
 	datums, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx,
@@ -666,14 +668,7 @@ func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
 
 	// Validate the new string value, but don't actually apply it to any real
 	// session.
-	fakeSessionMutator := &sessionDataMutator{
-		data:               &sessiondata.SessionData{},
-		defaults:           SessionDefaults(map[string]string{}),
-		settings:           params.ExecCfg().Settings,
-		paramStatusUpdater: &noopParamStatusUpdater{},
-		setCurTxnReadOnly:  func(bool) {},
-	}
-	if err := n.sVar.Set(params.ctx, fakeSessionMutator, strVal); err != nil {
+	if err := CheckSessionVariableValueValid(params.ctx, params.ExecCfg().Settings, n.varName, strVal); err != nil {
 		return "", err
 	}
 	return strVal, nil

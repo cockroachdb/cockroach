@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -76,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -431,6 +431,12 @@ var copyPartitioningWhenDeinterleavingTable = settings.RegisterBoolSetting(
 	`default value for enable_copying_partitioning_when_deinterleaving_table session variable`,
 	false,
 ).WithPublic()
+
+var propagateInputOrdering = settings.RegisterBoolSetting(
+	`sql.defaults.propagate_input_ordering.enabled`,
+	`default value for the experimental propagate_input_ordering session variable`,
+	false,
+)
 
 // settingWorkMemBytes is a cluster setting that determines the maximum amount
 // of RAM that a processor can use.
@@ -962,8 +968,9 @@ type ExecutorConfig struct {
 	// Role membership cache.
 	RoleMemberCache *MembershipCache
 
-	// AuthInfo cache.
-	AuthenticationInfoCache *authentication.AuthInfoCache
+	// SessionInitCache cache; contains information used during authentication
+	// and per-role default settings.
+	SessionInitCache *sessioninit.Cache
 
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
 	ProtectedTimestampProvider protectedts.Provider
@@ -2635,6 +2642,10 @@ func (m *sessionDataMutator) SetCopyPartitioningWhenDeinterleavingTable(b bool) 
 
 func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
 	m.data.ExperimentalComputedColumnRewrites = val
+}
+
+func (m *sessionDataMutator) SetPropagateInputOrdering(b bool) {
+	m.data.PropagateInputOrdering = b
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

@@ -1175,14 +1175,22 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 				//    schemas are supported.
 				//    See: https://github.com/cockroachdb/cockroach/issues/67376.
 				schemaName := ""
+				// If ForAllRoles is specified, we use an empty string as the normalized
+				// role name to create the row hash.
+				normalizedName := ""
+				roleOid := oidZero
+				if !defaultPrivs.GetForAllRoles() {
+					roleOid = h.UserOid(defaultPrivs.GetUserProto().Decode())
+					normalizedName = defaultPrivs.GetUserProto().Decode().Normalized()
+				}
 				rowOid := h.DBSchemaRoleOid(
 					dbContext.GetID(),
 					schemaName,
-					defaultPrivs.UserProto.Decode().Normalized(),
+					normalizedName,
 				)
 				if err := addRow(
-					rowOid, // row identifier oid
-					h.UserOid(defaultPrivs.UserProto.Decode()), // defaclrole oid
+					rowOid,             // row identifier oid
+					roleOid,            // defaclrole oid
 					oidZero,            // defaclnamespace oid
 					tree.NewDString(c), // defaclobjtype char
 					arr,                // defaclacl aclitem[]

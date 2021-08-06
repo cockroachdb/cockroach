@@ -246,11 +246,6 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 
-	// Collect the SQL schema.
-	if err := zc.collectSchemaData(ctx); err != nil {
-		return err
-	}
-
 	// Add a little helper script to draw attention to the existence of tags in
 	// the profiles.
 	{
@@ -303,7 +298,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	zr *zipReporter, conn clisqlclient.Conn, base, table, query string,
 ) error {
 	fullQuery := fmt.Sprintf(`SET statement_timeout = '%s'; %s`, zc.timeout, query)
-	baseName := base + "/" + table
+	baseName := base + "/" + sanitizeFilename(table)
 
 	s := zr.start("retrieving SQL data for %s", table)
 	const maxRetries = 5
@@ -346,4 +341,8 @@ func (zc *debugZipContext) dumpTableDataForZip(
 		break
 	}
 	return nil
+}
+
+func sanitizeFilename(f string) string {
+	return strings.TrimPrefix(f, `"".`)
 }

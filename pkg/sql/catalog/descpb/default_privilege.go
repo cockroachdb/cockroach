@@ -20,29 +20,24 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// AlterDefaultPrivilegesRole represents the creator role that the default privileges
+// DefaultPrivilegesRole represents the creator role that the default privileges
 // are being altered for.
 // Either:
 //     role should be populated
 //     forAllRoles should be true.
-type AlterDefaultPrivilegesRole struct {
+type DefaultPrivilegesRole struct {
 	Role        security.SQLUsername
 	ForAllRoles bool
 }
 
 // GrantDefaultPrivileges grants privileges for the specified users.
 func (p *DefaultPrivilegeDescriptor) GrantDefaultPrivileges(
-	role AlterDefaultPrivilegesRole,
+	role DefaultPrivilegesRole,
 	privileges privilege.List,
 	grantees tree.NameList,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
-	var defaultPrivilegesPerObject map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor
-	if role.ForAllRoles {
-		defaultPrivilegesPerObject = p.DefaultPrivilegesForAllRoles
-	} else {
-		defaultPrivilegesPerObject = p.findOrCreateUser(role.Role).DefaultPrivilegesPerObject
-	}
+	defaultPrivilegesPerObject := p.findOrCreateUser(role).DefaultPrivilegesPerObject
 	for _, grantee := range grantees {
 		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
 		defaultPrivileges.Grant(
@@ -55,17 +50,12 @@ func (p *DefaultPrivilegeDescriptor) GrantDefaultPrivileges(
 
 // RevokeDefaultPrivileges revokes privileges for the specified users.
 func (p *DefaultPrivilegeDescriptor) RevokeDefaultPrivileges(
-	role AlterDefaultPrivilegesRole,
+	role DefaultPrivilegesRole,
 	privileges privilege.List,
 	grantees tree.NameList,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
-	var defaultPrivilegesPerObject map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor
-	if role.ForAllRoles {
-		defaultPrivilegesPerObject = p.DefaultPrivilegesForAllRoles
-	} else {
-		defaultPrivilegesPerObject = p.findOrCreateUser(role.Role).DefaultPrivilegesPerObject
-	}
+	defaultPrivilegesPerObject := p.findOrCreateUser(role).DefaultPrivilegesPerObject
 	for _, grantee := range grantees {
 		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
 		defaultPrivileges.Revoke(
@@ -98,23 +88,30 @@ func CreatePrivilegesFromDefaultPrivileges(
 		defaultPrivileges = InitDefaultPrivilegeDescriptor()
 	}
 
-	defaultPrivilegesForAllRoles := defaultPrivileges.DefaultPrivilegesForAllRoles
-
 	// The privileges for the object are the union of the default privileges
 	// defined for the object for the object creator and the default privileges
 	// defined for all roles.
 	newPrivs := NewDefaultPrivilegeDescriptor(user)
-	privilegesForAllRoles, found := defaultPrivilegesForAllRoles[targetObject]
+	defaultPrivilegesForAllRoles, found := defaultPrivileges.GetDefaultPrivilegesForRole(
+		DefaultPrivilegesRole{
+			ForAllRoles: true,
+		},
+	)
 	if found {
-		for _, user := range privilegesForAllRoles.Users {
-			newPrivs.Grant(
-				user.UserProto.Decode(),
-				privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
-			)
+		defaultPrivileges, descriptorExists := defaultPrivilegesForAllRoles.DefaultPrivilegesPerObject[targetObject]
+		if descriptorExists {
+			for _, user := range defaultPrivileges.Users {
+				newPrivs.Grant(
+					user.UserProto.Decode(),
+					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
+				)
+			}
 		}
 	}
 
-	defaultPrivilegesForCreator, defaultPrivilegesDefinedForCreator := defaultPrivileges.GetDefaultPrivilegesForRole(user)
+	defaultPrivilegesForCreator, defaultPrivilegesDefinedForCreator := defaultPrivileges.GetDefaultPrivilegesForRole(DefaultPrivilegesRole{
+		Role: user,
+	})
 	if defaultPrivilegesDefinedForCreator {
 		defaultPrivileges, descriptorExists := defaultPrivilegesForCreator.DefaultPrivilegesPerObject[targetObject]
 		if descriptorExists {
@@ -145,17 +142,42 @@ func CreatePrivilegesFromDefaultPrivileges(
 	return newPrivs
 }
 
-// User accesses the role field.
-func (u *DefaultPrivilegesForRole) User() security.SQLUsername {
-	return u.UserProto.Decode()
+// ToDefaultPrivilegesRole returns the DefaultPrivilegesRole corresponding to
+// DefaultPrivilegesForRole.
+func (u *DefaultPrivilegesForRole) ToDefaultPrivilegesRole() DefaultPrivilegesRole {
+	if u.GetForAllRoles() {
+		return DefaultPrivilegesRole{
+			ForAllRoles: true,
+		}
+	}
+	return DefaultPrivilegesRole{
+		Role: u.GetUserProto().Decode(),
+	}
+}
+
+// LessThan returns whether r is less than other.
+// The DefaultPrivilegesRole with ForAllRoles set is always considered
+// larger. Only one of r or other should have ForAllRoles set since there
+// should only ever be one entry for all roles.
+// If ForAllRoles is set for neither, we do a string comparison on the username.
+func (r DefaultPrivilegesRole) LessThan(other DefaultPrivilegesRole) bool {
+	// Defined such that ForAllRoles is never less than.
+	if r.ForAllRoles {
+		return false
+	}
+	if other.ForAllRoles {
+		return true
+	}
+
+	return r.Role.LessThan(other.Role)
 }
 
 // GetDefaultPrivilegesForRole looks for a specific user in the list.
 // Returns (nil, false) if not found, or (obj, true) if found.
 func (p *DefaultPrivilegeDescriptor) GetDefaultPrivilegesForRole(
-	user security.SQLUsername,
+	role DefaultPrivilegesRole,
 ) (*DefaultPrivilegesForRole, bool) {
-	idx := p.findUserIndex(user)
+	idx := p.findUserIndex(role)
 	if idx == -1 {
 		return nil, false
 	}
@@ -164,11 +186,12 @@ func (p *DefaultPrivilegeDescriptor) GetDefaultPrivilegesForRole(
 
 // findUserIndex looks for a given user and returns its
 // index in the User array if found. Returns -1 otherwise.
-func (p *DefaultPrivilegeDescriptor) findUserIndex(user security.SQLUsername) int {
+func (p *DefaultPrivilegeDescriptor) findUserIndex(role DefaultPrivilegesRole) int {
 	idx := sort.Search(len(p.DefaultPrivilegesPerRole), func(i int) bool {
-		return !p.DefaultPrivilegesPerRole[i].User().LessThan(user)
+		return !p.DefaultPrivilegesPerRole[i].ToDefaultPrivilegesRole().LessThan(role)
 	})
-	if idx < len(p.DefaultPrivilegesPerRole) && p.DefaultPrivilegesPerRole[idx].User() == user {
+	if idx < len(p.DefaultPrivilegesPerRole) &&
+		p.DefaultPrivilegesPerRole[idx].ToDefaultPrivilegesRole() == role {
 		return idx
 	}
 	return -1
@@ -178,27 +201,33 @@ func (p *DefaultPrivilegeDescriptor) findUserIndex(user security.SQLUsername) in
 // If a new user is created, it must be added in the correct sorted order
 // in the list.
 func (p *DefaultPrivilegeDescriptor) findOrCreateUser(
-	user security.SQLUsername,
+	role DefaultPrivilegesRole,
 ) *DefaultPrivilegesForRole {
 	idx := sort.Search(len(p.DefaultPrivilegesPerRole), func(i int) bool {
-		return !p.DefaultPrivilegesPerRole[i].User().LessThan(user)
+		return !p.DefaultPrivilegesPerRole[i].ToDefaultPrivilegesRole().LessThan(role)
 	})
+	var defaultPrivilegeRole isDefaultPrivilegesForRole_Role
+	if role.ForAllRoles {
+		defaultPrivilegeRole = &DefaultPrivilegesForRole_ForAllRoles{ForAllRoles: true}
+	} else {
+		defaultPrivilegeRole = &DefaultPrivilegesForRole_UserProto{UserProto: role.Role.EncodeProto()}
+	}
 	if idx == len(p.DefaultPrivilegesPerRole) {
 		// Not found but should be inserted at the end.
 		p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole,
 			DefaultPrivilegesForRole{
-				UserProto:                  user.EncodeProto(),
+				Role:                       defaultPrivilegeRole,
 				DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
 			},
 		)
-	} else if p.DefaultPrivilegesPerRole[idx].User() == user {
+	} else if p.DefaultPrivilegesPerRole[idx].ToDefaultPrivilegesRole() == role {
 		// Found.
 	} else {
 		// New element to be inserted at idx.
 		p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole, DefaultPrivilegesForRole{})
 		copy(p.DefaultPrivilegesPerRole[idx+1:], p.DefaultPrivilegesPerRole[idx:])
 		p.DefaultPrivilegesPerRole[idx] = DefaultPrivilegesForRole{
-			UserProto:                  user.EncodeProto(),
+			Role:                       defaultPrivilegeRole,
 			DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
 		}
 	}
@@ -208,9 +237,17 @@ func (p *DefaultPrivilegeDescriptor) findOrCreateUser(
 // Validate returns an assertion error if the default privilege descriptor
 // is invalid.
 func (p *DefaultPrivilegeDescriptor) Validate() error {
+	entryForAllRolesFound := false
 	for i, defaultPrivilegesForRole := range p.DefaultPrivilegesPerRole {
+		if defaultPrivilegesForRole.GetForAllRoles() {
+			if entryForAllRolesFound {
+				return errors.AssertionFailedf("multiple entries found in map for all roles")
+			}
+			entryForAllRolesFound = true
+		}
 		if i+1 < len(p.DefaultPrivilegesPerRole) &&
-			!defaultPrivilegesForRole.User().LessThan(p.DefaultPrivilegesPerRole[i+1].User()) {
+			!defaultPrivilegesForRole.ToDefaultPrivilegesRole().
+				LessThan(p.DefaultPrivilegesPerRole[i+1].ToDefaultPrivilegesRole()) {
 			return errors.AssertionFailedf("default privilege list is not sorted")
 		}
 		for objectType, defaultPrivileges := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
@@ -231,11 +268,5 @@ func InitDefaultPrivilegeDescriptor() *DefaultPrivilegeDescriptor {
 	var defaultPrivilegesForRole []DefaultPrivilegesForRole
 	return &DefaultPrivilegeDescriptor{
 		DefaultPrivilegesPerRole: defaultPrivilegesForRole,
-		DefaultPrivilegesForAllRoles: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{
-			tree.Tables:    {},
-			tree.Sequences: {},
-			tree.Types:     {},
-			tree.Schemas:   {},
-		},
 	}
 }

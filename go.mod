@@ -103,7 +103,7 @@ require (
 	github.com/kr/pretty v0.2.1
 	github.com/kr/text v0.2.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
-	github.com/lib/pq v1.8.0
+	github.com/lib/pq v1.10.2
 	github.com/lib/pq/auth/kerberos v0.0.0-20200720160335-984a6aa1ca46
 	github.com/lightstep/lightstep-tracer-go v0.24.0
 	github.com/linkedin/goavro/v2 v2.10.0
@@ -191,9 +191,6 @@ replace vitess.io/vitess => github.com/cockroachdb/vitess v0.0.0-20210218160543-
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20180705215940-0e2822948641
 
 replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201030151939-7cced08450e7
-
-// Temporary workaround for #65320.
-replace github.com/lib/pq => github.com/cockroachdb/pq v0.0.0-20210517091544-990dd3347596
 
 // At the time of writing (i.e. as of this version below) the `etcd` repo is in the process of properly introducing
 // modules, and as part of that uses an unsatisfiable version for this dependency (v3.0.0-00010101000000-000000000000).
