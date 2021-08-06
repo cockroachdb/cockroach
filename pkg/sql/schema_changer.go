@@ -331,7 +331,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			isLocal := !getPlanDistribution(
 				ctx, localPlanner, localPlanner.execCfg.NodeID,
 				localPlanner.extendedEvalCtx.SessionData.DistSQLMode,
-				localPlanner.curPlan.main,
+				&localPlanner.EvalContext().Settings.SV, localPlanner.curPlan.main,
 			).WillDistribute()
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
 				Table: *table,
