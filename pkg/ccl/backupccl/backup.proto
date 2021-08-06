@@ -198,7 +198,7 @@ message BackupExportTraceResponseEvent {
   string duration = 1;
   int32 num_files = 2;
   repeated RowCount file_summaries = 3 [(gogoproto.nullable) = false];
-  bool has_returned_ssts = 4 [(gogoproto.customname) = "HasReturnedSSTs"];
+  reserved 4 ;
   string retryable_error = 5;
 }
 

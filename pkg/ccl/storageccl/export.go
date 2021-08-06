@@ -42,7 +42,7 @@ var ExportRequestTargetFileSize = settings.RegisterByteSizeSetting(
 		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",
 		SSTTargetSizeSetting, MaxExportOverageSetting,
 	),
-	64<<20, /* 64 MiB */
+	16<<20,
 ).WithPublic()
 
 // MaxExportOverageSetting is the cluster setting name for the

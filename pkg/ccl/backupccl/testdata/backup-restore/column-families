@@ -8,6 +8,7 @@ CREATE TABLE cfs (a INT PRIMARY KEY, b STRING, c STRING, d STRING, FAMILY (b), F
 INSERT INTO cfs SELECT x, repeat('abc', 100), repeat('abc', 100) FROM generate_series(0, 3) AS x;
 ALTER TABLE cfs SPLIT AT SELECT a FROM cfs;
 -- Split the output files very small to catch output SSTs mid-row.
+SET CLUSTER SETTING bulkio.backup.file_size = '1';
 SET CLUSTER SETTING kv.bulk_sst.target_size = '1';
 BACKUP cfs TO 'nodelocal://1/foo';
 CREATE DATABASE r1;

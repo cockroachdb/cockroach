@@ -56,6 +56,9 @@ type ServerConfig struct {
 	// NodeID is the id of the node on which this Server is running.
 	NodeID *base.SQLIDContainer
 
+	// Locality is the locality of the node on which this Server is running.
+	Locality roachpb.Locality
+
 	// Codec is capable of encoding and decoding sql table keys.
 	Codec keys.SQLCodec
 
