@@ -49,6 +49,7 @@ go_test(
     embed = [":opt"],
     deps = [
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",

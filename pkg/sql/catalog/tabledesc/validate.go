@@ -703,6 +703,10 @@ func (desc *wrapper) validateColumns(
 		if column.IsHidden() && column.IsInaccessible() {
 			return fmt.Errorf("column %q cannot be hidden and inaccessible", column.GetName())
 		}
+
+		if column.IsComputed() && column.IsGeneratedAsIdentity() {
+			return fmt.Errorf("both identity and generation expression specified for column %q", column.GetName())
+		}
 	}
 	return nil
 }
