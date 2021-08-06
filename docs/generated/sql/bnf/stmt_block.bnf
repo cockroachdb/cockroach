@@ -3036,6 +3036,8 @@ col_qualification_elem ::=
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| generated_as '(' a_expr ')' 'STORED'
 	| generated_as '(' a_expr ')' 'VIRTUAL'
+	| generated_always_as 'IDENTITY'
+	| generated_by_default_as 'IDENTITY'
 
 family_name ::=
 	name
@@ -3175,7 +3177,13 @@ opt_name_parens ::=
 
 generated_as ::=
 	'AS'
-	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS'
+	| generated_always_as
+
+generated_always_as ::=
+	'GENERATED_ALWAYS' 'ALWAYS' 'AS'
+
+generated_by_default_as ::=
+	'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS'
 
 reference_action ::=
 	'NO' 'ACTION'
