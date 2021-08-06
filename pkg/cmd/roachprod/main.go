@@ -31,6 +31,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	cld "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/errors"
@@ -74,6 +75,7 @@ The above commands will create a "local" 3 node cluster, start a cockroach
 cluster on these nodes, run a sql command on the 2nd node, stop, wipe and
 destroy the cluster.
 `,
+	Version: "details:\n" + build.GetInfo().Long(),
 }
 
 var (
@@ -1801,6 +1803,16 @@ var ipCmd = &cobra.Command{
 	}),
 }
 
+var versionCmd = &cobra.Command{
+	Use:   `version`,
+	Short: `print version information`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		info := build.GetInfo()
+		fmt.Println(info.Long())
+		return nil
+	},
+}
+
 func main() {
 	// The commands are displayed in the order they are added to rootCmd. Note
 	// that gcCmd and adminurlCmd contain a trailing \n in their Short help in
@@ -1837,6 +1849,7 @@ func main() {
 		logsCmd,
 		pprofCmd,
 		cachedHostsCmd,
+		versionCmd,
 	)
 	rootCmd.BashCompletionFunction = fmt.Sprintf(`__custom_func()
 	{
