@@ -36,7 +36,7 @@ import (
 var KVAdmissionControlEnabled = settings.RegisterBoolSetting(
 	"admission.kv.enabled",
 	"when true, work performed by the KV layer is subject to admission control",
-	false).WithPublic()
+	true).WithPublic()
 
 // SQLKVResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for KV requests, is enabled.
@@ -44,7 +44,7 @@ var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
 	"admission.sql_kv_response.enabled",
 	"when true, work performed by the SQL layer when receiving a KV response is subject to "+
 		"admission control",
-	false).WithPublic()
+	true).WithPublic()
 
 // SQLSQLResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for DistSQL requests, is enabled.
@@ -52,7 +52,7 @@ var SQLSQLResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
 	"admission.sql_sql_response.enabled",
 	"when true, work performed by the SQL layer when receiving a DistSQL response is subject "+
 		"to admission control",
-	false).WithPublic()
+	true).WithPublic()
 
 var admissionControlEnabledSettings = [numWorkKinds]*settings.BoolSetting{
 	KVWork:             KVAdmissionControlEnabled,
