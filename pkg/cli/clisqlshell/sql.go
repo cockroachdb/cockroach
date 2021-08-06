@@ -1202,17 +1202,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 func (c *cliState) handleConnect(
 	cmd []string, loopState, errState cliStateEnum,
 ) (resState cliStateEnum) {
-	firstArgIsURL := len(cmd) > 0 &&
-		(strings.HasPrefix(cmd[0], "postgres://") ||
-			strings.HasPrefix(cmd[0], "postgresql://"))
-	if len(cmd) == 1 && !firstArgIsURL && strings.TrimSpace(cmd[0]) != "-" {
-		// Special case: just a database name.
-		// Handled entirely locally with the existing connection.
-		c.concatLines = `USE ` + cmd[0]
-		return cliRunStatement
-	}
-
-	if err := c.handleConnectInternal(cmd, firstArgIsURL); err != nil {
+	if err := c.handleConnectInternal(cmd); err != nil {
 		fmt.Fprintln(c.iCtx.stderr, err)
 		c.exitErr = err
 		return errState
@@ -1220,7 +1210,11 @@ func (c *cliState) handleConnect(
 	return loopState
 }
 
-func (c *cliState) handleConnectInternal(cmd []string, firstArgIsURL bool) error {
+func (c *cliState) handleConnectInternal(cmd []string) error {
+	firstArgIsURL := len(cmd) > 0 &&
+		(strings.HasPrefix(cmd[0], "postgres://") ||
+			strings.HasPrefix(cmd[0], "postgresql://"))
+
 	if len(cmd) == 1 && firstArgIsURL {
 		// Note: we use a custom URL parser here to inherit the complex
 		// custom logic from crdb's own handling of --url in `cockroach
@@ -1251,7 +1245,7 @@ func (c *cliState) handleConnectInternal(cmd []string, firstArgIsURL bool) error
 	}
 
 	// Extract the current config.
-	_, prevhost, prevport := currURL.GetNetworking()
+	prevproto, prevhost, prevport := currURL.GetNetworking()
 	tlsUsed, mode, caCertPath := currURL.GetTLSOptions()
 
 	// newURL will be our new connection URL past this point.
@@ -1264,6 +1258,8 @@ func (c *cliState) handleConnectInternal(cmd []string, firstArgIsURL bool) error
 		WithDefaultUsername(currURL.GetUsername())
 	if tlsUsed {
 		newURL.WithTransport(pgurl.TransportTLS(mode, caCertPath))
+	} else {
+		newURL.WithTransport(pgurl.TransportNone())
 	}
 
 	// Parse the arguments to \connect:
@@ -1309,6 +1305,29 @@ func (c *cliState) handleConnectInternal(cmd []string, firstArgIsURL bool) error
 
 	default:
 		return errors.Newf(`unknown syntax: \c %s`, strings.Join(cmd, " "))
+	}
+
+	// If we are reconnecting to the same server with the same user, reuse
+	// the authentication credentials present inside the URL, if any.
+	// We do take care to avoid reusing the password however, for two separate
+	// reasons:
+	// - if the connection has just failed because of an invalid password,
+	//   we don't want to fix the invalid password in the URL.
+	// - the transport may be insecure, in which case we want to give
+	//   the user the opportunity to think twice about entering their
+	//   password over an untrusted link.
+	if proto, host, port := newURL.GetNetworking(); proto == prevproto &&
+		host == prevhost && port == prevport &&
+		newURL.GetUsername() == currURL.GetUsername() {
+		// Remove the password from the current URL.
+		currURL.ClearPassword()
+
+		// Migrate the details from the previous URL to the new one.
+		prevAuthn, err := currURL.GetAuthnOption()
+		if err != nil {
+			return err
+		}
+		newURL.WithAuthn(prevAuthn)
 	}
 
 	if err := newURL.Validate(); err != nil {

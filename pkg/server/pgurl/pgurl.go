@@ -10,7 +10,11 @@
 
 package pgurl
 
-import "net/url"
+import (
+	"net/url"
+
+	"github.com/cockroachdb/errors"
+)
 
 // Scheme is the URL scheme used in this package.
 // We have observed that all drivers support "postgresql",
@@ -217,6 +221,25 @@ func (u *URL) WithAuthn(opt AuthnOption) *URL {
 	return opt(u)
 }
 
+// GetAuthnOption retrieves the current authentication parameters so
+// they can be applied into a different URL.
+func (u *URL) GetAuthnOption() (AuthnOption, error) {
+	switch u.authn {
+	case authnNone:
+		return AuthnNone(), nil
+	case authnPassword:
+		return AuthnPassword(u.hasPassword, u.password), nil
+	case authnClientCert:
+		return AuthnClientCert(u.clientCertPath, u.clientKeyPath), nil
+	case authnPasswordWithClientCert:
+		return AuthnPasswordAndCert(
+			u.clientCertPath, u.clientKeyPath,
+			u.hasPassword, u.password), nil
+	default:
+		return nil, errors.New("unable to retrieve authentication options")
+	}
+}
+
 // AuthnNone creates an option to not use any client authentication.
 func AuthnNone() AuthnOption {
 	return AuthnOption(func(u *URL) *URL {
@@ -236,6 +259,13 @@ func AuthnPassword(setPassword bool, password string) AuthnOption {
 		u.password = password
 		return u
 	})
+}
+
+// ClearPassword removes the stored password from the URL, without
+// forgetting that the authentication is password-based.
+func (u *URL) ClearPassword() {
+	u.hasPassword = false
+	u.password = ""
 }
 
 // GetAuthnPassword returns whether password authentication is in use,
