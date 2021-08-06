@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/defaultprivilegedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -409,6 +410,16 @@ func (desc *Mutable) SetRegionConfig(cfg *descpb.DatabaseDescriptor_RegionConfig
 // RunPostDeserializationChanges.
 func (desc *Mutable) HasPostDeserializationChanges() bool {
 	return desc.changed
+}
+
+// GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
+func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
+	return defaultprivilegedesc.MakeDefaultPrivileges(desc.GetDefaultPrivileges())
+}
+
+// GetMutableDefaultPrivilegeDescriptor returns a Mutable.
+func (desc *Mutable) GetMutableDefaultPrivilegeDescriptor() defaultprivilegedesc.Mutable {
+	return defaultprivilegedesc.MakeMutableDefaultPrivileges(desc.GetDefaultPrivileges())
 }
 
 // SetDefaultPrivilegeDescriptor sets the default privilege descriptor
