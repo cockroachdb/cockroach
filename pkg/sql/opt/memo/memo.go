@@ -174,7 +174,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	// reused. Field reuse must be explicit.
 	*m = Memo{
 		metadata:                m.metadata,
-		reorderJoinsLimit:       evalCtx.SessionData.ReorderJoinsLimit,
+		reorderJoinsLimit:       int(evalCtx.SessionData.ReorderJoinsLimit),
 		zigzagJoinEnabled:       evalCtx.SessionData.ZigzagJoinEnabled,
 		useHistograms:           evalCtx.SessionData.OptimizerUseHistograms,
 		useMultiColStats:        evalCtx.SessionData.OptimizerUseMultiColStats,
@@ -285,7 +285,7 @@ func (m *Memo) IsStale(
 ) (bool, error) {
 	// Memo is stale if fields from SessionData that can affect planning have
 	// changed.
-	if m.reorderJoinsLimit != evalCtx.SessionData.ReorderJoinsLimit ||
+	if m.reorderJoinsLimit != int(evalCtx.SessionData.ReorderJoinsLimit) ||
 		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled ||
 		m.useHistograms != evalCtx.SessionData.OptimizerUseHistograms ||
 		m.useMultiColStats != evalCtx.SessionData.OptimizerUseMultiColStats ||
