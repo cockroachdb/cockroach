@@ -743,6 +743,14 @@ func registerTPCC(r registry.Registry) {
 		EstimatedMax:   gceOrAws(cloud, 2100, 2500),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes:                   3,
+		CPUs:                    16,
+		AdmissionControlEnabled: true,
+
+		LoadWarehouses: gceOrAws(cloud, 2500, 3000),
+		EstimatedMax:   gceOrAws(cloud, 2100, 2500),
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
 		CPUs:  16,
 
@@ -843,11 +851,12 @@ func (l tpccBenchLoadConfig) numLoadNodes(d tpccBenchDistribution) int {
 }
 
 type tpccBenchSpec struct {
-	Nodes        int
-	CPUs         int
-	Chaos        bool
-	Distribution tpccBenchDistribution
-	LoadConfig   tpccBenchLoadConfig
+	Nodes                   int
+	CPUs                    int
+	Chaos                   bool
+	AdmissionControlEnabled bool
+	Distribution            tpccBenchDistribution
+	LoadConfig              tpccBenchLoadConfig
 
 	// The number of warehouses to load into the cluster before beginning
 	// benchmarking. Should be larger than EstimatedMax and should be a
@@ -897,6 +906,9 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	}
 	if b.Chaos {
 		nameParts = append(nameParts, "chaos")
+	}
+	if b.AdmissionControlEnabled {
+		nameParts = append(nameParts, "admission")
 	}
 
 	opts := []spec.Option{spec.CPU(b.CPUs)}
@@ -1072,7 +1084,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	c.EncryptDefault(false)
 	c.EncryptAtRandom(false)
 	c.Start(ctx, append(b.startOpts(), roachNodes)...)
-
+	if b.AdmissionControlEnabled {
+		EnableAdmissionControl(ctx, t, c)
+	}
 	useHAProxy := b.Chaos
 	const restartWait = 15 * time.Second
 	{
@@ -1161,6 +1175,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		}
 
 		c.Start(ctx, append(b.startOpts(), roachNodes)...)
+		if b.AdmissionControlEnabled {
+			EnableAdmissionControl(ctx, t, c)
+		}
 	}
 
 	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
