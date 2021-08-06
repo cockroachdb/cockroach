@@ -495,6 +495,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ClusterID:      &cfg.rpcContext.ClusterID,
 		ClusterName:    cfg.ClusterName,
 		NodeID:         cfg.nodeIDContainer,
+		Locality:       cfg.Locality,
 		Codec:          codec,
 		DB:             cfg.db,
 		Executor:       cfg.circularInternalExecutor,
