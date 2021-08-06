@@ -479,7 +479,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	ot.semaCtx.Placeholders = tree.PlaceholderInfo{}
 
-	ot.evalCtx.SessionData.ReorderJoinsLimit = ot.Flags.JoinLimit
+	ot.evalCtx.SessionData.ReorderJoinsLimit = int64(ot.Flags.JoinLimit)
 	ot.evalCtx.SessionData.PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
 	ot.evalCtx.SessionData.PropagateInputOrdering = ot.Flags.PropagateInputOrdering
 

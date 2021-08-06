@@ -2415,7 +2415,7 @@ func (m *sessionDataMutator) SetDefaultIntSize(size int32) {
 }
 
 func (m *sessionDataMutator) SetDefaultTransactionPriority(val tree.UserPriority) {
-	m.data.DefaultTxnPriority = int(val)
+	m.data.DefaultTxnPriority = int64(val)
 }
 
 func (m *sessionDataMutator) SetDefaultTransactionReadOnly(val bool) {
@@ -2465,7 +2465,7 @@ func (m *sessionDataMutator) SetRequireExplicitPrimaryKeys(val bool) {
 }
 
 func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
-	m.data.ReorderJoinsLimit = val
+	m.data.ReorderJoinsLimit = int64(val)
 }
 
 func (m *sessionDataMutator) SetVectorize(val sessiondatapb.VectorizeExecMode) {
@@ -2477,7 +2477,7 @@ func (m *sessionDataMutator) SetTestingVectorizeInjectPanics(val bool) {
 }
 
 func (m *sessionDataMutator) SetOptimizerFKCascadesLimit(val int) {
-	m.data.OptimizerFKCascadesLimit = val
+	m.data.OptimizerFKCascadesLimit = int64(val)
 }
 
 func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {
