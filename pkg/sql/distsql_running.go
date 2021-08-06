@@ -1039,7 +1039,8 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	defer subqueryMemAccount.Close(ctx)
 
 	distributeSubquery := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
+		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode,
+		&evalCtx.Settings.SV, subqueryPlan.plan,
 	).WillDistribute()
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributeSubquery)
 	subqueryPlanCtx.stmtType = tree.Rows
@@ -1336,7 +1337,8 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	defer postqueryMemAccount.Close(ctx)
 
 	distributePostquery := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
+		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode,
+		&evalCtx.Settings.SV, postqueryPlan,
 	).WillDistribute()
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributePostquery)
 	postqueryPlanCtx.stmtType = tree.Rows

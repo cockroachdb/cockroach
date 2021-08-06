@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -357,28 +358,43 @@ func mustWrapValuesNode(planCtx *PlanningCtx, specifiedInQuery bool) bool {
 	return false
 }
 
+var preferLocalExecution = settings.RegisterBoolSetting(
+	`sql.distsql.prefer_local_execution.enabled`,
+	"setting to true makes the DistSQL physical planner heuristics prefer "+
+		"the local execution slightly in some cases",
+	false,
+)
+
 // checkSupportForPlanNode returns a distRecommendation (as described above) or
 // cannotDistribute and an error if the plan subtree is not distributable.
 // The error doesn't indicate complete failure - it's instead the reason that
 // this plan couldn't be distributed.
 // TODO(radu): add tests for this.
-func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
+//
+// - preferLocalExecution indicates whether the heuristics should favor local
+// execution in some cases (namely, lookup joins and top K sorts are preferred
+// to be executed locally in distsql=auto mode). Note that if a stage of a
+// physical plan is deemed as "should be distributed", preferLocalExecution is
+// ignored.
+func checkSupportForPlanNode(
+	node planNode, outputNodeHasLimit bool, preferLocalExecution bool,
+) (distRecommendation, error) {
 	switch n := node.(type) {
 	// Keep these cases alphabetized, please!
 	case *distinctNode:
-		return checkSupportForPlanNode(n.plan)
+		return checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */, preferLocalExecution)
 
 	case *exportNode:
-		return checkSupportForPlanNode(n.source)
+		return checkSupportForPlanNode(n.source, false /* outputNodeHasLimit */, preferLocalExecution)
 
 	case *filterNode:
 		if err := checkExpr(n.filter); err != nil {
 			return cannotDistribute, err
 		}
-		return checkSupportForPlanNode(n.source.plan)
+		return checkSupportForPlanNode(n.source.plan, false /* outputNodeHasLimit */, preferLocalExecution)
 
 	case *groupNode:
-		rec, err := checkSupportForPlanNode(n.plan)
+		rec, err := checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */, preferLocalExecution)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -388,19 +404,19 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 	case *indexJoinNode:
 		// n.table doesn't have meaningful spans, but we need to check support (e.g.
 		// for any filtering expression).
-		if _, err := checkSupportForPlanNode(n.table); err != nil {
+		if _, err := checkSupportForPlanNode(n.table, false /* outputNodeHasLimit */, preferLocalExecution); err != nil {
 			return cannotDistribute, err
 		}
-		return checkSupportForPlanNode(n.input)
+		return checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */, preferLocalExecution)
 
 	case *invertedFilterNode:
-		return checkSupportForInvertedFilterNode(n)
+		return checkSupportForInvertedFilterNode(n, preferLocalExecution)
 
 	case *invertedJoinNode:
 		if err := checkExpr(n.onExpr); err != nil {
 			return cannotDistribute, err
 		}
-		rec, err := checkSupportForPlanNode(n.input)
+		rec, err := checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */, preferLocalExecution)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -410,11 +426,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err := checkExpr(n.pred.onCond); err != nil {
 			return cannotDistribute, err
 		}
-		recLeft, err := checkSupportForPlanNode(n.left.plan)
+		recLeft, err := checkSupportForPlanNode(n.left.plan, false /* outputNodeHasLimit */, preferLocalExecution)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(n.right.plan)
+		recRight, err := checkSupportForPlanNode(n.right.plan, false /* outputNodeHasLimit */, preferLocalExecution)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -431,7 +447,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		// Note that we don't need to check whether we support distribution of
 		// n.countExpr or n.offsetExpr because those expressions are evaluated
 		// locally, during the physical planning.
-		return checkSupportForPlanNode(n.plan)
+		return checkSupportForPlanNode(n.plan, true /* outputNodeHasLimit */, preferLocalExecution)
 
 	case *lookupJoinNode:
 		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -448,9 +464,12 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
-		rec, err := checkSupportForPlanNode(n.input)
+		rec, err := checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */, preferLocalExecution)
 		if err != nil {
 			return cannotDistribute, err
+		}
+		if preferLocalExecution {
+			return rec.compose(canDistribute), nil
 		}
 		return rec.compose(shouldDistribute), nil
 
@@ -460,7 +479,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return cannotDistribute, nil
 
 	case *projectSetNode:
-		return checkSupportForPlanNode(n.source)
+		return checkSupportForPlanNode(n.source, false /* outputNodeHasLimit */, preferLocalExecution)
 
 	case *renderNode:
 		for _, e := range n.render {
@@ -468,7 +487,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 				return cannotDistribute, err
 			}
 		}
-		return checkSupportForPlanNode(n.source.plan)
+		return checkSupportForPlanNode(n.source.plan, outputNodeHasLimit, preferLocalExecution)
 
 	case *scanNode:
 		if n.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -497,23 +516,26 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 
 	case *sortNode:
-		rec, err := checkSupportForPlanNode(n.plan)
+		rec, err := checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */, preferLocalExecution)
 		if err != nil {
 			return cannotDistribute, err
 		}
+		if outputNodeHasLimit && preferLocalExecution {
+			// If we have a top K sort, we can distribute the query.
+			return rec.compose(canDistribute), nil
+		}
 		// If we have to sort, distribute the query.
-		rec = rec.compose(shouldDistribute)
-		return rec, nil
+		return rec.compose(shouldDistribute), nil
 
 	case *unaryNode:
 		return canDistribute, nil
 
 	case *unionNode:
-		recLeft, err := checkSupportForPlanNode(n.left)
+		recLeft, err := checkSupportForPlanNode(n.left, false /* outputNodeHasLimit */, preferLocalExecution)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(n.right)
+		recRight, err := checkSupportForPlanNode(n.right, false /* outputNodeHasLimit */, preferLocalExecution)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -537,7 +559,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return canDistribute, nil
 
 	case *windowNode:
-		return checkSupportForPlanNode(n.plan)
+		return checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */, preferLocalExecution)
 
 	case *zeroNode:
 		return canDistribute, nil
@@ -559,8 +581,10 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 	}
 }
 
-func checkSupportForInvertedFilterNode(n *invertedFilterNode) (distRecommendation, error) {
-	rec, err := checkSupportForPlanNode(n.input)
+func checkSupportForInvertedFilterNode(
+	n *invertedFilterNode, preferLocalExecution bool,
+) (distRecommendation, error) {
+	rec, err := checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */, preferLocalExecution)
 	if err != nil {
 		return cannotDistribute, err
 	}

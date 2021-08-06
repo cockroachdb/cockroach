@@ -55,7 +55,8 @@ func (n *explainVecNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution := getPlanDistribution(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
+		params.extendedEvalCtx.SessionData.DistSQLMode,
+		&params.extendedEvalCtx.Settings.SV, n.plan.main,
 	)
 	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
