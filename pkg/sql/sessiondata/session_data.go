@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -147,8 +146,9 @@ type LocalOnlySessionData struct {
 	// will self-flush.
 	ResultsBufferSize int64
 	// NoticeDisplaySeverity indicates the level of Severity to send notices for the given
-	// session.
-	NoticeDisplaySeverity pgnotice.DisplaySeverity
+	// session. This should ideally be of type pgnotice.DisplaySeverity, but cannot be done
+	// due to a circular dependency.
+	NoticeDisplaySeverity uint32
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
 	// DatabaseIDToTempSchemaID stores the temp schema ID for every database that
