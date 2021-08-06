@@ -318,6 +318,7 @@ func (ds *ServerImpl) setupFlow(
 			Codec:       ds.ServerConfig.Codec,
 			ReCache:     ds.regexpCache,
 			Mon:         monitor,
+			Locality:    ds.ServerConfig.Locality,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
 			Context:            ctx,
