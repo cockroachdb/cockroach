@@ -364,23 +364,23 @@ func mustWrapValuesNode(planCtx *PlanningCtx, specifiedInQuery bool) bool {
 // The error doesn't indicate complete failure - it's instead the reason that
 // this plan couldn't be distributed.
 // TODO(radu): add tests for this.
-func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
+func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecommendation, error) {
 	switch n := node.(type) {
 	// Keep these cases alphabetized, please!
 	case *distinctNode:
-		return checkSupportForPlanNode(n.plan)
+		return checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */)
 
 	case *exportNode:
-		return checkSupportForPlanNode(n.source)
+		return checkSupportForPlanNode(n.source, false /* outputNodeHasLimit */)
 
 	case *filterNode:
 		if err := checkExpr(n.filter); err != nil {
 			return cannotDistribute, err
 		}
-		return checkSupportForPlanNode(n.source.plan)
+		return checkSupportForPlanNode(n.source.plan, false /* outputNodeHasLimit */)
 
 	case *groupNode:
-		rec, err := checkSupportForPlanNode(n.plan)
+		rec, err := checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -390,10 +390,10 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 	case *indexJoinNode:
 		// n.table doesn't have meaningful spans, but we need to check support (e.g.
 		// for any filtering expression).
-		if _, err := checkSupportForPlanNode(n.table); err != nil {
+		if _, err := checkSupportForPlanNode(n.table, false /* outputNodeHasLimit */); err != nil {
 			return cannotDistribute, err
 		}
-		return checkSupportForPlanNode(n.input)
+		return checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */)
 
 	case *invertedFilterNode:
 		return checkSupportForInvertedFilterNode(n)
@@ -402,7 +402,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err := checkExpr(n.onExpr); err != nil {
 			return cannotDistribute, err
 		}
-		rec, err := checkSupportForPlanNode(n.input)
+		rec, err := checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -412,11 +412,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err := checkExpr(n.pred.onCond); err != nil {
 			return cannotDistribute, err
 		}
-		recLeft, err := checkSupportForPlanNode(n.left.plan)
+		recLeft, err := checkSupportForPlanNode(n.left.plan, false /* outputNodeHasLimit */)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(n.right.plan)
+		recRight, err := checkSupportForPlanNode(n.right.plan, false /* outputNodeHasLimit */)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -433,7 +433,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		// Note that we don't need to check whether we support distribution of
 		// n.countExpr or n.offsetExpr because those expressions are evaluated
 		// locally, during the physical planning.
-		return checkSupportForPlanNode(n.plan)
+		return checkSupportForPlanNode(n.plan, true /* outputNodeHasLimit */)
 
 	case *lookupJoinNode:
 		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -453,11 +453,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
-		rec, err := checkSupportForPlanNode(n.input)
+		rec, err := checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		return rec.compose(shouldDistribute), nil
+		return rec.compose(canDistribute), nil
 
 	case *ordinalityNode:
 		// WITH ORDINALITY never gets distributed so that the gateway node can
@@ -465,7 +465,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return cannotDistribute, nil
 
 	case *projectSetNode:
-		return checkSupportForPlanNode(n.source)
+		return checkSupportForPlanNode(n.source, false /* outputNodeHasLimit */)
 
 	case *renderNode:
 		for _, e := range n.render {
@@ -473,7 +473,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 				return cannotDistribute, err
 			}
 		}
-		return checkSupportForPlanNode(n.source.plan)
+		return checkSupportForPlanNode(n.source.plan, outputNodeHasLimit)
 
 	case *scanNode:
 		if n.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -502,23 +502,28 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 
 	case *sortNode:
-		rec, err := checkSupportForPlanNode(n.plan)
+		rec, err := checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		// If we have to sort, distribute the query.
-		rec = rec.compose(shouldDistribute)
+		if outputNodeHasLimit {
+			// If we have a top K sort, we can distribute the query.
+			rec = rec.compose(canDistribute)
+		} else {
+			// If we have to sort, distribute the query.
+			rec = rec.compose(shouldDistribute)
+		}
 		return rec, nil
 
 	case *unaryNode:
 		return canDistribute, nil
 
 	case *unionNode:
-		recLeft, err := checkSupportForPlanNode(n.left)
+		recLeft, err := checkSupportForPlanNode(n.left, false /* outputNodeHasLimit */)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(n.right)
+		recRight, err := checkSupportForPlanNode(n.right, false /* outputNodeHasLimit */)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -542,7 +547,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return canDistribute, nil
 
 	case *windowNode:
-		return checkSupportForPlanNode(n.plan)
+		return checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */)
 
 	case *zeroNode:
 		return canDistribute, nil
@@ -565,7 +570,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 }
 
 func checkSupportForInvertedFilterNode(n *invertedFilterNode) (distRecommendation, error) {
-	rec, err := checkSupportForPlanNode(n.input)
+	rec, err := checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */)
 	if err != nil {
 		return cannotDistribute, err
 	}
