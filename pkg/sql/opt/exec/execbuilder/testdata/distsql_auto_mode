@@ -68,9 +68,15 @@ SELECT info FROM [EXPLAIN SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1] WHERE
 ----
 distribution: full
 
-# Limit after sort - distribute.
+# Limit after sort (i.e. top K sort) - don't distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1] WHERE info LIKE 'distribution%'
+----
+distribution: local
+
+# General sort - distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE 'distribution%'
 ----
 distribution: full
 
@@ -115,3 +121,15 @@ query T
 SELECT info FROM [EXPLAIN SELECT * FROM abc WHERE b=1 AND a%2=0] WHERE info LIKE 'distribution%'
 ----
 distribution: local
+
+# Lookup join - don't distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT a FROM abc INNER LOOKUP JOIN kv ON b = k WHERE k < 10] WHERE info LIKE 'distribution%'
+----
+distribution: local
+
+# Lookup join on top of the full scan - distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT a FROM abc INNER LOOKUP JOIN kv ON b = k] WHERE info LIKE 'distribution%'
+----
+distribution: full
