@@ -159,7 +159,7 @@ func (ds *ServerImpl) Drain(
 	ctx context.Context, flowDrainWait time.Duration, reporter func(int, redact.SafeString),
 ) {
 	if err := ds.setDraining(true); err != nil {
-		log.Warningf(ctx, "unable to gossip distsql draining state: %s", err)
+		log.Warningf(ctx, "unable to gossip distsql draining state: %s", redact.Safe(err))
 	}
 
 	flowWait := flowDrainWait
@@ -227,7 +227,7 @@ func (ds *ServerImpl) setupFlow(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
 			req.Version, execinfra.MinAcceptedVersion, execinfra.Version,
 		)
-		log.Warningf(ctx, "%v", err)
+		log.Warningf(ctx, "%v", redact.Safe(err))
 		return ctx, nil, nil, err
 	}
 
@@ -528,7 +528,10 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (*execinfrapb.SimpleResponse, error) {
-	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
+	log.VEventf(
+		ctx, 1, "received SetupFlow request from n%d for flow %s",
+		redact.SafeInt(req.Flow.Gateway), redact.SafeString(req.Flow.FlowID.String()),
+	)
 	parentSpan := tracing.SpanFromContext(ctx)
 
 	// Note: the passed context will be canceled when this RPC completes, so we
@@ -584,7 +587,10 @@ func (ds *ServerImpl) flowStreamInt(
 		return err
 	}
 	defer cleanup()
-	log.VEventf(ctx, 1, "connected inbound stream %s/%d", flowID.Short(), streamID)
+	log.VEventf(
+		ctx, 1, "connected inbound stream %s/%d",
+		redact.SafeString(flowID.Short()), redact.SafeInt(streamID),
+	)
 	return streamStrategy.Run(f.AnnotateCtx(ctx), stream, msg, f)
 }
 

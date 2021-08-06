@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // flowStreamServer is a utility interface used to mock out the RPC layer.
@@ -279,7 +280,7 @@ func (i *Inbox) Init(ctx context.Context) {
 		// by the connection issues. It is expected that such an error can
 		// occur. The Inbox must still be closed.
 		i.close()
-		log.VEventf(ctx, 1, "Inbox encountered an error in Init: %v", err)
+		log.VEventf(ctx, 1, "Inbox encountered an error in Init: %v", redact.Safe(err))
 		colexecerror.ExpectedError(err)
 	}
 }
@@ -300,7 +301,7 @@ func (i *Inbox) Next() coldata.Batch {
 			// Only close the Inbox here in case of an ungraceful termination.
 			i.close()
 			err := logcrash.PanicAsError(0, panicObj)
-			log.VEventf(i.Ctx, 1, "Inbox encountered an error in Next: %v", err)
+			log.VEventf(i.Ctx, 1, "Inbox encountered an error in Next: %v", redact.Safe(err))
 			// Note that here we use InternalError to propagate the error
 			// consciously - the code below is careful to mark all expected
 			// errors as "expected", and we want to keep that distinction.
@@ -413,7 +414,7 @@ func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 	log.VEvent(ctx, 2, "Inbox sending drain signal to Outbox")
 	if err := i.stream.Send(&execinfrapb.ConsumerSignal{DrainRequest: &execinfrapb.DrainRequest{}}); err != nil {
 		if log.V(1) {
-			log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %+v", err)
+			log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %+v", redact.Safe(err))
 		}
 		return err
 	}
@@ -443,7 +444,7 @@ func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
 				break
 			}
 			if log.V(1) {
-				log.Warningf(i.Ctx, "Inbox Recv connection error while draining metadata: %+v", err)
+				log.Warningf(i.Ctx, "Inbox Recv connection error while draining metadata: %+v", redact.Safe(err))
 			}
 			return allMeta
 		}

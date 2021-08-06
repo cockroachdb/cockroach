@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/marusama/semaphore"
 )
 
@@ -221,7 +222,7 @@ func (f *vectorizedFlow) Setup(
 		// clean that up.
 		f.creator.cleanup(ctx)
 		f.creator.Release()
-		log.VEventf(ctx, 1, "failed to vectorize: %v", err)
+		log.VEventf(ctx, 1, "failed to vectorize: %v", redact.Safe(err))
 		return ctx, nil, err
 	}
 	f.batchFlowCoordinator = batchFlowCoordinator
@@ -273,7 +274,10 @@ func (f *vectorizedFlow) GetPath(ctx context.Context) string {
 	// The directory name is the flow's ID.
 	tempDirName := f.GetID().String()
 	f.tempStorage.path = filepath.Join(f.Cfg.TempStoragePath, tempDirName)
-	log.VEventf(ctx, 1, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
+	log.VEventf(
+		ctx, 1, "flow %s spilled to disk, stack trace: %s",
+		redact.SafeString(f.ID.String()), redact.SafeString(util.GetSmallTrace(2)),
+	)
 	if err := f.Cfg.TempFS.MkdirAll(f.tempStorage.path); err != nil {
 		colexecerror.InternalError(errors.Errorf("unable to create temporary storage directory: %v", err))
 	}
@@ -324,9 +328,9 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 			log.Warningf(
 				ctx,
 				"unable to remove flow %s's temporary directory at %s, files may be left over: %v",
-				f.GetID().Short(),
-				f.GetPath(ctx),
-				err,
+				redact.SafeString(f.GetID().Short()),
+				redact.SafeString(f.GetPath(ctx)),
+				redact.Safe(err),
 			)
 		}
 	}
@@ -890,7 +894,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				// 0, it is not included in the displayed stats for EXPLAIN ANALYZE
 				// diagrams.
 				latency = 0
-				log.VEventf(ctx, 1, "an error occurred during vectorized planning while getting latency: %v", err)
+				log.VEventf(ctx, 1, "an error occurred during vectorized planning while getting latency: %v", redact.Safe(err))
 			}
 			inbox, err := s.remoteComponentCreator.newInbox(
 				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),

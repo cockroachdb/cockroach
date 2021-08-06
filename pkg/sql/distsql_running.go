@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
@@ -299,7 +300,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// specs.
 		for _, spec := range flows {
 			if err := colflow.IsSupported(vectorizeMode, spec); err != nil {
-				log.VEventf(ctx, 2, "failed to vectorize: %s", err)
+				log.VEventf(ctx, 2, "failed to vectorize: %s", redact.Safe(err))
 				if vectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
 					return nil, nil, nil, err
 				}
@@ -795,10 +796,10 @@ func (r *DistSQLReceiver) SetError(err error) {
 	// If we encountered an error, we will transition to draining unless we were
 	// canceled.
 	if r.ctx.Err() != nil {
-		log.VEventf(r.ctx, 1, "encountered error (transitioning to shutting down): %v", r.ctx.Err())
+		log.VEventf(r.ctx, 1, "encountered error (transitioning to shutting down): %v", redact.Safe(r.ctx.Err()))
 		r.status = execinfra.ConsumerClosed
 	} else {
-		log.VEventf(r.ctx, 1, "encountered error (transitioning to draining): %v", err)
+		log.VEventf(r.ctx, 1, "encountered error (transitioning to draining): %v", redact.Safe(err))
 		r.status = execinfra.DrainRequested
 	}
 }

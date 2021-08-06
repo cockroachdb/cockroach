@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // flowStreamClient is a utility interface used to mock out the RPC layer.
@@ -168,7 +169,7 @@ func (o *Outbox) Run(
 
 	o.runnerCtx = ctx
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
-	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
+	log.VEventf(ctx, 2, "Outbox Dialing %d", redact.SafeInt(nodeID))
 
 	var stream execinfrapb.DistSQL_FlowStreamClient
 	if err := func() error {
@@ -177,7 +178,7 @@ func (o *Outbox) Run(
 			log.Warningf(
 				ctx,
 				"Outbox Dial connection error, distributed query will fail: %+v",
-				err,
+				redact.Safe(err),
 			)
 			return err
 		}
@@ -188,7 +189,7 @@ func (o *Outbox) Run(
 			log.Warningf(
 				ctx,
 				"Outbox FlowStream connection error, distributed query will fail: %+v",
-				err,
+				redact.Safe(err),
 			)
 			return err
 		}
@@ -201,7 +202,7 @@ func (o *Outbox) Run(
 			log.Warningf(
 				ctx,
 				"Outbox Send header error, distributed query will fail: %+v",
-				err,
+				redact.Safe(err),
 			)
 			return err
 		}
@@ -226,18 +227,18 @@ func handleStreamErr(
 ) {
 	if err == io.EOF {
 		if log.V(1) {
-			log.Infof(ctx, "Outbox calling outboxCtxCancel after %s EOF", opName)
+			log.Infof(ctx, "Outbox calling outboxCtxCancel after %s EOF", redact.SafeString(opName))
 		}
 		outboxCtxCancel()
 	} else {
-		log.Warningf(ctx, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		log.Warningf(ctx, "Outbox calling flowCtxCancel after %s connection error: %+v", redact.SafeString(opName), redact.Safe(err))
 		flowCtxCancel()
 	}
 }
 
 func (o *Outbox) moveToDraining(ctx context.Context, reason string) {
 	if atomic.CompareAndSwapUint32(&o.draining, 0, 1) {
-		log.VEventf(ctx, 2, "Outbox moved to draining (%s)", reason)
+		log.VEventf(ctx, 2, "Outbox moved to draining (%s)", redact.SafeString(reason))
 	}
 }
 
@@ -326,7 +327,7 @@ func (o *Outbox) sendBatches(
 func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errToSend error) error {
 	msg := &execinfrapb.ProducerMessage{}
 	if errToSend != nil {
-		log.VEventf(ctx, 1, "Outbox sending an error as metadata: %v", errToSend)
+		log.VEventf(ctx, 1, "Outbox sending an error as metadata: %v", redact.Safe(errToSend))
 		msg.Data.Metadata = append(
 			msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, execinfrapb.ProducerMetadata{Err: errToSend}),
 		)
@@ -395,7 +396,7 @@ func (o *Outbox) runWithStream(
 			}
 			switch {
 			case msg.Handshake != nil:
-				log.VEventf(ctx, 2, "Outbox received handshake: %v", msg.Handshake)
+				log.VEventf(ctx, 2, "Outbox received handshake: %v", redact.Safe(msg.Handshake))
 			case msg.DrainRequest != nil:
 				log.VEventf(ctx, 2, "Outbox received drain request")
 				o.moveToDraining(ctx, "consumer requested draining" /* reason */)

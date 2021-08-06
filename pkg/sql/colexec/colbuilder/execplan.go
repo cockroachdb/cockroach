@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func checkNumIn(inputs []colexecargs.OpWithMetaInfo, numIn int) error {
@@ -539,9 +540,9 @@ func (r opResult) createAndWrapRowSource(
 	if args.ProcessorConstructor == nil {
 		return errors.New("processorConstructor is nil")
 	}
-	log.VEventf(ctx, 1, "planning a row-execution processor in the vectorized flow because %v", causeToWrap)
+	log.VEventf(ctx, 1, "planning a row-execution processor in the vectorized flow because %v", redact.Safe(causeToWrap))
 	if err := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
-		log.VEventf(ctx, 1, "planning a wrapped processor failed because %v", err)
+		log.VEventf(ctx, 1, "planning a wrapped processor failed because %v", redact.Safe(err))
 		// Return the original error for why we don't support this spec
 		// natively since it is more interesting.
 		return causeToWrap
@@ -682,7 +683,7 @@ func NewColOperator(
 			}
 			result.OpMonitors = result.OpMonitors[:0]
 			if returnedErr != nil {
-				log.VEventf(ctx, 1, "vectorized planning failed with %v", returnedErr)
+				log.VEventf(ctx, 1, "vectorized planning failed with %v", redact.Safe(returnedErr))
 			}
 		}
 		if panicErr != nil {
