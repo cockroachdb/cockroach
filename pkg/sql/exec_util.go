@@ -2608,7 +2608,7 @@ func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 
 // SetNoticeDisplaySeverity sets the NoticeDisplaySeverity for the given session.
 func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplaySeverity) {
-	m.data.NoticeDisplaySeverity = severity
+	m.data.NoticeDisplaySeverity = uint32(severity)
 }
 
 // initSequenceCache creates an empty sequence cache instance for the session.

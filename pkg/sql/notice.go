@@ -43,7 +43,7 @@ func (p *planner) BufferClientNotice(ctx context.Context, notice pgnotice.Notice
 		noticeSeverity = pgnotice.DisplaySeverityNotice
 	}
 	if p.noticeSender == nil ||
-		noticeSeverity > p.SessionData().NoticeDisplaySeverity ||
+		noticeSeverity > pgnotice.DisplaySeverity(p.SessionData().NoticeDisplaySeverity) ||
 		!NoticesEnabled.Get(&p.execCfg.Settings.SV) {
 		// Notice cannot flow to the client - because of one of these conditions:
 		// * there is no client
