@@ -104,8 +104,9 @@ func CreateUserDefinedSchemaDescriptor(
 		}
 	}
 
-	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
-		db.GetID(), db.GetDefaultPrivileges(), user, tree.Schemas, db.GetPrivileges(),
+	immutableDefaultPrivileges := db.GetImmutableDefaultPrivileges()
+	privs := immutableDefaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
+		db.GetID(), user, tree.Schemas, db.GetPrivileges(),
 	)
 
 	if !n.AuthRole.Undefined() {

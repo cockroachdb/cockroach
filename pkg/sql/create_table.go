@@ -274,8 +274,9 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
-		n.dbDesc.GetID(), n.dbDesc.GetDefaultPrivileges(),
+	immutableDefaultPrivileges := n.dbDesc.GetImmutableDefaultPrivileges()
+	privs := immutableDefaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
+		n.dbDesc.GetID(),
 		params.SessionData().User(), tree.Tables, n.dbDesc.GetPrivileges(),
 	)
 	var desc *tabledesc.Mutable

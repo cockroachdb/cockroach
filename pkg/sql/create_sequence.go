@@ -100,8 +100,9 @@ func doCreateSequence(
 		return err
 	}
 
-	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
-		dbDesc.GetID(), dbDesc.GetDefaultPrivileges(),
+	immutableDefaultPrivileges := dbDesc.GetImmutableDefaultPrivileges()
+	privs := immutableDefaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
+		dbDesc.GetID(),
 		params.SessionData().User(), tree.Sequences, dbDesc.GetPrivileges(),
 	)
 

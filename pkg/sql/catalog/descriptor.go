@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/defaultprivilegedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -178,7 +179,7 @@ type DatabaseDescriptor interface {
 	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error
 	GetSchemaID(name string) descpb.ID
 	GetNonDroppedSchemaName(schemaID descpb.ID) string
-	GetDefaultPrivileges() *descpb.DefaultPrivilegeDescriptor
+	GetImmutableDefaultPrivileges() defaultprivilegedesc.ImmutableDefaultPrivileges
 }
 
 // TableDescriptor is an interface around the table descriptor types.

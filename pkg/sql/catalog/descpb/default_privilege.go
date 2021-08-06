@@ -13,7 +13,6 @@ package descpb
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,118 +27,6 @@ import (
 type DefaultPrivilegesRole struct {
 	Role        security.SQLUsername
 	ForAllRoles bool
-}
-
-// GrantDefaultPrivileges grants privileges for the specified users.
-func (p *DefaultPrivilegeDescriptor) GrantDefaultPrivileges(
-	role DefaultPrivilegesRole,
-	privileges privilege.List,
-	grantees tree.NameList,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
-) {
-	defaultPrivilegesPerObject := p.findOrCreateUser(role).DefaultPrivilegesPerObject
-	for _, grantee := range grantees {
-		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
-		defaultPrivileges.Grant(
-			security.MakeSQLUsernameFromPreNormalizedString(string(grantee)),
-			privileges,
-		)
-		defaultPrivilegesPerObject[targetObject] = defaultPrivileges
-	}
-}
-
-// RevokeDefaultPrivileges revokes privileges for the specified users.
-func (p *DefaultPrivilegeDescriptor) RevokeDefaultPrivileges(
-	role DefaultPrivilegesRole,
-	privileges privilege.List,
-	grantees tree.NameList,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
-) {
-	defaultPrivilegesPerObject := p.findOrCreateUser(role).DefaultPrivilegesPerObject
-	for _, grantee := range grantees {
-		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
-		defaultPrivileges.Revoke(
-			security.MakeSQLUsernameFromPreNormalizedString(string(grantee)),
-			privileges,
-			targetObject.ToPrivilegeObjectType(),
-		)
-
-		defaultPrivilegesPerObject[targetObject] = defaultPrivileges
-	}
-}
-
-// CreatePrivilegesFromDefaultPrivileges creates privileges for a
-// the specified object with the corresponding default privileges and
-// the appropriate owner (node for system, the restoring user otherwise.)
-func CreatePrivilegesFromDefaultPrivileges(
-	dbID ID,
-	defaultPrivileges *DefaultPrivilegeDescriptor,
-	user security.SQLUsername,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
-	databasePrivileges *PrivilegeDescriptor,
-) *PrivilegeDescriptor {
-	// If a new system table is being created (which should only be doable by
-	// an internal user account), make sure it gets the correct privileges.
-	if dbID == keys.SystemDatabaseID {
-		return NewDefaultPrivilegeDescriptor(security.NodeUserName())
-	}
-
-	if defaultPrivileges == nil {
-		defaultPrivileges = InitDefaultPrivilegeDescriptor()
-	}
-
-	// The privileges for the object are the union of the default privileges
-	// defined for the object for the object creator and the default privileges
-	// defined for all roles.
-	newPrivs := NewDefaultPrivilegeDescriptor(user)
-	defaultPrivilegesForAllRoles, found := defaultPrivileges.GetDefaultPrivilegesForRole(
-		DefaultPrivilegesRole{
-			ForAllRoles: true,
-		},
-	)
-	if found {
-		defaultPrivileges, descriptorExists := defaultPrivilegesForAllRoles.DefaultPrivilegesPerObject[targetObject]
-		if descriptorExists {
-			for _, user := range defaultPrivileges.Users {
-				newPrivs.Grant(
-					user.UserProto.Decode(),
-					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
-				)
-			}
-		}
-	}
-
-	defaultPrivilegesForCreator, defaultPrivilegesDefinedForCreator := defaultPrivileges.GetDefaultPrivilegesForRole(DefaultPrivilegesRole{
-		Role: user,
-	})
-	if defaultPrivilegesDefinedForCreator {
-		defaultPrivileges, descriptorExists := defaultPrivilegesForCreator.DefaultPrivilegesPerObject[targetObject]
-		if descriptorExists {
-			for _, user := range defaultPrivileges.Users {
-				newPrivs.Grant(
-					user.UserProto.Decode(),
-					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
-				)
-			}
-		}
-	}
-
-	newPrivs.SetOwner(user)
-	newPrivs.Version = Version21_2
-
-	// TODO(richardjcai): Remove this depending on how we handle the migration.
-	//   For backwards compatibility, also "inherit" privileges from the dbDesc.
-	//   Issue #67378.
-	if targetObject == tree.Tables || targetObject == tree.Sequences {
-		for _, u := range databasePrivileges.Users {
-			newPrivs.Grant(u.UserProto.Decode(), privilege.ListFromBitField(u.Privileges, privilege.Table))
-		}
-	} else if targetObject == tree.Schemas {
-		for _, u := range databasePrivileges.Users {
-			newPrivs.Grant(u.UserProto.Decode(), privilege.ListFromBitField(u.Privileges, privilege.Schema))
-		}
-	}
-	return newPrivs
 }
 
 // ToDefaultPrivilegesRole returns the DefaultPrivilegesRole corresponding to
@@ -172,21 +59,9 @@ func (r DefaultPrivilegesRole) LessThan(other DefaultPrivilegesRole) bool {
 	return r.Role.LessThan(other.Role)
 }
 
-// GetDefaultPrivilegesForRole looks for a specific user in the list.
-// Returns (nil, false) if not found, or (obj, true) if found.
-func (p *DefaultPrivilegeDescriptor) GetDefaultPrivilegesForRole(
-	role DefaultPrivilegesRole,
-) (*DefaultPrivilegesForRole, bool) {
-	idx := p.findUserIndex(role)
-	if idx == -1 {
-		return nil, false
-	}
-	return &p.DefaultPrivilegesPerRole[idx], true
-}
-
-// findUserIndex looks for a given user and returns its
+// FindUserIndex looks for a given user and returns its
 // index in the User array if found. Returns -1 otherwise.
-func (p *DefaultPrivilegeDescriptor) findUserIndex(role DefaultPrivilegesRole) int {
+func (p *DefaultPrivilegeDescriptor) FindUserIndex(role DefaultPrivilegesRole) int {
 	idx := sort.Search(len(p.DefaultPrivilegesPerRole), func(i int) bool {
 		return !p.DefaultPrivilegesPerRole[i].ToDefaultPrivilegesRole().LessThan(role)
 	})
@@ -197,10 +72,10 @@ func (p *DefaultPrivilegeDescriptor) findUserIndex(role DefaultPrivilegesRole) i
 	return -1
 }
 
-// findOrCreateUser looks for a specific user in the list, creating it if needed.
+// FindOrCreateUser looks for a specific user in the list, creating it if needed.
 // If a new user is created, it must be added in the correct sorted order
 // in the list.
-func (p *DefaultPrivilegeDescriptor) findOrCreateUser(
+func (p *DefaultPrivilegeDescriptor) FindOrCreateUser(
 	role DefaultPrivilegesRole,
 ) *DefaultPrivilegesForRole {
 	idx := sort.Search(len(p.DefaultPrivilegesPerRole), func(i int) bool {
