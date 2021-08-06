@@ -1116,12 +1116,8 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 	schema: vtable.PGCatalogDefaultACL,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		if dbContext.GetDefaultPrivileges() == nil {
-			return nil
-		}
-		for _, defaultPrivs := range dbContext.GetDefaultPrivileges().DefaultPrivilegesPerRole {
-			// Need to consider the case of USAGE for Public as well.
-			for objectType, privs := range defaultPrivs.DefaultPrivilegesPerObject {
+		f := func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
+			for objectType, privs := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
 				// Type of object this entry is for:
 				// r = relation (table, view), S = sequence, f = function, T = type, n = schema.
 				var c string
@@ -1179,9 +1175,9 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 				// role name to create the row hash.
 				normalizedName := ""
 				roleOid := oidZero
-				if !defaultPrivs.GetForAllRoles() {
-					roleOid = h.UserOid(defaultPrivs.GetUserProto().Decode())
-					normalizedName = defaultPrivs.GetUserProto().Decode().Normalized()
+				if !defaultPrivilegesForRole.GetForAllRoles() {
+					roleOid = h.UserOid(defaultPrivilegesForRole.GetUserProto().Decode())
+					normalizedName = defaultPrivilegesForRole.GetUserProto().Decode().Normalized()
 				}
 				rowOid := h.DBSchemaRoleOid(
 					dbContext.GetID(),
@@ -1198,8 +1194,9 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					return err
 				}
 			}
+			return nil
 		}
-		return nil
+		return dbContext.GetDefaultPrivilegeDescriptor().ForEachDefaultPrivilegeForRole(f)
 	},
 }
 

@@ -133,7 +133,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		n.dbDesc.SetDefaultPrivilegeDescriptor(descpb.InitDefaultPrivilegeDescriptor())
 	}
 
-	defaultPrivs := n.dbDesc.GetDefaultPrivileges()
+	defaultPrivs := n.dbDesc.GetMutableDefaultPrivilegeDescriptor()
 
 	var roles []descpb.DefaultPrivilegesRole
 	if n.n.ForAllRoles {
