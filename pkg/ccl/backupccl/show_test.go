@@ -479,6 +479,11 @@ func TestShowBackupTenants(t *testing.T) {
 	require.Equal(t, [][]string{
 		{"/Tenant/10", "/Tenant/11"},
 	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT database_id, parent_schema_id, object_id FROM [SHOW BACKUP 'nodelocal://1/t10' WITH debug_ids]`)
+	require.Equal(t, [][]string{
+		{"NULL", "NULL", "10"},
+	}, res)
 }
 
 func TestShowBackupPrivileges(t *testing.T) {
@@ -585,4 +590,64 @@ func showUpgradedForeignKeysTest(exportDir string) func(t *testing.T) {
 			require.Regexp(t, regexp.MustCompile(tc.expectedForeignKeyPattern), results[0][0])
 		}
 	}
+}
+
+func TestShowBackupWithDebugIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	// Create test database with bank table
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// add 1 type, 1 schema, and 2 tables to the database
+	sqlDB.Exec(t, `
+		SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
+		CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
+		USE data; CREATE SCHEMA sc;
+		CREATE TABLE data.sc.t1 (a INT);
+		CREATE TABLE data.sc.t2 (a data.welcome);
+  `)
+
+	const full = LocalFoo + "/full"
+
+	beforeTS := sqlDB.QueryStr(t, `SELECT now()::timestamp::string`)[0][0]
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
+
+	// extract the object IDs for the database and public schema
+	databaseRow := sqlDB.QueryStr(t, `
+		SELECT database_name, database_id, parent_schema_name, parent_schema_id, object_name, object_id, object_type
+		FROM [SHOW BACKUP $1 WITH debug_ids]
+		WHERE object_name = 'bank'`, full)
+	require.NotEmpty(t, databaseRow)
+	dbID, err := strconv.Atoi(databaseRow[0][1])
+	require.NoError(t, err)
+	publicID, err := strconv.Atoi(databaseRow[0][3])
+	require.NoError(t, err)
+
+	require.Greater(t, dbID, 0)
+	require.Greater(t, publicID, 0)
+
+	res := sqlDB.QueryStr(t, `
+		SELECT database_name, database_id, parent_schema_name, parent_schema_id, object_name, object_id, object_type
+		FROM [SHOW BACKUP $1 WITH debug_ids]
+		ORDER BY object_id`, full)
+
+	dbIDStr := strconv.Itoa(dbID)
+	publicIDStr := strconv.Itoa(publicID)
+	schemaIDStr := strconv.Itoa(dbID + 4)
+
+	expectedObjects := [][]string{
+		{"NULL", "NULL", "NULL", "NULL", "data", dbIDStr, "database"},
+		{"data", dbIDStr, "public", publicIDStr, "bank", strconv.Itoa(dbID + 1), "table"},
+		{"data", dbIDStr, "public", publicIDStr, "welcome", strconv.Itoa(dbID + 2), "type"},
+		{"data", dbIDStr, "public", publicIDStr, "_welcome", strconv.Itoa(dbID + 3), "type"},
+		{"data", dbIDStr, "NULL", "NULL", "sc", schemaIDStr, "schema"},
+		{"data", dbIDStr, "sc", schemaIDStr, "t1", strconv.Itoa(dbID + 5), "table"},
+		{"data", dbIDStr, "sc", schemaIDStr, "t2", strconv.Itoa(dbID + 6), "table"},
+	}
+
+	require.Equal(t, expectedObjects, res)
+
 }
