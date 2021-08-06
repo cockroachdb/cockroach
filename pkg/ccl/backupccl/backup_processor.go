@@ -197,7 +197,8 @@ func runBackupProcessor(
 	backupProcessorSpan := tracing.SpanFromContext(ctx)
 	clusterSettings := flowCtx.Cfg.Settings
 
-	todo := make(chan spanAndTime, len(spec.Spans)+len(spec.IntroducedSpans))
+	totalSpans := len(spec.Spans) + len(spec.IntroducedSpans)
+	todo := make(chan spanAndTime, totalSpans)
 	var spanIdx int
 	for _, s := range spec.IntroducedSpans {
 		todo <- spanAndTime{spanIdx: spanIdx, span: s, start: hlc.Timestamp{},
@@ -212,9 +213,42 @@ func runBackupProcessor(
 
 	targetFileSize := storageccl.ExportRequestTargetFileSize.Get(&clusterSettings.SV)
 
-	// For all backups, partitioned or not, the main BACKUP manifest is stored at
-	// details.URI.
 	defaultConf, err := cloud.ExternalStorageConfFromURI(spec.DefaultURI, spec.User())
+	if err != nil {
+		return err
+	}
+
+	destURI := spec.DefaultURI
+	var destLocalityKV string
+
+	if len(spec.URIsByLocalityKV) > 0 {
+		var localitySinkURI string
+		// When matching, more specific KVs in the node locality take precedence
+		// over less specific ones so search back to front.
+		for i := len(flowCtx.EvalCtx.Locality.Tiers) - 1; i >= 0; i-- {
+			tier := flowCtx.EvalCtx.Locality.Tiers[i].String()
+			if dest, ok := spec.URIsByLocalityKV[tier]; ok {
+				localitySinkURI = dest
+				destLocalityKV = tier
+				break
+			}
+		}
+		if localitySinkURI != "" {
+			log.Infof(ctx, "backing up %d spans to destination specified by locality %s", totalSpans, destLocalityKV)
+			destURI = localitySinkURI
+		} else {
+			nodeLocalities := make([]string, 0, len(flowCtx.EvalCtx.Locality.Tiers))
+			for _, i := range flowCtx.EvalCtx.Locality.Tiers {
+				nodeLocalities = append(nodeLocalities, i.String())
+			}
+			backupLocalities := make([]string, 0, len(spec.URIsByLocalityKV))
+			for i := range spec.URIsByLocalityKV {
+				backupLocalities = append(backupLocalities, i)
+			}
+			log.Infof(ctx, "backing up %d spans to default locality because backup localities %s have no match in node's localities %s", totalSpans, backupLocalities, nodeLocalities)
+		}
+	}
+	dest, err := cloud.ExternalStorageConfFromURI(destURI, spec.User())
 	if err != nil {
 		return err
 	}
@@ -410,7 +444,6 @@ func runBackupProcessor(
 							Span:        file.Span,
 							Path:        file.Path,
 							EntryCounts: countRows(file.Exported, spec.PKIDs),
-							LocalityKV:  file.LocalityKV,
 						}
 						exportResponseTraceEvent.FileSummaries = append(exportResponseTraceEvent.FileSummaries, f.EntryCounts)
 						if span.start != spec.BackupStartTime {
@@ -484,57 +517,28 @@ func runBackupProcessor(
 			settings:       &flowCtx.Cfg.Settings.SV,
 		}
 
-		defaultStore, err := flowCtx.Cfg.ExternalStorage(ctx, defaultConf)
+		storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest)
 		if err != nil {
 			return err
 		}
 
-		localitySinks := make(map[string]*sstSink)
-		defaultSink := &sstSink{conf: sinkConf, dest: defaultStore}
+		sink := &sstSink{conf: sinkConf, dest: storage}
 
 		defer func() {
-			for i := range localitySinks {
-				err := localitySinks[i].Close()
-				err = errors.CombineErrors(localitySinks[i].dest.Close(), err)
-				if err != nil {
-					log.Warningf(ctx, "failed to close backup sink(s): %+v", err)
-				}
-			}
-			err := defaultSink.Close()
-			err = errors.CombineErrors(defaultStore.Close(), err)
+			err := sink.Close()
+			err = errors.CombineErrors(storage.Close(), err)
 			if err != nil {
 				log.Warningf(ctx, "failed to close backup sink(s): %+v", err)
 			}
 		}()
 
 		for res := range returnedSSTs {
-			var sink *sstSink
-
-			if existing, ok := localitySinks[res.f.LocalityKV]; ok {
-				sink = existing
-			} else if conf, ok := storageConfByLocalityKV[res.f.LocalityKV]; ok {
-				es, err := flowCtx.Cfg.ExternalStorage(ctx, *conf)
-				if err != nil {
-					return err
-				}
-				// No defer Close here -- we defer a close of all of them above.
-				sink = &sstSink{conf: sinkConf, dest: es}
-				localitySinks[res.f.LocalityKV] = sink
-			} else {
-				sink = defaultSink
-			}
-
+			res.f.LocalityKV = destLocalityKV
 			if err := sink.push(ctx, res); err != nil {
 				return err
 			}
 		}
-
-		for _, s := range localitySinks {
-			if err := s.flush(ctx); err != nil {
-				return err
-			}
-		}
-		return defaultSink.flush(ctx)
+		return sink.flush(ctx)
 	})
 
 	return grp.Wait()
