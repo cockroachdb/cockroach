@@ -92,6 +92,7 @@ func showBackupPlanHook(
 		backupOptEncKMS:         sql.KVStringOptRequireValue,
 		backupOptWithPrivileges: sql.KVStringOptRequireNoValue,
 		backupOptAsJSON:         sql.KVStringOptRequireNoValue,
+		backupOptWithDebugIDs:   sql.KVStringOptRequireNoValue,
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
@@ -260,6 +261,20 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.Resul
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "privileges", Typ: types.String})
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "owner", Typ: types.String})
 	}
+
+	if _, shouldShowIDs := opts[backupOptWithDebugIDs]; shouldShowIDs {
+		baseHeaders = append(
+			colinfo.ResultColumns{
+				baseHeaders[0],
+				{Name: "database_id", Typ: types.Int},
+				baseHeaders[1],
+				{Name: "parent_schema_id", Typ: types.Int},
+				baseHeaders[2],
+				{Name: "object_id", Typ: types.Int},
+			},
+			baseHeaders[3:]...,
+		)
+	}
 	return baseHeaders
 }
 
@@ -325,6 +340,9 @@ func backupShowerDefault(
 					var parentSchemaName string
 					var descriptorType string
 
+					var dbID descpb.ID
+					var parentSchemaID descpb.ID
+
 					createStmtDatum := tree.DNull
 					dataSizeDatum := tree.DNull
 					rowCountDatum := tree.DNull
@@ -338,14 +356,19 @@ func backupShowerDefault(
 					case catalog.SchemaDescriptor:
 						descriptorType = "schema"
 						dbName = dbIDToName[desc.GetParentID()]
+						dbID = desc.GetParentID()
 					case catalog.TypeDescriptor:
 						descriptorType = "type"
 						dbName = dbIDToName[desc.GetParentID()]
+						dbID = desc.GetParentID()
 						parentSchemaName = schemaIDToName[desc.GetParentSchemaID()]
+						parentSchemaID = desc.GetParentSchemaID()
 					case catalog.TableDescriptor:
 						descriptorType = "table"
 						dbName = dbIDToName[desc.GetParentID()]
+						dbID = desc.GetParentID()
 						parentSchemaName = schemaIDToName[desc.GetParentSchemaID()]
+						parentSchemaID = desc.GetParentSchemaID()
 						descSize := descSizes[desc.GetID()]
 						dataSizeDatum = tree.NewDInt(tree.DInt(descSize.DataSize))
 						rowCountDatum = tree.NewDInt(tree.DInt(descSize.Rows))
@@ -386,6 +409,20 @@ func backupShowerDefault(
 						owner := desc.GetPrivileges().Owner().SQLIdentifier()
 						row = append(row, tree.NewDString(owner))
 					}
+					if _, shouldShowIDs := opts[backupOptWithDebugIDs]; shouldShowIDs {
+						// If showing debug IDs, interleave the IDs with the corresponding object names.
+						row = append(
+							tree.Datums{
+								row[0],
+								nullIfZero(dbID),
+								row[1],
+								nullIfZero(parentSchemaID),
+								row[2],
+								nullIfZero(desc.GetID()),
+							},
+							row[3:]...,
+						)
+					}
 					rows = append(rows, row)
 				}
 				for _, t := range manifest.Tenants {
@@ -407,6 +444,20 @@ func backupShowerDefault(
 					if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
 						row = append(row, tree.DNull)
 					}
+					if _, shouldShowIDs := opts[backupOptWithDebugIDs]; shouldShowIDs {
+						// If showing debug IDs, interleave the IDs with the corresponding object names.
+						row = append(
+							tree.Datums{
+								row[0],
+								tree.DNull, // Database ID
+								row[1],
+								tree.DNull, // Parent Schema ID
+								row[2],
+								tree.NewDInt(tree.DInt(t.ID)), // Object ID
+							},
+							row[3:]...,
+						)
+					}
 					rows = append(rows, row)
 				}
 			}
@@ -420,6 +471,13 @@ func nullIfEmpty(s string) tree.Datum {
 		return tree.DNull
 	}
 	return tree.NewDString(s)
+}
+
+func nullIfZero(i descpb.ID) tree.Datum {
+	if i == 0 {
+		return tree.DNull
+	}
+	return tree.NewDInt(tree.DInt(i))
 }
 
 func showPrivileges(descriptor *descpb.Descriptor) string {
