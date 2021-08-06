@@ -81,7 +81,7 @@ func (d *dev) build(cmd *cobra.Command, targets []string) error {
 
 	if cross == "" {
 		args = append(args, getConfigFlags()...)
-		if err := d.exec.CommandContextNoRecord(ctx, "bazel", args...); err != nil {
+		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err
 		}
 		return d.symlinkBinaries(ctx, fullTargets)

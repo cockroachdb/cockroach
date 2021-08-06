@@ -16,25 +16,15 @@ import (
 	"log"
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recorder"
+	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recording"
 	"github.com/cockroachdb/errors/oserror"
 )
 
-// OS is a convenience wrapper around the stdlib os package. It lets us:
-//
-// (a) mock operating system calls in tests, and
-// (b) capture the set of calls that take place during execution
-//
-// We achieve (a) by embedding a Recorder, and either replaying from it if
-// configured to do so, or "doing the real thing" and recording the fact into
-// the Recorder for future playback.
-//
-// For (b), each operation is logged (if configured to do so). These messages
-// can be captured by the caller and compared against what is expected.
+// OS is a convenience wrapper around the stdlib os package. It lets us
+// mock operating system calls in tests.
 type OS struct {
-	dir    string
 	logger *log.Logger
-	*recorder.Recorder
+	*recording.Recording
 }
 
 // New constructs a new OS handle, configured with the provided options.
@@ -68,17 +58,10 @@ func WithLogger(logger *log.Logger) func(o *OS) {
 	}
 }
 
-// WithRecorder configures OS to use the provided recorder.
-func WithRecorder(r *recorder.Recorder) func(o *OS) {
+// WithRecording configures OS to use the provided recording.
+func WithRecording(r *recording.Recording) func(o *OS) {
 	return func(o *OS) {
-		o.Recorder = r
-	}
-}
-
-// WithWorkingDir configures Exec to use the provided working directory.
-func WithWorkingDir(dir string) func(o *OS) {
-	return func(o *OS) {
-		o.dir = dir
+		o.Recording = r
 	}
 }
 
@@ -88,20 +71,14 @@ func (o *OS) MkdirAll(path string) error {
 	command := fmt.Sprintf("mkdir %s", path)
 	o.logger.Print(command)
 
-	if o.Recorder == nil || o.Recorder.Recording() {
+	if o.Recording == nil {
 		// Do the real thing.
 		if err := os.MkdirAll(path, 0755); err != nil {
 			return err
 		}
-	}
-
-	if o.Recorder == nil {
 		return nil
 	}
 
-	if o.Recording() {
-		return o.record(command, "")
-	}
 	_, err := o.replay(command)
 	return err
 }
@@ -111,20 +88,14 @@ func (o *OS) Remove(path string) error {
 	command := fmt.Sprintf("rm %s", path)
 	o.logger.Print(command)
 
-	if o.Recorder == nil || o.Recorder.Recording() {
+	if o.Recording == nil {
 		// Do the real thing.
 		if err := os.Remove(path); err != nil && !oserror.IsNotExist(err) {
 			return err
 		}
-	}
-
-	if o.Recorder == nil {
 		return nil
 	}
 
-	if o.Recording() {
-		return o.record(command, "")
-	}
 	_, err := o.replay(command)
 	return err
 }
@@ -135,20 +106,14 @@ func (o *OS) Symlink(to, from string) error {
 	command := fmt.Sprintf("ln -s %s %s", to, from)
 	o.logger.Print(command)
 
-	if o.Recorder == nil || o.Recorder.Recording() {
+	if o.Recording == nil {
 		// Do the real thing.
 		if err := os.Symlink(to, from); err != nil {
 			return err
 		}
-	}
-
-	if o.Recorder == nil {
 		return nil
 	}
 
-	if o.Recording() {
-		return o.record(command, "")
-	}
 	_, err := o.replay(command)
 	return err
 }
@@ -159,22 +124,11 @@ func (o OS) Getenv(key string) string {
 	command := fmt.Sprintf("getenv %s", key)
 	o.logger.Print(command)
 
-	var env string
-	if o.Recorder == nil || o.Recorder.Recording() {
-		env = os.Getenv(key)
+	if o.Recording == nil {
+		// Do the real thing.
+		return os.Getenv(key)
 	}
 
-	if o.Recorder == nil {
-		return env
-	}
-
-	if o.Recording() {
-		err := o.record(command, env)
-		if err != nil {
-			return ""
-		}
-		return env
-	}
 	ret, _ := o.replay(command)
 	return ret
 }
@@ -185,20 +139,11 @@ func (o *OS) Setenv(key, value string) error {
 	command := fmt.Sprintf("export %s=%s", key, value)
 	o.logger.Print(command)
 
-	if o.Recorder == nil || o.Recorder.Recording() {
+	if o.Recording == nil {
 		// Do the real thing.
-		if err := os.Setenv(key, value); err != nil {
-			return err
-		}
+		return os.Setenv(key, value)
 	}
 
-	if o.Recorder == nil {
-		return nil
-	}
-
-	if o.Recording() {
-		return o.record(command, "")
-	}
 	_, err := o.replay(command)
 	return err
 }
@@ -209,23 +154,11 @@ func (o *OS) Readlink(filename string) (string, error) {
 	command := fmt.Sprintf("readlink %s", filename)
 	o.logger.Print(command)
 
-	var resolved string
-	if o.Recorder == nil || o.Recorder.Recording() {
+	if o.Recording == nil {
 		// Do the real thing.
-		var err error
-		resolved, err = os.Readlink(filename)
-		if err != nil {
-			return "", err
-		}
+		return os.Readlink(filename)
 	}
 
-	if o.Recorder == nil {
-		return resolved, nil
-	}
-
-	if o.Recording() {
-		return resolved, o.record(command, resolved)
-	}
 	ret, err := o.replay(command)
 	return ret, err
 }
@@ -236,31 +169,23 @@ func (o *OS) ReadFile(filename string) (string, error) {
 	command := fmt.Sprintf("cat %s", filename)
 	o.logger.Print(command)
 
-	var out string
-	if o.Recorder == nil || o.Recorder.Recording() {
+	if o.Recording == nil {
 		// Do the real thing.
 		buf, err := ioutil.ReadFile(filename)
 		if err != nil {
 			return "", err
 		}
-		out = string(buf)
+		return string(buf), nil
 	}
 
-	if o.Recorder == nil {
-		return out, nil
-	}
-
-	if o.Recording() {
-		return out, o.record(command, out)
-	}
 	ret, err := o.replay(command)
 	return ret, err
 }
 
 // replay replays the specified command, erroring out if it's mismatched with
-// what the recorder plays back next. It returns the recorded output.
+// what the recording plays back next. It returns the recorded output.
 func (o *OS) replay(command string) (output string, err error) {
-	found, err := o.Recorder.Next(func(op recorder.Operation) error {
+	found, err := o.Recording.Next(func(op recording.Operation) error {
 		if op.Command != command {
 			return fmt.Errorf("expected %q, got %q", op.Command, command)
 		}
@@ -274,14 +199,4 @@ func (o *OS) replay(command string) (output string, err error) {
 		return "", fmt.Errorf("recording for %q not found", command)
 	}
 	return output, nil
-}
-
-// record records the specified command.
-func (o *OS) record(command, output string) error {
-	op := recorder.Operation{
-		Command: command,
-		Output:  output,
-	}
-
-	return o.Record(op)
 }

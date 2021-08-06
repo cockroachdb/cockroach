@@ -285,6 +285,11 @@ type LocalOnlySessionData struct {
 	// of that interleave should be applied to the new primary index.
 	CopyPartitioningWhenDeinterleavingTable bool
 
+	// PropagateInputOrdering indicates that when planning a subquery or CTE, the
+	// inner ordering should be propagated to the outer scope if the outer scope
+	// is unordered. PropagateInputOrdering is currently experimental.
+	PropagateInputOrdering bool
+
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //

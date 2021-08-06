@@ -15,6 +15,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -88,11 +89,12 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLogin, pwRetrievalFn, validUntilFn, err := sql.GetUserHashedPassword(
+	exists, canLogin, validUntil, defaultSettings, pwRetrievalFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		execCfg,
 		authOpt.ie,
 		c.sessionArgs.User,
+		c.sessionArgs.SessionDefaults["database"],
 	)
 	if err != nil {
 		log.Warningf(ctx, "user retrieval failed for user=%q: %+v", c.sessionArgs.User, err)
@@ -123,7 +125,7 @@ func (c *conn) handleAuthentication(
 
 	// Ask the method to authenticate.
 	authenticationHook, err := methodFn(ctx, ac, tlsState, pwRetrievalFn,
-		validUntilFn, execCfg, hbaEntry)
+		validUntil, execCfg, hbaEntry)
 
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
@@ -133,6 +135,30 @@ func (c *conn) handleAuthentication(
 	if connClose, err = authenticationHook(ctx, c.sessionArgs.User, true /* public */); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
 		return connClose, sendError(err)
+	}
+
+	// Add all the defaults to this session's defaults. If there is an
+	// error (e.g., a setting that no longer exists, or bad input),
+	// log a warning instead of preventing login.
+	// The defaultSettings array is ordered by precedence. This means that if
+	// SessionDefaults already has an entry for a given setting name, then
+	// it should not be replaced.
+	for _, settingEntry := range defaultSettings {
+		for _, setting := range settingEntry.Settings {
+			keyVal := strings.SplitN(setting, "=", 2)
+			if len(keyVal) != 2 {
+				log.Ops.Warningf(ctx, "%s has malformed default setting: %q", c.sessionArgs.User, setting)
+				continue
+			}
+			if err := sql.CheckSessionVariableValueValid(ctx, execCfg.Settings, keyVal[0], keyVal[1]); err != nil {
+				log.Ops.Warningf(ctx, "%s has invalid default setting: %v", c.sessionArgs.User, err)
+				continue
+			}
+			if _, ok := c.sessionArgs.SessionDefaults[keyVal[0]]; !ok {
+				c.sessionArgs.SessionDefaults[keyVal[0]] = keyVal[1]
+			}
+
+		}
 	}
 
 	ac.LogAuthOK(ctx)

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -253,7 +253,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 		}
 
-		if n.name == authentication.CacheEnabledSettingName {
+		if n.name == sessioninit.CacheEnabledSettingName {
 			if expectedEncodedValue == "false" {
 				// Bump role-related table versions to force other nodes to clear out
 				// their AuthInfo cache.
