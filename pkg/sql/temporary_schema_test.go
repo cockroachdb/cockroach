@@ -82,8 +82,10 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	}
 	for _, name := range selectableTempNames {
 		// Check tables are accessible.
-		_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", tempSchemaName, name))
+		var rows *gosql.Rows
+		rows, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", tempSchemaName, name))
 		require.NoError(t, err)
+		require.NoError(t, rows.Close())
 	}
 
 	require.NoError(
@@ -112,8 +114,10 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
 
 	// Check perm_table performs correctly, and has the right schema.
-	_, err = db.Query("SELECT * FROM perm_table")
+	var rows *gosql.Rows
+	rows, err = db.Query("SELECT * FROM perm_table")
 	require.NoError(t, err)
+	require.NoError(t, rows.Close())
 
 	var colDefault gosql.NullString
 	err = db.QueryRow(

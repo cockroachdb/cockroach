@@ -191,7 +191,7 @@ func fromCluster(
 SELECT id, descriptor, crdb_internal_mvcc_timestamp AS mod_time_logical
 FROM system.descriptor ORDER BY id`
 	checkColumnExistsStmt := "SELECT crdb_internal_mvcc_timestamp"
-	_, err := sqlConn.Query(maybePrint(checkColumnExistsStmt), nil)
+	rows, err := sqlConn.Query(maybePrint(checkColumnExistsStmt), nil)
 	// On versions before 20.2, the system.descriptor won't have the builtin
 	// crdb_internal_mvcc_timestamp. If we can't find it, use NULL instead.
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
@@ -199,6 +199,11 @@ FROM system.descriptor ORDER BY id`
 			stmt = `
 SELECT id, descriptor, NULL AS mod_time_logical
 FROM system.descriptor ORDER BY id`
+		}
+	}
+	if err == nil {
+		if closeErr := rows.Close(); closeErr != nil {
+			return nil, nil, nil, closeErr
 		}
 	}
 	descTable = make([]doctor.DescriptorTableRow, 0)
@@ -239,7 +244,7 @@ FROM system.descriptor ORDER BY id`
 	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace`
 
 	checkColumnExistsStmt = `SELECT "parentSchemaID" FROM system.namespace LIMIT 0`
-	_, err = sqlConn.Query(maybePrint(checkColumnExistsStmt), nil)
+	rows, err = sqlConn.Query(maybePrint(checkColumnExistsStmt), nil)
 	// On versions before 20.1, table system.namespace does not have this column.
 	// In that case the ParentSchemaID for tables is 29 and for databases is 0.
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
@@ -247,6 +252,11 @@ FROM system.descriptor ORDER BY id`
 			stmt = `
 SELECT "parentID", CASE WHEN "parentID" = 0 THEN 0 ELSE 29 END AS "parentSchemaID", name, id
 FROM system.namespace`
+		}
+	}
+	if err == nil {
+		if closeErr := rows.Close(); closeErr != nil {
+			return nil, nil, nil, closeErr
 		}
 	}
 
