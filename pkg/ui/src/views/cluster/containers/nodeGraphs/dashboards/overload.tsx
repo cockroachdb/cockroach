@@ -113,6 +113,7 @@ export default function (props: GraphDashboardProps) {
             name="cr.node.admission.granter.io_tokens_exhausted_duration.kv"
             title="IO Exhausted"
             sources={[nid]}
+            nonNegativeRate
           />
         ))}
       </Axis>
@@ -126,6 +127,13 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.admission.admitted.kv"
               title="KV request rate"
+              sources={[nid]}
+              nonNegativeRate
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.admitted.kv-stores"
+              title="KV write request rate"
               sources={[nid]}
               nonNegativeRate
             />
@@ -161,6 +169,13 @@ export default function (props: GraphDashboardProps) {
             />
             <Metric
               key={nid}
+              name="cr.node.admission.wait_sum.kv-stores"
+              title="KV write"
+              sources={[nid]}
+              nonNegativeRate
+            />
+            <Metric
+              key={nid}
               name="cr.node.admission.wait_sum.sql-kv-response"
               title="SQL-KV response"
               sources={[nid]}
@@ -186,6 +201,13 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.admission.wait_durations.kv-p75"
               title="KV"
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_durations.kv-stores-p75"
+              title="KV write"
               sources={[nid]}
               downsampleMax
             />
