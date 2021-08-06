@@ -395,6 +395,11 @@ func runBackupProcessor(
 						Duration:      duration.String(),
 						FileSummaries: make([]RowCount, 0),
 					}
+
+					if len(res.Files) > 1 {
+						log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
+					}
+
 					for i, file := range res.Files {
 						f := BackupManifest_File{
 							Span:        file.Span,
