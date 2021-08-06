@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1092,6 +1093,64 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 			}
 
 			assertEqualKVs(eng, keys.LocalMax, keys.MaxKey, testCase.start, testCase.end, latest, expectedKVs)(t)
+		})
+	}
+}
+
+func runIncrementalBenchmark(
+	b *testing.B, emk engineMaker, useTBI bool, ts hlc.Timestamp, opts benchDataOptions,
+) {
+	eng, _ := setupMVCCData(context.Background(), b, emk, opts)
+	{
+		// Pull all of the sstables into the cache.  This
+		// probably defeates a lot of the benefits of the
+		// time-based optimization.
+		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+		_, _ = iter.ComputeStats(keys.LocalMax, roachpb.KeyMax, 0)
+		iter.Close()
+	}
+	defer eng.Close()
+
+	startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(0)))
+	endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(opts.numKeys)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		it := NewMVCCIncrementalIterator(eng, MVCCIncrementalIterOptions{
+			EnableTimeBoundIteratorOptimization: useTBI,
+			EndKey:                              endKey,
+			StartTime:                           ts,
+			EndTime:                             hlc.MaxTimestamp,
+		})
+		it.SeekGE(MVCCKey{Key: startKey})
+		for {
+			if ok, err := it.Valid(); err != nil {
+				b.Fatalf("failed incremental iteration: %+v", err)
+			} else if !ok {
+				break
+			}
+			it.Next()
+		}
+	}
+}
+
+func BenchmarkMVCCIncrementalIterator(b *testing.B) {
+	numVersions := 100
+	numKeys := 1000
+	valueBytes := 64
+
+	for _, useTBI := range []bool{true, false} {
+		b.Run(fmt.Sprintf("useTBI=%v", useTBI), func(b *testing.B) {
+			for _, tsExcludePercent := range []float64{0, 0.95} {
+				wallTime := int64((5 * (float64(numVersions)*tsExcludePercent + 1)))
+				ts := hlc.Timestamp{WallTime: wallTime}
+				b.Run(fmt.Sprintf("ts=%d", ts.WallTime), func(b *testing.B) {
+					runIncrementalBenchmark(b, setupMVCCPebble, useTBI, ts, benchDataOptions{
+						numVersions: numVersions,
+						numKeys:     numKeys,
+						valueBytes:  valueBytes,
+					})
+				})
+			}
 		})
 	}
 }
