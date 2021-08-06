@@ -409,7 +409,18 @@ func safeFetchVal(jsonVal json.JSON, key string) (json.JSON, error) {
 		return nil, err
 	}
 	if field == nil {
-		return nil, errors.Errorf("%s field is not found in the JSON payload", key)
+		return nil, errors.Newf("%s field is not found in the JSON payload", key)
+	}
+	return field, nil
+}
+
+func safeFetchValIdx(jsonVal json.JSON, idx int) (json.JSON, error) {
+	field, err := jsonVal.FetchValIdx(idx)
+	if err != nil {
+		return nil, err
+	}
+	if field == nil {
+		return nil, errors.Newf("%dth element is not found in the JSON payload", idx)
 	}
 	return field, nil
 }
