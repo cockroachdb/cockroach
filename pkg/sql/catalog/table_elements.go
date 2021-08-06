@@ -276,6 +276,10 @@ type Column interface {
 
 	// IsSystemColumn returns true iff the column is a system column.
 	IsSystemColumn() bool
+
+	// IsGeneratedAsIdentity returns true if a column is created
+	// with the GENERATED ... AS IDENTITY token.
+	IsGeneratedAsIdentity() bool
 }
 
 // ConstraintToUpdate is an interface around a constraint mutation.
