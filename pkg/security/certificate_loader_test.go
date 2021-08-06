@@ -356,8 +356,12 @@ func TestNamingScheme(t *testing.T) {
 		// Write all files.
 		for _, f := range data.files {
 			n := f.name
-			if err := ioutil.WriteFile(filepath.Join(certsDir, n), f.contents, f.mode); err != nil {
+			path := filepath.Join(certsDir, n)
+			if err := ioutil.WriteFile(path, f.contents, f.mode); err != nil {
 				t.Fatalf("#%d: could not write file %s: %v", testNum, n, err)
+			}
+			if err := os.Chmod(path, f.mode); err != nil {
+				t.Fatalf("#%d: could not chmod file %s: %v", testNum, n, err)
 			}
 		}
 
