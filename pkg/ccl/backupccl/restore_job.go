@@ -2401,10 +2401,8 @@ func getRestoringPrivileges(
 			}
 
 			// TODO(dt): Make this more configurable.
-			updatedPrivileges = descpb.CreatePrivilegesFromDefaultPrivileges(
-				parentDB.GetID(), parentDB.GetDefaultPrivileges(), user, tree.Tables,
-				parentDB.GetPrivileges(),
-			)
+			updatedPrivileges = parentDB.GetDefaultPrivilegesWrapper().CreatePrivilegesFromDefaultPrivileges(
+				parentDB.GetID(), user, tree.Tables, parentDB.GetPrivileges())
 		}
 	case catalog.TypeDescriptor, catalog.DatabaseDescriptor:
 		if descCoverage == tree.RequestedDescriptors {

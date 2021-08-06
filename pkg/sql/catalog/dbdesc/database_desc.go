@@ -411,6 +411,12 @@ func (desc *Mutable) HasPostDeserializationChanges() bool {
 	return desc.changed
 }
 
+// IsMultiRegion returns whether the database has multi-region properties
+// configured. If so, desc.RegionConfig can be used.
+func (desc *immutable) GetDefaultPrivilegesWrapper() descpb.DefaultPrivileges {
+	return descpb.MakeDefaultPrivilegesWrapper(desc.GetDefaultPrivileges())
+}
+
 // SetDefaultPrivilegeDescriptor sets the default privilege descriptor
 // for the database.
 func (desc *Mutable) SetDefaultPrivilegeDescriptor(

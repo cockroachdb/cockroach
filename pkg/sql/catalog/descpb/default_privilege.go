@@ -20,6 +20,47 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// DefaultPrivileges is an interface for default privileges to ensure
+// DefaultPrivilegeDescriptor protos are not accessed and interacted
+// with directly.
+type DefaultPrivileges interface {
+	GrantDefaultPrivileges(
+		role DefaultPrivilegesRole,
+		privileges privilege.List,
+		grantees tree.NameList,
+		targetObject tree.AlterDefaultPrivilegesTargetObject,
+	)
+	RevokeDefaultPrivileges(role DefaultPrivilegesRole,
+		privileges privilege.List,
+		grantees tree.NameList,
+		targetObject tree.AlterDefaultPrivilegesTargetObject,
+	)
+	CreatePrivilegesFromDefaultPrivileges(
+		dbID ID,
+		user security.SQLUsername,
+		targetObject tree.AlterDefaultPrivilegesTargetObject,
+		databasePrivileges *PrivilegeDescriptor,
+	) *PrivilegeDescriptor
+	GetDefaultPrivilegesForRole(DefaultPrivilegesRole) (*DefaultPrivilegesForRole, bool)
+	ForEachDefaultPrivilegeForRole(func(DefaultPrivilegesForRole) error) error
+}
+
+// DefaultPrivilegesWrapper is used to encapsulate the DefaultPrivilegeDescriptor
+// so users don't directly access the fields.
+type DefaultPrivilegesWrapper struct {
+	defaultPrivilegeDescriptor *DefaultPrivilegeDescriptor
+}
+
+// MakeDefaultPrivilegesWrapper returns a DefaultPrivileges
+// given a defaultPrivilegeDescriptor.
+func MakeDefaultPrivilegesWrapper(
+	defaultPrivilegeDescriptor *DefaultPrivilegeDescriptor,
+) DefaultPrivileges {
+	return &DefaultPrivilegesWrapper{
+		defaultPrivilegeDescriptor: defaultPrivilegeDescriptor,
+	}
+}
+
 // DefaultPrivilegesRole represents the creator role that the default privileges
 // are being altered for.
 // Either:
@@ -31,13 +72,14 @@ type DefaultPrivilegesRole struct {
 }
 
 // GrantDefaultPrivileges grants privileges for the specified users.
-func (p *DefaultPrivilegeDescriptor) GrantDefaultPrivileges(
+func (d *DefaultPrivilegesWrapper) GrantDefaultPrivileges(
 	role DefaultPrivilegesRole,
 	privileges privilege.List,
 	grantees tree.NameList,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
-	defaultPrivilegesPerObject := p.findOrCreateUser(role).DefaultPrivilegesPerObject
+	defaultPrivilegesPerObject := d.defaultPrivilegeDescriptor.
+		findOrCreateUser(role).DefaultPrivilegesPerObject
 	for _, grantee := range grantees {
 		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
 		defaultPrivileges.Grant(
@@ -49,13 +91,14 @@ func (p *DefaultPrivilegeDescriptor) GrantDefaultPrivileges(
 }
 
 // RevokeDefaultPrivileges revokes privileges for the specified users.
-func (p *DefaultPrivilegeDescriptor) RevokeDefaultPrivileges(
+func (d *DefaultPrivilegesWrapper) RevokeDefaultPrivileges(
 	role DefaultPrivilegesRole,
 	privileges privilege.List,
 	grantees tree.NameList,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
-	defaultPrivilegesPerObject := p.findOrCreateUser(role).DefaultPrivilegesPerObject
+	defaultPrivilegesPerObject := d.defaultPrivilegeDescriptor.
+		findOrCreateUser(role).DefaultPrivilegesPerObject
 	for _, grantee := range grantees {
 		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
 		defaultPrivileges.Revoke(
@@ -71,13 +114,13 @@ func (p *DefaultPrivilegeDescriptor) RevokeDefaultPrivileges(
 // CreatePrivilegesFromDefaultPrivileges creates privileges for a
 // the specified object with the corresponding default privileges and
 // the appropriate owner (node for system, the restoring user otherwise.)
-func CreatePrivilegesFromDefaultPrivileges(
+func (d *DefaultPrivilegesWrapper) CreatePrivilegesFromDefaultPrivileges(
 	dbID ID,
-	defaultPrivileges *DefaultPrivilegeDescriptor,
 	user security.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	databasePrivileges *PrivilegeDescriptor,
 ) *PrivilegeDescriptor {
+	defaultPrivileges := d.defaultPrivilegeDescriptor
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
 	if dbID == keys.SystemDatabaseID {
@@ -92,7 +135,7 @@ func CreatePrivilegesFromDefaultPrivileges(
 	// defined for the object for the object creator and the default privileges
 	// defined for all roles.
 	newPrivs := NewDefaultPrivilegeDescriptor(user)
-	defaultPrivilegesForAllRoles, found := defaultPrivileges.GetDefaultPrivilegesForRole(
+	defaultPrivilegesForAllRoles, found := d.GetDefaultPrivilegesForRole(
 		DefaultPrivilegesRole{
 			ForAllRoles: true,
 		},
@@ -109,9 +152,10 @@ func CreatePrivilegesFromDefaultPrivileges(
 		}
 	}
 
-	defaultPrivilegesForCreator, defaultPrivilegesDefinedForCreator := defaultPrivileges.GetDefaultPrivilegesForRole(DefaultPrivilegesRole{
-		Role: user,
-	})
+	defaultPrivilegesForCreator, defaultPrivilegesDefinedForCreator := d.GetDefaultPrivilegesForRole(
+		DefaultPrivilegesRole{
+			Role: user,
+		})
 	if defaultPrivilegesDefinedForCreator {
 		defaultPrivileges, descriptorExists := defaultPrivilegesForCreator.DefaultPrivilegesPerObject[targetObject]
 		if descriptorExists {
@@ -140,6 +184,19 @@ func CreatePrivilegesFromDefaultPrivileges(
 		}
 	}
 	return newPrivs
+}
+
+// ForEachDefaultPrivilegeForRole loops through the DefaultPrivilegeDescriptior's
+// DefaultPrivilegePerRole entry and calls f on it.
+func (d *DefaultPrivilegesWrapper) ForEachDefaultPrivilegeForRole(
+	f func(defaultPrivilegesForRole DefaultPrivilegesForRole) error,
+) error {
+	for _, defaultPrivilegesForRole := range d.defaultPrivilegeDescriptor.DefaultPrivilegesPerRole {
+		if err := f(defaultPrivilegesForRole); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ToDefaultPrivilegesRole returns the DefaultPrivilegesRole corresponding to
@@ -174,14 +231,14 @@ func (r DefaultPrivilegesRole) LessThan(other DefaultPrivilegesRole) bool {
 
 // GetDefaultPrivilegesForRole looks for a specific user in the list.
 // Returns (nil, false) if not found, or (obj, true) if found.
-func (p *DefaultPrivilegeDescriptor) GetDefaultPrivilegesForRole(
+func (d *DefaultPrivilegesWrapper) GetDefaultPrivilegesForRole(
 	role DefaultPrivilegesRole,
 ) (*DefaultPrivilegesForRole, bool) {
-	idx := p.findUserIndex(role)
+	idx := d.defaultPrivilegeDescriptor.findUserIndex(role)
 	if idx == -1 {
 		return nil, false
 	}
-	return &p.DefaultPrivilegesPerRole[idx], true
+	return &d.defaultPrivilegeDescriptor.DefaultPrivilegesPerRole[idx], true
 }
 
 // findUserIndex looks for a given user and returns its
