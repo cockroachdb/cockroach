@@ -266,11 +266,15 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if prefix == "default" {
 			prefix = ""
 		}
-		fileSinkInfo, _, err := newFileSinkInfo(prefix, *fc)
+		fileSinkInfo, fileSink, err := newFileSinkInfo(prefix, *fc)
 		if err != nil {
 			return nil, err
 		}
 		attachSinkInfo(fileSinkInfo, fc.Channels.Channels)
+
+		// Start the GC process. This ensures that old capture files get
+		// erased as new files get created.
+		go fileSink.gcDaemon(secLoggersCtx)
 	}
 
 	// Create the fluent sinks.
