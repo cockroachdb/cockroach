@@ -48,12 +48,13 @@ func registerKV(r registry.Registry) {
 		blockSize int
 		splits    int // 0 implies default, negative implies 0
 		// If true, load-based splitting will be disabled.
-		disableLoadSplits bool
-		encryption        bool
-		sequential        bool
-		concMultiplier    int
-		duration          time.Duration
-		tags              []string
+		disableLoadSplits       bool
+		encryption              bool
+		sequential              bool
+		admissionControlEnabled bool
+		concMultiplier          int
+		duration                time.Duration
+		tags                    []string
 	}
 	computeNumSplits := func(opts kvOptions) int {
 		// TODO(ajwerner): set this default to a more sane value or remove it and
@@ -80,6 +81,9 @@ func registerKV(r registry.Registry) {
 			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'"); err != nil {
 				t.Fatalf("failed to disable load based splitting: %v", err)
 			}
+		}
+		if opts.admissionControlEnabled {
+			EnableAdmissionControl(ctx, t, c)
 		}
 
 		t.Status("running workload")
@@ -150,6 +154,8 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 8, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0},
 		{nodes: 3, cpus: 32, readPercent: 95},
+		{nodes: 3, cpus: 32, readPercent: 0, admissionControlEnabled: true},
+		{nodes: 3, cpus: 32, readPercent: 95, admissionControlEnabled: true},
 		{nodes: 3, cpus: 32, readPercent: 0, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 95, splits: -1 /* no splits */},
 
@@ -162,6 +168,10 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 8, readPercent: 95, blockSize: 1 << 16 /* 64 KB */},
 		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 16 /* 64 KB */},
 		{nodes: 3, cpus: 32, readPercent: 95, blockSize: 1 << 16 /* 64 KB */},
+		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 16, /* 64 KB */
+			admissionControlEnabled: true},
+		{nodes: 3, cpus: 32, readPercent: 95, blockSize: 1 << 16, /* 64 KB */
+			admissionControlEnabled: true},
 
 		// Configs with large batch sizes.
 		{nodes: 3, cpus: 8, readPercent: 0, batchSize: 16},
@@ -217,6 +227,9 @@ func registerKV(r registry.Registry) {
 		}
 		if opts.sequential {
 			nameParts = append(nameParts, "seq")
+		}
+		if opts.admissionControlEnabled {
+			nameParts = append(nameParts, "admission")
 		}
 		if opts.concMultiplier != 0 { // support legacy test name which didn't include this multiplier
 			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
