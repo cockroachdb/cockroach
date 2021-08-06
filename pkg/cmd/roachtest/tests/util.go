@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -77,6 +78,20 @@ func WaitForUpdatedReplicationReport(ctx context.Context, t test.Test, db *gosql
 		}
 		if timeutil.Since(tStart) > 30*time.Second {
 			t.L().Printf("still waiting for updated replication report")
+		}
+	}
+}
+
+// EnableAdmissionControl enables the admission control cluster settings on
+// the given cluster.
+func EnableAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster) {
+	db := c.Conn(ctx, 1)
+	defer db.Close()
+	for _, setting := range []string{"admission.kv.enabled", "admission.sql_kv_response.enabled",
+		"admission.sql_sql_response.enabled"} {
+		if _, err := db.ExecContext(
+			ctx, "SET CLUSTER SETTING "+setting+" = 'true'"); err != nil {
+			t.Fatalf("failed to enable admission control: %v", err)
 		}
 	}
 }
