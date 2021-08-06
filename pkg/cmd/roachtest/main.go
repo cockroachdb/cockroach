@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
@@ -59,7 +60,7 @@ func main() {
 		Short: "roachtest tool for testing cockroach clusters",
 		Long: `roachtest is a tool for testing cockroach clusters.
 `,
-
+		Version: "details:\n" + build.GetInfo().Long(),
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			// Don't bother checking flags for the default help command.
 			if cmd.Name() == "help" {
@@ -98,6 +99,16 @@ func main() {
 	f := rootCmd.PersistentFlags().VarPF(
 		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
 	f.NoOptDefVal = "true"
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   `version`,
+		Short: `print version information`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			info := build.GetInfo()
+			fmt.Println(info.Long())
+			return nil
+		}},
+	)
 
 	var listBench bool
 
