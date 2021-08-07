@@ -40,6 +40,9 @@ func NewCrossJoiner(
 	rightTypes []*types.T,
 	diskAcc *mon.BoundAccount,
 ) colexecop.Operator {
+	if joinType.IsSetOpJoin() {
+		colexecerror.InternalError(errors.AssertionFailedf("set-op cross joins are invalid"))
+	}
 	return &crossJoiner{
 		crossJoinerBase: newCrossJoinerBase(
 			unlimitedAllocator,
@@ -63,16 +66,18 @@ type crossJoiner struct {
 	*joinHelper
 
 	unlimitedAllocator    *colmem.Allocator
-	inputsConsumed        bool
+	rightInputConsumed    bool
 	outputTypes           []*types.T
 	maxOutputBatchMemSize int64
-	numTotalOutputTuples  int
-	numAlreadyEmitted     int
 	// isLeftAllNulls and isRightAllNulls indicate whether the output vectors
 	// corresponding to the left and right inputs, respectively, should consist
 	// only of NULL values. This is the case when we have right or left,
-	// respectively, unmatched tuples. Note that only one can be set to true.
+	// respectively, unmatched tuples.
 	isLeftAllNulls, isRightAllNulls bool
+	// done indicates that the cross joiner has fully built its output and
+	// closed the spilling queue. Once set to true, only zero-length batches are
+	// emitted.
+	done bool
 }
 
 var _ colexecop.ClosableOperator = &crossJoiner{}
@@ -88,17 +93,54 @@ func (c *crossJoiner) Init(ctx context.Context) {
 }
 
 func (c *crossJoiner) Next() coldata.Batch {
-	if !c.inputsConsumed {
-		c.consumeInputs(c.Ctx)
-		c.setupForBuilding()
-	}
-	if c.numTotalOutputTuples == c.numAlreadyEmitted {
-		if err := c.Close(); err != nil {
-			colexecerror.InternalError(err)
-		}
+	if c.done {
 		return coldata.ZeroBatch
 	}
-	willEmit := c.numTotalOutputTuples - c.numAlreadyEmitted
+	if !c.rightInputConsumed {
+		c.consumeRightInput(c.Ctx)
+		c.setupForBuilding()
+	}
+	var willEmit int
+	if c.needLeftTuples {
+		if c.isLeftAllNulls {
+			if c.isRightAllNulls {
+				// This can happen only in FULL OUTER join when both inputs are
+				// empty.
+				return c.emitFirstZeroBatch()
+			}
+			// All tuples from the right are unmatched and will be emitted once.
+			c.builderState.setup.rightNumRepeats = 1
+			willEmit = c.numRightTuples - c.builderState.numAlreadyEmitted
+		} else {
+			if c.builderState.left.currentBatch == nil || c.canEmit() == 0 {
+				// Get the next left batch if we haven't fetched one yet or we
+				// have fully built the output using the current left batch.
+				leftBatch := c.inputOne.Next()
+				n := leftBatch.Length()
+				if n == 0 {
+					return c.emitFirstZeroBatch()
+				}
+				c.prepareForNextLeftBatch(leftBatch, 0 /* startIdx */, n)
+			}
+			willEmit = c.canEmit()
+		}
+	} else {
+		switch c.joinType {
+		case descpb.LeftSemiJoin, descpb.LeftAntiJoin:
+			// We don't need the left tuples, and in case of LEFT SEMI/ANTI this
+			// means that the right input was empty/non-empty, so the cross join
+			// is empty.
+			return c.emitFirstZeroBatch()
+		case descpb.RightSemiJoin, descpb.RightAntiJoin:
+			if c.numRightTuples == 0 {
+				// For RIGHT SEMI, we didn't fetch any right tuples if the left
+				// input was empty; for RIGHT ANTI - if the left input wasn't
+				// empty. In both such cases the cross join is empty.
+				return c.emitFirstZeroBatch()
+			}
+			willEmit = c.canEmit()
+		}
+	}
 	c.output, _ = c.unlimitedAllocator.ResetMaybeReallocate(
 		c.outputTypes, c.output, willEmit, c.maxOutputBatchMemSize,
 	)
@@ -120,45 +162,58 @@ func (c *crossJoiner) Next() coldata.Batch {
 		}
 	}
 	c.output.SetLength(willEmit)
-	c.numAlreadyEmitted += willEmit
+	c.builderState.numAlreadyEmitted += willEmit
+	c.builderState.numEmittedSinceReset += willEmit
 	return c.output
 }
 
-// consumeInputs determines the kind of information the cross joiner needs from
-// its inputs (in some cases, we don't need to buffer all input tuples) and
-// consumes the inputs accordingly.
-func (c *crossJoiner) consumeInputs(ctx context.Context) {
-	c.inputsConsumed = true
-	var needLeftTuples bool
+// emitFirstZeroBatch closes the cross joiner and returns a zero-length batch.
+func (c *crossJoiner) emitFirstZeroBatch() coldata.Batch {
+	if err := c.Close(); err != nil {
+		colexecerror.InternalError(err)
+	}
+	c.done = true
+	return coldata.ZeroBatch
+}
+
+// consumeRightInput determines the kind of information the cross joiner needs
+// from its right input (in some cases, we don't need to buffer all tuples from
+// the right) and consumes the right input accordingly. It also checks whether
+// we need any tuples from the left and possibly reads a single batch, depending
+// on the join type.
+func (c *crossJoiner) consumeRightInput(ctx context.Context) {
+	c.rightInputConsumed = true
 	var needRightTuples, needOnlyNumRightTuples bool
 	switch c.joinType {
 	case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.RightOuterJoin, descpb.FullOuterJoin:
-		needLeftTuples = true
+		c.needLeftTuples = true
 		needRightTuples = true
 	case descpb.LeftSemiJoin:
 		// With LEFT SEMI join we only need to know whether the right input is
 		// empty or not.
-		c.right.numTuples = c.inputTwo.Next().Length()
-		needLeftTuples = c.right.numTuples != 0
+		c.numRightTuples = c.inputTwo.Next().Length()
+		c.needLeftTuples = c.numRightTuples != 0
 	case descpb.RightSemiJoin:
 		// With RIGHT SEMI join we only need to know whether the left input is
 		// empty or not.
-		c.left.numTuples = c.inputOne.Next().Length()
-		needRightTuples = c.left.numTuples != 0
+		leftBatch := c.inputOne.Next()
+		c.prepareForNextLeftBatch(leftBatch, 0 /* startIdx */, leftBatch.Length())
+		needRightTuples = leftBatch.Length() != 0
 	case descpb.LeftAntiJoin:
 		// With LEFT ANTI join we only need to know whether the right input is
 		// empty or not.
-		c.right.numTuples = c.inputTwo.Next().Length()
-		needLeftTuples = c.right.numTuples == 0
+		c.numRightTuples = c.inputTwo.Next().Length()
+		c.needLeftTuples = c.numRightTuples == 0
 	case descpb.RightAntiJoin:
 		// With RIGHT ANTI join we only need to know whether the left input is
 		// empty or not.
-		c.left.numTuples = c.inputOne.Next().Length()
-		needRightTuples = c.left.numTuples == 0
+		leftBatch := c.inputOne.Next()
+		c.prepareForNextLeftBatch(leftBatch, 0 /* startIdx */, leftBatch.Length())
+		needRightTuples = leftBatch.Length() == 0
 	case descpb.IntersectAllJoin, descpb.ExceptAllJoin:
 		// With set-operation joins we only need the number of tuples from the
 		// right input.
-		needLeftTuples = true
+		c.needLeftTuples = true
 		needOnlyNumRightTuples = true
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unexpected join type %s", c.joinType.String()))
@@ -167,66 +222,53 @@ func (c *crossJoiner) consumeInputs(ctx context.Context) {
 		colexecerror.InternalError(errors.AssertionFailedf("both needRightTuples and needOnlyNumRightTuples are true"))
 	}
 
-	if needLeftTuples {
-		for {
-			batch := c.inputOne.Next()
-			c.left.tuples.Enqueue(ctx, batch)
-			if batch.Length() == 0 {
-				break
-			}
-			c.left.numTuples += batch.Length()
-		}
-	}
 	if needRightTuples {
 		for {
 			batch := c.inputTwo.Next()
-			c.right.tuples.Enqueue(ctx, batch)
+			c.rightTuples.Enqueue(ctx, batch)
 			if batch.Length() == 0 {
 				break
 			}
-			c.right.numTuples += batch.Length()
+			c.numRightTuples += batch.Length()
 		}
-	}
-	if needOnlyNumRightTuples {
+	} else if needOnlyNumRightTuples {
 		for {
 			batch := c.inputTwo.Next()
 			if batch.Length() == 0 {
 				break
 			}
-			c.right.numTuples += batch.Length()
+			c.numRightTuples += batch.Length()
 		}
 	}
 }
 
+// setupForBuilding prepares the cross joiner to build the output. This method
+// must be called after the right input has been fully "processed" (which might
+// mean it wasn't fully read, depending on the join type).
 func (c *crossJoiner) setupForBuilding() {
-	c.numTotalOutputTuples = c.calculateOutputCount()
-
 	switch c.joinType {
 	case descpb.LeftOuterJoin:
-		c.isRightAllNulls = c.right.numTuples == 0
+		c.isRightAllNulls = c.numRightTuples == 0
 	case descpb.RightOuterJoin:
-		c.isLeftAllNulls = c.left.numTuples == 0
+		leftBatch := c.inputOne.Next()
+		c.builderState.left.currentBatch = leftBatch
+		c.isLeftAllNulls = leftBatch.Length() == 0
+		c.prepareForNextLeftBatch(leftBatch, 0 /* startIdx */, leftBatch.Length())
 	case descpb.FullOuterJoin:
-		c.isLeftAllNulls = c.left.numTuples == 0
-		c.isRightAllNulls = c.right.numTuples == 0
+		leftBatch := c.inputOne.Next()
+		c.builderState.left.currentBatch = leftBatch
+		c.isLeftAllNulls = leftBatch.Length() == 0
+		c.isRightAllNulls = c.numRightTuples == 0
+		c.prepareForNextLeftBatch(leftBatch, 0 /* startIdx */, leftBatch.Length())
 	}
-	// In order for buildFrom*Input methods to work in the unmatched cases, we
-	// "lie" that there is a single tuple on the opposite side which results in
-	// the builder methods repeating the tuples only once, and that's exactly
-	// what we want.
-	if c.isLeftAllNulls {
-		c.left.numTuples = 1
-	}
+	// In order for canEmit method to work in the unmatched cases, we "lie"
+	// that there is a single tuple on the right side which results in the
+	// builder method repeating the tuples only once, and that's exactly what we
+	// want.
 	if c.isRightAllNulls {
-		c.right.numTuples = 1
+		c.numRightTuples = 1
 	}
-	c.setupBuilder()
-	if c.isLeftAllNulls {
-		c.left.numTuples = 0
-	}
-	if c.isRightAllNulls {
-		c.right.numTuples = 0
-	}
+	c.setupLeftBuilder()
 }
 
 // setAllNulls sets all tuples in vecs with indices in [0, length) range to
@@ -245,15 +287,12 @@ func (c *crossJoiner) Reset(ctx context.Context) {
 		r.Reset(ctx)
 	}
 	c.crossJoinerBase.Reset(ctx)
-	c.inputsConsumed = false
-	c.numTotalOutputTuples = 0
-	c.numAlreadyEmitted = 0
+	c.rightInputConsumed = false
 	c.isLeftAllNulls = false
 	c.isRightAllNulls = false
+	c.done = false
 }
 
-// TODO(yuzefovich): use two separate unlimited allocators giving the right side
-// larger limit (since it might need to be read multiple times).
 func newCrossJoinerBase(
 	unlimitedAllocator *colmem.Allocator,
 	joinType descpb.JoinType,
@@ -269,32 +308,22 @@ func newCrossJoinerBase(
 			unlimitedAllocator:    unlimitedAllocator,
 			types:                 leftTypes,
 			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(leftTypes),
-			tuples: colexecutils.NewSpillingQueue(
-				&colexecutils.NewSpillingQueueArgs{
-					UnlimitedAllocator: unlimitedAllocator,
-					Types:              leftTypes,
-					MemoryLimit:        memoryLimit,
-					DiskQueueCfg:       cfg,
-					FDSemaphore:        fdSemaphore,
-					DiskAcc:            diskAcc,
-				},
-			),
 		},
 		right: cjState{
 			unlimitedAllocator:    unlimitedAllocator,
 			types:                 rightTypes,
 			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(rightTypes),
-			tuples: colexecutils.NewRewindableSpillingQueue(
-				&colexecutils.NewSpillingQueueArgs{
-					UnlimitedAllocator: unlimitedAllocator,
-					Types:              rightTypes,
-					MemoryLimit:        memoryLimit,
-					DiskQueueCfg:       cfg,
-					FDSemaphore:        fdSemaphore,
-					DiskAcc:            diskAcc,
-				},
-			),
 		},
+		rightTuples: colexecutils.NewRewindableSpillingQueue(
+			&colexecutils.NewSpillingQueueArgs{
+				UnlimitedAllocator: unlimitedAllocator,
+				Types:              rightTypes,
+				MemoryLimit:        memoryLimit,
+				DiskQueueCfg:       cfg,
+				FDSemaphore:        fdSemaphore,
+				DiskAcc:            diskAcc,
+			},
+		),
 	}
 	if joinType.ShouldIncludeLeftColsInOutput() {
 		base.builderState.rightColOffset = len(leftTypes)
@@ -303,12 +332,26 @@ func newCrossJoinerBase(
 }
 
 type crossJoinerBase struct {
-	initHelper   colexecop.InitHelper
-	joinType     descpb.JoinType
-	left, right  cjState
-	builderState struct {
+	initHelper     colexecop.InitHelper
+	joinType       descpb.JoinType
+	left, right    cjState
+	numRightTuples int
+	rightTuples    *colexecutils.SpillingQueue
+	needLeftTuples bool
+	builderState   struct {
 		setup       cjBuilderSetupState
 		left, right cjMutableBuilderState
+
+		// numAlreadyEmitted tracks the number of joined rows returned based on
+		// the current left batch. It is reset on every call to
+		// prepareForNextLeftBatch.
+		numAlreadyEmitted int
+
+		// numEmittedSinceReset tracks the number of rows that have been emitted
+		// since the crossJoinerBase has been reset. It is only used in RIGHT
+		// SEMI, RIGHT ANTI, and INTERSECT ALL joins.
+		numEmittedSinceReset int
+
 		// rightColOffset indicates the number of vectors in the output batch
 		// that should be "skipped" when building from the right input.
 		rightColOffset int
@@ -320,142 +363,108 @@ func (b *crossJoinerBase) init(ctx context.Context) {
 	b.initHelper.Init(ctx)
 }
 
-func (b *crossJoinerBase) setupBuilder() {
-	switch b.joinType {
-	case descpb.IntersectAllJoin:
-		// For INTERSECT ALL joins we build min(left.numTuples, right.numTuples)
-		// tuples.
-		if b.left.numTuples < b.right.numTuples {
-			b.builderState.setup.leftSrcEndIdx = b.left.numTuples
-		} else {
-			b.builderState.setup.leftSrcEndIdx = b.right.numTuples
-		}
-	case descpb.ExceptAllJoin:
-		// For EXCEPT ALL joins we build left.numTuples-right.numTuples tuples
-		// (if positive).
-		if b.left.numTuples > b.right.numTuples {
-			b.builderState.setup.leftSrcEndIdx = b.left.numTuples - b.right.numTuples
-		}
-	default:
-		b.builderState.setup.leftSrcEndIdx = b.left.numTuples
-	}
+func (b *crossJoinerBase) setupLeftBuilder() {
 	switch b.joinType {
 	case descpb.LeftSemiJoin, descpb.IntersectAllJoin, descpb.ExceptAllJoin:
 		b.builderState.setup.leftNumRepeats = 1
 	case descpb.LeftAntiJoin:
 		// LEFT ANTI cross join emits all left tuples repeated once only if the
 		// right input is empty.
-		if b.right.numTuples == 0 {
+		if b.numRightTuples == 0 {
 			b.builderState.setup.leftNumRepeats = 1
 		}
 	default:
-		b.builderState.setup.leftNumRepeats = b.right.numTuples
-	}
-	switch b.joinType {
-	case descpb.RightSemiJoin:
-		b.builderState.setup.rightNumRepeats = 1
-	case descpb.RightAntiJoin:
-		// RIGHT ANTI cross join emits all right tuples repeated once only if
-		// the left input is empty.
-		if b.left.numTuples == 0 {
-			b.builderState.setup.rightNumRepeats = 1
-		}
-	default:
-		b.builderState.setup.rightNumRepeats = b.left.numTuples
+		b.builderState.setup.leftNumRepeats = b.numRightTuples
 	}
 }
 
-// calculateOutputCount returns the total number of tuples that are emitted by
-// the cross join given already initialized left and right side states.
-func (b *crossJoinerBase) calculateOutputCount() int {
+// prepareForNextLeftBatch sets up the crossJoinerBase to build based on a new
+// batch coming from the left input. Only rows with ordinals in
+// [startIdx, endIdx) range will be used for the cross join.
+func (b *crossJoinerBase) prepareForNextLeftBatch(batch coldata.Batch, startIdx, endIdx int) {
+	b.builderState.numAlreadyEmitted = 0
+	b.builderState.left.currentBatch = batch
+	b.builderState.left.curSrcStartIdx = startIdx
+	b.builderState.left.numRepeatsIdx = 0
+	b.builderState.right.numRepeatsIdx = 0
+
+	if b.joinType == descpb.IntersectAllJoin {
+		// Intersect all is special because we need to count how many tuples
+		// from the right we have already used up.
+		if b.builderState.numEmittedSinceReset+endIdx-startIdx >= b.numRightTuples {
+			// The current left batch is the last one that contains tuples with
+			// a "match".
+			b.builderState.setup.leftSrcEndIdx = b.numRightTuples - b.builderState.numEmittedSinceReset + startIdx
+		} else {
+			// The current left batch is still emitted fully.
+			b.builderState.setup.leftSrcEndIdx = endIdx
+		}
+	} else {
+		b.builderState.setup.leftSrcEndIdx = endIdx
+	}
+
 	switch b.joinType {
-	case descpb.InnerJoin:
-		return b.left.numTuples * b.right.numTuples
-	case descpb.LeftOuterJoin:
-		if b.right.numTuples == 0 {
-			return b.left.numTuples
-		}
-		return b.left.numTuples * b.right.numTuples
-	case descpb.RightOuterJoin:
-		if b.left.numTuples == 0 {
-			return b.right.numTuples
-		}
-		return b.left.numTuples * b.right.numTuples
-	case descpb.FullOuterJoin:
-		if b.left.numTuples == 0 || b.right.numTuples == 0 {
-			return b.left.numTuples + b.right.numTuples
-		}
-		return b.left.numTuples * b.right.numTuples
-	case descpb.LeftSemiJoin:
-		if b.right.numTuples == 0 {
-			return 0
-		}
-		return b.left.numTuples
-	case descpb.RightSemiJoin:
-		if b.left.numTuples == 0 {
-			return 0
-		}
-		return b.right.numTuples
+	case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.RightOuterJoin, descpb.FullOuterJoin:
+		b.builderState.setup.rightNumRepeats = endIdx - startIdx
+	case descpb.RightSemiJoin, descpb.RightAntiJoin:
+		b.builderState.setup.rightNumRepeats = 1
+	}
+}
+
+// canEmit returns the number of output rows that can still be emitted based on
+// the current left batch. It supports only the case when both left and right
+// inputs are not empty.
+func (b *crossJoinerBase) canEmit() int {
+	switch b.joinType {
+	case descpb.LeftSemiJoin, descpb.IntersectAllJoin, descpb.ExceptAllJoin:
+		return b.builderState.setup.leftSrcEndIdx - b.builderState.left.curSrcStartIdx
 	case descpb.LeftAntiJoin:
-		if b.right.numTuples != 0 {
+		if b.numRightTuples != 0 {
 			return 0
 		}
-		return b.left.numTuples
+		return b.builderState.setup.leftSrcEndIdx - b.builderState.left.curSrcStartIdx
+	case descpb.RightSemiJoin:
+		// RIGHT SEMI cross join emits all right tuples repeated once iff the
+		// left input is not empty.
+		if b.builderState.setup.leftSrcEndIdx == b.builderState.left.curSrcStartIdx {
+			return 0
+		}
+		return b.numRightTuples - b.builderState.numEmittedSinceReset
 	case descpb.RightAntiJoin:
-		if b.left.numTuples != 0 {
+		// RIGHT ANTI cross join emits all right tuples repeated once iff the
+		// left input is empty.
+		if b.builderState.setup.leftSrcEndIdx != b.builderState.left.curSrcStartIdx {
 			return 0
 		}
-		return b.right.numTuples
-	case descpb.IntersectAllJoin:
-		if b.right.numTuples < b.left.numTuples {
-			return b.right.numTuples
-		}
-		return b.left.numTuples
-	case descpb.ExceptAllJoin:
-		if b.right.numTuples > b.left.numTuples {
-			return 0
-		}
-		return b.left.numTuples - b.right.numTuples
+		return b.numRightTuples - b.builderState.numEmittedSinceReset
 	default:
-		colexecerror.InternalError(errors.AssertionFailedf("unexpected join type %s", b.joinType.String()))
-		// Unreachable code.
-		return 0
+		return b.builderState.setup.rightNumRepeats*b.numRightTuples - b.builderState.numAlreadyEmitted
 	}
 }
 
 func (b *crossJoinerBase) Reset(ctx context.Context) {
-	if b.left.tuples != nil {
-		b.left.tuples.Reset(ctx)
+	if b.rightTuples != nil {
+		b.rightTuples.Reset(ctx)
 	}
-	if b.right.tuples != nil {
-		b.right.tuples.Reset(ctx)
-	}
-	b.left.numTuples = 0
-	b.right.numTuples = 0
+	b.numRightTuples = 0
 	b.builderState.left.reset()
 	b.builderState.right.reset()
+	b.builderState.numAlreadyEmitted = 0
+	b.builderState.numEmittedSinceReset = 0
 }
 
 func (b *crossJoinerBase) Close() error {
 	ctx := b.initHelper.EnsureCtx()
-	var lastErr error
-	if b.left.tuples != nil {
-		lastErr = b.left.tuples.Close(ctx)
+	if b.rightTuples != nil {
+		return b.rightTuples.Close(ctx)
 	}
-	if b.right.tuples != nil {
-		if err := b.right.tuples.Close(ctx); err != nil {
-			lastErr = err
-		}
-	}
-	return lastErr
+	return nil
 }
 
 type cjState struct {
 	unlimitedAllocator    *colmem.Allocator
 	types                 []*types.T
 	canonicalTypeFamilies []types.Family
-	tuples                *colexecutils.SpillingQueue
-	numTuples             int
 }
 
 type cjBuilderSetupState struct {
@@ -481,16 +490,10 @@ type cjMutableBuilderState struct {
 	// numRepeatsIdx tracks the number of times a "group" has already been
 	// repeated.
 	numRepeatsIdx int
-	// setOpLeftSrcIdx tracks the current tuple's index from the left input for
-	// set operation joins. INTERSECT ALL and EXCEPT ALL joins are special
-	// because they need to build the output partially (namely, for exactly
-	// leftSrcEndIdx number of tuples which could span multiple batches).
-	setOpLeftSrcIdx int
 }
 
 func (s *cjMutableBuilderState) reset() {
 	s.currentBatch = nil
 	s.curSrcStartIdx = 0
 	s.numRepeatsIdx = 0
-	s.setOpLeftSrcIdx = 0
 }
