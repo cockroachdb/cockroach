@@ -250,6 +250,30 @@ var testCases = []testCase{
 		},
 	},
 	{
+		name: "UpdateTimestamp",
+		ops: []op{
+			protectOp{spans: tableSpans(42)},
+			updateTimestampOp{
+				expectedRecordFn: func(record ptpb.Record) ptpb.Record {
+					record.Timestamp = hlc.Timestamp{WallTime: 1}
+					return record
+				},
+				updateTimestamp: hlc.Timestamp{WallTime: 1},
+			},
+		},
+	},
+	{
+		name: "UpdateTimestamp -- does not exist",
+		ops: []op{
+			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
+				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+					return tCtx.pts.UpdateTimestamp(ctx, txn, randomID(tCtx), hlc.Timestamp{WallTime: 1})
+				})
+				require.EqualError(t, err, protectedts.ErrNotExists.Error())
+			}),
+		},
+	},
+	{
 		name: "nil transaction errors",
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
@@ -371,6 +395,29 @@ func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		encoded, err := protoutil.Marshal(&ptstorage.Spans{Spans: p.spans})
 		require.NoError(t, err)
 		tCtx.state.TotalBytes += uint64(len(encoded) + len(p.meta) + len(p.metaType))
+	}
+}
+
+type updateTimestampOp struct {
+	expectedRecordFn func(record ptpb.Record) ptpb.Record
+	updateTimestamp  hlc.Timestamp
+	expErr           string
+}
+
+func (p updateTimestampOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
+	id := pickOneRecord(tCtx)
+	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return tCtx.pts.UpdateTimestamp(ctx, txn, id, p.updateTimestamp)
+	})
+	if !testutils.IsError(err, p.expErr) {
+		t.Fatalf("expected error to match %q, got %q", p.expErr, err)
+	}
+	if err == nil {
+		i := sort.Search(len(tCtx.state.Records), func(i int) bool {
+			return bytes.Equal(id[:], tCtx.state.Records[i].ID[:])
+		})
+		tCtx.state.Records[i] = p.expectedRecordFn(tCtx.state.Records[i])
+		tCtx.state.Version++
 	}
 }
 

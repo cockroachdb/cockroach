@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -54,6 +55,21 @@ func New(settings *cluster.Settings, ex sqlutil.InternalExecutor) protectedts.St
 }
 
 var errNoTxn = errors.New("must provide a non-nil transaction")
+
+func (p *storage) UpdateTimestamp(
+	ctx context.Context, txn *kv.Txn, id uuid.UUID, timestamp hlc.Timestamp,
+) error {
+	row, err := p.ex.QueryRowEx(ctx, "protectedts-update", txn,
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		updateTimestampQuery, id.GetBytesMut(), timestamp.AsOfSystemTime())
+	if err != nil {
+		return errors.Wrapf(err, "failed to update record %v", id)
+	}
+	if len(row) == 0 {
+		return protectedts.ErrNotExists
+	}
+	return nil
+}
 
 func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) error {
 	if err := validateRecordForProtect(r); err != nil {
