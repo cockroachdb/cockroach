@@ -323,17 +323,25 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 	}
 	c.buf.WriteString(data)
 	var readFn func(ctx context.Context, final bool) (brk bool, err error)
+	var checkLoopFn func() bool
 	switch c.format {
 	case tree.CopyFormatText:
 		readFn = c.readTextData
+		checkLoopFn = func() bool { return c.buf.Len() > 0 }
 	case tree.CopyFormatBinary:
 		readFn = c.readBinaryData
+		checkLoopFn = func() bool { return c.buf.Len() > 0 }
 	case tree.CopyFormatCSV:
 		readFn = c.readCSVData
+		// Never exit the loop from this check. Instead, it's up to the readCSVData
+		// function to break when it's done reading. This is because the csv.Reader
+		// consumes all of c.buf in one shot, so checking if c.buf is empty would
+		// cause us to exit the loop early.
+		checkLoopFn = func() bool { return true }
 	default:
 		panic("unknown copy format")
 	}
-	for c.buf.Len() > 0 {
+	for checkLoopFn() {
 		brk, err := readFn(ctx, final)
 		if err != nil {
 			return err
@@ -378,6 +386,9 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 	record, err := c.csvReader.Read()
 	// Look for end of data before checking for errors, since a field count
 	// error will still return record data.
+	if record == nil && err == io.EOF {
+		return true, nil
+	}
 	if len(record) == 1 && record[0] == endOfData && c.buf.Len() == 0 {
 		return true, nil
 	}
