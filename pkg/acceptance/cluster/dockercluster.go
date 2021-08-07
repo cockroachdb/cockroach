@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"go/build"
 	"io"
 	"io/ioutil"
 	"net"
@@ -70,15 +69,7 @@ var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before te
 var maxRangeBytes = *zonepb.DefaultZoneConfig().RangeMaxBytes
 
 // CockroachBinary is the path to the host-side binary to use.
-var CockroachBinary = flag.String("b", func() string {
-	rootPkg, err := build.Import("github.com/cockroachdb/cockroach", "", build.FindOnly)
-	if err != nil {
-		panic(err)
-	}
-	// NB: This is the binary produced by our linux-gnu build target. Changes
-	// to the Makefile must be reflected here.
-	return filepath.Join(rootPkg.Dir, "cockroach-linux-2.6.32-gnu-amd64")
-}(), "the host-side binary to run")
+var CockroachBinary = flag.String("b", "", "the host-side binary to run")
 
 func exists(path string) bool {
 	if _, err := os.Stat(path); oserror.IsNotExist(err) {
