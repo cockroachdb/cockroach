@@ -190,7 +190,7 @@ func getCJTestCases() []*joinTestCase {
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 			leftTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
-			rightTuples: colexectestutils.Tuples{{3}},
+			rightTuples: colexectestutils.Tuples{{3}, {4}},
 			leftOutCols: []uint32{0},
 			joinType:    descpb.LeftSemiJoin,
 			expected:    colexectestutils.Tuples{{0}, {1}, {2}},
@@ -253,75 +253,12 @@ func getCJTestCases() []*joinTestCase {
 			joinType:    descpb.LeftAntiJoin,
 			expected:    colexectestutils.Tuples{{0}, {1}, {2}, {3}},
 		},
-		{
-			description: "intersect all join, right non-empty",
-			leftTypes:   []*types.T{types.Int},
-			rightTypes:  []*types.T{types.Int},
-			leftTuples:  colexectestutils.Tuples{{0}, {1}, {2}, {3}, {4}},
-			rightTuples: colexectestutils.Tuples{{3}, {nil}, {3}},
-			leftOutCols: []uint32{0},
-			joinType:    descpb.IntersectAllJoin,
-			expected:    colexectestutils.Tuples{{0}, {1}, {2}},
-		},
-		{
-			description: "intersect all join, left empty",
-			leftTypes:   []*types.T{types.Int},
-			rightTypes:  []*types.T{types.Int},
-			leftTuples:  colexectestutils.Tuples{},
-			rightTuples: colexectestutils.Tuples{{3}, {4}},
-			leftOutCols: []uint32{0},
-			joinType:    descpb.IntersectAllJoin,
-			// Injecting nulls into the right input won't change the output.
-			skipAllNullsInjection: true,
-			expected:              colexectestutils.Tuples{},
-		},
-		{
-			description: "intersect all join, right empty",
-			leftTypes:   []*types.T{types.Int},
-			rightTypes:  []*types.T{types.Int},
-			leftTuples:  colexectestutils.Tuples{{0}, {1}, {2}, {3}},
-			rightTuples: colexectestutils.Tuples{},
-			leftOutCols: []uint32{0},
-			joinType:    descpb.IntersectAllJoin,
-			// Injecting nulls into the left input won't change the output.
-			skipAllNullsInjection: true,
-			expected:              colexectestutils.Tuples{},
-		},
-		{
-			description: "except all join, right non-empty",
-			leftTypes:   []*types.T{types.Int},
-			rightTypes:  []*types.T{types.Int},
-			leftTuples:  colexectestutils.Tuples{{0}, {1}, {2}, {3}, {4}},
-			rightTuples: colexectestutils.Tuples{{3}, {nil}, {3}},
-			leftOutCols: []uint32{0},
-			joinType:    descpb.ExceptAllJoin,
-			expected:    colexectestutils.Tuples{{0}, {1}},
-		},
-		{
-			description: "except all join, left empty",
-			leftTypes:   []*types.T{types.Int},
-			rightTypes:  []*types.T{types.Int},
-			leftTuples:  colexectestutils.Tuples{},
-			rightTuples: colexectestutils.Tuples{{3}, {4}},
-			leftOutCols: []uint32{0},
-			joinType:    descpb.ExceptAllJoin,
-			// Injecting nulls into the right input won't change the output.
-			skipAllNullsInjection: true,
-			expected:              colexectestutils.Tuples{},
-		},
-		{
-			description: "except all join, right empty",
-			leftTypes:   []*types.T{types.Int},
-			rightTypes:  []*types.T{types.Int},
-			leftTuples:  colexectestutils.Tuples{{0}, {1}, {2}, {3}},
-			rightTuples: colexectestutils.Tuples{},
-			leftOutCols: []uint32{0},
-			joinType:    descpb.ExceptAllJoin,
-			expected:    colexectestutils.Tuples{{0}, {1}, {2}, {3}},
-		},
 	}
 	for jt := range descpb.JoinType_name {
 		joinType := descpb.JoinType(jt)
+		if joinType.IsSetOpJoin() {
+			continue
+		}
 		tc := &joinTestCase{
 			description: fmt.Sprintf("%s, both empty", joinType),
 			leftTypes:   []*types.T{types.Int},
