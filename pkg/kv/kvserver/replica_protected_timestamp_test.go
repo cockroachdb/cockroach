@@ -145,6 +145,97 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 					r.markPendingGC(ts, ts.Next()).Error())
 			},
 		},
+		// If the timestamp of a record is updated then a verify request must see
+		// the correct version of the record. If the request finds the version of
+		// the record with the older timestamp then it must refresh the cache and
+		// attempt to verify again.
+		{
+			name: "find correct record on timestamp update",
+			test: func(t *testing.T, r *Replica, mt *manualCache) {
+				ts := r.store.Clock().Now()
+				mt.asOf = ts.Prev()
+				id := uuid.MakeV4()
+				// Insert a record.
+				oldTimestamp := ts
+				mt.records = append(mt.records, &ptpb.Record{
+					ID:        id,
+					Timestamp: oldTimestamp,
+					Spans: []roachpb.Span{
+						{
+							Key:    roachpb.Key(r.Desc().StartKey),
+							EndKey: roachpb.Key(r.Desc().StartKey.Next()),
+						},
+					},
+				})
+				// Assume the record has an updated timestamp that we are trying to
+				// verify.
+				updatedTimestamp := ts.Next()
+				aliveAt := ts.Next().Next()
+				args := makeArgs(r, updatedTimestamp, aliveAt)
+				args.RecordID = id
+
+				var cacheIsRefreshed bool
+				mt.refresh = func(_ context.Context, refreshTo hlc.Timestamp) error {
+					cacheIsRefreshed = true
+					require.Equal(t, refreshTo, aliveAt)
+					// Update the record timestamp so that post cache refresh we see the
+					// record with the updated timestamp.
+					mt.records[0].Timestamp = updatedTimestamp
+					mt.asOf = refreshTo.Next()
+					return nil
+				}
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
+				require.True(t, cacheIsRefreshed)
+				require.True(t, willApply)
+				require.NoError(t, err)
+				require.Empty(t, doesNotApplyReason)
+			},
+		},
+		{
+			name: "find correct record on multiple timestamp update",
+			test: func(t *testing.T, r *Replica, mt *manualCache) {
+				ts := r.store.Clock().Now()
+				mt.asOf = ts.Prev()
+				id := uuid.MakeV4()
+				// Insert a record.
+				oldTimestamp := ts
+				mt.records = append(mt.records, &ptpb.Record{
+					ID:        id,
+					Timestamp: oldTimestamp,
+					Spans: []roachpb.Span{
+						{
+							Key:    roachpb.Key(r.Desc().StartKey),
+							EndKey: roachpb.Key(r.Desc().StartKey.Next()),
+						},
+					},
+				})
+				// Assume the record has an updated timestamp that we are trying to
+				// verify.
+				updatedTimestamp := ts.Next()
+				aliveAt := ts.Next().Next()
+				args := makeArgs(r, updatedTimestamp, aliveAt)
+				args.RecordID = id
+
+				var cacheIsRefreshed bool
+				mt.refresh = func(_ context.Context, refreshTo hlc.Timestamp) error {
+					cacheIsRefreshed = true
+					require.Equal(t, refreshTo, aliveAt)
+					// Assume that there was a second timestamp update while the
+					// verification for the first was inflight.
+					// Verification of the first update should still pass since the cache
+					// sees a record with a later timestamp than the one we are verifying.
+					anotherUpdateTimestamp := updatedTimestamp.Next()
+					mt.records[0].Timestamp = anotherUpdateTimestamp
+					mt.asOf = refreshTo.Next()
+					return nil
+				}
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
+				require.True(t, cacheIsRefreshed)
+				require.True(t, willApply)
+				require.NoError(t, err)
+				require.Empty(t, doesNotApplyReason)
+			},
+		},
 		// If the timestamp at which the record is known to be alive is older than
 		// our current view of the protected timestamp subsystem and we don't
 		// already see the record, then we know that the record must have been
