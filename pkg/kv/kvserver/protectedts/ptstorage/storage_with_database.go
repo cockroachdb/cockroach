@@ -95,3 +95,15 @@ func (s *storageWithDatabase) GetState(
 	}
 	return s.s.GetState(ctx, txn)
 }
+
+func (s *storageWithDatabase) Update(
+	ctx context.Context, txn *kv.Txn, id uuid.UUID, fn protectedts.UpdateFn,
+) (err error) {
+	if txn == nil {
+		err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return s.s.Update(ctx, txn, id, fn)
+		})
+		return err
+	}
+	return s.s.Update(ctx, txn, id, fn)
+}

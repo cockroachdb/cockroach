@@ -250,6 +250,52 @@ var testCases = []testCase{
 		},
 	},
 	{
+		name: "Update",
+		ops: []op{
+			protectOp{spans: tableSpans(42)},
+			updateOp{
+				expectedRecordFn: func(record ptpb.Record) ptpb.Record {
+					record.Timestamp = hlc.Timestamp{WallTime: 1}
+					return record
+				},
+				updateFn: func(txn *kv.Txn, r protectedts.RecordMetadata, ru *protectedts.RecordUpdater) error {
+					ru.UpdateTimestamp(hlc.Timestamp{WallTime: 1})
+					return nil
+				},
+			},
+		},
+	},
+	{
+		name: "Update -- no updates",
+		ops: []op{
+			protectOp{spans: tableSpans(42)},
+			updateOp{
+				expectedRecordFn: func(record ptpb.Record) ptpb.Record {
+					return record
+				},
+				updateFn: func(txn *kv.Txn, r protectedts.RecordMetadata, ru *protectedts.RecordUpdater) error {
+					return nil
+				},
+				noUpdate: true,
+			},
+		},
+	},
+	{
+		name: "Update -- does not exist",
+		ops: []op{
+			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
+				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+					return tCtx.pts.Update(ctx, txn, randomID(tCtx), func(txn *kv.Txn,
+						r protectedts.RecordMetadata, ru *protectedts.RecordUpdater) error {
+						ru.UpdateTimestamp(hlc.Timestamp{WallTime: 1})
+						return nil
+					})
+				})
+				require.EqualError(t, err, protectedts.ErrNotExists.Error())
+			}),
+		},
+	},
+	{
 		name: "nil transaction errors",
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
@@ -371,6 +417,32 @@ func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		encoded, err := protoutil.Marshal(&ptstorage.Spans{Spans: p.spans})
 		require.NoError(t, err)
 		tCtx.state.TotalBytes += uint64(len(encoded) + len(p.meta) + len(p.metaType))
+	}
+}
+
+type updateOp struct {
+	expectedRecordFn func(record ptpb.Record) ptpb.Record
+	updateFn         protectedts.UpdateFn
+	noUpdate         bool
+	expErr           string
+}
+
+func (p updateOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
+	id := pickOneRecord(tCtx)
+	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return tCtx.pts.Update(ctx, txn, id, p.updateFn)
+	})
+	if !testutils.IsError(err, p.expErr) {
+		t.Fatalf("expected error to match %q, got %q", p.expErr, err)
+	}
+	if err == nil {
+		i := sort.Search(len(tCtx.state.Records), func(i int) bool {
+			return bytes.Equal(id[:], tCtx.state.Records[i].ID[:])
+		})
+		tCtx.state.Records[i] = p.expectedRecordFn(tCtx.state.Records[i])
+		if !p.noUpdate {
+			tCtx.state.Version++
+		}
 	}
 }
 

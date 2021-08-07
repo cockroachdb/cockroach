@@ -55,6 +55,37 @@ func New(settings *cluster.Settings, ex sqlutil.InternalExecutor) protectedts.St
 
 var errNoTxn = errors.New("must provide a non-nil transaction")
 
+func (p *storage) Update(
+	ctx context.Context, txn *kv.Txn, id uuid.UUID, updateFn protectedts.UpdateFn,
+) error {
+	// Get the pts record that we want to update.
+	oldRecord, err := p.GetRecord(ctx, txn, id)
+	if err != nil {
+		return err
+	}
+
+	r := protectedts.RecordMetadata{Timestamp: oldRecord.Timestamp}
+	var ru protectedts.RecordUpdater
+	if err := updateFn(txn, r, &ru); err != nil {
+		return err
+	}
+
+	if !ru.HasUpdates() {
+		return nil
+	}
+
+	row, err := p.ex.QueryRowEx(ctx, "protectedts-update", txn,
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		updateQuery, id.GetBytesMut(), ru.GetTimestamp().AsOfSystemTime())
+	if err != nil {
+		return errors.Wrapf(err, "failed to update record %v", id)
+	}
+	if len(row) == 0 {
+		return protectedts.ErrNotExists
+	}
+	return nil
+}
+
 func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) error {
 	if err := validateRecordForProtect(r); err != nil {
 		return err

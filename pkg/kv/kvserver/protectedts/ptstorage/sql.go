@@ -165,6 +165,44 @@ RETURNING
     1
 `
 
+	updateQuery = `
+WITH
+    current_meta AS (` + currentMetaCTE + `),
+    updated_meta AS (` + updateUpsertMetaCTE + `),
+    updated_record AS (` + updateUpsertRecordCTE + `)
+SELECT
+    id
+FROM
+    updated_record;`
+
+	updateUpsertMetaCTE = `
+UPSERT
+INTO
+    system.protected_ts_meta (version, num_records, num_spans, total_bytes)
+(
+    SELECT
+        version + 1,
+        num_records,
+        num_spans,
+        total_bytes
+    FROM
+        current_meta
+)
+RETURNING
+    NULL
+`
+
+	updateUpsertRecordCTE = `
+UPDATE
+    system.protected_ts_records
+SET
+    ts = $2
+WHERE
+    id = $1
+RETURNING
+    id
+`
+
 	getMetadataQuery = `
 WITH
     current_meta AS (` + currentMetaCTE + `)
