@@ -262,3 +262,51 @@ ReadyForQuery
 {"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
 {"Type":"ErrorResponse","Code":"22P04"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN CSV"}
+CopyData {"Data": "1,one\n2,two\n3,three"}
+CopyDone
+Query {"String": "SELECT * FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"one"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"two"}]}
+{"Type":"DataRow","Values":[{"text":"3"},{"text":"three"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN DELIMITER ',' NULL ''"}
+CopyData {"Data": "1,one\n2,two\n3,three"}
+CopyDone
+Query {"String": "SELECT * FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"one"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"two"}]}
+{"Type":"DataRow","Values":[{"text":"3"},{"text":"three"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
