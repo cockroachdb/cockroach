@@ -675,6 +675,10 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 			for _, testSpec := range testSpecs {
 				for nCols := 1; nCols <= maxCols; nCols++ {
 					for nEqCols := 0; nEqCols <= nCols; nEqCols++ {
+						if testSpec.joinType.IsSetOpJoin() && nEqCols == 0 {
+							// Set-op cross joins are invalid.
+							continue
+						}
 						triedWithoutOnExpr, triedWithOnExpr := false, false
 						if !testSpec.onExprSupported {
 							triedWithOnExpr = true
