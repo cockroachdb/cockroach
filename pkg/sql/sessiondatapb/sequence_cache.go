@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sessiondata
+package sessiondatapb
 
 // SequenceCache stores sequence values that have already been created in KV
 // and are available to be given out as sequence numbers. Values for sequences
@@ -20,22 +20,7 @@ package sessiondata
 // new descriptor versions may not monotonically increase. For example, the sequence schema
 // may be altered in a txn, so the cache sees a new version V and invalidates/repopulates itself. Then,
 // the txn may get rolled back, so the cache will see version V-1 and invalidate/repopulate itself again.
-type SequenceCache map[uint32]*sequenceCacheEntry
-
-type sequenceCacheEntry struct {
-	// cachedVersion stores the descpb.DescriptorVersion that cached values are associated with.
-	// The version is checked to determine if cache needs to be invalidated. The version is stored as
-	// a uint32 to prevent an import cycle with the descpb package.
-	cachedVersion uint32
-	// currentValue stores the present value of the sequence to be given out.
-	currentValue int64
-	// increment stores the amount to increment the currentVal by each time the
-	// currentVal is used. This value corresponds to descpb.TableDescriptor_SequenceOpts.Increment.
-	increment int64
-	// numValues represents the number of values to cache. The cache is considered
-	// to be empty when numValues is 0.
-	numValues int64
-}
+type SequenceCache map[uint32]*SequenceCacheEntry
 
 // NextValue fetches the next value in the sequence cache. If the values in the cache have all been
 // given out or if the descriptor version has changed, then fetchNextValues() is used to repopulate the cache.
@@ -44,14 +29,14 @@ func (sc SequenceCache) NextValue(
 ) (int64, error) {
 	// Create entry for this sequence ID if there are no existing entries.
 	if _, found := sc[seqID]; !found {
-		sc[seqID] = &sequenceCacheEntry{}
+		sc[seqID] = &SequenceCacheEntry{}
 	}
 	cacheEntry := sc[seqID]
 
-	if cacheEntry.numValues > 0 && cacheEntry.cachedVersion == clientVersion {
-		cacheEntry.currentValue += cacheEntry.increment
-		cacheEntry.numValues--
-		return cacheEntry.currentValue - cacheEntry.increment, nil
+	if cacheEntry.NumValues > 0 && cacheEntry.CachedVersion == clientVersion {
+		cacheEntry.CurrentValue += cacheEntry.Increment
+		cacheEntry.NumValues--
+		return cacheEntry.CurrentValue - cacheEntry.Increment, nil
 	}
 
 	currentValue, increment, numValues, err := fetchNextValues()
@@ -61,9 +46,9 @@ func (sc SequenceCache) NextValue(
 
 	// One value must be returned, and the rest of the values are stored.
 	val := currentValue
-	cacheEntry.currentValue = currentValue + increment
-	cacheEntry.increment = increment
-	cacheEntry.numValues = numValues - 1
-	cacheEntry.cachedVersion = clientVersion
+	cacheEntry.CurrentValue = currentValue + increment
+	cacheEntry.Increment = increment
+	cacheEntry.NumValues = numValues - 1
+	cacheEntry.CachedVersion = clientVersion
 	return val, nil
 }
