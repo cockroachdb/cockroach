@@ -340,6 +340,7 @@ func newInternalPlanner(
 	p.semaCtx = tree.MakeSemaContext()
 	p.semaCtx.SearchPath = sd.SearchPath
 	p.semaCtx.IntervalStyleEnabled = sd.IntervalStyleEnabled
+	p.semaCtx.DateStyleEnabled = sd.DateStyleEnabled
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
