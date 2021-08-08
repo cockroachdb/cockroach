@@ -976,7 +976,7 @@ func (s *SQLServer) preStart(
 				// another node, but DistSQL doesn't. Also see #44101 for why DistSQL is
 				// particularly fragile immediately after a node is started (i.e. the
 				// present situation).
-				DistSQLMode: sessiondata.DistSQLOff,
+				DistSQLMode: sessiondatapb.DistSQLOff,
 			},
 		})
 	startupMigrationsMgr := startupmigrations.NewManager(

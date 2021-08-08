@@ -80,7 +80,7 @@ go_test(
         "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/testutils",

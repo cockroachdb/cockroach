@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -78,8 +78,8 @@ type mtClient struct {
 func TestMonotonicInserts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, distSQLMode := range []sessiondata.DistSQLExecMode{
-		sessiondata.DistSQLOff, sessiondata.DistSQLOn,
+	for _, distSQLMode := range []sessiondatapb.DistSQLExecMode{
+		sessiondatapb.DistSQLOff, sessiondatapb.DistSQLOn,
 	} {
 		t.Run(fmt.Sprintf("distsql=%s", distSQLMode), func(t *testing.T) {
 			testMonotonicInserts(t, distSQLMode)
@@ -87,7 +87,7 @@ func TestMonotonicInserts(t *testing.T) {
 	}
 }
 
-func testMonotonicInserts(t *testing.T, distSQLMode sessiondata.DistSQLExecMode) {
+func testMonotonicInserts(t *testing.T, distSQLMode sessiondatapb.DistSQLExecMode) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
