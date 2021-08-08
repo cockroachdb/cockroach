@@ -298,7 +298,6 @@ var pgjdbcBlockList21_2 = blocklist{
 	"org.postgresql.test.jdbc2.DatabaseMetaDataTest.testVersionColumns[binary = REGULAR]":                                                                                      "32552",
 	"org.postgresql.test.jdbc2.DatabaseMetaDataTest.testViewPrivileges[binary = FORCE]":                                                                                        "32552",
 	"org.postgresql.test.jdbc2.DatabaseMetaDataTest.testViewPrivileges[binary = REGULAR]":                                                                                      "32552",
-	"org.postgresql.test.jdbc2.DateStyleTest.conenct[dateStyle=ISO,ymd, shouldPass=true]":                                                                                      "41773",
 	"org.postgresql.test.jdbc2.DateStyleTest.conenct[dateStyle=PostgreSQL, shouldPass=false]":                                                                                  "41773",
 	"org.postgresql.test.jdbc2.EnumTest.enumArrayArray[binary = FORCE]":                                                                                                        "51480",
 	"org.postgresql.test.jdbc2.EnumTest.enumArrayArray[binary = REGULAR]":                                                                                                      "51480",
