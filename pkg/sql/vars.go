@@ -402,7 +402,7 @@ var varGen = map[string]sessionVar{
 	// CockroachDB extension.
 	`distsql`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			mode, ok := sessiondata.DistSQLExecModeFromString(s)
+			mode, ok := sessiondatapb.DistSQLExecModeFromString(s)
 			if !ok {
 				return newVarValueError(`distsql`, s, "on", "off", "auto", "always", "2.0-auto", "2.0-off")
 			}
@@ -413,7 +413,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData.DistSQLMode.String()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)).String()
+			return sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)).String()
 		},
 	},
 
@@ -442,7 +442,7 @@ var varGen = map[string]sessionVar{
 	`experimental_distsql_planning`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_distsql_planning`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			mode, ok := sessiondata.ExperimentalDistSQLPlanningModeFromString(s)
+			mode, ok := sessiondatapb.ExperimentalDistSQLPlanningModeFromString(s)
 			if !ok {
 				return newVarValueError(`experimental_distsql_planning`, s,
 					"off", "on", "always")
@@ -454,7 +454,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData.ExperimentalDistSQLPlanningMode.String()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondata.ExperimentalDistSQLPlanningMode(experimentalDistSQLPlanningClusterMode.Get(sv)).String()
+			return sessiondatapb.ExperimentalDistSQLPlanningMode(experimentalDistSQLPlanningClusterMode.Get(sv)).String()
 		},
 	},
 
@@ -715,7 +715,7 @@ var varGen = map[string]sessionVar{
 	// CockroachDB extension.
 	`serial_normalization`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			mode, ok := sessiondata.SerialNormalizationModeFromString(s)
+			mode, ok := sessiondatapb.SerialNormalizationModeFromString(s)
 			if !ok {
 				return newVarValueError(`serial_normalization`, s,
 					"rowid", "virtual_sequence", "sql_sequence", "sql_sequence_cached")
@@ -727,7 +727,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData.SerialNormalizationMode.String()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondata.SerialNormalizationMode(
+			return sessiondatapb.SerialNormalizationMode(
 				SerialNormalizationMode.Get(sv)).String()
 		},
 	},
@@ -1365,7 +1365,7 @@ var varGen = map[string]sessionVar{
 	`experimental_use_new_schema_changer`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_use_new_schema_changer`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			mode, ok := sessiondata.NewSchemaChangerModeFromString(s)
+			mode, ok := sessiondatapb.NewSchemaChangerModeFromString(s)
 			if !ok {
 				return newVarValueError(`experimental_use_new_schema_changer`, s,
 					"off", "on", "unsafe_always")
@@ -1377,7 +1377,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData.NewSchemaChangerMode.String()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondata.NewSchemaChangerMode(experimentalUseNewSchemaChanger.Get(sv)).String()
+			return sessiondatapb.NewSchemaChangerMode(experimentalUseNewSchemaChanger.Get(sv)).String()
 		},
 	},
 

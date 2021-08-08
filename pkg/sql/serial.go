@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -85,7 +85,7 @@ func (p *planner) processSerialInColumnDef(
 
 	// Find the integer type that corresponds to the specification.
 	switch serialNormalizationMode {
-	case sessiondata.SerialUsesRowID, sessiondata.SerialUsesVirtualSequences:
+	case sessiondatapb.SerialUsesRowID, sessiondatapb.SerialUsesVirtualSequences:
 		// If unique_rowid() or virtual sequences are requested, we have
 		// no choice but to use the full-width integer type, no matter
 		// which serial size was requested, otherwise the values will not fit.
@@ -95,7 +95,7 @@ func (p *planner) processSerialInColumnDef(
 		// switch this behavior around.
 		newSpec.Type = types.Int
 
-	case sessiondata.SerialUsesSQLSequences, sessiondata.SerialUsesCachedSQLSequences:
+	case sessiondatapb.SerialUsesSQLSequences, sessiondatapb.SerialUsesCachedSQLSequences:
 		// With real sequences we can use the requested type as-is.
 
 	default:
@@ -113,7 +113,7 @@ func (p *planner) processSerialInColumnDef(
 	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(
 		defType.Name(), serialNormalizationMode.String()))
 
-	if serialNormalizationMode == sessiondata.SerialUsesRowID {
+	if serialNormalizationMode == sessiondatapb.SerialUsesRowID {
 		// We're not constructing a sequence for this SERIAL column.
 		// Use the "old school" CockroachDB default.
 		newSpec.DefaultExpr.Expr = uniqueRowIDExpr
@@ -164,10 +164,10 @@ func (p *planner) processSerialInColumnDef(
 
 	seqType := ""
 	seqOpts := realSequenceOpts
-	if serialNormalizationMode == sessiondata.SerialUsesVirtualSequences {
+	if serialNormalizationMode == sessiondatapb.SerialUsesVirtualSequences {
 		seqType = "virtual "
 		seqOpts = virtualSequenceOpts
-	} else if serialNormalizationMode == sessiondata.SerialUsesCachedSQLSequences {
+	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedSQLSequences {
 		seqType = "cached "
 
 		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)

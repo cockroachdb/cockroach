@@ -396,9 +396,9 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 		"disables new schema changer by default",
 	"off",
 	map[int64]string{
-		int64(sessiondata.UseNewSchemaChangerOff):          "off",
-		int64(sessiondata.UseNewSchemaChangerOn):           "on",
-		int64(sessiondata.UseNewSchemaChangerUnsafeAlways): "unsafe_always",
+		int64(sessiondatapb.UseNewSchemaChangerOff):          "off",
+		int64(sessiondatapb.UseNewSchemaChangerOn):           "on",
+		int64(sessiondatapb.UseNewSchemaChangerUnsafeAlways): "unsafe_always",
 	},
 ).WithPublic()
 
@@ -452,8 +452,8 @@ var experimentalDistSQLPlanningClusterMode = settings.RegisterEnumSetting(
 	"default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning",
 	"off",
 	map[int64]string{
-		int64(sessiondata.ExperimentalDistSQLPlanningOff): "off",
-		int64(sessiondata.ExperimentalDistSQLPlanningOn):  "on",
+		int64(sessiondatapb.ExperimentalDistSQLPlanningOff): "off",
+		int64(sessiondatapb.ExperimentalDistSQLPlanningOn):  "on",
 	},
 ).WithPublic()
 
@@ -481,9 +481,9 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"default distributed SQL execution mode",
 	"auto",
 	map[int64]string{
-		int64(sessiondata.DistSQLOff):  "off",
-		int64(sessiondata.DistSQLAuto): "auto",
-		int64(sessiondata.DistSQLOn):   "on",
+		int64(sessiondatapb.DistSQLOff):  "off",
+		int64(sessiondatapb.DistSQLAuto): "auto",
+		int64(sessiondatapb.DistSQLOn):   "on",
 	},
 ).WithPublic()
 
@@ -494,10 +494,10 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 	"default handling of SERIAL in table definitions",
 	"rowid",
 	map[int64]string{
-		int64(sessiondata.SerialUsesRowID):              "rowid",
-		int64(sessiondata.SerialUsesVirtualSequences):   "virtual_sequence",
-		int64(sessiondata.SerialUsesSQLSequences):       "sql_sequence",
-		int64(sessiondata.SerialUsesCachedSQLSequences): "sql_sequence_cached",
+		int64(sessiondatapb.SerialUsesRowID):              "rowid",
+		int64(sessiondatapb.SerialUsesVirtualSequences):   "virtual_sequence",
+		int64(sessiondatapb.SerialUsesSQLSequences):       "sql_sequence",
+		int64(sessiondatapb.SerialUsesCachedSQLSequences): "sql_sequence_cached",
 	},
 ).WithPublic()
 
@@ -1210,14 +1210,14 @@ var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
 func (*BackupRestoreTestingKnobs) ModuleTestingKnobs() {}
 
 func shouldDistributeGivenRecAndMode(
-	rec distRecommendation, mode sessiondata.DistSQLExecMode,
+	rec distRecommendation, mode sessiondatapb.DistSQLExecMode,
 ) bool {
 	switch mode {
-	case sessiondata.DistSQLOff:
+	case sessiondatapb.DistSQLOff:
 		return false
-	case sessiondata.DistSQLAuto:
+	case sessiondatapb.DistSQLAuto:
 		return rec == shouldDistribute
-	case sessiondata.DistSQLOn, sessiondata.DistSQLAlways:
+	case sessiondatapb.DistSQLOn, sessiondatapb.DistSQLAlways:
 		return rec != cannotDistribute
 	}
 	panic(errors.AssertionFailedf("unhandled distsql mode %v", mode))
@@ -1232,7 +1232,7 @@ func getPlanDistribution(
 	ctx context.Context,
 	p *planner,
 	nodeID *base.SQLIDContainer,
-	distSQLMode sessiondata.DistSQLExecMode,
+	distSQLMode sessiondatapb.DistSQLExecMode,
 	plan planMaybePhysical,
 ) physicalplan.PlanDistribution {
 	if plan.isPhysicalPlan() {
@@ -1249,7 +1249,7 @@ func getPlanDistribution(
 	if _, singleTenant := nodeID.OptionalNodeID(); !singleTenant {
 		return physicalplan.LocalPlan
 	}
-	if distSQLMode == sessiondata.DistSQLOff {
+	if distSQLMode == sessiondatapb.DistSQLOff {
 		return physicalplan.LocalPlan
 	}
 
@@ -2423,7 +2423,7 @@ func (m *sessionDataMutator) SetSynchronousCommit(val bool) {
 	m.data.SynchronousCommit = val
 }
 
-func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
+func (m *sessionDataMutator) SetDistSQLMode(val sessiondatapb.DistSQLExecMode) {
 	m.data.DistSQLMode = val
 }
 
@@ -2440,7 +2440,7 @@ func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 }
 
 func (m *sessionDataMutator) SetExperimentalDistSQLPlanning(
-	val sessiondata.ExperimentalDistSQLPlanningMode,
+	val sessiondatapb.ExperimentalDistSQLPlanningMode,
 ) {
 	m.data.ExperimentalDistSQLPlanningMode = val
 }
@@ -2489,7 +2489,7 @@ func (m *sessionDataMutator) SetInsertFastPath(val bool) {
 	m.data.InsertFastPath = val
 }
 
-func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondata.SerialNormalizationMode) {
+func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondatapb.SerialNormalizationMode) {
 	m.data.SerialNormalizationMode = val
 }
 
@@ -2581,7 +2581,7 @@ func (m *sessionDataMutator) SetUniqueWithoutIndexConstraints(val bool) {
 	m.data.EnableUniqueWithoutIndexConstraints = val
 }
 
-func (m *sessionDataMutator) SetUseNewSchemaChanger(val sessiondata.NewSchemaChangerMode) {
+func (m *sessionDataMutator) SetUseNewSchemaChanger(val sessiondatapb.NewSchemaChangerMode) {
 	m.data.NewSchemaChangerMode = val
 }
 
