@@ -151,6 +151,22 @@ message LocalOnlySessionData {
 	// inner ordering should be propagated to the outer scope if the outer scope
 	// is unordered. PropagateInputOrdering is currently experimental.
 	bool propagate_input_ordering = 39;
+  // ExperimentalDistSQLPlanningMode indicates whether the experimental
+  // DistSQL planning driven by the optimizer is enabled.
+  int64 experimental_distsql_planning_mode = 40 [
+    (gogoproto.customname)="ExperimentalDistSQLPlanningMode",
+    (gogoproto.casttype)="ExperimentalDistSQLPlanningMode"
+  ];
+  // DistSQLMode indicates whether to run queries using the distributed
+  // execution engine.
+  int64 dist_sql_mode = 41 [
+    (gogoproto.customname)="DistSQLMode",
+    (gogoproto.casttype)="DistSQLExecMode"
+  ];
+  // SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
+  int64 serial_normalization_mode = 42 [(gogoproto.casttype)="SerialNormalizationMode"];
+  // NewSchemaChangerMode indicates whether to use the new schema changer.
+  int64 new_schema_changer_mode = 43 [(gogoproto.casttype)="NewSchemaChangerMode"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

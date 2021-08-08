@@ -137,16 +137,6 @@ type LocalUnmigratableSessionData struct {
 	// descpb.ID -> descpb.ID, but cannot be stored as such due to package
 	// dependencies. Temporary tables are not supported in session migrations.
 	DatabaseIDToTempSchemaID map[uint32]uint32
-	// ExperimentalDistSQLPlanningMode indicates whether the experimental
-	// DistSQL planning driven by the optimizer is enabled.
-	ExperimentalDistSQLPlanningMode sessiondatapb.ExperimentalDistSQLPlanningMode
-	// DistSQLMode indicates whether to run queries using the distributed
-	// execution engine.
-	DistSQLMode sessiondatapb.DistSQLExecMode
-	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
-	SerialNormalizationMode sessiondatapb.SerialNormalizationMode
-	// NewSchemaChangerMode indicates whether to use the new schema changer.
-	NewSchemaChangerMode sessiondatapb.NewSchemaChangerMode
 	// SequenceCache stores sequence values which have been cached using the
 	// CACHE sequence option.
 	// Cached sequence options are not yet supported during session migrations.
