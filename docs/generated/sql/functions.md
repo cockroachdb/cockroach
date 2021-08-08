@@ -512,8 +512,6 @@ and which stays constant throughout the transaction. This timestamp
 has no relationship with the commit order of concurrent transactions.</p>
 <p>This function is the preferred overload and will be evaluated by default.</p>
 </span></td></tr>
-<tr><td><a name="parse_interval"></a><code>parse_interval(string: <a href="string.html">string</a>, style: <a href="string.html">string</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Convert a string to an interval using the given IntervalStyle.</p>
-</span></td></tr>
 <tr><td><a name="statement_timestamp"></a><code>statement_timestamp() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the start time of the current statement.</p>
 </span></td></tr>
 <tr><td><a name="statement_timestamp"></a><code>statement_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns the start time of the current statement.</p>
@@ -529,6 +527,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="timezone"></a><code>timezone(timezone: <a href="string.html">string</a>, timestamptz_string: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Convert given time stamp with time zone to the new time zone, with no time zone designation.</p>
 </span></td></tr>
 <tr><td><a name="timezone"></a><code>timezone(timezone: <a href="string.html">string</a>, timetz: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Convert given time with time zone to the new time zone.</p>
+</span></td></tr>
+<tr><td><a name="to_char"></a><code>to_char(date: <a href="date.html">date</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an date to a string assuming the ISO, MDY DateStyle.</p>
+</span></td></tr>
+<tr><td><a name="to_char"></a><code>to_char(interval: <a href="interval.html">interval</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an interval to a string assuming the Postgres IntervalStyle.</p>
+</span></td></tr>
+<tr><td><a name="to_char"></a><code>to_char(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an timestamp to a string assuming the ISO, MDY DateStyle.</p>
 </span></td></tr>
 <tr><td><a name="transaction_timestamp"></a><code>transaction_timestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
@@ -2534,7 +2538,25 @@ The output can be used to recreate a database.’</p>
 </span></td></tr>
 <tr><td><a name="overlay"></a><code>overlay(input: <a href="string.html">string</a>, overlay_val: <a href="string.html">string</a>, start_pos: <a href="int.html">int</a>, end_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Deletes the characters in <code>input</code> between <code>start_pos</code> and <code>end_pos</code> (count starts at 1), and then insert <code>overlay_val</code> at <code>start_pos</code>.</p>
 </span></td></tr>
-<tr><td><a name="parse_timestamp"></a><code>parse_timestamp(string: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Convert a string containing an absolute timestamp to the corresponding timestamp.</p>
+<tr><td><a name="parse_date"></a><code>parse_date(string: <a href="string.html">string</a>, datestyle: <a href="string.html">string</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Parses a date assuming it is in format specified by DateStyle.</p>
+</span></td></tr>
+<tr><td><a name="parse_date"></a><code>parse_date(val: <a href="string.html">string</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Parses a date assuming it is in MDY format.</p>
+</span></td></tr>
+<tr><td><a name="parse_interval"></a><code>parse_interval(string: <a href="string.html">string</a>, style: <a href="string.html">string</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Convert a string to an interval using the given IntervalStyle.</p>
+</span></td></tr>
+<tr><td><a name="parse_interval"></a><code>parse_interval(val: <a href="string.html">string</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Convert a string to an interval assuming the Postgres IntervalStyle.</p>
+</span></td></tr>
+<tr><td><a name="parse_time"></a><code>parse_time(string: <a href="string.html">string</a>, timestyle: <a href="string.html">string</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Parses a time assuming the date (if any) is in format specified by DateStyle.</p>
+</span></td></tr>
+<tr><td><a name="parse_time"></a><code>parse_time(val: <a href="string.html">string</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Parses a time assuming the date (if any) is in MDY format.</p>
+</span></td></tr>
+<tr><td><a name="parse_timestamp"></a><code>parse_timestamp(string: <a href="string.html">string</a>, datestyle: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Convert a string containing an absolute timestamp to the corresponding timestamp assuming dates formatted using the given DateStyle.</p>
+</span></td></tr>
+<tr><td><a name="parse_timestamp"></a><code>parse_timestamp(val: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Convert a string containing an absolute timestamp to the corresponding timestamp assuming dates are in MDY format.</p>
+</span></td></tr>
+<tr><td><a name="parse_timetz"></a><code>parse_timetz(string: <a href="string.html">string</a>, timestyle: <a href="string.html">string</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Parses a timetz assuming the date (if any) is in format specified by DateStyle.</p>
+</span></td></tr>
+<tr><td><a name="parse_timetz"></a><code>parse_timetz(val: <a href="string.html">string</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Parses a timetz assuming the date (if any) is in MDY format.</p>
 </span></td></tr>
 <tr><td><a name="pg_collation_for"></a><code>pg_collation_for(str: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the collation of the argument</p>
 </span></td></tr>
@@ -2724,7 +2746,11 @@ The output can be used to recreate a database.’</p>
 </span></td></tr>
 <tr><td><a name="substring"></a><code>substring(input: varbit, start_pos: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Returns a bit subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1) and including up to <code>length</code> characters.</p>
 </span></td></tr>
+<tr><td><a name="to_char_with_style"></a><code>to_char_with_style(date: <a href="date.html">date</a>, datestyle: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an date to a string assuming the string is formatted using the given DateStyle.</p>
+</span></td></tr>
 <tr><td><a name="to_char_with_style"></a><code>to_char_with_style(interval: <a href="interval.html">interval</a>, style: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an interval to a string using the given IntervalStyle.</p>
+</span></td></tr>
+<tr><td><a name="to_char_with_style"></a><code>to_char_with_style(timestamp: <a href="timestamp.html">timestamp</a>, datestyle: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an timestamp to a string assuming the string is formatted using the given DateStyle.</p>
 </span></td></tr>
 <tr><td><a name="to_english"></a><code>to_english(val: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function enunciates the value of its argument using English cardinals.</p>
 </span></td></tr>
