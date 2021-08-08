@@ -265,6 +265,23 @@ var varGen = map[string]sessionVar{
 			if ds.Style != pgdate.Style_ISO {
 				return unimplemented.NewWithIssue(41773, "only ISO style is supported")
 			}
+			if ds.Order != pgdate.Order_MDY && !m.data.DateStyleEnabled {
+				return errors.WithDetailf(
+					errors.WithHintf(
+						pgerror.Newf(
+							pgcode.FeatureNotSupported,
+							"setting DateStyle is not enabled",
+						),
+						"You can enable DateStyle customization for all sessions with the cluster setting sql.defaults.datestyle_enabled, or per session using SET datestyle_enabled = true.",
+					),
+					"Setting DateStyle changes the volatility of timestamp/timestamptz/date::string "+
+						"and string::timestamp/timestamptz/date/time/timetz casts from immutable to stable. "+
+						"No computed columns, partial indexes, partitions and check constraints can "+
+						"use this casts. "+
+						"Use to_char_with_style or parse_{timestamp,timestamptz,date,time,timetz} "+
+						"instead if you need these casts to work in the aforementioned cases.",
+				)
+			}
 			m.SetDateStyle(ds)
 			return nil
 		},
@@ -273,6 +290,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return dateStyleEnumMap[dateStyle.Get(sv)]
+		},
+	},
+	`datestyle_enabled`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.DateStyleEnabled)
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("datestyle_enabled"),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`datestyle_enabled`, s)
+			if err != nil {
+				return err
+			}
+			m.SetDateStyleEnabled(b)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(dateStyleEnabled.Get(sv))
 		},
 	},
 
