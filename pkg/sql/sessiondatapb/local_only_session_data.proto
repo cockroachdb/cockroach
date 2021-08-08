@@ -147,6 +147,22 @@ message LocalOnlySessionData {
   // ResultsBufferSize specifies the size at which the pgwire results buffer
   // will self-flush.
   int64 results_buffer_size = 38;
+  // ExperimentalDistSQLPlanningMode indicates whether the experimental
+  // DistSQL planning driven by the optimizer is enabled.
+  int64 experimental_distsql_planning_mode = 39 [
+    (gogoproto.customname)="ExperimentalDistSQLPlanningMode",
+    (gogoproto.casttype)="ExperimentalDistSQLPlanningMode"
+  ];
+  // DistSQLMode indicates whether to run queries using the distributed
+  // execution engine.
+  int64 dist_sql_mode = 40 [
+    (gogoproto.customname)="DistSQLMode",
+    (gogoproto.casttype)="DistSQLExecMode"
+  ];
+  // SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
+  int64 serial_normalization_mode = 41 [(gogoproto.casttype)="SerialNormalizationMode"];
+  // NewSchemaChangerMode indicates whether to use the new schema changer.
+  int64 new_schema_changer_mode = 42 [(gogoproto.casttype)="NewSchemaChangerMode"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

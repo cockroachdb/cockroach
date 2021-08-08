@@ -114,7 +114,7 @@ func TestTraceAnalyzer(t *testing.T) {
 				SessionData: sessiondatapb.SessionData{
 					VectorizeMode: vectorizeMode,
 				},
-				LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
+				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 					DistSQLMode: sessiondatapb.DistSQLOn,
 				},
 			},
