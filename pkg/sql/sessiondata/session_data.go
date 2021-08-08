@@ -31,7 +31,11 @@ type SessionData struct {
 	sessiondatapb.SessionData
 	// LocalOnlySessionData contains session parameters that don't need to be
 	// propagated to the remote nodes.
-	LocalOnlySessionData
+	sessiondatapb.LocalOnlySessionData
+	// LocalUnmigratableSessionData contains session parameters that cannot
+	// be propagated to remote nodes and cannot be migrated to another
+	// session.
+	LocalUnmigratableSessionData
 
 	// All session parameters below must be propagated to the remote nodes but
 	// are not easily serializable. They require custom serialization
@@ -123,172 +127,38 @@ func (s *SessionData) GetDateStyle() pgdate.DateStyle {
 	return s.DataConversionConfig.DateStyle
 }
 
-// LocalOnlySessionData contains session parameters that only influence the
-// execution on the gateway node and don't need to be propagated to the remote
-// nodes.
-type LocalOnlySessionData struct {
-	// SaveTablesPrefix indicates that a table should be created with the
-	// given prefix for the output of each subexpression in a query. If
-	// SaveTablesPrefix is empty, no tables are created.
-	SaveTablesPrefix string
+// LocalUnmigratableSessionData contains session parameters that cannot
+// be propagated to remote nodes and cannot be migrated to another
+// session.
+type LocalUnmigratableSessionData struct {
 	// RemoteAddr is used to generate logging events.
+	// RemoteAddr will acceptably change between session migrations.
 	RemoteAddr net.Addr
+	// DatabaseIDToTempSchemaID stores the temp schema ID for every
+	// database that has created a temporary schema. The mapping is from
+	// descpb.ID -> descpb.ID, but cannot be stored as such due to package
+	// dependencies. Temporary tables are not supported in session migrations.
+	DatabaseIDToTempSchemaID map[uint32]uint32
 	// ExperimentalDistSQLPlanningMode indicates whether the experimental
 	// DistSQL planning driven by the optimizer is enabled.
 	ExperimentalDistSQLPlanningMode ExperimentalDistSQLPlanningMode
 	// DistSQLMode indicates whether to run queries using the distributed
 	// execution engine.
 	DistSQLMode DistSQLExecMode
-	// OptimizerFKCascadesLimit is the maximum number of cascading operations that
-	// are run for a single query.
-	OptimizerFKCascadesLimit int64
-	// ResultsBufferSize specifies the size at which the pgwire results buffer
-	// will self-flush.
-	ResultsBufferSize int64
-	// NoticeDisplaySeverity indicates the level of Severity to send notices for the given
-	// session. This should ideally be of type pgnotice.DisplaySeverity, but cannot be done
-	// due to a circular dependency.
-	NoticeDisplaySeverity uint32
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
-	// DatabaseIDToTempSchemaID stores the temp schema ID for every database that
-	// has created a temporary schema. The mapping is from descpb.ID -> desscpb.ID,
-	// but cannot be stored as such due to package dependencies.
-	DatabaseIDToTempSchemaID map[uint32]uint32
-	// StmtTimeout is the duration a query is permitted to run before it is
-	// canceled by the session. If set to 0, there is no timeout.
-	StmtTimeout time.Duration
-	// IdleInSessionTimeout is the duration a session is permitted to idle before
-	// the session is canceled. If set to 0, there is no timeout.
-	IdleInSessionTimeout time.Duration
-	// IdleInTransactionSessionTimeout is the duration a session is permitted to
-	// idle in a transaction before the session is canceled.
-	// If set to 0, there is no timeout.
-	IdleInTransactionSessionTimeout time.Duration
-	// ReorderJoinsLimit indicates the number of joins at which the optimizer should
-	// stop attempting to reorder.
-	ReorderJoinsLimit int64
-	// DefaultTxnPriority indicates the default priority of newly created
-	// transactions.
-	// NOTE: we'd prefer to use tree.UserPriority here, but doing so would
-	// introduce a package dependency cycle.
-	DefaultTxnPriority int64
-	// DefaultTxnReadOnly indicates the default read-only status of newly
-	// created transactions.
-	DefaultTxnReadOnly bool
-	// DefaultTxnUseFollowerReads indicates whether transactions should be
-	// created by default using an AS OF SYSTEM TIME clause far enough in the
-	// past to facilitate reads against followers. If true, transactions will
-	// also default to being read-only.
-	DefaultTxnUseFollowerReads bool
-	// PartiallyDistributedPlansDisabled indicates whether the partially
-	// distributed plans produced by distSQLSpecExecFactory are disabled. It
-	// should be set to 'true' only in tests that verify that the old and the
-	// new factories return exactly the same physical plans.
-	// TODO(yuzefovich): remove it when deleting old sql.execFactory.
-	PartiallyDistributedPlansDisabled bool
-	// OptimizerUseHistograms indicates whether we should use histograms for
-	// cardinality estimation in the optimizer.
-	OptimizerUseHistograms bool
-	// OptimizerUseMultiColStats indicates whether we should use multi-column
-	// statistics for cardinality estimation in the optimizer.
-	OptimizerUseMultiColStats bool
-	// LocalityOptimizedSearch indicates that the optimizer will try to plan scans
-	// and lookup joins in which local nodes (i.e., nodes in the gateway region)
-	// are searched for matching rows before remote nodes, in the hope that the
-	// execution engine can avoid visiting remote nodes.
-	LocalityOptimizedSearch bool
-	// SafeUpdates causes errors when the client
-	// sends syntax that may have unwanted side effects.
-	SafeUpdates bool
-	// PreferLookupJoinsForFKs causes foreign key operations to prefer lookup
-	// joins.
-	PreferLookupJoinsForFKs bool
-	// ZigzagJoinEnabled indicates whether the optimizer should try and plan a
-	// zigzag join.
-	ZigzagJoinEnabled bool
-	// RequireExplicitPrimaryKeys indicates whether CREATE TABLE statements should
-	// error out if no primary key is provided.
-	RequireExplicitPrimaryKeys bool
-	// ForceSavepointRestart overrides the default SAVEPOINT behavior
-	// for compatibility with certain ORMs. When this flag is set,
-	// the savepoint name will no longer be compared against the magic
-	// identifier `cockroach_restart` in order use a restartable
-	// transaction.
-	ForceSavepointRestart bool
-	// AllowPrepareAsOptPlan must be set to allow use of
-	//   PREPARE name AS OPT PLAN '...'
-	AllowPrepareAsOptPlan bool
-	// TempTablesEnabled indicates whether temporary tables can be created or not.
-	TempTablesEnabled bool
-	// ImplicitPartitioningEnabled indicates whether implicit column partitioning
-	// can be created.
-	ImplicitColumnPartitioningEnabled bool
-	// DropEnumValueEnabled indicates whether enum values can be dropped.
-	DropEnumValueEnabled bool
-	// OverrideMultiRegionZoneConfigEnabled indicates whether zone configurations can be
-	// modified for multi-region databases and tables/indexes/partitions.
-	OverrideMultiRegionZoneConfigEnabled bool
-	// HashShardedIndexesEnabled indicates whether hash sharded indexes can be created.
-	HashShardedIndexesEnabled bool
-	// DisallowFullTableScans indicates whether queries that plan full table scans
-	// should be rejected.
-	DisallowFullTableScans bool
-	// ImplicitSelectForUpdate is true if FOR UPDATE locking may be used during
-	// the row-fetch phase of mutation statements.
-	ImplicitSelectForUpdate bool
-	// InsertFastPath is true if the fast path for insert (with VALUES input) may
-	// be used.
-	InsertFastPath bool
-	// AlterColumnTypeGeneralEnabled is true if ALTER TABLE ... ALTER COLUMN ...
-	// TYPE x may be used for general conversions requiring online schema change/
-	AlterColumnTypeGeneralEnabled bool
-	// SynchronousCommit is a dummy setting for the synchronous_commit var.
-	SynchronousCommit bool
-	// EnableSeqScan is a dummy setting for the enable_seqscan var.
-	EnableSeqScan bool
-
-	// EnableExpressionIndexes indicates whether creating expression indexes is
-	// allowed.
-	EnableExpressionIndexes bool
-
-	// EnableUniqueWithoutIndexConstraints indicates whether creating unique
-	// constraints without an index is allowed.
-	// TODO(rytaft): remove this once unique without index constraints are fully
-	// supported.
-	EnableUniqueWithoutIndexConstraints bool
-
 	// NewSchemaChangerMode indicates whether to use the new schema changer.
 	NewSchemaChangerMode NewSchemaChangerMode
-
-	// EnableStreamReplication indicates whether to allow setting up a replication
-	// stream.
-	EnableStreamReplication bool
-
 	// SequenceCache stores sequence values which have been cached using the
 	// CACHE sequence option.
+	// Cached sequence options are not yet supported during session migrations.
 	SequenceCache SequenceCache
-
-	// StubCatalogTablesEnabled allows queries against virtual
-	// tables that are not yet implemented.
-	StubCatalogTablesEnabled bool
-
-	// ExperimentalComputedColumnRewrites allows automatic rewriting of computed
-	// column expressions in CREATE TABLE and ALTER TABLE statements. See the
-	// experimentalComputedColumnRewrites cluster setting for a description of the
-	// format.
-	ExperimentalComputedColumnRewrites string
-
-	// CopyPartitioningWhenDeinterleavingTable indicates that when running an
-	// ALTER PRIMARY KEY that retains the same columns but removes any
-	// interleaving that zone configurations and partitioning from the root
-	// of that interleave should be applied to the new primary index.
-	CopyPartitioningWhenDeinterleavingTable bool
 
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
-	// be propagated to the remote nodes. If so, that parameter should live  //
-	// in the SessionData struct above.                                      //
+	// be propagated to the remote nodes or needs to persist amongst session //
+	// migrations. If so, they should live in the LocalOnlySessionData or    //
+	// SessionData protobuf in the sessiondatapb package.                    //
 	///////////////////////////////////////////////////////////////////////////
 }
 

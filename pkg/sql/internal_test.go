@@ -161,7 +161,7 @@ func TestInternalFullTableScan(t *testing.T) {
 				Database:  "db",
 				UserProto: security.RootUserName().EncodeProto(),
 			},
-			LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 				DisallowFullTableScans: true,
 			},
 			SequenceState: &sessiondata.SequenceState{},
