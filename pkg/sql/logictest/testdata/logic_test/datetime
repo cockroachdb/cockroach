@@ -1704,20 +1704,6 @@ SELECT 'infinity'::timestamp, '-infinity'::timestamptz
 ----
 294276-12-31 23:59:59.999999 +0000 +0000  -4713-11-24 00:00:00 +0000 +0000
 
-query T
-SELECT parse_timestamp('2020-01-02 01:02:03')
-----
-2020-01-02 01:02:03 +0000 +0000
-
-query error could not parse
-SELECT parse_timestamp('foo')
-
-query error parse_timestamp\(\): relative timestamps are not supported
-SELECT parse_timestamp('now')
-
-query error parse_timestamp\(\): relative timestamps are not supported
-SELECT parse_timestamp('tomorrow')
-
 # Verify that parse_timestamp can be used in computed column expressions.
 statement ok
 CREATE TABLE timestamps (s STRING, ts TIMESTAMP AS (parse_timestamp(s)) STORED)
@@ -1879,3 +1865,113 @@ FROM ( VALUES
 2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
 1995-03-04 15:16:19.123 +0000 UTC  1995-03-04 15:16:19.123 +0000 +0000  0000-01-01 15:16:19.123 +0000 UTC  0000-01-01 15:16:19.123 +0000 UTC  1995-03-04 00:00:00 +0000 +0000
 2020-09-05 15:17:19.123 +0000 UTC  2020-09-05 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-05 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT parse_timestamp('01-02-2020 01:02:03', 'postgres')
+
+query error could not parse
+SELECT parse_timestamp('foo')
+
+query error parse_timestamp\(\): relative timestamps are not supported
+SELECT parse_timestamp('now')
+
+query error parse_timestamp\(\): relative timestamps are not supported
+SELECT parse_timestamp('tomorrow')
+
+query error parse_timestamp\(\): relative timestamps are not supported
+SELECT parse_timestamp('now', 'mdy')
+
+statement error only ISO style is supported
+SELECT to_char_with_style(now()::timestamp, 'postgres')
+
+query TT
+SELECT
+  to_char('2020-01-02 01:02:03'::timestamp),
+  to_char_with_style('2020-01-02 01:02:03'::timestamp, 'DMY')
+----
+2020-01-02 01:02:03  2020-01-02 01:02:03
+
+statement ok
+CREATE TABLE timestamp_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+INSERT INTO timestamp_datestyle_parse VALUES
+  (1, '07-09-12 11:30:45.123'),
+  (2, '07-09-12')
+
+query TTTT
+SELECT
+  parse_timestamp(s),
+  parse_timestamp(s, 'iso,mdy'),
+  parse_timestamp(s, 'iso,dmy'),
+  parse_timestamp(s, 'iso,ymd')
+FROM timestamp_datestyle_parse
+ORDER BY pk
+----
+2012-07-09 11:30:45.123 +0000 +0000  2012-07-09 11:30:45.123 +0000 +0000  2012-09-07 11:30:45.123 +0000 +0000  2007-09-12 11:30:45.123 +0000 +0000
+2012-07-09 00:00:00 +0000 +0000      2012-07-09 00:00:00 +0000 +0000      2012-09-07 00:00:00 +0000 +0000      2007-09-12 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT parse_date('01-02-2020 01:02:03', 'postgres')
+
+query error parse_date\(\): relative dates are not supported
+SELECT parse_date('now')
+
+query error parse_date\(\): relative dates are not supported
+SELECT parse_date('tomorrow', 'iso,mdy')
+
+query TTTT
+SELECT
+  parse_date(s),
+  parse_date(s, 'iso,mdy'),
+  parse_date(s, 'iso,dmy'),
+  parse_date(s, 'iso,ymd')
+FROM timestamp_datestyle_parse
+ORDER BY pk
+----
+2012-07-09 00:00:00 +0000 +0000  2012-07-09 00:00:00 +0000 +0000  2012-09-07 00:00:00 +0000 +0000  2007-09-12 00:00:00 +0000 +0000
+2012-07-09 00:00:00 +0000 +0000  2012-07-09 00:00:00 +0000 +0000  2012-09-07 00:00:00 +0000 +0000  2007-09-12 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT to_char_with_style(now()::date, 'postgres')
+
+query TT
+SELECT
+  to_char('2020-01-02 01:02:03'::date),
+  to_char_with_style('2020-01-02 01:02:03'::date, 'DMY')
+----
+2020-01-02  2020-01-02
+
+statement ok
+CREATE TABLE time_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+INSERT INTO time_datestyle_parse VALUES
+  (1, '2007-09-12 11:30:45.123+06'),
+  (2, '2007-09-12 11:30:45.123+03')
+
+statement error only ISO style is supported
+SELECT parse_time('01-02-2020 01:02:03', 'postgres')
+
+query TTTT
+SELECT
+  parse_time(s),
+  parse_time(s, 'iso,mdy'),
+  parse_time(s, 'iso,dmy'),
+  parse_time(s, 'iso,ymd')
+FROM time_datestyle_parse
+ORDER BY pk
+----
+0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC
+0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC
+
+statement error only ISO style is supported
+SELECT parse_timetz('01-02-2020 01:02:03', 'postgres')
+
+query TTTT
+SELECT
+  parse_timetz(s),
+  parse_timetz(s, 'iso,mdy'),
+  parse_timetz(s, 'iso,dmy'),
+  parse_timetz(s, 'iso,ymd')
+FROM time_datestyle_parse
+ORDER BY pk
+----
+0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600
+0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300

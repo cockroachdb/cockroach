@@ -193,7 +193,7 @@ var validCasts = []castInfo{
 		from:           types.IntervalFamily,
 		to:             types.StringFamily,
 		volatility:     VolatilityImmutable,
-		volatilityHint: "INTERVAL to STRING casts depends on IntervalStyle; consider using to_char_with_style(interval, 'postgres')",
+		volatilityHint: "INTERVAL to STRING casts depends on IntervalStyle; consider using to_char(interval)",
 	},
 	{from: types.UuidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{
@@ -319,7 +319,7 @@ var validCasts = []castInfo{
 		from:           types.StringFamily,
 		to:             types.IntervalFamily,
 		volatility:     VolatilityImmutable,
-		volatilityHint: "STRING to INTERVAL casts depend on session IntervalStyle; use parse_interval(string, 'postgres') instead",
+		volatilityHint: "STRING to INTERVAL casts depend on session IntervalStyle; use parse_interval(string) instead",
 	},
 	{from: types.CollatedStringFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
 	{from: types.IntFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
