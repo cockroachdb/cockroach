@@ -137,10 +137,6 @@ type LocalUnmigratableSessionData struct {
 	// descpb.ID -> descpb.ID, but cannot be stored as such due to package
 	// dependencies. Temporary tables are not supported in session migrations.
 	DatabaseIDToTempSchemaID map[uint32]uint32
-	// SequenceCache stores sequence values which have been cached using the
-	// CACHE sequence option.
-	// Cached sequence options are not yet supported during session migrations.
-	SequenceCache SequenceCache
 
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
