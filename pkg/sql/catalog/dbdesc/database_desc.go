@@ -437,3 +437,22 @@ func (desc *Mutable) SetDefaultPrivilegeDescriptor(
 ) {
 	desc.DefaultPrivileges = defaultPrivilegeDescriptor
 }
+
+// maybeFixDroppedSchemaName fixes the name of a dropped child schema in a
+// database descriptor. In a previous version, schemas map of a database descriptor
+// was mistakenly populated with its own name instead of schema's name when the schema
+// was dropped. Moreover, the value in schemasMap was set to database's ID.
+//
+// This function fixes this problem by deleting the erroneous entry.
+func maybeFixDroppedSchemaName(dbDesc *descpb.DatabaseDescriptor) bool {
+	if dbDesc == nil {
+		return false
+	}
+	if sc, ok := dbDesc.Schemas[dbDesc.Name]; ok {
+		if sc.Dropped && sc.ID == dbDesc.ID {
+			delete(dbDesc.Schemas, dbDesc.Name)
+			return true
+		}
+	}
+	return false
+}
