@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
@@ -296,4 +297,31 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
 		}
 	}
+}
+
+// TestFixDroppedSchemaName tests fixing a corrupted descriptor as part of
+// RunPostDeserializationChanges. It tests for a particular corruption that
+// happened when a schema was dropped that had the same name as its parent
+// database name.
+func TestFixDroppedSchemaName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	const (
+		dbName = "foo"
+		dbID   = 1
+	)
+	dbDesc := descpb.DatabaseDescriptor{
+		Name: dbName,
+		ID:   dbID,
+		Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
+			dbName: {ID: dbID, Dropped: true},
+		},
+	}
+	b := NewBuilder(&dbDesc)
+	require.NoError(t, b.RunPostDeserializationChanges(ctx, nil))
+	desc := b.BuildCreatedMutableDatabase()
+	require.Truef(t, desc.HasPostDeserializationChanges(), "expected changes in descriptor, found none")
+	_, ok := desc.Schemas[dbName]
+	require.Falsef(t, ok, "erroneous entry exists")
 }
