@@ -659,8 +659,10 @@ func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 		SessionData: sessiondatapb.SessionData{
 			UserProto: args.User.EncodeProto(),
 		},
-		LocalOnlySessionData: sessiondata.LocalOnlySessionData{
-			RemoteAddr:        args.RemoteAddr,
+		LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
+			RemoteAddr: args.RemoteAddr,
+		},
+		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 			ResultsBufferSize: args.ConnResultsBufferSize,
 		},
 	}
