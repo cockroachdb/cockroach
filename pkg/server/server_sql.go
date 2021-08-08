@@ -968,7 +968,7 @@ func (s *SQLServer) preStart(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
 	migrationsExecutor.SetSessionData(
 		&sessiondata.SessionData{
-			LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
+			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 				// Migrations need an executor with query distribution turned off. This is
 				// because the node crashes if migrations fail to execute, and query
 				// distribution introduces more moving parts. Local execution is more

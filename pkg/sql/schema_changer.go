@@ -2032,7 +2032,7 @@ func NewFakeSessionData(sv *settings.Values) *sessiondata.SessionData {
 			UserProto:     security.NodeUserName().EncodeProto(),
 			VectorizeMode: sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv)),
 		},
-		LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
+		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 			DistSQLMode: sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
 		},
 		SearchPath:    sessiondata.DefaultSearchPathForUser(security.NodeUserName()),
