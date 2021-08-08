@@ -13,7 +13,10 @@ go_library(
 
 proto_library(
     name = "sessiondatapb_proto",
-    srcs = ["session_data.proto"],
+    srcs = [
+        "local_only_session_data.proto",
+        "session_data.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
