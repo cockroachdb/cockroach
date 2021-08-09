@@ -51,7 +51,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
-        "@com_github_jackc_pgx//:pgx",
+        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_stretchr_testify//require",
     ],
 )

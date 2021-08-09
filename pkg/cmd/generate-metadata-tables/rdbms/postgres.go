@@ -14,12 +14,13 @@
 package rdbms
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq/oid"
 )
 
@@ -57,11 +58,11 @@ type pgMetadataConnection struct {
 }
 
 func postgresConnect(address, user, catalog string) (DBMetadataConnection, error) {
-	conf, err := pgx.ParseURI(fmt.Sprintf("postgresql://%s@%s?sslmode=disable", user, address))
+	conf, err := pgx.ParseConfig(fmt.Sprintf("postgresql://%s@%s?sslmode=disable", user, address))
 	if err != nil {
 		return nil, err
 	}
-	conn, err := pgx.Connect(conf)
+	conn, err := pgx.ConnectConfig(context.Background(), conf)
 	if err != nil {
 		return nil, err
 	}
@@ -69,9 +70,9 @@ func postgresConnect(address, user, catalog string) (DBMetadataConnection, error
 	return pgMetadataConnection{conn, catalog}, nil
 }
 
-func (conn pgMetadataConnection) DescribeSchema() (*ColumnMetadataList, error) {
+func (conn pgMetadataConnection) DescribeSchema(ctx context.Context) (*ColumnMetadataList, error) {
 	var metadata []*columnMetadata
-	rows, err := conn.Query(sql.GetPGMetadataSQL, conn.catalog)
+	rows, err := conn.Query(ctx, sql.GetPGMetadataSQL, conn.catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +96,10 @@ func (conn pgMetadataConnection) DescribeSchema() (*ColumnMetadataList, error) {
 	return &ColumnMetadataList{data: metadata, exclusions: postgresExclusions}, nil
 }
 
-func (conn pgMetadataConnection) DatabaseVersion() (pgVersion string, err error) {
-	row := conn.QueryRow(getServerVersion)
+func (conn pgMetadataConnection) DatabaseVersion(
+	ctx context.Context,
+) (pgVersion string, err error) {
+	row := conn.QueryRow(ctx, getServerVersion)
 	err = row.Scan(&pgVersion)
 	return pgVersion, err
 }
