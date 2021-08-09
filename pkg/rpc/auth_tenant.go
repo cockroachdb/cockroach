@@ -23,7 +23,9 @@ import (
 // tenantAuthorizer authorizes RPCs sent by tenants to a node's tenant RPC
 // server, that is, it ensures that the request only accesses resources
 // available to the tenant.
-type tenantAuthorizer struct{}
+type tenantAuthorizer struct {
+	tenantID roachpb.TenantID
+}
 
 func tenantFromCommonName(commonName string) (roachpb.TenantID, error) {
 	tenID, err := strconv.ParseUint(commonName, 10, 64)
@@ -36,6 +38,8 @@ func tenantFromCommonName(commonName string) (roachpb.TenantID, error) {
 	return roachpb.MakeTenantID(tenID), nil
 }
 
+// authorize enforces a security boundary around endpoints that tenants
+// request from the host KV node.
 func (a tenantAuthorizer) authorize(
 	tenID roachpb.TenantID, fullMethod string, req interface{},
 ) error {
@@ -56,10 +60,13 @@ func (a tenantAuthorizer) authorize(
 		return a.authTokenBucket(tenID, req.(*roachpb.TokenBucketRequest))
 
 	case "/cockroach.rpc.Heartbeat/Ping":
-		return nil // no authorization
+		return nil // no restriction to usage of this endpoint by tenants
 
 	case "/cockroach.server.serverpb.Status/Regions":
-		return nil // no authorization
+		return nil // no restriction to usage of this endpoint by tenants
+
+	case "/cockroach.server.serverpb.Status/Statements":
+		return a.authTenant(tenID)
 
 	default:
 		return authErrorf("unknown method %q", fullMethod)
@@ -159,6 +166,16 @@ func (a tenantAuthorizer) authGossipSubscription(
 		if !allowed {
 			return authErrorf("requested pattern %q not permitted", pat)
 		}
+	}
+	return nil
+}
+
+// authTenant checks if the given tenantID matches the one the
+// authorizer was initialized with. This authorizer is used for
+// endpoints that should remain within a single tenant's pods.
+func (a tenantAuthorizer) authTenant(id roachpb.TenantID) error {
+	if a.tenantID != id {
+		return authErrorf("request from tenant %s not permitted on tenant %s", id, a.tenantID)
 	}
 	return nil
 }

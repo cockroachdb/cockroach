@@ -1339,7 +1339,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
-	pgL, startRPCServer, err := s.startListenRPCAndSQL(ctx, workersCtx)
+	pgL, startRPCServer, err := StartListenRPCAndSQL(ctx, workersCtx, s.cfg.BaseConfig, s.stopper, s.grpc)
 	if err != nil {
 		return err
 	}
@@ -1372,82 +1372,17 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
-	jsonpb := &protoutil.JSONPb{
-		EnumsAsInts:  true,
-		EmitDefaults: true,
-		Indent:       "  ",
-	}
-	protopb := new(protoutil.ProtoPb)
-	gwMux := gwruntime.NewServeMux(
-		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.JSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
-		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
-		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
-		gwruntime.WithMetadata(forwardAuthenticationMetadata),
+	gwMux, gwCtx, conn, err := ConfigureGRPCGateway(
+		ctx,
+		workersCtx,
+		s.cfg.AmbientCtx,
+		s.rpcContext,
+		s.stopper,
+		s.grpc,
+		s.cfg.AdvertiseAddr,
 	)
-	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
-	s.stopper.AddCloser(stop.CloserFn(gwCancel))
-
-	// loopback handles the HTTP <-> RPC loopback connection.
-	loopback := newLoopbackListener(workersCtx, s.stopper)
-
-	waitQuiesce := func(context.Context) {
-		<-s.stopper.ShouldQuiesce()
-		_ = loopback.Close()
-	}
-	if err := s.stopper.RunAsyncTask(workersCtx, "gw-quiesce", waitQuiesce); err != nil {
-		waitQuiesce(workersCtx)
-	}
-
-	_ = s.stopper.RunAsyncTask(workersCtx, "serve-loopback", func(context.Context) {
-		netutil.FatalIfUnexpected(s.grpc.Serve(loopback))
-	})
-
-	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
-	// uniquely in-process connection.
-	dialOpts, err := s.rpcContext.GRPCDialOptions()
 	if err != nil {
 		return err
-	}
-
-	callCountInterceptor := func(
-		ctx context.Context,
-		method string,
-		req, reply interface{},
-		cc *grpc.ClientConn,
-		invoker grpc.UnaryInvoker,
-		opts ...grpc.CallOption,
-	) error {
-		telemetry.Inc(getServerEndpointCounter(method))
-		return invoker(ctx, method, req, reply, cc, opts...)
-	}
-	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(append(
-		dialOpts,
-		grpc.WithUnaryInterceptor(callCountInterceptor)),
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return loopback.Connect(ctx)
-		}),
-	)...)
-	if err != nil {
-		return err
-	}
-	{
-		waitQuiesce := func(workersCtx context.Context) {
-			<-s.stopper.ShouldQuiesce()
-			// NB: we can't do this as a Closer because (*Server).ServeWith is
-			// running in a worker and usually sits on accept() which unblocks
-			// only when the listener closes. In other words, the listener needs
-			// to close when quiescing starts to allow that worker to shut down.
-			err := conn.Close() // nolint:grpcconnclose
-			if err != nil {
-				log.Ops.Fatalf(workersCtx, "%v", err)
-			}
-		}
-		if err := s.stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {
-			waitQuiesce(workersCtx)
-		}
 	}
 
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, s.tsServer} {
@@ -1938,6 +1873,104 @@ func (s *Server) PreStart(ctx context.Context) error {
 	return maybeImportTS(ctx, s)
 }
 
+// ConfigureGRPCGateway initializes services necessary for running the
+// GRPC Gateway services proxied against the server at `grpcSrv`.
+//
+// The connection between the reverse proxy provided by grpc-gateway
+// and our grpc server uses a loopback-based listener to create
+// connections between the two.
+//
+// The function returns 3 arguments that are necessary to call
+// `RegisterGateway` which generated for each of your gRPC services
+// by grpc-gateway.
+func ConfigureGRPCGateway(
+	ctx, workersCtx context.Context,
+	ambientCtx log.AmbientContext,
+	rpcContext *rpc.Context,
+	stopper *stop.Stopper,
+	grpcSrv *grpcServer,
+	GRPCAddr string,
+) (*gwruntime.ServeMux, context.Context, *grpc.ClientConn, error) {
+	jsonpb := &protoutil.JSONPb{
+		EnumsAsInts:  true,
+		EmitDefaults: true,
+		Indent:       "  ",
+	}
+	protopb := new(protoutil.ProtoPb)
+	gwMux := gwruntime.NewServeMux(
+		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.JSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
+		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
+		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
+		gwruntime.WithMetadata(forwardAuthenticationMetadata),
+	)
+	gwCtx, gwCancel := context.WithCancel(ambientCtx.AnnotateCtx(context.Background()))
+	stopper.AddCloser(stop.CloserFn(gwCancel))
+
+	// loopback handles the HTTP <-> RPC loopback connection.
+	loopback := newLoopbackListener(workersCtx, stopper)
+
+	waitQuiesce := func(context.Context) {
+		<-stopper.ShouldQuiesce()
+		_ = loopback.Close()
+	}
+	if err := stopper.RunAsyncTask(workersCtx, "gw-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(workersCtx)
+	}
+
+	_ = stopper.RunAsyncTask(workersCtx, "serve-loopback", func(context.Context) {
+		netutil.FatalIfUnexpected(grpcSrv.Serve(loopback))
+	})
+
+	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
+	// uniquely in-process connection.
+	dialOpts, err := rpcContext.GRPCDialOptions()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	callCountInterceptor := func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		telemetry.Inc(getServerEndpointCounter(method))
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+	conn, err := grpc.DialContext(ctx, GRPCAddr, append(append(
+		dialOpts,
+		grpc.WithUnaryInterceptor(callCountInterceptor)),
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return loopback.Connect(ctx)
+		}),
+	)...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	{
+		waitQuiesce := func(workersCtx context.Context) {
+			<-stopper.ShouldQuiesce()
+			// NB: we can't do this as a Closer because (*Server).ServeWith is
+			// running in a worker and usually sits on accept() which unblocks
+			// only when the listener closes. In other words, the listener needs
+			// to close when quiescing starts to allow that worker to shut down.
+			err := conn.Close() // nolint:grpcconnclose
+			if err != nil {
+				log.Ops.Fatalf(workersCtx, "%v", err)
+			}
+		}
+		if err := stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {
+			waitQuiesce(workersCtx)
+		}
+	}
+	return gwMux, gwCtx, conn, nil
+}
+
 func maybeImportTS(ctx context.Context, s *Server) error {
 	knobs, _ := s.cfg.TestingKnobs.Server.(*TestingKnobs)
 	if knobs == nil {
@@ -2084,43 +2117,43 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 	return nil
 }
 
-// startListenRPCAndSQL starts the RPC and SQL listeners.
+// StartListenRPCAndSQL starts the RPC and SQL listeners.
 // It returns the SQL listener, which can be used
 // to start the SQL server when initialization has completed.
 // It also returns a function that starts the RPC server,
 // when the cluster is known to have bootstrapped or
 // when waiting for init().
-func (s *Server) startListenRPCAndSQL(
-	ctx, workersCtx context.Context,
+func StartListenRPCAndSQL(
+	ctx, workersCtx context.Context, cfg BaseConfig, stopper *stop.Stopper, grpc *grpcServer,
 ) (sqlListener net.Listener, startRPCServer func(ctx context.Context), err error) {
 	rpcChanName := "rpc/sql"
-	if s.cfg.SplitListenSQL {
+	if cfg.SplitListenSQL {
 		rpcChanName = "rpc"
 	}
 	var ln net.Listener
-	if k := s.cfg.TestingKnobs.Server; k != nil {
+	if k := cfg.TestingKnobs.Server; k != nil {
 		knobs := k.(*TestingKnobs)
 		ln = knobs.RPCListener
 	}
 	if ln == nil {
 		var err error
-		ln, err = ListenAndUpdateAddrs(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, rpcChanName)
+		ln, err = ListenAndUpdateAddrs(ctx, &cfg.Addr, &cfg.AdvertiseAddr, rpcChanName)
 		if err != nil {
 			return nil, nil, err
 		}
-		log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
+		log.Eventf(ctx, "listening on port %s", cfg.Addr)
 	}
 
 	var pgL net.Listener
-	if s.cfg.SplitListenSQL {
-		pgL, err = ListenAndUpdateAddrs(ctx, &s.cfg.SQLAddr, &s.cfg.SQLAdvertiseAddr, "sql")
+	if cfg.SplitListenSQL {
+		pgL, err = ListenAndUpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, "sql")
 		if err != nil {
 			return nil, nil, err
 		}
 		// The SQL listener shutdown worker, which closes everything under
 		// the SQL port when the stopper indicates we are shutting down.
 		waitQuiesce := func(ctx context.Context) {
-			<-s.stopper.ShouldQuiesce()
+			<-stopper.ShouldQuiesce()
 			// NB: we can't do this as a Closer because (*Server).ServeWith is
 			// running in a worker and usually sits on accept() which unblocks
 			// only when the listener closes. In other words, the listener needs
@@ -2129,11 +2162,11 @@ func (s *Server) startListenRPCAndSQL(
 				log.Ops.Fatalf(ctx, "%v", err)
 			}
 		}
-		if err := s.stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {
+		if err := stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {
 			waitQuiesce(workersCtx)
 			return nil, nil, err
 		}
-		log.Eventf(ctx, "listening on sql port %s", s.cfg.SQLAddr)
+		log.Eventf(ctx, "listening on sql port %s", cfg.SQLAddr)
 	}
 
 	// serveOnMux is used to ensure that the mux gets listened on eventually,
@@ -2142,7 +2175,7 @@ func (s *Server) startListenRPCAndSQL(
 
 	m := cmux.New(ln)
 
-	if !s.cfg.SplitListenSQL {
+	if !cfg.SplitListenSQL {
 		// If the pg port is split, it will be opened above. Otherwise,
 		// we make it hang off the RPC listener via cmux here.
 		pgL = m.Match(func(r io.Reader) bool {
@@ -2151,12 +2184,12 @@ func (s *Server) startListenRPCAndSQL(
 		// Also if the pg port is not split, the actual listen
 		// and advertise addresses for SQL become equal to that
 		// of RPC, regardless of what was configured.
-		s.cfg.SQLAddr = s.cfg.Addr
-		s.cfg.SQLAdvertiseAddr = s.cfg.AdvertiseAddr
+		cfg.SQLAddr = cfg.Addr
+		cfg.SQLAdvertiseAddr = cfg.AdvertiseAddr
 	}
 
 	anyL := m.Match(cmux.Any())
-	if serverTestKnobs, ok := s.cfg.TestingKnobs.Server.(*TestingKnobs); ok {
+	if serverTestKnobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok {
 		if serverTestKnobs.ContextTestingKnobs.ArtificialLatencyMap != nil {
 			anyL = rpc.NewDelayingListener(anyL)
 		}
@@ -2164,12 +2197,12 @@ func (s *Server) startListenRPCAndSQL(
 
 	// The remainder shutdown worker.
 	waitForQuiesce := func(context.Context) {
-		<-s.stopper.ShouldQuiesce()
+		<-stopper.ShouldQuiesce()
 		// TODO(bdarnell): Do we need to also close the other listeners?
 		netutil.FatalIfUnexpected(anyL.Close())
 	}
-	s.stopper.AddCloser(stop.CloserFn(func() {
-		s.grpc.Stop()
+	stopper.AddCloser(stop.CloserFn(func() {
+		grpc.Stop()
 		serveOnMux.Do(func() {
 			// The cmux matches don't shut down properly unless serve is called on the
 			// cmux at some point. Use serveOnMux to ensure it's called during shutdown
@@ -2177,7 +2210,7 @@ func (s *Server) startListenRPCAndSQL(
 			netutil.FatalIfUnexpected(m.Serve())
 		})
 	}))
-	if err := s.stopper.RunAsyncTask(
+	if err := stopper.RunAsyncTask(
 		workersCtx, "grpc-quiesce", waitForQuiesce,
 	); err != nil {
 		return nil, nil, err
@@ -2189,11 +2222,11 @@ func (s *Server) startListenRPCAndSQL(
 	// (Server.Start) will call this at the right moment.
 	startRPCServer = func(ctx context.Context) {
 		// Serve the gRPC endpoint.
-		_ = s.stopper.RunAsyncTask(workersCtx, "serve-grpc", func(context.Context) {
-			netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
+		_ = stopper.RunAsyncTask(workersCtx, "serve-grpc", func(context.Context) {
+			netutil.FatalIfUnexpected(grpc.Serve(anyL))
 		})
 
-		_ = s.stopper.RunAsyncTask(ctx, "serve-mux", func(context.Context) {
+		_ = stopper.RunAsyncTask(ctx, "serve-mux", func(context.Context) {
 			serveOnMux.Do(func() {
 				netutil.FatalIfUnexpected(m.Serve())
 			})

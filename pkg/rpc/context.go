@@ -157,7 +157,11 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	var streamInterceptor []grpc.StreamServerInterceptor
 
 	if !ctx.Config.Insecure {
-		a := kvAuth{}
+		a := kvAuth{
+			tenant: tenantAuthorizer{
+				tenantID: ctx.tenID,
+			},
+		}
 
 		unaryInterceptor = append(unaryInterceptor, a.AuthUnary())
 		streamInterceptor = append(streamInterceptor, a.AuthStream())
@@ -1029,6 +1033,19 @@ func (ctx *Context) GRPCDialNode(
 		log.Fatalf(context.TODO(), "%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
 	return ctx.grpcDialNodeInternal(target, remoteNodeID, class)
+}
+
+// GRPCDialPod wraps GRPCDialNode and treats the `remoteInstanceID`
+// argument as a `NodeID` which it converts. This works because the
+// tenant gRPC server is initialized using the `InstanceID` so it
+// accepts our connection as matching the ID we're dialing.
+//
+// Since GRPCDialNode accepts a separate `target` and `NodeID` it
+// requires no further modification to work between pods.
+func (ctx *Context) GRPCDialPod(
+	target string, remoteInstanceID base.SQLInstanceID, class ConnectionClass,
+) *Connection {
+	return ctx.GRPCDialNode(target, roachpb.NodeID(remoteInstanceID), class)
 }
 
 func (ctx *Context) grpcDialNodeInternal(
