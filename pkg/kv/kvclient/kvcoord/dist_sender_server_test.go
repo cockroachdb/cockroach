@@ -1262,7 +1262,7 @@ func TestBadRequest(t *testing.T) {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 
-	if err := db.DelRange(ctx, "x", "a"); !testutils.IsError(err, "must be greater than start") {
+	if _, err := db.DelRange(ctx, "x", "a", false); !testutils.IsError(err, "must be greater than start") {
 		t.Fatalf("unexpected error on deletion on [x, a): %v", err)
 	}
 
@@ -1271,7 +1271,7 @@ func TestBadRequest(t *testing.T) {
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	repl := store.LookupReplica(roachpb.RKeyMin)
-	if err := db.DelRange(ctx, "", repl.Desc().EndKey); !testutils.IsError(err, "must be greater than LocalMax") {
+	if _, err := db.DelRange(ctx, "", repl.Desc().EndKey, false); !testutils.IsError(err, "must be greater than LocalMax") {
 		t.Fatalf("unexpected error on deletion on [KeyMin, %s): %v", repl.Desc().EndKey, err)
 	}
 }
@@ -2236,7 +2236,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.DelRange(ctx, "a", "b")
+				_, err := db.DelRange(ctx, "a", "b", false)
+				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				if _, err := txn.Get(ctx, "c"); err != nil {
@@ -2252,7 +2253,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.DelRange(ctx, "a", "b")
+				_, err := db.DelRange(ctx, "a", "b", false)
+				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				if _, err := txn.Get(ctx, "a"); err != nil {
