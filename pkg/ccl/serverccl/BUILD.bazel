@@ -15,6 +15,7 @@ go_test(
         "main_test.go",
         "role_authentication_test.go",
         "server_sql_test.go",
+        "tenant_grpc_test.go",
         "tenant_status_test.go",
     ],
     embed = [":serverccl"],
@@ -24,6 +25,7 @@ go_test(
         "//pkg/ccl/kvccl",
         "//pkg/ccl/utilccl",
         "//pkg/roachpb:with-mocks",
+        "//pkg/rpc",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -42,6 +44,7 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:go_default_library",
         "@org_golang_x_crypto//bcrypt",
     ],
 )

@@ -522,6 +522,11 @@ func (t *TestTenant) DistSQLServer() interface{} {
 	return t.SQLServer.distSQLServer
 }
 
+// RPCContext is part of the TestTenantInterface interface
+func (t *TestTenant) RPCContext() *rpc.Context {
+	return t.execCfg.RPCContext
+}
+
 // JobRegistry is part of the TestTenantInterface interface.
 func (t *TestTenant) JobRegistry() interface{} {
 	return t.SQLServer.jobRegistry
