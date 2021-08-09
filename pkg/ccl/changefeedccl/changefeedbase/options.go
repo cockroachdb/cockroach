@@ -96,7 +96,8 @@ const (
 	OptOnErrorPause OnErrorType = `pause`
 
 	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
-	OptKafkaSinkConfig = `kafka_sink_config`
+	OptKafkaSinkConfig   = `kafka_sink_config`
+	OptWebhookSinkConfig = `webhook_sink_config`
 
 	SinkParamCACert                 = `ca_cert`
 	SinkParamClientCert             = `client_cert`

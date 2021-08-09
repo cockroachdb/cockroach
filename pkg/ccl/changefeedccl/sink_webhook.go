@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -56,12 +57,13 @@ type webhookSinkPayload struct {
 	Payload []json.RawMessage `json:"payload"`
 }
 
-func encodePayloadWebhook(value []byte) ([]byte, error) {
-	payload := json.RawMessage(value)
-	// the 'payload' field has an array as a value to support
-	// batched rows in the future
+func encodePayloadWebhook(values [][]byte) ([]byte, error) {
+	var payload []json.RawMessage
+	for _, value := range values {
+		payload = append(payload, value)
+	}
 	body := &webhookSinkPayload{
-		Payload: []json.RawMessage{payload},
+		Payload: payload,
 	}
 	j, err := json.Marshal(body)
 	if err != nil {
@@ -70,26 +72,103 @@ func encodePayloadWebhook(value []byte) ([]byte, error) {
 	return j, err
 }
 
+type batchTracker struct {
+	buffer                  [][]byte
+	bufferBytes, bufferSize int
+	bufferInitTime          time.Time
+}
+
+func (b *batchTracker) addToBuffer(payload []byte) {
+	b.bufferSize++
+	b.bufferBytes += len(payload)
+	b.buffer = append(b.buffer, payload)
+}
+
+func (b *batchTracker) emptyBufferAndReset() [][]byte {
+	buffer := b.buffer
+	b.buffer = [][]byte{}
+	b.bufferSize = 0
+	b.bufferBytes = 0
+	b.bufferInitTime = timeutil.Now()
+	return buffer
+}
+
+type batchConfig struct {
+	Bytes, Messages int          `json:",omitempty"`
+	Frequency       JSONDuration `json:",omitempty"`
+}
+
 type webhookSink struct {
-	workerCtx   context.Context
-	url         sinkURL
-	authHeader  string
-	parallelism int
-	client      *httputil.Client
-	workerGroup ctxgroup.Group
-	exitWorkers func()
-	eventsChans []chan []byte
-	inflight    *inflightTracker
-	retryCfg    retry.Options
+	workerCtx    context.Context
+	url          sinkURL
+	authHeader   string
+	parallelism  int
+	client       *httputil.Client
+	workerGroup  ctxgroup.Group
+	exitWorkers  func()
+	eventsChans  []chan []byte
+	inflight     *inflightTracker
+	retryCfg     retry.Options
+	batchCfg     batchConfig
+	batchDefault bool
+	// the i-th batchTracker should track and buffer events received by the
+	// i-th eventsChan.
+	batchTrackers []batchTracker
+}
+
+func (s *webhookSink) getWebhookSinkConfig(
+	opts map[string]string,
+) (batchCfg batchConfig, retryCfg retry.Options, err error) {
+	defaultRetryCfg := defaultRetryConfig()
+
+	// wrapper structs to unmarshal json
+	type retryConfig struct {
+		Max     int          `json:",omitempty"`
+		Backoff JSONDuration `json:",omitempty"`
+	}
+
+	type webhookSinkConfig struct {
+		Flush batchConfig `json:",omitempty"`
+		Retry retryConfig `json:",omitempty"`
+	}
+
+	var cfg webhookSinkConfig
+	if configStr, ok := opts[changefeedbase.OptWebhookSinkConfig]; ok {
+		var configJSON map[string]interface{}
+		err = json.Unmarshal([]byte(configStr), &configJSON)
+		if err != nil {
+			return
+		}
+		// check if batch config has been set by the user
+		if _, ok := configJSON["Flush"]; ok {
+			// use the provided batch config, not the default
+			s.batchDefault = false
+		}
+
+		cfg = webhookSinkConfig{
+			Flush: batchConfig{},
+			Retry: retryConfig{
+				Max:     defaultRetryCfg.MaxRetries,
+				Backoff: JSONDuration(defaultRetryCfg.InitialBackoff),
+			},
+		}
+		err = json.Unmarshal([]byte(configStr), &cfg)
+		if err != nil {
+			return
+		}
+	}
+
+	if batchCfg.Messages < 0 || batchCfg.Bytes < 0 || retryCfg.MaxRetries < 0 {
+		err = errors.Errorf("invalid option value %s, all int values must be non-negative", changefeedbase.OptWebhookSinkConfig)
+	}
+
+	defaultRetryCfg.MaxRetries = cfg.Retry.Max
+	defaultRetryCfg.InitialBackoff = time.Duration(cfg.Retry.Backoff)
+	return cfg.Flush, defaultRetryCfg, nil
 }
 
 func makeWebhookSink(
-	ctx context.Context,
-	u sinkURL,
-	opts map[string]string,
-	parallelism int,
-	acc mon.BoundAccount,
-	retryOptions retry.Options,
+	ctx context.Context, u sinkURL, opts map[string]string, parallelism int, acc mon.BoundAccount,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
@@ -135,14 +214,19 @@ func makeWebhookSink(
 	ctx, cancel := context.WithCancel(ctx)
 
 	sink := &webhookSink{
-		workerCtx:   ctx,
-		authHeader:  opts[changefeedbase.OptWebhookAuthHeader],
-		exitWorkers: cancel,
-		parallelism: parallelism,
-		retryCfg:    retryOptions,
+		workerCtx:    ctx,
+		authHeader:   opts[changefeedbase.OptWebhookAuthHeader],
+		exitWorkers:  cancel,
+		parallelism:  parallelism,
+		batchDefault: true,
 	}
 
 	var err error
+	sink.batchCfg, sink.retryCfg, err = sink.getWebhookSinkConfig(opts)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error processing option %s", changefeedbase.OptWebhookSinkConfig)
+	}
+
 	sink.client, err = makeWebhookClient(u, connTimeout)
 	if err != nil {
 		return nil, err
@@ -210,7 +294,6 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 	return client, nil
 }
 
-// TODO (ryan min): allow user to configure custom retry options
 func defaultRetryConfig() retry.Options {
 	opts := retry.Options{
 		InitialBackoff: 500 * time.Millisecond,
@@ -228,32 +311,56 @@ func defaultWorkerCount() int {
 }
 
 func (s *webhookSink) setupWorkers() {
+	// setup events channels to send to workers and the worker group
 	s.eventsChans = make([]chan []byte, s.parallelism)
+	s.batchTrackers = make([]batchTracker, s.parallelism)
 	s.workerGroup = ctxgroup.WithContext(s.workerCtx)
+	currentTime := timeutil.Now()
 	for i := 0; i < s.parallelism; i++ {
 		s.eventsChans[i] = make(chan []byte)
+		s.batchTrackers[i].bufferInitTime = currentTime
 		j := i
 		s.workerGroup.GoCtx(func(ctx context.Context) error {
-			s.workerLoop(s.eventsChans[j])
+			s.workerLoop(j)
 			return nil
 		})
 	}
 }
 
-func (s *webhookSink) workerLoop(workerCh chan []byte) {
+func (s *webhookSink) shouldSendBatch(workerIndex int) bool {
+	f := s.batchTrackers[workerIndex]
+	// send batch if:
+	// 1. The default batch behavior is in place (send every time)
+	// 2. Any one of the conditions are met UNLESS the condition is zero which means never batch
+	return s.batchDefault ||
+		(f.bufferSize >= s.batchCfg.Messages && s.batchCfg.Messages > 0) ||
+		(f.bufferBytes >= s.batchCfg.Bytes && s.batchCfg.Bytes > 0) ||
+		(timeutil.Since(f.bufferInitTime) >= time.Duration(s.batchCfg.Frequency) && s.batchCfg.Frequency > 0)
+}
+
+func (s *webhookSink) workerLoop(workerIndex int) {
 	for {
 		select {
 		case <-s.workerCtx.Done():
 			return
-		case msg := <-workerCh:
-			err := s.sendMessageWithRetries(s.workerCtx, msg)
-			s.inflight.maybeSetError(err)
-			// reduce inflight count by one and reduce memory counter
-			s.inflight.FinishRequest(s.workerCtx, int64(len(msg)))
-			// shut down all other workers immediately if error encountered
-			if err != nil {
-				s.exitWorkers()
-				return
+		case msg := <-s.eventsChans[workerIndex]:
+			s.batchTrackers[workerIndex].addToBuffer(msg)
+			if s.shouldSendBatch(workerIndex) {
+				msgs := s.batchTrackers[workerIndex].emptyBufferAndReset()
+				encodedMsgs, err := encodePayloadWebhook(msgs)
+				if err == nil {
+					err = s.sendMessageWithRetries(s.workerCtx, encodedMsgs)
+				}
+				s.inflight.maybeSetError(err)
+				for _, m := range msgs {
+					// reduce inflight count by one and reduce memory counter
+					s.inflight.FinishRequest(s.workerCtx, int64(len(m)))
+				}
+				// shut down all other workers immediately if error encountered
+				if err != nil {
+					s.exitWorkers()
+					return
+				}
 			}
 		}
 	}
@@ -406,18 +513,13 @@ func (i *inflightTracker) Close(ctx context.Context) {
 func (s *webhookSink) EmitRow(
 	ctx context.Context, _ TopicDescriptor, key, value []byte, _ hlc.Timestamp,
 ) error {
-	j, err := encodePayloadWebhook(value)
-	if err != nil {
-		return err
-	}
-
 	// check if error has been encountered and exit if needed
-	err = s.inflight.hasError()
+	err := s.inflight.hasError()
 	if err != nil {
 		return err
 	}
 
-	err = s.inflight.StartRequest(ctx, int64(len(j)))
+	err = s.inflight.StartRequest(ctx, int64(len(value)))
 	if err != nil {
 		return err
 	}
@@ -428,7 +530,7 @@ func (s *webhookSink) EmitRow(
 		return s.workerCtx.Err()
 	case <-ctx.Done():
 		return ctx.Err()
-	case s.eventsChans[s.workerIndex(key)] <- j:
+	case s.eventsChans[s.workerIndex(key)] <- value:
 	}
 	return nil
 }

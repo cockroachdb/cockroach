@@ -104,7 +104,7 @@ type saramaConfig struct {
 	Flush struct {
 		Bytes       int          `json:",omitempty"`
 		Messages    int          `json:",omitempty"`
-		Frequency   jsonDuration `json:",omitempty"`
+		Frequency   JSONDuration `json:",omitempty"`
 		MaxMessages int          `json:",omitempty"`
 	}
 
@@ -141,7 +141,7 @@ func defaultSaramaConfig() *saramaConfig {
 	// The default configuration of all 0 values will send
 	// messages as quickly as possible.
 	config.Flush.Messages = 0
-	config.Flush.Frequency = jsonDuration(0)
+	config.Flush.Frequency = JSONDuration(0)
 	config.Flush.Bytes = 0
 
 	// This works around what seems to be a bug in sarama where it isn't
@@ -416,9 +416,12 @@ func makeTopicsMap(
 	return topics
 }
 
-type jsonDuration time.Duration
+// JSONDuration is an aliased type for unmarshalling a Duration object
+// from JSON
+type JSONDuration time.Duration
 
-func (j *jsonDuration) UnmarshalJSON(b []byte) error {
+// UnmarshalJSON unmarshals a JSON string field into a JSONDuration object
+func (j *JSONDuration) UnmarshalJSON(b []byte) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
@@ -427,7 +430,7 @@ func (j *jsonDuration) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	*j = jsonDuration(dur)
+	*j = JSONDuration(dur)
 	return nil
 }
 
