@@ -5061,7 +5061,12 @@ show_default_privileges_stmt:
     $$.val = &tree.ShowDefaultPrivileges{
       Roles: $4.nameList(),
     }
-}
+  }
+| SHOW DEFAULT PRIVILEGES FOR ALL ROLES {
+    $$.val = &tree.ShowDefaultPrivileges{
+      ForAllRoles: true,
+    }
+  }
 | SHOW DEFAULT PRIVILEGES error // SHOW HELP: SHOW DEFAULT PRIVILEGES
 
 // %Help: SHOW ENUMS - list enums
