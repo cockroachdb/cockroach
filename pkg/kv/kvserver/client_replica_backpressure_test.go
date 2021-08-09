@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -283,16 +283,16 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		// Use pgx so that cancellation does something reasonable.
 		url, cleanup := sqlutils.PGUrl(t, tc.Server(1).ServingSQLAddr(), "", url.User("root"))
 		defer cleanup()
-		conf, err := pgx.ParseConnectionString(url.String())
+		conf, err := pgx.ParseConfig(url.String())
 		require.NoError(t, err)
-		c, err := pgx.Connect(conf)
+		c, err := pgx.ConnectConfig(ctx, conf)
 		require.NoError(t, err)
 		ctxWithCancel, cancel := context.WithCancel(ctx)
 		defer cancel()
 		upsertErrCh := make(chan error)
 		_ = tc.Stopper().RunAsyncTask(ctx, "upsert", func(ctx context.Context) {
-			_, err := c.ExecEx(ctxWithCancel, "UPSERT INTO foo VALUES ($1, $2)",
-				nil /* options */, rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
+			_, err := c.Exec(ctxWithCancel, "UPSERT INTO foo VALUES ($1, $2)",
+				rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
 			upsertErrCh <- err
 		})
 
@@ -302,6 +302,6 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		case err := <-upsertErrCh:
 			t.Fatalf("expected no error because the request should hang, got %v", err)
 		}
-		require.Equal(t, context.Canceled, <-upsertErrCh)
+		require.Equal(t, context.Canceled, errors.Unwrap(<-upsertErrCh))
 	})
 }

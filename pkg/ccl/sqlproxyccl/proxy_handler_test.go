@@ -74,7 +74,7 @@ func TestLongDBName(t *testing.T) {
 	s, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "{{clusterName}}-0.cockroachdb:26257"})
 
 	longDB := strings.Repeat("x", 70) // 63 is limit
-	pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28", addr, longDB)
+	pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, longDB)
 	te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
 	require.Equal(t, int64(1), s.metrics.RoutingErrCount.Count())
 }
@@ -104,7 +104,7 @@ func TestBackendDownRetry(t *testing.T) {
 	_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$"})
 
 	// Valid connection, but no backend server running.
-	pgurl := fmt.Sprintf("postgres://unused:unused@%s/db?options=--cluster=dim-dog-28", addr)
+	pgurl := fmt.Sprintf("postgres://unused:unused@%s/db?options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "cluster dim-dog-28 not found")
 	require.Equal(t, 3, callCount)
 }
@@ -128,34 +128,35 @@ func TestFailedConnection(t *testing.T) {
 	u := fmt.Sprintf("postgres://unused:unused@localhost:%s/", p)
 
 	// Unencrypted connections bounce.
-	for _, sslmode := range []string{"disable", "allow"} {
-		te.TestConnectErr(
-			ctx, t, u+"?options=--cluster=dim-dog-28&sslmode="+sslmode,
-			codeUnexpectedInsecureStartupMessage, "server requires encryption",
-		)
-	}
+	te.TestConnectErr(
+		ctx, t, u+"?options=--cluster=dim-dog-28&sslmode=disable",
+		codeUnexpectedInsecureStartupMessage, "server requires encryption",
+	)
 	require.Equal(t, int64(0), s.metrics.RoutingErrCount.Count())
 
-	// TenantID rejected as malformed.
-	te.TestConnectErr(
-		ctx, t, u+"?options=--cluster=dimdog&sslmode=require",
-		codeParamsRoutingFailed, "invalid cluster name 'dimdog'",
-	)
-	require.Equal(t, int64(1), s.metrics.RoutingErrCount.Count())
+	sslModesUsingTLS := []string{"require", "allow"}
+	for i, sslmode := range sslModesUsingTLS {
+		// TenantID rejected as malformed.
+		te.TestConnectErr(
+			ctx, t, u+"?options=--cluster=dimdog&sslmode="+sslmode,
+			codeParamsRoutingFailed, "invalid cluster name 'dimdog'",
+		)
+		require.Equal(t, int64(1+(i*3)), s.metrics.RoutingErrCount.Count())
 
-	// No cluster name and TenantID.
-	te.TestConnectErr(
-		ctx, t, u+"?sslmode=require",
-		codeParamsRoutingFailed, "missing cluster name in connection string",
-	)
-	require.Equal(t, int64(2), s.metrics.RoutingErrCount.Count())
+		// No cluster name and TenantID.
+		te.TestConnectErr(
+			ctx, t, u+"?sslmode="+sslmode,
+			codeParamsRoutingFailed, "missing cluster name in connection string",
+		)
+		require.Equal(t, int64(2+(i*3)), s.metrics.RoutingErrCount.Count())
 
-	// Bad TenantID. Ensure that we don't leak any parsing errors.
-	te.TestConnectErr(
-		ctx, t, u+"?options=--cluster=dim-dog-foo3&sslmode=require",
-		codeParamsRoutingFailed, "invalid cluster name 'dim-dog-foo3'",
-	)
-	require.Equal(t, int64(3), s.metrics.RoutingErrCount.Count())
+		// Bad TenantID. Ensure that we don't leak any parsing errors.
+		te.TestConnectErr(
+			ctx, t, u+"?options=--cluster=dim-dog-foo3&sslmode="+sslmode,
+			codeParamsRoutingFailed, "invalid cluster name 'dim-dog-foo3'",
+		)
+		require.Equal(t, int64(3+(i*3)), s.metrics.RoutingErrCount.Count())
+	}
 }
 
 func TestUnexpectedError(t *testing.T) {
@@ -314,7 +315,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 
 	s, proxyAddr := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{})
 
-	u := fmt.Sprintf("postgres://bogususer@%s/?sslmode=require&authToken=abc123&options=--cluster=dim-dog-28", proxyAddr)
+	u := fmt.Sprintf("postgres://bogususer@%s/?sslmode=require&authToken=abc123&options=--cluster=dim-dog-28&sslmode=require", proxyAddr)
 	te.TestConnect(ctx, t, u, func(conn *pgx.Conn) {
 		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 		require.NoError(t, runTestQuery(ctx, conn))
@@ -339,10 +340,10 @@ func TestInsecureProxy(t *testing.T) {
 		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
 	)
 
-	url := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable&options=--cluster=dim-dog-28", addr)
+	url := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, 0, "ERROR: password authentication failed for user bob")
 
-	url = fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28", addr)
+	url = fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.NoError(t, runTestQuery(ctx, conn))
 	})
@@ -367,7 +368,7 @@ func TestErroneousFrontend(t *testing.T) {
 	defer stopper.Stop(ctx)
 	_, addr := newProxyServer(ctx, t, stopper, &ProxyOptions{})
 
-	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28", addr)
+	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
 
 	// Generic message here as the Frontend's error is not codeError and
 	// by default we don't pass back error's text. The startup message doesn't
@@ -392,7 +393,7 @@ func TestErroneousBackend(t *testing.T) {
 	defer stopper.Stop(ctx)
 	_, addr := newProxyServer(ctx, t, stopper, &ProxyOptions{})
 
-	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28", addr)
+	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
 
 	// Generic message here as the Backend's error is not codeError and
 	// by default we don't pass back error's text. The startup message has
@@ -417,7 +418,7 @@ func TestProxyRefuseConn(t *testing.T) {
 	defer stopper.Stop(ctx)
 	s, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{})
 
-	url := fmt.Sprintf("postgres://root:admin@%s?sslmode=require&options=--cluster=dim-dog-28", addr)
+	url := fmt.Sprintf("postgres://root:admin@%s?sslmode=require&options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, codeProxyRefusedConnection, "too many attempts")
 	require.Equal(t, int64(1), s.metrics.RefusedConnCount.Count())
 	require.Equal(t, int64(0), s.metrics.SuccessfulConnCount.Count())
@@ -472,7 +473,7 @@ func TestDenylistUpdate(t *testing.T) {
 	})
 	defer func() { _ = os.Remove(denyList.Name()) }()
 
-	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require&options=--cluster=dim-dog-28", addr)
+	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require&options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.Eventuallyf(
 			t,
@@ -939,7 +940,12 @@ func (te *tester) TestConnectErr(
 	t.Helper()
 	te.setAuthenticated(false)
 	te.setErrToClient(nil)
-	conn, err := pgx.Connect(ctx, url)
+	cfg, err := pgx.ParseConfig(url)
+	require.NoError(t, err)
+
+	// Prevent pgx from tying to connect to the `::1` ipv6 address for localhost.
+	cfg.LookupFunc = func(ctx context.Context, s string) ([]string, error) { return []string{s}, nil }
+	conn, err := pgx.ConnectConfig(ctx, cfg)
 	if err == nil {
 		_ = conn.Close(ctx)
 	}

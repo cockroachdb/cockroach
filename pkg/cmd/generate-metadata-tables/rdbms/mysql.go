@@ -14,6 +14,7 @@
 package rdbms
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"regexp"
@@ -53,15 +54,19 @@ func mysqlConnect(address, user, catalog string) (DBMetadataConnection, error) {
 	return mysqlMetadataConnection{db, catalog}, nil
 }
 
-func (conn mysqlMetadataConnection) DatabaseVersion() (version string, err error) {
-	row := conn.QueryRow("SELECT version()")
+func (conn mysqlMetadataConnection) DatabaseVersion(
+	ctx context.Context,
+) (version string, err error) {
+	row := conn.QueryRowContext(ctx, "SELECT version()")
 	err = row.Scan(&version)
 	return version, err
 }
 
-func (conn mysqlMetadataConnection) DescribeSchema() (*ColumnMetadataList, error) {
+func (conn mysqlMetadataConnection) DescribeSchema(
+	ctx context.Context,
+) (*ColumnMetadataList, error) {
 	metadata := &ColumnMetadataList{exclusions: mysqlExclusions}
-	rows, err := conn.Query(mysqlDescribeSchema, conn.catalog)
+	rows, err := conn.QueryContext(ctx, mysqlDescribeSchema, conn.catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -78,4 +83,8 @@ func (conn mysqlMetadataConnection) DescribeSchema() (*ColumnMetadataList, error
 	}
 
 	return metadata, nil
+}
+
+func (conn mysqlMetadataConnection) Close(ctx context.Context) error {
+	return conn.DB.Close()
 }
