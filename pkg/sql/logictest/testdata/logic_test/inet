@@ -877,3 +877,15 @@ query T
 SELECT host(max('192.168.0.2/24'::INET)) FROM (VALUES (1)) AS t(x)
 ----
 192.168.0.2
+
+subtest regression_68578
+
+# These address formats are valid in pg, even though they are not valid in Go.
+# This test ensures that they remain recognized even when Go does not support them any more.
+query TTT
+SELECT '127.001.002.003'::INET, '127.001.002.003/016'::INET, '010.001.002.003'::INET
+----
+127.1.2.3 127.1.2.3/16 10.1.2.3
+
+subtest end
+
