@@ -143,7 +143,7 @@ func TestWorkQueueBasic(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				tg = &testGranter{buf: &buf}
-				q = makeWorkQueue(KVWork, tg, false, true, nil).(*WorkQueue)
+				q = makeWorkQueue(KVWork, tg, nil, makeWorkQueueOptions(KVWork)).(*WorkQueue)
 				tg.r = q
 				workMap.workMap = make(map[int]*testWork)
 				return ""
