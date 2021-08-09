@@ -128,7 +128,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	for _, rng := range ranges {
 		if rng.end != nil {
-			if err := txn.DelRange(ctx, rng.start, rng.end); err != nil {
+			if _, err := txn.DelRange(ctx, rng.start, rng.end, false); err != nil {
 				t.Fatal(err)
 			}
 		} else {
@@ -857,7 +857,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("w"))
+	_, pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("w"), false)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1725,7 +1725,10 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			pointWrite: true,
 		},
 		{
-			f:          func(ctx context.Context, txn *kv.Txn) error { return txn.DelRange(ctx, "a", "b") },
+			f: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.DelRange(ctx, "a", "b", false)
+				return err
+			},
 			expMethod:  roachpb.DeleteRange,
 			pointWrite: false,
 		},
