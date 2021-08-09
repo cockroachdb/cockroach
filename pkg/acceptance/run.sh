@@ -12,4 +12,4 @@ export TMPDIR=$PWD/artifacts/acceptance
 
 # For the acceptance tests that run without Docker.
 make build
-make test PKG=./pkg/acceptance TESTTIMEOUT="${TESTTIMEOUT-30m}" TAGS=acceptance TESTFLAGS="${TESTFLAGS--v} -l $TMPDIR"
+make test PKG=./pkg/acceptance TESTTIMEOUT="${TESTTIMEOUT-30m}" TAGS=acceptance TESTFLAGS="${TESTFLAGS--v} -b $PWD/cockroach-linux-2.6.32-gnu-amd64 -l $TMPDIR"

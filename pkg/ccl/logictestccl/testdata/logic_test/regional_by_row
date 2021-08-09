@@ -926,7 +926,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0{-/NULL}, /Table/75/1/"\x80"/10/0{-/NULL}, /Table/75/1/"\xc0"/10/0{-/NULL}
+Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
@@ -956,7 +956,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0{-/NULL}, /Table/75/1/"\x80"/10/0{-/NULL}, /Table/75/1/"\xc0"/10/0{-/NULL}
+Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
@@ -987,7 +987,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0{-/NULL}, /Table/75/1/"\x80"/10/0{-/NULL}, /Table/75/1/"\xc0"/10/0{-/NULL}
+Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
@@ -1018,7 +1018,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0{-/NULL}, /Table/75/1/"\x80"/10/0{-/NULL}, /Table/75/1/"\xc0"/10/0{-/NULL}
+Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL

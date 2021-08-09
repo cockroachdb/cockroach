@@ -62,12 +62,21 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
 	if n.Block {
 		sqlStmt = fmt.Sprintf(
-			`SELECT * FROM [%s]
-			 WHERE
-			    IF(finished IS NULL,
-			      IF(pg_sleep(1), crdb_internal.force_retry('24h'), 0),
-			      0
-			    ) = 0`, sqlStmt)
+			`
+    WITH jobs AS (SELECT * FROM [%s]),
+       sleep_and_restart_if_unfinished AS (
+              SELECT IF(pg_sleep(1), crdb_internal.force_retry('24h'), 1)
+                     = 0 AS timed_out
+                FROM (SELECT job_id FROM jobs WHERE finished IS NULL LIMIT 1)
+             ),
+       fail_if_slept_too_long AS (
+                SELECT crdb_internal.force_error('55000', 'timed out waiting for jobs')
+                  FROM sleep_and_restart_if_unfinished
+                 WHERE timed_out
+              )
+SELECT *
+  FROM jobs
+ WHERE NOT EXISTS(SELECT * FROM fail_if_slept_too_long)`, sqlStmt)
 	}
 	return parse(sqlStmt)
 }
