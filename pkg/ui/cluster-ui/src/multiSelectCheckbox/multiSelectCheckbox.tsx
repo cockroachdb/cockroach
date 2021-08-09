@@ -15,11 +15,6 @@ import classNames from "classnames/bind";
 
 const cx = classNames.bind(styles);
 
-const defaultSelectProps = {
-  searchable: false,
-  clearable: false,
-};
-
 export interface SelectOption {
   label: string;
   value: string;
@@ -122,7 +117,6 @@ export const MultiSelectCheckbox = (props: MultiSelectCheckboxProps) => {
       closeMenuOnSelect={false}
       components={{ Option: CheckboxOption }}
       styles={customStyles}
-      {...defaultSelectProps}
     />
   );
 };

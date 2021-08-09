@@ -26,10 +26,12 @@ import {
 } from "./statementsPage";
 import {
   selectApps,
+  selectDatabases,
   selectLastReset,
   selectStatements,
   selectStatementsLastError,
   selectTotalFingerprints,
+  selectColumns,
 } from "./statementsPage.selectors";
 import { AggregateStatistics } from "../statementsTable";
 
@@ -43,8 +45,10 @@ export const ConnectedStatementsPage = withRouter(
       statements: selectStatements(state, props),
       statementsError: selectStatementsLastError(state),
       apps: selectApps(state),
+      databases: selectDatabases(state),
       totalFingerprints: selectTotalFingerprints(state),
       lastReset: selectLastReset(state),
+      columns: selectColumns(state),
     }),
     (dispatch: Dispatch) => ({
       refreshStatements: () => dispatch(statementActions.refresh()),
@@ -108,6 +112,18 @@ export const ConnectedStatementsPage = withRouter(
           analyticsActions.track({
             name: "Statement Clicked",
             page: "Statements",
+          }),
+        ),
+      // We use `null` when the value was never set and it will show all columns.
+      // If the user modifies the selection and no columns are selected,
+      // the function will save the value as a blank space, otherwise
+      // it gets saved as `null`.
+      onColumnsChange: (selectedColumns: string[]) =>
+        dispatch(
+          localStorageActions.update({
+            key: "showColumns/StatementsPage",
+            value:
+              selectedColumns.length === 0 ? " " : selectedColumns.join(","),
           }),
         ),
     }),

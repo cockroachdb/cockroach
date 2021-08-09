@@ -80,6 +80,7 @@ const statementStats: any = {
     seconds: Long.fromInt(1599670292),
     nanos: 111613000,
   },
+  database: "defaultdb",
   sensitive_info: {
     last_err: "",
     most_recent_plan_description: {
@@ -125,39 +126,46 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
     state: null,
   },
   match: {
-    path: "/statement/:implicitTxn/:statement",
-    url: "/statement/true/SELECT city%2C id FROM vehicles WHERE city %3D %241",
+    path: "/statement/:database/:implicitTxn/:statement",
+    url:
+      "/statement/defaultdb/true/SELECT city%2C id FROM vehicles WHERE city %3D %241",
     isExact: true,
     params: {
       implicitTxn: "true",
       statement: "SELECT city%2C id FROM vehicles WHERE city %3D %241",
+      database: "defaultdb",
     },
   },
   statement: {
     statement: "SELECT city, id FROM vehicles WHERE city = $1",
     stats: statementStats,
+    database: "defaultdb",
     byNode: [
       {
         label: "4",
         implicitTxn: true,
+        database: "defaultdb",
         fullScan: true,
         stats: statementStats,
       },
       {
         label: "3",
         implicitTxn: true,
+        database: "defaultdb",
         fullScan: true,
         stats: statementStats,
       },
       {
         label: "2",
         implicitTxn: true,
+        database: "defaultdb",
         fullScan: true,
         stats: statementStats,
       },
       {
         label: "1",
         implicitTxn: true,
+        database: "defaultdb",
         fullScan: true,
         stats: statementStats,
       },

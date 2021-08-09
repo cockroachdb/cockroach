@@ -762,12 +762,12 @@ SELECT * FROM t_53504
 query ITTTI colnames
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
 ----
-node_id  application_name     key                   statement_ids                                                     count
-1        test_txn_statistics  4572719807723346491   {14727561584397653505,14727561584397653505}                       2
-1        test_txn_statistics  6826443595058283584   {14727561584397653505,14727561584397653505,14727561584397653505}  1
-1        test_txn_statistics  7134109142904971730   {14727561584397653517}                                            1
-1        test_txn_statistics  7134109142904971742   {14727561584397653505}                                            1
-1        test_txn_statistics  10166963080898232577  {2484845987516053214}                                             1
+node_id  application_name     key                   statement_ids                                                  count
+1        test_txn_statistics  10922505138341351577  {4104808689124681542}                                          1
+1        test_txn_statistics  12762606372390135532  {8833422719858486605,8833422719858486605,8833422719858486605}  1
+1        test_txn_statistics  15417266716795083410  {8833422719858486605}                                          1
+1        test_txn_statistics  15417266716795083422  {8833422719858486593}                                          1
+1        test_txn_statistics  17236010932163349339  {8833422719858486605,8833422719858486605}                      2
 
 ## crdb_internal.cluster_database_privileges
 subtest cluster_database_privileges
