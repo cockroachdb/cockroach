@@ -108,7 +108,7 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c *cluster, binary str
 		select {
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
-		case <-tn.errCh:
+		case err := <-tn.errCh:
 			t.Fatal(err)
 		default:
 		}
