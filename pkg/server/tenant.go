@@ -77,12 +77,6 @@ func StartTenant(
 		nil, // tlsConfig
 		nil, // handler
 	)
-	knobs := baseCfg.TestingKnobs.TenantTestingKnobs
-	if tenantKnobs, ok := knobs.(*sql.TenantTestingKnobs); ok && tenantKnobs.IdleExitCountdownDuration != 0 {
-		SetupIdleMonitor(ctx, args.stopper, baseCfg.IdleExitAfter, connManager, tenantKnobs.IdleExitCountdownDuration)
-	} else {
-		SetupIdleMonitor(ctx, args.stopper, baseCfg.IdleExitAfter, connManager)
-	}
 
 	pgL, err := ListenAndUpdateAddrs(ctx, &args.Config.SQLAddr, &args.Config.SQLAdvertiseAddr, "sql")
 	if err != nil {
