@@ -157,6 +157,10 @@ export function addStatementStats(
     legacy_last_err_redacted: "",
     exec_stats: addExecStats(a.exec_stats, b.exec_stats),
     sql_type: a.sql_type,
+    last_exec_timestamp:
+      a.last_exec_timestamp.seconds > b.last_exec_timestamp.seconds
+        ? a.last_exec_timestamp
+        : b.last_exec_timestamp,
   };
 }
 

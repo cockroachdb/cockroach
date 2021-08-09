@@ -57,6 +57,7 @@ import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import styles from "./statementDetails.module.scss";
 import { NodeSummaryStats } from "../nodes";
 import { UIConfigState } from "../store/uiConfig";
+import moment from "moment";
 
 const { TabPane } = Tabs;
 
@@ -446,6 +447,9 @@ export class StatementDetails extends React.Component<
       stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
     const duration = (v: number) => Duration(v * 1e9);
     const hasDiagnosticReports = diagnosticsReports.length > 0;
+    const lastExec = moment(stats.last_exec_timestamp.seconds.low * 1e3).format(
+      "MMM DD, YYYY HH:MM",
+    );
     return (
       <Tabs
         defaultActiveKey="1"
@@ -573,6 +577,10 @@ export class StatementDetails extends React.Component<
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Transaction type</Text>
                   <Text>{renderTransactionType(implicit_txn)}</Text>
+                </div>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text>Last execution time</Text>
+                  <Text>{lastExec}</Text>
                 </div>
                 <p
                   className={summaryCardStylesCx(

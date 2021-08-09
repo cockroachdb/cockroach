@@ -87,6 +87,10 @@ const statementStats: Required<IStatementStatistics> = {
     "squared_diffs": 1,
   },
   exec_stats: execStats,
+  "last_exec_timestamp": {
+    seconds: Long.fromInt(1599670292),
+    nanos: 111613000,
+  },
   "sensitive_info": {
     "last_err": "",
     "most_recent_plan_description": {
