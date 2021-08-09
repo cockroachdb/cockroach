@@ -2,13 +2,15 @@
 
 set -euo pipefail
 
-source "$(dirname "${0}")/teamcity-support.sh"  # For $root
-source "$(dirname "${0}")/teamcity-bazel-support.sh"  # For run_bazel
+dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
+
+source "$dir/teamcity-support.sh"  # For $root
+source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 
 tc_prepare
 
 tc_start_block "Run Bazel build"
-run_bazel build/bazelutil/bazelbuild.sh crosslinux
+run_bazel build/teamcity/cockroach/ci/builds/build_impl.sh crosslinux
 tc_end_block "Run Bazel build"
 
 set +e

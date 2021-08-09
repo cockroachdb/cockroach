@@ -4,7 +4,7 @@ set -xeuo pipefail
 
 if [ -z "$1" ]
 then
-    echo 'Usage: bazelbuild.sh CONFIG'
+    echo 'Usage: build_impl.sh CONFIG'
     exit 1
 fi
 
