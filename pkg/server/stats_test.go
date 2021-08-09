@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -28,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,14 +109,29 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
+	sqlConn := sqlutils.MakeSQLRunner(sqlDB)
+
+	tcs := []struct {
+		stmt        string
+		fingerprint string
+	}{
+		{
+			stmt:        "SELECT 1",
+			fingerprint: "SELECT _",
+		},
+		{
+			stmt:        "SELECT 1, 1",
+			fingerprint: "SELECT _, _",
+		},
+		{
+			stmt:        "SELECT 1, 1, 1",
+			fingerprint: "SELECT _, _, _",
+		},
+	}
+
 	// Run some queries against the database.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (x INT PRIMARY KEY);
-INSERT INTO t.test VALUES (1);
-INSERT INTO t.test VALUES (2);
-`); err != nil {
-		t.Fatal(err)
+	for _, tc := range tcs {
+		sqlConn.Exec(t, tc.stmt)
 	}
 
 	statusServer := s.(*TestServer).status
@@ -129,17 +143,18 @@ INSERT INTO t.test VALUES (2);
 			t.Fatal(err)
 		}
 
-		found := false
+		foundFingerprintCnt := 0
 		for _, stat := range res.SqlStats {
 			// These stats are scrubbed, so look for our scrubbed statement.
-			if strings.HasPrefix(stat.Key.Query, "INSERT INTO _ VALUES (_)") {
-				found = true
+			for _, tc := range tcs {
+				if tc.fingerprint == stat.Key.Query {
+					foundFingerprintCnt++
+					break
+				}
 			}
 		}
 
-		if !found {
-			return errors.New("expected to find query stats, but didn't")
-		}
+		require.Equal(t, len(tcs), foundFingerprintCnt, "expected to find query stats, but didn't")
 
 		// We should also not find the stat in the SQL stats pool, since the SQL
 		// stats are getting flushed.
@@ -147,9 +162,8 @@ INSERT INTO t.test VALUES (2);
 		require.NoError(t, err)
 
 		for _, stat := range stats {
-			// These stats are scrubbed, so look for our scrubbed statement.
-			if strings.HasPrefix(stat.Key.Query, "INSERT INTO _ VALUES (_)") {
-				t.Error("expected to not find stat, but did")
+			for _, tc := range tcs {
+				require.NotEqual(t, tc.fingerprint, stat.Key.Query, "expected to not found %s in stats, bud did", stat.Key.Query)
 			}
 		}
 		return nil
