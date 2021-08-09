@@ -564,7 +564,9 @@ func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
 	if err != nil {
 		return rk, err
 	}
-	if IsLocal(k) {
+	// If k is the RangeKeyPrefix, it excludes all range local keys under rk.
+	// The Next() is not necessary.
+	if IsLocal(k) && !k.Equal(MakeRangeKeyPrefix(rk)) {
 		// The upper bound for a range-local key that addresses to key k
 		// is the key directly after k.
 		rk = rk.Next()

@@ -121,6 +121,30 @@ func TestKeyAddress(t *testing.T) {
 	}
 }
 
+func TestKeyAddressUpperBound(t *testing.T) {
+	testCases := []struct {
+		key        roachpb.Key
+		expAddress roachpb.RKey
+	}{
+		{roachpb.Key{}, roachpb.RKeyMin},
+		{roachpb.Key("123"), roachpb.RKey("123")},
+		{MakeRangeKeyPrefix(roachpb.RKey("foo")), roachpb.RKey("foo")},
+		{RangeDescriptorKey(roachpb.RKey("foo")), roachpb.RKey("foo").Next()},
+		{MakeRangeKeyPrefix(roachpb.RKey("baz")), roachpb.RKey("baz")},
+		{TransactionKey(roachpb.Key("baz"), uuid.MakeV4()), roachpb.RKey("baz").Next()},
+		{TransactionKey(roachpb.KeyMax, uuid.MakeV4()), roachpb.RKeyMax.Next()},
+		{RangeDescriptorKey(roachpb.RKey(TransactionKey(roachpb.Key("doubleBaz"), uuid.MakeV4()))), roachpb.RKey("doubleBaz").Next()},
+		{nil, nil},
+	}
+	for i, test := range testCases {
+		if keyAddr, err := AddrUpperBound(test.key); err != nil {
+			t.Errorf("%d: %v", i, err)
+		} else if !keyAddr.Equal(test.expAddress) {
+			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
+		}
+	}
+}
+
 func TestKeyAddressError(t *testing.T) {
 	testCases := map[string][]roachpb.Key{
 		"store-local key .* is not addressable": {
