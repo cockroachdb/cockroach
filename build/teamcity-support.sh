@@ -1,7 +1,7 @@
 # Common helpers for teamcity-*.sh scripts.
 
 # root is the absolute path to the root directory of the repository.
-root=$(cd "$(dirname "$0")/.." && pwd)
+root="$(dirname $(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ))"
 
 source "$root/build/teamcity-common-support.sh"
 
@@ -112,13 +112,21 @@ function run_json_test() {
   return $status
 }
 
-function maybe_stress() {
+function would_stress() {
   # Don't stressrace on the release branches; we only want that to happen on the
   # PRs. There's no need in making master flakier than it needs to be; nightly
   # stress will weed out the flaky tests.
-  # NB: as a consequence of the above, this code doesn't know about posting
-  # Github issues.
   if tc_release_branch; then
+    return 1
+  else
+    return 0
+  fi
+}
+
+function maybe_stress() {
+   # NB: This code doesn't know about posting Github issues as we don't stress on
+   # the release branches.
+  if ! would_stress; then
     return 0
   fi
 
