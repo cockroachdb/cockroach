@@ -82,14 +82,23 @@ func parseAddr(addr string) (string, error) {
 	return fmt.Sprintf("%s:%s", ip, port), nil
 }
 
-func (d *dev) getWorkspace(ctx context.Context) (string, error) {
-	args := []string{"info", "workspace", "--color=no"}
+func (d *dev) getBazelInfo(ctx context.Context, key string) (string, error) {
+	args := []string{"info", key, "--color=no"}
 	args = append(args, getConfigFlags()...)
 	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+
+}
+
+func (d *dev) getWorkspace(ctx context.Context) (string, error) {
+	return d.getBazelInfo(ctx, "workspace")
+}
+
+func (d *dev) getBazelBin(ctx context.Context) (string, error) {
+	return d.getBazelInfo(ctx, "bazel-bin")
 }
 
 func getConfigFlags() []string {
