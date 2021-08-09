@@ -51,7 +51,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"

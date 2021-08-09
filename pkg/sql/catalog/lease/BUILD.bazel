@@ -98,7 +98,7 @@ go_test(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
-        "@com_github_cockroachdb_cockroach_go//crdb",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_lib_pq//:pq",

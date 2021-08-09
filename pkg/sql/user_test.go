@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgtype"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 )
 
 // TestGetUserHashedPasswordTimeout verifies that user login attempts
