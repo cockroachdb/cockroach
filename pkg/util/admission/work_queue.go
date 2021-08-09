@@ -168,17 +168,44 @@ type WorkQueue struct {
 
 var _ requester = &WorkQueue{}
 
+type workQueueOptions struct {
+	usesTokens  bool
+	tiedToRange bool
+	// If non-nil, the WorkQueue should use the supplied metrics instead of
+	// creating its own.
+	metrics *WorkQueueMetrics
+}
+
+func makeWorkQueueOptions(workKind WorkKind) workQueueOptions {
+	switch workKind {
+	case KVWork:
+		return workQueueOptions{usesTokens: false, tiedToRange: true}
+	case SQLKVResponseWork, SQLSQLResponseWork:
+		return workQueueOptions{usesTokens: true, tiedToRange: false}
+	case SQLStatementLeafStartWork, SQLStatementRootStartWork:
+		return workQueueOptions{usesTokens: false, tiedToRange: false}
+	default:
+		panic(errors.AssertionFailedf("unexpected workKind %d", workKind))
+	}
+}
+
 func makeWorkQueue(
-	workKind WorkKind, granter granter, usesTokens bool, tiedToRange bool, settings *cluster.Settings,
+	workKind WorkKind, granter granter, settings *cluster.Settings, opts workQueueOptions,
 ) requester {
 	gcStopCh := make(chan struct{})
+	var metrics WorkQueueMetrics
+	if opts.metrics == nil {
+		metrics = makeWorkQueueMetrics(string(workKindString(workKind)))
+	} else {
+		metrics = *opts.metrics
+	}
 	q := &WorkQueue{
 		workKind:    workKind,
 		granter:     granter,
-		usesTokens:  usesTokens,
-		tiedToRange: tiedToRange,
+		usesTokens:  opts.usesTokens,
+		tiedToRange: opts.tiedToRange,
 		settings:    settings,
-		metrics:     makeWorkQueueMetrics(string(workKindString(workKind))),
+		metrics:     metrics,
 		gcStopCh:    gcStopCh,
 	}
 	q.mu.tenants = make(map[uint64]*tenantInfo)
@@ -681,7 +708,9 @@ func addName(name string, meta metric.Metadata) metric.Metadata {
 	return rv
 }
 
-// WorkQueueMetrics are metrics associated with a WorkQueue.
+// WorkQueueMetrics are metrics associated with a WorkQueue. These can be
+// shared across WorkQueues, so Gauges should only be updated using deltas
+// instead of by setting values.
 type WorkQueueMetrics struct {
 	Requested       *metric.Counter
 	Admitted        *metric.Counter

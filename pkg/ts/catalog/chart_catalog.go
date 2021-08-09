@@ -2678,6 +2678,9 @@ var charts = []sectionDescription{
 					"admission.requested.kv",
 					"admission.admitted.kv",
 					"admission.errored.kv",
+					"admission.requested.kv-stores",
+					"admission.admitted.kv-stores",
+					"admission.errored.kv-stores",
 					"admission.requested.sql-kv-response",
 					"admission.admitted.sql-kv-response",
 					"admission.errored.sql-kv-response",
@@ -2696,6 +2699,7 @@ var charts = []sectionDescription{
 				Title: "Work Queue Length",
 				Metrics: []string{
 					"admission.wait_queue_length.kv",
+					"admission.wait_queue_length.kv-stores",
 					"admission.wait_queue_length.sql-kv-response",
 					"admission.wait_queue_length.sql-sql-response",
 					"admission.wait_queue_length.sql-leaf-start",
@@ -2706,6 +2710,7 @@ var charts = []sectionDescription{
 				Title: "Work Queue Admission Latency Sum",
 				Metrics: []string{
 					"admission.wait_sum.kv",
+					"admission.wait_sum.kv-stores",
 					"admission.wait_sum.sql-kv-response",
 					"admission.wait_sum.sql-sql-response",
 					"admission.wait_sum.sql-leaf-start",
@@ -2716,6 +2721,7 @@ var charts = []sectionDescription{
 				Title: "Work Queue Latency Distribution",
 				Metrics: []string{
 					"admission.wait_durations.kv",
+					"admission.wait_durations.kv-stores",
 					"admission.wait_durations.sql-kv-response",
 					"admission.wait_durations.sql-sql-response",
 					"admission.wait_durations.sql-leaf-start",
