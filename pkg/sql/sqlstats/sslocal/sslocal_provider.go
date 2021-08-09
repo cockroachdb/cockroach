@@ -111,6 +111,7 @@ func (s *SQLStats) GetWriterForApplication(appName string) sqlstats.Writer {
 		&s.atomic.uniqueStmtFingerprintCount,
 		&s.atomic.uniqueTxnFingerprintCount,
 		s.mu.mon,
+		appName,
 	)
 	s.mu.apps[appName] = a
 	return a
@@ -127,34 +128,43 @@ func (s *SQLStats) GetLastReset() time.Time {
 func (s *SQLStats) IterateStatementStats(
 	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
 ) error {
-	appNames := s.getAppNames(options.SortedAppNames)
+	iter := s.StmtStatsIterator(options)
 
-	for _, appName := range appNames {
-		statsContainer := s.getStatsForApplication(appName)
-
-		err := statsContainer.IterateStatementStats(ctx, appName, options.SortedKey, visitor)
-		if err != nil {
-			return fmt.Errorf("sql stats iteration abort: %s", err)
+	for iter.Next() {
+		if err := visitor(ctx, iter.Cur()); err != nil {
+			return err
 		}
 	}
+
 	return nil
+}
+
+// StmtStatsIterator returns an instance of sslocal.StmtStatsIterator for
+// the current SQLStats.
+func (s *SQLStats) StmtStatsIterator(options *sqlstats.IteratorOptions) *StmtStatsIterator {
+	return NewStmtStatsIterator(s, options)
 }
 
 // IterateTransactionStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateTransactionStats(
 	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
 ) error {
-	appNames := s.getAppNames(options.SortedAppNames)
+	iter := s.TxnStatsIterator(options)
 
-	for _, appName := range appNames {
-		statsContainer := s.getStatsForApplication(appName)
-
-		err := statsContainer.IterateTransactionStats(ctx, appName, options.SortedKey, visitor)
-		if err != nil {
-			return fmt.Errorf("sql stats iteration abort: %s", err)
+	for iter.Next() {
+		fingerprintID, stats := iter.Cur()
+		if err := visitor(ctx, fingerprintID, stats); err != nil {
+			return err
 		}
 	}
+
 	return nil
+}
+
+// TxnStatsIterator returns an instance of sslocal.TxnStatsIterator for
+// the current SQLStats.
+func (s *SQLStats) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStatsIterator {
+	return NewTxnStatsIterator(s, options)
 }
 
 // IterateAggregatedTransactionStats implements sqlstats.Provider interface.
