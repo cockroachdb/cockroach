@@ -134,7 +134,7 @@ func TestCompare(t *testing.T) {
 				if !ok {
 					t.Fatalf("bad connection name: %s", testCn.name)
 				}
-				conn, err := cmpconn.NewConnWithMutators(uri.addr, rng, testCn.mutators)
+				conn, err := cmpconn.NewConnWithMutators(ctx, uri.addr, rng, testCn.mutators)
 				if err != nil {
 					t.Fatal(err)
 				}

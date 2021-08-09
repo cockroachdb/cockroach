@@ -13,7 +13,7 @@ package clisqlclient
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 )
 
 // sqlTxnShim implements the crdb.Tx interface.

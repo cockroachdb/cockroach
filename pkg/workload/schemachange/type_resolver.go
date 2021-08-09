@@ -19,14 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq/oid"
 )
 
 // txTypeResolver is a minimal type resolver to support writing enum values to
 // columns.
 type txTypeResolver struct {
-	tx *pgx.Tx
+	tx pgx.Tx
 }
 
 // ResolveType implements the TypeReferenceResolver interface.
@@ -37,7 +37,7 @@ func (t txTypeResolver) ResolveType(
 ) (*types.T, error) {
 
 	if name.HasExplicitSchema() {
-		rows, err := t.tx.Query(`
+		rows, err := t.tx.Query(ctx, `
   SELECT enumlabel, enumsortorder, pgt.oid::int
     FROM pg_enum AS pge, pg_type AS pgt, pg_namespace AS pgn
    WHERE (pgt.typnamespace = pgn.oid AND pgt.oid = pge.enumtypid)
@@ -88,7 +88,7 @@ ORDER BY enumsortorder`, name.Object(), name.Schema())
 
 	// Since the type is not a user defined schema type, it is a primitive type.
 	var objectID oid.Oid
-	if err := t.tx.QueryRow(`
+	if err := t.tx.QueryRow(ctx, `
   SELECT oid::int
     FROM pg_type
    WHERE typname = $1

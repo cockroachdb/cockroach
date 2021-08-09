@@ -159,7 +159,7 @@ func (w *indexes) Ops(
 	cfg := workload.MultiConnPoolCfg{
 		MaxTotalConnections: w.connFlags.Concurrency + 1,
 	}
-	mcp, err := workload.NewMultiConnPool(cfg, urls...)
+	mcp, err := workload.NewMultiConnPool(ctx, cfg, w.connFlags, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}

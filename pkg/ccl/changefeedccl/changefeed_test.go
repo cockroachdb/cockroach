@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -2342,8 +2342,21 @@ func TestChangefeedDataTTL(t *testing.T) {
 		// finishing.
 		atomic.StoreInt32(&shouldWait, 1)
 
-		dataExpiredRows := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo")
-		defer closeFeed(t, dataExpiredRows)
+		// The changefeed needs to be initialized in a background goroutine because
+		// pgx will try to pull results from it as soon as it runs the conn.Query
+		// method, but that will block until `resume` is signaled.
+		changefeedInit := make(chan cdctest.TestFeed, 1)
+		var dataExpiredRows cdctest.TestFeed
+		defer func() {
+			if dataExpiredRows != nil {
+				closeFeed(t, dataExpiredRows)
+			}
+		}()
+		go func() {
+			changefeed := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo")
+			changefeedInit <- changefeed
+			close(changefeedInit)
+		}()
 
 		// Ensure our changefeed is started and waiting during the backfill.
 		<-wait
@@ -2362,6 +2375,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 		// Resume our changefeed normally.
 		atomic.StoreInt32(&shouldWait, 0)
 		resume <- struct{}{}
+		dataExpiredRows = <-changefeedInit
 
 		// Verify that, at some point, Next() returns a "must
 		// be after replica GC threshold" error. In the common

@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
 
 var printUnknown = flag.Bool("unknown", false, "print unknown types during walk")
@@ -60,15 +60,11 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 			RawQuery: options.Encode(),
 		}
 
-		conf, err := pgx.ParseURI(url.String())
+		db, err := pgx.Connect(ctx, url.String())
 		if err != nil {
 			panic(err)
 		}
-		db, err := pgx.Connect(conf)
-		if err != nil {
-			panic(err)
-		}
-		_, err = db.ExecEx(ctx, string(f), nil)
+		_, err = db.Exec(ctx, string(f))
 		if err == nil {
 			return false
 		}

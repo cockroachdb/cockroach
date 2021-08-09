@@ -25,7 +25,7 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
-	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -46,7 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
 
 type sinklessFeedFactory struct {
@@ -69,7 +69,7 @@ func (f *sinklessFeedFactory) Feed(create string, args ...interface{}) (cdctest.
 	sink.Path = `d`
 	// Use pgx directly instead of database/sql so we can close the conn
 	// (instead of returning it to the pool).
-	pgxConfig, err := pgx.ParseConnectionString(sink.String())
+	pgxConfig, err := pgx.ParseConfig(sink.String())
 	if err != nil {
 		return nil, err
 	}
@@ -119,12 +119,14 @@ type sinklessFeed struct {
 	seenTrackerMap
 	create  string
 	args    []interface{}
-	connCfg pgx.ConnConfig
+	connCfg *pgx.ConnConfig
 
 	conn           *pgx.Conn
-	rows           *pgx.Rows
+	rows           pgx.Rows
 	latestResolved hlc.Timestamp
 }
+
+var _ cdctest.TestFeed = (*sinklessFeed)(nil)
 
 // Partitions implements the TestFeed interface.
 func (c *sinklessFeed) Partitions() []string { return []string{`sinkless`} }
@@ -162,8 +164,9 @@ func (c *sinklessFeed) Next() (*cdctest.TestFeedMessage, error) {
 
 // Resume implements the TestFeed interface.
 func (c *sinklessFeed) start() error {
+	ctx := context.Background()
 	var err error
-	c.conn, err = pgx.Connect(c.connCfg)
+	c.conn, err = pgx.ConnectConfig(ctx, c.connCfg)
 	if err != nil {
 		return err
 	}
@@ -183,14 +186,14 @@ func (c *sinklessFeed) start() error {
 			create += fmt.Sprintf(` WITH cursor='%s'`, c.latestResolved.AsOfSystemTime())
 		}
 	}
-	c.rows, err = c.conn.Query(create, c.args...)
+	c.rows, err = c.conn.Query(ctx, create, c.args...)
 	return err
 }
 
 // Close implements the TestFeed interface.
 func (c *sinklessFeed) Close() error {
 	c.rows = nil
-	return c.conn.Close()
+	return c.conn.Close(context.Background())
 }
 
 // reportErrorResumer is a job resumer which reports OnFailOrCancel events.
@@ -610,6 +613,8 @@ type tableFeed struct {
 	toSend []*cdctest.TestFeedMessage
 }
 
+var _ cdctest.TestFeed = (*tableFeed)(nil)
+
 // Partitions implements the TestFeed interface.
 func (c *tableFeed) Partitions() []string {
 	// The sqlSink hardcodes these.
@@ -787,6 +792,8 @@ type cloudFeed struct {
 	resolved string
 	rows     []cloudFeedEntry
 }
+
+var _ cdctest.TestFeed = (*cloudFeed)(nil)
 
 const cloudFeedPartition = ``
 

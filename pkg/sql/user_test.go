@@ -30,8 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgtype"
+	"github.com/jackc/pgx/v4"
 )
 
 // TestGetUserHashedPasswordTimeout verifies that user login attempts
@@ -110,7 +109,7 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 		unauthURL.User = url.User("foo")
 		dbSQL, err := pgxConn(t, unauthURL)
 		if err == nil {
-			defer func() { _ = dbSQL.Close() }()
+			defer func() { _ = dbSQL.Close(ctx) }()
 		}
 		if !testutils.IsError(err, "password authentication failed for user foo") {
 			t.Fatalf("expected password error, got %v", err)
@@ -123,8 +122,8 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = dbSQL.Close() }()
-		row := dbSQL.QueryRow("SELECT current_user")
+		defer func() { _ = dbSQL.Close(ctx) }()
+		row := dbSQL.QueryRow(ctx, "SELECT current_user")
 		var username string
 		if err := row.Scan(&username); err != nil {
 			t.Fatal(err)
@@ -155,9 +154,9 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = dbSQL.Close() }()
+		defer func() { _ = dbSQL.Close(ctx) }()
 		// A simple query must work even without a system range available.
-		if _, err := dbSQL.Exec("SELECT 1"); err != nil {
+		if _, err := dbSQL.Exec(ctx, "SELECT 1"); err != nil {
 			t.Fatal(err)
 		}
 	}()
@@ -170,7 +169,7 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 		start := timeutil.Now()
 		dbSQL, err := pgxConn(t, barURL)
 		if err == nil {
-			defer func() { _ = dbSQL.Close() }()
+			defer func() { _ = dbSQL.Close(ctx) }()
 		}
 		if !testutils.IsError(err, "internal error while retrieving user account") {
 			t.Fatalf("expected error during connection, got %v", err)
@@ -188,25 +187,20 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = dbSQL.Close() }()
+		defer func() { _ = dbSQL.Close(ctx) }()
 		// A simple query must work for 'root' even without a system range available.
-		if _, err := dbSQL.Exec("SELECT 1"); err != nil {
+		if _, err := dbSQL.Exec(ctx, "SELECT 1"); err != nil {
 			t.Fatal(err)
 		}
 	}()
 }
 
 func pgxConn(t *testing.T, connURL url.URL) (*pgx.Conn, error) {
-	pgxConfig, err := pgx.ParseConnectionString(connURL.String())
+	t.Helper()
+	pgxConfig, err := pgx.ParseConfig(connURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Override the conninfo to avoid a bunch of pg_catalog
-	// queries when the connection is being set up.
-	pgxConfig.CustomConnInfo = func(c *pgx.Conn) (*pgtype.ConnInfo, error) {
-		return c.ConnInfo, nil
-	}
-
-	return pgx.Connect(pgxConfig)
+	return pgx.ConnectConfig(context.Background(), pgxConfig)
 }

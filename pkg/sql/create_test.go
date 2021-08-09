@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
 
 func TestDatabaseDescriptor(t *testing.T) {
@@ -454,36 +454,36 @@ func TestCreateStatementType(t *testing.T) {
 
 	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
-	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err := pgx.Connect(pgxConfig)
+	conn, err := pgx.ConnectConfig(ctx, pgxConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cmdTag, err := conn.Exec("CREATE DATABASE t")
+	cmdTag, err := conn.Exec(ctx, "CREATE DATABASE t")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdTag != "CREATE DATABASE" {
+	if cmdTag.String() != "CREATE DATABASE" {
 		t.Fatal("expected CREATE DATABASE, got", cmdTag)
 	}
 
-	cmdTag, err = conn.Exec("CREATE TABLE t.foo(x INT)")
+	cmdTag, err = conn.Exec(ctx, "CREATE TABLE t.foo(x INT)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdTag != "CREATE TABLE" {
+	if cmdTag.String() != "CREATE TABLE" {
 		t.Fatal("expected CREATE TABLE, got", cmdTag)
 	}
 
-	cmdTag, err = conn.Exec("CREATE TABLE t.bar AS SELECT * FROM generate_series(1,10)")
+	cmdTag, err = conn.Exec(ctx, "CREATE TABLE t.bar AS SELECT * FROM generate_series(1,10)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdTag != "CREATE TABLE AS" {
+	if cmdTag.String() != "CREATE TABLE AS" {
 		t.Fatal("expected CREATE TABLE AS, got", cmdTag)
 	}
 }

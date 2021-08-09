@@ -23,6 +23,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -46,13 +47,14 @@ var (
 )
 
 func main() {
+	ctx := context.Background()
 	flag.Parse()
 	conn, err := connect()
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
-	dbVersion, err := conn.DatabaseVersion()
+	defer func() { _ = conn.Close(ctx) }()
+	dbVersion, err := conn.DatabaseVersion(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -61,7 +63,7 @@ func main() {
 		PGMetadata: sql.PGMetadataTables{},
 	}
 
-	rows, err := conn.DescribeSchema()
+	rows, err := conn.DescribeSchema(ctx)
 	if err != nil {
 		panic(err)
 	}
