@@ -129,6 +129,7 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		&s.atomic.uniqueStmtFingerprintCount,
 		&s.atomic.uniqueTxnFingerprintCount,
 		s.mu.mon,
+		appName,
 	)
 	s.mu.apps[appName] = a
 	return a
