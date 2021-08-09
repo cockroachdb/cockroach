@@ -92,6 +92,7 @@ const (
 	ExplainFlagEnv
 	ExplainFlagCatalog
 	ExplainFlagDebug
+	ExplainFlagMemo
 	numExplainFlags = iota
 )
 
@@ -102,6 +103,7 @@ var explainFlagStrings = [...]string{
 	ExplainFlagEnv:     "ENV",
 	ExplainFlagCatalog: "CATALOG",
 	ExplainFlagDebug:   "DEBUG",
+	ExplainFlagMemo:    "MEMO",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {
