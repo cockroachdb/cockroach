@@ -4848,7 +4848,8 @@ var crdbInternalDefaultPrivilegesTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.default_privileges (
 	database_name   STRING NOT NULL,
 	schema_name     STRING,
-	role            STRING NOT NULL,
+	role            STRING,
+	for_all_roles   BOOL,
 	object_type     STRING NOT NULL,
 	grantee         STRING NOT NULL,
 	privilege_type  STRING NOT NULL
@@ -4863,8 +4864,10 @@ CREATE TABLE crdb_internal.default_privileges (
 							privList := privilege.ListFromBitField(userPrivs.Privileges, privilegeObjectType)
 							for _, priv := range privList {
 								role := tree.DNull
+								forAllRoles := tree.DBoolTrue
 								if !defaultPrivilegesForRole.GetForAllRoles() {
 									role = tree.NewDString(defaultPrivilegesForRole.GetUserProto().Decode().Normalized())
+									forAllRoles = tree.DBoolFalse
 								}
 								if err := addRow(
 									tree.NewDString(descriptor.GetName()),
@@ -4872,6 +4875,7 @@ CREATE TABLE crdb_internal.default_privileges (
 									// privileges are defined at the database level.
 									tree.DNull, /* schema is currently always nil. See: #67376 */
 									role,
+									forAllRoles,
 									tree.NewDString(objectType.String()),
 									tree.NewDString(userPrivs.User().Normalized()),
 									tree.NewDString(priv.String()),
