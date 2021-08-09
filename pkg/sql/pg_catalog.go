@@ -1393,6 +1393,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 			case keys.DatabaseCommentType:
 				// Database comments are exported in pg_shdescription.
 				continue
+			case keys.SchemaCommentType:
+				objID = tree.NewDOid(tree.MustBeDInt(objID))
+				classOid = tree.NewDOid(catconstants.PgCatalogNamespaceTableID)
 			case keys.ColumnCommentType, keys.TableCommentType:
 				objID = tree.NewDOid(tree.MustBeDInt(objID))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
