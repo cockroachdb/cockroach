@@ -6,3 +6,21 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel info workspace --color=no --config=dev
 go/src/github.com/cockroachdb/cockroach/build/bazelutil/bazel-generate.sh
+
+dev gen docs
+----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+bazel info workspace --color=no --config=dev
+cat go/src/github.com/cockroachdb/cockroach/docs/generated/bazel_targets.txt
+bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev //docs/generated:gen-logging-md //docs/generated/sql
+bazel info bazel-bin --color=no --config=dev
+bazel query --output=xml //docs/generated:gen-logging-md
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/logging.md go/src/github.com/cockroachdb/cockroach/docs/generated/logging.md
+bazel query --output=xml //docs/generated/sql
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/aggregates.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/aggregates.md
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/functions.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/functions.md
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/operators.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/operators.md
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/window_functions.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/window_functions.md

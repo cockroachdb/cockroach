@@ -12,7 +12,9 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -42,6 +44,7 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	// TODO(irfansharif): Flesh out the remaining targets.
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
 		"bazel": d.generateBazel,
+		"docs":  d.generateDocs,
 	}
 
 	if len(targets) == 0 {
@@ -73,4 +76,56 @@ func (d *dev) generateBazel(cmd *cobra.Command) error {
 	}
 	_, err = d.exec.CommandContext(ctx, filepath.Join(workspace, "build", "bazelutil", "bazel-generate.sh"))
 	return err
+}
+
+func (d *dev) generateDocs(cmd *cobra.Command) error {
+	ctx := cmd.Context()
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+	// List targets we need to build.
+	targetsFile, err := d.os.ReadFile(filepath.Join(workspace, "docs/generated/bazel_targets.txt"))
+	if err != nil {
+		return err
+	}
+	var targets []string
+	for _, line := range strings.Split(targetsFile, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "//") {
+			targets = append(targets, line)
+		}
+	}
+	// Build targets.
+	var args []string
+	args = append(args, "build", "--color=yes", "--experimental_convenience_symlinks=ignore")
+	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
+	args = append(args, getConfigFlags()...)
+	args = append(args, targets...)
+	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	if err != nil {
+		return err
+	}
+	// Copy docs from bazel-bin to workspace.
+	bazelBin, err := d.getBazelBin(ctx)
+	if err != nil {
+		return err
+	}
+	for _, target := range targets {
+		query, err := d.exec.CommandContextSilent(ctx, "bazel", "query", "--output=xml", target)
+		if err != nil {
+			return err
+		}
+		outputs, err := bazelutil.OutputsOfGenrule(target, string(query))
+		if err != nil {
+			return err
+		}
+		for _, output := range outputs {
+			err = d.os.CopyFile(filepath.Join(bazelBin, output), filepath.Join(workspace, output))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
