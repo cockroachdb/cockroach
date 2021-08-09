@@ -241,7 +241,7 @@ func (f *vectorizedFlow) GetPath(ctx context.Context) string {
 	f.tempStorage.path = filepath.Join(f.Cfg.TempStoragePath, tempDirName)
 	log.VEventf(ctx, 1, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
 	if err := f.Cfg.TempFS.MkdirAll(f.tempStorage.path); err != nil {
-		colexecerror.InternalError(errors.Wrapf(err, "unable to create temporary storage directory"))
+		colexecerror.InternalError(errors.Wrap(err, "unable to create temporary storage directory"))
 	}
 	return f.tempStorage.path
 }

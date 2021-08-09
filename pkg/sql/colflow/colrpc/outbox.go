@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // flowStreamClient is a utility interface used to mock out the RPC layer.
@@ -220,7 +221,10 @@ func (o *Outbox) Run(
 // called, for all other errors flowCtxCancel is. The given error is logged with
 // the associated opName.
 func handleStreamErr(
-	ctx context.Context, opName string, err error, flowCtxCancel, outboxCtxCancel context.CancelFunc,
+	ctx context.Context,
+	opName redact.SafeString,
+	err error,
+	flowCtxCancel, outboxCtxCancel context.CancelFunc,
 ) {
 	if err == io.EOF {
 		if log.V(1) {
@@ -233,9 +237,9 @@ func handleStreamErr(
 	}
 }
 
-func (o *Outbox) moveToDraining(ctx context.Context) {
+func (o *Outbox) moveToDraining(ctx context.Context, reason redact.RedactableString) {
 	if atomic.CompareAndSwapUint32(&o.draining, 0, 1) {
-		log.VEvent(ctx, 2, "Outbox moved to draining")
+		log.VEventf(ctx, 2, "Outbox moved to draining (%s)", reason)
 	}
 }
 
@@ -390,7 +394,7 @@ func (o *Outbox) runWithStream(
 				log.VEventf(ctx, 2, "Outbox received handshake: %v", msg.Handshake)
 			case msg.DrainRequest != nil:
 				log.VEventf(ctx, 2, "Outbox received drain request")
-				o.moveToDraining(ctx)
+				o.moveToDraining(ctx, "consumer requested draining" /* reason */)
 			}
 		}
 		close(waitCh)
@@ -398,7 +402,13 @@ func (o *Outbox) runWithStream(
 
 	terminatedGracefully, errToSend := o.sendBatches(ctx, stream, flowCtxCancel, outboxCtxCancel)
 	if terminatedGracefully || errToSend != nil {
-		o.moveToDraining(ctx)
+		var reason redact.RedactableString
+		if errToSend != nil {
+			reason = redact.Sprintf("encountered error when sending batches: %v", errToSend)
+		} else {
+			reason = redact.Sprint(redact.SafeString("terminated gracefully"))
+		}
+		o.moveToDraining(ctx, reason)
 		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
 			handleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
 		} else {
