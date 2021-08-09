@@ -209,6 +209,7 @@ function randomStats(
     legacy_last_err: "",
     legacy_last_err_redacted: "",
     exec_stats: randomExecStats(count),
+    sql_type: "DDL",
   };
 }
 

@@ -497,6 +497,7 @@ function makeStats(): Required<StatementStatistics> {
     rows_read: makeStat(),
     bytes_read: makeStat(),
     exec_stats: makeExecStats(),
+    sql_type: "DDL",
   };
 }
 

@@ -51,6 +51,7 @@ const statementStats: Required<IStatementStatistics> = {
   "count": Long.fromNumber(180000),
   "first_attempt_count": Long.fromNumber(50000),
   "max_retries": Long.fromNumber(10),
+  "sql_type": "DDL",
   "num_rows": {
     "mean": 1,
     "squared_diffs": 0,

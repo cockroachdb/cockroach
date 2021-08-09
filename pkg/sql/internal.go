@@ -761,7 +761,7 @@ func (ie *InternalExecutor) execInternal(
 		wg:      &wg,
 	}
 
-	if parsed.AST.StatementType() != tree.Rows {
+	if parsed.AST.StatementReturnType() != tree.Rows {
 		r.resultCols = rowsAffectedResultColumns
 	}
 
