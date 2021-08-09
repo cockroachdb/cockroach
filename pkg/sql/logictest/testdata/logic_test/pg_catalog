@@ -5074,3 +5074,14 @@ SELECT sequenceowner, cache_size FROM pg_sequences WHERE sequencename = 'serial'
 ----
 sequenceowner  cache_size
 anyuser        10
+
+statement ok
+COMMENT ON SCHEMA test_schema is 'testing schema';
+
+query T colnames
+SELECT obj_description(objoid)
+  FROM pg_catalog.pg_description
+ WHERE description = 'testing schema'
+----
+obj_description
+testing schema
