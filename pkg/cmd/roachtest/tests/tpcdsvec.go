@@ -90,14 +90,14 @@ func registerTPCDSVec(r registry.Registry) {
 		openNewConnections := func() (map[string]cmpconn.Conn, func()) {
 			conns := map[string]cmpconn.Conn{}
 			vecOffConn, err := cmpconn.NewConn(
-				firstNodeURL, setStmtTimeout+"SET vectorize=off; USE tpcds;",
+				ctx, firstNodeURL, setStmtTimeout+"SET vectorize=off; USE tpcds;",
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
 			conns["vectorize=OFF"] = vecOffConn
 			vecOnConn, err := cmpconn.NewConn(
-				firstNodeURL, setStmtTimeout+"SET vectorize=on; USE tpcds;",
+				ctx, firstNodeURL, setStmtTimeout+"SET vectorize=on; USE tpcds;",
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -112,8 +112,8 @@ func registerTPCDSVec(r registry.Registry) {
 				t.Fatal("unexpectedly SHOW vectorize didn't trigger an error on comparison")
 			}
 			return conns, func() {
-				vecOffConn.Close()
-				vecOnConn.Close()
+				vecOffConn.Close(ctx)
+				vecOnConn.Close(ctx)
 			}
 		}
 

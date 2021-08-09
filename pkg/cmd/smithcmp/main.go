@@ -75,6 +75,7 @@ func enableMutations(shouldEnable bool, mutations []randgen.Mutator) []randgen.M
 }
 
 func main() {
+	ctx := context.Background()
 	args := os.Args[1:]
 	if len(args) != 1 {
 		usage()
@@ -107,7 +108,7 @@ func main() {
 			mutators = append(mutators, randgen.PostgresMutator)
 		}
 		conns[name], err = cmpconn.NewConnWithMutators(
-			db.Addr, rng, mutators, db.InitSQL, opts.InitSQL)
+			ctx, db.Addr, rng, mutators, db.InitSQL, opts.InitSQL)
 		if err != nil {
 			log.Fatalf("%s (%s): %+v", name, db.Addr, err)
 		}
@@ -142,12 +143,12 @@ func main() {
 	} else {
 		stmts = make([]statement, len(opts.SQL))
 		for i, stmt := range opts.SQL {
-			ps, err := conns[opts.Smither].PGX().Prepare("", stmt)
+			ps, err := conns[opts.Smither].PGX().Prepare(ctx, "", stmt)
 			if err != nil {
 				log.Fatalf("bad SQL statement on %s: %v\nSQL:\n%s", opts.Smither, stmt, err)
 			}
 			var placeholders []*types.T
-			for _, param := range ps.ParameterOIDs {
+			for _, param := range ps.ParamOIDs {
 				typ, ok := types.OidToType[oid.Oid(param)]
 				if !ok {
 					log.Fatalf("unknown oid: %v", param)
@@ -162,7 +163,6 @@ func main() {
 	}
 
 	var prep, exec string
-	ctx := context.Background()
 	done := time.After(timeout)
 	for i, ignoredErrCount := 0, 0; true; i++ {
 		select {
@@ -218,12 +218,12 @@ func main() {
 		for name, conn := range conns {
 			start := timeutil.Now()
 			fmt.Printf("pinging %s...", name)
-			if err := conn.Ping(); err != nil {
+			if err := conn.Ping(ctx); err != nil {
 				fmt.Printf("\n%s: ping failure: %v\nprevious SQL:\n%s;\n%s;\n", name, err, prep, exec)
 				// Try to reconnect.
 				db := opts.Databases[name]
 				newConn, err := cmpconn.NewConnWithMutators(
-					db.Addr, rng, enableMutations(db.AllowMutations, sqlMutators),
+					ctx, db.Addr, rng, enableMutations(db.AllowMutations, sqlMutators),
 					db.InitSQL, opts.InitSQL,
 				)
 				if err != nil {
