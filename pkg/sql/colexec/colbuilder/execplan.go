@@ -539,9 +539,9 @@ func (r opResult) createAndWrapRowSource(
 	if args.ProcessorConstructor == nil {
 		return errors.New("processorConstructor is nil")
 	}
-	log.VEventf(ctx, 1, "planning a row-execution processor in the vectorized flow because %v", causeToWrap)
+	log.VEventf(ctx, 1, "planning a row-execution processor in the vectorized flow: %v", causeToWrap)
 	if err := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
-		log.VEventf(ctx, 1, "planning a wrapped processor failed because %v", err)
+		log.VEventf(ctx, 1, "planning a wrapped processor failed: %v", err)
 		// Return the original error for why we don't support this spec
 		// natively since it is more interesting.
 		return causeToWrap
@@ -682,7 +682,7 @@ func NewColOperator(
 			}
 			result.OpMonitors = result.OpMonitors[:0]
 			if returnedErr != nil {
-				log.VEventf(ctx, 1, "vectorized planning failed with %v", returnedErr)
+				log.VEventf(ctx, 1, "vectorized planning failed: %v", returnedErr)
 			}
 		}
 		if panicErr != nil {
