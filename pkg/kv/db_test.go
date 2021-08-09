@@ -580,7 +580,8 @@ func TestDBDecommissionedOperations(t *testing.T) {
 			return db.Del(ctx, key)
 		}},
 		{"DelRange", func() error {
-			return db.DelRange(ctx, key, keyEnd)
+			_, err := db.DelRange(ctx, key, keyEnd, false)
+			return err
 		}},
 		{"Get", func() error {
 			_, err := db.Get(ctx, key)
