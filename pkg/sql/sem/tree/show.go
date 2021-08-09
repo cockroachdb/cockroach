@@ -835,7 +835,8 @@ func (n *ShowSchedules) Format(ctx *FmtCtx) {
 
 // ShowDefaultPrivileges represents a SHOW DEFAULT PRIVILEGES statement.
 type ShowDefaultPrivileges struct {
-	Roles NameList
+	Roles       NameList
+	ForAllRoles bool
 }
 
 var _ Statement = &ShowDefaultPrivileges{}
@@ -852,5 +853,7 @@ func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&role)
 		}
 		ctx.WriteString(" ")
+	} else if n.ForAllRoles {
+		ctx.WriteString("FOR ALL ROLES ")
 	}
 }
