@@ -64,6 +64,8 @@ message FlowSpec {
                               (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
   repeated ProcessorSpec processors = 2 [(gogoproto.nullable) = false];
+
+  optional bool no_fuse_if_local = 4 [(gogoproto.nullable) = false];
 }
 
 // EvalContext is used to marshall some planner.EvalContext members.

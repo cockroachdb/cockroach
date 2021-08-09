@@ -3439,11 +3439,10 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 					)
 				}
 				// Here we don't force the serialization so that the unordered
-				// synchronizer is used. Additionally, because the plan will be fully
-				// local, we will use the flowinfra.FuseAggressively option. As a
-				// result, the plan will end up with a serial unordered synchronizer,
-				// which has exactly the behavior that we want (in particular, it won't
-				// execute the right child if the limit is reached by the left child).
+				// synchronizer is used. Additionally, we also force the usage
+				// of flowinfra.FuseNormally option. As a result, the plan will
+				// end up with a parallel unordered synchronizer.
+				p.NoFuseIfLocal = true
 				p.EnsureSingleStreamPerNode(
 					false, /* forceSerialization */
 					execinfrapb.PostProcessSpec{Limit: n.hardLimit},

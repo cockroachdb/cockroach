@@ -352,11 +352,12 @@ func (ds *ServerImpl) setupFlow(
 		localState.LocalProcs, isVectorized,
 	)
 	opt := flowinfra.FuseNormally
-	if localState.IsLocal {
-		// If there's no remote flows, fuse everything. This is needed in order for
-		// us to be able to use the RootTxn for the flow 's execution; the RootTxn
-		// doesn't allow for concurrent operations. Local flows with mutations need
-		// to use the RootTxn.
+	if localState.IsLocal && !req.Flow.NoFuseIfLocal {
+		// If there are no remote flows and we aren't forced to not fuse, fuse
+		// everything. This is needed in order for us to be able to use the
+		// RootTxn for the flow 's execution; the RootTxn doesn't allow for
+		// concurrent operations. Local flows with mutations need to use the
+		// RootTxn.
 		opt = flowinfra.FuseAggressively
 	}
 

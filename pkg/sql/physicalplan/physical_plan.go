@@ -146,6 +146,8 @@ type PhysicalPlan struct {
 	// Distribution is the indicator of the distribution of the physical plan.
 	// TODO(radu): move this field to PlanInfrastructure?
 	Distribution PlanDistribution
+
+	NoFuseIfLocal bool
 }
 
 // MakePhysicalInfrastructure initializes a PhysicalInfrastructure that can then
@@ -874,6 +876,7 @@ func (p *PhysicalPlan) GenerateFlowSpecs() map[roachpb.NodeID]*execinfrapb.FlowS
 		flowSpec, ok := flows[proc.Node]
 		if !ok {
 			flowSpec = NewFlowSpec(flowID, p.GatewayNodeID)
+			flowSpec.NoFuseIfLocal = p.NoFuseIfLocal
 			flows[proc.Node] = flowSpec
 		}
 		flowSpec.Processors = append(flowSpec.Processors, proc.Spec)
