@@ -1530,9 +1530,9 @@ oid         typname                                typnamespace  typowner    typ
 100072      _newtype1                              2332901747    1546506610  -1      false     b
 100073      newtype2                               2332901747    1546506610  -1      false     e
 100074      _newtype2                              2332901747    1546506610  -1      false     b
-4294967019  spatial_ref_sys                        3553698885    3233629770  -1      false     c
-4294967020  geometry_columns                       3553698885    3233629770  -1      false     c
-4294967021  geography_columns                      3553698885    3233629770  -1      false     c
+4294967018  spatial_ref_sys                        3553698885    3233629770  -1      false     c
+4294967019  geometry_columns                       3553698885    3233629770  -1      false     c
+4294967020  geography_columns                      3553698885    3233629770  -1      false     c
 4294967023  pg_views                               1307062959    3233629770  -1      false     c
 4294967024  pg_user                                1307062959    3233629770  -1      false     c
 4294967025  pg_user_mappings                       1307062959    3233629770  -1      false     c
@@ -1900,9 +1900,9 @@ oid         typname                                typcategory  typispreferred  
 100072      _newtype1                              A            false           true          ,         0           100071   0
 100073      newtype2                               E            false           true          ,         0           0        100074
 100074      _newtype2                              A            false           true          ,         0           100073   0
-4294967019  spatial_ref_sys                        C            false           true          ,         4294967019  0        0
-4294967020  geometry_columns                       C            false           true          ,         4294967020  0        0
-4294967021  geography_columns                      C            false           true          ,         4294967021  0        0
+4294967018  spatial_ref_sys                        C            false           true          ,         4294967018  0        0
+4294967019  geometry_columns                       C            false           true          ,         4294967019  0        0
+4294967020  geography_columns                      C            false           true          ,         4294967020  0        0
 4294967023  pg_views                               C            false           true          ,         4294967023  0        0
 4294967024  pg_user                                C            false           true          ,         4294967024  0        0
 4294967025  pg_user_mappings                       C            false           true          ,         4294967025  0        0
@@ -2270,9 +2270,9 @@ oid         typname                                typinput        typoutput    
 100072      _newtype1                              array_in        array_out        array_recv        array_send        0         0          0
 100073      newtype2                               enum_in         enum_out         enum_recv         enum_send         0         0          0
 100074      _newtype2                              array_in        array_out        array_recv        array_send        0         0          0
-4294967019  spatial_ref_sys                        record_in       record_out       record_recv       record_send       0         0          0
-4294967020  geometry_columns                       record_in       record_out       record_recv       record_send       0         0          0
-4294967021  geography_columns                      record_in       record_out       record_recv       record_send       0         0          0
+4294967018  spatial_ref_sys                        record_in       record_out       record_recv       record_send       0         0          0
+4294967019  geometry_columns                       record_in       record_out       record_recv       record_send       0         0          0
+4294967020  geography_columns                      record_in       record_out       record_recv       record_send       0         0          0
 4294967023  pg_views                               record_in       record_out       record_recv       record_send       0         0          0
 4294967024  pg_user                                record_in       record_out       record_recv       record_send       0         0          0
 4294967025  pg_user_mappings                       record_in       record_out       record_recv       record_send       0         0          0
@@ -2640,9 +2640,9 @@ oid         typname                                typalign  typstorage  typnotn
 100072      _newtype1                              NULL      NULL        false       0            -1
 100073      newtype2                               NULL      NULL        false       0            -1
 100074      _newtype2                              NULL      NULL        false       0            -1
-4294967019  spatial_ref_sys                        NULL      NULL        false       0            -1
-4294967020  geometry_columns                       NULL      NULL        false       0            -1
-4294967021  geography_columns                      NULL      NULL        false       0            -1
+4294967018  spatial_ref_sys                        NULL      NULL        false       0            -1
+4294967019  geometry_columns                       NULL      NULL        false       0            -1
+4294967020  geography_columns                      NULL      NULL        false       0            -1
 4294967023  pg_views                               NULL      NULL        false       0            -1
 4294967024  pg_user                                NULL      NULL        false       0            -1
 4294967025  pg_user_mappings                       NULL      NULL        false       0            -1
@@ -3010,9 +3010,9 @@ oid         typname                                typndims  typcollation  typde
 100072      _newtype1                              0         0             NULL           NULL        NULL
 100073      newtype2                               0         0             NULL           NULL        NULL
 100074      _newtype2                              0         0             NULL           NULL        NULL
-4294967019  spatial_ref_sys                        0         0             NULL           NULL        NULL
-4294967020  geometry_columns                       0         0             NULL           NULL        NULL
-4294967021  geography_columns                      0         0             NULL           NULL        NULL
+4294967018  spatial_ref_sys                        0         0             NULL           NULL        NULL
+4294967019  geometry_columns                       0         0             NULL           NULL        NULL
+4294967020  geography_columns                      0         0             NULL           NULL        NULL
 4294967023  pg_views                               0         0             NULL           NULL        NULL
 4294967024  pg_user                                0         0             NULL           NULL        NULL
 4294967025  pg_user_mappings                       0         0             NULL           NULL        NULL
@@ -3755,9 +3755,9 @@ objoid      classoid    objsubid  description
 4294967026  4294967136  0         local to remote user mapping (empty - feature does not exist)
 4294967025  4294967136  0         pg_user_mappings was created for compatibility and is currently unimplemented
 4294967023  4294967136  0         view definitions (incomplete - see also information_schema.views)
-4294967021  4294967136  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
-4294967020  4294967136  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
-4294967019  4294967136  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
+4294967020  4294967136  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
+4294967019  4294967136  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
+4294967018  4294967136  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
 
 ## pg_catalog.pg_shdescription
 
@@ -5072,3 +5072,15 @@ SELECT sequenceowner, cache_size FROM pg_sequences WHERE sequencename = 'serial'
 ----
 sequenceowner  cache_size
 anyuser        10
+
+statement ok
+COMMENT ON SCHEMA test_schema is 'testing schema';
+
+query OOIT colnames
+SELECT objoid, classoid, objsubid, description
+  FROM pg_catalog.pg_description
+ WHERE description = 'testing schema';
+----
+objoid  classoid    objsubid  description
+94      4294967022  0         testing schema
+

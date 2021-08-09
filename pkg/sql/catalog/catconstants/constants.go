@@ -309,6 +309,7 @@ const (
 	PgCatalogUserMappingsTableID
 	PgCatalogUserTableID
 	PgCatalogViewsTableID
+	PgCatalogSchemaID
 	PgExtensionSchemaID
 	PgExtensionGeographyColumnsTableID
 	PgExtensionGeometryColumnsTableID
