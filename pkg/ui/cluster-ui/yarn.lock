@@ -2853,10 +2853,10 @@
   resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.4.1.tgz#5772f94ce625279a4789f8e48c9b4e903c5bc5d7"
   integrity sha512-JaiYFDhqhvGPqAFkHGCnEYiBe6Gas2HjqhLOQa4T5FRRMJ07liswOPARXyX120hTPwqEUaQyaHLxzqYDFwfdzQ==
 
-"@cockroachlabs/ui-components@0.2.19-alpha.2":
-  version "0.2.19-alpha.2"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.19-alpha.2.tgz#71c1323779db30a8fc5876d1e9b219e59155d9a5"
-  integrity sha512-vvFgptbRVpa97zEitqjLQNuwttgMUjV057xqrk3WMLhdC5Myo/o3Zv/ZUNmvMXls8aqBfhqeIEtNCgYkKkpaOw==
+"@cockroachlabs/ui-components@0.2.19-alpha.11":
+  version "0.2.19-alpha.11"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.19-alpha.11.tgz#41e285d65e1d1bb20000c43e473f05ba84e050b3"
+  integrity sha512-HoSNnpxiWa7ZBamexRf/ihV6NDN+e+OsWZha7Bt3v9TBqXznY+nCdTNGperJAK+RXTBM/WhpmiLtlgC8MRWuxQ==
   dependencies:
     "@cockroachlabs/icons" "^0.4.1"
     "@popperjs/core" "^2.4.3"
