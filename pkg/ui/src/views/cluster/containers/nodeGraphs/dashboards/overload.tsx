@@ -80,5 +80,132 @@ export default function (props: GraphDashboardProps) {
         ))}
       </Axis>
     </LineGraph>,
+
+    <LineGraph title="KV Admission Slots" sources={nodeSources}>
+      <Axis label="slots">
+        {nodeIDs.map((nid) => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.admission.granter.total_slots.kv"
+              title="Total Slots"
+              sources={[nid]}
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.granter.used_slots.kv"
+              title="Used Slots"
+              sources={[nid]}
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="KV Admission IO Tokens Exhausted Duration Per Second"
+      sources={nodeSources}
+    >
+      <Axis label="duration (micros/sec)">
+        {nodeIDs.map((nid) => (
+          <Metric
+            key={nid}
+            name="cr.node.admission.granter.io_tokens_exhausted_duration.kv"
+            title="IO Exhausted"
+            sources={[nid]}
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Admission Work Rate" sources={nodeSources}>
+      <Axis label="work rate">
+        {nodeIDs.map((nid) => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.admission.admitted.kv"
+              title="KV request rate"
+              sources={[nid]}
+              nonNegativeRate
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.admitted.sql-kv-response"
+              title="SQL-KV response rate"
+              sources={[nid]}
+              nonNegativeRate
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.admitted.sql-sql-response"
+              title="SQL-SQL response rate"
+              sources={[nid]}
+              nonNegativeRate
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Admission Delay Rate" sources={nodeSources}>
+      <Axis label="delay rate (micros/sec)">
+        {nodeIDs.map((nid) => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_sum.kv"
+              title="KV"
+              sources={[nid]}
+              nonNegativeRate
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_sum.sql-kv-response"
+              title="SQL-KV response"
+              sources={[nid]}
+              nonNegativeRate
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_sum.sql-sql-response"
+              title="SQL-SQL response"
+              sources={[nid]}
+              nonNegativeRate
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Admission Delay: 75th percentile" sources={nodeSources}>
+      <Axis label="delay for requests that waited (nanos)">
+        {nodeIDs.map((nid) => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_durations.kv-p75"
+              title="KV"
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_durations.sql-kv-response-p75"
+              title="SQL-KV response"
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.admission.wait_durations.sql-sql-response-p75"
+              title="SQL-SQL response"
+              sources={[nid]}
+              downsampleMax
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
   ];
 }
