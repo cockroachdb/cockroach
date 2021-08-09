@@ -1668,7 +1668,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.DelRange(ctx, "a", "b")
+				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				return err
 			},
 			// No retry, preemptive refresh before commit.
 		},
@@ -1877,7 +1878,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				// Advance timestamp. This also creates a refresh span which
 				// will prevent the txn from committing without a refresh.
-				if err := txn.DelRange(ctx, "a", "b"); err != nil {
+				if _, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */); err != nil {
 					return err
 				}
 				// Make the final batch large enough such that if we accounted
@@ -2246,14 +2247,15 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.DelRange(ctx, "a", "b", false)
+				_, err := db.DelRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				if _, err := txn.Get(ctx, "c"); err != nil {
 					return err
 				}
-				return txn.DelRange(ctx, "a", "b")
+				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				return err
 			},
 			txnCoordRetry: true, // can refresh
 		},
@@ -2263,14 +2265,15 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.DelRange(ctx, "a", "b", false)
+				_, err := db.DelRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				if _, err := txn.Get(ctx, "a"); err != nil {
 					return err
 				}
-				return txn.DelRange(ctx, "a", "b")
+				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				return err
 			},
 			clientRetry: true, // can't refresh
 		},
@@ -2634,7 +2637,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		{
 			name: "multi-range delete range with uncertainty interval error",
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.DelRange(ctx, "a", "d")
+				_, err := txn.DelRange(ctx, "a", "d", false /* returnKeys */)
+				return err
 			},
 			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
 			// Expect a transaction coord retry, which should succeed.
