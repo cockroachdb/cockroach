@@ -12,6 +12,7 @@ package os
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -180,6 +181,29 @@ func (o *OS) ReadFile(filename string) (string, error) {
 
 	ret, err := o.replay(command)
 	return ret, err
+}
+
+// CopyFile copies a file from one location to another.
+func (o *OS) CopyFile(src, dst string) error {
+	command := fmt.Sprintf("cp %s %s", src, dst)
+	o.logger.Print(command)
+
+	if o.Recording == nil {
+		// Do the real thing.
+		srcFile, err := os.Open(src)
+		if err != nil {
+			return err
+		}
+		dstFile, err := os.Create(dst)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(dstFile, srcFile)
+		return err
+	}
+
+	_, err := o.replay(command)
+	return err
 }
 
 // replay replays the specified command, erroring out if it's mismatched with

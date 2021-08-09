@@ -14,7 +14,7 @@ CONFIG="$1"
 DOC_TARGETS=
 if [ "$CONFIG" == "crosslinux" ]
 then
-   DOC_TARGETS="//docs/generated:gen-logging-md //docs/generated:gen-logsinks-md //docs/generated:gen-eventlog-md //docs/generated:gen-logformats-md //docs/generated/settings:settings //docs/generated/settings:settings_for_tenants //docs/generated/sql //docs/generated/sql/bnf"
+   DOC_TARGETS=$(grep '^//' docs/generated/bazel_targets.txt)
 fi
 
 bazel build //pkg/cmd/bazci --config=ci

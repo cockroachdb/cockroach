@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
@@ -103,7 +104,7 @@ func (d *dev) build(cmd *cobra.Command, targets []string) error {
 	script.WriteString(fmt.Sprintf("bazel %s\n", strings.Join(args, " ")))
 	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s`\n", cross))
 	for _, target := range fullTargets {
-		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", targetToRelativeBinPath(target)))
+		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", bazelutil.OutputOfBinaryRule(target)))
 		script.WriteString(fmt.Sprintf("chmod +w /artifacts/%s\n", targetToBinBasename(target)))
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, script.String(), "docker", dockerArgs...)
@@ -158,28 +159,6 @@ func (d *dev) symlinkBinaries(ctx context.Context, targets []string) error {
 	return nil
 }
 
-// targetToRelativeBinPath returns the path of the binary produced by this build
-// target relative to bazel-bin. That is,
-//    filepath.Join(bazelBin, targetToRelativeBinPath(target)) is the absolute
-// path to the build binary for the target.
-func targetToRelativeBinPath(target string) string {
-	var head string
-	if strings.HasPrefix(target, "@") {
-		doubleSlash := strings.Index(target, "//")
-		head = filepath.Join("external", target[1:doubleSlash])
-	} else {
-		head = strings.TrimPrefix(target, "//")
-	}
-	var bin string
-	colon := strings.Index(target, ":")
-	if colon >= 0 {
-		bin = target[colon+1:]
-	} else {
-		bin = target[strings.LastIndex(target, "/")+1:]
-	}
-	return filepath.Join(head, bin+"_", bin)
-}
-
 func targetToBinBasename(target string) string {
 	base := filepath.Base(strings.TrimPrefix(target, "//"))
 	// If there's a colon, the actual name of the executable is
@@ -192,14 +171,11 @@ func targetToBinBasename(target string) string {
 }
 
 func (d *dev) getPathToBin(ctx context.Context, target string) (string, error) {
-	args := []string{"info", "bazel-bin", "--color=no"}
-	args = append(args, getConfigFlags()...)
-	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
+	bazelBin, err := d.getBazelBin(ctx)
 	if err != nil {
 		return "", err
 	}
-	bazelBin := strings.TrimSpace(string(out))
-	rel := targetToRelativeBinPath(target)
+	rel := bazelutil.OutputOfBinaryRule(target)
 	return filepath.Join(bazelBin, rel), nil
 }
 

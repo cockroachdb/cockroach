@@ -19,10 +19,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -216,22 +216,11 @@ func (w watcher) stageBinaryArtifacts() error {
 		if err != nil {
 			return err
 		}
-		// XML parsing is a bit heavyweight here, and encoding/xml
-		// refuses to parse the query output since it's XML 1.1 instead
-		// of 1.0. Have fun with regexes instead.
-		colon := strings.LastIndex(bin, ":")
-		regexStr := fmt.Sprintf("^<rule-output name=\"%s:(?P<Filename>.*)\"/>$", regexp.QuoteMeta(bin[:colon]))
-		re, err := regexp.Compile(regexStr)
+		outs, err := bazelutil.OutputsOfGenrule(bin, query)
 		if err != nil {
 			return err
 		}
-		for _, line := range strings.Split(query, "\n") {
-			line = strings.TrimSpace(line)
-			submatch := re.FindStringSubmatch(line)
-			if submatch == nil {
-				continue
-			}
-			relBinPath := filepath.Join(strings.TrimPrefix(bin[:colon], "//"), submatch[1])
+		for _, relBinPath := range outs {
 			err := w.maybeStageArtifact(binSourceDir, relBinPath, 0666, finalizePhase, copyContentTo)
 			if err != nil {
 				return err
