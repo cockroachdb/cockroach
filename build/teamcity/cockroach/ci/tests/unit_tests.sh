@@ -9,6 +9,6 @@ source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 
 tc_prepare
 
-tc_start_block "Run lints"
-run_bazel build/teamcity/cockroach/ci/tests/lint_impl.sh
-tc_end_block "Run lints"
+tc_start_block "Run unit tests"
+run_bazel build/teamcity/cockroach/ci/tests/unit_tests_impl.sh
+tc_end_block "Run unit tests"
