@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
 
 func TestDatabaseDescriptor(t *testing.T) {

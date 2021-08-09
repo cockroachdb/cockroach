@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
 
 var printUnknown = flag.Bool("unknown", false, "print unknown types during walk")

@@ -29,7 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/spf13/pflag"
 )
 
@@ -258,7 +259,7 @@ func (w *kv) Ops(
 	cfg := workload.MultiConnPoolCfg{
 		MaxTotalConnections: w.connFlags.Concurrency + 1,
 	}
-	mcp, err := workload.NewMultiConnPool(cfg, urls...)
+	mcp, err := workload.NewMultiConnPool(ctx, cfg, w.connFlags, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -435,12 +436,12 @@ func (o *kvOp) run(ctx context.Context) error {
 		// We could use crdb.ExecuteTx, but we avoid retries in this workload so
 		// that each run call makes 1 attempt, so that rate limiting in workerRun
 		// behaves as expected.
-		var tx *pgx.Tx
-		if tx, err = o.mcp.Get().Begin(); err != nil {
+		var tx pgx.Tx
+		if tx, err = o.mcp.Get().Begin(ctx); err != nil {
 			return err
 		}
 		defer func() {
-			_ = tx.Rollback()
+			_ = tx.Rollback(ctx)
 		}()
 		rows, err := o.sfuStmt.QueryTx(ctx, tx, sfuArgs...)
 		if err != nil {
@@ -458,7 +459,7 @@ func (o *kvOp) run(ctx context.Context) error {
 			// a serialization failure. We swallow such an error.
 			return o.tryHandleWriteErr("write-write-err", start, err)
 		}
-		if err = tx.Commit(); err != nil {
+		if err = tx.Commit(ctx); err != nil {
 			return o.tryHandleWriteErr("write-commit-err", start, err)
 		}
 	} else {
@@ -471,7 +472,7 @@ func (o *kvOp) run(ctx context.Context) error {
 
 func (o *kvOp) tryHandleWriteErr(name string, start time.Time, err error) error {
 	// If the error not an instance of pgx.PgError, then it is unexpected.
-	pgErr := pgx.PgError{}
+	pgErr := pgconn.PgError{}
 	if !errors.As(err, &pgErr) {
 		return err
 	}
