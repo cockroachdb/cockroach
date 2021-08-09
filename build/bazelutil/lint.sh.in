@@ -49,4 +49,4 @@ cd "$BUILD_WORKSPACE_DIRECTORY/$PACKAGE"
 TEST_WORKSPACE=cockroach \
     PATH="$(dirname $go_bin):$(dirname $roachvet_bin):$(dirname $errcheck_bin):$(dirname $returncheck_bin):$(dirname $staticcheck_bin):$(dirname $crlfmt_bin):$(dirname $misspell_bin):$(dirname $golint_bin):$(dirname $optfmt_bin):$PATH" \
     GOROOT="$(dirname $(dirname $go_bin))" \
-    $test_bin $@
+    "$test_bin" "$@"

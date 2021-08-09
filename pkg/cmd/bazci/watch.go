@@ -275,8 +275,10 @@ func copyContentTo(srcContent []byte, outFile io.Writer) error {
 }
 
 // mungeTestXML parses and slightly munges the XML in the source file and writes
-// it to the output file. Helper function meant to be used with
-// maybeStageArtifact.
+// it to the output file. TeamCity kind of knows how to interpret the schema,
+// but the schema isn't *exactly* what it's expecting. By munging the XML's
+// here we ensure that the TC test view is as useful as possible.
+// Helper function meant to be used with maybeStageArtifact.
 func mungeTestXML(srcContent []byte, outFile io.Writer) error {
 	// Parse the XML into a testSuites struct.
 	suites := testSuites{}
