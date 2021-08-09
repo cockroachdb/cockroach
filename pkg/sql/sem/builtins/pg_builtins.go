@@ -1942,6 +1942,8 @@ func getCatalogOidForComments(catalogName string) (id int, ok bool) {
 		return catconstants.PgCatalogClassTableID, true
 	case "pg_database":
 		return catconstants.PgCatalogDatabaseTableID, true
+	case "pg_description":
+		return catconstants.PgCatalogDescriptionTableID, true
 	default:
 		// We currently only support comments on pg_class objects
 		// (columns, tables) in this context.
