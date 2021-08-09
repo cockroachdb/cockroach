@@ -12,7 +12,12 @@ import React from "react";
 import classNames from "classnames/bind";
 import Long from "long";
 
-import { FixLong, StatementSummary, StatementStatistics } from "src/util";
+import {
+  FixLong,
+  longToInt,
+  StatementSummary,
+  StatementStatistics,
+} from "src/util";
 import {
   countBarChart,
   rowsReadBarChart,
@@ -25,7 +30,11 @@ import {
   workloadPctBarChart,
 } from "src/barCharts";
 import { ActivateDiagnosticsModalRef } from "src/statementsDiagnostics";
-import { ColumnDescriptor, SortedTable } from "src/sortedtable";
+import {
+  ColumnDescriptor,
+  longListWithTooltip,
+  SortedTable,
+} from "src/sortedtable";
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import {
@@ -38,11 +47,11 @@ type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosti
 type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 import styles from "./statementsTable.module.scss";
 const cx = classNames.bind(styles);
-const longToInt = (d: number | Long) => Number(FixLong(d));
 
 function makeCommonColumns(
   statements: AggregateStatistics[],
   totalWorkload: number,
+  nodeRegions: { [nodeId: string]: string },
 ): ColumnDescriptor<AggregateStatistics>[] {
   const defaultBarChartOptions = {
     classes: {
@@ -88,7 +97,7 @@ function makeCommonColumns(
       title: StatementTableTitle.database,
       className: cx("statements-table__col-database"),
       cell: (stmt: AggregateStatistics) => stmt.database,
-      sort: (stmt: AggregateStatistics) => FixLong(Number(stmt.database)),
+      sort: (stmt: AggregateStatistics) => stmt.database,
       showByDefault: false,
     },
     {
@@ -154,6 +163,16 @@ function makeCommonColumns(
         (stmt.stats.service_lat.mean * longToInt(stmt.stats.count)) /
         totalWorkload,
     },
+    {
+      name: "regionNodes",
+      title: StatementTableTitle.regionNodes,
+      className: cx("statements-table__col-regions"),
+      cell: (stmt: AggregateStatistics) => {
+        return longListWithTooltip(stmt.regionNodes.sort().join(", "), 50);
+      },
+      sort: (stmt: AggregateStatistics) => stmt.regionNodes.sort().join(", "),
+      showByDefault: false,
+    },
   ];
   return columns;
 }
@@ -170,6 +189,7 @@ export interface AggregateStatistics {
   diagnosticsReports?: cockroach.server.serverpb.IStatementDiagnosticsReport[];
   // totalWorkload is the sum of service latency of all statements listed on the table.
   totalWorkload?: Long;
+  regionNodes?: string[];
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
@@ -198,6 +218,7 @@ export function makeStatementsColumns(
   selectedApp: string,
   // totalWorkload is the sum of service latency of all statements listed on the table.
   totalWorkload: number,
+  nodeRegions: { [nodeId: string]: string },
   search?: string,
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
   onDiagnosticsDownload?: (report: IStatementDiagnosticsReport) => void,
@@ -217,7 +238,7 @@ export function makeStatementsColumns(
       alwaysShow: true,
     },
   ];
-  columns.push(...makeCommonColumns(statements, totalWorkload));
+  columns.push(...makeCommonColumns(statements, totalWorkload, nodeRegions));
 
   if (activateDiagnosticsRef) {
     const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
@@ -247,6 +268,7 @@ export function makeNodesColumns(
   statements: AggregateStatistics[],
   nodeNames: NodeNames,
   totalWorkload: number,
+  nodeRegions: { [nodeId: string]: string },
 ): ColumnDescriptor<AggregateStatistics>[] {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
@@ -256,5 +278,50 @@ export function makeNodesColumns(
     },
   ];
 
-  return original.concat(makeCommonColumns(statements, totalWorkload));
+  return original.concat(
+    makeCommonColumns(statements, totalWorkload, nodeRegions),
+  );
+}
+
+/**
+ * For each statement, generate the list of regions and nodes it was
+ * executed on. Each node is assigned to only one region and a region can
+ * have multiple nodes.
+ * E.g. of one element of the list: `gcp-us-east1 (n1, n2, n3)`
+ * @param statements: list of statements containing details about which
+ * node it was executed on.
+ * @param nodeRegions: object with keys being the node id and the value
+ * which region it belongs to.
+ */
+export function populateRegionNodeForStatements(
+  statements: AggregateStatistics[],
+  nodeRegions: { [p: string]: string },
+) {
+  statements.forEach(stmt => {
+    const regions: { [region: string]: Set<number> } = {};
+    // For each region, populate a list of all nodes where the statement was executed.
+    // E.g. {"gcp-us-east1" : [1,3,4]}
+    stmt.stats.nodes.forEach(node => {
+      if (Object.keys(regions).includes(nodeRegions[node.toString()])) {
+        regions[nodeRegions[node.toString()]].add(longToInt(node));
+      } else {
+        regions[nodeRegions[node.toString()]] = new Set([longToInt(node)]);
+      }
+    });
+    // Create a list nodes/regions where a statement was executed on, with
+    // format: region (node1,node2)
+    const regionNodes: string[] = [];
+    Object.keys(regions).forEach(region => {
+      regionNodes.push(
+        region +
+          " (" +
+          Array.from(regions[region])
+            .sort()
+            .map(n => "n" + n)
+            .toString() +
+          ")",
+      );
+    });
+    stmt.regionNodes = regionNodes;
+  });
 }

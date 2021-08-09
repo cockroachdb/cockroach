@@ -52,6 +52,7 @@ const statementStats: Required<IStatementStatistics> = {
   "first_attempt_count": Long.fromNumber(50000),
   "max_retries": Long.fromNumber(10),
   "sql_type": "DDL",
+  "nodes": [Long.fromNumber(1), Long.fromNumber(2)],
   "num_rows": {
     "mean": 1,
     "squared_diffs": 0,
@@ -250,6 +251,12 @@ const statementsPagePropsFixture: StatementsPageProps = {
     "params": {},
   },
   "databases": ["defaultdb","foo","system"],
+  "nodeRegions": {
+    "1": "gcp-us-east1",
+    "2": "gcp-us-east1",
+    "3": "gcp-us-west1",
+    "4": "gcp-europe-west1",
+  },
   "statements": [
     {
       "label": "SELECT IFNULL(a, b) FROM (SELECT (SELECT code FROM promo_codes WHERE code > $1 ORDER BY code LIMIT _) AS a, (SELECT code FROM promo_codes ORDER BY code LIMIT _) AS b)",

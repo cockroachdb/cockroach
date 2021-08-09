@@ -28,9 +28,16 @@ import {
   getTimeValueInSeconds,
 } from "../queryFilter";
 
-import { appAttr, getMatchParamByName, calculateTotalWorkload } from "src/util";
+import {
+  appAttr,
+  getMatchParamByName,
+  calculateTotalWorkload,
+  unique,
+  containAny,
+} from "src/util";
 import {
   AggregateStatistics,
+  populateRegionNodeForStatements,
   makeStatementsColumns,
   statementColumnLabels,
   StatementsSortedTable,
@@ -86,6 +93,7 @@ export interface StatementsPageStateProps {
   totalFingerprints: number;
   lastReset: string;
   columns: string[];
+  nodeRegions: { [key: string]: string };
 }
 
 export interface StatementsPageState {
@@ -248,6 +256,8 @@ export class StatementsPage extends React.Component<
       timeUnit: filters.timeUnit,
       sqlType: filters.sqlType,
       database: filters.database,
+      regions: filters.regions,
+      nodes: filters.nodes,
     });
     this.selectApp(filters.app);
   };
@@ -273,13 +283,15 @@ export class StatementsPage extends React.Component<
       timeUnit: undefined,
       sqlType: undefined,
       database: undefined,
+      regions: undefined,
+      nodes: undefined,
     });
     this.selectApp("");
   };
 
   filteredStatementsData = () => {
     const { search, filters } = this.state;
-    const { statements } = this.props;
+    const { statements, nodeRegions } = this.props;
     const timeValue = getTimeValueInSeconds(filters);
     const sqlTypes =
       filters.sqlType.length > 0
@@ -291,7 +303,15 @@ export class StatementsPage extends React.Component<
         : [];
     const databases =
       filters.database.length > 0 ? filters.database.split(",") : [];
+    const regions =
+      filters.regions.length > 0 ? filters.regions.split(",") : [];
+    const nodes = filters.nodes.length > 0 ? filters.nodes.split(",") : [];
 
+    // Return statements filtered by the values selected on the filter and
+    // the search text. A statement must match all selected filters to be
+    // displayed on the table.
+    // Current filters: search text, database, fullScan, service latency,
+    // SQL Type, nodes and regions.
     return statements
       .filter(
         statement =>
@@ -315,6 +335,29 @@ export class StatementsPage extends React.Component<
       .filter(
         statement =>
           sqlTypes.length == 0 || sqlTypes.includes(statement.stats.sql_type),
+      )
+      .filter(
+        // The statement must contain at least one value from the selected nodes
+        // list if the list is not empty.
+        statement =>
+          regions.length == 0 ||
+          containAny(
+            statement.stats.nodes.map(
+              node => nodeRegions[node.toString()],
+              regions,
+            ),
+            regions,
+          ),
+      )
+      .filter(
+        // The statement must contain at least one value from the selected regions
+        // list if the list is not empty.
+        statement =>
+          nodes.length == 0 ||
+          containAny(
+            statement.stats.nodes.map(node => "n" + node),
+            nodes,
+          ),
       );
   };
 
@@ -330,6 +373,7 @@ export class StatementsPage extends React.Component<
       resetSQLStats,
       columns: userSelectedColumnsToShow,
       onColumnsChange,
+      nodeRegions,
     } = this.props;
     const appAttrValue = getMatchParamByName(match, appAttr);
     const selectedApp = appAttrValue || "";
@@ -339,17 +383,31 @@ export class StatementsPage extends React.Component<
     const totalWorkload = calculateTotalWorkload(data);
     const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
+    const nodes = Object.keys(nodeRegions)
+      .map(n => Number(n))
+      .sort();
+    const regions = unique(
+      nodes.map(node => nodeRegions[node.toString()]),
+    ).sort();
+    populateRegionNodeForStatements(statements, nodeRegions);
 
     // Creates a list of all possible columns
     const columns = makeStatementsColumns(
       statements,
       selectedApp,
       totalWorkload,
+      nodeRegions,
       search,
       this.activateDiagnosticsRef,
       onDiagnosticsReportDownload,
       onStatementClick,
     );
+
+    // If it's multi-region, we want to show the Regions/Nodes column by default
+    // and hide otherwise.
+    if (regions.length > 1) {
+      columns.filter(c => c.name === "regionNodes")[0].showByDefault = true;
+    }
 
     const isColumnSelected = (c: ColumnDescriptor<AggregateStatistics>) => {
       return (
@@ -391,11 +449,15 @@ export class StatementsPage extends React.Component<
               onSubmitFilters={this.onSubmitFilters}
               appNames={appOptions}
               dbNames={databases}
+              regions={regions}
+              nodes={nodes.map(n => "n" + n)}
               activeFilters={activeFilters}
               filters={filters}
               showDB={true}
               showSqlType={true}
               showScan={true}
+              showRegions={regions.length > 1}
+              showNodes={nodes.length > 1}
             />
           </PageConfigItem>
         </PageConfig>

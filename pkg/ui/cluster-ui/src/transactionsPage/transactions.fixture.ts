@@ -33,6 +33,13 @@ export const routeProps = {
   },
 };
 
+export const nodeRegions: { [nodeId: string]: string } = {
+  "1": "gcp-us-east1",
+  "2": "gcp-us-east1",
+  "3": "gcp-us-west1",
+  "4": "gcp-europe-west1",
+};
+
 export const data: cockroach.server.serverpb.IStatementsResponse = {
   statements: [
     {
@@ -51,6 +58,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       },
       stats: {
         count: Long.fromInt(557),
+        nodes: [Long.fromNumber(1), Long.fromNumber(2)],
         first_attempt_count: Long.fromInt(557),
         max_retries: Long.fromInt(0),
         legacy_last_err: "",
@@ -128,6 +136,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       },
       stats: {
         count: Long.fromInt(70),
+        nodes: [Long.fromNumber(1), Long.fromNumber(3)],
         first_attempt_count: Long.fromInt(70),
         max_retries: Long.fromInt(0),
         legacy_last_err: "",
@@ -192,6 +201,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       },
       stats: {
         count: Long.fromInt(1),
+        nodes: [Long.fromNumber(1), Long.fromNumber(3)],
         first_attempt_count: Long.fromInt(1),
         max_retries: Long.fromInt(0),
         legacy_last_err: "",
@@ -247,6 +257,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       },
       stats: {
         count: Long.fromInt(280),
+        nodes: [Long.fromNumber(3), Long.fromNumber(4)],
         first_attempt_count: Long.fromInt(280),
         max_retries: Long.fromInt(0),
         legacy_last_err: "",
@@ -343,6 +354,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       },
       stats: {
         count: Long.fromInt(1),
+        nodes: [Long.fromNumber(2), Long.fromNumber(4)],
         first_attempt_count: Long.fromInt(1),
         max_retries: Long.fromInt(0),
         legacy_last_err: "",
@@ -392,6 +404,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       },
       stats: {
         count: Long.fromInt(1),
+        nodes: [Long.fromNumber(1)],
         first_attempt_count: Long.fromInt(1),
         max_retries: Long.fromInt(0),
         legacy_last_err: "",
@@ -430,6 +443,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       },
       stats: {
         count: Long.fromInt(1),
+        nodes: [Long.fromNumber(3), Long.fromNumber(4)],
         first_attempt_count: Long.fromInt(1),
         max_retries: Long.fromInt(0),
         legacy_last_err: "",
@@ -467,6 +481,94 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       key: {
         key_data: {
           query:
+            "WITH current_meta AS (SELECT version, num_records, num_spans, total_bytes FROM system.protected_ts_meta UNION ALL SELECT _ AS version, _ AS num_records, _ AS num_spans, _ AS total_bytes ORDER BY version DESC LIMIT _) SELECT version, num_records, num_spans, total_bytes FROM current_meta",
+          app: "$ internal-protectedts-GetMetadata",
+          distSQL: false,
+          failed: false,
+          opt: true,
+          implicit_txn: false,
+          vec: false,
+        },
+        node_id: 5,
+      },
+      stats: {
+        count: Long.fromInt(24),
+        nodes: [Long.fromNumber(2), Long.fromNumber(3)],
+        first_attempt_count: Long.fromInt(24),
+        max_retries: Long.fromInt(0),
+        legacy_last_err: "",
+        num_rows: { mean: 0, squared_diffs: 0 },
+        parse_lat: { mean: 0.0010775, squared_diffs: 0.000022485897999999995 },
+        plan_lat: {
+          mean: 0.029394708333333335,
+          squared_diffs: 0.1030786466649583,
+        },
+        run_lat: {
+          mean: 0.005224291666666666,
+          squared_diffs: 0.0025294570249583337,
+        },
+        service_lat: {
+          mean: 0.035700833333333334,
+          squared_diffs: 0.13060311153333334,
+        },
+        overhead_lat: {
+          mean: 0.000004333333333333095,
+          squared_diffs: 1.3933333333305632e-10,
+        },
+        legacy_last_err_redacted: "",
+        sensitive_info: {
+          last_err: "",
+          most_recent_plan_description: {
+            name: "render",
+            children: [
+              {
+                name: "limit",
+                attrs: [{ key: "count", value: "_" }],
+                children: [
+                  {
+                    name: "sort",
+                    attrs: [{ key: "order", value: "-version" }],
+                    children: [
+                      {
+                        name: "union all",
+                        children: [
+                          {
+                            name: "scan",
+                            attrs: [
+                              { key: "missing stats", value: "" },
+                              {
+                                key: "table",
+                                value: "protected_ts_meta@primary",
+                              },
+                              { key: "spans", value: "FULL SCAN" },
+                            ],
+                          },
+                          {
+                            name: "values",
+                            attrs: [{ key: "size", value: "1 column, 1 row" }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          most_recent_plan_timestamp: {
+            seconds: Long.fromInt(1599670094),
+            nanos: 152349000,
+          },
+        },
+        bytes_read: { mean: 0, squared_diffs: 0 },
+        rows_read: { mean: 0, squared_diffs: 0 },
+      },
+      id: Long.fromInt(107),
+    },
+    {
+      key: {
+        key_data: {
+          query:
             "WITH deleted_sessions AS (DELETE FROM sqlliveness WHERE expiration < $1 RETURNING session_id) SELECT count(*) FROM deleted_sessions",
           app: "$ internal-delete-sessions",
           distSQL: false,
@@ -479,6 +581,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       },
       stats: {
         count: Long.fromInt(141),
+        nodes: [Long.fromNumber(1), Long.fromNumber(2), Long.fromNumber(3)],
         first_attempt_count: Long.fromInt(141),
         max_retries: Long.fromInt(0),
         legacy_last_err: "",
@@ -590,6 +693,12 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       },
       stats: {
         count: Long.fromInt(1),
+        nodes: [
+          Long.fromNumber(1),
+          Long.fromNumber(2),
+          Long.fromNumber(3),
+          Long.fromNumber(4),
+        ],
         first_attempt_count: Long.fromInt(1),
         max_retries: Long.fromInt(0),
         legacy_last_err: "",
@@ -627,93 +736,6 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
         rows_read: { mean: 0, squared_diffs: 0 },
       },
       id: Long.fromInt(109),
-    },
-    {
-      key: {
-        key_data: {
-          query:
-            "WITH current_meta AS (SELECT version, num_records, num_spans, total_bytes FROM system.protected_ts_meta UNION ALL SELECT _ AS version, _ AS num_records, _ AS num_spans, _ AS total_bytes ORDER BY version DESC LIMIT _) SELECT version, num_records, num_spans, total_bytes FROM current_meta",
-          app: "$ internal-protectedts-GetMetadata",
-          distSQL: false,
-          failed: false,
-          opt: true,
-          implicit_txn: false,
-          vec: false,
-        },
-        node_id: 5,
-      },
-      stats: {
-        count: Long.fromInt(24),
-        first_attempt_count: Long.fromInt(24),
-        max_retries: Long.fromInt(0),
-        legacy_last_err: "",
-        num_rows: { mean: 0, squared_diffs: 0 },
-        parse_lat: { mean: 0.0010775, squared_diffs: 0.000022485897999999995 },
-        plan_lat: {
-          mean: 0.029394708333333335,
-          squared_diffs: 0.1030786466649583,
-        },
-        run_lat: {
-          mean: 0.005224291666666666,
-          squared_diffs: 0.0025294570249583337,
-        },
-        service_lat: {
-          mean: 0.035700833333333334,
-          squared_diffs: 0.13060311153333334,
-        },
-        overhead_lat: {
-          mean: 0.000004333333333333095,
-          squared_diffs: 1.3933333333305632e-10,
-        },
-        legacy_last_err_redacted: "",
-        sensitive_info: {
-          last_err: "",
-          most_recent_plan_description: {
-            name: "render",
-            children: [
-              {
-                name: "limit",
-                attrs: [{ key: "count", value: "_" }],
-                children: [
-                  {
-                    name: "sort",
-                    attrs: [{ key: "order", value: "-version" }],
-                    children: [
-                      {
-                        name: "union all",
-                        children: [
-                          {
-                            name: "scan",
-                            attrs: [
-                              { key: "missing stats", value: "" },
-                              {
-                                key: "table",
-                                value: "protected_ts_meta@primary",
-                              },
-                              { key: "spans", value: "FULL SCAN" },
-                            ],
-                          },
-                          {
-                            name: "values",
-                            attrs: [{ key: "size", value: "1 column, 1 row" }],
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-          most_recent_plan_timestamp: {
-            seconds: Long.fromInt(1599670094),
-            nanos: 152349000,
-          },
-        },
-        bytes_read: { mean: 0, squared_diffs: 0 },
-        rows_read: { mean: 0, squared_diffs: 0 },
-      },
-      id: Long.fromInt(107),
     },
   ],
   last_reset: { seconds: Long.fromInt(1599667572), nanos: 688635000 },

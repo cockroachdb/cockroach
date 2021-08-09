@@ -24,6 +24,7 @@ import {
   selectTransactionsData,
   selectTransactionsLastError,
 } from "./transactionsPage.selectors";
+import { nodeRegionsByIDSelector } from "../store/nodes";
 
 export const TransactionsPageConnected = withRouter(
   connect<
@@ -33,6 +34,7 @@ export const TransactionsPageConnected = withRouter(
   >(
     (state: AppState) => ({
       data: selectTransactionsData(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
       error: selectTransactionsLastError(state),
     }),
     (dispatch: Dispatch) => ({

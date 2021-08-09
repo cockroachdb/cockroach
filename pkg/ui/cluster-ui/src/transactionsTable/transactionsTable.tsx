@@ -10,7 +10,11 @@
 
 import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { SortedTable, ISortedTablePagination } from "../sortedtable";
+import {
+  SortedTable,
+  ISortedTablePagination,
+  longListWithTooltip,
+} from "../sortedtable";
 import {
   transactionsCountBarChart,
   transactionsRowsReadBarChart,
@@ -21,11 +25,10 @@ import {
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
 } from "./transactionsBarCharts";
-import { StatementTableTitle } from "../statementsTable/statementsTableContent";
-import { longToInt } from "./utils";
+import { StatementTableTitle } from "../statementsTable";
 import { tableClasses } from "./transactionsTableClasses";
 import { textCell } from "./transactionsCells";
-import { FixLong } from "src/util";
+import { FixLong, longToInt } from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
   getStatementsById,
@@ -37,10 +40,11 @@ import statementsPageStyles from "src/statementsTable/statementsTableContent.mod
 
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
+type CollectedTransactionStatistics = protos.cockroach.sql.ICollectedTransactionStatistics;
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 interface TransactionsTable {
-  transactions: Transaction[];
+  transactions: TransactionInfo[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
   handleDetails: (
@@ -49,8 +53,13 @@ interface TransactionsTable {
   ) => void;
   pagination: ISortedTablePagination;
   statements: Statement[];
+  nodeRegions: { [key: string]: string };
   search?: string;
   renderNoResult?: React.ReactNode;
+}
+
+export interface TransactionInfo extends Transaction {
+  regionNodes: string[];
 }
 
 const { latencyClasses } = tableClasses;
@@ -66,7 +75,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
   };
   const sampledExecStatsBarChartOptions = {
     classes: defaultBarChartOptions.classes,
-    displayNoSamples: (d: Transaction) => {
+    displayNoSamples: (d: TransactionInfo) => {
       return longToInt(d.stats_data.stats.exec_stats?.count) == 0;
     },
   };
@@ -102,7 +111,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     {
       name: "transactions",
       title: <>Transactions</>,
-      cell: (item: Transaction) =>
+      cell: (item: TransactionInfo) =>
         textCell({
           transactionText: collectStatementsText(
             getStatementsById(item.stats_data.statement_ids, statements),
@@ -112,7 +121,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
           handleDetails,
           search,
         }),
-      sort: (item: Transaction) =>
+      sort: (item: TransactionInfo) =>
         collectStatementsText(
           getStatementsById(item.stats_data.statement_ids, statements),
         ),
@@ -121,14 +130,15 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
       name: "execution count",
       title: StatementTableTitle.executionCount,
       cell: countBar,
-      sort: (item: Transaction) => FixLong(Number(item.stats_data.stats.count)),
+      sort: (item: TransactionInfo) =>
+        FixLong(Number(item.stats_data.stats.count)),
     },
     {
       name: "rows read",
       title: StatementTableTitle.rowsRead,
       cell: rowsReadBar,
       className: cx("statements-table__col-rows-read"),
-      sort: (item: Transaction) =>
+      sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.rows_read.mean)),
     },
     {
@@ -136,7 +146,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
       title: StatementTableTitle.bytesRead,
       cell: bytesReadBar,
       className: cx("statements-table__col-bytes-read"),
-      sort: (item: Transaction) =>
+      sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.bytes_read.mean)),
     },
     {
@@ -144,14 +154,14 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
       title: StatementTableTitle.transactionTime,
       cell: latencyBar,
       className: latencyClasses.column,
-      sort: (item: Transaction) => item.stats_data.stats.service_lat.mean,
+      sort: (item: TransactionInfo) => item.stats_data.stats.service_lat.mean,
     },
     {
       name: "contention",
       title: StatementTableTitle.contention,
       cell: contentionBar,
       className: cx("statements-table__col-contention"),
-      sort: (item: Transaction) =>
+      sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.exec_stats.contention_time?.mean)),
     },
     {
@@ -159,7 +169,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
       title: StatementTableTitle.maxMemUsage,
       cell: maxMemUsageBar,
       className: cx("statements-table__col-max-mem-usage"),
-      sort: (item: Transaction) =>
+      sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.exec_stats.max_mem_usage?.mean)),
     },
     {
@@ -167,21 +177,30 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
       title: StatementTableTitle.networkBytes,
       cell: networkBytesBar,
       className: cx("statements-table__col-network-bytes"),
-      sort: (item: Transaction) =>
+      sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.exec_stats.network_bytes?.mean)),
     },
     {
       name: "retries",
       title: StatementTableTitle.retries,
       cell: retryBar,
-      sort: (item: Transaction) =>
+      sort: (item: TransactionInfo) =>
         longToInt(Number(item.stats_data.stats.max_retries)),
+    },
+    {
+      name: "regionNodes",
+      title: StatementTableTitle.regionNodes,
+      className: cx("statements-table__col-regions"),
+      cell: (item: TransactionInfo) => {
+        return longListWithTooltip(item.regionNodes.sort().join(", "), 50);
+      },
+      sort: (item: TransactionInfo) => item.regionNodes.sort().join(", "),
     },
     {
       name: "statements",
       title: <>Statements</>,
-      cell: (item: Transaction) => item.stats_data.statement_ids.length,
-      sort: (item: Transaction) => item.stats_data.statement_ids.length,
+      cell: (item: TransactionInfo) => item.stats_data.statement_ids.length,
+      sort: (item: TransactionInfo) => item.stats_data.statement_ids.length,
     },
   ];
 

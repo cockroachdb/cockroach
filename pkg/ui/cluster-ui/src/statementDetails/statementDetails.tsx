@@ -24,6 +24,7 @@ import {
   Bytes,
   Duration,
   FixLong,
+  longToInt,
   appAttr,
   NumericStat,
   StatementStatistics,
@@ -31,6 +32,7 @@ import {
   getMatchParamByName,
   formatNumberForDisplay,
   calculateTotalWorkload,
+  unique,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -43,11 +45,11 @@ import {
   approximify,
   latencyBreakdown,
   genericBarChart,
-  longToInt,
   formatTwoPlaces,
 } from "src/barCharts";
 import {
   AggregateStatistics,
+  populateRegionNodeForStatements,
   makeNodesColumns,
   StatementsSortedTable,
 } from "src/statementsTable";
@@ -143,6 +145,7 @@ export interface StatementDetailsStateProps {
   statement: SingleStatementStatistics;
   statementsError: Error | null;
   nodeNames: { [nodeId: string]: string };
+  nodeRegions: { [nodeId: string]: string };
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
   uiConfig?: UIConfigState["pages"]["statementDetails"];
 }
@@ -165,6 +168,17 @@ function AppLink(props: { app: string }) {
       to={`/statements/${encodeURIComponent(props.app)}`}
     >
       {props.app}
+    </Link>
+  );
+}
+
+function NodeLink(props: { node: string }) {
+  return (
+    <Link
+      className={cx("app-name")}
+      to={`/node/${encodeURIComponent(props.node)}`}
+    >
+      N{props.node}
     </Link>
   );
 }
@@ -386,6 +400,7 @@ export class StatementDetails extends React.Component<
       diagnosticsReports,
       dismissStatementDiagnosticsAlertMessage,
       onDiagnosticBundleDownload,
+      nodeRegions,
     } = this.props;
     const { currentTab } = this.state;
 
@@ -445,6 +460,13 @@ export class StatementDetails extends React.Component<
 
     const statsByNode = this.props.statement.byNode;
     const totalWorkload = calculateTotalWorkload(statsByNode);
+    populateRegionNodeForStatements(statsByNode, nodeRegions);
+    const nodes: string[] = unique(
+      stats.nodes.map(node => node.toString()),
+    ).sort();
+    const regions = unique(
+      stats.nodes.map(node => nodeRegions[node.toString()]),
+    ).sort();
     const logicalPlan =
       stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
     const duration = (v: number) => Duration(v * 1e9);
@@ -552,6 +574,28 @@ export class StatementDetails extends React.Component<
               <SummaryCard className={cx("summary-card")}>
                 <Heading type="h5">Statement details</Heading>
                 <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text>Nodes</Text>
+                  <Text>
+                    {intersperse<ReactNode>(
+                      nodes.map(n => <NodeLink node={n} key={n} />),
+                      ", ",
+                    )}
+                  </Text>
+                </div>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text>Regions</Text>
+                  <Text>{intersperse<ReactNode>(regions, ", ")}</Text>
+                </div>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text>Database</Text>
+                  <Text>{database}</Text>
+                </div>
+                <p
+                  className={summaryCardStylesCx(
+                    "summary--card__divider--large",
+                  )}
+                />
+                <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>App</Text>
                   <Text>
                     {intersperse<ReactNode>(
@@ -583,10 +627,6 @@ export class StatementDetails extends React.Component<
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Last execution time</Text>
                   <Text>{lastExec}</Text>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Database</Text>
-                  <Text>{database}</Text>
                 </div>
                 <p
                   className={summaryCardStylesCx(
@@ -781,6 +821,7 @@ export class StatementDetails extends React.Component<
                 statsByNode,
                 this.props.nodeNames,
                 totalWorkload,
+                nodeRegions,
               )}
               sortSetting={this.state.sortSetting}
               onChangeSortSetting={this.changeSortSetting}

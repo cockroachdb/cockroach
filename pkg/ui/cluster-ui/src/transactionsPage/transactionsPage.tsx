@@ -13,7 +13,7 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 import styles from "../statementsPage/statementsPage.module.scss";
 import { RouteComponentProps } from "react-router-dom";
-import { TransactionsTable } from "../transactionsTable";
+import { TransactionInfo, TransactionsTable } from "../transactionsTable";
 import { TransactionDetails } from "../transactionDetails";
 import { ISortedTablePagination, SortSetting } from "../sortedtable";
 import { Pagination } from "../pagination";
@@ -22,7 +22,11 @@ import {
   baseHeadingClasses,
   statisticsClasses,
 } from "./transactionsPageClasses";
-import { aggregateAcrossNodeIDs, getTrxAppFilterOptions } from "./utils";
+import {
+  aggregateAcrossNodeIDs,
+  generateRegionNode,
+  getTrxAppFilterOptions,
+} from "./utils";
 import {
   searchTransactionsData,
   filterTransactions,
@@ -30,7 +34,7 @@ import {
 } from "./utils";
 import { forIn } from "lodash";
 import Long from "long";
-import { aggregateStatementStats, getSearchParams } from "src/util";
+import { aggregateStatementStats, getSearchParams, unique } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
 import { PageConfig, PageConfigItem } from "../pageConfig";
@@ -58,6 +62,7 @@ interface TState {
 
 export interface TransactionsPageStateProps {
   data: IStatementsResponse;
+  nodeRegions: { [nodeId: string]: string };
   error?: Error | null;
   pageSize?: number;
 }
@@ -172,6 +177,8 @@ export class TransactionsPage extends React.Component<
       app: filters.app,
       timeNumber: filters.timeNumber,
       timeUnit: filters.timeUnit,
+      regions: filters.regions,
+      nodes: filters.nodes,
     });
   };
 
@@ -186,6 +193,8 @@ export class TransactionsPage extends React.Component<
       app: undefined,
       timeNumber: undefined,
       timeUnit: undefined,
+      regions: undefined,
+      nodes: undefined,
     });
   };
 
@@ -210,13 +219,19 @@ export class TransactionsPage extends React.Component<
           loading={!this.props?.data}
           error={this.props?.error}
           render={() => {
-            const { data, resetSQLStats } = this.props;
+            const { data, resetSQLStats, nodeRegions } = this.props;
             const { pagination, search, filters } = this.state;
             const { statements, internal_app_name_prefix } = data;
             const appNames = getTrxAppFilterOptions(
               data.transactions,
               internal_app_name_prefix,
             );
+            const nodes = Object.keys(nodeRegions)
+              .map(n => Number(n))
+              .sort();
+            const regions = unique(
+              nodes.map(node => nodeRegions[node.toString()]),
+            ).sort();
             // We apply the search filters and app name filters prior to aggregating across Node IDs
             // in order to match what's done on the Statements Page.
             //
@@ -229,11 +244,17 @@ export class TransactionsPage extends React.Component<
               searchTransactionsData(search, data.transactions, statements),
               filters,
               internal_app_name_prefix,
+              statements,
+              nodeRegions,
             );
-            const transactionsToDisplay = aggregateAcrossNodeIDs(
+            const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
               filteredTransactions,
               statements,
-            );
+            ).map(t => ({
+              stats_data: t.stats_data,
+              node_id: t.node_id,
+              regionNodes: generateRegionNode(t, statements, nodeRegions),
+            }));
             const { current, pageSize } = pagination;
             const hasData = data.transactions?.length > 0;
             const isUsedFilter = search?.length > 0;
@@ -252,8 +273,12 @@ export class TransactionsPage extends React.Component<
                     <Filter
                       onSubmitFilters={this.onSubmitFilters}
                       appNames={appNames}
+                      regions={regions}
+                      nodes={nodes.map(n => "n" + n)}
                       activeFilters={activeFilters}
                       filters={filters}
+                      showRegions={regions.length > 1}
+                      showNodes={nodes.length > 1}
                     />
                   </PageConfigItem>
                 </PageConfig>
@@ -271,6 +296,7 @@ export class TransactionsPage extends React.Component<
                   <TransactionsTable
                     transactions={transactionsToDisplay}
                     statements={statements}
+                    nodeRegions={nodeRegions}
                     sortSetting={this.state.sortSetting}
                     onChangeSortSetting={this.onChangeSortSetting}
                     handleDetails={this.handleDetails}
@@ -306,6 +332,7 @@ export class TransactionsPage extends React.Component<
     return (
       <TransactionDetails
         statements={aggregateStatementStats(transactionDetails)}
+        nodeRegions={this.props.nodeRegions}
         transactionStats={this.state.transactionStats}
         lastReset={this.lastReset()}
         handleDetails={this.handleDetails}

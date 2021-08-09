@@ -44,6 +44,7 @@ go_test(
         "every_n_test.go",
         "fast_int_map_test.go",
         "fast_int_set_test.go",
+        "slices_test.go",
         "smalltrace_test.go",
         "strings_test.go",
         "topk_test.go",

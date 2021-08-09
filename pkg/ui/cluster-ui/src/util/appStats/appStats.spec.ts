@@ -214,6 +214,7 @@ function randomStats(
       seconds: Long.fromInt(1599670292),
       nanos: 111613000,
     },
+    nodes: [Long.fromInt(1), Long.fromInt(3), Long.fromInt(4)],
   };
 }
 
