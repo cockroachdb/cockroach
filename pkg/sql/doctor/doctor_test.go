@@ -55,9 +55,8 @@ var validTableDesc = &descpb.Descriptor{
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				EncodingType:        descpb.PrimaryIndexEncoding,
 			},
-			NextIndexID: 2,
-			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-				descpb.SystemAllowedPrivileges[keys.SqllivenessID], security.NodeUserName()),
+			NextIndexID:    2,
+			Privileges:     descpb.NewDefaultPrivilegeDescriptor(security.NodeUserName()),
 			FormatVersion:  descpb.InterleavedFormatVersion,
 			NextMutationID: 1,
 		},
