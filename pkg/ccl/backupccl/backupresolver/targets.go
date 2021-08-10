@@ -109,7 +109,7 @@ func (r *DescriptorResolver) LookupSchema(
 	if scID, ok := schemas[scName]; ok {
 		dbDesc, dbOk := r.DescByID[dbID].(catalog.DatabaseDescriptor)
 		scDesc, scOk := r.DescByID[scID].(catalog.SchemaDescriptor)
-		if !scOk && scID == keys.PublicSchemaID {
+		if !scOk && scID == keys.PublicSchemaIDForBackup {
 			scDesc, scOk = schemadesc.GetPublicSchema(), true
 		}
 		if dbOk && scOk {
@@ -157,7 +157,6 @@ func (r *DescriptorResolver) LookupObject(
 							"expected schema for ID %d, got %T", scID, r.DescByID[scID])
 					}
 				}
-
 				return true, resolvedPrefix, r.DescByID[objID], nil
 			}
 		}
@@ -189,7 +188,7 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 			r.SchemasByName[desc.GetID()] = make(map[string]descpb.ID)
 			// Always add an entry for the public schema.
 			r.ObjsByName[desc.GetID()][tree.PublicSchema] = make(map[string]descpb.ID)
-			r.SchemasByName[desc.GetID()][tree.PublicSchema] = keys.PublicSchemaID
+			r.SchemasByName[desc.GetID()][tree.PublicSchema] = keys.PublicSchemaIDForBackup
 		}
 
 		// Incidentally, also remember all the descriptors by ID.
@@ -235,7 +234,7 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 		schemaMap := r.ObjsByName[parentDesc.GetID()]
 		scID := desc.GetParentSchemaID()
 		var scName string
-		if scID == keys.PublicSchemaID {
+		if scID == keys.PublicSchemaIDForBackup {
 			scName = tree.PublicSchema
 		} else {
 			scDescI, ok := r.DescByID[scID]
@@ -337,7 +336,7 @@ func DescriptorsMatchingTargets(
 	alreadyRequestedSchemas := make(map[descpb.ID]struct{})
 	maybeAddSchemaDesc := func(id descpb.ID, requirePublic bool) error {
 		// Only add user defined schemas.
-		if id == keys.PublicSchemaID {
+		if id == keys.PublicSchemaIDForBackup {
 			return nil
 		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
@@ -539,7 +538,7 @@ func DescriptorsMatchingTargets(
 				}
 				// If this table is a member of a user defined schema, then request the
 				// user defined schema.
-				if desc.GetParentSchemaID() != keys.PublicSchemaID {
+				if desc.GetParentSchemaID() != keys.PublicSchemaIDForBackup {
 					// Note, that although we're processing the database expansions,
 					// since the table is in a PUBLIC state, we also expect the schema
 					// to be in a similar state.

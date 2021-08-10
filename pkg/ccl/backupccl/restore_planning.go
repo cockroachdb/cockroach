@@ -1138,7 +1138,7 @@ func maybeRewriteSchemaID(
 ) descpb.ID {
 	// If the current schema is the public schema, then don't attempt to
 	// do any rewriting.
-	if curSchemaID == keys.PublicSchemaID && !isTemporaryDesc {
+	if curSchemaID == keys.PublicSchemaIDForBackup && !isTemporaryDesc {
 		return curSchemaID
 	}
 	rw, ok := descriptorRewrites[curSchemaID]

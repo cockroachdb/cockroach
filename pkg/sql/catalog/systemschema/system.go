@@ -703,7 +703,7 @@ func systemTable(
 		Name:                    string(name),
 		ID:                      id,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
 		Version:                 1,
 		Columns:                 columns,
 		Families:                families,

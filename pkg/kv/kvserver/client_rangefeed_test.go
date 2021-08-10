@@ -71,7 +71,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		require.GreaterOrEqual(t, keys.MaxReservedDescID, junkDescriptorID)
 		junkDescriptorKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, junkDescriptorID)
 		junkDescriptor := dbdesc.NewInitial(
-			junkDescriptorID, "junk", security.AdminRoleName())
+			junkDescriptorID, "junk", security.AdminRoleName(), 0)
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 				return err

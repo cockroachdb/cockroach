@@ -37,15 +37,15 @@ func TestRenameTable(t *testing.T) {
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	counter := int64(keys.MinNonPredefinedUserDescID)
-
-	oldDBID := descpb.ID(counter)
+	var oldDBID descpb.ID
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
 
+	row := db.QueryRow(`SELECT id FROM system.namespace WHERE name = 'test'`)
+	row.Scan(&oldDBID)
+
 	// Create table in 'test'.
-	counter++
 	oldName := "foo"
 	if _, err := db.Exec(`CREATE TABLE test.foo (k INT PRIMARY KEY, v int)`); err != nil {
 		t.Fatal(err)
@@ -61,11 +61,13 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Create database test2.
-	counter++
-	newDBID := descpb.ID(counter)
+	var newDBID descpb.ID
 	if _, err := db.Exec(`CREATE DATABASE test2`); err != nil {
 		t.Fatal(err)
 	}
+
+	row = db.QueryRow(`SELECT id FROM system.namespace WHERE name = 'test2'`)
+	row.Scan(&newDBID)
 
 	// Move table to test2 and change its name as well.
 	newName := "bar"

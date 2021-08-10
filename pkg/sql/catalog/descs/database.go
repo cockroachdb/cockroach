@@ -62,6 +62,7 @@ func (tc *Collection) getDatabaseByName(
 ) (catalog.DatabaseDescriptor, error) {
 	found, desc, err := tc.getByName(
 		ctx, txn, nil, nil, name, flags.AvoidCached, flags.RequireMutable,
+		tc.settings.Version,
 	)
 	if err != nil {
 		return nil, err

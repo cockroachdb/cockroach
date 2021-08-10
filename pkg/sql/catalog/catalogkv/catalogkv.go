@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -67,15 +68,23 @@ func GetDescriptorID(
 
 // ResolveSchemaID resolves a schema's ID based on db and name.
 func ResolveSchemaID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	dbID descpb.ID,
+	scName string,
+	version clusterversion.Handle,
 ) (bool, descpb.ID, error) {
-	// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
-	// checking for public schema.
-	if scName == tree.PublicSchema {
-		return true, keys.PublicSchemaID, nil
+	if !version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
+		// checking for public schema.
+		if scName == tree.PublicSchema {
+			return true, keys.PublicSchemaID, nil
+		}
 	}
 
 	sKey := catalogkeys.NewNameKeyComponents(dbID, keys.RootNamespaceID, scName)
+	// TODO(richardjcai): Make sure this handles the mixed version case.
 	schemaID, err := GetDescriptorID(ctx, txn, codec, sKey)
 	if err != nil || schemaID == descpb.InvalidID {
 		return false, descpb.InvalidID, err

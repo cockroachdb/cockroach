@@ -304,6 +304,8 @@ const (
 	TargetBytesAvoidExcess
 
 	// *************************************************
+	// Public schema is backed by a descriptor.
+	PublicSchemasWithDescriptors
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
 	// *************************************************
@@ -515,7 +517,10 @@ var versionsSingleton = keyedVersions{
 		Key:     TargetBytesAvoidExcess,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 4},
 	},
-
+	{
+		Key:     PublicSchemasWithDescriptors,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 6},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

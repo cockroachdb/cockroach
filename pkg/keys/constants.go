@@ -389,7 +389,15 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
-	PublicSchemaID                       = 29 // pseudo
+	// TODO(richardjcai): Remove this in 22.2.
+	// PublicSchemaID refers to old references where Public schemas are
+	// descriptorless.
+	PublicSchemaID = 29 // pseudo
+	// PublicSchemaIDForBackup is used temporarily to determine cases of
+	// PublicSchemaID being used for backup.
+	PublicSchemaIDForBackup = 29
+	// SystemPublicSchema continues to use 29 as an ID.
+	SystemPublicSchemaID = 29 // pseudo
 	// New NamespaceTableID for cluster version >= 20.1
 	// Ensures that NamespaceTable does not get gossiped again
 	NamespaceTableID                    = 30
