@@ -6,6 +6,7 @@ go_library(
         "inject.go",
         "pg_url.go",
         "pretty.go",
+        "rows.go",
         "scrub.go",
         "sql_runner.go",
         "table_gen.go",
