@@ -97,6 +97,9 @@ type Builder struct {
 	// containsBoundedStalenessScan is true if the query uses bounded
 	// staleness and contains a scan.
 	containsBoundedStalenessScan bool
+
+	// ContainsMutation is set to true if the whole plan contains any mutations.
+	ContainsMutation bool
 }
 
 // New constructs an instance of the execution node builder using the

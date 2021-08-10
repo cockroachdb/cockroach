@@ -164,10 +164,13 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		}
 	}
 
-	// Raise error if mutation op is part of a read-only transaction.
-	if opt.IsMutationOp(e) && b.evalCtx.TxnReadOnly {
-		return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-			"cannot execute %s in a read-only transaction", b.statementTag(e))
+	if opt.IsMutationOp(e) {
+		b.ContainsMutation = true
+		// Raise error if mutation op is part of a read-only transaction.
+		if b.evalCtx.TxnReadOnly {
+			return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+				"cannot execute %s in a read-only transaction", b.statementTag(e))
+		}
 	}
 
 	// Raise error if bounded staleness is used incorrectly.

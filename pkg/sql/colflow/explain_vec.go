@@ -48,7 +48,7 @@ func convertToVecTree(
 		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
 	}
 	fuseOpt := flowinfra.FuseNormally
-	if isPlanLocal {
+	if isPlanLocal && !execinfra.HasParallelProcessors(flow) {
 		fuseOpt = flowinfra.FuseAggressively
 	}
 	// We optimistically assume that sql.DistSQLReceiver can be used as an
