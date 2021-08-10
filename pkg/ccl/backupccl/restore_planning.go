@@ -851,11 +851,11 @@ func allocateDescriptorRewrites(
 
 	// Generate new IDs for the tables that need to be remapped.
 	for _, desc := range descriptorsToRemap {
-		newTableID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		id, err := catalogkv.GenerateUniqueIDGreaterThanID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec, maxDescIDInBackup)
 		if err != nil {
 			return nil, err
 		}
-		descriptorRewrites[desc.GetID()].ID = newTableID
+		descriptorRewrites[desc.GetID()].ID = id
 	}
 
 	return descriptorRewrites, nil
@@ -1115,7 +1115,7 @@ func maybeRewriteSchemaID(
 ) descpb.ID {
 	// If the current schema is the public schema, then don't attempt to
 	// do any rewriting.
-	if curSchemaID == keys.PublicSchemaID && !isTemporaryDesc {
+	if curSchemaID == keys.PublicSchemaIDForBackup && !isTemporaryDesc {
 		return curSchemaID
 	}
 	rw, ok := descriptorRewrites[curSchemaID]
@@ -2207,9 +2207,20 @@ func planDatabaseModifiersForRestore(
 		)
 
 		// Allocate the region enum ID.
-		regionEnumID := maxSeenID + 1
-		regionEnumArrayID := maxSeenID + 2
-		maxSeenID += 2
+		regionEnumID, err := catalogkv.GenerateUniqueIDGreaterThanID(
+			ctx, p.ExecCfg().DB, p.ExecCfg().Codec, int64(maxSeenID),
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		maxSeenID = regionEnumID
+		regionEnumArrayID, err := catalogkv.GenerateUniqueIDGreaterThanID(
+			ctx, p.ExecCfg().DB, p.ExecCfg().Codec, int64(maxSeenID),
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		maxSeenID = regionEnumID
 
 		// Assign the multi-region configuration to the database descriptor.
 		sg, err := sql.TranslateSurvivalGoal(tree.SurvivalGoalDefault)

@@ -11,6 +11,7 @@
 package zonepb
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -987,26 +989,33 @@ func TestZoneSpecifiers(t *testing.T) {
 	}
 
 	// Simulate the following schema:
-	//   CREATE DATABASE db;        CREATE TABLE db.public.tbl ...
-	//   CREATE DATABASE carl;      CREATE TABLE carl.public.toys ...
-	//   CREATE SCHEMA test_schema; CREATE TABLE carl.test_schema.toys ...
+	/*
+	   CREATE DATABASE db;
+	   CREATE TABLE db.public.tbl();
+	   CREATE DATABASE carl;
+	   CREATE TABLE carl.public.toys();
+	   CREATE SCHEMA carl.test_schema;
+	   CREATE TABLE carl.test_schema.toys();
+	*/
 	type namespaceEntry struct {
 		parentID uint32
 		name     string
 		schemaID uint32
 	}
 	namespace := map[namespaceEntry]uint32{
-		{parentID: 0, name: "db"}: 50,
-		{parentID: 50, name: "tbl",
-			schemaID: keys.PublicSchemaID,
-		}: 51,
-		{parentID: 0, name: "carl"}:                                            55,
-		{parentID: 55, name: "toys", schemaID: keys.PublicSchemaID}:            56,
-		{parentID: 9000, name: "broken_parent", schemaID: keys.PublicSchemaID}: 57,
-		{parentID: 55, name: "test_schema"}:                                    58,
+		{parentID: 0, name: "db"}:      54,
+		{parentID: 54, name: "public"}: 55,
+		{parentID: 54, name: "tbl",
+			schemaID: 55,
+		}: 56,
+		{parentID: 0, name: "carl"}:                           57,
+		{parentID: 57, name: "public"}:                        58,
+		{parentID: 57, name: "toys", schemaID: 58}:            59,
+		{parentID: 9000, name: "broken_parent", schemaID: 58}: 999,
+		{parentID: 57, name: "test_schema"}:                   60,
 		// Test that a table with the same name as another table in a public
 		// schema works properly.
-		{parentID: 55, name: "toys", schemaID: 58}: 59,
+		{parentID: 57, name: "toys", schemaID: 60}: 61,
 	}
 
 	resolveName := func(parentID uint32, schemaID uint32, name string) (uint32, error) {
@@ -1036,26 +1045,28 @@ func TestZoneSpecifiers(t *testing.T) {
 		{tree.ZoneSpecifier{NamedZone: "default"}, 0, ""},
 		{tree.ZoneSpecifier{NamedZone: "carl"}, 42, ""},
 		{tree.ZoneSpecifier{NamedZone: "foo"}, -1, `"foo" is not a built-in zone`},
-		{tree.ZoneSpecifier{Database: "db"}, 50, ""},
+		{tree.ZoneSpecifier{Database: "db"}, 54, ""},
 		{tree.ZoneSpecifier{NamedZone: "db"}, -1, `"db" is not a built-in zone`},
-		{tableSpecifier("db", "tbl", "", ""), 51, ""},
-		{tableSpecifier("db", "tbl", "", "prt"), 51, ""},
-		{tableSpecifier("db", "tbl", "primary", ""), 51, ""},
-		{tableSpecifier("db", "tbl", "idx", ""), 51, ""},
-		{tableSpecifier("db", "tbl", "idx", "prt"), 51, ""},
+		{tableSpecifier("db", "tbl", "", ""), 56, ""},
+		{tableSpecifier("db", "tbl", "", "prt"), 56, ""},
+		{tableSpecifier("db", "tbl", "primary", ""), 56, ""},
+		{tableSpecifier("db", "tbl", "idx", ""), 56, ""},
+		{tableSpecifier("db", "tbl", "idx", "prt"), 56, ""},
 		{tree.ZoneSpecifier{Database: "tbl"}, -1, `"tbl" not found`},
-		{tree.ZoneSpecifier{Database: "carl"}, 55, ""},
-		{tableSpecifier("carl", "toys", "", ""), 56, ""},
+		{tree.ZoneSpecifier{Database: "carl"}, 57, ""},
+		{tableSpecifier("carl", "toys", "", ""), 59, ""},
 		{tree.ZoneSpecifier{
 			TableOrIndex: tree.TableIndexName{
 				Table: tree.MakeTableNameWithSchema("carl", "test_schema", "toys"),
 			},
-		}, 59, ""},
+		}, 61, ""},
 		{tableSpecifier("carl", "love", "", ""), -1, `"love" not found`},
 	} {
 		t.Run(fmt.Sprintf("resolve-specifier=%s", tc.specifier.String()), func(t *testing.T) {
 			err := func() error {
-				id, err := ResolveZoneSpecifier(&tc.specifier, resolveName)
+				settings := cluster.MakeTestingClusterSettings()
+				id, err := ResolveZoneSpecifier(context.Background(), &tc.specifier, resolveName,
+					settings.Version)
 				if err != nil {
 					return err
 				}
@@ -1078,12 +1089,12 @@ func TestZoneSpecifiers(t *testing.T) {
 		{0, "RANGE default", ""},
 		{41, "", "41 not found"},
 		{42, "RANGE carl", ""},
-		{50, "DATABASE db", ""},
-		{51, "TABLE db.public.tbl", ""},
-		{55, "DATABASE carl", ""},
-		{56, "TABLE carl.public.toys", ""},
-		{57, "", "9000 not found"},
-		{59, "TABLE carl.test_schema.toys", ""},
+		{54, "DATABASE db", ""},
+		{56, "TABLE db.public.tbl", ""},
+		{57, "DATABASE carl", ""},
+		{59, "TABLE carl.public.toys", ""},
+		{999, "", "9000 not found"},
+		{61, "TABLE carl.test_schema.toys", ""},
 		{600, "", "600 not found"},
 	} {
 		t.Run(fmt.Sprintf("resolve-id=%d", tc.id), func(t *testing.T) {

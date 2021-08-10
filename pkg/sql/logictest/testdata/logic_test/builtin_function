@@ -2684,12 +2684,12 @@ NULL
 query I
 SELECT crdb_internal.get_namespace_id(0, 'root_test')
 ----
-63
+66
 
 query I
 SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
 ----
-64
+NULL
 
 query T
 SELECT crdb_internal.get_zone_config(-1)::string
@@ -2739,12 +2739,18 @@ user testuser
 query I
 SELECT crdb_internal.get_namespace_id(0, 'root_test')
 ----
-63
+66
+
+let $root_test_id
+SELECT crdb_internal.get_namespace_id(0, 'root_test')
+
+let $root_test_public_schema_id
+SELECT crdb_internal.get_namespace_id($root_test_id, 'public')
 
 query I
-SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
+SELECT crdb_internal.get_namespace_id($root_test_id, $root_test_public_schema_id, 't')
 ----
-64
+68
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
@@ -2752,9 +2758,9 @@ SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_tes
 \x2805500158017800
 
 query T
-SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
+SELECT crdb_internal.get_namespace_id($root_test_id, $root_test_public_schema_id, 't')::string
 ----
-NULL
+68
 
 # reset state to default
 user root

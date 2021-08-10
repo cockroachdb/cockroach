@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -55,14 +54,15 @@ func (b *buildContext) dropDatabase(ctx context.Context, n *tree.DropDatabase) {
 		}
 	}
 
-	doSchema(schemadesc.GetPublicSchema())
 	var schemaIDs catalog.DescriptorIDSet
+	schemaIDs.Add(db.GetSchemaID(tree.PublicSchema))
 	_ = db.ForEachSchemaInfo(func(id descpb.ID, _ string, isDropped bool) error {
 		if !isDropped {
 			schemaIDs.Add(id)
 		}
 		return nil
 	})
+
 	for _, schemaID := range schemaIDs.Ordered() {
 		schema := mustReadSchema(ctx, b, schemaID)
 		if schema.Dropped() {

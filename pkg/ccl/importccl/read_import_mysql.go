@@ -431,7 +431,7 @@ func mysqlTableToCockroach(
 			seqName,
 			opts,
 			parentDB.GetID(),
-			keys.PublicSchemaID,
+			keys.PublicSchemaIDForBackup,
 			id,
 			time,
 			privilegeDesc,

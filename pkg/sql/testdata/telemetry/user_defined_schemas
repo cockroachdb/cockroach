@@ -22,22 +22,21 @@ CREATE DATABASE d1;
 CREATE DATABASE d2;
 ----
 
-feature-usage
-ALTER DATABASE d1 CONVERT TO SCHEMA WITH PARENT d2
-----
-sql.uds.reparent_database
-
 exec
 CREATE SCHEMA s
 ----
 
+# TODO(richardjcai): We might want to change telemetry being reported if
+# public schema is used now that public schemas are also "UDS".
 feature-usage
 CREATE TABLE public.t (x INT)
 ----
+sql.uds.schema_used_by_object
 
 feature-usage
 CREATE TYPE public.ty AS ENUM ('hello')
 ----
+sql.uds.schema_used_by_object
 
 feature-usage
 CREATE TABLE s.t (x INT)
