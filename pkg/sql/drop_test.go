@@ -1380,7 +1380,7 @@ CREATE TABLE t.child(k INT PRIMARY KEY REFERENCES t.parent);
 	// for updating the referenced table has an empty description.
 	testutils.SucceedsSoon(t, func() error {
 		var count int
-		sqlRun.QueryRow(t, `SELECT count(*) FROM [SHOW JOBS] WHERE description = 'GC for ' AND status = 'succeeded'`).Scan(&count)
+		sqlRun.QueryRow(t, `SELECT count(*) FROM [SHOW JOBS] WHERE description LIKE 'removing FK % in cascade' AND status = 'succeeded'`).Scan(&count)
 		if count != 1 {
 			return errors.Newf("expected 1 result, got %d", count)
 		}
@@ -1458,4 +1458,61 @@ func TestDropPhysicalTableGC(t *testing.T) {
 			require.Zerof(t, actualZoneConfigs, "Zone config for '%s' was not deleted as expected.", table.name)
 		}
 	}
+}
+
+// TestDescriptionInDropCascade tests for a description message not empty for jobs
+// that are created while removing a foreign key in DROP DATABASE CASCADE.
+func TestDescriptionInDropCascade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("remove back reference", func(t *testing.T) {
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		defer s.Stopper().Stop(context.Background())
+
+		// Create a child table to have a FK outbound to parent to hit the case of
+		// removing an outbound FK.
+		tdb.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.parent (a INT PRIMARY KEY);
+CREATE TABLE t.child (
+   b INT PRIMARY KEY,
+   CONSTRAINT fk_b_a FOREIGN KEY (b) REFERENCES t.parent (a)
+ );
+DROP DATABASE t CASCADE`)
+
+		query := `
+SELECT count(*) FROM [SHOW JOBS]
+WHERE job_type = 'SCHEMA CHANGE GC'
+  AND description LIKE '% removing FK fk_b_a back-reference in cascade'`
+		tdb.CheckQueryResults(t, query, [][]string{{"1"}})
+	})
+
+	t.Run("remove forward reference", func(t *testing.T) {
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		defer s.Stopper().Stop(context.Background())
+
+		// Create a second child table to have FK inbound to child table. In this way
+		// we hit the case of removing a forward reference.
+		tdb.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.parent (a INT PRIMARY KEY);
+CREATE TABLE t.child (
+  b INT PRIMARY KEY,
+  CONSTRAINT fk_b_a FOREIGN KEY (b) REFERENCES t.parent (a)
+);
+CREATE TABLE t.child_child (
+  c INT PRIMARY KEY,
+  CONSTRAINT fk_c_b FOREIGN KEY (c) REFERENCES t.child (b)
+);
+DROP DATABASE t CASCADE`)
+
+		query := `
+SELECT count(*) FROM [SHOW JOBS]
+WHERE job_type = 'SCHEMA CHANGE GC'
+  AND description LIKE '% removing FK fk_c_b for back-reference in cascade'`
+		tdb.CheckQueryResults(t, query, [][]string{{"1"}})
+	})
 }
