@@ -687,14 +687,14 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
 func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
-	priv := privilege.ReadData
+	//priv := privilege.ReadData
 	return dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name:    SystemDatabaseName,
 		ID:      keys.SystemDatabaseID,
 		Version: 1,
-		// Assign max privileges to root user.
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			priv, security.NodeUserName()),
+		//Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+		//	priv, security.NodeUserName()),
+		Privileges: descpb.NewBaseDatabasePrivilegeDescriptor(security.NodeUserName()),
 	}).BuildImmutableDatabase()
 }
 

@@ -57,8 +57,9 @@ var validTableDesc = &descpb.Descriptor{
 				EncodingType:        descpb.PrimaryIndexEncoding,
 			},
 			NextIndexID: 2,
-			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-				privilege.ReadWriteData, security.NodeUserName()),
+			//Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			//	privilege.ReadWriteData, security.NodeUserName()),
+			Privileges:     descpb.NewBasePrivilegeDescriptor(security.NodeUserName()),
 			FormatVersion:  descpb.InterleavedFormatVersion,
 			NextMutationID: 1,
 		},

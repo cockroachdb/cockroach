@@ -104,27 +104,6 @@ func (p *PrivilegeDescriptor) RemoveUser(user security.SQLUsername) {
 	p.Users = append(p.Users[:idx], p.Users[idx+1:]...)
 }
 
-// NewCustomSuperuserPrivilegeDescriptor returns a privilege descriptor for the root user
-// and the admin role with specified privileges.
-func NewCustomSuperuserPrivilegeDescriptor(
-	priv privilege.List, owner security.SQLUsername,
-) *PrivilegeDescriptor {
-	return &PrivilegeDescriptor{
-		OwnerProto: owner.EncodeProto(),
-		Users: []UserPrivileges{
-			{
-				UserProto:  security.AdminRoleName().EncodeProto(),
-				Privileges: priv.ToBitField(),
-			},
-			{
-				UserProto:  security.RootUserName().EncodeProto(),
-				Privileges: priv.ToBitField(),
-			},
-		},
-		Version: Version21_2,
-	}
-}
-
 // NewPublicSelectPrivilegeDescriptor is used to construct a privilege descriptor
 // owned by the node user which has SELECT privilege for the public role. It is
 // used for virtual tables.
@@ -163,7 +142,11 @@ var DefaultSuperuserPrivileges = privilege.List{privilege.ALL}
 // with ALL privileges for the root user and admin role.
 // NOTE: use NewBaseDatabasePrivilegeDescriptor for databases.
 func NewBasePrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescriptor {
-	return NewCustomSuperuserPrivilegeDescriptor(DefaultSuperuserPrivileges, owner)
+	return &PrivilegeDescriptor{
+		OwnerProto: owner.EncodeProto(),
+		Users:      []UserPrivileges{},
+		Version:    Version21_2,
+	}
 }
 
 // NewBaseDatabasePrivilegeDescriptor creates defaults privileges for a database.

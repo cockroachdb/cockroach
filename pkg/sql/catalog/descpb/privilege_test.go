@@ -353,10 +353,7 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 
 	{
 		// Valid: root user has one of the allowable privilege sets.
-		descriptor := NewCustomSuperuserPrivilegeDescriptor(
-			privilege.List{privilege.SELECT, privilege.GRANT},
-			security.AdminRoleName(),
-		)
+		descriptor := NewBasePrivilegeDescriptor(security.AdminRoleName())
 		if err := validate(descriptor); err != nil {
 			t.Fatal(err)
 		}
@@ -376,10 +373,10 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 
 	{
 		// Valid: root has exactly the allowed privileges.
-		descriptor := NewCustomSuperuserPrivilegeDescriptor(
-			privilege.List{privilege.SELECT, privilege.GRANT},
-			security.AdminRoleName(),
-		)
+		descriptor := NewBasePrivilegeDescriptor(security.AdminRoleName())
+		if err := validate(descriptor); err != nil {
+			t.Fatal(err)
+		}
 
 		// Valid: foo has a subset of the allowed privileges.
 		descriptor.Grant(testUser, privilege.List{privilege.GRANT}, false)
@@ -403,8 +400,7 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 
 	{
 		// Invalid: root has a non-allowable privilege set.
-		descriptor := NewCustomSuperuserPrivilegeDescriptor(privilege.List{privilege.UPDATE},
-			security.AdminRoleName())
+		descriptor := NewBasePrivilegeDescriptor(security.AdminRoleName())
 		if err := validate(descriptor); !testutils.IsError(err, rootWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", rootWrongPrivilegesErr, err)
 		}
