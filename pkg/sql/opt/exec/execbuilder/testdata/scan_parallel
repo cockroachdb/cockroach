@@ -1,0 +1,95 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE data (a INT PRIMARY KEY, b INT)
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {2}       2
+/2         /3       {3}       3
+/3         /4       {4}       4
+/4         /5       {5}       5
+/5         /6       {1}       1
+/6         /7       {2}       2
+/7         /8       {3}       3
+/8         /9       {4}       4
+/9         NULL     {5}       5
+
+# Populate the range cache.
+statement ok
+SELECT * FROM data
+
+# Disable DistSQL since we need to have fully local plans.
+statement ok
+SET distsql = off
+
+# Check that 5 TableReaders are planned on the gateway.
+# TODO(yuzefovich): use DISTSQL option - for some reason at the moment we
+# non-deterministically get either Get or Scan requests (the latter shouldn't
+# happen).
+query T
+EXPLAIN SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: data@primary
+  spans: [/0 - /0] [/2 - /2] [/4 - /4] [/6 - /6] … (1 more)
+
+query T
+EXPLAIN (VEC) SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
+----
+│
+└ Node 1
+  └ *colexec.ParallelUnorderedSynchronizer
+    ├ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+# Now disable the parallelization of local scans by reducing the concurrency
+# limit to 0.
+
+statement ok
+SET CLUSTER SETTING sql.local_scans.concurrency_limit = 0
+
+# Check that a single TableReader is planned.
+# TODO(yuzefovich): use DISTSQL option - for some reason at the moment we
+# non-deterministically get either Get or Scan requests (the latter shouldn't
+# happen).
+query T
+EXPLAIN SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: data@primary
+  spans: [/0 - /0] [/2 - /2] [/4 - /4] [/6 - /6] … (1 more)
+
+query T
+EXPLAIN (VEC) SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
+----
+│
+└ Node 1
+  └ *colfetcher.ColBatchScan
+
+statement ok
+RESET CLUSTER SETTING sql.local_scans.concurrency_limit
