@@ -442,6 +442,10 @@ type ColumnTableDef struct {
 		Expr           Expr
 		ConstraintName Name
 	}
+	OnUpdateExpr struct {
+		Expr           Expr
+		ConstraintName Name
+	}
 	CheckExprs []ColumnTableDefCheckExpr
 	References struct {
 		Table          *TableName
@@ -536,6 +540,13 @@ func NewColumnTableDef(
 			}
 			d.DefaultExpr.Expr = t.Expr
 			d.DefaultExpr.ConstraintName = c.Name
+		case *ColumnOnUpdate:
+			if d.HasOnUpdateExpr() {
+				return nil, pgerror.Newf(pgcode.Syntax,
+					"multiple ON UPDATE values specified for column %q", name)
+			}
+			d.OnUpdateExpr.Expr = t.Expr
+			d.OnUpdateExpr.ConstraintName = c.Name
 		case *GeneratedAlwaysAsIdentity, *GeneratedByDefAsIdentity:
 			if d.GeneratedIdentity.IsGeneratedAsIdentity {
 				return nil, pgerror.Newf(pgcode.Syntax,
@@ -621,12 +632,26 @@ func NewColumnTableDef(
 			return nil, errors.AssertionFailedf("unexpected column qualification: %T", c)
 		}
 	}
+
+	if d.HasOnUpdateExpr() && d.References.Actions.Update != NoAction {
+		return nil, pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"ON UPDATE expression and ON UPDATE foreign key action both specified for column %q",
+			name,
+		)
+	}
+
 	return d, nil
 }
 
 // HasDefaultExpr returns if the ColumnTableDef has a default expression.
 func (node *ColumnTableDef) HasDefaultExpr() bool {
 	return node.DefaultExpr.Expr != nil
+}
+
+// HasOnUpdateExpr returns if the ColumnTableDef has an ON UPDATE expression.
+func (node *ColumnTableDef) HasOnUpdateExpr() bool {
+	return node.OnUpdateExpr.Expr != nil
 }
 
 // HasFKConstraint returns if the ColumnTableDef has a foreign key constraint.
@@ -698,6 +723,14 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 		}
 		ctx.WriteString(" DEFAULT ")
 		ctx.FormatNode(node.DefaultExpr.Expr)
+	}
+	if node.HasOnUpdateExpr() {
+		if node.OnUpdateExpr.ConstraintName != "" {
+			ctx.WriteString(" CONSTRAINT ")
+			ctx.FormatNode(&node.OnUpdateExpr.ConstraintName)
+		}
+		ctx.WriteString(" ON UPDATE ")
+		ctx.FormatNode(node.OnUpdateExpr.Expr)
 	}
 	if node.GeneratedIdentity.IsGeneratedAsIdentity {
 		switch node.GeneratedIdentity.GeneratedAsIdentityType {
@@ -791,6 +824,7 @@ type ColumnQualification interface {
 
 func (ColumnCollation) columnQualification()             {}
 func (*ColumnDefault) columnQualification()              {}
+func (*ColumnOnUpdate) columnQualification()             {}
 func (NotNullConstraint) columnQualification()           {}
 func (NullConstraint) columnQualification()              {}
 func (HiddenConstraint) columnQualification()            {}
@@ -809,6 +843,11 @@ type ColumnCollation string
 
 // ColumnDefault represents a DEFAULT clause for a column.
 type ColumnDefault struct {
+	Expr Expr
+}
+
+// ColumnOnUpdate represents a ON UPDATE clause for a column.
+type ColumnOnUpdate struct {
 	Expr Expr
 }
 

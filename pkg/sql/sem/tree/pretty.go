@@ -1906,6 +1906,12 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 			pretty.ConcatSpace(pretty.Keyword("DEFAULT"), p.Doc(node.DefaultExpr.Expr))))
 	}
 
+	// ON UPDATE expression.
+	if node.HasOnUpdateExpr() {
+		clauses = append(clauses, p.maybePrependConstraintName(&node.OnUpdateExpr.ConstraintName,
+			pretty.ConcatSpace(pretty.Keyword("ON UPDATE"), p.Doc(node.OnUpdateExpr.Expr))))
+	}
+
 	// [NOT] VISIBLE constraint.
 	if node.Hidden {
 		hiddenConstraint := pretty.Keyword("NOT VISIBLE")
