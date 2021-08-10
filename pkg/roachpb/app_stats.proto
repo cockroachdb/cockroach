@@ -179,6 +179,7 @@ message StatementStatisticsKey {
   optional bool vec = 7 [(gogoproto.nullable) = false];
   optional bool full_scan = 8 [(gogoproto.nullable) = false];
   optional string database = 9 [(gogoproto.nullable) = false];
+  optional uint64 plan_hash = 10 [(gogoproto.nullable) = false];
 }
 
 // CollectedStatementStatistics wraps collected timings and metadata for some
@@ -190,6 +191,7 @@ message CollectedStatementStatistics {
   optional uint64 id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "StmtFingerprintID"];
   optional StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
   optional StatementStatistics stats = 2 [(gogoproto.nullable) = false];
+  optional google.protobuf.Timestamp aggregated_ts = 4 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
 }
 
 
@@ -202,6 +204,7 @@ message CollectedTransactionStatistics {
   // App is the name of the app which executed the transaction.
   optional string app = 2 [(gogoproto.nullable) = false];
   optional TransactionStatistics stats = 3 [(gogoproto.nullable) = false];
+  optional google.protobuf.Timestamp aggregated_ts = 4 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
 }
 
 

@@ -84,9 +84,9 @@ type Reader interface {
 
 // IteratorOptions provides the ability to the caller to change how it iterates
 // the statements and transactions.
-// TODO(azhng): we want to support pagination/continuation tokens as well as
-//  different error handling behaviors when error is encountered once we start
-//  to support cluster-wide implementation of the sqlstats.Reader interface.
+// TODO(azhng): introduce StartTime and EndTime field so we can implement
+//  virtual indexes on crdb_internal.{statement,transaction}_statistics
+//  using the iterators.
 type IteratorOptions struct {
 	// SortedAppNames determines whether or not the application names will be
 	// sorted when iterating through statistics.

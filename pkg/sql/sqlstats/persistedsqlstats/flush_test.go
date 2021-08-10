@@ -40,27 +40,27 @@ type testCase struct {
 	count       int64
 }
 
+var testQueries = []testCase{
+	{
+		query:       "SELECT 1",
+		fingerprint: "SELECT _",
+		count:       3,
+	},
+	{
+		query:       "SELECT 1, 2, 3",
+		fingerprint: "SELECT _, _, _",
+		count:       10,
+	},
+	{
+		query:       "SELECT 1, 1 WHERE 1 < 10",
+		fingerprint: "SELECT _, _ WHERE _ < _",
+		count:       7,
+	},
+}
+
 func TestSQLStatsFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	testCases := []testCase{
-		{
-			query:       "SELECT 1",
-			fingerprint: "SELECT _",
-			count:       3,
-		},
-		{
-			query:       "SELECT 1, 2, 3",
-			fingerprint: "SELECT _, _, _",
-			count:       10,
-		},
-		{
-			query:       "SELECT 1, 1 WHERE 1 < 10",
-			fingerprint: "SELECT _, _ WHERE _ < _",
-			count:       7,
-		},
-	}
 
 	fakeTime := stubTime{
 		aggInterval: time.Hour,
@@ -117,24 +117,24 @@ func TestSQLStatsFlush(t *testing.T) {
 
 	// Regular inserts.
 	{
-		for _, tc := range testCases {
+		for _, tc := range testQueries {
 			for i := int64(0); i < tc.count; i++ {
 				firstSQLConn.Exec(t, tc.query)
 			}
 		}
 
-		verifyInMemoryStatsCorrectness(t, testCases, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testCases, secondServerSQLStats)
+		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
 		firstServerSQLStats.Flush(ctx)
 		secondServerSQLStats.Flush(ctx)
 
-		verifyInMemoryStatsEmpty(t, testCases, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testCases, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
 		// For each test case, we verify that it's being properly inserted exactly
 		// once and it is exactly executed tc.count number of times.
-		for _, tc := range testCases {
+		for _, tc := range testQueries {
 			verifyNumOfInsertedEntries(t, secondSQLConn, tc.fingerprint, firstServer.NodeID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
 			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.fingerprint, fakeTime.getAggTimeTs(), firstServer.NodeID(), tc.count)
 		}
@@ -143,23 +143,23 @@ func TestSQLStatsFlush(t *testing.T) {
 	// We insert the same data during the same aggregation window to ensure that
 	// no new entries will be created but the statistics is updated.
 	{
-		for i := range testCases {
+		for i := range testQueries {
 			// Increment the execution count.
-			testCases[i].count++
-			for execCnt := int64(0); execCnt < testCases[i].count; execCnt++ {
-				firstSQLConn.Exec(t, testCases[i].query)
+			testQueries[i].count++
+			for execCnt := int64(0); execCnt < testQueries[i].count; execCnt++ {
+				firstSQLConn.Exec(t, testQueries[i].query)
 			}
 		}
-		verifyInMemoryStatsCorrectness(t, testCases, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testCases, secondServerSQLStats)
+		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
 		firstServerSQLStats.Flush(ctx)
 		secondServerSQLStats.Flush(ctx)
 
-		verifyInMemoryStatsEmpty(t, testCases, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testCases, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
-		for _, tc := range testCases {
+		for _, tc := range testQueries {
 			verifyNumOfInsertedEntries(t, secondSQLConn, tc.fingerprint, firstServer.NodeID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
 			// The execution count is doubled here because we execute all of the
 			// statements here in the same aggregation interval.
@@ -171,21 +171,21 @@ func TestSQLStatsFlush(t *testing.T) {
 	{
 		fakeTime.setTime(fakeTime.StubTimeNow().Add(time.Hour * 3))
 
-		for _, tc := range testCases {
+		for _, tc := range testQueries {
 			for i := int64(0); i < tc.count; i++ {
 				firstSQLConn.Exec(t, tc.query)
 			}
 		}
-		verifyInMemoryStatsCorrectness(t, testCases, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testCases, secondServerSQLStats)
+		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
 		firstServerSQLStats.Flush(ctx)
 		secondServerSQLStats.Flush(ctx)
 
-		verifyInMemoryStatsEmpty(t, testCases, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testCases, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
-		for _, tc := range testCases {
+		for _, tc := range testQueries {
 			// We expect exactly 2 entries since we are in a different aggregation window.
 			verifyNumOfInsertedEntries(t, secondSQLConn, tc.fingerprint, firstServer.NodeID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
 			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.fingerprint, fakeTime.getAggTimeTs(), firstServer.NodeID(), tc.count)
@@ -194,24 +194,24 @@ func TestSQLStatsFlush(t *testing.T) {
 
 	// We run queries in a different server and trigger the flush.
 	{
-		for _, tc := range testCases {
+		for _, tc := range testQueries {
 			for i := int64(0); i < tc.count; i++ {
 				secondSQLConn.Exec(t, tc.query)
 				require.NoError(t, err)
 			}
 		}
-		verifyInMemoryStatsEmpty(t, testCases, firstServerSQLStats)
-		verifyInMemoryStatsCorrectness(t, testCases, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
+		verifyInMemoryStatsCorrectness(t, testQueries, secondServerSQLStats)
 
 		firstServerSQLStats.Flush(ctx)
 		secondServerSQLStats.Flush(ctx)
 
-		verifyInMemoryStatsEmpty(t, testCases, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testCases, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
 		// Ensure that we encode the correct node_id for the new entry and did not
 		// accidentally tamper the entries written by another server.
-		for _, tc := range testCases {
+		for _, tc := range testQueries {
 			verifyNumOfInsertedEntries(t, firstSQLConn, tc.fingerprint, secondServer.NodeID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
 			verifyInsertedFingerprintExecCount(t, firstSQLConn, tc.fingerprint, fakeTime.getAggTimeTs(), secondServer.NodeID(), tc.count)
 			verifyNumOfInsertedEntries(t, secondSQLConn, tc.fingerprint, firstServer.NodeID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
@@ -336,7 +336,7 @@ func verifyInMemoryStatsCorrectness(
 	t *testing.T, tcs []testCase, statsProvider *persistedsqlstats.PersistedSQLStats,
 ) {
 	for _, tc := range tcs {
-		err := statsProvider.IterateStatementStats(context.Background(), &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
 			if tc.fingerprint == statistics.Key.Query {
 				require.Equal(t, tc.count, statistics.Stats.Count, "fingerprint: %s", tc.fingerprint)
 			}
@@ -351,7 +351,7 @@ func verifyInMemoryStatsEmpty(
 	t *testing.T, tcs []testCase, statsProvider *persistedsqlstats.PersistedSQLStats,
 ) {
 	for _, tc := range tcs {
-		err := statsProvider.IterateStatementStats(context.Background(), &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
 			if tc.fingerprint == statistics.Key.Query {
 				require.Equal(t, 0 /* expected */, statistics.Stats.Count, "fingerprint: %s", tc.fingerprint)
 			}
