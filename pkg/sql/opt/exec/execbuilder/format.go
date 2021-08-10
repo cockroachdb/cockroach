@@ -35,7 +35,15 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 	}
 
 	// Build the scalar expression and format it as a single string.
-	bld := New(nil /* factory */, f.Memo, nil /* catalog */, scalar, nil /* evalCtx */, false /* allowAutoCommit */)
+	bld := New(
+		nil, /* factory */
+		nil, /* optimizer */
+		f.Memo,
+		nil, /* catalog */
+		scalar,
+		nil,   /* evalCtx */
+		false, /* allowAutoCommit */
+	)
 	expr, err := bld.BuildScalar()
 	if err != nil {
 		// Not all scalar operators are supported (e.g. Projections).

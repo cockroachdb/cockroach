@@ -475,7 +475,13 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 
 	root := execMemo.RootExpr()
 	eb := execbuilder.New(
-		exec.StubFactory{}, execMemo, nil /* catalog */, root, &h.evalCtx, true, /* allowAutoCommit */
+		exec.StubFactory{},
+		&h.optimizer,
+		execMemo,
+		nil, /* catalog */
+		root,
+		&h.evalCtx,
+		true, /* allowAutoCommit */
 	)
 	if _, err = eb.Build(); err != nil {
 		tb.Fatalf("%v", err)
@@ -521,7 +527,13 @@ func (h *harness) runPrepared(tb testing.TB, phase Phase) {
 
 	root := execMemo.RootExpr()
 	eb := execbuilder.New(
-		exec.StubFactory{}, execMemo, nil /* catalog */, root, &h.evalCtx, true, /* allowAutoCommit */
+		exec.StubFactory{},
+		&h.optimizer,
+		execMemo,
+		nil, /* catalog */
+		root,
+		&h.evalCtx,
+		true, /* allowAutoCommit */
 	)
 	if _, err := eb.Build(); err != nil {
 		tb.Fatalf("%v", err)
