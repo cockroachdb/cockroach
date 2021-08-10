@@ -287,7 +287,8 @@ func runPlanInsidePlan(
 	evalCtx := params.p.ExtendedEvalContextCopy()
 	plannerCopy := *params.p
 	distributePlan := getPlanDistribution(
-		params.ctx, &plannerCopy, plannerCopy.execCfg.NodeID, plannerCopy.SessionData().DistSQLMode, plan.main,
+		params.ctx, &plannerCopy, plannerCopy.execCfg.NodeID, plannerCopy.SessionData().DistSQLMode,
+		&evalCtx.Settings.SV, plan.main,
 	)
 	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.NewPlanningCtx(
 		params.ctx, evalCtx, &plannerCopy, params.p.txn, distributePlan.WillDistribute(),

@@ -1125,6 +1125,7 @@ func getPlanDistribution(
 	p *planner,
 	nodeID *base.SQLIDContainer,
 	distSQLMode sessiondata.DistSQLExecMode,
+	sv *settings.Values,
 	plan planMaybePhysical,
 ) physicalplan.PlanDistribution {
 	if plan.isPhysicalPlan() {
@@ -1150,7 +1151,7 @@ func getPlanDistribution(
 		return physicalplan.LocalPlan
 	}
 
-	rec, err := checkSupportForPlanNode(plan.planNode)
+	rec, err := checkSupportForPlanNode(plan.planNode, false /* outputNodeHasLimit */, preferLocalExecution.Get(sv))
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)

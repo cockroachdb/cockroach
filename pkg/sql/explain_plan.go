@@ -55,7 +55,8 @@ func (e *explainPlanNode) startExec(params runParams) error {
 
 	distribution := getPlanDistribution(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
+		params.extendedEvalCtx.SessionData.DistSQLMode,
+		&params.extendedEvalCtx.Settings.SV, plan.main,
 	)
 	ob.AddDistribution(distribution.String())
 
