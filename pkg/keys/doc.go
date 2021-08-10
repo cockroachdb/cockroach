@@ -210,6 +210,7 @@ var _ = [...]interface{}{
 	//   as a whole. They are replicated and addressable. Typical examples are
 	//   the range descriptor and transaction records. They all share
 	//   `LocalRangePrefix`.
+	RangeProbeKey,         // "prbe"
 	QueueLastProcessedKey, // "qlpt"
 	RangeDescriptorKey,    // "rdsc"
 	TransactionKey,        // "txn-"
