@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -198,11 +199,11 @@ func (p *Prober) probe(ctx context.Context, db dbGet) {
 	// perspective of the user.
 	timeout := readTimeout.Get(&p.settings.SV)
 	err = contextutil.RunWithTimeout(ctx, "db.Get", timeout, func(ctx context.Context) error {
-		// We read the start key for the range. There may be no data at the key,
-		// but that is okay. Even if there is no data at the key, the prober still
-		// executes a basic read operation on the range.
+		// We read a "range-local" key dedicated to probing. See pkg/keys for more.
+		// There is no data at the key, but that is okay. Even tho there is no data
+		// at the key, the prober still executes a read operation on the range.
 		// TODO(josh): Trace the probes.
-		_, err = db.Get(ctx, step.StartKey)
+		_, err = db.Get(ctx, keys.RangeProbeKey(step.StartKey))
 		return err
 	})
 	if err != nil {
