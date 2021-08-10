@@ -248,6 +248,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 
+				if d.Predicate != nil {
+					idxValidator := schemaexpr.MakeIndexPredicateValidator(params.ctx, *tn, n.tableDesc, &params.p.semaCtx)
+					expr, err := idxValidator.Validate(d.Predicate)
+					if err != nil {
+						return err
+					}
+					idx.Predicate = expr
+				}
+
 				var err error
 				idx, err = params.p.configureIndexDescForNewIndexPartitioning(
 					params.ctx,
