@@ -655,7 +655,7 @@ SELECT has_schema_privilege('bar', 'public', 'CREATE'),
        has_schema_privilege('bar', 'public', 'USAGE'),
        has_schema_privilege('bar', 'public', 'CREATE, USAGE')
 ----
-true  false  true
+true  true  true
 
 query BBB
 SELECT has_schema_privilege('bar', 'public', 'CREATE WITH GRANT OPTION'),
@@ -669,7 +669,7 @@ SELECT has_schema_privilege('testuser', 'public', 'CREATE'),
        has_schema_privilege('testuser', 'public', 'USAGE'),
        has_schema_privilege('testuser', 'public', 'CREATE, USAGE')
 ----
-false  false  false
+true  true  true
 
 query BBB
 SELECT has_schema_privilege('bar', 'test_schema', 'CREATE'),
@@ -704,7 +704,7 @@ SELECT has_schema_privilege('all_user_schema', 'public', 'CREATE'),
        has_schema_privilege('all_user_schema', 'public', 'USAGE'),
        has_schema_privilege('all_user_schema', 'public', 'CREATE, USAGE')
 ----
-false  false  false
+true  true  true
 
 query BBB
 SELECT has_schema_privilege('all_user_schema', 'test_schema', 'CREATE'),
@@ -1306,7 +1306,7 @@ SELECT has_database_privilege('testuser', 'my_db', 'create'),
        has_schema_privilege('testuser', 'public', 'usage'),
        has_table_privilege('testuser', 's.t', 'select')
 ----
-true  false  true
+true  true  true
 
 user root
 
@@ -1335,4 +1335,4 @@ SELECT has_database_privilege('testuser2', 'my_db', 'create'),
        has_schema_privilege('testuser2', 'public', 'usage'),
        has_table_privilege('testuser2', 's.t', 'select')
 ----
-true  false  true
+true  true  true

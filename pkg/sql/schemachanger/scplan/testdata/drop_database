@@ -52,262 +52,268 @@ DROP DATABASE db1 CASCADE
 ----
 Stage 0
   *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 54
-  *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 57
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 60
   *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 55
   *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 58
   *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 59
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 60
-  *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 61
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 64
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 56
   *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 62
   *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 63
   *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 53
+    DescID: 64
   *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 52
+    DescID: 67
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 59
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 65
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 66
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 56
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 54
 Stage 1 (non-revertible)
+  *scop.MarkDescriptorAsDropped
+    DescID: 60
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 3
+    TableID: 60
+  *scop.UpdateRelationDeps
+    TableID: 60
   *scop.MarkDescriptorAsDropped
     DescID: 57
   *scop.RemoveColumnDefaultExpression
-    ColumnID: 3
-    TableID: 57
-  *scop.UpdateRelationDeps
-    TableID: 57
-  *scop.MarkDescriptorAsDropped
-    DescID: 54
-  *scop.RemoveColumnDefaultExpression
     ColumnID: 1
-    TableID: 57
+    TableID: 60
   *scop.UpdateRelationDeps
-    TableID: 57
+    TableID: 60
   *scop.RemoveColumnDefaultExpression
     ColumnID: 2
-    TableID: 57
+    TableID: 60
   *scop.UpdateRelationDeps
-    TableID: 57
+    TableID: 60
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 57
-    TableID: 54
-  *scop.MarkDescriptorAsDropped
-    DescID: 56
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 3
-    TableID: 56
-  *scop.UpdateRelationDeps
-    TableID: 56
+    DependedOnBy: 60
+    TableID: 57
   *scop.MarkDescriptorAsDropped
     DescID: 55
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 58
-    TableID: 56
-  *scop.MarkDescriptorAsDropped
-    DescID: 58
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 59
-    TableID: 58
   *scop.MarkDescriptorAsDropped
     DescID: 59
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 60
-    TableID: 58
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 60
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 3
+    TableID: 59
+  *scop.UpdateRelationDeps
     TableID: 59
   *scop.MarkDescriptorAsDropped
-    DescID: 60
+    DescID: 58
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 61
     TableID: 59
   *scop.MarkDescriptorAsDropped
     DescID: 61
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 64
+    DependedOnBy: 62
     TableID: 61
   *scop.MarkDescriptorAsDropped
-    DescID: 64
-  *scop.MarkDescriptorAsDropped
     DescID: 62
-  *scop.RemoveTypeBackRef
-    DescID: 64
-    TypeID: 62
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 63
+    TableID: 61
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 63
+    TableID: 62
   *scop.MarkDescriptorAsDropped
     DescID: 63
-  *scop.RemoveTypeBackRef
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 64
+    TableID: 62
+  *scop.MarkDescriptorAsDropped
     DescID: 64
-    TypeID: 63
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 67
+    TableID: 64
+  *scop.MarkDescriptorAsDropped
+    DescID: 67
+  *scop.MarkDescriptorAsDropped
+    DescID: 65
+  *scop.RemoveTypeBackRef
+    DescID: 67
+    TypeID: 65
+  *scop.MarkDescriptorAsDropped
+    DescID: 66
+  *scop.RemoveTypeBackRef
+    DescID: 67
+    TypeID: 66
   *scop.RemoveColumnDefaultExpression
     ColumnID: 1
-    TableID: 56
+    TableID: 59
   *scop.UpdateRelationDeps
-    TableID: 56
+    TableID: 59
   *scop.RemoveColumnDefaultExpression
     ColumnID: 2
-    TableID: 56
+    TableID: 59
   *scop.UpdateRelationDeps
-    TableID: 56
+    TableID: 59
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 56
-    TableID: 55
+    DependedOnBy: 59
+    TableID: 58
   *scop.MarkDescriptorAsDropped
-    DescID: 53
+    DescID: 56
   *scop.MarkDescriptorAsDropped
-    DescID: 52
-Stage 2 (non-revertible)
-  *scop.DrainDescriptorName
-    TableID: 54
-  *scop.CreateGcJobForDescriptor
     DescID: 54
+Stage 2 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 57
   *scop.CreateGcJobForDescriptor
     DescID: 57
   *scop.DrainDescriptorName
-    TableID: 55
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
-  *scop.DrainDescriptorName
     TableID: 60
   *scop.CreateGcJobForDescriptor
     DescID: 60
   *scop.DrainDescriptorName
-    TableID: 59
-  *scop.CreateGcJobForDescriptor
-    DescID: 59
+    TableID: 55
   *scop.DrainDescriptorName
     TableID: 58
   *scop.CreateGcJobForDescriptor
     DescID: 58
   *scop.DrainDescriptorName
-    TableID: 64
+    TableID: 63
   *scop.CreateGcJobForDescriptor
-    DescID: 64
+    DescID: 63
+  *scop.DrainDescriptorName
+    TableID: 62
+  *scop.CreateGcJobForDescriptor
+    DescID: 62
   *scop.DrainDescriptorName
     TableID: 61
   *scop.CreateGcJobForDescriptor
     DescID: 61
   *scop.DrainDescriptorName
-    TableID: 56
+    TableID: 67
   *scop.CreateGcJobForDescriptor
-    DescID: 56
+    DescID: 67
   *scop.DrainDescriptorName
-    TableID: 62
+    TableID: 64
+  *scop.CreateGcJobForDescriptor
+    DescID: 64
   *scop.DrainDescriptorName
-    TableID: 63
+    TableID: 59
+  *scop.CreateGcJobForDescriptor
+    DescID: 59
   *scop.DrainDescriptorName
-    TableID: 53
+    TableID: 65
   *scop.DrainDescriptorName
-    TableID: 52
+    TableID: 66
+  *scop.DrainDescriptorName
+    TableID: 56
+  *scop.DrainDescriptorName
+    TableID: 54
 
 deps
 DROP DATABASE db1 CASCADE
 ----
-- from: [Database:{DescID: 52}, ABSENT]
-  to:   [Sequence:{DescID: 54}, ABSENT]
-- from: [Database:{DescID: 52}, ABSENT]
-  to:   [Table:{DescID: 57}, ABSENT]
-- from: [DefaultExpression:{DescID: 56, ColumnID: 1}, ABSENT]
-  to:   [Table:{DescID: 56}, DROPPED]
-- from: [DefaultExpression:{DescID: 56, ColumnID: 2}, ABSENT]
-  to:   [Table:{DescID: 56}, DROPPED]
-- from: [DefaultExpression:{DescID: 56, ColumnID: 3}, ABSENT]
-  to:   [Table:{DescID: 56}, DROPPED]
-- from: [DefaultExpression:{DescID: 57, ColumnID: 1}, ABSENT]
-  to:   [Table:{DescID: 57}, DROPPED]
-- from: [DefaultExpression:{DescID: 57, ColumnID: 2}, ABSENT]
-  to:   [Table:{DescID: 57}, DROPPED]
-- from: [DefaultExpression:{DescID: 57, ColumnID: 3}, ABSENT]
-  to:   [Table:{DescID: 57}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}, ABSENT]
-  to:   [Sequence:{DescID: 54}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
-  to:   [Sequence:{DescID: 55}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
-  to:   [Table:{DescID: 56}, DROPPED]
+- from: [DefaultExpression:{DescID: 59, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 59}, DROPPED]
+- from: [DefaultExpression:{DescID: 59, ColumnID: 2}, ABSENT]
+  to:   [Table:{DescID: 59}, DROPPED]
+- from: [DefaultExpression:{DescID: 59, ColumnID: 3}, ABSENT]
+  to:   [Table:{DescID: 59}, DROPPED]
+- from: [DefaultExpression:{DescID: 60, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 60}, DROPPED]
+- from: [DefaultExpression:{DescID: 60, ColumnID: 2}, ABSENT]
+  to:   [Table:{DescID: 60}, DROPPED]
+- from: [DefaultExpression:{DescID: 60, ColumnID: 3}, ABSENT]
+  to:   [Table:{DescID: 60}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 60}, ABSENT]
+  to:   [Sequence:{DescID: 57}, DROPPED]
 - from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}, ABSENT]
-  to:   [View:{DescID: 58}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}, ABSENT]
-  to:   [View:{DescID: 58}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 59, ReferencedDescID: 60}, ABSENT]
-  to:   [View:{DescID: 59}, DROPPED]
+  to:   [Sequence:{DescID: 58}, DROPPED]
 - from: [RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}, ABSENT]
-  to:   [View:{DescID: 59}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 61, ReferencedDescID: 64}, ABSENT]
+  to:   [Table:{DescID: 59}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 61, ReferencedDescID: 62}, ABSENT]
   to:   [View:{DescID: 61}, DROPPED]
-- from: [Schema:{DescID: 53}, ABSENT]
-  to:   [Sequence:{DescID: 55}, ABSENT]
-- from: [Schema:{DescID: 53}, ABSENT]
-  to:   [Table:{DescID: 56}, ABSENT]
-- from: [Schema:{DescID: 53}, ABSENT]
-  to:   [Type:{DescID: 62}, ABSENT]
-- from: [Schema:{DescID: 53}, ABSENT]
-  to:   [Type:{DescID: 63}, ABSENT]
-- from: [Schema:{DescID: 53}, ABSENT]
-  to:   [View:{DescID: 58}, ABSENT]
-- from: [Schema:{DescID: 53}, ABSENT]
-  to:   [View:{DescID: 59}, ABSENT]
-- from: [Schema:{DescID: 53}, ABSENT]
-  to:   [View:{DescID: 60}, ABSENT]
-- from: [Schema:{DescID: 53}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 61, ReferencedDescID: 63}, ABSENT]
+  to:   [View:{DescID: 61}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 62, ReferencedDescID: 63}, ABSENT]
+  to:   [View:{DescID: 62}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 62, ReferencedDescID: 64}, ABSENT]
+  to:   [View:{DescID: 62}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 64, ReferencedDescID: 67}, ABSENT]
+  to:   [View:{DescID: 64}, DROPPED]
+- from: [Schema:{DescID: 55}, ABSENT]
+  to:   [Sequence:{DescID: 57}, ABSENT]
+- from: [Schema:{DescID: 55}, ABSENT]
+  to:   [Table:{DescID: 60}, ABSENT]
+- from: [Schema:{DescID: 56}, ABSENT]
+  to:   [Sequence:{DescID: 58}, ABSENT]
+- from: [Schema:{DescID: 56}, ABSENT]
+  to:   [Table:{DescID: 59}, ABSENT]
+- from: [Schema:{DescID: 56}, ABSENT]
+  to:   [Type:{DescID: 65}, ABSENT]
+- from: [Schema:{DescID: 56}, ABSENT]
+  to:   [Type:{DescID: 66}, ABSENT]
+- from: [Schema:{DescID: 56}, ABSENT]
   to:   [View:{DescID: 61}, ABSENT]
-- from: [Schema:{DescID: 53}, ABSENT]
+- from: [Schema:{DescID: 56}, ABSENT]
+  to:   [View:{DescID: 62}, ABSENT]
+- from: [Schema:{DescID: 56}, ABSENT]
+  to:   [View:{DescID: 63}, ABSENT]
+- from: [Schema:{DescID: 56}, ABSENT]
   to:   [View:{DescID: 64}, ABSENT]
-- from: [Sequence:{DescID: 54}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}, ABSENT]
-- from: [Sequence:{DescID: 55}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
-- from: [Table:{DescID: 56}, ABSENT]
-  to:   [DefaultExpression:{DescID: 56, ColumnID: 1}, ABSENT]
-- from: [Table:{DescID: 56}, ABSENT]
-  to:   [DefaultExpression:{DescID: 56, ColumnID: 2}, ABSENT]
-- from: [Table:{DescID: 56}, ABSENT]
-  to:   [DefaultExpression:{DescID: 56, ColumnID: 3}, ABSENT]
-- from: [Table:{DescID: 56}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
-- from: [Table:{DescID: 56}, ABSENT]
-  to:   [View:{DescID: 58}, ABSENT]
-- from: [Table:{DescID: 57}, ABSENT]
-  to:   [DefaultExpression:{DescID: 57, ColumnID: 1}, ABSENT]
-- from: [Table:{DescID: 57}, ABSENT]
-  to:   [DefaultExpression:{DescID: 57, ColumnID: 2}, ABSENT]
-- from: [Table:{DescID: 57}, ABSENT]
-  to:   [DefaultExpression:{DescID: 57, ColumnID: 3}, ABSENT]
-- from: [TypeReference:{DescID: 64, ReferencedDescID: 62}, ABSENT]
-  to:   [Type:{DescID: 62}, DROPPED]
-- from: [TypeReference:{DescID: 64, ReferencedDescID: 63}, ABSENT]
-  to:   [Type:{DescID: 63}, DROPPED]
-- from: [View:{DescID: 58}, ABSENT]
+- from: [Schema:{DescID: 56}, ABSENT]
+  to:   [View:{DescID: 67}, ABSENT]
+- from: [Sequence:{DescID: 57}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 60}, ABSENT]
+- from: [Sequence:{DescID: 58}, ABSENT]
   to:   [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}, ABSENT]
-- from: [View:{DescID: 58}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}, ABSENT]
-- from: [View:{DescID: 58}, ABSENT]
-  to:   [View:{DescID: 59}, ABSENT]
-- from: [View:{DescID: 58}, ABSENT]
-  to:   [View:{DescID: 60}, ABSENT]
-- from: [View:{DescID: 59}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 59, ReferencedDescID: 60}, ABSENT]
-- from: [View:{DescID: 59}, ABSENT]
+- from: [Table:{DescID: 59}, ABSENT]
+  to:   [DefaultExpression:{DescID: 59, ColumnID: 1}, ABSENT]
+- from: [Table:{DescID: 59}, ABSENT]
+  to:   [DefaultExpression:{DescID: 59, ColumnID: 2}, ABSENT]
+- from: [Table:{DescID: 59}, ABSENT]
+  to:   [DefaultExpression:{DescID: 59, ColumnID: 3}, ABSENT]
+- from: [Table:{DescID: 59}, ABSENT]
   to:   [RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}, ABSENT]
-- from: [View:{DescID: 59}, ABSENT]
-  to:   [View:{DescID: 60}, ABSENT]
-- from: [View:{DescID: 59}, ABSENT]
+- from: [Table:{DescID: 59}, ABSENT]
   to:   [View:{DescID: 61}, ABSENT]
+- from: [Table:{DescID: 60}, ABSENT]
+  to:   [DefaultExpression:{DescID: 60, ColumnID: 1}, ABSENT]
+- from: [Table:{DescID: 60}, ABSENT]
+  to:   [DefaultExpression:{DescID: 60, ColumnID: 2}, ABSENT]
+- from: [Table:{DescID: 60}, ABSENT]
+  to:   [DefaultExpression:{DescID: 60, ColumnID: 3}, ABSENT]
+- from: [TypeReference:{DescID: 67, ReferencedDescID: 65}, ABSENT]
+  to:   [Type:{DescID: 65}, DROPPED]
+- from: [TypeReference:{DescID: 67, ReferencedDescID: 66}, ABSENT]
+  to:   [Type:{DescID: 66}, DROPPED]
 - from: [View:{DescID: 61}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 61, ReferencedDescID: 64}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 61, ReferencedDescID: 62}, ABSENT]
 - from: [View:{DescID: 61}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 61, ReferencedDescID: 63}, ABSENT]
+- from: [View:{DescID: 61}, ABSENT]
+  to:   [View:{DescID: 62}, ABSENT]
+- from: [View:{DescID: 61}, ABSENT]
+  to:   [View:{DescID: 63}, ABSENT]
+- from: [View:{DescID: 62}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 62, ReferencedDescID: 63}, ABSENT]
+- from: [View:{DescID: 62}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 62, ReferencedDescID: 64}, ABSENT]
+- from: [View:{DescID: 62}, ABSENT]
+  to:   [View:{DescID: 63}, ABSENT]
+- from: [View:{DescID: 62}, ABSENT]
   to:   [View:{DescID: 64}, ABSENT]
 - from: [View:{DescID: 64}, ABSENT]
-  to:   [TypeReference:{DescID: 64, ReferencedDescID: 62}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 64, ReferencedDescID: 67}, ABSENT]
 - from: [View:{DescID: 64}, ABSENT]
-  to:   [TypeReference:{DescID: 64, ReferencedDescID: 63}, ABSENT]
+  to:   [View:{DescID: 67}, ABSENT]
+- from: [View:{DescID: 67}, ABSENT]
+  to:   [TypeReference:{DescID: 67, ReferencedDescID: 65}, ABSENT]
+- from: [View:{DescID: 67}, ABSENT]
+  to:   [TypeReference:{DescID: 67, ReferencedDescID: 66}, ABSENT]

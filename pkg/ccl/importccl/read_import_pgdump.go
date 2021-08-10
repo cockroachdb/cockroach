@@ -845,7 +845,7 @@ func readPostgresStmt(
 					txn,
 					p.ExecCfg().Codec,
 					parentID,
-					keys.PublicSchemaID,
+					keys.PublicSchemaIDForBackup,
 					tree.NewUnqualifiedTableName(tree.Name(tableName)),
 				)
 				if err != nil {

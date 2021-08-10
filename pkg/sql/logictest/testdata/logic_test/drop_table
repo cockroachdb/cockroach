@@ -1,6 +1,9 @@
 statement ok
 CREATE TABLE a (id INT PRIMARY KEY)
 
+let $t_id
+SELECT id FROM system.namespace WHERE name='a'
+
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
 
@@ -43,8 +46,8 @@ public  b  table  root  0  NULL
 statement error pgcode 42P01 relation "a" does not exist
 SELECT * FROM a
 
-statement error pq: \[53 AS a\]: descriptor is being dropped
-SELECT * FROM [53 AS a]
+statement error pq: \[\d+ AS a\]: descriptor is being dropped
+SELECT * FROM [$t_id AS a]
 
 statement error pgcode 42P01 relation "a" does not exist
 DROP TABLE a

@@ -46,7 +46,7 @@ func TestPlanAlterTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	datadriven.Walk(t, filepath.Join("testdata"), func(t *testing.T, path string) {
+	datadriven.Walk(t, filepath.Join("testdata/drop_database"), func(t *testing.T, path string) {
 		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
 
