@@ -12,8 +12,10 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -99,10 +101,11 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 		if err != nil {
 			return err
 		}
-		stressBin, err = d.getPathToBin(ctx, stressTarget)
+		bazelBin, err := d.getBazelBin(ctx)
 		if err != nil {
 			return err
 		}
+		stressBin = filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(stressTarget))
 	}
 
 	var args []string

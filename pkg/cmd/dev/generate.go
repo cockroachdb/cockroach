@@ -28,10 +28,10 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 		Short:   `Generate the specified files`,
 		Long:    `Generate the specified files.`,
 		Example: `
-	dev generate
-	dev generate bazel
-	dev generate protobuf
-	dev generate {exec,opt}gen`,
+        dev generate
+        dev generate bazel
+        dev generate docs
+`,
 		Args: cobra.MinimumNArgs(0),
 		// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
 		// invocations in something that prints out the appropriate error log
@@ -41,10 +41,12 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 }
 
 func (d *dev) generate(cmd *cobra.Command, targets []string) error {
-	// TODO(irfansharif): Flesh out the remaining targets.
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
-		"bazel": d.generateBazel,
-		"docs":  d.generateDocs,
+		"bazel":   d.generateBazel,
+		"docs":    d.generateDocs,
+		"execgen": d.generateUnimplemented,
+		"optgen":  d.generateUnimplemented,
+		"proto":   d.generateUnimplemented,
 	}
 
 	if len(targets) == 0 {
@@ -128,4 +130,8 @@ func (d *dev) generateDocs(cmd *cobra.Command) error {
 		}
 	}
 	return nil
+}
+
+func (*dev) generateUnimplemented(*cobra.Command) error {
+	return errors.New("To generate Go code, run `dev build` with the flag `--hoist-generated-code`")
 }
