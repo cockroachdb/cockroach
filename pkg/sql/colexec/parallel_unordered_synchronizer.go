@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -64,6 +66,10 @@ type ParallelUnorderedSynchronizer struct {
 	colexecop.InitHelper
 
 	inputs []colexecargs.OpWithMetaInfo
+	// cancelInputs stores context cancellation functions for each of the
+	// inputs.
+	cancelInputs []context.CancelFunc
+	tracingSpans []*tracing.Span
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
 	// goroutines to wait on until the Next goroutine signals that it is safe to
@@ -132,6 +138,8 @@ func NewParallelUnorderedSynchronizer(
 	}
 	return &ParallelUnorderedSynchronizer{
 		inputs:            inputs,
+		cancelInputs:      make([]context.CancelFunc, len(inputs)),
+		tracingSpans:      make([]*tracing.Span, len(inputs)),
 		readNextBatch:     readNextBatch,
 		batches:           make([]coldata.Batch, len(inputs)),
 		nextBatch:         make([]func(), len(inputs)),
@@ -156,7 +164,10 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 		return
 	}
 	for i, input := range s.inputs {
-		input.Root.Init(s.Ctx)
+		var inputCtx context.Context
+		inputCtx, s.tracingSpans[i] = execinfra.ProcessorSpan(s.Ctx, fmt.Sprintf("parallel unordered sync input %d", i))
+		inputCtx, s.cancelInputs[i] = context.WithCancel(inputCtx)
+		input.Root.Init(inputCtx)
 		s.nextBatch[i] = func(inputOp colexecop.Operator, inputIdx int) func() {
 			return func() {
 				s.batches[inputIdx] = inputOp.Next()
@@ -188,9 +199,8 @@ func (s *ParallelUnorderedSynchronizer) init() {
 		// TODO(asubiotto): Most inputs are Inboxes, and these have handler
 		// goroutines just sitting around waiting for cancellation. I wonder if we
 		// could reuse those goroutines to push batches to batchCh directly.
-		go func(ctx context.Context, input colexecargs.OpWithMetaInfo, inputIdx int) {
-			var span *tracing.Span
-			ctx, span = execinfra.ProcessorSpan(ctx, fmt.Sprintf("parallel unordered sync input %d", inputIdx))
+		go func(input colexecargs.OpWithMetaInfo, inputIdx int) {
+			span := s.tracingSpans[inputIdx]
 			defer func() {
 				if span != nil {
 					span.Finish()
@@ -200,7 +210,7 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				}
 				// We need to close all of the closers of this input before we
 				// notify the wait groups.
-				input.ToClose.CloseAndLogOnErr(ctx, "parallel unordered synchronizer input")
+				input.ToClose.CloseAndLogOnErr(s.Ctx, "parallel unordered synchronizer input")
 				s.internalWaitGroup.Done()
 				s.externalWaitGroup.Done()
 			}()
@@ -225,6 +235,22 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				switch state {
 				case parallelUnorderedSynchronizerStateRunning:
 					if err := colexecerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
+						if strings.Contains(err.Error(), context.Canceled.Error()) && s.Ctx.Err() == nil {
+							// The input context has been canceled, yet the main
+							// context of the synchronizer has not. This
+							// indicates that the synchronizer has transitioned
+							// into draining state and wanted this goroutine to
+							// stop whatever it was doing.
+							if util.CrdbTestBuild {
+								if s.getState() != parallelUnorderedSynchronizerStateDraining {
+									colexecerror.InternalError(errors.AssertionFailedf(
+										"unexpectedly the input context is canceled, the main " +
+											"context is not, and not in the draining state",
+									))
+								}
+							}
+							continue
+						}
 						sendErr(err)
 						return
 					}
@@ -268,8 +294,8 @@ func (s *ParallelUnorderedSynchronizer) init() {
 					sentMeta = true
 				}
 				select {
-				case <-ctx.Done():
-					sendErr(ctx.Err())
+				case <-s.Ctx.Done():
+					sendErr(s.Ctx.Err())
 					return
 				case s.batchCh <- msg:
 				}
@@ -283,12 +309,12 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				// Wait until Next goroutine tells us we are good to go.
 				select {
 				case <-s.readNextBatch[inputIdx]:
-				case <-ctx.Done():
-					sendErr(ctx.Err())
+				case <-s.Ctx.Done():
+					sendErr(s.Ctx.Err())
 					return
 				}
 			}
-		}(s.Ctx, input, i)
+		}(input, i)
 	}
 }
 
@@ -363,6 +389,11 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 	s.setState(parallelUnorderedSynchronizerStateDraining)
 	if prevState == parallelUnorderedSynchronizerStateUninitialized {
 		s.init()
+	}
+	// Make sure that each input goroutine stops whatever it is doing right
+	// away.
+	for i := range s.cancelInputs {
+		s.cancelInputs[i]()
 	}
 
 	// Non-blocking drain of batchCh. This is important mostly because of the
