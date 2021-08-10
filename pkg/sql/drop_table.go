@@ -575,8 +575,17 @@ func (p *planner) removeFKForBackReference(
 	if err := removeFKForBackReferenceFromTable(originTableDesc, ref, tableDesc); err != nil {
 		return err
 	}
-	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, originTableDesc, descpb.InvalidMutationID, "")
+	thisTableName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+	originTableName, err := p.getQualifiedTableName(ctx, originTableDesc)
+	if err != nil {
+		return err
+	}
+	jobDesc := fmt.Sprintf("removing inbound FK %s from table %s(%d), referenced by table %s(%d)",
+		ref.Name, thisTableName.FQString(), tableDesc.GetID(), originTableName.FQString(), originTableDesc.GetID())
+	return p.writeSchemaChange(ctx, originTableDesc, descpb.InvalidMutationID, jobDesc)
 }
 
 // removeFKBackReferenceFromTable edits the supplied originTableDesc to
@@ -633,8 +642,17 @@ func (p *planner) removeFKBackReference(
 	if err := removeFKBackReferenceFromTable(referencedTableDesc, ref.Name, tableDesc); err != nil {
 		return err
 	}
-	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, referencedTableDesc, descpb.InvalidMutationID, "")
+	thisTableName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+	referencedTableName, err := p.getQualifiedTableName(ctx, referencedTableDesc)
+	if err != nil {
+		return err
+	}
+	jobDesc := fmt.Sprintf("removing outbound FK %s from table %s(%d), referencing to table %s(%d)",
+		ref.Name, thisTableName.FQString(), tableDesc.GetID(), referencedTableName.FQString(), referencedTableDesc.GetID())
+	return p.writeSchemaChange(ctx, referencedTableDesc, descpb.InvalidMutationID, jobDesc)
 }
 
 // removeFKBackReferenceFromTable edits the supplied referencedTableDesc to
