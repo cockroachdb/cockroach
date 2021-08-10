@@ -279,6 +279,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 
+				if d.Predicate != nil {
+					expr, err := schemaexpr.ValidatePartialIndexPredicate(
+						params.ctx, n.tableDesc, d.Predicate, tableName, params.p.SemaCtx(),
+					)
+					if err != nil {
+						return err
+					}
+					idx.Predicate = expr
+				}
+
 				idx, err = params.p.configureIndexDescForNewIndexPartitioning(
 					params.ctx,
 					n.tableDesc,
