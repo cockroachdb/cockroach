@@ -4551,7 +4551,7 @@ FROM
   ROWS FROM (unnest(ARRAY[1, 2]))
 ----
 project
- ├── columns: "?column?":9
+ ├── columns: "?column?":8
  ├── project-set
  │    ├── columns: unnest:1
  │    ├── values
@@ -4559,29 +4559,26 @@ project
  │    └── zip
  │         └── unnest(ARRAY[1,2])
  └── projections
-      └── subquery [as="?column?":9]
+      └── subquery [as="?column?":8]
            └── max1-row
-                ├── columns: "?column?":8
+                ├── columns: "?column?":7
                 └── project
-                     ├── columns: "?column?":8
-                     ├── group-by
-                     │    ├── columns: max:6 unnest:7
-                     │    ├── grouping columns: unnest:7
+                     ├── columns: "?column?":7
+                     ├── scalar-group-by
+                     │    ├── columns: max:6
                      │    ├── project
-                     │    │    ├── columns: unnest:7 b:3
-                     │    │    ├── select
-                     │    │    │    ├── columns: a:2!null b:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-                     │    │    │    ├── scan ab
-                     │    │    │    │    └── columns: a:2!null b:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-                     │    │    │    └── filters
-                     │    │    │         └── a:2 = unnest:1
-                     │    │    └── projections
-                     │    │         └── unnest:1 [as=unnest:7]
+                     │    │    ├── columns: b:3
+                     │    │    └── select
+                     │    │         ├── columns: a:2!null b:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+                     │    │         ├── scan ab
+                     │    │         │    └── columns: a:2!null b:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+                     │    │         └── filters
+                     │    │              └── a:2 = unnest:1
                      │    └── aggregations
                      │         └── max [as=max:6]
                      │              └── b:3
                      └── projections
-                          └── (max:6, unnest:1) [as="?column?":8]
+                          └── (max:6, unnest:1) [as="?column?":7]
 
 # Regression test for #46196. Don't eliminate the scalar group by, and
 # default to type string.
@@ -4737,3 +4734,47 @@ build
 SELECT count(1) FROM kv UNION ALL SELECT v FROM kv ORDER BY count(1)
 ----
 error (42803): count(): aggregate functions are not allowed in ORDER BY
+
+# Regression test for #68290: the outer column should not become an implicit
+# grouping column.
+build
+SELECT
+  (
+    SELECT
+      CASE
+      WHEN t.arr IS NULL THEN '[]'::JSONB
+      ELSE json_agg(elem)
+      END
+    FROM
+      unnest(t.arr) AS elem
+  )
+FROM
+  (SELECT ARRAY[]::STRING[] AS arr) AS t
+----
+project
+ ├── columns: json_agg:5
+ ├── project
+ │    ├── columns: arr:1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── ARRAY[] [as=arr:1]
+ └── projections
+      └── subquery [as=json_agg:5]
+           └── max1-row
+                ├── columns: json_agg:4
+                └── project
+                     ├── columns: json_agg:4
+                     ├── scalar-group-by
+                     │    ├── columns: json_agg:3
+                     │    ├── project-set
+                     │    │    ├── columns: unnest:2
+                     │    │    ├── values
+                     │    │    │    └── ()
+                     │    │    └── zip
+                     │    │         └── unnest(arr:1)
+                     │    └── aggregations
+                     │         └── json-agg [as=json_agg:3]
+                     │              └── unnest:2
+                     └── projections
+                          └── CASE WHEN arr:1 IS NULL THEN '[]' ELSE json_agg:3 END [as=json_agg:4]
