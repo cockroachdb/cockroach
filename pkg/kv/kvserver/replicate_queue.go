@@ -319,11 +319,10 @@ func (rq *replicateQueue) processOneChange(
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	voterReplicas := desc.Replicas().Voters()
-	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(voterReplicas)
+	liveReplicas, _ := rq.allocator.storePool.liveAndDeadReplicas(desc.Replicas().All())
 	{
 		unavailable := !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
-			for _, inner := range liveVoterReplicas {
+			for _, inner := range liveReplicas {
 				if inner.ReplicaID == rDesc.ReplicaID {
 					return true
 				}
@@ -333,11 +332,14 @@ func (rq *replicateQueue) processOneChange(
 		if unavailable {
 			return false, newQuorumError(
 				"range requires a replication change, but live replicas %v don't constitute a quorum for %v:",
-				liveVoterReplicas,
+				liveReplicas,
 				desc.Replicas().All(),
 			)
 		}
 	}
+
+	voterReplicas := desc.Replicas().Voters()
+	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(voterReplicas)
 
 	action, _ := rq.allocator.ComputeAction(ctx, zone, desc)
 	log.VEventf(ctx, 1, "next replica action: %s", action)
