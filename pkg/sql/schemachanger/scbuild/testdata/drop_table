@@ -43,117 +43,117 @@ CREATE VIEW v1 as (select customer_id, carrier from defaultdb.shipments);
 build
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-- DROP DefaultExpression:{DescID: 57, ColumnID: 1}
+- DROP DefaultExpression:{DescID: 59, ColumnID: 1}
   state: PUBLIC
   details:
     columnId: 1
     defaultExpr: gen_random_uuid()
-    tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 2}
+    tableId: 59
+- DROP DefaultExpression:{DescID: 59, ColumnID: 2}
   state: PUBLIC
   details:
     columnId: 2
-    tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 3}
+    tableId: 59
+- DROP DefaultExpression:{DescID: 59, ColumnID: 3}
   state: PUBLIC
   details:
     columnId: 3
-    tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 4}
+    tableId: 59
+- DROP DefaultExpression:{DescID: 59, ColumnID: 4}
   state: PUBLIC
   details:
     columnId: 4
-    tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 5}
+    tableId: 59
+- DROP DefaultExpression:{DescID: 59, ColumnID: 5}
   state: PUBLIC
   details:
     columnId: 5
-    defaultExpr: nextval(54:::REGCLASS)
-    tableId: 57
+    defaultExpr: nextval(56:::REGCLASS)
+    tableId: 59
     usesSequenceIDs:
-    - 54
-- DROP DefaultExpression:{DescID: 57, ColumnID: 6}
+    - 56
+- DROP DefaultExpression:{DescID: 59, ColumnID: 6}
   state: PUBLIC
   details:
     columnId: 6
-    tableId: 57
-- DROP InboundForeignKey:{DescID: 52, Name: fk_customers, ReferencedDescID: 57}
+    tableId: 59
+- DROP InboundForeignKey:{DescID: 54, Name: fk_customers, ReferencedDescID: 59}
   state: PUBLIC
   details:
     name: fk_customers
     originColumns:
     - 1
-    originId: 52
+    originId: 54
     referenceColumns:
     - 4
-    referenceId: 57
-- DROP InboundForeignKey:{DescID: 53, Name: fk_orders, ReferencedDescID: 57}
+    referenceId: 59
+- DROP InboundForeignKey:{DescID: 55, Name: fk_orders, ReferencedDescID: 59}
   state: PUBLIC
   details:
     name: fk_orders
     originColumns:
     - 2
-    originId: 53
+    originId: 55
     referenceColumns:
     - 4
-    referenceId: 57
-- DROP OutboundForeignKey:{DescID: 57, Name: fk_customers, ReferencedDescID: 52}
+    referenceId: 59
+- DROP OutboundForeignKey:{DescID: 59, Name: fk_customers, ReferencedDescID: 54}
   state: PUBLIC
   details:
     name: fk_customers
     originColumns:
     - 4
-    originId: 57
+    originId: 59
     referenceColumns:
     - 1
-    referenceId: 52
-- DROP OutboundForeignKey:{DescID: 57, Name: fk_orders, ReferencedDescID: 53}
+    referenceId: 54
+- DROP OutboundForeignKey:{DescID: 59, Name: fk_orders, ReferencedDescID: 55}
   state: PUBLIC
   details:
     name: fk_orders
     originColumns:
     - 4
-    originId: 57
+    originId: 59
     referenceColumns:
     - 2
-    referenceId: 53
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}
-  state: PUBLIC
-  details:
-    dependedOn: 57
-    tableId: 54
-- DROP RelationDependedOnBy:{DescID: 57, ReferencedDescID: 59}
+    referenceId: 55
+- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}
   state: PUBLIC
   details:
     dependedOn: 59
-    tableId: 57
-- DROP Sequence:{DescID: 58}
+    tableId: 56
+- DROP RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}
   state: PUBLIC
   details:
-    sequenceId: 58
-- DROP SequenceOwnedBy:{DescID: 58, ReferencedDescID: 57}
+    dependedOn: 61
+    tableId: 59
+- DROP Sequence:{DescID: 60}
   state: PUBLIC
   details:
-    ownerTableId: 57
-    sequenceId: 58
-- DROP Table:{DescID: 57}
+    sequenceId: 60
+- DROP SequenceOwnedBy:{DescID: 60, ReferencedDescID: 59}
   state: PUBLIC
   details:
-    tableId: 57
-- DROP TypeReference:{DescID: 57, ReferencedDescID: 55}
+    ownerTableId: 59
+    sequenceId: 60
+- DROP Table:{DescID: 59}
   state: PUBLIC
   details:
-    descriptorId: 57
-    typeId: 55
-- DROP TypeReference:{DescID: 57, ReferencedDescID: 56}
+    tableId: 59
+- DROP TypeReference:{DescID: 59, ReferencedDescID: 57}
   state: PUBLIC
   details:
-    descriptorId: 57
-    typeId: 56
-- DROP View:{DescID: 59}
+    descriptorId: 59
+    typeId: 57
+- DROP TypeReference:{DescID: 59, ReferencedDescID: 58}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    typeId: 58
+- DROP View:{DescID: 61}
   state: PUBLIC
   details:
     dependedOnBy: []
     dependsOn:
-    - 57
-    tableId: 59
+    - 59
+    tableId: 61

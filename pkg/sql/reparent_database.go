@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -41,6 +42,11 @@ type reparentDatabaseNode struct {
 func (p *planner) ReparentDatabase(
 	ctx context.Context, n *tree.ReparentDatabase,
 ) (planNode, error) {
+	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot perform ALTER DATABASE CONVERT TO SCHEMA in version %v and beyond",
+			clusterversion.PublicSchemasWithDescriptors)
+	}
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -261,7 +267,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 
 	// Delete the public schema namespace entry for this database. Per our check
 	// during initialization, this is the only schema present under n.db.
-	b.Del(catalogkeys.MakePublicSchemaNameKey(codec, n.db.ID))
+	b.Del(catalogkeys.MakeSchemaNameKey(codec, n.db.ID, tree.PublicSchema))
 
 	// This command can only be run when database leasing is supported, so we don't
 	// have to handle the case where it isn't.
