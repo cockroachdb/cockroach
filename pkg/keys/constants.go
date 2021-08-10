@@ -137,6 +137,8 @@ var (
 	// key info, such as the txn ID in the case of a transaction record.
 	LocalRangePrefix = roachpb.Key(makeKey(LocalPrefix, roachpb.RKey("k")))
 	LocalRangeMax    = LocalRangePrefix.PrefixEnd()
+	// LocalRangeProbeSuffix is the suffix for keys for probing.
+	LocalRangeProbeSuffix = roachpb.RKey("prbe")
 	// LocalQueueLastProcessedSuffix is the suffix for replica queue state keys.
 	LocalQueueLastProcessedSuffix = roachpb.RKey("qlpt")
 	// LocalRangeDescriptorSuffix is the suffix for keys storing

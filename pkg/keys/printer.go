@@ -183,6 +183,7 @@ var (
 		{name: "RangeDescriptor", suffix: LocalRangeDescriptorSuffix, atEnd: true},
 		{name: "Transaction", suffix: LocalTransactionSuffix, atEnd: false},
 		{name: "QueueLastProcessed", suffix: LocalQueueLastProcessedSuffix, atEnd: false},
+		{name: "RangeProbe", suffix: LocalRangeProbeSuffix, atEnd: true},
 	}
 )
 
