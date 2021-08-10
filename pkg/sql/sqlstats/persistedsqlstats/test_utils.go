@@ -21,6 +21,11 @@ type TestingKnobs struct {
 	// StubTimeNow allows tests to override the timeutil.Now() function used
 	// by the flush operation to calculate aggregated_ts timestamp.
 	StubTimeNow func() time.Time
+
+	// DisableFollowerRead disallows the PersistedSQLStats to use follower read.
+	// This is used in the unit tests where it might be reading from the past
+	// where the stmt/txn stats system table are not yet created.
+	DisableFollowerRead bool
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
