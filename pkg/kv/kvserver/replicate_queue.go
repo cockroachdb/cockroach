@@ -373,10 +373,10 @@ func (rq *replicateQueue) processOneChange(
 	voterReplicas := desc.Replicas().VoterDescriptors()
 	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
-		voterReplicas, true, /* includeSuspectStores */
+		voterReplicas, true, /* includeSuspectAndDrainingStores */
 	)
 	liveNonVoterReplicas, deadNonVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
-		nonVoterReplicas, true, /* includeSuspectStores */
+		nonVoterReplicas, true, /* includeSuspectAndDrainingStores */
 	)
 
 	// NB: the replication layer ensures that the below operations don't cause
