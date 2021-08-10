@@ -953,7 +953,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// Note that if we have opt == flowinfra.FuseAggressively, then we
 			// must use the serial unordered sync above in order to remove any
 			// concurrency.
-			sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
+			sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup, flowCtx.TestingKnobs().UsesFakeSpanResolver)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
