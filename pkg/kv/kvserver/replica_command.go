@@ -2042,11 +2042,11 @@ type changeReplicasTxnArgs struct {
 	//
 	// - Replicas on decommissioning node/store are considered live.
 	//
-	// - If `includeSuspectStores` is true, stores that are marked suspect (i.e.
+	// - If `includeSuspectAndDrainingStores` is true, stores that are marked suspect (i.e.
 	// stores that have failed a liveness heartbeat in the recent past) are
 	// considered live. Otherwise, they are excluded from the returned slices.
 	liveAndDeadReplicas func(
-		repls []roachpb.ReplicaDescriptor, includeSuspectStores bool,
+		repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
 	) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor)
 
 	logChange                            logChangeFn
@@ -2141,7 +2141,7 @@ func execChangeReplicasTxn(
 			// Note that the allocator will avoid rebalancing to stores that are
 			// currently marked suspect. See uses of StorePool.getStoreList() in
 			// allocator.go.
-			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors(), true /* includeSuspectStores */)
+			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors(), true /* includeSuspectAndDrainingStores */)
 			if !replicas.CanMakeProgress(
 				func(rDesc roachpb.ReplicaDescriptor) bool {
 					for _, inner := range liveReplicas {
@@ -2895,8 +2895,10 @@ func (s *Store) relocateOne(
 		for _, candidate := range candidateTargets {
 			store, ok := storeMap[candidate.StoreID]
 			if !ok {
-				return nil, nil, fmt.Errorf("cannot up-replicate to s%d; missing gossiped StoreDescriptor",
-					candidate.StoreID)
+				return nil, nil, fmt.Errorf(
+					"cannot up-replicate to s%d; missing gossiped StoreDescriptor"+
+						" (the store is likely dead, draining or decommissioning)", candidate.StoreID,
+				)
 			}
 			candidateDescs = append(candidateDescs, *store)
 		}
