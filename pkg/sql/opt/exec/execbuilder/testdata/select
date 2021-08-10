@@ -1765,7 +1765,11 @@ SELECT * FROM a
 statement ok
 SET tracing = on; SELECT * FROM a WHERE a = 0 OR a = 10; SET tracing = off
 
-# The span "sending partial batch" means that the scan was parallelized.
+# The span "sending partial batch" means that the scan was parallelized. We're
+# seeing duplicate "querying next range" entries because we first use the range
+# cache to try to partition the spans in order to have parallel TableReaders (we
+# end up with a single partition though), and then we have a single TableReader
+# performing the scan of two spans in parallel.
 # If this test is failing and doesn't have that span, it means that the scanNode
 # was improperly configured to add a limit to the ScanRequest batch.
 # See #30943 for more details.
@@ -1774,6 +1778,8 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE 'querying next range at /Table/74/1%' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
+querying next range at /Table/74/1/0/0
+querying next range at /Table/74/1/10/0
 querying next range at /Table/74/1/0/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/74/1/10/0
