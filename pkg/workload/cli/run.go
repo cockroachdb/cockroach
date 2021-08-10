@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	gosql "database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -270,7 +271,10 @@ func workerRun(
 		}
 
 		if err := workFn(ctx); err != nil {
-			if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+			if ctx.Err() != nil && (errors.Is(err, ctx.Err()) || errors.Is(err, driver.ErrBadConn)) {
+				// lib/pq may return either the `context canceled` error or a
+				// `bad connection` error when performing an operation with a context
+				// that has been canceled. See https://github.com/lib/pq/pull/1000
 				return
 			}
 			errCh <- err
