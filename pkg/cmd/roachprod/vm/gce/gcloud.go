@@ -188,6 +188,8 @@ type providerOpts struct {
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
 	useSharedUser bool
+	// use preemptible insances
+	preemptible bool
 }
 
 // projectsVal is the implementation for the --gce-projects flag. It populates
@@ -289,6 +291,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
 			strings.Join(defaultZones, ",")))
+	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false, "use preemptible GCE instances")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
@@ -393,6 +396,17 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}
 	if p.opts.ServiceAccount != "" {
 		args = append(args, "--service-account", p.opts.ServiceAccount)
+	}
+
+	if p.opts.preemptible {
+		// Make sure the lifetime is no longer than 24h
+		if opts.Lifetime > time.Hour*24 {
+			return errors.New("lifetime cannot be longer than 24 hours for preemptible instances")
+		}
+		args = append(args, "--preemptible")
+		// Preemptible instances require the following arguments set explicitly
+		args = append(args, "--maintenance-policy=terminate")
+		args = append(args, "--no-restart-on-failure")
 	}
 
 	extraMountOpts := ""
