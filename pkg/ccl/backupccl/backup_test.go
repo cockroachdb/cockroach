@@ -1607,9 +1607,9 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 		).Scan(&fractionCompleted); err != nil {
 			return err
 		}
-		if fractionCompleted < 0.25 || fractionCompleted > 0.75 {
+		if fractionCompleted < 0.01 || fractionCompleted > 0.99 {
 			return errors.Errorf(
-				"expected progress to be in range [0.25, 0.75] but got %f",
+				"expected progress to be in range [0.01, 0.99] but got %f",
 				fractionCompleted,
 			)
 		}
