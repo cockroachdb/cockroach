@@ -23,6 +23,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/backupccl/backupresolver",
+        "//pkg/ccl/changefeedccl/cdcutils",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/changefeeddist",
         "//pkg/ccl/changefeedccl/kvfeed",

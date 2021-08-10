@@ -8,10 +8,12 @@ go_library(
         "metrics.go",
         "physical_kv_feed.go",
         "scanner.go",
+        "throttling_buffer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/cdcutils",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/schemafeed",
         "//pkg/gossip",
