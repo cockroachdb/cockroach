@@ -692,7 +692,7 @@ func systemTable(
 		Name:                    string(name),
 		ID:                      id,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
 		Version:                 1,
 		Columns:                 columns,
 		Families:                families,
@@ -767,6 +767,9 @@ var (
 // statements. See the `TestSystemTableLiterals` which checks that they do
 // indeed match, and has suggestions on writing and maintaining them.
 var (
+
+	// SystemPublicSchema is the descriptor for the system public schema.
+	//SystemPublicSchema = MakeSystemPublicSchemaDesc()
 
 	// NamespaceTable is the descriptor for the namespace table. Note that this
 	// table should only be written to via KV puts, not via the SQL layer. Some

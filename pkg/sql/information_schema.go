@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -2091,7 +2092,15 @@ func forEachSchema(
 		case strings.HasPrefix(name, catconstants.PgTempSchemaName):
 			schemas = append(schemas, schemadesc.NewTemporarySchema(name, id, db.GetID()))
 		case name == tree.PublicSchema:
-			schemas = append(schemas, schemadesc.GetPublicSchema())
+			// TODO(richardjcai): Remove this in 22.2. In 22.2, only the system
+			// public schema will continue to use keys.PublicSchemaID (29).
+			if id == keys.PublicSchemaID {
+				schemas = append(schemas, schemadesc.GetPublicSchema())
+			} else {
+				// The default case is a user defined schema. Collect the ID to get the
+				// descriptor later.
+				userDefinedSchemaIDs = append(userDefinedSchemaIDs, id)
+			}
 		default:
 			// The default case is a user defined schema. Collect the ID to get the
 			// descriptor later.
@@ -2188,7 +2197,8 @@ func forEachTypeDesc(
 		return err
 	}
 	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
-		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec),
+		p.ExecCfg().Settings.Version)
 	for _, id := range lCtx.typIDs {
 		typ := lCtx.typDescs[id]
 		dbDesc, err := lCtx.getDatabaseByID(typ.GetParentID())
@@ -2367,7 +2377,8 @@ func forEachTypeDescWithTableLookupInternalFromDescriptors(
 	fn func(catalog.DatabaseDescriptor, string, catalog.TypeDescriptor, tableLookupFn) error,
 ) error {
 	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
-		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec),
+		p.ExecCfg().Settings.Version)
 
 	for _, typID := range lCtx.typIDs {
 		typDesc := lCtx.typDescs[typID]
@@ -2406,7 +2417,8 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
-		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec),
+		p.ExecCfg().Settings.Version)
 
 	if virtualOpts == virtualMany || virtualOpts == virtualCurrentDB {
 		// Virtual descriptors first.

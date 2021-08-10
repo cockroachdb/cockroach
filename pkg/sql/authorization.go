@@ -610,7 +610,7 @@ func (p *planner) canResolveDescUnderSchema(
 
 	switch kind := scDesc.SchemaKind(); kind {
 	case catalog.SchemaPublic, catalog.SchemaTemporary, catalog.SchemaVirtual:
-		// Anyone can resolve under temporary, public or virtual schemas.
+		// Anyone can resolve under temporary or virtual schemas.
 		return nil
 	case catalog.SchemaUserDefined:
 		return p.CheckPrivilegeForUser(ctx, scDesc, privilege.USAGE, p.User())

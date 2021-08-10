@@ -28,6 +28,8 @@ func schemaExists(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, schema string,
 ) (bool, descpb.ID, error) {
 	// Check statically known schemas.
+	// TODO(richardjcai): Disallow dropping and renaming public schema in 22.1
+	//    such that this is true.
 	if schema == tree.PublicSchema {
 		return true, descpb.InvalidID, nil
 	}

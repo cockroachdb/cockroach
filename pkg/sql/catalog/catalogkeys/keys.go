@@ -169,6 +169,7 @@ func MakeObjectNameKey(
 
 // MakePublicObjectNameKey returns the roachpb.Key for the given object name
 // scoped under the public schema in the given database.
+// TODO(richardjcai): This should be removed in the new public schema update.
 func MakePublicObjectNameKey(codec keys.SQLCodec, parentID descpb.ID, name string) roachpb.Key {
 	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.PublicSchemaID, name))
 }

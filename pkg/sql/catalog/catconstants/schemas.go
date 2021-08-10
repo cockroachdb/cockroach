@@ -14,6 +14,7 @@ import "github.com/cockroachdb/cockroach/pkg/keys"
 
 // StaticSchemaIDMap is a map of statically known schema IDs.
 var StaticSchemaIDMap = map[uint32]string{
+	// TODO(richardjcai): Remove entry for keys.PublicSchemaID in 22.2.
 	keys.PublicSchemaID: PublicSchemaName,
 	PgCatalogID:         PgCatalogName,
 	InformationSchemaID: InformationSchemaName,

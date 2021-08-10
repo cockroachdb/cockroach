@@ -324,15 +324,8 @@ func GetForDatabase(
 		return nil, err
 	}
 
-	// Always add public schema ID.
-	// TODO(solon): This can be removed in 20.2, when this is always written.
-	// In 20.1, in a migrating state, it may be not included yet.
 	ret := make(map[descpb.ID]SchemaEntryForDB, len(kvs)+1)
-	ret[descpb.ID(keys.PublicSchemaID)] =
-		SchemaEntryForDB{
-			Name:      tree.PublicSchema,
-			Timestamp: txn.ReadTimestamp(),
-		}
+
 	for _, kv := range kvs {
 		id := descpb.ID(kv.ValueInt())
 		if _, ok := ret[id]; ok {
