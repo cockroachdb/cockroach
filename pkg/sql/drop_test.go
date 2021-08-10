@@ -1370,7 +1370,7 @@ CREATE TABLE t.child(k INT PRIMARY KEY REFERENCES t.parent);
 	// for updating the referenced table has an empty description.
 	testutils.SucceedsSoon(t, func() error {
 		var count int
-		sqlRun.QueryRow(t, `SELECT count(*) FROM [SHOW JOBS] WHERE description = 'GC for ' AND status = 'succeeded'`).Scan(&count)
+		sqlRun.QueryRow(t, `SELECT count(*) FROM [SHOW JOBS] WHERE description LIKE 'removing FK % in cascade' AND status = 'succeeded'`).Scan(&count)
 		if count != 1 {
 			return errors.Newf("expected 1 result, got %d", count)
 		}

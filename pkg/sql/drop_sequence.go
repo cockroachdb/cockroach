@@ -247,7 +247,7 @@ func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc
 
 		// If the dependent object is a view, drop the view.
 		if tblDesc.IsView() {
-			_, err = p.dropViewImpl(ctx, tblDesc, false /* queueJob */, "", tree.DropCascade)
+			_, err = p.dropViewImpl(ctx, tblDesc, false /* queueJob */, "dropping dependent view in cascade", tree.DropCascade)
 			if err != nil {
 				return err
 			}

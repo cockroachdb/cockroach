@@ -575,8 +575,8 @@ func (p *planner) removeFKForBackReference(
 	if err := removeFKForBackReferenceFromTable(originTableDesc, ref, tableDesc); err != nil {
 		return err
 	}
-	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, originTableDesc, descpb.InvalidMutationID, "")
+	jobDesc := fmt.Sprintf("removing FK %s for back-reference in cascade", ref.Name)
+	return p.writeSchemaChange(ctx, originTableDesc, descpb.InvalidMutationID, jobDesc)
 }
 
 // removeFKBackReferenceFromTable edits the supplied originTableDesc to
@@ -633,8 +633,8 @@ func (p *planner) removeFKBackReference(
 	if err := removeFKBackReferenceFromTable(referencedTableDesc, ref.Name, tableDesc); err != nil {
 		return err
 	}
-	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, referencedTableDesc, descpb.InvalidMutationID, "")
+	jobDesc := fmt.Sprintf("removing FK %s back-reference in cascade", ref.Name)
+	return p.writeSchemaChange(ctx, referencedTableDesc, descpb.InvalidMutationID, jobDesc)
 }
 
 // removeFKBackReferenceFromTable edits the supplied referencedTableDesc to
