@@ -21,6 +21,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -171,6 +172,20 @@ func NewInboxWithAdmissionControl(
 	i.admissionQ = admissionQ
 	i.admissionInfo = admissionInfo
 	return i, err
+}
+
+// ContainsInbox returns true if there is at least one Inbox in the operator
+// tree rooted in op.
+func ContainsInbox(op colexecargs.OpWithMetaInfo) bool {
+	// All inboxes must have been added to the MetadataSources, so rather than
+	// walking over the whole operator tree, we can just iterate over the
+	// MetadataSources.
+	for _, ms := range op.MetadataSources {
+		if _, ok := ms.(*Inbox); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // close closes the inbox, ensuring that any call to RunWithStream will return
