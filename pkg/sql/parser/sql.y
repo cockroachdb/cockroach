@@ -862,7 +862,8 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 // extensions (CREATE FAMILY/CREATE FAMILY family_name). RESET_ALL is used
 // to differentiate `RESET var` from `RESET ALL`. ROLE_ALL and USER_ALL are
 // used in ALTER ROLE statements that affect all roles.
-%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL USER_ALL
+%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL
+%token USER_ALL ON_LA
 
 %union {
   id    int32
@@ -1113,6 +1114,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.SelectStatement> set_operation
 
 %type <tree.Expr> alter_column_default
+%type <tree.Expr> alter_column_on_update
 %type <tree.Expr> alter_column_visible
 %type <tree.Direction> opt_asc_desc
 %type <tree.NullsOrder> opt_nulls_order
@@ -2122,6 +2124,11 @@ alter_table_cmd:
   {
     $$.val = &tree.AlterTableSetDefault{Column: tree.Name($3), Default: $4.expr()}
   }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> {ON UPDATE <expr>|DROP ON UPDATE}
+| ALTER opt_column column_name alter_column_on_update
+  {
+    $$.val = &tree.AlterTableSetOnUpdate{Column: tree.Name($3), Expr: $4.expr()}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET {VISIBLE|NOT VISIBLE}
 | ALTER opt_column column_name alter_column_visible
   {
@@ -2282,6 +2289,16 @@ alter_column_default:
     $$.val = $3.expr()
   }
 | DROP DEFAULT
+  {
+    $$.val = nil
+  }
+
+alter_column_on_update:
+  SET ON UPDATE b_expr
+  {
+    $$.val = $4.expr()
+  }
+| DROP ON UPDATE
   {
     $$.val = nil
   }
@@ -6708,6 +6725,10 @@ col_qualification_elem:
   {
     $$.val = &tree.ColumnDefault{Expr: $2.expr()}
   }
+| ON UPDATE b_expr
+  {
+    $$.val = &tree.ColumnOnUpdate{Expr: $3.expr()}
+  }
 | REFERENCES table_name opt_name_parens key_match reference_actions
   {
     name := $2.unresolvedObjectName().ToTableName()
@@ -7088,13 +7109,13 @@ reference_actions:
   }
 
 reference_on_update:
-  ON UPDATE reference_action
+  ON_LA UPDATE reference_action
   {
     $$.val = $3.referenceAction()
   }
 
 reference_on_delete:
-  ON DELETE reference_action
+  ON_LA DELETE reference_action
   {
     $$.val = $3.referenceAction()
   }
