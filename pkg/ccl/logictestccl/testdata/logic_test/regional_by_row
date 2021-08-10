@@ -774,30 +774,68 @@ ORDER BY pk LIMIT 5] OFFSET 2
 
 # Tests for locality optimized search.
 
+# Split the table into 3 regions and change the leaseholders to be "local"
+# according to the crdb_region column.
+statement ok
+ALTER TABLE regional_by_row_table SPLIT AT VALUES ('ca-central-1', 6), ('us-east-1', 20);
+ALTER TABLE regional_by_row_table EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 1), (ARRAY[4], 'ca-central-1', 6), (ARRAY[7], 'us-east-1', 20);
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE regional_by_row_table]
+----
+start_key   end_key     replicas  lease_holder
+NULL        /"\x80"/6   {1}       1
+/"\x80"/6   /"\xc0"/20  {4}       4
+/"\xc0"/20  NULL        {7}       7
+
 statement ok
 SET locality_optimized_partitioned_index_scan = false
 
 # Query with locality optimized search disabled.
 query T
-SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
 ----
 ·
 • scan
   missing stats
   table: regional_by_row_table@primary
   spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskFGr00AQhd_9FcM8qawkm6svC0JEUwzU5poEFG5C2ZsdajDdjbsbbCn575LkoVaKaPVxZs6Z882c0H3rUGCRrJO3JTyHVZ59gIfk8_36TbqBp-_Soiw-rp_BpcDSrjVadtvH49aa71svHzuCT--TPIH-K7wGXkO2WhVJCREy1EbRRu7JoXhAjjXD3pqGnDN2ap1mQaoOKEKGre4HP7Vrho2xhOKEvvUdocByyslJKrJBiAwVedl289qrSHFv2720R2RY9FI7AUGFcYUBD0KQWgEH47-QRYbZ4AXEnMURi-9Y_JLFr7AeGZrBn3mclztCwUd2GzO_lbmqDk24cP831jPioI1VZEld4NXjlWs25oXpg-gX4fXo6G_elJPrjXb0R5vDCY3UjpY7nBlsQ_fWNHPMUmazb24ocn6ZRkuR6nk0_-ZnM_8Xc_Rb892FORzr8cmPAAAA__9feyB6
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
+----
+│
+└ Node 1
+  └ *colexec.ParallelUnorderedSynchronizer
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+statement ok
+RESET vectorize
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
 
-# All rows are scanned at once without the optimization.
-query T
+# All rows are scanned at once without the optimization. Note that it's not easy
+# to see from the trace that the lookups into the local and remote regions
+# happen in parallel: we can only see that all spans are divided into "local"
+# and "remote" (and the relevant "Scan" tracing messages can be in any order).
+# However, we have confirmed the parallelism via the DistSQL diagram above
+# (where we have two TableReaders with a parallel unordered synchronizer on
+# top).
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/73/1/"@"/1/0, /Table/73/1/"\x80"/1/0, /Table/73/1/"\xc0"/1/0
+Scan /Table/73/1/"\xc0"/1/0
+Scan /Table/73/1/"@"/1/0, /Table/73/1/"\x80"/1/0
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -805,6 +843,11 @@ statement ok
 SET locality_optimized_partitioned_index_scan = true
 
 # Same query with locality optimized search enabled.
+
+# First check the plan with the vectorized engine.
+statement ok
+SET vectorize=on
+
 query T
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
 ----
@@ -822,7 +865,31 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 
       table: regional_by_row_table@primary
       spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkdGL1DAQxt_9K4Z5Uom06SlIQKhoFwt1e7YFhWtZcs2wFrtJTVK8Y-n_Lts-nJVb4dbH-Wa-md-XHNH97FFgmWTJhwpewqbIP8NN8u06e59u4fnHtKzKL9kLWA9Y2ndGy353e7-z5tfOy9ue4OunpEhg-AHvgDeQbzZlUkGEDLVRtJUHcihukGPDcLCmJeeMPUnHeSBVdyhChp0eRn-SG4atsYTiiL7zPaHA6nSnIKnIBiEyVORl189rH0WKB9sdpL1HhuUgtRMQ1FjXd2_DGgMehCC1Ag7GfyeLDPPRC4g5iyMWX7H4NYvfYDMxNKN_YHJe7gkFn9hl3PxS7nhhfiJndJbzAW_UxiqypFZozfRIkq15ZYYgWmfIukPngZ9lCJ_yVgW5wWhHf7Gc29wwJLWnJZAzo23p2pp2PrOU-eybBUXOL91oKVI9t-bP_NPM_8cc_dN8tTKHUzM9-x0AAP__wyAi4g==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysklFr2zAQx9_3KcQ9bUMjlpPCEAw8NocFsqSzDRvUJqjWEcQcy5Nk1hL83Yflh84jC43TR53up_vd3z6C_VUBhzRex58y8pYsk-1Xchf_uF1_XG3I68-rNEu_rd-QcYPBvdK1qHb3jzujf--cuK-QfP8SJzFpfpIPhBVku1ymcUZCoFBriRtxQAv8DhgUFBqjS7RWm7509A0r-QA8oKDqpnV9uaBQaoPAj-CUqxA4ZP2cBIVEMwuAgkQnVOWfPakUNUYdhHkECmkjasvJLIc8f3gf5DBj_olt6ziJGI1CGs1ptKDRDRQdBd26Jw_rxB6Bs45Oc2VXuJYv7fqk2NbaSDQoR3pFd2KbjX6nm1n4T-Pp0eHUmOZTY4omRTR_RkQWjRIVuTipxXiVtTooR9h_VYJLIkvQNrq2-KyPEfSOKPc47GV1a0q8Nbr0Y4bj1nO-ING64TYcDqvaX_nf6W-YXQOHZ-HFeXh-Dbw4C9-M4KAruld_AgAA__9L0Kp2
+
+query T
+EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
+----
+│
+└ Node 1
+  └ *colexec.limitOp
+    └ *colexec.SerialUnorderedSynchronizer
+      ├ *colfetcher.ColBatchScan
+      └ *colexec.ParallelUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchScan
+
+# Now check the physical plan for the row-by-row engine.
+statement ok
+SET vectorize=off
+
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] AS temp(a) WHERE a LIKE '%Diagram%'
+----
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkXFr1EAQxf_3UwwDpa2sJJsqSEBIsRGD8a5eDhR64djeDudisrvubrDlyHeXS4Qa6Qm9_jnvzZv8XnaH_meDKVZ5mb9fwkv4sJh_hpv823V5Wczg7KqoltWX8hymC462ymjRrG_v1878Wgdx2xB8_ZgvcrA_4B3wGi4rCNRaOBPnfxwBZfEph9OTKyW2TrQnp8hQG0kz0ZLH9AY51gytMxvy3ri9tBsWCnmHacxQaduFvVwz3BhHmO4wqNAQprjcMyxISHJRjAwlBaGa4eyjuJl1qhXuHhlWVmifQrTC1erubbzCiEcxCC2BgwnfySHDeRdSyDjLEpZdsOw1y95g3TM0XXhg8kFsCVPes-O4-bHc2cj8RM7kIOcDnienRAOdNk6SIzkhrPtHCs3MK2OjZFqlVK0KwA-ixE_5ZQvy1mhP_7AculwzJLmlsZc3ndvQtTOb4TPjOB9ygyDJh9FNxqHQgzW86d9h_pxw8t_wxSQc93X_4ncAAAD___VzLXM=
+
+statement ok
+RESET vectorize
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
@@ -898,6 +965,20 @@ statement ok
 INSERT INTO child (crdb_region, c_id, c_p_id)
 VALUES ('ap-southeast-2', 10, 10), ('ca-central-1', 20, 20), ('us-east-1', 30, 30)
 
+# Split the child table into 3 regions and change the leaseholders to be "local"
+# according to the crdb_region column.
+statement ok
+ALTER TABLE child SPLIT AT VALUES ('ca-central-1', 20), ('us-east-1', 30);
+ALTER TABLE child EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 10), (ARRAY[4], 'ca-central-1', 20), (ARRAY[7], 'us-east-1', 30);
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE child]
+----
+start_key   end_key     replicas  lease_holder
+NULL        /"\x80"/20  {1}       1
+/"\x80"/20  /"\xc0"/30  {4}       4
+/"\xc0"/30  NULL        {7}       7
+
 statement ok
 SET locality_optimized_partitioned_index_scan = false
 
@@ -920,13 +1001,14 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
 
 # All regions are scanned without the optimization.
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
+Scan /Table/75/1/"\xc0"/10/0
+Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
@@ -950,13 +1032,14 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
 
 # All regions are scanned without the optimization.
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
+Scan /Table/75/1/"\xc0"/10/0
+Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
@@ -981,13 +1064,14 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
 
 # All regions are scanned without the optimization.
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
+Scan /Table/75/1/"\xc0"/10/0
+Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
@@ -1012,13 +1096,14 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
 
 # All regions are scanned without the optimization.
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
+Scan /Table/75/1/"\xc0"/10/0
+Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
@@ -1028,6 +1113,11 @@ statement ok
 SET locality_optimized_partitioned_index_scan = true
 
 # Anti join with locality optimized search enabled.
+
+# First check the plan with the vectorized engine.
+statement ok
+SET vectorize=on
+
 query T
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
@@ -1055,7 +1145,33 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * 
               table: child@primary
               spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k9GL2kAQxt_7VwzzopYtbmIOjgUh0os0R5pcNdCDMxxpMtyl1d10swEP8X8vJsIZqeJd6Zs7-33O75vMbrD6vUSBcy_wPsfwEaaz6Cs8ePd3wcQPoX_jz-P5t2AAXUH2XCxz-P7Fm3nQD6MYvPudEPpdWZlqkmavKx-LHMaQPe5-DAYwCW-gn7VFiw8SiKbTuReDjQylyilMV1SheEALE4alVhlVldK70qYR-PkaBWdYyLI2u3LCMFOaUGzQFGZJKDBOfyxpRmlOesiRYU4mLZbN3zYZ3FIXq1S_IMN5mcpKwHCBi8X6mi9waPEhh1TmYIEyz6SRYVQbAa7FXBuTLUNVm9felUmfCIW1Ze_jsy7lc_dsl_HYJ3leMWqpdE6a8g5Csv0Lcag-qXJod1mDYlUYsE4y8LfM5FYVcj-SUbdN_FKSgMCbxjAJYx9uIz9Ehu2aHYwqUOpXXcJPVUhQUkDfHcEYXHu_dK4DY1j3HN4TQrgW5_zKGVw2zNE7gzj_K8juka5714dRGKx7WSfbheGct4SbUVUqWdHRxpz6_glDyp-oXbtK1TqjO62ypk17jBpfU8ipMu2t3R582Vw1T-vQbP2L2T5rHnXM_Ng8Omt2zpuds-arI3Oy_fAnAAD__xkswqg=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lNFr2zAQxt_3Vxz3kmRoRHacrggKLqvDXDy7SwwrNKZ4tui0OZYn2ZAS8r8P24HGoTNJur1Fp_vlvu9D5w3q3xkyXDie8ymE9zCbB1_gwbm_865dH4Y37iJcfPVG0G1IfogshW-fnbkDQz8IwbmvG2HYbStixfNy11c8ihSuIHmsf4xGcO3fwDBpiwYdRRDMZgsnBBMJ5jLlfrziGtkDGhgRLJRMuNZS1aVN0-Cma2SUoMiLqqzLEcFEKo5sg6UoM44Mw_h7xuc8TrkaUySY8jIWWfO3jQe7UGIVq2ckuCjiXDMYL3G5XF_SJY4N2jBBVTKwDWKbGG0Jyqp8mafL-IkjM7bkPE3GCZqSf6XpRUqVS5VyxdOOjGj7impffpDF2DxofH20eW4ck2PjsE-KYnJEFJorEWdwciJWV7InVqIE469S6CnR3EqR75KZdseEzwVn4DmzEK790IXbwPWRYLtwe4l5Uv6qCvgpRQ4yZzC0J3AFtrlbP9uCK1gPLDpgjNkGpXRqjY7L1DrTyMX_MlJ_rtaDy30rBNaDpOPtSHPTU8zNuS5krvlRq0Hrl8TTJ96-Pi0rlfA7JZNmTHsMGq4ppFyX7a3ZHty8uWqWex823gKbvbDVD0_eAlu98LQD00N42gtf9MMXvfDHAzjavvsTAAD__1G8QgQ=
+
+query T
+EXPLAIN (VEC) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *rowexec.joinReader
+      └ *colexec.limitOp
+        └ *colexec.SerialUnorderedSynchronizer
+          ├ *colfetcher.ColBatchScan
+          └ *colexec.ParallelUnorderedSynchronizer
+            ├ *colfetcher.ColBatchScan
+            └ *colfetcher.ColBatchScan
+
+# Now check the physical plan for the row-by-row engine.
+statement ok
+SET vectorize=off
+
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] AS temp(a) WHERE a LIKE '%Diagram%'
+----
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k2Fr2z4Qxt__P8VxUGz_0YjsuFAEBYfVZe48p0sMKzSmaLZotTmWJ8uQUvLdR-xA47CEtGPvotPzyz3P-fSCza8SGc7DOPyYwv9wPZt-gfvw7jaeRAnYV9E8nX-NHRgK8idZFvDtUzgLwU6mKYR3GyHYQ1nNtajMVlc_yAIuIX_Y_HAcmCRXYOd90aVOBpM5GLGswebOFuEQR59DsM6uJH_UfHlmIcFKFSLhS9Egu0cXM4K1VrloGqU3pZdOEBUrZJSgrOrWbMoZwVxpgewFjTSlQIYp_16KmeCF0COKBAthuCy7v-3yBbWWS66fkeC85lXDYLTAxWJ1QRc4cumIAq8KcEGZJ6GR4LQ1DAKXBB5ma4KqNa-9G8MfBTJ3Td7nzz3VX7D1dpof76CfVxuN0JKX0FZKF0KLYuAkW__BeKI-qHrkDS3HcikNuAet0LeM5kbJajuZ8bBN-lwLBnF4ncIkSSO4mUYJEuw3cWdisVI_2xp-KFmBqhjYwRguIfC2exn4cAkry6cWYyxwKaXnvnPaTMfvDOL_qyCbd7yyLnajEFhZ-SDbieH8t4SbiaZWVSP2NubQ988IiuJR9NvXqFbn4larvGvTH6cd1xUK0Zj-1usPUdVddS9sF3b_BvaOwuMBTPfh8VHYPw77R-HzPThb__c7AAD__2PDzTk=
+
+statement ok
+RESET vectorize
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
@@ -1091,6 +1207,11 @@ Scan /Table/74/1/"\x80"/20/0, /Table/74/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 
 # Semi join with locality optimized search enabled.
+
+# First check the plan with the vectorized engine.
+statement ok
+SET vectorize=on
+
 query T
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
@@ -1114,7 +1235,32 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM
           table: child@primary
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fr2zAQgN_3K457STI0IjsZFEHAZXWYi5t0sWGFxhTPOlpvjuTJMqSE_PcRO9A4LF26vlmn-3Qfd-cNVr8LFBj5of8lho8wXcxv4N6_uw0vgxn0r4Iojr6FA-gmZE95IeH7V3_hg3-3y4F-N6NMDSm7TykfcgkTyB52HwO4nF1BP2tjDh8kMJ9OIz8GFxkqLWmWrqhCcY8OJgxLozOqKm12oU2TEMg1Cs4wV2Vtd-GEYaYNodigzW1BKDBOfxS0oFSSGXJkKMmmedE829h7pclXqXlGhlGZqkrAcInL5fqCL3Ho8CGHVElwQNsnMshwXlsBnsM8F5MtQ13bl9qVTR8JhbNl_-fnnOvn7d3O83FP-rxo1EobSYZkRyHZ_sV4pj_pcuh2XcN8lVtwTjrwt_TkWudq35JRt0z8XJKA0J_GEPk3AVzPgxkybLfsoFWh1r_qEn7qXIFWAvreCCbguful88YwgXVvzHtCCM_hnH8eD5DhglbaEhT_pHf_xLp3ccgzWPeyzoOD88YzektrFlSVWlV0NKZTTU8YknykdtaVrk1Gt0ZnTZn2OG-4JiCpsu2t2x4C1Vw1-3wIO--B3VfhUQfmx_DoVXh8BCfbD38CAAD___0SgRM=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslNFr2zAQxt_3Vxz3kmRoRHacUQQBl9VhLm7SxYYVGlM8--i8OZYny5AS8r8P24HGocuStm_R6fvpPr7LeYPlnwwF-o7nfAngI0wX8xu4d-5uvUt3Bv0r1w_8b94AuoL4Z5ol8P2rs3DAuas10O8qikhRrneS4iFNYALxQ_1jAJezK-jHbc3ggxDm06nvBGAiw1wmNItWVKK4RwNDhoWSMZWlVHVp0wjcZI2CM0zzotJ1OWQYS0UoNqhTnREKDKIfGS0oSkgNOTJMSEdp1jzbuLcLla4i9YQM_SLKSwHDJS6X6wu-xKHBG2ZeaQG2wWwTwy1DWennfqWOHgmFsWWv82Sc4Sl-L0_PVqpcqoQUJR0b4fYF1zP5SRZD80D4cmvztXGMTo3DPiuK0QlRlKTSKIOzE7G6lr10lWow_mmFnxPNtUzzXTLjbpvgqSABnjMNwHduXLieuzNk2O7bXmKelL-rAn7JNAeZC-jbI5iAbe7Wz7ZgAuuexXtCCNvgnI-tATJc0Epqguy_dP11WPcu9nkG617ceXBw2pSsc6JZUFnIvKST_o-8Hh8lj9SOvJSViulWybhp0x7nDdcUEip1e2u2BzdvrpqN2oeNt8DmUdg6Do_eAltH4XEH5ofw-Cj8-QAOtx_-BgAA__9j5gBo
+
+query T
+EXPLAIN (VEC) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colexec.limitOp
+      └ *colexec.SerialUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colexec.ParallelUnorderedSynchronizer
+          ├ *colfetcher.ColBatchScan
+          └ *colfetcher.ColBatchScan
+
+# Now check the physical plan for the row-by-row engine.
+statement ok
+SET vectorize=off
+
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] AS temp(a) WHERE a LIKE '%Diagram%'
+----
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk-Fq2zAQgP_vKY6D4nhoRHYyKIKCy-oyd27SxYEVGlM0-2i12ZYny5BS8u4jdqB1Wbp0-xed7tN9uTs_YvOrQIFJGIeflvAezhfzS7gJr6_i02gGo7MoWSZfYxeGCdm9KnL49jlchBBeb3NgNMyopaHK7lLqW5XDCWS32x8unM7OYJT1MY-7KZwmYKmsYSTdHSEhjr6E4BydKXlnZHnkIMNK5zSTJTUobtDDlGFtdEZNo8029NglRPkaBWeoqrq123DKMNOGUDyiVbYgFLiU3wtakMzJjDkyzMlKVXTPdv8sqI0qpXlAhkktq0bAeIWr1fqYr3Ds8TEHWeXggbb3ZJDhvLUCAo8FPqYbhrq1T7UbK-8Ihbdh_-bnHeoX7NwO8_H3-jxpNGSULKCttMnJUD4wSTd_EJ_pD7oe-0PlWJXKgrdXhb-lNRdaVbvOTIZllg81CYjD8yUk4WUEF_Nohgz7RXzWsVjrn20NP7SqQFcCRsEETiDwd3sZTOEE1s6UO0KIwOOcf5y6yHBBpbYExV_p7Wezdo6f8wzWTjZ40D1sSpO3tGZBTa2rhl6MaV_TU4aU31E_8ka3JqMro7OuTH-cd1wXyKmx_a3fH6Kqu-rW-jns_Q_svwpPBjB_CU9ehacv4HTz7ncAAAD__9WDi6Q=
+
+statement ok
+RESET vectorize
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
@@ -1152,6 +1298,11 @@ fetched: /parent/primary/'ca-central-1'/20 -> NULL
 output row: [20 20]
 
 # Inner join with locality optimized search enabled.
+
+# First check the plan with the vectorized engine.
+statement ok
+SET vectorize=on
+
 query T
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
 ----
@@ -1175,7 +1326,32 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id =
           table: child@primary
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr2zAQx9_3KY57STI0ItsZFEHAZXWYS2Z3TmCDxhTPOlpvjuTJMniEfPcRu9A4LF27vdkn_XQ__nc7rH-WKHAVLIMPa3gLiyT-BLfB15vlZRjB-CpcrVeflxMYXsgfilJCGEVBAtdxGEGVGVIW4giqu0LCHPK77uPLxyAJIO9rDk8hXixWwRpcZKi0pCjbUo3iFh1MGVZG51TX2hxKu-5CKFsUnGGhqsYeyinDXBtCsUNb2JJQ4Dr7VlJCmSQz5chQks2Ksnu2E_UrU2wz8wsZrqpM1QKmG9xs2gu-wanDpxwyJcEBbR_IIMO4sQJ8h_kupnuGurFPvWub3RMKZ8_-zc95qZ__6PYyH_esz5NGo7SRZEgOFNL9H4wj_U5XU3fouiy2hQXnrAN_TSbXulCPkXjDNv0qHWWy1PpHU8F3XSjQSsDY92AOvjuBy-gKxv4M5tCOZnwkhPAdzvn72QQZJrTVlqD8K33Y83Z0ccwzaEf54MHJYA7M987G4L0mhoTqSquaTkZyLuCUIcl76uda68bkdGN03rXpf-OO6wqSatufuv1PqLqjbnePYed_YPdZ2BvA_BT2noVnJ3C6f_M7AAD__413dng=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr2zAQx9_3KY57STM0IjvOKIKCy-oyl8zunMAGjSmefXTaHMuTZMgI-e4j9qBxaLOk3Zt10k_35yffGs2vEgXOgmnwYQ5v4TqJP8Fd8PV2ehlGcHYVzuazz9Mh9A_k32VZQBhFQQI3cRhBnWmqLMQR1PeygAvI79uPLx-DJIC8qzk8hfj6ehbMwUWGlSooypZkUNyhgynDWqucjFF6W1q3B8JihYIzlFXd2G05ZZgrTSjWaKUtCQXOs28lJZQVpEccGRZkM1m217ZB_VrLZaZ_I8NZnVVGwGiBi8XqnC9w5PCWiRsrwHeY72K6Yaga-9jP2OyBUDgb9rJMzgmZ8v-V6TFKUyldkKaiFyPdPJE6Uu9UPXL3Dj7d2n2pjvGxOvyTVIyPUGFIy6yEk414_chTuZQWnGej8FPU3ChZ_TUz6bfphmpHzVSpn00NP5SsQFUCzvwxXIDvDuEyuoIz34MLWA08PhBC-A7nfOINkWFCS2UJyn_S24lfDc53eQarQd67cNh7DuaPn9XgnaIhIVOrytBR_x7fPhUVD9Q9r1GNzulWq7xt0y3jlmsLBRnb7brdIqzarXZ6dmHnNbB7EPYOw-PXwN5BeNKD-T48OQi_34PTzZs_AQAA___5TfW-
+
+query T
+EXPLAIN (VEC) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colexec.limitOp
+      └ *colexec.SerialUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colexec.ParallelUnorderedSynchronizer
+          ├ *colfetcher.ColBatchScan
+          └ *colfetcher.ColBatchScan
+
+# Now check the physical plan for the row-by-row engine.
+statement ok
+SET vectorize=off
+
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] AS temp(a) WHERE a LIKE '%Diagram%'
+----
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk2Fr2zAQhr_vVxwHxcnQiGxnUAQFl9Vj7jyncwobNKZo9tFqsy1PliGj5L-P2IHGYena7Vt00qN78p78gO3PEgUuwzh8dw2v4X26-AQ34der-DxKYHIRLa-Xn-MpjA_k96osIEqSMIXLRZRAIw3VFhYJNLeqgDPIb_sfXz6EaQj5UHN5BudLsFQ1MJHT3aaEOPoYgnNyoeSdkdWJgwxrXVAiK2pR3KCLGcPG6JzaVptt6aE_EBVrFJyhqpvObssZw1wbQvGAVtmSUOC1_FZSSrIgM-PIsCArVdlf2_-JoDGqkuYXMlw2sm4FzFa4Wq1P-QpnLp9xkHUBLmh7TwYZLjorIHBZ4GG2Yag7-9i7tfKOULgb9m9-7nP9gp3b83y8oz6PGi0ZJUvoam0KMlSMTLLNH8QT_UY3M2-sHKtKWXCPqvCXRHOpVb1Lxh-3GV7bXjSx1j-6Br5rVYOuBUwCH84g8KZwnlzAJJjDGaydOXeEEIHLOX87nyLDlCptCcq_0ttPYe2c7vMM1k4-unA6GgcL_KMx-C-JIaW20XVLByM5FnDGkIo7Gsbb6s7kdGV03rcZloue6wsFtXbY9YZFVPdb_RPeh93_gb0nYX8E80PYfxKeH8DZ5tXvAAAA___ix4EJ
+
+statement ok
+RESET vectorize
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
@@ -1213,6 +1389,11 @@ fetched: /parent/primary/'ca-central-1'/20 -> NULL
 output row: [20 20 20]
 
 # Left join with locality optimized search enabled.
+
+# First check the plan with the vectorized engine.
+statement ok
+SET vectorize=on
+
 query T
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
 ----
@@ -1236,7 +1417,32 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = 
           table: child@primary
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr2zAQx9_3KY57STM0ItsZFEHAZXVYimd3jscGjSmedbTeHMmTZUgJ-e4jdqFxWLp2e7NP-ul-_O-22PyqUOAyCIMPKbyFeRJ_gpvg23V4sYjg7HKxTJefwzEMLxT3ZSUhDOYpXMWLCOrckLIQR1DflhJmUNx2H18_BkkARV9zeAbxfL4MUnCRodKSonxNDYobdDBjWBtdUNNosy9tuwsLuUHBGZaqbu2-nDEstCEUW7SlrQgFpvn3ihLKJZkJR4aSbF5W3bOdp1-bcp2bB2S4rHPVCJiscLXanPMVThw-4ZArCQ5oe08GGcatFeA7zHcx2zHUrX3q3dj8jlA4O_Zvfs5L_fxHt5f5uCd9njRapY0kQ3KgkO3-YBzpd7qeuEPXsFyXFpyTDvw1mVzpUj1G4g3bpA81iX614i9pkHQLhgz7FTvIKtT6Z1vDD10q0ErAme_BDHx3DBfRJZz5U5jBZjTlIyGE73DO30_HyDChtbYE1V_p_fpvRueHPIPNqBg8OB7Mh_neyXi818STUFNr1dDRqE4FnzEkeUf9vBvdmoKujS66Nv1v3HFdQVJj-1O3_1mo7qjb6UPY-R_YfRb2BjA_hr1n4ekRnO3e_A4AAP__llN8vQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslFFr2zAQx9_3KY57STM0IjvOKIKCy-qwFM_uHI8NGlM8--i8OZYny5AS8t1H5EHj0GZJuzfrdL-7P__zaY3N7xIFzj3f-xDDW5hG4Se49b7d-JezAM6uZvN4_tkfQj8h-1GUOfjeNIbrcBZAnSqqNIQB1HdFDheQ3ZmPrx-9yIOsi1k8gXA6nXsx2MiwkjkF6ZIaFLdoYcKwVjKjppFqG1qbhFm-QsEZFlXd6m04YZhJRSjWqAtdEgqM0-8lRZTmpEYcGeak06I0ZY1Ot1bFMlUPyHBep1UjYLTAxWJ1zhc4srhhwlYLcC3m2phsGMpWP_ZrdHpPKKwNe5km6wRN2f_S9CilraTKSVHek5FsnlAdyHeyHtl7iU-3tl9qx_hYO9yTrBgfYUVDqkhLONkRpy_ZL5aFButZKfwUa65lUf11ZtJvEz_UJLolC7_EXmRWDRl2y7ZjmS_lr7aGn7KoQFYCztwxXIBrD-EyuIIz14ELWA0cPhBCuBbnfOIMkWFES6kJyn_S24dgNTjf5RmsBlmv4LA3JuaOn7XHOcWeiJpaVg0d9U_y7Qgpv6du7I1sVUY3SmamTXcMDWcCOTW6u7W7w6wyV2ardmHrNbB9EHYOw-PXwM5BeNKD-T48OQi_34OTzZs_AQAA__-3xvwD
+
+query T
+EXPLAIN (VEC) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colexec.limitOp
+      └ *colexec.SerialUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colexec.ParallelUnorderedSynchronizer
+          ├ *colfetcher.ColBatchScan
+          └ *colfetcher.ColBatchScan
+
+# Now check the physical plan for the row-by-row engine.
+statement ok
+SET vectorize=off
+
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] AS temp(a) WHERE a LIKE '%Diagram%'
+----
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk2FrnEwQx98_n2IYCHf3sOVWvUJYCBgaQ02tpp6lhZyErQ7JturadYUL4b57iQYSQy9N2nfuzP5nfv5n9ha7nxUKXAdR8C6D_-E0TT7CRfD1PDoOY5ifhOts_SlawPRCca2qEqLgNIOzJIyhlYYaC0kM7aUq4QiKy-Hjy_sgDaAYYw7P4XgNluoW5nJxn5QQhR8CmB2cKHllZH0wQ4aNLimWNXUoLtDBnGFrdEFdp81d6Ha4EJZbFJyhatre3oVzhoU2hOIWrbIVocBMfqsoJVmSWXJkWJKVqhrKDv_gt0bV0twgw3Urm07AcoObzfaQb3Dp8CUH2ZTggLbXZJBh0lsBvsN8F_MdQ93bh96dlVeEwtmxv-NzXsrn37O9jMfdy_OA0ZFRsoK-0aYkQ-WEJN_9BjzWb3S7dKfIkaqVBWcvCn-NNWdaNffOeNM22U1LYty-5HMWpMMOIsNxCx9ZFmn9o2_hu1YN6EbA3PfgCHx3AcfxCcz9FRzBdrbiMyGE73DO364WyDClWluC6o_quxeynR0-1jPYzopJwcVkTMz39trjvcaelLpWNx09GdU-43OGVF7ROPZO96agc6OLoc14TAbdECips2PWHQ9hM6SG1X4sdv5F7D4r9iZi_lTsPStePRHnu_9-BQAA___eN4dO
+
+statement ok
+RESET vectorize
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off

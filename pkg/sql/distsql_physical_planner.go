@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -657,6 +658,15 @@ type PlanningCtx struct {
 
 	// If set, statement execution stats should be collected.
 	collectExecStats bool
+
+	// parallelizeScansIfLocal indicates whether we might want to create
+	// multiple table readers if the physical plan ends up being fully local.
+	// This value is determined based on the corresponding cluster setting (we
+	// want to capture that value in case there is a race between actual
+	// physical planning and updating the setting on a separate connection) and
+	// whether there are any mutations in the plan (which prohibit all
+	// concurrency).
+	parallelizeScansIfLocal bool
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
@@ -1312,11 +1322,55 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	planCtx *PlanningCtx, p *PhysicalPlan, info *tableReaderPlanningInfo,
 ) error {
 	var (
-		spanPartitions []SpanPartition
-		err            error
+		spanPartitions   []SpanPartition
+		err              error
+		parallelizeLocal bool
 	)
 	if planCtx.isLocal {
-		spanPartitions = []SpanPartition{{dsp.gatewayNodeID, info.spans}}
+		// For local plans, if:
+		// - there is no required ordering,
+		// - the scan is safe to parallelize, and
+		// - the parallelization of scans in local flows is allowed,
+		// then we will split all spans according to the leaseholder boundaries
+		// and will create a separate TableReader for each node.
+		//
+		// The last condition can only be false in tests.
+		sd := planCtx.ExtendedEvalCtx.EvalContext.SessionData
+		// If we have locality optimized search enabled and we won't use the
+		// vectorized engine, using the parallel scans might actually be
+		// significantly worse, so we prohibit it. This is the case because
+		// in case of a local region hit, we would still execute all lookups
+		// into the remote regions and would block until all come back in the
+		// row-based flow.
+		prohibitParallelScans := sd.LocalityOptimizedSearch && sd.VectorizeMode == sessiondatapb.VectorizeOff
+		if len(info.reqOrdering) == 0 &&
+			info.parallelize &&
+			planCtx.parallelizeScansIfLocal &&
+			!prohibitParallelScans &&
+			planCtx.spanIter != nil {
+			parallelizeLocal = true
+			// Temporarily unset isLocal so that PartitionSpans divides all
+			// spans according to the respective leaseholders.
+			planCtx.isLocal = false
+			// TODO(yuzefovich): do we want to limit the concurrency here? It is
+			// currently O(#nodes).
+			spanPartitions, err = dsp.PartitionSpans(planCtx, info.spans)
+			planCtx.isLocal = true
+			if err != nil {
+				return err
+			}
+			for i := range spanPartitions {
+				spanPartitions[i].Node = dsp.gatewayNodeID
+			}
+			if len(spanPartitions) == 1 {
+				// If all spans are assigned to a single partition, then there
+				// will be no parallelism, so we want to elide the redundant
+				// synchronizer.
+				parallelizeLocal = false
+			}
+		} else {
+			spanPartitions = []SpanPartition{{dsp.gatewayNodeID, info.spans}}
+		}
 	} else if info.post.Limit == 0 {
 		// No hard limit - plan all table readers where their data live. Note
 		// that we're ignoring soft limits for now since the TableReader will
@@ -1402,6 +1456,12 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		}
 	}
 	p.AddProjection(outCols, dsp.convertOrdering(info.reqOrdering, planToStreamColMap))
+
+	if parallelizeLocal {
+		// If we planned multiple table readers, we need to merge the streams
+		// into one.
+		p.AddSingleGroupStage(dsp.gatewayNodeID, execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}}, execinfrapb.PostProcessSpec{}, p.GetResultTypes())
+	}
 
 	p.PlanToStreamColMap = planToStreamColMap
 	return nil
@@ -3727,14 +3787,31 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	// Tenants can not distribute plans.
 	distribute = distribute && evalCtx.Codec.ForSystemTenant()
 	planCtx := &PlanningCtx{
-		ctx:             ctx,
-		ExtendedEvalCtx: evalCtx,
-		infra:           physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewayNodeID),
-		isLocal:         !distribute,
-		planner:         planner,
+		ctx:                     ctx,
+		ExtendedEvalCtx:         evalCtx,
+		infra:                   physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewayNodeID),
+		isLocal:                 !distribute,
+		planner:                 planner,
+		parallelizeScansIfLocal: !distribute && execinfra.ParallelizeScansIfLocal.Get(&evalCtx.Settings.SV),
 	}
 	if !distribute {
-		return planCtx
+		if planner == nil || dsp.spanResolver == nil || planner.curPlan.flags.IsSet(planFlagContainsMutation) {
+			// Don't parallelize the scans if we have a local plan if
+			// - we don't have a planner which is the case when we are not on
+			// the main query path;
+			// - we don't have a span resolver (this can happen only in tests);
+			// - the plan contains a mutation operation - we currently don't
+			// support any parallelism when mutations are present.
+			planCtx.parallelizeScansIfLocal = false
+			return planCtx
+		}
+		// We might decide to parallelize scans, and although the plan is local,
+		// we still need to instantiate a full planning context.
+		// TODO(yuzefovich): instead, we could walk over the plan tree and see
+		// whether there are any scanNodes that will be parallelized. On a quick
+		// glance it seems like the tree traversal might be more expensive then
+		// several map creations in the code below (but probably not when the
+		// plan is simple when this would actually matter).
 	}
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
 	planCtx.NodeStatuses = make(map[roachpb.NodeID]NodeStatus)
