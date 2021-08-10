@@ -39,6 +39,7 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",

@@ -285,6 +285,13 @@ func (ds *ServerImpl) setupFlow(
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
 		evalCtx.Mon = monitor
+		if localState.HasConcurrency {
+			var err error
+			leafTxn, err = makeLeaf(req)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+		}
 	} else {
 		if localState.IsLocal {
 			return nil, nil, nil, errors.AssertionFailedf(
@@ -352,11 +359,12 @@ func (ds *ServerImpl) setupFlow(
 		localState.LocalProcs, isVectorized,
 	)
 	opt := flowinfra.FuseNormally
-	if localState.IsLocal {
-		// If there's no remote flows, fuse everything. This is needed in order for
-		// us to be able to use the RootTxn for the flow 's execution; the RootTxn
-		// doesn't allow for concurrent operations. Local flows with mutations need
-		// to use the RootTxn.
+	if localState.IsLocal && !localState.HasConcurrency {
+		// If there are no remote flows and the local flow doesn't have any
+		// concurrency, fuse everything. This is needed in order for us to be
+		// able to use the RootTxn for the flow 's execution; the RootTxn
+		// doesn't allow for concurrent operations. Local flows with mutations
+		// need to use the RootTxn.
 		opt = flowinfra.FuseAggressively
 	}
 
@@ -491,6 +499,10 @@ type LocalState struct {
 	// IsLocal is set if the flow is running on the gateway and there are no
 	// remote flows.
 	IsLocal bool
+
+	// HasConcurrency indicates whether the local flow uses multiple goroutines.
+	// It is set only if IsLocal is true.
+	HasConcurrency bool
 
 	// Txn is filled in on the gateway only. It is the RootTxn that the query is running in.
 	// This will be used directly by the flow if the flow has no concurrency and IsLocal is set.

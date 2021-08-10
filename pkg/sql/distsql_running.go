@@ -397,6 +397,17 @@ func (dsp *DistSQLPlanner) Run(
 ) (cleanup func()) {
 	ctx := planCtx.ctx
 
+	flows := plan.GenerateFlowSpecs()
+	defer func() {
+		for _, flowSpec := range flows {
+			physicalplan.ReleaseFlowSpec(flowSpec)
+		}
+	}()
+	if _, ok := flows[dsp.gatewayNodeID]; !ok {
+		recv.SetError(errors.Errorf("expected to find gateway flow"))
+		return func() {}
+	}
+
 	var (
 		localState     distsql.LocalState
 		leafInputState *roachpb.LeafTxnInputState
@@ -418,9 +429,18 @@ func (dsp *DistSQLPlanner) Run(
 
 	if planCtx.isLocal {
 		localState.IsLocal = true
-	} else if txn != nil {
-		// If the plan is not local, we will have to set up leaf txns using the
-		// txnCoordMeta.
+		if planCtx.parallelizeScansIfLocal {
+			// Even though we have a single flow on the gateway node, we might have
+			// decided to parallelize the scans. If that's the case, we will need to
+			// use the Leaf txn.
+			for _, flow := range flows {
+				localState.HasConcurrency = localState.HasConcurrency || execinfra.HasParallelProcessors(flow)
+			}
+		}
+	}
+	if (!localState.IsLocal || localState.HasConcurrency) && txn != nil {
+		// If the plan is not local or it has any concurrency, we will have to
+		// set up leaf txns using the txnCoordMeta.
 		tis, err := txn.GetLeafTxnInputStateOrRejectClient(ctx)
 		if err != nil {
 			log.Infof(ctx, "%s: %s", clientRejectedMsg, err)
@@ -428,17 +448,6 @@ func (dsp *DistSQLPlanner) Run(
 			return func() {}
 		}
 		leafInputState = &tis
-	}
-
-	flows := plan.GenerateFlowSpecs()
-	defer func() {
-		for _, flowSpec := range flows {
-			physicalplan.ReleaseFlowSpec(flowSpec)
-		}
-	}()
-	if _, ok := flows[dsp.gatewayNodeID]; !ok {
-		recv.SetError(errors.Errorf("expected to find gateway flow"))
-		return func() {}
 	}
 
 	if logPlanDiagram {
@@ -515,7 +524,7 @@ func (dsp *DistSQLPlanner) Run(
 	// This is important, since these flows are forced to use the RootTxn (since
 	// they might have mutations), and the RootTxn does not permit concurrency.
 	// For such flows, we were supposed to have fused everything.
-	if txn != nil && planCtx.isLocal && flow.ConcurrentTxnUse() {
+	if txn != nil && planCtx.isLocal && !localState.HasConcurrency && flow.ConcurrentTxnUse() {
 		recv.SetError(errors.AssertionFailedf(
 			"unexpected concurrency for a flow that was forced to be planned locally"))
 		return func() {}
