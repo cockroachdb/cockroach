@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -159,14 +160,14 @@ func (tc *Collection) getByName(
 	sc catalog.SchemaDescriptor,
 	name string,
 	avoidCached, mutable bool,
+	version clusterversion.Handle,
 ) (found bool, desc catalog.Descriptor, err error) {
-
 	var parentID, parentSchemaID descpb.ID
 	if db != nil {
 		if sc == nil {
 			// Schema descriptors are handled in a special way, see getSchemaByName
 			// function declaration for details.
-			return getSchemaByName(ctx, tc, txn, db, name, avoidCached, mutable)
+			return getSchemaByName(ctx, tc, txn, db, name, avoidCached, mutable, version)
 		}
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
 	}
@@ -257,8 +258,9 @@ func getSchemaByName(
 	name string,
 	avoidCached bool,
 	mutable bool,
+	version clusterversion.Handle,
 ) (bool, catalog.Descriptor, error) {
-	if name == tree.PublicSchema {
+	if !db.HasPublicSchemaWithDescriptor() && name == tree.PublicSchema {
 		return true, schemadesc.GetPublicSchema(), nil
 	}
 	if sc := tc.virtual.getSchemaByName(name); sc != nil {
@@ -266,7 +268,7 @@ func getSchemaByName(
 	}
 	if isTemporarySchema(name) {
 		if refuseFurtherLookup, sc, err := tc.temporary.getSchemaByName(
-			ctx, txn, db.GetID(), name,
+			ctx, txn, db.GetID(), name, version,
 		); refuseFurtherLookup || sc != nil || err != nil {
 			return sc != nil, sc, err
 		}
@@ -284,7 +286,9 @@ func getSchemaByName(
 			errors.Is(err, catalog.ErrDescriptorDropped) {
 			err = nil
 		}
-		return sc != nil, sc, err
+		if sc != nil {
+			return sc != nil, sc, err
+		}
 	}
 	return false, nil, nil
 }

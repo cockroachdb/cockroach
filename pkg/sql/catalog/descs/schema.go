@@ -68,6 +68,7 @@ func (tc *Collection) getSchemaByName(
 ) (catalog.SchemaDescriptor, error) {
 	found, desc, err := tc.getByName(
 		ctx, txn, db, nil, schemaName, flags.AvoidCached, flags.RequireMutable,
+		tc.settings.Version,
 	)
 	if err != nil {
 		return nil, err
@@ -104,12 +105,13 @@ func (tc *Collection) GetImmutableSchemaByID(
 func (tc *Collection) getSchemaByID(
 	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
+	// TODO(richardjcai): Remove this in 22.2, new schemas created in 22.1
+	// are regular UDS and do not use keys.PublicSchemaID.
+	// We can remove this after 22.1 when we no longer have to consider
+	// mixed version clusters between 21.2 and 22.1.
 	if schemaID == keys.PublicSchemaID {
 		return schemadesc.GetPublicSchema(), nil
 	}
-
-	// We have already considered if the schemaID is PublicSchemaID,
-	// if the id appears in staticSchemaIDMap, it must map to a virtual schema.
 	if sc, err := tc.virtual.getSchemaByID(
 		ctx, schemaID, flags.RequireMutable,
 	); sc != nil || err != nil {

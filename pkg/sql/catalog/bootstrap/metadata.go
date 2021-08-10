@@ -142,7 +142,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			// the public schema, as all tables are scoped under the public schema.
 			add(catalogkeys.MakeDatabaseNameKey(ms.codec, desc.GetName()), nameValue)
 			publicSchemaValue := roachpb.Value{}
-			publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
+			publicSchemaValue.SetInt(int64(keys.SystemPublicSchemaID))
 			add(catalogkeys.MakePublicSchemaNameKey(ms.codec, desc.GetID()), publicSchemaValue)
 		}
 

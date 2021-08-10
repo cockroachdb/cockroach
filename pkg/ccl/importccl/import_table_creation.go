@@ -102,23 +102,18 @@ func MakeTestingSimpleTableDescriptor(
 	fks fkHandler,
 	walltime int64,
 ) (*tabledesc.Mutable, error) {
-	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName())
-	var sc catalog.SchemaDescriptor
-	if parentSchemaID == keys.PublicSchemaID {
-		sc = schemadesc.GetPublicSchema()
-	} else {
-		sc = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
-			Name:     "foo",
-			ID:       parentSchemaID,
-			Version:  1,
-			ParentID: parentID,
-			Privileges: descpb.NewPrivilegeDescriptor(
-				security.PublicRoleName(),
-				privilege.SchemaPrivileges,
-				security.RootUserName(),
-			),
-		}).BuildCreatedMutableSchema()
-	}
+	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName(), 0)
+	sc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		Name:     "foo",
+		ID:       parentSchemaID,
+		Version:  1,
+		ParentID: parentID,
+		Privileges: descpb.NewPrivilegeDescriptor(
+			security.PublicRoleName(),
+			privilege.SchemaPrivileges,
+			security.RootUserName(),
+		),
+	}).BuildCreatedMutableSchema()
 	return MakeSimpleTableDescriptor(ctx, semaCtx, st, create, db, sc, tableID, fks, walltime)
 }
 

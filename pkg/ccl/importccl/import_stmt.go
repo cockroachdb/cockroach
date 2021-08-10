@@ -967,7 +967,7 @@ func importPlanHook(
 
 			// Due to how we generate and rewrite descriptor ID's for import, we run
 			// into problems when using user defined schemas.
-			if sc.GetID() != keys.PublicSchemaID {
+			if sc.GetID() != keys.PublicSchemaIDForBackup {
 				err := errors.New("cannot use IMPORT with a user defined schema")
 				hint := errors.WithHint(err, "create the table with CREATE TABLE and use IMPORT INTO instead")
 				return hint
@@ -1518,7 +1518,7 @@ func constructSchemaAndTableKey(
 	tableDesc *descpb.TableDescriptor, schemaIDToName map[descpb.ID]string,
 ) (schemaAndTableName, error) {
 	schemaName, ok := schemaIDToName[tableDesc.GetUnexposedParentSchemaID()]
-	if !ok && tableDesc.UnexposedParentSchemaID != keys.PublicSchemaID {
+	if !ok {
 		return schemaAndTableName{}, errors.Newf("invalid parent schema ID %d for table %s",
 			tableDesc.UnexposedParentSchemaID, tableDesc.GetName())
 	}

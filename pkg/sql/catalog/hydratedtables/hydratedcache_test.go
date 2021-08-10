@@ -288,7 +288,7 @@ const (
 // constructing descriptors for testing less terrible without running a whole
 // server.
 var (
-	dbDesc     = dbdesc.NewInitial(dbID, "db", security.RootUserName())
+	dbDesc     = dbdesc.NewInitial(dbID, "db", security.RootUserName(), 0)
 	schemaDesc = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		Name:     "schema",
 		ID:       scID,

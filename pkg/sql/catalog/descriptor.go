@@ -180,6 +180,7 @@ type DatabaseDescriptor interface {
 	GetSchemaID(name string) descpb.ID
 	GetNonDroppedSchemaName(schemaID descpb.ID) string
 	GetDefaultPrivilegeDescriptor() DefaultPrivilegeDescriptor
+	HasPublicSchemaWithDescriptor() bool
 }
 
 // TableDescriptor is an interface around the table descriptor types.

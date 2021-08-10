@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
@@ -189,6 +190,19 @@ func (desc *immutable) GetSchemaID(name string) descpb.ID {
 		return descpb.InvalidID
 	}
 	return info.ID
+}
+
+// HasPublicSchemaWithDescriptor returns if the database has a public schema
+// with a descriptor.
+// If descs.Schemas has an explicit entry for "public", then it has a descriptor
+// otherwise it is an implicit public schema.
+func (desc *immutable) HasPublicSchemaWithDescriptor() bool {
+	// The system database does not have a public schema backed by a descriptor.
+	if desc.ID == keys.SystemDatabaseID {
+		return false
+	}
+	_, found := desc.Schemas[tree.PublicSchema]
+	return found
 }
 
 // GetNonDroppedSchemaName returns the name in the schema mapping entry for the

@@ -202,6 +202,7 @@ func maybeFillInDescriptor(
 	changes.UpgradedNamespaceName = maybeUpgradeNamespaceName(desc)
 
 	parentSchemaID := desc.GetUnexposedParentSchemaID()
+	// TODO(richardjcai): Remove this case in 22.2.
 	if parentSchemaID == descpb.InvalidID {
 		parentSchemaID = keys.PublicSchemaID
 	}

@@ -456,7 +456,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// resolveZone determines the ID of the target object of the zone
 		// specifier. This ought to succeed regardless of whether there is
 		// already a zone config for the target object.
-		targetID, err := resolveZone(params.ctx, params.ExecCfg().Codec, params.p.txn, &zs)
+		targetID, err := resolveZone(params.ctx, params.ExecCfg().Codec, params.p.txn, &zs, params.ExecCfg().Settings.Version)
 		if err != nil {
 			return err
 		}
