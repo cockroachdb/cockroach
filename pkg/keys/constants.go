@@ -436,7 +436,7 @@ var PseudoTableIDs = []uint32{
 	SystemRangesID,
 	TimeseriesRangesID,
 	LivenessRangesID,
-	PublicSchemaID,
+	PublicSchemaID, // This needs to be removed if PublicSchema is added as a desc.
 	TenantsRangesID,
 }
 

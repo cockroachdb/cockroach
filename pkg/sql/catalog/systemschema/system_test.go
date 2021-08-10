@@ -31,12 +31,12 @@ func TestShouldSplitAtDesc(t *testing.T) {
 	typ := descpb.TypeDescriptor{}
 	schema := descpb.SchemaDescriptor{}
 	for inner, should := range map[catalog.Descriptor]bool{
-		tabledesc.NewBuilder(&tbl1).BuildImmutable():          true,
-		tabledesc.NewBuilder(&tbl2).BuildImmutable():          false,
-		tabledesc.NewBuilder(&tbl3).BuildImmutable():          true,
-		dbdesc.NewInitial(42, "db", security.AdminRoleName()): false,
-		typedesc.NewBuilder(&typ).BuildCreatedMutable():       false,
-		schemadesc.NewBuilder(&schema).BuildImmutable():       false,
+		tabledesc.NewBuilder(&tbl1).BuildImmutable():             true,
+		tabledesc.NewBuilder(&tbl2).BuildImmutable():             false,
+		tabledesc.NewBuilder(&tbl3).BuildImmutable():             true,
+		dbdesc.NewInitial(42, "db", security.AdminRoleName(), 0): false,
+		typedesc.NewBuilder(&typ).BuildCreatedMutable():          false,
+		schemadesc.NewBuilder(&schema).BuildImmutable():          false,
 	} {
 		var rawDesc roachpb.Value
 		require.NoError(t, rawDesc.SetProto(inner.DescriptorProto()))

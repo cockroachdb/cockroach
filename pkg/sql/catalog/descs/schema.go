@@ -13,11 +13,9 @@ package descs
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -104,10 +102,6 @@ func (tc *Collection) GetImmutableSchemaByID(
 func (tc *Collection) getSchemaByID(
 	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
-	if schemaID == keys.PublicSchemaID {
-		return schemadesc.GetPublicSchema(), nil
-	}
-
 	// We have already considered if the schemaID is PublicSchemaID,
 	// if the id appears in staticSchemaIDMap, it must map to a virtual schema.
 	if sc, err := tc.virtual.getSchemaByID(

@@ -45,7 +45,7 @@ func CreateTestTableDescriptor(
 	evalCtx := tree.MakeTestingEvalContext(st)
 	switch n := stmt.AST.(type) {
 	case *tree.CreateTable:
-		db := dbdesc.NewInitial(parentID, "test", security.RootUserName())
+		db := dbdesc.NewInitial(parentID, "test", security.RootUserName(), 0)
 		desc, err := NewTableDesc(
 			ctx,
 			nil, /* txn */

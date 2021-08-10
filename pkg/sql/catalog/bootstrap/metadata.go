@@ -132,6 +132,21 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 				})
 		}
 
+		//else if desc.GetID() == keys.PublicSchemaID {
+		//	ret = append(ret, roachpb.KeyValue{
+		//		Key:   catalogkeys.MakePublicSchemaNameKey(ms.codec, parentID),
+		//		Value: value,
+		//	})
+		//} else {
+		//	ret = append(
+		//		ret,
+		//		roachpb.KeyValue{
+		//			Key:   catalogkeys.MakeDatabaseNameKey(ms.codec, desc.GetName()),
+		//			Value: value,
+		//		},
+		//	)
+		//}
+
 		// Create descriptor metadata key.
 		value = roachpb.Value{}
 		descDesc := desc.DescriptorProto()
@@ -333,6 +348,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 		target.AddDescriptor(keys.SystemDatabaseID, systemschema.TenantUsageTable)
 	}
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SQLInstancesTable)
+
+	// Add system schema.
+	//target.AddDescriptor(keys.SystemDatabaseID, systemschema.SystemPublicSchema)
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
@@ -400,6 +418,8 @@ func addZoneConfigKVsToSchema(
 		createZoneConfigKV(keys.SystemRangesID, target.codec, systemZoneConf))
 	target.otherKV = append(target.otherKV,
 		createZoneConfigKV(keys.SystemDatabaseID, target.codec, systemZoneConf))
+	//target.otherKV = append(target.otherKV,
+	//	createZoneConfigKV(keys.PublicSchemaID, target.codec, systemZoneConf))
 	target.otherKV = append(target.otherKV,
 		createZoneConfigKV(keys.ReplicationConstraintStatsTableID, target.codec, replicationConstraintStatsZoneConf))
 	target.otherKV = append(target.otherKV,

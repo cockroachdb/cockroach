@@ -12,8 +12,8 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -112,10 +112,16 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
+	publicSchemaID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	if err != nil {
+		return nil, true, err
+	}
+
 	desc := dbdesc.NewInitial(
 		id,
 		string(database.Name),
 		p.SessionData().User(),
+		publicSchemaID,
 		dbdesc.MaybeWithDatabaseRegionConfig(regionConfig),
 	)
 
@@ -131,8 +137,38 @@ func (p *planner) createDatabase(
 	}
 
 	// Every database must be initialized with the public schema.
-	key := catalogkeys.MakePublicSchemaNameKey(p.ExecCfg().Codec, id)
-	if err := p.CreateSchemaNamespaceEntry(ctx, key, keys.PublicSchemaID); err != nil {
+	// Create the SchemaDescriptor.
+	publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		ParentID:   id,
+		Name:       tree.PublicSchema,
+		ID:         publicSchemaID,
+		Privileges: descpb.NewDefaultPrivilegeDescriptor(p.User()),
+		Version:    1,
+	}).BuildCreatedMutableSchema()
+
+	//desc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+	//desc.Schemas[publicSchemaDesc.GetName()] = descpb.DatabaseDescriptor_SchemaInfo{
+	//	ID:      publicSchemaDesc.ID,
+	//	Dropped: false,
+	//}
+
+	// TODO(richardjcai): Might be better to bake this public schema creation into
+	//    the createDescriptorWithID if it is a database.
+	if err := p.writeNonDropDatabaseChange(
+		ctx, desc,
+		fmt.Sprintf("updating parent database %s for %s", desc.GetName(), tree.AsStringWithFQNames(database, p.Ann())),
+	); err != nil {
+		return nil, true, err
+	}
+
+	if err := p.createDescriptorWithID(
+		ctx,
+		catalogkeys.MakePublicSchemaNameKey(p.ExecCfg().Codec, id),
+		publicSchemaDesc.GetID(),
+		publicSchemaDesc,
+		p.ExecCfg().Settings,
+		tree.AsStringWithFQNames(database, p.Ann()),
+	); err != nil {
 		return nil, true, err
 	}
 

@@ -123,7 +123,7 @@ func readMysqlCreateFrom(
 	defer f.Close()
 	walltime := testEvalCtx.StmtTimestamp.UnixNano()
 	expectedParent := dbdesc.NewInitial(
-		expectedParentID, "test", security.RootUserName(),
+		expectedParentID, "test", security.RootUserName(), 0,
 	)
 	tbl, err := readMysqlCreateTable(context.Background(), f, testEvalCtx, nil, id, expectedParent, name, fks, map[descpb.ID]int64{}, security.RootUserName(), walltime)
 	if err != nil {

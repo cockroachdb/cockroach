@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -135,13 +136,18 @@ func MaybeWithDatabaseRegionConfig(regionConfig *multiregion.RegionConfig) NewIn
 // NewInitial constructs a new Mutable for an initial version from an id and
 // name with default privileges.
 func NewInitial(
-	id descpb.ID, name string, owner security.SQLUsername, options ...NewInitialOption,
+	id descpb.ID,
+	name string,
+	owner security.SQLUsername,
+	publicSchemaID descpb.ID,
+	options ...NewInitialOption,
 ) *Mutable {
 	return NewInitialWithPrivileges(
 		id,
 		name,
 		descpb.NewDefaultPrivilegeDescriptor(owner),
 		descpb.InitDefaultPrivilegeDescriptor(),
+		publicSchemaID,
 		options...,
 	)
 }
@@ -153,6 +159,7 @@ func NewInitialWithPrivileges(
 	name string,
 	privileges *descpb.PrivilegeDescriptor,
 	defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
+	publicSchemaID descpb.ID,
 	options ...NewInitialOption,
 ) *Mutable {
 	ret := descpb.DatabaseDescriptor{
@@ -161,6 +168,12 @@ func NewInitialWithPrivileges(
 		Version:           1,
 		Privileges:        privileges,
 		DefaultPrivileges: defaultPrivileges,
+		Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
+			tree.PublicSchema: {
+				ID:      publicSchemaID,
+				Dropped: false,
+			},
+		},
 	}
 	for _, option := range options {
 		option(&ret)

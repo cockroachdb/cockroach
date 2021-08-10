@@ -22,8 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -558,7 +560,27 @@ func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 		// Assign max privileges to root user.
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.SystemDatabaseID], security.NodeUserName()),
+		Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
+			tree.PublicSchema: {
+				ID:      keys.PublicSchemaID,
+				Dropped: false,
+			},
+		},
 	}).BuildImmutableDatabase()
+}
+
+// MakeSystemPublicSchemaDesc constructs a copy of the system database's public
+//  schema descriptor.
+func MakeSystemPublicSchemaDesc() catalog.SchemaDescriptor {
+	return schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		ParentID: keys.SystemDatabaseID,
+		Name:     tree.PublicSchema,
+		ID:       keys.PublicSchemaID,
+		Version:  1,
+		// Assign max privileges to root user.
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.PublicSchemaID], security.NodeUserName()),
+	}).BuildImmutableSchema()
 }
 
 func makeTable(desc descpb.TableDescriptor) catalog.TableDescriptor {
@@ -578,6 +600,9 @@ func makeTable(desc descpb.TableDescriptor) catalog.TableDescriptor {
 var (
 	// SystemDB is the descriptor for the system database.
 	SystemDB = MakeSystemDatabaseDesc()
+
+	// SystemPublicSchema is the descriptor for the system public schema.
+	//SystemPublicSchema = MakeSystemPublicSchemaDesc()
 
 	// NamespaceTable is the descriptor for the namespace table. Note that this
 	// table should only be written to via KV puts, not via the SQL layer. Some

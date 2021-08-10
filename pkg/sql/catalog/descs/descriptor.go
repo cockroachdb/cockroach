@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -232,9 +231,9 @@ func getSchemaByName(
 	avoidCached bool,
 	mutable bool,
 ) (bool, catalog.Descriptor, error) {
-	if name == tree.PublicSchema {
-		return true, schemadesc.GetPublicSchema(), nil
-	}
+	//if name == tree.PublicSchema {
+	//	return true, schemadesc.GetPublicSchema(), nil
+	//}
 	if sc := tc.virtual.getSchemaByName(name); sc != nil {
 		return true, sc, nil
 	}

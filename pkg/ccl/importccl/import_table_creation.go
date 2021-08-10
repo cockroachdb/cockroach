@@ -102,7 +102,7 @@ func MakeTestingSimpleTableDescriptor(
 	fks fkHandler,
 	walltime int64,
 ) (*tabledesc.Mutable, error) {
-	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName())
+	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName(), 0)
 	var sc catalog.SchemaDescriptor
 	if parentSchemaID == keys.PublicSchemaID {
 		sc = schemadesc.GetPublicSchema()
