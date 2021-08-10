@@ -1848,28 +1848,30 @@ project
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(5,10,21,25,26,31,33,36-39)
- ├── left-join (merge)
+ ├── inner-join (hash)
  │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_is_mrkt:21!null se_t_id:24 se_cash_type:25 se_cash_due_date:26 settlement.se_amt:27 ct_t_id:30 ct_dts:31 cash_transaction.ct_amt:32 ct_name:33
- │    ├── left ordering: +1
- │    ├── right ordering: +30
  │    ├── cardinality: [0 - 5]
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
  │    ├── key: (1)
  │    ├── fd: (1)-->(4,5,8,10,11,24-27,30-33), (18)-->(21), (4)==(18), (18)==(4), (24)-->(25-27), (30)-->(31-33)
+ │    ├── scan trade_type
+ │    │    ├── columns: tt_id:18!null tt_is_mrkt:21!null
+ │    │    ├── key: (18)
+ │    │    └── fd: (18)-->(21)
  │    ├── left-join (merge)
- │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_is_mrkt:21!null se_t_id:24 se_cash_type:25 se_cash_due_date:26 settlement.se_amt:27
+ │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11 se_t_id:24 se_cash_type:25 se_cash_due_date:26 settlement.se_amt:27 ct_t_id:30 ct_dts:31 cash_transaction.ct_amt:32 ct_name:33
  │    │    ├── left ordering: +1
  │    │    ├── right ordering: +24
  │    │    ├── cardinality: [0 - 5]
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(4,5,8,10,11,24-27), (18)-->(21), (4)==(18), (18)==(4), (24)-->(25-27)
- │    │    ├── ordering: +1
- │    │    ├── inner-join (lookup trade_type)
- │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_is_mrkt:21!null
- │    │    │    ├── key columns: [4] = [18]
- │    │    │    ├── lookup columns are key
+ │    │    ├── fd: (1)-->(4,5,8,10,11,24-27,30-33), (30)-->(31-33), (24)-->(25-27)
+ │    │    ├── left-join (merge)
+ │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11 ct_t_id:30 ct_dts:31 cash_transaction.ct_amt:32 ct_name:33
+ │    │    │    ├── left ordering: +1
+ │    │    │    ├── right ordering: +30
  │    │    │    ├── cardinality: [0 - 5]
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: (1)-->(4,5,8,10,11), (18)-->(21), (4)==(18), (18)==(4)
+ │    │    │    ├── fd: (1)-->(4,5,8,10,11,30-33), (30)-->(31-33)
  │    │    │    ├── ordering: +1
  │    │    │    ├── scan trade
  │    │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11
@@ -1878,6 +1880,13 @@ project
  │    │    │    │    ├── key: (1)
  │    │    │    │    ├── fd: (1)-->(4,5,8,10,11)
  │    │    │    │    └── ordering: +1
+ │    │    │    ├── scan cash_transaction
+ │    │    │    │    ├── columns: ct_t_id:30!null ct_dts:31!null cash_transaction.ct_amt:32!null ct_name:33
+ │    │    │    │    ├── constraint: /30: [/1 - /5]
+ │    │    │    │    ├── cardinality: [0 - 5]
+ │    │    │    │    ├── key: (30)
+ │    │    │    │    ├── fd: (30)-->(31-33)
+ │    │    │    │    └── ordering: +30
  │    │    │    └── filters (true)
  │    │    ├── scan settlement
  │    │    │    ├── columns: se_t_id:24!null se_cash_type:25!null se_cash_due_date:26!null settlement.se_amt:27!null
@@ -1887,14 +1896,8 @@ project
  │    │    │    ├── fd: (24)-->(25-27)
  │    │    │    └── ordering: +24
  │    │    └── filters (true)
- │    ├── scan cash_transaction
- │    │    ├── columns: ct_t_id:30!null ct_dts:31!null cash_transaction.ct_amt:32!null ct_name:33
- │    │    ├── constraint: /30: [/1 - /5]
- │    │    ├── cardinality: [0 - 5]
- │    │    ├── key: (30)
- │    │    ├── fd: (30)-->(31-33)
- │    │    └── ordering: +30
- │    └── filters (true)
+ │    └── filters
+ │         └── tt_id:18 = t_tt_id:4 [outer=(4,18), constraints=(/4: (/NULL - ]; /18: (/NULL - ]), fd=(4)==(18), (18)==(4)]
  └── projections
       ├── trade.t_bid_price:8::FLOAT8 [as=t_bid_price:36, outer=(8), immutable]
       ├── trade.t_trade_price:11::FLOAT8 [as=t_trade_price:37, outer=(11), immutable]
