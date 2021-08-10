@@ -1,0 +1,92 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE data (a INT PRIMARY KEY, b INT)
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {2}       2
+/2         /3       {3}       3
+/3         /4       {4}       4
+/4         /5       {5}       5
+/5         /6       {1}       1
+/6         /7       {2}       2
+/7         /8       {3}       3
+/8         /9       {4}       4
+/9         NULL     {5}       5
+
+# Populate the range cache.
+statement ok
+SELECT * FROM data
+
+statement ok
+SET distsql = off
+
+statement ok
+SET CLUSTER SETTING sql.local_scans.concurrency_limit = 1024
+
+# Check that 5 TableReaders are planned on the gateway.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: data@primary
+  spans: [/0 - /0] [/2 - /2] [/4 - /4] [/6 - /6] … (1 more)
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kN9LwzAQx9_9K8I9OYn0x7ox8qRoxcLcZjtQkD7E5hiFrqlJCsro_y5NH-ZkSF3ZY-7uc5_vZQf6owAG4etqfhstyOV9lKyT5_mIJOE8vFuTK_IQL5-I4IaTl8cwDgkn7ZxLiU9JQMmUktkIKJRS4IJvUQN7Aw9SCpWSGWotVVva2YFIfAJzKeRlVZu2nFLIpEJgOzC5KRAYrPl7gTFygcpxgYJAw_PCrm1T3FQq33L1BRSSipeaEcd1XEgbCrI2-7Xa8A0C8xp6mtrrpfbPofZ7qYNzqMe91NNzqINe6tlJ6r2xLqUSqFAc2NLmSLiFvJaVM_k1eFzt_-fqGHUlS429NrttNBQb7O7QslYZrpTMrKZ7Li1nCwK16bqT7hGVtmX_5ifsDYH9IfB4CBwMgSd_wtMD2G3S5uI7AAD__1EBqrw=
+
+query T
+EXPLAIN (VEC) SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
+----
+│
+└ Node 1
+  └ *colexec.ParallelUnorderedSynchronizer
+    ├ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+# Now disable the parallelization of local scans by reducing the concurrency
+# limit to 0.
+
+statement ok
+SET CLUSTER SETTING sql.local_scans.concurrency_limit = 0
+
+# Check that a single TableReader is planned.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: data@primary
+  spans: [/0 - /0] [/2 - /2] [/4 - /4] [/6 - /6] … (1 more)
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMT09L-0AQvf8-xfBOv8pAt1JE9qRoxEBta1JQkBzW7FAD6W7c3YJS8t0lyUE8CB7fn3nvzQnxvYVG9rxdXedr-n-bl7vycTWjMltlNzs6o7ti80DWJENP91mRkaHBp5jOmZZMF0yXMzCct7I2B4nQL1igYnTB1xKjDwN1Gg25_YBWjMZ1xzTQFaP2QaBPSE1qBRo789pKIcZKmCswrCTTtGPssOKqC83BhE8wys64qGmu5oqMs7Qkn94kRFQ9wx_Td0dMZi_Qi57_vqOQ2HkX5ceE35JVXzHE7mX6NfpjqGUbfD3WTHAz3o2ElZgmdTGB3E1SX_X_vgIAAP__xZh_Xg==
+
+query T
+EXPLAIN (VEC) SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
+----
+│
+└ Node 1
+  └ *colfetcher.ColBatchScan
