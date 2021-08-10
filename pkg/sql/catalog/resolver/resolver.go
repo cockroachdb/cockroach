@@ -13,6 +13,7 @@ package resolver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -287,10 +288,16 @@ func ResolveTargetObject(
 // TODO (SQLSchema): The remaining uses of this should be plumbed through
 //  the desc.Collection's ResolveSchemaByID.
 func ResolveSchemaNameByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, schemaID descpb.ID,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	dbID descpb.ID,
+	schemaID descpb.ID,
+	version clusterversion.Handle,
 ) (string, error) {
 	// Fast-path for public schema and virtual schemas, to avoid hot lookups.
-	if schemaName, ok := catconstants.StaticSchemaIDMap[uint32(schemaID)]; ok {
+	staticSchemaMap := catconstants.GetStaticSchemaIDMap(ctx, version)
+	if schemaName, ok := staticSchemaMap[uint32(schemaID)]; ok {
 		return schemaName, nil
 	}
 	schemas, err := GetForDatabase(ctx, txn, codec, dbID)
@@ -324,15 +331,8 @@ func GetForDatabase(
 		return nil, err
 	}
 
-	// Always add public schema ID.
-	// TODO(solon): This can be removed in 20.2, when this is always written.
-	// In 20.1, in a migrating state, it may be not included yet.
 	ret := make(map[descpb.ID]SchemaEntryForDB, len(kvs)+1)
-	ret[descpb.ID(keys.PublicSchemaID)] =
-		SchemaEntryForDB{
-			Name:      tree.PublicSchema,
-			Timestamp: txn.ReadTimestamp(),
-		}
+
 	for _, kv := range kvs {
 		id := descpb.ID(kv.ValueInt())
 		if _, ok := ret[id]; ok {

@@ -321,6 +321,7 @@ func cleanupSchemaObjects(
 						codec,
 						dTableDesc.GetParentID(),
 						dTableDesc.GetParentSchemaID(),
+						settings.Version,
 					)
 					if err != nil {
 						return err

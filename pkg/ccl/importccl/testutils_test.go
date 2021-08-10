@@ -59,7 +59,7 @@ func descForTable(
 			name,
 			tree.SequenceOptions{},
 			parent,
-			keys.PublicSchemaID,
+			keys.PublicSchemaIDForBackup,
 			id-1,
 			ts,
 			priv,
@@ -75,7 +75,7 @@ func descForTable(
 		stmt = parsed[0].AST.(*tree.CreateTable)
 	}
 	semaCtx := tree.MakeSemaContext()
-	table, err := MakeTestingSimpleTableDescriptor(context.Background(), &semaCtx, settings, stmt, parent, keys.PublicSchemaID, id, fks, nanos)
+	table, err := MakeTestingSimpleTableDescriptor(context.Background(), &semaCtx, settings, stmt, parent, keys.PublicSchemaIDForBackup, id, fks, nanos)
 	if err != nil {
 		t.Fatalf("could not interpret %q: %v", create, err)
 	}

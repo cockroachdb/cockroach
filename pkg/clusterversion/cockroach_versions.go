@@ -293,6 +293,8 @@ const (
 	V21_2
 
 	// *************************************************
+	// Public schema is backed by a descriptor.
+	PublicSchemasWithDescriptors
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
 	// *************************************************
@@ -494,7 +496,10 @@ var versionsSingleton = keyedVersions{
 		Key:     V21_2,
 		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
-	// *************************************************
+	{
+		Key:     PublicSchemasWithDescriptors,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 1000},
+	},
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
 	// *************************************************
