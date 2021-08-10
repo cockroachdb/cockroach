@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -32,23 +31,15 @@ type recordResolvedWriter struct {
 	resolved []jobspb.ResolvedSpan
 }
 
-func (r *recordResolvedWriter) AddKV(
-	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
-) error {
+func (r *recordResolvedWriter) Add(ctx context.Context, e kvevent.Event) error {
+	if e.Type() == kvevent.TypeResolved {
+		r.resolved = append(r.resolved, *e.Resolved())
+	}
 	return nil
 }
 
-func (r *recordResolvedWriter) AddResolved(
-	ctx context.Context,
-	span roachpb.Span,
-	ts hlc.Timestamp,
-	boundaryType jobspb.ResolvedSpan_BoundaryType,
-) error {
-	r.resolved = append(r.resolved, jobspb.ResolvedSpan{Span: span, Timestamp: ts})
+func (r *recordResolvedWriter) Close(ctx context.Context) error {
 	return nil
-}
-
-func (r *recordResolvedWriter) Close(ctx context.Context) {
 }
 
 var _ kvevent.Writer = (*recordResolvedWriter)(nil)

@@ -36,10 +36,14 @@ func makeMetricsSink(metrics *Metrics, s Sink) *metricsSink {
 
 // EmitRow implements Sink interface.
 func (s *metricsSink) EmitRow(
-	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	r kvevent.Alloc,
 ) error {
 	start := timeutil.Now()
-	err := s.wrapped.EmitRow(ctx, topic, key, value, updated)
+	err := s.wrapped.EmitRow(ctx, topic, key, value, updated, r)
 	if err == nil {
 		emitNanos := timeutil.Since(start).Nanoseconds()
 		s.metrics.EmittedMessages.Inc(1)

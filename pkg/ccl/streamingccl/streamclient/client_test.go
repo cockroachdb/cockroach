@@ -79,6 +79,8 @@ func ExampleClient() {
 				fmt.Printf("%s->%s@%d\n", kv.Key.String(), string(kv.Value.RawBytes), kv.Value.Timestamp.WallTime)
 			case streamingccl.CheckpointEvent:
 				fmt.Printf("resolved %d\n", event.GetResolved().WallTime)
+			case streamingccl.GenerationEvent:
+				fmt.Printf("received generation event")
 			default:
 				panic(fmt.Sprintf("unexpected event type %v", event.Type()))
 			}

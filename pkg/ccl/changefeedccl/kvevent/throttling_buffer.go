@@ -29,10 +29,12 @@ func NewThrottlingBuffer(b Buffer, throttle *cdcutils.Throttler) Buffer {
 func (b *throttlingBuffer) Get(ctx context.Context) (Event, error) {
 	evt, err := b.Buffer.Get(ctx)
 	if err != nil {
-		return Event{}, err
+		return evt, err
 	}
+
 	if err := b.throttle.AcquireMessageQuota(ctx, evt.ApproximateSize()); err != nil {
 		return Event{}, err
 	}
+
 	return evt, nil
 }
