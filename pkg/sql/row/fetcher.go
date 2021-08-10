@@ -246,6 +246,11 @@ type Fetcher struct {
 	// locks held by other active transactions.
 	lockWaitPolicy descpb.ScanLockingWaitPolicy
 
+	// lockTimeout specifies the maximum amount of time that the fetcher will
+	// wait while attempting to acquire a lock on a key or while blocking on an
+	// existing lock in order to perform a non-locking read on a key.
+	lockTimeout time.Duration
+
 	// traceKV indicates whether or not session tracing is enabled. It is set
 	// when beginning a new scan.
 	traceKV bool
@@ -317,6 +322,7 @@ func (rf *Fetcher) Init(
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockTimeout time.Duration,
 	isCheck bool,
 	alloc *rowenc.DatumAlloc,
 	memMonitor *mon.BytesMonitor,
@@ -330,6 +336,7 @@ func (rf *Fetcher) Init(
 	rf.reverse = reverse
 	rf.lockStrength = lockStrength
 	rf.lockWaitPolicy = lockWaitPolicy
+	rf.lockTimeout = lockTimeout
 	rf.alloc = alloc
 	rf.isCheck = isCheck
 
@@ -580,6 +587,7 @@ func (rf *Fetcher) StartScan(
 		rf.firstBatchLimit(limitHint),
 		rf.lockStrength,
 		rf.lockWaitPolicy,
+		rf.lockTimeout,
 		rf.mon,
 		forceProductionKVBatchSize,
 	)
@@ -677,6 +685,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		rf.firstBatchLimit(limitHint),
 		rf.lockStrength,
 		rf.lockWaitPolicy,
+		rf.lockTimeout,
 		rf.mon,
 		forceProductionKVBatchSize,
 		txn.AdmissionHeader(),

@@ -13,6 +13,7 @@ package row
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -83,6 +84,10 @@ type txnKVFetcher struct {
 	// lockWaitPolicy represents the policy to be used for handling conflicting
 	// locks held by other active transactions.
 	lockWaitPolicy descpb.ScanLockingWaitPolicy
+	// lockTimeout specifies the maximum amount of time that the fetcher will
+	// wait while attempting to acquire a lock on a key or while blocking on an
+	// existing lock in order to perform a non-locking read on a key.
+	lockTimeout time.Duration
 
 	fetchEnd bool
 	batchIdx int
@@ -217,6 +222,7 @@ func makeKVBatchFetcher(
 	firstBatchLimit int64,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockTimeout time.Duration,
 	mon *mon.BytesMonitor,
 	forceProductionKVBatchSize bool,
 ) (txnKVFetcher, error) {
@@ -229,8 +235,8 @@ func makeKVBatchFetcher(
 	}
 	return makeKVBatchFetcherWithSendFunc(
 		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
-		lockWaitPolicy, mon, forceProductionKVBatchSize, txn.AdmissionHeader(),
-		txn.DB().SQLKVResponseAdmissionQ,
+		lockWaitPolicy, lockTimeout, mon, forceProductionKVBatchSize,
+		txn.AdmissionHeader(), txn.DB().SQLKVResponseAdmissionQ,
 	)
 }
 
@@ -244,6 +250,7 @@ func makeKVBatchFetcherWithSendFunc(
 	firstBatchLimit int64,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockTimeout time.Duration,
 	mon *mon.BytesMonitor,
 	forceProductionKVBatchSize bool,
 	requestAdmissionHeader roachpb.AdmissionHeader,
@@ -313,6 +320,7 @@ func makeKVBatchFetcherWithSendFunc(
 		firstBatchLimit:            firstBatchLimit,
 		lockStrength:               lockStrength,
 		lockWaitPolicy:             lockWaitPolicy,
+		lockTimeout:                lockTimeout,
 		mon:                        mon,
 		acc:                        mon.MakeBoundAccount(),
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
@@ -329,6 +337,7 @@ const maxScanResponseBytes = 10 * (1 << 20) // 10MB
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	var ba roachpb.BatchRequest
 	ba.Header.WaitPolicy = f.getWaitPolicy()
+	ba.Header.LockTimeout = f.lockTimeout
 	ba.Header.MaxSpanRequestKeys = f.getBatchSize()
 	if ba.Header.MaxSpanRequestKeys > 0 {
 		// If this kvfetcher limits the number of rows returned, also use

@@ -113,6 +113,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
+		0,    /* lockTimeout */
 		true, /* isCheck */
 		&rowenc.DatumAlloc{},
 		nil, /* memMonitor */

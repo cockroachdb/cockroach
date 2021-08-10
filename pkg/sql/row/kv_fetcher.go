@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,12 +52,13 @@ func NewKVFetcher(
 	firstBatchLimit int64,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockTimeout time.Duration,
 	mon *mon.BytesMonitor,
 	forceProductionKVBatchSize bool,
 ) (*KVFetcher, error) {
 	kvBatchFetcher, err := makeKVBatchFetcher(
 		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
-		lockWaitPolicy, mon, forceProductionKVBatchSize,
+		lockWaitPolicy, lockTimeout, mon, forceProductionKVBatchSize,
 	)
 	return newKVFetcher(&kvBatchFetcher), err
 }

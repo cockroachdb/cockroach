@@ -1,5 +1,3 @@
-# Cockroach currently supports all of the row locking modes as no-ops, so just
-# test that they parse and run.
 query I
 SELECT 1 FOR UPDATE
 ----

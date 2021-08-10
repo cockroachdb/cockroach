@@ -355,6 +355,17 @@ var clusterStatementTimeout = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 ).WithPublic()
 
+var clusterLockTimeout = settings.RegisterDurationSetting(
+	"sql.defaults.lock_timeout",
+	"default value for the lock_timeout; "+
+		"default value for the lock_timeout session setting; controls the "+
+		"duration a query is permitted to wait while attempting to acquire "+
+		"a lock on a key or while blocking on an existing lock in order to "+
+		"perform a non-locking read on a key; if set to 0, there is no timeout",
+	0,
+	settings.NonNegativeDuration,
+).WithPublic()
+
 var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 	"sql.defaults.idle_in_session_timeout",
 	"default value for the idle_in_session_timeout; "+
@@ -2535,6 +2546,10 @@ func (m *sessionDataMutator) SetReadOnly(val bool) {
 
 func (m *sessionDataMutator) SetStmtTimeout(timeout time.Duration) {
 	m.data.StmtTimeout = timeout
+}
+
+func (m *sessionDataMutator) SetLockTimeout(timeout time.Duration) {
+	m.data.LockTimeout = timeout
 }
 
 func (m *sessionDataMutator) SetIdleInSessionTimeout(timeout time.Duration) {
