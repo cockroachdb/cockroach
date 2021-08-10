@@ -229,7 +229,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						},
 					)
 				}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, &wg)
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, &wg, false /* usesFakeSpanResolver */)
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 

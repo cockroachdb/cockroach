@@ -61,6 +61,7 @@ go_library(
         "//pkg/sql/colexec/execgen",  # keep
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
+        "//pkg/sql/colflow/colrpc",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
@@ -71,6 +72,7 @@ go_library(
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/cancelchecker",
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
         "//pkg/util/humanizeutil",
