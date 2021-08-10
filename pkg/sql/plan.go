@@ -580,6 +580,9 @@ const (
 	// planFlagContainsFullIndexScan is set if the plan involves an unconstrained
 	// secondary index scan.
 	planFlagContainsFullIndexScan
+
+	// planFlagContainsMutation is set if the plan has any mutations.
+	planFlagContainsMutation
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
