@@ -11,13 +11,11 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math/rand"
 	"os"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
@@ -183,22 +181,7 @@ Output build version information.
 
 func fullVersionString() string {
 	info := build.GetInfo()
-	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-	fmt.Fprintf(tw, "Build Tag:        %s\n", info.Tag)
-	fmt.Fprintf(tw, "Build Time:       %s\n", info.Time)
-	fmt.Fprintf(tw, "Distribution:     %s\n", info.Distribution)
-	fmt.Fprintf(tw, "Platform:         %s", info.Platform)
-	if info.CgoTargetTriple != "" {
-		fmt.Fprintf(tw, " (%s)", info.CgoTargetTriple)
-	}
-	fmt.Fprintln(tw)
-	fmt.Fprintf(tw, "Go Version:       %s\n", info.GoVersion)
-	fmt.Fprintf(tw, "C Compiler:       %s\n", info.CgoCompiler)
-	fmt.Fprintf(tw, "Build Commit ID:  %s\n", info.Revision)
-	fmt.Fprintf(tw, "Build Type:       %s", info.Type) // No final newline: cobra prints one for us.
-	_ = tw.Flush()
-	return buf.String()
+	return info.Long()
 }
 
 var cockroachCmd = &cobra.Command{
