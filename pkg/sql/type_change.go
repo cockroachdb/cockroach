@@ -835,6 +835,19 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			}
 		}
 
+		// Examine all check constraints.
+		for _, chk := range desc.AllActiveAndInactiveChecks() {
+			foundUsage, err := findUsagesOfEnumValue(chk.Expr, member, typeDesc.ID)
+			if err != nil {
+				return err
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in a check constraint of %q",
+					member.LogicalRepresentation, desc.GetName())
+			}
+		}
+
 		for _, col := range desc.PublicColumns() {
 			// If this column has a default expression, check if it uses the enum member being dropped.
 			if col.HasDefault() {
