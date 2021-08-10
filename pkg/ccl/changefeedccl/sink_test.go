@@ -508,7 +508,7 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 
 		expected := defaultSaramaConfig()
 		expected.Flush.MaxMessages = 1000
-		expected.Flush.Frequency = jsonDuration(time.Second)
+		expected.Flush.Frequency = JSONDuration(time.Second)
 
 		cfg, err := getSaramaConfig(opts)
 		require.NoError(t, err)
