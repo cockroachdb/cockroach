@@ -980,3 +980,16 @@ type LocalProcessor interface {
 	// LocalProcessor expects to get its data from another RowSource.
 	SetInput(ctx context.Context, input RowSource) error
 }
+
+// HasParallelProcessors returns whether flow contains multiple processors in
+// the same stage.
+func HasParallelProcessors(flow *execinfrapb.FlowSpec) bool {
+	var seen util.FastIntSet
+	for _, p := range flow.Processors {
+		if seen.Contains(int(p.StageID)) {
+			return true
+		}
+		seen.Add(int(p.StageID))
+	}
+	return false
+}

@@ -278,6 +278,13 @@ func (ds *ServerImpl) setupFlow(
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
 		evalCtx.Mon = monitor
+		if localState.HasConcurrency {
+			var err error
+			leafTxn, err = makeLeaf(req)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+		}
 	} else {
 		if localState.IsLocal {
 			return nil, nil, nil, errors.AssertionFailedf(
@@ -345,11 +352,12 @@ func (ds *ServerImpl) setupFlow(
 		localState.LocalProcs, isVectorized,
 	)
 	opt := flowinfra.FuseNormally
-	if localState.IsLocal {
-		// If there's no remote flows, fuse everything. This is needed in order for
-		// us to be able to use the RootTxn for the flow 's execution; the RootTxn
-		// doesn't allow for concurrent operations. Local flows with mutations need
-		// to use the RootTxn.
+	if !localState.MustUseLeafTxn() {
+		// If there are no remote flows and the local flow doesn't have any
+		// concurrency, fuse everything. This is needed in order for us to be
+		// able to use the RootTxn for the flow 's execution; the RootTxn
+		// doesn't allow for concurrent operations. Local flows with mutations
+		// need to use the RootTxn.
 		opt = flowinfra.FuseAggressively
 	}
 
@@ -485,6 +493,10 @@ type LocalState struct {
 	// remote flows.
 	IsLocal bool
 
+	// HasConcurrency indicates whether the local flow uses multiple goroutines.
+	// It is set only if IsLocal is true.
+	HasConcurrency bool
+
 	// Txn is filled in on the gateway only. It is the RootTxn that the query is running in.
 	// This will be used directly by the flow if the flow has no concurrency and IsLocal is set.
 	// If there is concurrency, a LeafTxn will be created.
@@ -493,6 +505,12 @@ type LocalState struct {
 	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
 	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
 	LocalProcs []execinfra.LocalProcessor
+}
+
+// MustUseLeafTxn returns true if a LeafTxn must be used. It is valid to call
+// this method only after IsLocal and HasConcurrency have been set correctly.
+func (l LocalState) MustUseLeafTxn() bool {
+	return !l.IsLocal || l.HasConcurrency
 }
 
 // SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node,

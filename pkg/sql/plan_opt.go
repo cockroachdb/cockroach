@@ -561,6 +561,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var isDDL bool
 	var containsFullTableScan bool
 	var containsFullIndexScan bool
+	var containsMutation bool
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
 		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
@@ -572,6 +573,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		isDDL = bld.IsDDL
 		containsFullTableScan = bld.ContainsFullTableScan
 		containsFullIndexScan = bld.ContainsFullIndexScan
+		containsMutation = bld.ContainsMutation
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
@@ -587,6 +589,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		isDDL = bld.IsDDL
 		containsFullTableScan = bld.ContainsFullTableScan
 		containsFullIndexScan = bld.ContainsFullIndexScan
+		containsMutation = bld.ContainsMutation
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
@@ -609,6 +612,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	if containsFullIndexScan {
 		planTop.flags.Set(planFlagContainsFullIndexScan)
+	}
+	if containsMutation {
+		planTop.flags.Set(planFlagContainsMutation)
 	}
 	if planTop.instrumentation.ShouldSaveMemo() {
 		planTop.mem = mem

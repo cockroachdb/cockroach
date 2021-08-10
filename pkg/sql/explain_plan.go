@@ -231,5 +231,8 @@ func newPhysPlanForExplainPurposes(
 	if plan.isPhysicalPlan() {
 		return plan.physPlan.PhysicalPlan, nil
 	}
-	return distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan.planNode)
+	physPlan, err := distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan.planNode)
+	// Release the resources right away since we won't be running the plan.
+	planCtx.getCleanupFunc()()
+	return physPlan, err
 }
