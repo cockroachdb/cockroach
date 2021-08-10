@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,6 +37,11 @@ var _ colexecop.ClosableOperator = &InvariantsChecker{}
 
 // NewInvariantsChecker creates a new InvariantsChecker.
 func NewInvariantsChecker(input colexecop.Operator) *InvariantsChecker {
+	if !util.CrdbTestBuild {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"an InvariantsChecker is attempted to be created in non-test build",
+		))
+	}
 	c := &InvariantsChecker{
 		OneInputNode: colexecop.OneInputNode{Input: input},
 	}
