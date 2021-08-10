@@ -1917,7 +1917,10 @@ func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
 		// TODO(knz): Remove all this with ctx.FormatNode()
 		// if/when throttling supports full expressions.
 		if ctx.flags.HasFlags(FmtHideConstants) {
-			ctx.WriteByte('_')
+			// Using the value '0.001' instead of '0.0', because
+			// when using '0.0' the statement does not get
+			// formatted with the THROTTLING option.
+			ctx.WriteString("0.001")
 		} else {
 			fmt.Fprintf(ctx, "%g", o.Throttling)
 		}
