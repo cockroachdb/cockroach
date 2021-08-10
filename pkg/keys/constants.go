@@ -145,6 +145,8 @@ var (
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	LocalTransactionSuffix = roachpb.RKey("txn-")
+	// RangeProbeSuffix is the suffix for keys for blackbox probing.
+	RangeProbeSuffix = roachpb.RKey("prbe")
 
 	// 4. Store local keys
 	//
