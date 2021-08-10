@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach-go/crdb"
@@ -342,48 +341,9 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
-				// Find out how many output columns there are.
-				cols, err := rows.Columns()
-				if err != nil {
-					t.Fatal(err)
-				}
-				// Allocate a buffer of *interface{} to write results into.
-				elemsI := make([]interface{}, len(cols))
-				for i := range elemsI {
-					elemsI[i] = new(interface{})
-				}
-				elems := make([]string, len(cols))
-
-				// Build string output of the row data.
-				var output strings.Builder
-				for rows.Next() {
-					if err := rows.Scan(elemsI...); err != nil {
-						t.Fatal(err)
-					}
-					for i, elem := range elemsI {
-						val := *(elem.(*interface{}))
-						switch t := val.(type) {
-						case []byte:
-							// The postgres wire protocol does not distinguish between
-							// strings and byte arrays, but our tests do. In order to do
-							// The Right Thing™, we replace byte arrays which are valid
-							// UTF-8 with strings. This allows byte arrays which are not
-							// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
-							// while printing valid strings naturally.
-							if str := string(t); utf8.ValidString(str) {
-								elems[i] = str
-							}
-						default:
-							elems[i] = fmt.Sprintf("%v", val)
-						}
-					}
-					output.WriteString(strings.Join(elems, " "))
-					output.WriteString("\n")
-				}
-				if err := rows.Err(); err != nil {
-					t.Fatal(err)
-				}
-				return output.String()
+				output, err := sqlutils.RowsToDataDrivenOutput(rows)
+				require.NoError(t, err)
+				return output
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
