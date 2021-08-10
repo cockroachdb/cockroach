@@ -15,6 +15,7 @@ option go_package = "sessiondatapb";
 import "util/duration/duration.proto";
 import "util/timeutil/pgdate/pgdate.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
 
 // SessionData contains session parameters that are easily serializable and are
 // required to be propagated to the remote nodes for the correct execution of
@@ -67,6 +68,11 @@ message SessionData {
   // DateStyleEnabled allows the setting of DateStyle to different
   // values.
   bool date_style_enabled = 14;
+  // LockTimeout is the maximum amount of time that a query will wait while
+  // attempting to acquire a lock on a key or while blocking on an existing
+  // lock in order to perform a non-locking read on a key.
+  google.protobuf.Duration lock_timeout = 15 [(gogoproto.nullable) = false,
+                                              (gogoproto.stdduration) = true];
 }
 
 // DataConversionConfig contains the parameters that influence the output

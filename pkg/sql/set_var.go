@@ -318,6 +318,20 @@ func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) err
 	return nil
 }
 
+func lockTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+	timeout, err := validateTimeoutVar(
+		m.data.GetIntervalStyle(),
+		s,
+		"lock_timeout",
+	)
+	if err != nil {
+		return err
+	}
+
+	m.SetLockTimeout(timeout)
+	return nil
+}
+
 func idleInSessionTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),

@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -108,6 +109,9 @@ type tableWriterBase struct {
 	autoCommit autoCommitOpt
 	// b is the current batch.
 	b *kv.Batch
+	// lockTimeout specifies the maximum amount of time that the writer will
+	// wait while attempting to acquire a lock on a key.
+	lockTimeout time.Duration
 	// maxBatchSize determines the maximum number of entries in the KV batch
 	// for a mutation operation. By default, it will be set to 10k but can be
 	// a different value in tests.
@@ -140,7 +144,10 @@ func (tb *tableWriterBase) init(
 ) {
 	tb.txn = txn
 	tb.desc = tableDesc
-	tb.b = txn.NewBatch()
+	tb.lockTimeout = 0
+	if evalCtx != nil {
+		tb.lockTimeout = evalCtx.SessionData.LockTimeout
+	}
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionBatchSizes
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
 	batchMaxBytes := int(maxBatchBytes.Default())
@@ -148,6 +155,7 @@ func (tb *tableWriterBase) init(
 		batchMaxBytes = int(maxBatchBytes.Get(&evalCtx.Settings.SV))
 	}
 	tb.maxBatchByteSize = mutations.MaxBatchByteSize(batchMaxBytes, tb.forceProductionBatchSizes)
+	tb.initNewBatch()
 }
 
 // flushAndStartNewBatch shares the common flushAndStartNewBatch() code between
@@ -170,7 +178,7 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 			return err
 		}
 	}
-	tb.b = tb.txn.NewBatch()
+	tb.initNewBatch()
 	tb.lastBatchSize = tb.currentBatchSize
 	tb.currentBatchSize = 0
 	return nil
@@ -198,6 +206,11 @@ func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 
 func (tb *tableWriterBase) enableAutoCommit() {
 	tb.autoCommit = autoCommitEnabled
+}
+
+func (tb *tableWriterBase) initNewBatch() {
+	tb.b = tb.txn.NewBatch()
+	tb.b.Header.LockTimeout = tb.lockTimeout
 }
 
 func (tb *tableWriterBase) clearLastBatch(ctx context.Context) {
