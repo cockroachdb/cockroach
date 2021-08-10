@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 )
@@ -60,6 +60,7 @@ type cloudStorageSinkFile struct {
 	codec   io.WriteCloser
 	rawSize int
 	buf     bytes.Buffer
+	alloc   kvevent.Alloc
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -295,9 +296,6 @@ type cloudStorageSink struct {
 	dataFileTs        string
 	dataFilePartition string
 	prevFilename      string
-
-	// Memory used by this sink
-	mem mon.BoundAccount
 }
 
 const sinkCompressionGzip = "gzip"
@@ -313,7 +311,6 @@ func makeCloudStorageSink(
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user security.SQLUsername,
-	acc mon.BoundAccount,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
@@ -339,7 +336,6 @@ func makeCloudStorageSink(
 		timestampOracle:   timestampOracle,
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
 		jobSessionID: generateChangefeedSessionID(),
-		mem:          acc,
 	}
 	if timestampOracle != nil {
 		s.dataFileTs = cloudStorageFormatTime(timestampOracle.inclusiveLowerBoundTS())
@@ -403,25 +399,23 @@ func (s *cloudStorageSink) getOrCreateFile(topic TopicDescriptor) *cloudStorageS
 
 // EmitRow implements the Sink interface.
 func (s *cloudStorageSink) EmitRow(
-	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
 	file := s.getOrCreateFile(topic)
+	file.alloc.Merge(&alloc)
 
-	oldCap := file.buf.Cap()
 	if _, err := file.Write(value); err != nil {
 		return err
 	}
 	if _, err := file.Write(s.rowDelimiter); err != nil {
-		return err
-	}
-
-	// Grow buffered memory.  It's okay that we do it after the fact
-	// (and if not, we're in a deeper problem and probably OOMed by now).
-	if err := s.mem.Grow(ctx, int64(file.buf.Cap()-oldCap)); err != nil {
 		return err
 	}
 
@@ -518,20 +512,13 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 
 // file should not be used after flushing.
 func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
+	defer file.alloc.Release(ctx)
+
 	if file.rawSize == 0 {
 		// This method shouldn't be called with an empty file, but be defensive
 		// about not writing empty files anyway.
 		return nil
 	}
-
-	// Release memory allocated for this file.  Note, closing codec
-	// below may as well write more data to our buffer (and that may cause buffer
-	// to grow due to reallocation).  But we don't account for that additional memory
-	// because a) we don't know if buffer will be resized (nor by how much), and
-	// b) if we're out of memory we'd OOMed when trying to close codec anyway.
-	defer func(delta int) {
-		s.mem.Shrink(ctx, int64(delta))
-	}(file.buf.Cap())
 
 	if file.codec != nil {
 		if err := file.codec.Close(); err != nil {
@@ -563,7 +550,6 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 // Close implements the Sink interface.
 func (s *cloudStorageSink) Close() error {
 	s.files = nil
-	s.mem.Close(context.Background())
 	return s.es.Close()
 }
 

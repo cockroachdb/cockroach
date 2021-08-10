@@ -112,4 +112,17 @@ INSERT INTO d.t2 VALUES (2);
 		feed.ObserveResolved(secondObserved.Value.Timestamp)
 		cancelIngestion()
 	})
+
+	t.Run("stream-address-disconnects", func(t *testing.T) {
+		clientCtx, cancelIngestion := context.WithCancel(ctx)
+		eventCh, errCh, err := client.ConsumePartition(clientCtx, pa, startTime)
+		require.NoError(t, err)
+		feedSource := &channelFeedSource{eventCh: eventCh, errCh: errCh}
+		feed := streamingtest.MakeReplicationFeed(t, feedSource)
+
+		h.SysServer.Stopper().Stop(clientCtx)
+
+		require.True(t, feed.ObserveGeneration())
+		cancelIngestion()
+	})
 }

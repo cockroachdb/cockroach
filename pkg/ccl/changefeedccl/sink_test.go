@@ -10,7 +10,6 @@ package changefeedccl
 
 import (
 	"context"
-	"math"
 	"net/url"
 	"strconv"
 	"sync"
@@ -19,11 +18,10 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -32,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -152,29 +149,46 @@ func topic(name string) tableDescriptorTopic {
 	return tableDescriptorTopic{tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()}
 }
 
-const memoryUnlimited int64 = math.MaxInt64
 const noTopicPrefix = ""
 const defaultTopicName = ""
 
-func getBoundAccountWithBudget(budget int64) (account mon.BoundAccount, cleanup func()) {
-	mm := mon.NewMonitorWithLimit(
-		"test-mm", mon.MemoryResource, budget,
-		nil, nil, mon.DefaultPoolAllocationSize, 100,
-		cluster.MakeTestingClusterSettings())
-	mm.Start(context.Background(), nil, mon.MakeStandaloneBudget(budget))
-	return mm.MakeBoundAccount(), func() { mm.Stop(context.Background()) }
+type testAllocPool struct {
+	syncutil.Mutex
+	n int64
 }
+
+// Release implements kvevent.pool interface.
+func (ap *testAllocPool) Release(ctx context.Context, bytes, entries int64) {
+	ap.Lock()
+	defer ap.Unlock()
+	if ap.n == 0 {
+		panic("can't release zero resources")
+	}
+	ap.n -= bytes
+}
+
+func (ap *testAllocPool) alloc() kvevent.Alloc {
+	ap.Lock()
+	defer ap.Unlock()
+	ap.n++
+	return kvevent.TestingMakeAlloc(1, ap)
+}
+
+func (ap *testAllocPool) used() int64 {
+	ap.Lock()
+	defer ap.Unlock()
+	return ap.n
+}
+
+var zeroAlloc kvevent.Alloc
 
 func makeTestKafkaSink(
 	t testing.TB,
 	topicPrefix string,
 	topicNameOverride string,
 	p sarama.AsyncProducer,
-	budget int64,
 	targetNames ...string,
 ) (s *kafkaSink, cleanup func()) {
-	mem, release := getBoundAccountWithBudget(budget)
-
 	targets := makeChangefeedTargets(targetNames...)
 
 	s = &kafkaSink{
@@ -182,12 +196,10 @@ func makeTestKafkaSink(
 		topics:   makeTopicsMap(topicPrefix, topicNameOverride, targets),
 		producer: p,
 	}
-	s.mu.mem = mem
 	s.start()
 
 	return s, func() {
 		require.NoError(t, s.Close())
-		release()
 	}
 }
 
@@ -206,7 +218,7 @@ func TestKafkaSink(t *testing.T) {
 	ctx := context.Background()
 	p := newAsyncProducerMock(1)
 	sink, cleanup := makeTestKafkaSink(
-		t, noTopicPrefix, defaultTopicName, p, memoryUnlimited, "t")
+		t, noTopicPrefix, defaultTopicName, p, "t")
 	defer cleanup()
 
 	// No inflight
@@ -215,7 +227,7 @@ func TestKafkaSink(t *testing.T) {
 	}
 
 	// Timeout
-	if err := sink.EmitRow(ctx, topic(`t`), []byte(`1`), nil, zeroTS); err != nil {
+	if err := sink.EmitRow(ctx, topic(`t`), []byte(`1`), nil, zeroTS, zeroAlloc); err != nil {
 		t.Fatal(err)
 	}
 	m1 := <-p.inputCh
@@ -239,15 +251,16 @@ func TestKafkaSink(t *testing.T) {
 	}
 
 	// Mixed success and error.
-	if err := sink.EmitRow(ctx, topic(`t`), []byte(`2`), nil, zeroTS); err != nil {
+	var pool testAllocPool
+	if err := sink.EmitRow(ctx, topic(`t`), []byte(`2`), nil, zeroTS, pool.alloc()); err != nil {
 		t.Fatal(err)
 	}
 	m2 := <-p.inputCh
-	if err := sink.EmitRow(ctx, topic(`t`), []byte(`3`), nil, zeroTS); err != nil {
+	if err := sink.EmitRow(ctx, topic(`t`), []byte(`3`), nil, zeroTS, pool.alloc()); err != nil {
 		t.Fatal(err)
 	}
 	m3 := <-p.inputCh
-	if err := sink.EmitRow(ctx, topic(`t`), []byte(`4`), nil, zeroTS); err != nil {
+	if err := sink.EmitRow(ctx, topic(`t`), []byte(`4`), nil, zeroTS, pool.alloc()); err != nil {
 		t.Fatal(err)
 	}
 	m4 := <-p.inputCh
@@ -264,7 +277,7 @@ func TestKafkaSink(t *testing.T) {
 	}
 
 	// Check simple success again after error
-	if err := sink.EmitRow(ctx, topic(`t`), []byte(`5`), nil, zeroTS); err != nil {
+	if err := sink.EmitRow(ctx, topic(`t`), []byte(`5`), nil, zeroTS, pool.alloc()); err != nil {
 		t.Fatal(err)
 	}
 	m5 := <-p.inputCh
@@ -272,6 +285,8 @@ func TestKafkaSink(t *testing.T) {
 	if err := sink.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// At the end, all of the resources has been released
+	require.EqualValues(t, 0, pool.used())
 }
 
 func TestKafkaSinkEscaping(t *testing.T) {
@@ -280,11 +295,10 @@ func TestKafkaSinkEscaping(t *testing.T) {
 
 	ctx := context.Background()
 	p := newAsyncProducerMock(1)
-	sink, cleanup := makeTestKafkaSink(
-		t, noTopicPrefix, defaultTopicName, p, memoryUnlimited, `☃`)
+	sink, cleanup := makeTestKafkaSink(t, noTopicPrefix, defaultTopicName, p, `☃`)
 	defer cleanup()
 
-	if err := sink.EmitRow(ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS); err != nil {
+	if err := sink.EmitRow(ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroAlloc); err != nil {
 		t.Fatal(err)
 	}
 	m := <-p.inputCh
@@ -301,11 +315,11 @@ func TestKafkaTopicNameProvided(t *testing.T) {
 	const topicOverride = "general"
 	p := newAsyncProducerMock(1)
 	sink, cleanup := makeTestKafkaSink(
-		t, noTopicPrefix, topicOverride, p, memoryUnlimited, "particular0", "particular1")
+		t, noTopicPrefix, topicOverride, p, "particular0", "particular1")
 	defer cleanup()
 
 	//all messages go to the general topic
-	require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroAlloc))
 	m := <-p.inputCh
 	require.Equal(t, topicOverride, m.Topic)
 }
@@ -319,11 +333,11 @@ func TestKafkaTopicNameWithPrefix(t *testing.T) {
 	const topicPrefix = "prefix-"
 	const topicOverride = "☃"
 	sink, clenaup := makeTestKafkaSink(
-		t, topicPrefix, topicOverride, p, memoryUnlimited, "particular0", "particular1")
+		t, topicPrefix, topicOverride, p, "particular0", "particular1")
 	defer clenaup()
 
 	//the prefix is applied and the name is escaped
-	require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroAlloc))
 	m := <-p.inputCh
 	require.Equal(t, `prefix-_u2603_`, m.Topic)
 }
@@ -341,7 +355,7 @@ func BenchmarkEmitRow(b *testing.B) {
 	p := newAsyncProducerMock(unbuffered)
 	const tableName = `defaultdb.public.funky_table☃`
 	topic := topic(tableName)
-	sink, cleanup := makeTestKafkaSink(b, noTopicPrefix, defaultTopicName, p, memoryUnlimited, tableName)
+	sink, cleanup := makeTestKafkaSink(b, noTopicPrefix, defaultTopicName, p, tableName)
 	stopConsume := p.consumeAndSucceed()
 	defer func() {
 		stopConsume()
@@ -350,7 +364,7 @@ func BenchmarkEmitRow(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		require.NoError(b, sink.EmitRow(ctx, topic, []byte(`k☃`), []byte(`v☃`), hlc.Timestamp{}))
+		require.NoError(b, sink.EmitRow(ctx, topic, []byte(`k☃`), []byte(`v☃`), hlc.Timestamp{}, zeroAlloc))
 	}
 
 	b.ReportAllocs()
@@ -403,10 +417,11 @@ func TestSQLSink(t *testing.T) {
 
 	// Undeclared topic
 	require.EqualError(t,
-		sink.EmitRow(ctx, overrideTopic(`nope`), nil, nil, zeroTS), `cannot emit to undeclared topic: `)
+		sink.EmitRow(ctx, overrideTopic(`nope`), nil, nil, zeroTS, zeroAlloc),
+		`cannot emit to undeclared topic: `)
 
 	// With one row, nothing flushes until Flush is called.
-	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`k1`), []byte(`v0`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`k1`), []byte(`v0`), zeroTS, zeroAlloc))
 	sqlDB.CheckQueryResults(t, `SELECT key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{},
 	)
@@ -420,7 +435,7 @@ func TestSQLSink(t *testing.T) {
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`0`}})
 	for i := 0; i < sqlSinkRowBatchSize+1; i++ {
 		require.NoError(t,
-			sink.EmitRow(ctx, fooTopic, []byte(`k1`), []byte(`v`+strconv.Itoa(i)), zeroTS))
+			sink.EmitRow(ctx, fooTopic, []byte(`k1`), []byte(`v`+strconv.Itoa(i)), zeroTS, zeroAlloc))
 	}
 	// Should have auto flushed after sqlSinkRowBatchSize
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`3`}})
@@ -429,10 +444,12 @@ func TestSQLSink(t *testing.T) {
 	sqlDB.Exec(t, `TRUNCATE sink`)
 
 	// Two tables interleaved in time
-	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`kfoo`), []byte(`v0`), zeroTS))
-	require.NoError(t, sink.EmitRow(ctx, barTopic, []byte(`kbar`), []byte(`v0`), zeroTS))
-	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`kfoo`), []byte(`v1`), zeroTS))
+	var pool testAllocPool
+	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`kfoo`), []byte(`v0`), zeroTS, pool.alloc()))
+	require.NoError(t, sink.EmitRow(ctx, barTopic, []byte(`kbar`), []byte(`v0`), zeroTS, pool.alloc()))
+	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`kfoo`), []byte(`v1`), zeroTS, pool.alloc()))
 	require.NoError(t, sink.Flush(ctx))
+	require.EqualValues(t, 0, pool.used())
 	sqlDB.CheckQueryResults(t, `SELECT topic, key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{{`bar`, `kbar`, `v0`}, {`foo`, `kfoo`, `v0`}, {`foo`, `kfoo`, `v1`}},
 	)
@@ -442,11 +459,11 @@ func TestSQLSink(t *testing.T) {
 	// guarantee that at lease two of them end up in the same partition.
 	for i := 0; i < sqlSinkNumPartitions+1; i++ {
 		require.NoError(t,
-			sink.EmitRow(ctx, fooTopic, []byte(`v`+strconv.Itoa(i)), []byte(`v0`), zeroTS))
+			sink.EmitRow(ctx, fooTopic, []byte(`v`+strconv.Itoa(i)), []byte(`v0`), zeroTS, zeroAlloc))
 	}
 	for i := 0; i < sqlSinkNumPartitions+1; i++ {
 		require.NoError(t,
-			sink.EmitRow(ctx, fooTopic, []byte(`v`+strconv.Itoa(i)), []byte(`v1`), zeroTS))
+			sink.EmitRow(ctx, fooTopic, []byte(`v`+strconv.Itoa(i)), []byte(`v1`), zeroTS, zeroAlloc))
 	}
 	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t, `SELECT partition, key, value FROM sink ORDER BY PRIMARY KEY sink`,
@@ -466,7 +483,7 @@ func TestSQLSink(t *testing.T) {
 	// Emit resolved
 	var e testEncoder
 	require.NoError(t, sink.EmitResolvedTimestamp(ctx, e, zeroTS))
-	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`foo0`), []byte(`v0`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`foo0`), []byte(`v0`), zeroTS, zeroAlloc))
 	require.NoError(t, sink.EmitResolvedTimestamp(ctx, e, hlc.Timestamp{WallTime: 1}))
 	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t,
@@ -617,7 +634,6 @@ func TestKafkaSinkTracksMemory(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	memCapacity := mon.DefaultPoolAllocationSize
 
 	// Use fake kafka sink which "consumes" all messages on its input channel,
 	// but does not acknowledge them automatically (i.e. slow sink)
@@ -625,7 +641,7 @@ func TestKafkaSinkTracksMemory(t *testing.T) {
 	stopConsume := p.consume()
 
 	sink, cleanup := makeTestKafkaSink(
-		t, noTopicPrefix, defaultTopicName, p, memCapacity, "t")
+		t, noTopicPrefix, defaultTopicName, p, "t")
 	defer func() {
 		stopConsume()
 		cleanup()
@@ -638,57 +654,17 @@ func TestKafkaSinkTracksMemory(t *testing.T) {
 	rnd, _ := randutil.NewTestPseudoRand()
 	key := randutil.RandBytes(rnd, 1+rnd.Intn(64))
 	val := randutil.RandBytes(rnd, 1+rnd.Intn(512))
-	kvLen := int64(len(key)) + int64(len(val))
 
 	testTopic := topic(`t`)
+	var pool testAllocPool
 	for i := 0; i < 10; i++ {
-		require.NoError(t, sink.EmitRow(ctx, testTopic, key, val, zeroTS))
+		require.NoError(t, sink.EmitRow(ctx, testTopic, key, val, zeroTS, pool.alloc()))
 	}
-
-	memUsed := func() int64 {
-		sink.mu.Lock()
-		defer sink.mu.Unlock()
-		return sink.mu.mem.Used()
-	}
-	require.Equal(t, 10*kvLen, memUsed())
+	require.EqualValues(t, 10, pool.used())
 
 	// Acknowledge outstanding messages, and flush.
 	p.acknowledge(10, p.successesCh)
 	require.NoError(t, sink.Flush(ctx))
 	require.EqualValues(t, 0, p.outstanding())
-
-	// Try emitting resolved timestamp.  This message type is different from the
-	// regular messages since it doesn't have Key set.
-	// We bypass majority of EmitResolvedTimestamp logic since we don't have
-	// a real kafka client instantiated.  Instead, we call emitMessage directly.
-	reg := cdctest.StartTestSchemaRegistry()
-	defer reg.Close()
-	opts := map[string]string{
-		changefeedbase.OptEnvelope:                string(changefeedbase.OptEnvelopeWrapped),
-		changefeedbase.OptConfluentSchemaRegistry: reg.URL(),
-	}
-	encoder, err := newConfluentAvroEncoder(ctx, opts, makeChangefeedTargets("t"))
-	require.NoError(t, err)
-	payload, err := encoder.EncodeResolvedTimestamp(ctx, "t", hlc.Timestamp{})
-	require.NoError(t, err)
-	msg := &sarama.ProducerMessage{
-		Topic: "t",
-		Key:   nil,
-		Value: sarama.ByteEncoder(payload),
-	}
-	require.NoError(t, sink.emitMessage(ctx, msg))
-	p.acknowledge(1, p.successesCh)
-	require.NoError(t, sink.Flush(ctx))
-	require.EqualValues(t, 0, p.outstanding())
-
-	// Try to emit more than we can handle.
-	expectOverflow := memCapacity / kvLen
-	for err == nil {
-		err = sink.EmitRow(ctx, testTopic, key, val, zeroTS)
-	}
-
-	require.Regexp(t, `memory budget exceeded`, err)
-	// We failed to allocate more memory, but we should have used
-	// memory for the expectOverflow key/values.
-	require.EqualValues(t, expectOverflow*kvLen, memUsed())
+	require.EqualValues(t, 0, pool.used())
 }

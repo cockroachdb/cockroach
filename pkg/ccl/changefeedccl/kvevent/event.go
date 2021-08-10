@@ -34,9 +34,10 @@ type Reader interface {
 
 // Writer is the write portion of the Buffer interface.
 type Writer interface {
-	AddKV(ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp) error
-	AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp, boundaryType jobspb.ResolvedSpan_BoundaryType) error
-	Close(ctx context.Context)
+	// Add adds event to this writer.
+	Add(ctx context.Context, event Event) error
+	// Close closes this writer.
+	Close(ctx context.Context) error
 }
 
 // Type indicates the type of the event.
@@ -66,6 +67,8 @@ type Event struct {
 	resolved           *jobspb.ResolvedSpan
 	backfillTimestamp  hlc.Timestamp
 	bufferGetTimestamp time.Time
+	approxSize         int
+	alloc              Alloc
 }
 
 // Type returns the event's Type.
@@ -81,10 +84,7 @@ func (b *Event) Type() Type {
 
 // ApproximateSize returns events approximate size in bytes.
 func (b *Event) ApproximateSize() int {
-	if b.kv.Key != nil {
-		return b.kv.Size() + b.prevVal.Size()
-	}
-	return b.resolved.Size()
+	return b.approxSize
 }
 
 // KV is populated if this event returns true for IsKV().
@@ -156,7 +156,16 @@ func (b *Event) MVCCTimestamp() hlc.Timestamp {
 	}
 }
 
-func makeResolvedEvent(
+// DetachAlloc detaches and returns allocation associated with this event.
+func (b *Event) DetachAlloc() Alloc {
+	a := b.alloc
+	b.alloc.entries = 0
+	b.alloc.bytes = 0
+	return a
+}
+
+// MakeResolvedEvent returns resolved event.
+func MakeResolvedEvent(
 	span roachpb.Span, ts hlc.Timestamp, boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) Event {
 	return Event{
@@ -165,15 +174,18 @@ func makeResolvedEvent(
 			Timestamp:    ts,
 			BoundaryType: boundaryType,
 		},
+		approxSize: span.Size() + ts.Size() + 4,
 	}
 }
 
-func makeKVEvent(
+// MakeKVEvent returns KV event.
+func MakeKVEvent(
 	kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
 ) Event {
 	return Event{
 		kv:                kv,
 		prevVal:           prevVal,
 		backfillTimestamp: backfillTimestamp,
+		approxSize:        kv.Size() + prevVal.Size() + backfillTimestamp.Size(),
 	}
 }
