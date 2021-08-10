@@ -954,6 +954,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// must use the serial unordered sync above in order to remove any
 			// concurrency.
 			sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
+			sync.UsesFakeSpanResolver = flowCtx.TestingKnobs().UsesFakeSpanResolver
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
