@@ -1969,6 +1969,27 @@ message Header {
   // If the desired behavior is to block on the conflicting lock up to some
   // maximum duration, use the Block wait policy and set a context timeout.
   kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;
+  // lock_timeout specifies the maximum amount of time that the batch request
+  // will wait while attempting to acquire a lock on a key or while blocking on
+  // an existing lock in order to perform a non-locking read on a key. The time
+  // limit applies separately to each lock acquisition attempt. If the timeout
+  // elapses when waiting for a lock, a WriteIntentError will be returned.
+  //
+  // Unlike in some other systems like PostgreSQL, where non-locking reads do
+  // not wait on conflicting locks, in CockroachDB, non-locking reads do wait
+  // for conflicting locks to be released. Because of this, the lock_timeout
+  // configuration applies to non-locking reads in read-write and read-only
+  // transactions as well.
+  //
+  // Only the (default) Block wait policy will allow a request to wait on
+  // conflicting locks, so the timeout only makes sense in conjunction with the
+  // Block wait policy. The Error wait policy will throw an error immediately if
+  // a conflicting lock held by an active transaction is encountered, so this
+  // timeout can never be hit with an Error wait policy.
+  //
+  // A value of zero disables the timeout.
+  google.protobuf.Duration lock_timeout = 21 [(gogoproto.nullable) = false,
+                                              (gogoproto.stdduration) = true];
   // If set to a non-zero value, the total number of keys touched by requests in
   // the batch is limited. A resume span will be provided on the response of the
   // requests that were not able to run to completion before the limit was
