@@ -792,7 +792,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		knobs, _ := cfg.TestingKnobs.MigrationManager.(*migrationmanager.TestingKnobs)
 		migrationMgr := migrationmanager.NewManager(
-			c, cfg.circularInternalExecutor, jobRegistry, codec, cfg.Settings, knobs,
+			c, leaseMgr, cfg.circularInternalExecutor, jobRegistry, codec, cfg.Settings, knobs,
 		)
 		execCfg.MigrationJobDeps = migrationMgr
 		execCfg.VersionUpgradeHook = migrationMgr.Migrate
