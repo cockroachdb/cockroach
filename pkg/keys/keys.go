@@ -417,6 +417,13 @@ func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 	return MakeRangeKey(key, LocalQueueLastProcessedSuffix, roachpb.RKey(queue))
 }
 
+// RangeProbeKey returns a range-local key for probing. The
+// purpose of the key is to test CRDB in production; if any data is present at
+// the key, it has no purpose except in allowing testing CRDB in production.
+func RangeProbeKey(key roachpb.RKey) roachpb.Key {
+	return MakeRangeKey(key, LocalRangeProbeSuffix, nil)
+}
+
 // LockTableSingleKey creates a key under which all single-key locks for the
 // given key can be found. buf is used as scratch-space, up to its capacity,
 // to avoid allocations -- its contents will be overwritten and not appended
