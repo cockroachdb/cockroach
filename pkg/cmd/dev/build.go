@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const crossFlag = "cross"
+const (
+	crossFlag              = "cross"
+	hoistGeneratedCodeFlag = "hoist-generated-code"
+)
 
 // makeBuildCmd constructs the subcommand used to build the specified binaries.
 func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -46,6 +50,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
         You can optionally set a config, as in --cross=windows.
         Defaults to linux if not specified. The config should be the name of a
         build configuration specified in .bazelrc, minus the "cross" prefix.`)
+	buildCmd.Flags().Bool(hoistGeneratedCodeFlag, false, "hoist generated code out of the Bazel sandbox into the workspace")
 	buildCmd.Flags().Lookup(crossFlag).NoOptDefVal = "linux"
 	return buildCmd
 }
@@ -74,6 +79,7 @@ var buildTargetMapping = map[string]string{
 func (d *dev) build(cmd *cobra.Command, targets []string) error {
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
+	hoistGeneratedCode := mustGetFlagBool(cmd, hoistGeneratedCodeFlag)
 
 	args, fullTargets, err := getBasicBuildArgs(targets)
 	if err != nil {
@@ -85,7 +91,7 @@ func (d *dev) build(cmd *cobra.Command, targets []string) error {
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err
 		}
-		return d.symlinkBinaries(ctx, fullTargets)
+		return d.stageArtifacts(ctx, fullTargets, hoistGeneratedCode)
 	}
 	// Cross-compilation case.
 	cross = "cross" + cross
@@ -117,7 +123,7 @@ func (d *dev) build(cmd *cobra.Command, targets []string) error {
 	return nil
 }
 
-func (d *dev) symlinkBinaries(ctx context.Context, targets []string) error {
+func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGeneratedCode bool) error {
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
@@ -126,20 +132,21 @@ func (d *dev) symlinkBinaries(ctx context.Context, targets []string) error {
 	if err = d.os.MkdirAll(path.Join(workspace, "bin")); err != nil {
 		return err
 	}
+	bazelBin, err := d.getBazelBin(ctx)
+	if err != nil {
+		return err
+	}
 
 	for _, target := range targets {
-		binaryPath, err := d.getPathToBin(ctx, target)
-		if err != nil {
-			return err
-		}
+		binaryPath := filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(target))
 		base := targetToBinBasename(target)
 		var symlinkPath string
 		// Binaries beginning with the string "cockroach" go right at
 		// the top of the workspace; others go in the `bin` directory.
 		if strings.HasPrefix(base, "cockroach") {
-			symlinkPath = path.Join(workspace, base)
+			symlinkPath = filepath.Join(workspace, base)
 		} else {
-			symlinkPath = path.Join(workspace, "bin", base)
+			symlinkPath = filepath.Join(workspace, "bin", base)
 		}
 
 		// Symlink from binaryPath -> symlinkPath
@@ -156,6 +163,46 @@ func (d *dev) symlinkBinaries(ctx context.Context, targets []string) error {
 		logSuccessfulBuild(target, rel)
 	}
 
+	if hoistGeneratedCode {
+		goFiles, err := d.os.ListFilesWithSuffix(filepath.Join(bazelBin, "pkg"), ".go")
+		if err != nil {
+			return err
+		}
+		for _, file := range goFiles {
+			const cockroachURL = "github.com/cockroachdb/cockroach/"
+			ind := strings.LastIndex(file, cockroachURL)
+			if ind > 0 {
+				// If the cockroach URL was found in the filepath, then we should
+				// trim everything up to and including the URL to find the path
+				// where the file should be staged.
+				loc := file[ind+len(cockroachURL):]
+				err := d.os.CopyFile(file, filepath.Join(workspace, loc))
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			pathComponents := strings.Split(file, string(os.PathSeparator))
+			var skip bool
+			for _, component := range pathComponents[:len(pathComponents)-1] {
+				// Pretty decent heuristic for whether a file needs to be staged.
+				// When path components contain ., they normally are generated files
+				// from third-party packages, as in google.golang.org. Meanwhile,
+				// when path components end in _, that usually represents internal
+				// stuff that doesn't need to be staged, like
+				// pkg/cmd/dev/dev_test_/testmain.go. Note that generated proto code
+				// is handled by the cockroach URL case above.
+				if len(component) > 0 && (strings.ContainsRune(component, '.') || component[len(component)-1] == '_') {
+					skip = true
+				}
+			}
+			if !skip {
+				// Failures here don't mean much. Just ignore them.
+				_ = d.os.CopyFile(file, filepath.Join(workspace, strings.TrimPrefix(file, bazelBin+"/")))
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -168,15 +215,6 @@ func targetToBinBasename(target string) string {
 		base = base[colon+1:]
 	}
 	return base
-}
-
-func (d *dev) getPathToBin(ctx context.Context, target string) (string, error) {
-	bazelBin, err := d.getBazelBin(ctx)
-	if err != nil {
-		return "", err
-	}
-	rel := bazelutil.OutputOfBinaryRule(target)
-	return filepath.Join(bazelBin, rel), nil
 }
 
 // getBasicBuildArgs is for enumerating the arguments to pass to `bazel` in
