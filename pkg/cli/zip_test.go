@@ -85,7 +85,8 @@ table_name NOT IN (
 	'predefined_comments',
 	'session_trace',
 	'session_variables',
-	'tables'
+	'tables',
+	'statement_statistics'
 )
 ORDER BY name ASC`)
 	assert.NoError(t, err)

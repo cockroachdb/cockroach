@@ -9,6 +9,7 @@ go_library(
         "sslocal_provider.go",
         "sslocal_sink.go",
         "sslocal_stats_collector.go",
+        "temp_sql_stats.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal",
     visibility = ["//visibility:public"],
