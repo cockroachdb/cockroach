@@ -3,7 +3,8 @@ module github.com/cockroachdb/cockroach
 go 1.16
 
 require (
-	cloud.google.com/go/storage v1.10.0
+	cloud.google.com/go v0.90.0 // indirect
+	cloud.google.com/go/storage v1.16.0
 	github.com/Azure/azure-sdk-for-go v33.4.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.14.0
 	github.com/Azure/go-autorest/autorest v0.11.1
@@ -74,14 +75,15 @@ require (
 	github.com/golang-commonmark/puny v0.0.0-20180910110745-050be392d8b8 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
 	github.com/golang/glog v0.0.0-20210429001901-424d2337a529 // indirect
-	github.com/golang/mock v1.5.0
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
 	github.com/golang/snappy v0.0.4
 	github.com/google/btree v1.0.0
 	github.com/google/flatbuffers v1.11.0
-	github.com/google/go-cmp v0.5.5
+	github.com/google/go-cmp v0.5.6
 	github.com/google/go-github v17.0.0+incompatible
-	github.com/google/pprof v0.0.0-20200708004538-1a94d8640e99
+	github.com/google/pprof v0.0.0-20210720184732-4bb14d4b1be1
 	github.com/gorhill/cronexpr v0.0.0-20140423231348-a557574d6c02
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.3.0
@@ -156,16 +158,16 @@ require (
 	golang.org/x/exp v0.0.0-20210514180818-737f94c0881e
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d
-	golang.org/x/oauth2 v0.0.0-20201109201403-9fd604954f58
+	golang.org/x/oauth2 v0.0.0-20210810183815-faf39c7919d5
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210806184541-e5e7981a1069
+	golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
-	golang.org/x/text v0.3.6
+	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	golang.org/x/tools v0.1.5
-	google.golang.org/api v0.30.0
-	google.golang.org/genproto v0.0.0-20210805201207-89edb61ffb67
+	google.golang.org/api v0.52.0
+	google.golang.org/genproto v0.0.0-20210811021853-ddbe55d93216
 	google.golang.org/grpc v1.39.1
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	google.golang.org/protobuf v1.27.1

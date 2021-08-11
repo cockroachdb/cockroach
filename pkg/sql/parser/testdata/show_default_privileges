@@ -37,3 +37,11 @@ SHOW DEFAULT PRIVILEGES FOR ROLE "fOo", "baR"  -- normalized!
 SHOW DEFAULT PRIVILEGES FOR ROLE "fOo", "baR"  -- fully parenthesized
 SHOW DEFAULT PRIVILEGES FOR ROLE "fOo", "baR"  -- literals removed
 SHOW DEFAULT PRIVILEGES FOR ROLE _, _  -- identifiers removed
+
+parse
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES  -- normalized!
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES  -- fully parenthesized
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES  -- literals removed
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES  -- identifiers removed

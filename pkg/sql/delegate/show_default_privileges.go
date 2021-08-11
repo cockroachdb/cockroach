@@ -26,29 +26,32 @@ func (d *delegator) delegateShowDefaultPrivileges(
 		return nil, err
 	}
 	query := fmt.Sprintf(
-		"SELECT role, object_type, grantee, privilege_type FROM crdb_internal.default_privileges WHERE database_name = '%s'",
+		"SELECT role, for_all_roles, object_type, grantee, privilege_type FROM crdb_internal.default_privileges WHERE database_name = '%s'",
 		currentDatabase.Normalize(),
 	)
 
-	targetRoles, err := n.Roles.ToSQLUsernames()
-	if err != nil {
-		return nil, err
-	}
-	if len(targetRoles) == 0 {
-		targetRoles = append(targetRoles, d.evalCtx.SessionData.User())
-	}
-
-	query = fmt.Sprintf("%s AND role IN (", query)
-	for i, role := range targetRoles {
-		if i != 0 {
-			query += fmt.Sprintf(", '%s'", role.Normalized())
-		} else {
-			query += fmt.Sprintf("'%s'", role.Normalized())
+	if n.ForAllRoles {
+		query += " AND for_all_roles=true"
+	} else if len(n.Roles) > 0 {
+		targetRoles, err := n.Roles.ToSQLUsernames()
+		if err != nil {
+			return nil, err
 		}
+
+		query = fmt.Sprintf("%s AND for_all_roles=false AND role IN (", query)
+		for i, role := range targetRoles {
+			if i != 0 {
+				query += fmt.Sprintf(", '%s'", role.Normalized())
+			} else {
+				query += fmt.Sprintf("'%s'", role.Normalized())
+			}
+		}
+
+		query += ")"
+	} else {
+		query = fmt.Sprintf("%s AND for_all_roles=false AND role = '%s'",
+			query, d.evalCtx.SessionData.User())
 	}
-
-	query += ")"
-
 	query += " ORDER BY 1,2,3,4"
 	return parse(query)
 }

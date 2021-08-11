@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -50,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1607,9 +1609,9 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 		).Scan(&fractionCompleted); err != nil {
 			return err
 		}
-		if fractionCompleted < 0.25 || fractionCompleted > 0.75 {
+		if fractionCompleted < 0.01 || fractionCompleted > 0.99 {
 			return errors.Errorf(
-				"expected progress to be in range [0.25, 0.75] but got %f",
+				"expected progress to be in range [0.01, 0.99] but got %f",
 				fractionCompleted,
 			)
 		}
@@ -6260,6 +6262,59 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 func getTableID(db *kv.DB, dbName, tableName string) descpb.ID {
 	desc := catalogkv.TestingGetTableDescriptor(db, keys.SystemSQLCodec, dbName, tableName)
 	return desc.GetID()
+}
+
+func TestProtectedTimestampSpanSelectionClusterBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	allowRequest := make(chan struct{})
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+			for _, ru := range request.Requests {
+				switch ru.GetInner().(type) {
+				case *roachpb.ExportRequest:
+					<-allowRequest
+				}
+			}
+			return nil
+		},
+	}
+
+	_, tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, params)
+	defer cleanupFn()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sqlDB.Exec(t, `BACKUP TO 'nodelocal://self/foo'`)
+	}()
+
+	var jobID string
+	conn := tc.Conns[0]
+	testutils.SucceedsSoon(t, func() error {
+		row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+		return row.Scan(&jobID)
+	})
+
+	// Check protected timestamp record to ensure we are protecting the clusters
+	// key-span.
+	var spans []byte
+	sqlDB.QueryRow(t, `SELECT spans FROM system.protected_ts_records LIMIT 1`).Scan(&spans)
+	var protectedSpans ptstorage.Spans
+	require.NoError(t, protoutil.Unmarshal(spans, &protectedSpans))
+
+	expectedSpans := ptstorage.Spans{
+		Spans: []roachpb.Span{{Key: keys.TableDataMin, EndKey: keys.TableDataMax}},
+	}
+	require.Equal(t, expectedSpans, protectedSpans)
+	close(allowRequest)
+	wg.Wait()
 }
 
 // TestSpanSelectionDuringBackup tests the method spansForAllTableIndexes which
