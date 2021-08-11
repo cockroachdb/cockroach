@@ -12,12 +12,14 @@ import React from "react";
 import { RouteComponentProps } from "react-router-dom";
 import { isNil, merge, forIn } from "lodash";
 import Helmet from "react-helmet";
+import moment, { Moment } from "moment";
 import classNames from "classnames/bind";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { ColumnDescriptor, SortSetting } from "src/sortedtable";
 import { Search } from "src/search";
 import { Pagination } from "src/pagination";
+import { DateRange } from "src/dateRange";
 import { TableStatistics } from "../tableStatistics";
 import {
   Filter,
@@ -59,6 +61,8 @@ import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import { UIConfigState } from "../store/uiConfig";
+import { StatementsRequest } from "src/api/statementsApi";
+import Long from "long";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -69,7 +73,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 // provide convenient definitions for `mapDispatchToProps`, `mapStateToProps` and props that
 // have to be provided by parent component.
 export interface StatementsPageDispatchProps {
-  refreshStatements: () => void;
+  refreshStatements: (req?: StatementsRequest) => void;
   refreshStatementDiagnosticsRequests: () => void;
   resetSQLStats: () => void;
   dismissAlertMessage: () => void;
@@ -86,10 +90,12 @@ export interface StatementsPageDispatchProps {
   onFilterChange?: (value: string) => void;
   onStatementClick?: (statement: string) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
+  onDateRangeChange: (start: Moment, end: Moment) => void;
 }
 
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
+  dateRange?: [Moment, Moment];
   statementsError: Error | null;
   apps: string[];
   databases: string[];
@@ -111,6 +117,17 @@ export interface StatementsPageState {
 export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
+
+function statementsRequestFromProps(
+  props: StatementsPageProps,
+): cockroach.server.serverpb.StatementsRequest | null {
+  if (props.isTenant || props.dateRange == null) return null;
+  return new cockroach.server.serverpb.StatementsRequest({
+    combined: true,
+    start: Long.fromNumber(props.dateRange[0].unix()),
+    end: Long.fromNumber(props.dateRange[1].unix()),
+  });
+}
 
 export class StatementsPage extends React.Component<
   StatementsPageProps,
@@ -192,6 +209,20 @@ export class StatementsPage extends React.Component<
     }
   };
 
+  changeDateRange = (start: Moment, end: Moment): void => {
+    if (this.props.onDateRangeChange) {
+      this.props.onDateRangeChange(start, end);
+    }
+  };
+
+  resetTime = (): void => {
+    // Default range to reset to is one hour ago.
+    this.changeDateRange(
+      moment.utc().subtract(1, "hours"),
+      moment.utc().add(1, "minute"),
+    );
+  };
+
   selectApp = (value: string) => {
     if (value == "All") value = "";
     const { history, onFilterChange } = this.props;
@@ -214,8 +245,13 @@ export class StatementsPage extends React.Component<
     });
   };
 
+  refreshStatements = () => {
+    const req = statementsRequestFromProps(this.props);
+    this.props.refreshStatements(req);
+  };
+
   componentDidMount() {
-    this.props.refreshStatements();
+    this.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
   }
 
@@ -226,7 +262,7 @@ export class StatementsPage extends React.Component<
     if (this.state.search && this.state.search !== prevState.search) {
       this.props.onSearchComplete(this.filteredStatementsData());
     }
-    this.props.refreshStatements();
+    this.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
   };
 
@@ -482,6 +518,22 @@ export class StatementsPage extends React.Component<
               showNodes={nodes.length > 1}
             />
           </PageConfigItem>
+          {this.props.dateRange && (
+            <>
+              <PageConfigItem>
+                <DateRange
+                  start={this.props.dateRange[0]}
+                  end={this.props.dateRange[1]}
+                  onSubmit={this.changeDateRange}
+                />
+              </PageConfigItem>
+              <PageConfigItem>
+                <button className={cx("reset-btn")} onClick={this.resetTime}>
+                  reset time
+                </button>
+              </PageConfigItem>
+            </>
+          )}
         </PageConfig>
         <section className={sortableTableCx("cl-table-container")}>
           <div>

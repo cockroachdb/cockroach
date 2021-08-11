@@ -120,6 +120,7 @@ export const selectStatement = createSelector(
   (_state: AppState, props: RouteComponentProps) => props,
   (statementsState, props) => {
     const statements = statementsState.data?.statements;
+
     if (!statements) {
       return null;
     }

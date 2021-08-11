@@ -10,12 +10,14 @@
 
 import { StatementsPageProps } from "@cockroachlabs/cluster-ui";
 import { createMemoryHistory } from "history";
+import moment from "moment";
 import Long from "long";
 import * as protos from "src/js/protos";
 import {
   refreshStatementDiagnosticsRequests,
   refreshStatements,
 } from "src/redux/apiReducers";
+
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
@@ -503,9 +505,11 @@ const statementsPagePropsFixture: StatementsPageProps = {
   apps: ["(internal)", "movr", "$ cockroach demo"],
   totalFingerprints: 95,
   lastReset: "2020-04-13 07:22:23",
+  dateRange: [moment.utc("2021.08.08"), moment.utc("2021.08.12")],
   dismissAlertMessage: () => {},
   refreshStatementDiagnosticsRequests: (() => {}) as typeof refreshStatementDiagnosticsRequests,
   refreshStatements: (() => {}) as typeof refreshStatements,
+  onDateRangeChange: () => {},
   onActivateStatementDiagnostics: _ => {},
   onDiagnosticsModalOpen: _ => {},
   onPageChanged: _ => {},
