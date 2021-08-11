@@ -17,10 +17,14 @@ import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnos
 export const selectStatementByFingerprint = createSelector(
   (state: AdminUIState) => state.cachedData.statements.data?.statements,
   (_state: AdminUIState, statementFingerprint: string) => statementFingerprint,
-  (statements, statementFingerprint) =>
-    (statements || []).find(
+  (statements, statementFingerprint) => {
+    if (statements == null) {
+      return null;
+    }
+    return statements.find(
       statement => statement.key.key_data.query === statementFingerprint,
-    ),
+    );
+  },
 );
 
 export const selectDiagnosticsReportsByStatementFingerprint = createSelector(

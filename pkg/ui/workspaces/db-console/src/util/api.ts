@@ -129,6 +129,8 @@ export type CreateStatementDiagnosticsReportResponseMessage = protos.cockroach.s
 export type StatementDiagnosticsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequest;
 export type StatementDiagnosticsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
 
+export type StatementsRequestMessage = protos.cockroach.server.serverpb.StatementsRequest;
+
 export type ResetSQLStatsRequestMessage = protos.cockroach.server.serverpb.ResetSQLStatsRequest;
 export type ResetSQLStatsResponseMessage = protos.cockroach.server.serverpb.ResetSQLStatsResponse;
 
@@ -670,11 +672,17 @@ export function getStores(
 
 // getStatements returns statements the cluster has recently executed, and some stats about them.
 export function getStatements(
+  req: StatementsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<StatementsResponseMessage> {
+  const queryStr = propsToQueryString({
+    combined: true,
+    start: req.start.toInt(),
+    end: req.end.toInt(),
+  });
   return timeoutFetch(
     serverpb.StatementsResponse,
-    `${STATUS_PREFIX}/statements`,
+    `${STATUS_PREFIX}/statements?${queryStr}`,
     null,
     timeout,
   );
