@@ -110,7 +110,7 @@ func (m *mockStreamClient) ConsumePartition(
 		}
 	}()
 
-	return eventCh, nil, nil
+	return eventCh, errCh, nil
 }
 
 // RegisterInterception implements the InterceptableStreamClient interface.
