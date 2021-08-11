@@ -12,8 +12,10 @@ import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 import styles from "../statementsPage/statementsPage.module.scss";
+import moment, { Moment } from "moment";
 import { RouteComponentProps } from "react-router-dom";
 import { TransactionInfo, TransactionsTable } from "../transactionsTable";
+import { DateRange } from "src/dateRange";
 import { TransactionDetails } from "../transactionDetails";
 import { ISortedTablePagination, SortSetting } from "../sortedtable";
 import { Pagination } from "../pagination";
@@ -47,6 +49,7 @@ import {
   getFiltersFromQueryString,
 } from "../queryFilter";
 import { UIConfigState } from "../store/uiConfig";
+import { StatementsRequest } from "src/api/statementsApi";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
@@ -64,6 +67,7 @@ interface TState {
 
 export interface TransactionsPageStateProps {
   data: IStatementsResponse;
+  dateRange?: [Moment, Moment];
   nodeRegions: { [nodeId: string]: string };
   error?: Error | null;
   pageSize?: number;
@@ -71,14 +75,25 @@ export interface TransactionsPageStateProps {
 }
 
 export interface TransactionsPageDispatchProps {
-  refreshData: () => void;
+  refreshData: (req?: StatementsRequest) => void;
   resetSQLStats: () => void;
+  onDateRangeChange?: (start: Moment, end: Moment) => void;
 }
 
 export type TransactionsPageProps = TransactionsPageStateProps &
   TransactionsPageDispatchProps &
   RouteComponentProps;
 
+function statementsRequestFromProps(
+  props: TransactionsPageProps,
+): protos.cockroach.server.serverpb.StatementsRequest | null {
+  if (props.isTenant || props.dateRange == null) return null;
+  return new protos.cockroach.server.serverpb.StatementsRequest({
+    combined: true,
+    start: Long.fromNumber(props.dateRange[0].unix()),
+    end: Long.fromNumber(props.dateRange[1].unix()),
+  });
+}
 export class TransactionsPage extends React.Component<
   TransactionsPageProps,
   TState
@@ -108,11 +123,16 @@ export class TransactionsPage extends React.Component<
     transactionStats: null,
   };
 
+  refreshData = () => {
+    const req = statementsRequestFromProps(this.props);
+    this.props.refreshData(req);
+  };
+
   componentDidMount() {
-    this.props.refreshData();
+    this.refreshData();
   }
   componentDidUpdate() {
-    this.props.refreshData();
+    this.refreshData();
   }
 
   syncHistory = (params: Record<string, string | undefined>) => {
@@ -216,6 +236,20 @@ export class TransactionsPage extends React.Component<
     return new Date(Number(this.props.data?.last_reset.seconds) * 1000);
   };
 
+  changeDateRange = (start: Moment, end: Moment): void => {
+    if (this.props.onDateRangeChange) {
+      this.props.onDateRangeChange(start, end);
+    }
+  };
+
+  resetTime = (): void => {
+    // Default range to reset to is one hour ago.
+    this.changeDateRange(
+      moment.utc().subtract(1, "hours"),
+      moment.utc().add(1, "minute"),
+    );
+  };
+
   renderTransactionsList() {
     return (
       <div className={cx("table-area")}>
@@ -295,6 +329,25 @@ export class TransactionsPage extends React.Component<
                       showNodes={nodes.length > 1}
                     />
                   </PageConfigItem>
+                  {this.props.dateRange && (
+                    <>
+                      <PageConfigItem>
+                        <DateRange
+                          start={this.props.dateRange[0]}
+                          end={this.props.dateRange[1]}
+                          onSubmit={this.changeDateRange}
+                        />
+                      </PageConfigItem>
+                      <PageConfigItem>
+                        <button
+                          className={cx("reset-btn")}
+                          onClick={this.resetTime}
+                        >
+                          reset time
+                        </button>
+                      </PageConfigItem>
+                    </>
+                  )}
                 </PageConfig>
                 <section className={statisticsClasses.tableContainerClass}>
                   <TableStatistics

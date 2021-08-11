@@ -11,6 +11,7 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import moment, { Moment } from "moment";
 import * as protos from "src/js/protos";
 import {
   refreshStatementDiagnosticsRequests,
@@ -32,12 +33,14 @@ import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
+import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
 import { getMatchParamByName } from "src/util/query";
 
 import { StatementsPage, AggregateStatistics } from "@cockroachlabs/cluster-ui";
 import {
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
+  setCombinedStatementsDateRangeAction,
 } from "src/redux/statements";
 import {
   trackDownloadDiagnosticsBundleAction,
@@ -199,6 +202,13 @@ export const selectLastReset = createSelector(
   },
 );
 
+export const selectDateRange = createSelector(
+  statementsDateRangeLocalSetting.selector,
+  (state: { start: number; end: number }): [Moment, Moment] => {
+    return [moment.unix(state.start), moment.unix(state.end)];
+  },
+);
+
 export const statementColumnsLocalSetting = new LocalSetting(
   "create_statement_columns",
   (state: AdminUIState) => state.localSettings,
@@ -210,6 +220,7 @@ export default withRouter(
     (state: AdminUIState, props: RouteComponentProps) => ({
       statements: selectStatements(state, props),
       statementsError: state.cachedData.statements.lastError,
+      dateRange: selectDateRange(state),
       apps: selectApps(state),
       databases: selectDatabases(state),
       totalFingerprints: selectTotalFingerprints(state),
@@ -218,7 +229,8 @@ export default withRouter(
       nodeRegions: nodeRegionsByIDSelector(state),
     }),
     {
-      refreshStatements,
+      refreshStatements: refreshStatements,
+      onDateRangeChange: setCombinedStatementsDateRangeAction,
       refreshStatementDiagnosticsRequests,
       resetSQLStats: resetSQLStatsAction,
       dismissAlertMessage: () =>
