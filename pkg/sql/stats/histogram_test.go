@@ -48,11 +48,11 @@ func TestEquiDepthHistogram(t *testing.T) {
 				},
 				{
 					// Bucket contains 2, 4.
-					upper: 4, numEq: 1, numLess: 1, distinctLess: 0.73,
+					upper: 4, numEq: 1, numLess: 1, distinctLess: 0.63,
 				},
 				{
 					// Bucket contains 5, 5, 9.
-					upper: 9, numEq: 1, numLess: 2, distinctLess: 1.27,
+					upper: 9, numEq: 1, numLess: 2, distinctLess: 1.37,
 				},
 			},
 		},
@@ -160,11 +160,11 @@ func TestEquiDepthHistogram(t *testing.T) {
 			buckets: []expBucket{
 				{
 					// Bucket contains -9222292034315889200.
-					upper: -9222292034315889200, numEq: 1000, numLess: 0, distinctLess: 0,
+					upper: -9222292034315889200, numEq: 10, numLess: 0, distinctLess: 0,
 				},
 				{
 					// Bucket contains -9130100296576294525, -9042492057500701159.
-					upper: -9042492057500701159, numEq: 1000, numLess: 1000, distinctLess: 298,
+					upper: -9042492057500701159, numEq: 10, numLess: 2980, distinctLess: 298,
 				},
 			},
 		},
