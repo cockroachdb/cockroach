@@ -174,11 +174,11 @@ func (l *listener) Less(than btree.Item) bool {
 func checkConnection(connection ConnectionTags, list *Denylist) error {
 	ip := DenyEntity{Item: connection.IP, Type: IPAddrType}
 	if err := list.Denied(ip); err != nil {
-		return errors.Errorf("connection ip '%v' denied: %v", connection.IP, err)
+		return errors.Wrapf(err, "connection ip '%v' denied", connection.IP)
 	}
 	cluster := DenyEntity{Item: connection.Cluster, Type: ClusterType}
 	if err := list.Denied(cluster); err != nil {
-		return errors.Errorf("connection cluster '%v' denied: %v", connection.Cluster, err)
+		return errors.Wrapf(err, "connection cluster '%v' denied", connection.Cluster)
 	}
 	return nil
 }

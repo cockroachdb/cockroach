@@ -330,7 +330,7 @@ func getActiveEncryptionkey(dir string) (string, string, error) {
 
 	var setting enginepbccl.EncryptionSettings
 	if err := protoutil.Unmarshal(entry.EncryptionSettings, &setting); err != nil {
-		return "", "", fmt.Errorf("could not unmarshal encryption settings for %s: %v", keyRegistryFilename, err)
+		return "", "", errors.Wrapf(err, "could not unmarshal encryption settings for %s", keyRegistryFilename)
 	}
 
 	return setting.EncryptionType.String(), setting.KeyId, nil
