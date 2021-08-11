@@ -57,6 +57,11 @@ const (
 	// ExprFmtHideStats does not show statistics in the output.
 	ExprFmtHideStats
 
+	// ExprFmtHideHistograms does not show statistics histograms in the output.
+	// Note that if ExprFmtHideStats is set, histograms are never included
+	// in the output.
+	ExprFmtHideHistograms
+
 	// ExprFmtHideCost does not show expression cost in the output.
 	ExprFmtHideCost
 
@@ -726,7 +731,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	}
 
 	if !f.HasFlags(ExprFmtHideStats) {
-		tp.Childf("stats: %s", &relational.Stats)
+		if f.HasFlags(ExprFmtHideHistograms) {
+			tp.Childf("stats: %s", relational.Stats.StringWithoutHistograms())
+		} else {
+			tp.Childf("stats: %s", &relational.Stats)
+		}
 	}
 
 	if !f.HasFlags(ExprFmtHideCost) {
