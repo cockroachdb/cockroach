@@ -12,12 +12,14 @@ import React from "react";
 import { RouteComponentProps } from "react-router-dom";
 import { isNil, merge, forIn } from "lodash";
 import Helmet from "react-helmet";
+import moment, { Moment } from "moment";
 import classNames from "classnames/bind";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { ColumnDescriptor, SortSetting } from "src/sortedtable";
 import { Search } from "src/search";
 import { Pagination } from "src/pagination";
+import { DateRange } from "src/dateRange";
 import { TableStatistics } from "../tableStatistics";
 import {
   Filter,
@@ -70,6 +72,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 // have to be provided by parent component.
 export interface StatementsPageDispatchProps {
   refreshStatements: () => void;
+  refreshCombinedStatements: (start: Moment, end: Moment) => void;
   refreshStatementDiagnosticsRequests: () => void;
   resetSQLStats: () => void;
   dismissAlertMessage: () => void;
@@ -86,6 +89,7 @@ export interface StatementsPageDispatchProps {
   onFilterChange?: (value: string) => void;
   onStatementClick?: (statement: string) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
+  onDateRangeChange?: (start: Moment, end: Moment) => void;
 }
 
 export interface StatementsPageStateProps {
@@ -97,9 +101,11 @@ export interface StatementsPageStateProps {
   lastReset: string;
   columns: string[];
   nodeRegions: { [key: string]: string };
+  validStatementsDateRange: [Moment, Moment];
 }
 
 export interface StatementsPageState {
+  dateRange: [Moment, Moment];
   sortSetting: SortSetting;
   search?: string;
   pagination: ISortedTablePagination;
@@ -122,6 +128,11 @@ export class StatementsPage extends React.Component<
       this.props.history.location.search,
     );
     const defaultState = {
+      dateRange: [moment.utc().subtract(1, "hours"), moment.utc()] as [
+        Moment,
+        Moment,
+      ],
+
       sortSetting: {
         // Sort by Execution Count column as default option.
         ascending: false,
@@ -187,6 +198,13 @@ export class StatementsPage extends React.Component<
     }
   };
 
+  changeDateRange = (start: Moment, end: Moment): void => {
+    this.setState({ dateRange: [start, end] });
+    if (this.props.onDateRangeChange) {
+      this.props.onDateRangeChange(start, end);
+    }
+  };
+
   selectApp = (value: string) => {
     if (value == "All") value = "";
     const { history, onFilterChange } = this.props;
@@ -209,8 +227,15 @@ export class StatementsPage extends React.Component<
     });
   };
 
+  refreshCombinedStatements = () => {
+    this.props.refreshCombinedStatements(
+      this.state.dateRange[0],
+      this.state.dateRange[1],
+    );
+  };
+
   componentDidMount() {
-    this.props.refreshStatements();
+    this.refreshCombinedStatements();
     this.props.refreshStatementDiagnosticsRequests();
   }
 
@@ -221,7 +246,9 @@ export class StatementsPage extends React.Component<
     if (this.state.search && this.state.search !== prevState.search) {
       this.props.onSearchComplete(this.filteredStatementsData());
     }
-    this.props.refreshStatements();
+    if (this.state.dateRange !== prevState.dateRange) {
+      this.refreshCombinedStatements();
+    }
     this.props.refreshStatementDiagnosticsRequests();
   };
 
@@ -462,6 +489,14 @@ export class StatementsPage extends React.Component<
               showScan={true}
               showRegions={regions.length > 1}
               showNodes={nodes.length > 1}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <DateRange
+              start={this.state.dateRange[0]}
+              end={this.state.dateRange[1]}
+              onSubmit={this.changeDateRange}
+              allowedInterval={this.props.validStatementsDateRange}
             />
           </PageConfigItem>
         </PageConfig>

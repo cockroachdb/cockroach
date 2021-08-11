@@ -11,6 +11,7 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import moment, { Moment } from "moment";
 import * as protos from "src/js/protos";
 import {
   refreshStatementDiagnosticsRequests,
@@ -38,6 +39,7 @@ import { StatementsPage, AggregateStatistics } from "@cockroachlabs/cluster-ui";
 import {
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
+  getCombinedStatementsAction,
 } from "src/redux/statements";
 import {
   trackDownloadDiagnosticsBundleAction,
@@ -63,7 +65,7 @@ interface StatementsSummaryData {
 // selectStatements returns the array of AggregateStatistics to show on the
 // StatementsPage, based on if the appAttr route parameter is set.
 export const selectStatements = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.combinedStatements,
   (_state: AdminUIState, props: RouteComponentProps) => props,
   selectDiagnosticsReportsPerStatement,
   (
@@ -216,9 +218,16 @@ export default withRouter(
       lastReset: selectLastReset(state),
       columns: statementColumnsLocalSetting.selectorToArray(state),
       nodeRegions: nodeRegionsByIDSelector(state),
+
+      // TODO (xinhaoz) derive these values from available statement data
+      validStatementsDateRange: [
+        moment.utc().subtract(1, "month"),
+        moment.utc(),
+      ] as [Moment, Moment],
     }),
     {
       refreshStatements,
+      refreshCombinedStatements: getCombinedStatementsAction,
       refreshStatementDiagnosticsRequests,
       resetSQLStats: resetSQLStatsAction,
       dismissAlertMessage: () =>

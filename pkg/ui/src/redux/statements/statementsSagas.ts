@@ -14,17 +14,24 @@ import { PayloadAction } from "src/interfaces/action";
 import { createStatementDiagnosticsReport } from "src/util/api";
 import {
   CREATE_STATEMENT_DIAGNOSTICS_REPORT,
+  REQUEST_COMBINED_STATEMENTS,
   DiagnosticsReportPayload,
   createStatementDiagnosticsReportCompleteAction,
   createStatementDiagnosticsReportFailedAction,
+  CombinedStatementsPayload,
+  getCombinedStatementsCompleteAction,
+  getCombinedStatementsFailedAction,
 } from "./statementsActions";
 import { cockroach } from "src/js/protos";
 import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+import CombinedStatementsRequest = cockroach.server.serverpb.PersistedStatementStatsRequest;
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
+  refreshCombinedStatements,
 } from "src/redux/apiReducers";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
+import Long from "long";
 
 export function* createDiagnosticsReportSaga(
   action: PayloadAction<DiagnosticsReportPayload>,
@@ -56,8 +63,25 @@ export function* createDiagnosticsReportSaga(
   }
 }
 
+export function* combinedStatementsSaga(
+  action: PayloadAction<CombinedStatementsPayload>,
+) {
+  const { start, end } = action.payload;
+  const combinedStatementsRequest = new CombinedStatementsRequest({
+    start: Long.fromNumber(start.utc().unix()),
+    end: Long.fromNumber(end.utc().unix()),
+  });
+  try {
+    yield put(refreshCombinedStatements(combinedStatementsRequest) as any);
+    yield put(getCombinedStatementsCompleteAction());
+  } catch (e) {
+    yield put(getCombinedStatementsFailedAction());
+  }
+}
+
 export function* statementsSaga() {
   yield all([
     takeEvery(CREATE_STATEMENT_DIAGNOSTICS_REPORT, createDiagnosticsReportSaga),
+    takeEvery(REQUEST_COMBINED_STATEMENTS, combinedStatementsSaga),
   ]);
 }

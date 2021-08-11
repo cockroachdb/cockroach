@@ -10,6 +10,7 @@
 
 import { Action } from "redux";
 import { PayloadAction } from "src/interfaces/action";
+import { Moment } from "moment";
 
 export const CREATE_STATEMENT_DIAGNOSTICS_REPORT =
   "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_REPORT";
@@ -55,5 +56,46 @@ export function createOpenDiagnosticsModalAction(
     payload: {
       statementFingerprint,
     },
+  };
+}
+
+/***************************************
+        Combined Stats Actions
+****************************************/
+
+export const REQUEST_COMBINED_STATEMENTS =
+  "cockroachui/statements/REQUEST_COMBINED_STATEMENTS";
+export const REQUEST_COMBINED_STATEMENTS_COMPLETE =
+  "cockroachui/statements/REQUEST_COMBINED_STATEMENTS_COMPLETE";
+export const REQUEST_COMBINED_STATEMENTS_FAILED =
+  "cockroachui/statements/REQUEST_COMBINED_STATEMENTS_FAILED";
+
+export type CombinedStatementsPayload = {
+  start: Moment;
+  end: Moment;
+};
+
+export function getCombinedStatementsAction(
+  start: Moment,
+  end: Moment,
+): PayloadAction<CombinedStatementsPayload> {
+  return {
+    type: REQUEST_COMBINED_STATEMENTS,
+    payload: {
+      start,
+      end,
+    },
+  };
+}
+
+export function getCombinedStatementsCompleteAction(): Action {
+  return {
+    type: REQUEST_COMBINED_STATEMENTS_COMPLETE,
+  };
+}
+
+export function getCombinedStatementsFailedAction(): Action {
+  return {
+    type: REQUEST_COMBINED_STATEMENTS_FAILED,
   };
 }

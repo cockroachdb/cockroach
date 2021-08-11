@@ -11,6 +11,7 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
+import moment, { Moment } from "moment";
 
 import { AppState } from "src/store";
 import { actions as statementActions } from "src/store/statements";
@@ -51,9 +52,15 @@ export const ConnectedStatementsPage = withRouter(
       lastReset: selectLastReset(state),
       columns: selectColumns(state),
       nodeRegions: nodeRegionsByIDSelector(state),
+      validStatementsDateRange: [moment.utc(), moment.utc()] as [
+        Moment,
+        Moment,
+      ],
     }),
     (dispatch: Dispatch) => ({
       refreshStatements: () => dispatch(statementActions.refresh()),
+      // TODO xinhaoz wip fill this in
+      refreshCombinedStatements: () => {},
       refreshStatementDiagnosticsRequests: () =>
         dispatch(statementDiagnosticsActions.refresh()),
       resetSQLStats: () => dispatch(resetSQLStatsActions.request()),
