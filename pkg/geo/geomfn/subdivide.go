@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/errors"
-	"github.com/twpayne/go-geom"
+	geom "github.com/twpayne/go-geom"
 )
 
 // Subdivide returns a geometry divided into parts, where each part contains no more than the number of vertices provided.
@@ -30,11 +30,11 @@ func Subdivide(g geo.Geometry, maxVertices int) ([]geo.Geometry, error) {
 
 	gt, err := g.AsGeomT()
 	if err != nil {
-		return nil, errors.Newf("could not transform input geometry into geom.T: %v", err)
+		return nil, errors.Wrap(err, "could not transform input geometry into geom.T")
 	}
 	dim, err := dimensionFromGeomT(gt)
 	if err != nil {
-		return nil, errors.Newf("could not calculate geometry dimension: %v", err)
+		return nil, errors.Wrap(err, "could not calculate geometry dimension")
 	}
 	// maxDepth 50 => 2^50 ~= 10^15 subdivisions.
 	const maxDepth = 50
@@ -49,7 +49,7 @@ func Subdivide(g geo.Geometry, maxVertices int) ([]geo.Geometry, error) {
 		geo.AdjustGeomTSRID(cg, g.SRID())
 		g, err := geo.MakeGeometryFromGeomT(cg)
 		if err != nil {
-			return []geo.Geometry{}, errors.Newf("could not transform output geom.T into geometry: %v", err)
+			return []geo.Geometry{}, errors.Wrap(err, "could not transform output geom.T into geometry")
 		}
 		output = append(output, g)
 	}
@@ -106,7 +106,7 @@ func subdivideRecursive(
 	}
 	currDim, err := dimensionFromGeomT(gt)
 	if err != nil {
-		return nil, errors.Newf("error checking geom.T dimension: %v", err)
+		return nil, errors.Wrap(err, "error checking geom.T dimension")
 	}
 	if currDim < dim {
 		// Ignore lower dimension object produced by clipping at a shallower recursion level.
@@ -142,11 +142,11 @@ func subdivideRecursive(
 
 	clipped1, err := clipGeomTByBoundingBoxForSubdivide(gt, &subBox1)
 	if err != nil {
-		return nil, errors.Newf("error clipping geom.T: %v", err)
+		return nil, errors.Wrap(err, "error clipping geom.T")
 	}
 	clipped2, err := clipGeomTByBoundingBoxForSubdivide(gt, &subBox2)
 	if err != nil {
-		return nil, errors.Newf("error clipping geom.T: %v", err)
+		return nil, errors.Wrap(err, "error clipping geom.T")
 	}
 	depth++
 	subdivisions1, err := subdivideRecursive(clipped1, maxVertices, depth, dim, maxDepth)
@@ -207,7 +207,7 @@ func calculateSplitPointCoordForSubdivide(
 		var err error
 		pivot, err = findMostCentralPointValueForPolygon(gt, nVertices, splitHorizontally, &clip)
 		if err != nil {
-			return 0, errors.Newf("error finding most central point for polygon: %v", err)
+			return 0, errors.Wrap(err, "error finding most central point for polygon")
 		}
 		if splitHorizontally {
 			// Ignore point on the boundaries
@@ -278,25 +278,25 @@ func findMostCentralPointValueForPolygon(
 func clipGeomTByBoundingBoxForSubdivide(gt geom.T, clip *geo.CartesianBoundingBox) (geom.T, error) {
 	g, err := geo.MakeGeometryFromGeomT(gt)
 	if err != nil {
-		return nil, errors.Newf("error transforming geom.T to geometry: %v", err)
+		return nil, errors.Wrap(err, "error transforming geom.T to geometry")
 	}
 	clipgt := clip.ToGeomT(g.SRID())
 	clipg, err := geo.MakeGeometryFromGeomT(clipgt)
 	if err != nil {
-		return nil, errors.Newf("error transforming geom.T to geometry: %v", err)
+		return nil, errors.Wrap(err, "error transforming geom.T to geometry")
 	}
 	out, err := Intersection(g, clipg)
 	if err != nil {
-		return nil, errors.Newf("error applying intersection: %v", err)
+		return nil, errors.Wrap(err, "error applying intersection")
 	}
 	// Simplify is required to remove the unnecessary points. Otherwise vertices count is altered and too many subdivision may be returned.
 	out, err = SimplifyGEOS(out, 0)
 	if err != nil {
-		return nil, errors.Newf("simplifying error: %v", err)
+		return nil, errors.Wrap(err, "simplifying error")
 	}
 	gt, err = out.AsGeomT()
 	if err != nil {
-		return nil, errors.Newf("error transforming geometry to geom.T: %v", err)
+		return nil, errors.Wrap(err, "error transforming geometry to geom.T")
 	}
 	return gt, nil
 }

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/pierrre/geohash"
-	"github.com/twpayne/go-geom"
+	geom "github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/ewkbhex"
 	"github.com/twpayne/go-geom/encoding/geojson"
@@ -247,7 +247,7 @@ func parseGeoHash(g string, precision int) (geohash.Box, error) {
 func GeometryToEncodedPolyline(g Geometry, p int) (string, error) {
 	gt, err := g.AsGeomT()
 	if err != nil {
-		return "", fmt.Errorf("error parsing input geometry: %v", err)
+		return "", errors.Wrap(err, "error parsing input geometry")
 	}
 	if gt.SRID() != 4326 {
 		return "", errors.New("only SRID 4326 is supported")
@@ -263,7 +263,7 @@ func ParseEncodedPolyline(encodedPolyline string, precision int) (Geometry, erro
 
 	g, err := MakeGeometryFromGeomT(ls)
 	if err != nil {
-		return Geometry{}, fmt.Errorf("parsing geography error: %v", err)
+		return Geometry{}, errors.Wrap(err, "parsing geography error")
 	}
 	return g, nil
 }

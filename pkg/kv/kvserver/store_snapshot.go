@@ -1155,7 +1155,10 @@ func sendSnapshot(
 	// completed (such as defers that might be run after the previous message was
 	// received).
 	if unexpectedResp, err := stream.Recv(); err != io.EOF {
-		return errors.Errorf("%s: expected EOF, got resp=%v err=%v", to, unexpectedResp, err)
+		if err != nil {
+			return errors.Wrapf(err, "%s: expected EOF, got resp=%v with error", to, unexpectedResp)
+		}
+		return errors.Newf("%s: expected EOF, got resp=%v", to, unexpectedResp)
 	}
 	switch resp.Status {
 	case SnapshotResponse_ERROR:
