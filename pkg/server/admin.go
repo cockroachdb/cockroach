@@ -1501,7 +1501,7 @@ func (s *adminServer) getUIData(
 	}
 	query.Append(");")
 	if err := query.Errors(); err != nil {
-		return nil, errors.Errorf("error constructing query: %v", err)
+		return nil, errors.Wrap(err, "error constructing query")
 	}
 	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-getUIData", nil, /* txn */
