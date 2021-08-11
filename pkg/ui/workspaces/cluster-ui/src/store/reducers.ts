@@ -11,6 +11,10 @@
 import { combineReducers, createStore } from "redux";
 import { createAction, createReducer } from "@reduxjs/toolkit";
 import { StatementsState, reducer as statements } from "./statements";
+import {
+  CombinedStatementsState,
+  reducer as combinedStatements,
+} from "./combinedStatements";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
 import {
   StatementDiagnosticsState,
@@ -29,6 +33,7 @@ import { DOMAIN_NAME } from "./utils";
 
 export type AdminUiState = {
   statements: StatementsState;
+  combinedStatements: CombinedStatementsState;
   statementDiagnostics: StatementDiagnosticsState;
   localStorage: LocalStorageState;
   nodes: NodesState;
@@ -47,6 +52,7 @@ export const reducers = combineReducers<AdminUiState>({
   localStorage,
   statementDiagnostics,
   statements,
+  combinedStatements,
   nodes,
   liveness,
   sessions,

@@ -15,12 +15,18 @@ import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 export const selectStatementByFingerprint = createSelector(
+  (state: AdminUIState) => state.cachedData.combinedStatements.data?.statements,
   (state: AdminUIState) => state.cachedData.statements.data?.statements,
   (_state: AdminUIState, statementFingerprint: string) => statementFingerprint,
-  (statements, statementFingerprint) =>
-    (statements || []).find(
+  (statements, combinedStatements, statementFingerprint) => {
+    const allStatements = [
+      ...(statements || []),
+      ...(combinedStatements || []),
+    ];
+    return allStatements.find(
       statement => statement.key.key_data.query === statementFingerprint,
-    ),
+    );
+  },
 );
 
 export const selectDiagnosticsReportsByStatementFingerprint = createSelector(

@@ -8,23 +8,33 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { PayloadAction } from "@reduxjs/toolkit";
 import { all, call, put, delay, takeLatest } from "redux-saga/effects";
-import { getStatements } from "src/api/statementsApi";
+import { getStatements, StatementsRequest } from "src/api/statementsApi";
 import { actions } from "./statements.reducer";
+import { actions as combinedStatementsActions } from "../combinedStatements";
 import { rootActions } from "../reducers";
 
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 
-export function* refreshStatementsSaga() {
-  yield put(actions.request());
+export function* refreshStatementsSaga(
+  action?: PayloadAction<StatementsRequest>,
+) {
+  yield put(actions.request(action?.payload));
 }
 
-export function* requestStatementsSaga(): any {
-  try {
-    const result = yield call(getStatements);
-    yield put(actions.received(result));
-  } catch (e) {
-    yield put(actions.failed(e));
+export function* requestStatementsSaga(
+  action?: PayloadAction<StatementsRequest>,
+): any {
+  if (action?.payload?.combined) {
+    yield put(combinedStatementsActions.refresh(action.payload));
+  } else {
+    try {
+      const result = yield call(getStatements);
+      yield put(actions.received(result));
+    } catch (e) {
+      yield put(actions.failed(e));
+    }
   }
 }
 

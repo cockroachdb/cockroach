@@ -20,11 +20,13 @@ import { transactionsSaga } from "./transactions";
 import { terminateSaga } from "./terminateQuery";
 import { notifificationsSaga } from "./notifications";
 import { sqlStatsSaga } from "./sqlStats";
+import { combinedStatementsSaga } from "./combinedStatements";
 
 export function* sagas(cacheInvalidationPeriod?: number) {
   yield all([
     fork(localStorageSaga),
     fork(statementsSaga, cacheInvalidationPeriod),
+    fork(combinedStatementsSaga, cacheInvalidationPeriod),
     fork(statementsDiagnosticsSagas, cacheInvalidationPeriod),
     fork(nodesSaga, cacheInvalidationPeriod),
     fork(livenessSaga, cacheInvalidationPeriod),
