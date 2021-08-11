@@ -28,6 +28,7 @@ import { nodeRegionsByIDSelector } from "src/redux/nodes";
 export const selectData = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
+    console.log(state);
     return state.data || null;
   },
 );

@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import _ from "lodash";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RequestError } from "../util";
 import { getBasePath } from "./basePath";
@@ -27,6 +28,20 @@ export function toArrayBuffer(encodedRequest: Uint8Array): ArrayBuffer {
     encodedRequest.byteOffset,
     encodedRequest.byteOffset + encodedRequest.byteLength,
   );
+}
+
+// propsToQueryString is a helper function that converts a set of object
+// properties to a query string
+// - keys with null or undefined values will be skipped
+// - non-string values will be toString'd
+export function propsToQueryString(props: { [k: string]: any }) {
+  return _.compact(
+    _.map(props, (v: any, k: string) =>
+      !_.isNull(v) && !_.isUndefined(v)
+        ? `${encodeURIComponent(k)}=${encodeURIComponent(v.toString())}`
+        : null,
+    ),
+  ).join("&");
 }
 
 /**

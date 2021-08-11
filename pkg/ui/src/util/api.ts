@@ -129,6 +129,8 @@ export type CreateStatementDiagnosticsReportResponseMessage = protos.cockroach.s
 export type StatementDiagnosticsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequest;
 export type StatementDiagnosticsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
 
+export type CombinedStatementsRequestMessage = protos.cockroach.server.serverpb.CombinedStatementsStatsRequest;
+
 export type ResetSQLStatsRequestMessage = protos.cockroach.server.serverpb.ResetSQLStatsRequest;
 export type ResetSQLStatsResponseMessage = protos.cockroach.server.serverpb.ResetSQLStatsResponse;
 
@@ -675,6 +677,22 @@ export function getStatements(
   return timeoutFetch(
     serverpb.StatementsResponse,
     `${STATUS_PREFIX}/statements`,
+    null,
+    timeout,
+  );
+}
+
+export function getStatementsByDate(
+  req: CombinedStatementsRequestMessage,
+  timeout?: moment.Duration,
+): Promise<StatementsResponseMessage> {
+  const queryStr = propsToQueryString({
+    start: req.start.toInt(),
+    end: req.end.toInt(),
+  });
+  return timeoutFetch(
+    serverpb.StatementsResponse,
+    `${STATUS_PREFIX}/combinedstmts?${queryStr}`,
     null,
     timeout,
   );

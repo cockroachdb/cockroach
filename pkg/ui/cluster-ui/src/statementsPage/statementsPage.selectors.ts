@@ -204,3 +204,8 @@ export const selectColumns = createSelector(
       ? localStorage["showColumns/StatementsPage"].split(",")
       : null,
 );
+
+export const selectDateRange = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["dateRange/StatementsPage"],
+);

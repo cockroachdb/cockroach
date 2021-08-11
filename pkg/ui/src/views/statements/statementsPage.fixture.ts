@@ -10,12 +10,15 @@
 
 import { StatementsPageProps } from "@cockroachlabs/cluster-ui";
 import { createMemoryHistory } from "history";
+import moment from "moment";
 import Long from "long";
 import * as protos from "src/js/protos";
 import {
   refreshStatementDiagnosticsRequests,
   refreshStatements,
 } from "src/redux/apiReducers";
+import { refreshCombinedStatementsAction } from "src/redux/statements";
+
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
@@ -182,6 +185,11 @@ const statementsPagePropsFixture: StatementsPageProps = {
     isExact: true,
     params: {},
   },
+
+  validStatementsDateRange: [
+    moment.utc("2021.08.08"),
+    moment.utc("2021.08.12"),
+  ],
   statements: [
     {
       label:
@@ -506,6 +514,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   dismissAlertMessage: () => {},
   refreshStatementDiagnosticsRequests: (() => {}) as typeof refreshStatementDiagnosticsRequests,
   refreshStatements: (() => {}) as typeof refreshStatements,
+  refreshCombinedStatements: (() => {}) as typeof refreshCombinedStatementsAction,
   onActivateStatementDiagnostics: (_) => {},
   onDiagnosticsModalOpen: (_) => {},
   onPageChanged: (_) => {},
