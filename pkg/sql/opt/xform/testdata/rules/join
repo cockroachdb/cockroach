@@ -64,6 +64,7 @@ CREATE TABLE virt (
   j INT NOT NULL,
   v1 INT AS (i + 10) VIRTUAL,
   v2 INT AS (i + 100) VIRTUAL,
+  v3 INT AS (i + j) VIRTUAL,
   CHECK (j IN (10, 20, 30))
 )
 ----
@@ -4133,6 +4134,67 @@ exec-ddl
 DROP INDEX partial_idx
 ----
 
+exec-ddl
+CREATE INDEX i_partial ON virt (i) WHERE v1 > 0
+----
+
+# Covering case with partial index predicate that references a virtual column.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.i AND v1 > 0
+----
+project
+ ├── columns: m:1!null v1:9!null
+ ├── immutable
+ ├── fd: (1)-->(9)
+ └── project
+      ├── columns: v1:9!null m:1!null i:7!null
+      ├── immutable
+      ├── fd: (7)-->(9), (1)==(7), (7)==(1)
+      ├── inner-join (lookup virt@i_partial,partial)
+      │    ├── columns: m:1!null i:7!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [7]
+      │    ├── fd: (1)==(7), (7)==(1)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── projections
+           └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+
+# Non-covering case with partial index predicate that references a virtual
+# column.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m, virt.j, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.i AND v1 > 0
+----
+project
+ ├── columns: m:1!null j:8!null v1:9!null
+ ├── immutable
+ ├── fd: (1)-->(9)
+ └── project
+      ├── columns: v1:9!null m:1!null i:7!null j:8!null
+      ├── immutable
+      ├── fd: (7)-->(9), (1)==(7), (7)==(1)
+      ├── inner-join (lookup virt)
+      │    ├── columns: m:1!null i:7!null j:8!null
+      │    ├── key columns: [6] = [6]
+      │    ├── lookup columns are key
+      │    ├── fd: (1)==(7), (7)==(1)
+      │    ├── inner-join (lookup virt@i_partial,partial)
+      │    │    ├── columns: m:1!null k:6!null i:7!null
+      │    │    ├── flags: force lookup join (into right side)
+      │    │    ├── key columns: [1] = [7]
+      │    │    ├── fd: (6)-->(7), (1)==(7), (7)==(1)
+      │    │    ├── scan small
+      │    │    │    └── columns: m:1
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── projections
+           └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+
+exec-ddl
+DROP INDEX i_partial
+----
+
 # Regression test for #63735. Ensure that the constant filter which maximally
 # constrains the lookup table is chosen when there is more than one option.
 # Here, the CHECK constraint establishes an implicit filter that constrains the
@@ -4237,33 +4299,6 @@ inner-join (lookup virt)
  │    └── filters (true)
  └── filters (true)
 
-# Non-covering. Extra filter on non-covered column. We do not support this yet.
-# TODO(mgartner): Generate lookup joins with virtual columns and extra filters
-# by handling the (Project (Select (Scan))) pattern on the right side of the
-# join.
-opt format=hide-all
-SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND i > 0
-----
-inner-join (hash)
- ├── flags: force lookup join (into right side)
- ├── scan small
- ├── project
- │    ├── select
- │    │    ├── scan virt
- │    │    │    ├── check constraint expressions
- │    │    │    │    └── j IN (10, 20, 30)
- │    │    │    └── computed column expressions
- │    │    │         ├── v1
- │    │    │         │    └── i + 10
- │    │    │         └── v2
- │    │    │              └── i + 100
- │    │    └── filters
- │    │         └── i > 0
- │    └── projections
- │         └── i + 10
- └── filters
-      └── m = v1
-
 # Do not generate a lookup join when the right side projects a column that is
 # not a virtual computed column.
 opt expect-not=GenerateLookupJoinsWithVirtualCols
@@ -4273,17 +4308,17 @@ FROM small INNER LOOKUP JOIN (
 ) tmp ON m = tmp.v1
 ----
 project
- ├── columns: m:1!null p:13
+ ├── columns: m:1!null p:14
  ├── immutable
  └── inner-join (hash)
-      ├── columns: m:1!null v1:9!null p:13
+      ├── columns: m:1!null v1:9!null p:14
       ├── flags: force lookup join (into right side)
       ├── immutable
       ├── fd: (1)==(9), (9)==(1)
       ├── scan small
       │    └── columns: m:1
       ├── project
-      │    ├── columns: p:13 v1:9
+      │    ├── columns: p:14 v1:9
       │    ├── immutable
       │    ├── scan virt
       │    │    ├── columns: i:7
@@ -4292,10 +4327,12 @@ project
       │    │    └── computed column expressions
       │    │         ├── v1:9
       │    │         │    └── i:7 + 10
-      │    │         └── v2:10
-      │    │              └── i:7 + 100
+      │    │         ├── v2:10
+      │    │         │    └── i:7 + 100
+      │    │         └── v3:11
+      │    │              └── i:7 + j:8
       │    └── projections
-      │         ├── i:7 + 5 [as=p:13, outer=(7), immutable]
+      │         ├── i:7 + 5 [as=p:14, outer=(7), immutable]
       │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
       └── filters
            └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
@@ -4322,8 +4359,10 @@ inner-join (hash)
  │    │    └── computed column expressions
  │    │         ├── v1:9
  │    │         │    └── i:7 + 10
- │    │         └── v2:10
- │    │              └── i:7 + 100
+ │    │         ├── v2:10
+ │    │         │    └── i:7 + 100
+ │    │         └── v3:11
+ │    │              └── i:7 + j:8
  │    └── projections
  │         ├── i:7 + 10 [as=v1:9, outer=(7), immutable]
  │         └── i:7 + 100 [as=v2:10, outer=(7), immutable]
@@ -4345,8 +4384,10 @@ project
       │    │    └── computed column expressions
       │    │         ├── v1
       │    │         │    └── i + 10
-      │    │         └── v2
-      │    │              └── i + 100
+      │    │         ├── v2
+      │    │         │    └── i + 100
+      │    │         └── v3
+      │    │              └── i + j
       │    └── projections
       │         └── i + 10
       └── filters
@@ -4365,12 +4406,14 @@ semi-join (hash)
  │    │    └── computed column expressions
  │    │         ├── v1
  │    │         │    └── i + 10
- │    │         └── v2
- │    │              └── i + 100
+ │    │         ├── v2
+ │    │         │    └── i + 100
+ │    │         └── v3
+ │    │              └── i + j
  │    └── projections
  │         └── i + 10
  └── filters
-      └── m = column13
+      └── m = column14
 
 # Do not generate lookup joins with virtual columns for anti-joins.
 opt expect-not=GenerateLookupJoinsWithVirtualCols format=hide-all
@@ -4385,12 +4428,14 @@ anti-join (hash)
  │    │    └── computed column expressions
  │    │         ├── v1
  │    │         │    └── i + 10
- │    │         └── v2
- │    │              └── i + 100
+ │    │         ├── v2
+ │    │         │    └── i + 100
+ │    │         └── v3
+ │    │              └── i + j
  │    └── projections
  │         └── i + 10
  └── filters
-      └── m = column13
+      └── m = column14
 
 exec-ddl
 DROP INDEX v1
@@ -4500,36 +4545,6 @@ inner-join (lookup virt@v2_i)
  │    └── columns: m:1
  └── filters (true)
 
-# Covering case with a cross join for multiple constant values for the leading
-# lookup column. We do not support this yet.
-# TODO(mgartner): Generate lookup joins with virtual columns and extra filters
-# by handling the (Project (Select (Scan))) pattern on the right side of the
-# join.
-opt
-SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON virt.i IN (1, 2, 3) AND m = virt.v1
-----
-inner-join (hash)
- ├── columns: m:1!null k:6!null v1:9!null
- ├── flags: force lookup join (into right side)
- ├── immutable
- ├── fd: (6)-->(9), (1)==(9), (9)==(1)
- ├── scan small
- │    └── columns: m:1
- ├── project
- │    ├── columns: v1:9!null k:6!null
- │    ├── immutable
- │    ├── key: (6)
- │    ├── fd: (6)-->(9)
- │    ├── scan virt@i_v1
- │    │    ├── columns: k:6!null i:7!null
- │    │    ├── constraint: /7/9/6: [/1 - /3]
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
- │    └── projections
- │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
- └── filters
-      └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
-
 exec-ddl
 DROP INDEX i_v1
 ----
@@ -4550,16 +4565,16 @@ SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1
 inner-join (lookup virt@j_v1)
  ├── columns: m:1!null k:6!null v1:9!null
  ├── flags: force lookup join (into right side)
- ├── key columns: [13 1] = [8 9]
+ ├── key columns: [14 1] = [8 9]
  ├── immutable
  ├── fd: (6)-->(9), (1)==(9), (9)==(1)
  ├── inner-join (cross)
- │    ├── columns: m:1 "lookup_join_const_col_@8":13!null
+ │    ├── columns: m:1 "lookup_join_const_col_@8":14!null
  │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── scan small
  │    │    └── columns: m:1
  │    ├── values
- │    │    ├── columns: "lookup_join_const_col_@8":13!null
+ │    │    ├── columns: "lookup_join_const_col_@8":14!null
  │    │    ├── cardinality: [3 - 3]
  │    │    ├── (10,)
  │    │    ├── (20,)
@@ -4581,15 +4596,15 @@ inner-join (lookup virt)
  ├── inner-join (lookup virt@j_v1)
  │    ├── columns: m:1!null k:6!null v1:9!null
  │    ├── flags: force lookup join (into right side)
- │    ├── key columns: [13 1] = [8 9]
+ │    ├── key columns: [14 1] = [8 9]
  │    ├── fd: (6)-->(1,9), (1)==(9), (9)==(1)
  │    ├── inner-join (cross)
- │    │    ├── columns: m:1 "lookup_join_const_col_@8":13!null
+ │    │    ├── columns: m:1 "lookup_join_const_col_@8":14!null
  │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    ├── scan small
  │    │    │    └── columns: m:1
  │    │    ├── values
- │    │    │    ├── columns: "lookup_join_const_col_@8":13!null
+ │    │    │    ├── columns: "lookup_join_const_col_@8":14!null
  │    │    │    ├── cardinality: [3 - 3]
  │    │    │    ├── (10,)
  │    │    │    ├── (20,)
@@ -4602,83 +4617,758 @@ exec-ddl
 DROP INDEX j_v1
 ----
 
+
+# --------------------------------------------------
+# GenerateLookupJoinsWithVirtualColsAndFilter
+# --------------------------------------------------
+
 exec-ddl
 CREATE INDEX v1_storing_i ON virt (v1) STORING (i)
 ----
 
 # Covering case. Virtual column is the lookup column and there is an extra
-# filter on the non-virtual column. We do not support this yet.
-# TODO(mgartner): Generate lookup joins with virtual columns and extra filters
-# by handling the (Project (Select (Scan))) pattern on the right side of the
-# join.
-opt format=hide-all
-SELECT m, virt.i, virt.v2 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND i > 0
+# filter on the non-virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND i > 0
 ----
 project
- └── inner-join (hash)
+ ├── columns: m:1!null i:7!null
+ ├── immutable
+ ├── fd: (7)-->(1)
+ └── inner-join (lookup virt@v1_storing_i)
+      ├── columns: m:1!null i:7!null v1:9!null
       ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [9]
+      ├── immutable
+      ├── fd: (7)-->(9), (1)==(9), (9)==(1)
       ├── scan small
-      ├── project
-      │    ├── select
-      │    │    ├── scan virt
-      │    │    │    ├── check constraint expressions
-      │    │    │    │    └── j IN (10, 20, 30)
-      │    │    │    └── computed column expressions
-      │    │    │         ├── v1
-      │    │    │         │    └── i + 10
-      │    │    │         └── v2
-      │    │    │              └── i + 100
-      │    │    └── filters
-      │    │         └── i > 0
-      │    └── projections
-      │         ├── i + 10
-      │         └── i + 100
+      │    └── columns: m:1
       └── filters
-           └── m = v1
+           └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+
+# Covering case. Virtual column is the lookup column and there is an extra
+# filter on the non-virtual column, but the column is not selected. We do not
+# handle this case yet.
+# TODO(mgartner): We could handle this by wrapping the lookup join in an
+# IndexJoin to fetch i and filter by it, then wrapping the index join in a
+# Project that removes i.
+opt
+SELECT m, virt.k FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND i > 0
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── immutable
+ ├── fd: (6)-->(1)
+ └── inner-join (hash)
+      ├── columns: m:1!null k:6!null v1:9!null
+      ├── flags: force lookup join (into right side)
+      ├── immutable
+      ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      ├── project
+      │    ├── columns: v1:9!null k:6!null
+      │    ├── immutable
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(9)
+      │    ├── select
+      │    │    ├── columns: k:6!null i:7!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7)
+      │    │    ├── scan virt
+      │    │    │    ├── columns: k:6!null i:7
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── v1:9
+      │    │    │    │    │    └── i:7 + 10
+      │    │    │    │    ├── v2:10
+      │    │    │    │    │    └── i:7 + 100
+      │    │    │    │    └── v3:11
+      │    │    │    │         └── i:7 + j:8
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7)
+      │    │    └── filters
+      │    │         └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+      │    └── projections
+      │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+      └── filters
+           └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Non-covering case. Virtual column is the lookup column and there is an extra
+# filter on a column not in the index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND j > 0
+----
+project
+ ├── columns: m:1!null j:8!null
+ ├── immutable
+ └── inner-join (lookup virt)
+      ├── columns: m:1!null j:8!null v1:9!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (1)==(9), (9)==(1)
+      ├── inner-join (lookup virt@v1_storing_i)
+      │    ├── columns: m:1!null k:6!null v1:9!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [9]
+      │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── filters
+           └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+
+# Non-covering case. Virtual column is the lookup column and there is an extra
+# filter on a column not in the index, but the column is not selected. We do not
+# handle this case yet.
+# TODO(mgartner): We could handle this by wrapping the lookup join in an
+# IndexJoin to fetch i and filter by it, then wrapping the index join in a
+# Project that removes i.
+opt
+SELECT m, virt.k FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND j > 0
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── immutable
+ ├── fd: (6)-->(1)
+ └── inner-join (hash)
+      ├── columns: m:1!null k:6!null v1:9!null
+      ├── flags: force lookup join (into right side)
+      ├── immutable
+      ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      ├── project
+      │    ├── columns: v1:9 k:6!null
+      │    ├── immutable
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(9)
+      │    ├── select
+      │    │    ├── columns: k:6!null i:7 j:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7,8)
+      │    │    ├── scan virt
+      │    │    │    ├── columns: k:6!null i:7 j:8!null
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── v1:9
+      │    │    │    │    │    └── i:7 + 10
+      │    │    │    │    ├── v2:10
+      │    │    │    │    │    └── i:7 + 100
+      │    │    │    │    └── v3:11
+      │    │    │    │         └── i:7 + j:8
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7,8)
+      │    │    └── filters
+      │    │         └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │    └── projections
+      │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+      └── filters
+           └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
 
 exec-ddl
 DROP INDEX v1_storing_i
 ----
 
 exec-ddl
+CREATE INDEX i_v1 ON virt (i, v1)
+----
+
+# Covering case.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON virt.i = 1 AND m = virt.v1
+----
+inner-join (lookup virt@i_v1)
+ ├── columns: m:1!null k:6!null v1:9!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [14 1] = [7 9]
+ ├── immutable
+ ├── fd: ()-->(1,9), (1)==(9), (9)==(1)
+ ├── project
+ │    ├── columns: "lookup_join_const_col_@7":14!null m:1
+ │    ├── fd: ()-->(14)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── projections
+ │         └── 1 [as="lookup_join_const_col_@7":14]
+ └── filters (true)
+
+# Non-covering case.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j FROM small INNER LOOKUP JOIN virt ON virt.i = 1 AND m = virt.v1
+----
+project
+ ├── columns: m:1!null j:8!null
+ ├── immutable
+ ├── fd: ()-->(1)
+ └── inner-join (lookup virt)
+      ├── columns: m:1!null j:8!null v1:9!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: ()-->(1,9), (1)==(9), (9)==(1)
+      ├── inner-join (lookup virt@i_v1)
+      │    ├── columns: m:1!null k:6!null v1:9!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [14 1] = [7 9]
+      │    ├── fd: ()-->(1,9), (1)==(9), (9)==(1)
+      │    ├── project
+      │    │    ├── columns: "lookup_join_const_col_@7":14!null m:1
+      │    │    ├── fd: ()-->(14)
+      │    │    ├── scan small
+      │    │    │    └── columns: m:1
+      │    │    └── projections
+      │    │         └── 1 [as="lookup_join_const_col_@7":14]
+      │    └── filters (true)
+      └── filters (true)
+
+# Covering case with a cross join for multiple constant values for the leading
+# lookup column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON virt.i IN (1, 2, 3) AND m = virt.v1
+----
+inner-join (lookup virt@i_v1)
+ ├── columns: m:1!null k:6!null v1:9!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [14 1] = [7 9]
+ ├── immutable
+ ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ ├── inner-join (cross)
+ │    ├── columns: m:1 "lookup_join_const_col_@7":14!null
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    ├── values
+ │    │    ├── columns: "lookup_join_const_col_@7":14!null
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── (1,)
+ │    │    ├── (2,)
+ │    │    └── (3,)
+ │    └── filters (true)
+ └── filters (true)
+
+# Non-covering case with a cross join for multiple constant values for the
+# leading lookup column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j, virt.v1 FROM small INNER LOOKUP JOIN virt ON virt.i IN (1, 2, 3) AND m = virt.v1
+----
+inner-join (lookup virt)
+ ├── columns: m:1!null j:8!null v1:9!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (1)==(9), (9)==(1)
+ ├── inner-join (lookup virt@i_v1)
+ │    ├── columns: m:1!null k:6!null v1:9!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [14 1] = [7 9]
+ │    ├── fd: (6)-->(1,9), (1)==(9), (9)==(1)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: m:1 "lookup_join_const_col_@7":14!null
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1
+ │    │    ├── values
+ │    │    │    ├── columns: "lookup_join_const_col_@7":14!null
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── (1,)
+ │    │    │    ├── (2,)
+ │    │    │    └── (3,)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── filters (true)
+
+# Do not generate a lookup join when the right side projects a column that is
+# not a virtual computed column.
+opt expect-not=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, tmp.p
+FROM small INNER LOOKUP JOIN (
+  SELECT v1, i, i + 5 AS p FROM virt
+) tmp ON tmp.i = 1 AND m = tmp.v1
+----
+project
+ ├── columns: m:1!null p:14!null
+ ├── immutable
+ ├── fd: ()-->(1,14)
+ └── inner-join (hash)
+      ├── columns: m:1!null v1:9!null p:14!null
+      ├── flags: force lookup join (into right side)
+      ├── immutable
+      ├── fd: ()-->(1,9,14), (1)==(9), (9)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      ├── project
+      │    ├── columns: p:14!null v1:9!null
+      │    ├── immutable
+      │    ├── fd: ()-->(9,14)
+      │    ├── scan virt@i_v1
+      │    │    ├── columns: i:7!null
+      │    │    ├── constraint: /7/9/6: [/1/11 - /1/11]
+      │    │    └── fd: ()-->(7)
+      │    └── projections
+      │         ├── i:7 + 5 [as=p:14, outer=(7), immutable]
+      │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+      └── filters
+           └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Do not generate a lookup join when all the projected virtual columns cannot
+# be produced from a single index.
+opt expect-not=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.v1, virt.v2 FROM small INNER LOOKUP JOIN virt ON virt.i = 1 AND m = virt.v1
+----
+inner-join (hash)
+ ├── columns: m:1!null v1:9!null v2:10!null
+ ├── flags: force lookup join (into right side)
+ ├── immutable
+ ├── fd: ()-->(1,9,10), (1)==(9), (9)==(1)
+ ├── scan small
+ │    └── columns: m:1
+ ├── project
+ │    ├── columns: v1:9!null v2:10!null
+ │    ├── immutable
+ │    ├── fd: ()-->(9,10)
+ │    ├── scan virt@i_v1
+ │    │    ├── columns: i:7!null
+ │    │    ├── constraint: /7/9/6: [/1/11 - /1/11]
+ │    │    └── fd: ()-->(7)
+ │    └── projections
+ │         ├── i:7 + 10 [as=v1:9, outer=(7), immutable]
+ │         └── i:7 + 100 [as=v2:10, outer=(7), immutable]
+ └── filters
+      └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Do not generate lookup joins with virtual columns for left joins.
+opt expect-not=GenerateLookupJoinsWithVirtualColsAndFilter format=hide-all
+SELECT m, virt.k FROM small LEFT LOOKUP JOIN virt ON virt.i = 1 AND m = virt.v1
+----
+project
+ └── left-join (hash)
+      ├── flags: force lookup join (into right side)
+      ├── scan small
+      ├── project
+      │    ├── scan virt@i_v1
+      │    │    └── constraint: /7/9/6: [/1/11 - /1/11]
+      │    └── projections
+      │         └── i + 10
+      └── filters
+           └── m = v1
+
+# Do not generate lookup joins with virtual columns for semi-joins.
+opt expect-not=GenerateLookupJoinsWithVirtualColsAndFilter format=hide-all
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE virt.i = 1 AND m = virt.v1)
+----
+project
+ └── project
+      └── inner-join (cross)
+           ├── select
+           │    ├── scan small
+           │    └── filters
+           │         └── m = 11
+           ├── scan virt@i_v1
+           │    ├── constraint: /7/9/6: [/1/11 - /1/11]
+           │    └── limit: 1
+           └── filters (true)
+
+# Do not generate lookup joins with virtual columns for anti-joins.
+opt expect-not=GenerateLookupJoinsWithVirtualColsAndFilter format=hide-all
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE virt.i = 1 AND m = virt.v1)
+----
+anti-join (cross)
+ ├── scan small
+ ├── scan virt@i_v1
+ │    └── constraint: /7/9/6: [/1/11 - /1/11]
+ └── filters
+      └── m = 11
+
+exec-ddl
+DROP INDEX i_v1
+----
+
+exec-ddl
 CREATE INDEX v1_partial ON virt (v1) WHERE k > 0
 ----
 
-# Covering case with partial index. We do not support this yet.
-# TODO(mgartner): Generate lookup joins with virtual columns indexed by partial
-# indexes by handling the (Project (Select (Scan))) pattern on the right side of
-# the join.
-opt format=hide-all
+# Covering case with partial index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
 SELECT m, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND k > 0
 ----
-inner-join (hash)
+inner-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1!null v1:9!null
  ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── fd: (1)==(9), (9)==(1)
  ├── scan small
- ├── project
- │    ├── scan virt
- │    │    └── constraint: /6: [/1 - ]
- │    └── projections
- │         └── i + 10
- └── filters
-      └── m = v1
+ │    └── columns: m:1
+ └── filters (true)
 
-# Non-covering case with partial index. We do not support this yet.
-# TODO(mgartner): Generate lookup joins with virtual columns indexed by partial
-# indexes by handling the (Project (Select (Scan))) pattern on the right side of
-# the join.
-opt format=hide-all
+# Non-covering case with partial index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
 SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND k > 0
 ----
-inner-join (hash)
+inner-join (lookup virt)
+ ├── columns: m:1!null i:7 v1:9!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)-->(9), (1)==(9), (9)==(1)
+ ├── inner-join (lookup virt@v1_partial,partial)
+ │    ├── columns: m:1!null k:6!null v1:9!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+exec-ddl
+DROP INDEX v1_partial
+----
+
+exec-ddl
+CREATE INDEX v1_partial ON virt (v1) WHERE v1 > 0
+----
+
+# Covering case with partial index predicate that reference the indexed virtual
+# column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND v1 > 0
+----
+inner-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1!null v1:9!null
  ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── fd: (1)==(9), (9)==(1)
+ ├── select
+ │    ├── columns: m:1!null
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters
+ │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ └── filters (true)
+
+# Non-covering case with partial index predicate that references the indexed
+# virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND v1 > 0
+----
+inner-join (lookup virt)
+ ├── columns: m:1!null i:7!null v1:9!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)-->(9), (1)==(9), (9)==(1)
+ ├── inner-join (lookup virt@v1_partial,partial)
+ │    ├── columns: m:1!null k:6!null v1:9!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ │    ├── select
+ │    │    ├── columns: m:1!null
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1
+ │    │    └── filters
+ │    │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    └── filters (true)
+ └── filters (true)
+
+exec-ddl
+DROP INDEX v1_partial
+----
+
+exec-ddl
+CREATE INDEX v1_partial ON virt (v1) WHERE v2 > 0
+----
+
+# Covering case with partial index predicate that references another virtual
+# column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND v2 > 0
+----
+inner-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1!null v1:9!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── fd: (1)==(9), (9)==(1)
  ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Non-covering case with partial index predicate that references another virtual
+# column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND v2 > 0
+----
+inner-join (lookup virt)
+ ├── columns: m:1!null i:7!null v1:9!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)-->(9), (1)==(9), (9)==(1)
+ ├── inner-join (lookup virt@v1_partial,partial)
+ │    ├── columns: m:1!null k:6!null v1:9!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+exec-ddl
+DROP INDEX v1_partial
+----
+
+exec-ddl
+CREATE INDEX v3_partial ON virt (v3) WHERE v3 > 0
+----
+
+# Covering case with a more complex partial index predicate that references the
+# indexed virtual column.
+opt
+SELECT m, virt.k, virt.v3 FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0 AND m > 0
+----
+inner-join (lookup virt@v3_partial,partial)
+ ├── columns: m:1!null k:6!null v3:11!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [11]
+ ├── immutable
+ ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+ ├── select
+ │    ├── columns: m:1!null
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters
+ │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ └── filters (true)
+
+# Non-covering case with a more complex partial index predicate that references
+# the indexed virtual column.
+opt
+SELECT m, virt.i, virt.v3 FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0 AND m > 0
+----
+inner-join (lookup virt)
+ ├── columns: m:1!null i:7 v3:11!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (1)==(11), (11)==(1)
+ ├── inner-join (lookup virt@v3_partial,partial)
+ │    ├── columns: m:1!null k:6!null v3:11!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [11]
+ │    ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+ │    ├── select
+ │    │    ├── columns: m:1!null
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1
+ │    │    └── filters
+ │    │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    └── filters (true)
+ └── filters (true)
+
+exec-ddl
+DROP INDEX v3_partial
+----
+
+exec-ddl
+CREATE INDEX v3_partial ON virt (v3) STORING (i) WHERE i > 0 OR j > 0 OR virt.v2 > 0 OR virt.v3 > 0
+----
+
+# We can generate a lookup join with filters remaining after partial index
+# implication if the index contains columns in the remaining filter and those
+# columns are output by the Project.
+# projected.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.i FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND i > 0
+----
+project
+ ├── columns: m:1!null k:6!null i:7!null
+ ├── immutable
+ ├── fd: (6)-->(1,7)
+ └── inner-join (lookup virt@v3_partial,partial)
+      ├── columns: m:1!null k:6!null i:7!null v3:11!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [11]
+      ├── immutable
+      ├── fd: (6)-->(7,11), (1)==(11), (11)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters
+           └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+
+# We can generate a lookup join with filters remaining after partial index
+# implication if the index does not contain columns in the remaining filter,
+# as long as those columns are output by the Project.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.j FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND j > 0
+----
+project
+ ├── columns: m:1!null k:6!null j:8!null
+ ├── immutable
+ ├── fd: (6)-->(1,8)
+ └── inner-join (lookup virt)
+      ├── columns: m:1!null k:6!null j:8!null v3:11!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (6)-->(8,11), (1)==(11), (11)==(1)
+      ├── inner-join (lookup virt@v3_partial,partial)
+      │    ├── columns: m:1!null k:6!null v3:11!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [11]
+      │    ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── filters
+           └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+
+# We can generate a lookup join with filters remaining after partial index
+# implication that contain a virtual column if the columns referenced in the
+# virtual column expression are output by the Project.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.i, virt.j FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0
+----
+project
+ ├── columns: m:1!null k:6!null i:7 j:8!null
+ ├── immutable
+ ├── fd: (6)-->(7,8), (7,8)-->(1)
+ └── inner-join (lookup virt)
+      ├── columns: m:1!null k:6!null i:7 j:8!null v3:11!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (6)-->(7,8), (7,8)-->(11), (1)==(11), (11)==(1)
+      ├── inner-join (lookup virt@v3_partial,partial)
+      │    ├── columns: m:1!null k:6!null i:7 v3:11!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [11]
+      │    ├── fd: (6)-->(7,11), (1)==(11), (11)==(1)
+      │    ├── select
+      │    │    ├── columns: m:1!null
+      │    │    ├── scan small
+      │    │    │    └── columns: m:1
+      │    │    └── filters
+      │    │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+      │    └── filters (true)
+      └── filters
+           └── (i:7 + j:8) > 0 [outer=(7,8), immutable]
+
+# We cannot currently generate a lookup join with filters remaining after
+# partial index implication that contain a virtual column if the columns
+# referenced in the virtual column expression are not output by the Project.
+# TODO(mgartner): We could handle this by wrapping the lookup join in an index
+# join to fetch i and j, and filter by them, then wrapping the index join in a
+# Project that removes i.
+opt
+SELECT m, virt.k, virt.v3 FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0
+----
+inner-join (hash)
+ ├── columns: m:1!null k:6!null v3:11!null
+ ├── flags: force lookup join (into right side)
+ ├── immutable
+ ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+ ├── select
+ │    ├── columns: m:1!null
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters
+ │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
  ├── project
- │    ├── scan virt
- │    │    └── constraint: /6: [/1 - ]
+ │    ├── columns: v3:11 k:6!null
+ │    ├── immutable
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(11)
+ │    ├── select
+ │    │    ├── columns: k:6!null i:7 j:8!null
+ │    │    ├── immutable
+ │    │    ├── key: (6)
+ │    │    ├── fd: (6)-->(7,8)
+ │    │    ├── scan virt
+ │    │    │    ├── columns: k:6!null i:7 j:8!null
+ │    │    │    ├── check constraint expressions
+ │    │    │    │    └── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │    │    ├── computed column expressions
+ │    │    │    │    ├── v1:9
+ │    │    │    │    │    └── i:7 + 10
+ │    │    │    │    ├── v2:10
+ │    │    │    │    │    └── i:7 + 100
+ │    │    │    │    └── v3:11
+ │    │    │    │         └── i:7 + j:8
+ │    │    │    ├── partial index predicates
+ │    │    │    │    └── v3_partial: filters
+ │    │    │    │         └── (((i:7 > 0) OR (j:8 > 0)) OR (i:7 > -100)) OR ((i:7 + j:8) > 0) [outer=(7,8), immutable]
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7,8)
+ │    │    └── filters
+ │    │         └── (i:7 + j:8) > 0 [outer=(7,8), immutable]
  │    └── projections
- │         └── i + 10
+ │         └── i:7 + j:8 [as=v3:11, outer=(7,8), immutable]
  └── filters
-      └── m = v1
+      └── m:1 = v3:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+
+# We cannot currently generate a lookup join with filters remaining after
+# partial index implication if the columns in the remaining filter are not
+# output by the Project.
+# TODO(mgartner): We could handle this by wrapping the lookup join in an index
+# join to fetch i and filter by it, then wrapping the IndexJoin in a Project
+# that removes i.
+opt
+SELECT m, virt.k FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND i > 0
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── immutable
+ ├── fd: (6)-->(1)
+ └── inner-join (hash)
+      ├── columns: m:1!null k:6!null v3:11!null
+      ├── flags: force lookup join (into right side)
+      ├── immutable
+      ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      ├── project
+      │    ├── columns: v3:11!null k:6!null
+      │    ├── immutable
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(11)
+      │    ├── select
+      │    │    ├── columns: k:6!null i:7!null j:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7,8)
+      │    │    ├── scan virt
+      │    │    │    ├── columns: k:6!null i:7 j:8!null
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── v1:9
+      │    │    │    │    │    └── i:7 + 10
+      │    │    │    │    ├── v2:10
+      │    │    │    │    │    └── i:7 + 100
+      │    │    │    │    └── v3:11
+      │    │    │    │         └── i:7 + j:8
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── v3_partial: filters
+      │    │    │    │         └── (((i:7 > 0) OR (j:8 > 0)) OR (i:7 > -100)) OR ((i:7 + j:8) > 0) [outer=(7,8), immutable]
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7,8)
+      │    │    └── filters
+      │    │         └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+      │    └── projections
+      │         └── i:7 + j:8 [as=v3:11, outer=(7,8), immutable]
+      └── filters
+           └── m:1 = v3:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+
+exec-ddl
+DROP INDEX v3_partial
+----
 
 
 # -------------------------------------------------------
