@@ -270,7 +270,7 @@ func TestDeterministicInitialData(t *testing.T) {
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
 		`tpcc`:       0xab32e4f5e899eb2f,
-		`tpch`:       0xdd952207e22aa577,
+		`tpch`:       0x65a1e18ddf4e59aa,
 		`ycsb`:       0x1244ea1c29ef67f6,
 	}
 
