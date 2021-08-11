@@ -13,53 +13,44 @@ import { throwError } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
-import { getStatements } from "src/api/statementsApi";
-import {
-  receivedStatementsSaga,
-  refreshStatementsSaga,
-  requestStatementsSaga,
-} from "./statements.sagas";
-import { actions, reducer, StatementsState } from "./statements.reducer";
-import * as combinedStatements from "src/store/combinedStatements";
 import { getCombinedStatements } from "src/api/statementsApi";
+import {
+  receivedCombinedStatementsSaga,
+  refreshCombinedStatementsSaga,
+  requestCombinedStatementsSaga,
+} from "./combinedStatements.sagas";
+import {
+  actions,
+  reducer,
+  CombinedStatementsState,
+} from "./combinedStatements.reducer";
+import { selectLocalStorageDateRange } from "src/statementsPage/statementsPage.selectors";
+import moment from "moment";
 
 describe("StatementsPage sagas", () => {
   const statements = new cockroach.server.serverpb.StatementsResponse({
     statements: [],
     last_reset: null,
   });
+  const req = new cockroach.server.serverpb.StatementsRequest({
+    combined: true,
+  });
 
-  describe("refreshStatementsSaga", () => {
+  describe("refreshCombinedStatementsSaga", () => {
     it("dispatches request statements action", () => {
-      expectSaga(refreshStatementsSaga)
-        .put(actions.request())
+      expectSaga(refreshCombinedStatementsSaga, req)
+        .put(actions.request(req))
         .run();
     });
   });
 
-  describe("requestStatementsSaga", () => {
+  describe("requestCombinedStatementsSaga", () => {
     it("successfully requests statements list", () => {
-      expectSaga(requestStatementsSaga)
-        .provide([[matchers.call.fn(getStatements), statements]])
+      expectSaga(requestCombinedStatementsSaga, req)
+        .provide([[matchers.call.fn(getCombinedStatements), statements]])
         .put(actions.received(statements))
         .withReducer(reducer)
-        .hasFinalState<StatementsState>({
-          data: statements,
-          lastError: null,
-          valid: true,
-        })
-        .run();
-    });
-
-    it("successfully requests from combined statement if combined=true in the request message", () => {
-      const req = new cockroach.server.serverpb.StatementsRequest({
-        combined: true,
-      });
-      expectSaga(requestStatementsSaga, req)
-        .provide([[matchers.call.fn(getCombinedStatements), statements]])
-        .put(combinedStatements.actions.received(statements))
-        .withReducer(combinedStatements.reducer)
-        .hasFinalState<combinedStatements.CombinedStatementsState>({
+        .hasFinalState<CombinedStatementsState>({
           data: statements,
           lastError: null,
           valid: true,
@@ -69,11 +60,11 @@ describe("StatementsPage sagas", () => {
 
     it("returns error on failed request", () => {
       const error = new Error("Failed request");
-      expectSaga(requestStatementsSaga)
-        .provide([[matchers.call.fn(getStatements), throwError(error)]])
+      expectSaga(requestCombinedStatementsSaga, req)
+        .provide([[matchers.call.fn(getCombinedStatements), throwError(error)]])
         .put(actions.failed(error))
         .withReducer(reducer)
-        .hasFinalState<StatementsState>({
+        .hasFinalState<CombinedStatementsState>({
           data: null,
           lastError: error,
           valid: false,
@@ -85,7 +76,7 @@ describe("StatementsPage sagas", () => {
   describe("receivedStatementsSaga", () => {
     it("sets valid status to false after specified period of time", () => {
       const timeout = 500;
-      expectSaga(receivedStatementsSaga, timeout)
+      expectSaga(receivedCombinedStatementsSaga, timeout)
         .delay(timeout)
         .put(actions.invalidated())
         .withReducer(reducer, {
@@ -93,7 +84,7 @@ describe("StatementsPage sagas", () => {
           lastError: null,
           valid: true,
         })
-        .hasFinalState<StatementsState>({
+        .hasFinalState<CombinedStatementsState>({
           data: statements,
           lastError: null,
           valid: false,
