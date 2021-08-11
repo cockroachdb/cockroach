@@ -26,7 +26,8 @@ import {
   nodeDisplayNameByIDSelector,
   nodeRegionsByIDSelector,
 } from "../store/nodes";
-import { actions as statementActions } from "src/store/statements";
+import { actions as combinedStatementsActions } from "src/store/combinedStatements";
+import { actions as statementsActions } from "src/store/combinedStatements";
 import {
   actions as statementDiagnosticsActions,
   selectDiagnosticsReportsByStatementFingerprint,
@@ -35,13 +36,15 @@ import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
+import { selectDateRange } from "../statementsPage/statementsPage.selectors";
 
 const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
   const statement = selectStatement(state, props);
   const statementFingerprint = statement?.statement;
   return {
     statement,
-    statementsError: state.adminUI.statements.lastError,
+    statementsError: state.adminUI.combinedStatements.lastError,
+    dateRange: state.adminUI.uiConfig.isTenant ? null : selectDateRange(state),
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
@@ -55,7 +58,9 @@ const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementDetailsDispatchProps => ({
-  refreshStatements: () => dispatch(statementActions.refresh()),
+  refreshStatements: () => dispatch(statementsActions.refresh()),
+  refreshCombinedStatements: () =>
+    dispatch(combinedStatementsActions.refresh()),
   refreshStatementDiagnosticsRequests: () =>
     dispatch(statementDiagnosticsActions.refresh()),
   refreshNodes: () => dispatch(nodesActions.refresh()),
