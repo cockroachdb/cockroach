@@ -12,6 +12,7 @@ package instancestorage_test
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -79,6 +80,8 @@ func TestStorage(t *testing.T) {
 			instanceID, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), addr)
 			require.NoError(t, err)
 			require.Equal(t, id, instanceID)
+			query := fmt.Sprintf("use '%s'", t.Name())
+			tDB.Exec(t, query)
 		}
 	})
 	t.Run("release-instance-get-all-instances", func(t *testing.T) {

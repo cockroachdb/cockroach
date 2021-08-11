@@ -12,6 +12,7 @@ package instancestorage_test
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -19,56 +20,62 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 // TestReader verifies that instancereader retrieves SQL instance data correctly.
+// TODO(rima): Update tests with rangefeed related tests.
 func TestReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	tDB := sqlutils.MakeSQLRunner(sqlDB)
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	tDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	dbName := t.Name()
+	s := tc.Server(0)
 	setup := func(t *testing.T) (
 		*stop.Stopper, *instancestorage.Storage, *slstorage.FakeStorage, *hlc.Clock, *instancestorage.Reader,
 	) {
-		dbName := t.Name()
+		fmt.Printf("DB name %s\n", dbName)
 		tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
 		schema := strings.Replace(systemschema.SQLInstancesTableSchema,
 			`CREATE TABLE system.sql_instances`,
 			`CREATE TABLE "`+dbName+`".sql_instances`, 1)
 		tDB.Exec(t, schema)
 		tableID := getTableID(t, tDB, dbName, "sql_instances")
-		clock := hlc.NewClock(func() int64 {
-			return timeutil.NewTestTimeSource().Now().UnixNano()
-		}, base.DefaultMaxClockOffset)
-		stopper := stop.NewStopper()
+		f, err := rangefeed.NewFactory(s.Stopper(), s.DB(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
 		slStorage := slstorage.NewFakeStorage()
-		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage)
-		reader := instancestorage.NewReader(storage, slStorage)
-		return stopper, storage, slStorage, clock, reader
+		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, tableID, slStorage)
+		reader := instancestorage.NewTestingReader(storage, slStorage, f, keys.SystemSQLCodec, tableID, s.Clock(), s.Stopper())
+		return s.Stopper(), storage, slStorage, s.Clock(), reader
 	}
 
 	t.Run("basic-get-instance-data", func(t *testing.T) {
-		stopper, storage, slStorage, clock, reader := setup(t)
-		defer stopper.Stop(ctx)
+		_, storage, slStorage, clock, reader := setup(t)
+		require.NoError(t, reader.Start(ctx))
 		const sessionID = sqlliveness.SessionID("session_id")
 		const addr = "addr"
-		const expiration = time.Minute
+		const expiration = 10 * time.Hour
 		{
 			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 			id, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addr)
@@ -79,9 +86,16 @@ func TestReader(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			instanceInfo, err := reader.GetInstance(ctx, id)
-			require.NoError(t, err)
-			require.Equal(t, addr, instanceInfo.InstanceAddr)
+			testutils.SucceedsSoon(t, func() error {
+				instanceInfo, err := reader.GetInstance(ctx, id)
+				if err != nil {
+					return err
+				}
+				if addr != instanceInfo.InstanceAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", addr, instanceInfo.InstanceAddr)
+				}
+				return nil
+			})
 		}
 	})
 	t.Run("release-instance-get-all-instances", func(t *testing.T) {
