@@ -707,6 +707,69 @@ func TestFilterBucket(t *testing.T) {
 		runTest(h3, t3, types.StringFamily)
 	})
 
+	t.Run("bytes", func(t *testing.T) {
+		h1 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDBytes("bear"))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDBytes("bobcat")},
+		}}
+		h2 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDBytes("a"))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDBytes("c")},
+		}}
+		h3 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDBytes("aaaaaaaaaaaa"))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDBytes("cccccccccccc")},
+		}}
+
+		t1 := []testCase{
+			{
+				span:     "[/bluejay - /boar]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.92, DistinctRange: 2.92, UpperBound: tree.NewDBytes("boar")},
+			},
+			{
+				span:     "[/beer - /bobcat]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 9.98, DistinctRange: 9.98, UpperBound: tree.NewDBytes("bobcat")},
+			},
+		}
+
+		t2 := []testCase{
+			// Within the CRDB encoding, all null bytes are followed by an escape byte,
+			// (255) which are left in for the rangeAfter calculations. For this
+			// reason, the resulting NumRange is slightly lower than expected at 4.99
+			// instead of 5.
+			{
+				span:     "[/a\x00 - /b]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 4.99, DistinctRange: 4.99, UpperBound: tree.NewDBytes("b")},
+			},
+			{
+				span:     "[/as - /b]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.76, DistinctRange: 2.76, UpperBound: tree.NewDBytes("b")},
+			},
+			{
+				span:     "[/as - /c]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 7.77, DistinctRange: 7.77, UpperBound: tree.NewDBytes("c")},
+			},
+			{
+				span:     "[/bs - /c]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 2.76, DistinctRange: 2.76, UpperBound: tree.NewDBytes("c")},
+			},
+		}
+
+		// The initial 8 bytes for lowerBound and upperBound of the span is the same.
+		// Hence, the resulting NumRange/DistinctRange should be 0, as rangeAfter
+		// only considers the first 8 bytes of the bounds.
+		t3 := []testCase{
+			{
+				span:     "[/aaaaaaaabbbb - /aaaaaaaacccc]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDBytes("aaaaaaaacccc")},
+			},
+		}
+
+		runTest(h1, t1, types.BytesFamily)
+		runTest(h2, t2, types.BytesFamily)
+		runTest(h3, t3, types.BytesFamily)
+	})
+
 	t.Run("uuid", func(t *testing.T) {
 		l1, err := tree.ParseDUuidFromString("2189ad07-52f2-4d60-83e8-4a8347fef718")
 		if err != nil {

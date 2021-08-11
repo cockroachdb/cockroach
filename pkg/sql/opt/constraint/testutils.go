@@ -151,6 +151,8 @@ func parseDatumPath(evalCtx *tree.EvalContext, str string, typs []types.Family) 
 			val, _, err = tree.ParseDTimestampTZ(evalCtx, valStr, time.Microsecond)
 		case types.StringFamily:
 			val = tree.NewDString(valStr)
+		case types.BytesFamily:
+			val = tree.NewDBytes(tree.DBytes(valStr))
 		case types.OidFamily:
 			dInt, err := tree.ParseDInt(valStr)
 			if err == nil {
