@@ -1,0 +1,85 @@
+statement ok
+CREATE USER test1;
+CREATE USER test2;
+GRANT test1 TO ROOT;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 GRANT SELECT ON TABLES TO test2;
+
+statement error pq: role test1 cannot be dropped because some objects depend on it\nowner of default privileges on new relations belonging to role test1
+DROP ROLE test1
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations belonging to role test1
+DROP ROLE test2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 REVOKE SELECT ON TABLES FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 GRANT USAGE ON SCHEMAS TO test2;
+
+statement error pq: role test1 cannot be dropped because some objects depend on it\nowner of default privileges on new schemas belonging to role test1
+DROP ROLE test1
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new schemas belonging to role test1
+DROP ROLE test2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 REVOKE USAGE ON SCHEMAS FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 GRANT USAGE ON TYPES TO test2;
+
+statement error pq: role test1 cannot be dropped because some objects depend on it\nowner of default privileges on new types belonging to role test1
+DROP ROLE test1
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new types belonging to role test1
+DROP ROLE test2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 REVOKE USAGE ON TYPES FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 GRANT SELECT ON SEQUENCES TO test2;
+
+statement error pq: role test1 cannot be dropped because some objects depend on it\nowner of default privileges on new sequences belonging to role test1
+DROP ROLE test1
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new sequences belonging to role test1
+DROP ROLE test2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 REVOKE SELECT ON TABLES FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 REVOKE USAGE ON SCHEMAS FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 REVOKE USAGE ON TYPES FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 REVOKE SELECT ON SEQUENCES FROM test2;
+
+statement ok
+DROP ROLE test1;
+
+statement ok
+DROP ROLE test2;
+
+statement ok
+CREATE USER test2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON TABLES TO test2
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations for all roles
+DROP ROLE test2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE SELECT ON TABLES FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT USAGE ON SCHEMAS TO test2;
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new schemas for all roles
+DROP ROLE test2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE USAGE ON SCHEMAS FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT USAGE ON TYPES TO test2;
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new types for all roles
+DROP ROLE test2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE USAGE ON TYPES FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON SEQUENCES TO test2;
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new sequences for all roles
+DROP ROLE test2
