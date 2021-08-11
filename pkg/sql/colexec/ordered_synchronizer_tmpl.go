@@ -288,7 +288,7 @@ func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 }
 
 func (o *OrderedSynchronizer) Close() error {
-	o.accountingHelper.Close()
+	o.accountingHelper.Release()
 	for _, input := range o.inputs {
 		input.ToClose.CloseAndLogOnErr(o.EnsureCtx(), "ordered synchronizer")
 	}

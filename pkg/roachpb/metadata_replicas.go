@@ -535,14 +535,6 @@ func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, rngDesc *RangeDe
 		//
 		// Since the leaseholder can't remove itself and is a VOTER_FULL, we
 		// also know that in any configuration there's at least one VOTER_FULL.
-		//
-		// TODO(tbg): if this code path is hit during a lease transfer (we check
-		// upstream of raft, but this check has false negatives) then we are in
-		// a situation where the leaseholder is a node that has set its
-		// minProposedTS and won't be using its lease any more. Either the setting
-		// of minProposedTS needs to be "reversible" (tricky) or we make the
-		// lease evaluation succeed, though with a lease that's "invalid" so that
-		// a new lease can be requested right after.
 		return errReplicaCannotHoldLease
 	}
 	return nil
