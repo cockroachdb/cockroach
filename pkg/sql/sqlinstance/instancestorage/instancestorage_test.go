@@ -106,9 +106,7 @@ func TestStorage(t *testing.T) {
 		// Verify all instances are returned by GetAllInstancesDataForTest.
 		{
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
-			sort.SliceStable(instances, func(idx1, idx2 int) bool {
-				return instances[idx1].InstanceID < instances[idx2].InstanceID
-			})
+			sortInstances(instances)
 			require.NoError(t, err)
 			require.Equal(t, len(instanceIDs), len(instances))
 			for index, instance := range instances {

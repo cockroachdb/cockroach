@@ -162,7 +162,7 @@ func (s *Storage) getInstanceData(
 	if row.Value == nil {
 		return instancerow{}, sqlinstance.NonExistentInstanceError
 	}
-	_, addr, sessionID, timestamp, err := s.rowcodec.decodeRow(row)
+	_, addr, sessionID, timestamp, _, err := s.rowcodec.decodeRow(row)
 	if err != nil {
 		return instancerow{}, errors.Wrapf(err, "could not decode data for instance %d", instanceID)
 	}
@@ -204,7 +204,7 @@ func (s *Storage) getAllInstanceRows(
 		return nil, err
 	}
 	for i := range rows {
-		instanceID, addr, sessionID, timestamp, err := s.rowcodec.decodeRow(rows[i])
+		instanceID, addr, sessionID, timestamp, _, err := s.rowcodec.decodeRow(rows[i])
 		if err != nil {
 			log.Warningf(ctx, "failed to decode row %v: %v", rows[i].Key, err)
 			return nil, err
