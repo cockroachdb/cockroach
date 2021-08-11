@@ -6,7 +6,7 @@ if [[ $# < 3 || $# > 4 ]]; then
 $0 rewrites the given testfixtures statistics file by running SHOW STATISTICS USING JSON
 for each table in the specified database.
 
-Note that this tool assumes a cockroach cluster is up and running in insecure mode, the 
+Note that this tool assumes a cockroach cluster is up and running in insecure mode, the
 specified database is already loaded, and statistics have been collected on all tables.
 
 Usage: $0 path/to/cockroach/binary database filename
@@ -18,7 +18,8 @@ COCKROACH_BINARY=$1
 DATABASE=$2
 FILENAME=$3
 
-tables=($($COCKROACH_BINARY sql --insecure --format=tsv -e "USE $DATABASE; SELECT table_name FROM [SHOW TABLES];"))
+tables=($($COCKROACH_BINARY sql --insecure --format=tsv \
+ -e "USE $DATABASE; SELECT table_name FROM [SHOW TABLES] ORDER BY table_name;"))
 tables=("${tables[@]:3}")
 
 echo "Writing statistics to $FILENAME"
@@ -36,7 +37,9 @@ do
     # 3. Remove the double quote at the beginning of the JSON.
     # 4. Remove the double quote at the end of the JSON.
     # 5. Append '; to the last line.
-    $COCKROACH_BINARY sql --insecure --format=tsv -e "USE $DATABASE; SELECT jsonb_pretty(statistics) FROM [SHOW STATISTICS USING JSON FOR TABLE \"$table\"];" | sed '1,2d' | sed 's/""/"/g' | sed 's/^"\[/\[/g' | sed 's/\]"$/\]/g' | sed '$ s/$/'\'';/' >> $FILENAME
+    $COCKROACH_BINARY sql --insecure --format=tsv \
+     -e "USE $DATABASE; SELECT jsonb_pretty(statistics) FROM [SHOW STATISTICS USING JSON FOR TABLE \"$table\"];" \
+     | sed '1,2d' | sed 's/""/"/g' | sed 's/^"\[/\[/g' | sed 's/\]"$/\]/g' | sed '$ s/$/'\'';/' >> $FILENAME
     echo "----" >> $FILENAME
     echo "" >> $FILENAME
 done
