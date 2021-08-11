@@ -380,7 +380,7 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 	// Stat the file. This follows symlinks.
 	info, err := assetLoaderImpl.Stat(fullKeyPath)
 	if err != nil {
-		return errors.Errorf("could not stat key file %s: %v", fullKeyPath, err)
+		return errors.Wrapf(err, "could not stat key file %s", fullKeyPath)
 	}
 
 	// Only regular files are supported (after following symlinks).
@@ -401,7 +401,7 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 	// Read key file.
 	keyPEMBlock, err := assetLoaderImpl.ReadFile(fullKeyPath)
 	if err != nil {
-		return errors.Errorf("could not read key file %s: %v", fullKeyPath, err)
+		return errors.Wrapf(err, "could not read key file %s", fullKeyPath)
 	}
 
 	ci.KeyFilename = keyFilename
