@@ -267,7 +267,7 @@ func (c *sqlConn) GetServerMetadata() (nodeID int32, version, clusterID string, 
 			c.clusterOrganization = row[2]
 			id, err := strconv.Atoi(row[0])
 			if err != nil {
-				return 0, "", "", errors.Newf("incorrect data while retrieving node id: %v", err)
+				return 0, "", "", errors.Wrap(err, "incorrect data while retrieving node id")
 			}
 			nodeID = int32(id)
 

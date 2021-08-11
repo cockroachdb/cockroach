@@ -75,7 +75,7 @@ func newDescGetter(
 	for _, r := range descRows {
 		var d descpb.Descriptor
 		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {
-			return ddg, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
+			return ddg, errors.Wrapf(err, "failed to unmarshal descriptor %d", r.ID)
 		}
 		b := catalogkv.NewBuilderWithMVCCTimestamp(&d, r.ModTime)
 		if b != nil {
@@ -86,7 +86,7 @@ func newDescGetter(
 	for _, r := range descRows {
 		var d descpb.Descriptor
 		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {
-			return ddg, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
+			return ddg, errors.Wrapf(err, "failed to unmarshal descriptor %d", r.ID)
 		}
 		b := catalogkv.NewBuilderWithMVCCTimestamp(&d, r.ModTime)
 		if b != nil {
@@ -195,7 +195,7 @@ func validateNamespaceRow(row NamespaceTableRow, desc catalog.Descriptor) error 
 		return nil
 	}
 	if id == descpb.InvalidID {
-		return fmt.Errorf("invalid descriptor ID")
+		return errors.New("invalid descriptor ID")
 	}
 	if desc == nil {
 		return catalog.ErrDescriptorNotFound
@@ -206,16 +206,16 @@ func validateNamespaceRow(row NamespaceTableRow, desc catalog.Descriptor) error 
 		}
 	}
 	if desc.Dropped() {
-		return fmt.Errorf("no matching name info in draining names of dropped %s",
-			string(desc.DescriptorType()))
+		return errors.Newf("no matching name info in draining names of dropped %s",
+			desc.DescriptorType())
 	}
 	if row.ParentID == desc.GetParentID() &&
 		row.ParentSchemaID == desc.GetParentSchemaID() &&
 		row.Name == desc.GetName() {
 		return nil
 	}
-	return fmt.Errorf("no matching name info found in non-dropped %s %q",
-		string(desc.DescriptorType()), desc.GetName())
+	return errors.Newf("no matching name info found in non-dropped %s %q",
+		desc.DescriptorType(), desc.GetName())
 }
 
 // ExamineJobs runs a suite of consistency checks over the system.jobs table.
@@ -341,7 +341,7 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 func descriptorModifiedForInsert(r DescriptorTableRow) ([]byte, error) {
 	var descProto descpb.Descriptor
 	if err := protoutil.Unmarshal(r.DescBytes, &descProto); err != nil {
-		return nil, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
+		return nil, errors.Wrapf(err, "failed to unmarshal descriptor %d", r.ID)
 	}
 	b := catalogkv.NewBuilderWithMVCCTimestamp(&descProto, r.ModTime)
 	if b == nil {
