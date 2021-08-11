@@ -160,8 +160,8 @@ func (n *createViewNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
 
-	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
-		n.dbDesc.GetID(), n.dbDesc.GetDefaultPrivileges(),
+	privs := n.dbDesc.GetDefaultPrivilegeDescriptor().CreatePrivilegesFromDefaultPrivileges(
+		n.dbDesc.GetID(),
 		params.SessionData().User(), tree.Tables, n.dbDesc.GetPrivileges(),
 	)
 

@@ -4856,18 +4856,15 @@ CREATE TABLE crdb_internal.default_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(descriptor catalog.DatabaseDescriptor) error {
-				if descriptor.GetDefaultPrivileges() == nil {
-					return nil
-				}
-				for _, defaultPrivs := range descriptor.GetDefaultPrivileges().DefaultPrivilegesPerRole {
-					for objectType, privs := range defaultPrivs.DefaultPrivilegesPerObject {
+				f := func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
+					for objectType, privs := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
 						privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 						for _, userPrivs := range privs.Users {
 							privList := privilege.ListFromBitField(userPrivs.Privileges, privilegeObjectType)
 							for _, priv := range privList {
 								role := tree.DNull
-								if !defaultPrivs.GetForAllRoles() {
-									role = tree.NewDString(defaultPrivs.GetUserProto().Decode().Normalized())
+								if !defaultPrivilegesForRole.GetForAllRoles() {
+									role = tree.NewDString(defaultPrivilegesForRole.GetUserProto().Decode().Normalized())
 								}
 								if err := addRow(
 									tree.NewDString(descriptor.GetName()),
@@ -4884,8 +4881,9 @@ CREATE TABLE crdb_internal.default_privileges (
 							}
 						}
 					}
+					return nil
 				}
-				return nil
+				return descriptor.GetDefaultPrivilegeDescriptor().ForEachDefaultPrivilegeForRole(f)
 			})
 	},
 }
