@@ -37,14 +37,14 @@ events (1 found):
 query idx=2 show-events
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', true) WHERE pk = 1
 ----
-pq: bounded staleness read with minimum timestamp bound of 1628657895.276791000,0 could not be satisfied by a local resolved timestamp of 1628657892.252827000,0
+pq: bounded staleness read with minimum timestamp bound of XXX could not be satisfied by a local resolved timestamp of XXX
 events (1 found):
  * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
 
 query idx=2 show-events
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1ms', true) WHERE pk = 1
 ----
-pq: bounded staleness read with minimum timestamp bound of 1628657895.277801000,0 could not be satisfied by a local resolved timestamp of 1628657892.252827000,0
+pq: bounded staleness read with minimum timestamp bound of XXX could not be satisfied by a local resolved timestamp of XXX
 events (1 found):
  * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
 
