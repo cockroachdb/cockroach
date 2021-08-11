@@ -2229,7 +2229,7 @@ func runSchemaChangesInTxn(
 			} else {
 				lookup, err := planner.Descriptors().GetMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
 				if err != nil {
-					return errors.Errorf("error resolving referenced table ID %d: %v", fk.ReferencedTableID, err)
+					return errors.Wrapf(err, "error resolving referenced table ID %d", fk.ReferencedTableID)
 				}
 				referencedTableDesc = lookup
 			}

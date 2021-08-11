@@ -1341,7 +1341,7 @@ func (p *planner) updateFKBackReferenceName(
 	} else {
 		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
 		if err != nil {
-			return errors.Errorf("error resolving referenced table ID %d: %v", ref.ReferencedTableID, err)
+			return errors.Wrapf(err, "error resolving referenced table ID %d", ref.ReferencedTableID)
 		}
 		referencedTableDesc = lookup
 	}
