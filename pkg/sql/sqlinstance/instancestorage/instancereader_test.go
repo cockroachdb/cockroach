@@ -12,25 +12,25 @@ package instancestorage_test
 
 import (
 	"context"
-	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,11 +40,14 @@ func TestReader(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	tDB := sqlutils.MakeSQLRunner(sqlDB)
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	s := tc.Server(0)
+	tDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	// Enable rangefeed for the test.
+	tDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	setup := func(t *testing.T) (
-		*stop.Stopper, *instancestorage.Storage, *slstorage.FakeStorage, *hlc.Clock, *instancestorage.Reader,
+		*instancestorage.Storage, *slstorage.FakeStorage, *hlc.Clock, *instancestorage.Reader,
 	) {
 		dbName := t.Name()
 		tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
@@ -53,22 +56,26 @@ func TestReader(t *testing.T) {
 			`CREATE TABLE "`+dbName+`".sql_instances`, 1)
 		tDB.Exec(t, schema)
 		tableID := getTableID(t, tDB, dbName, "sql_instances")
-		clock := hlc.NewClock(func() int64 {
-			return timeutil.NewTestTimeSource().Now().UnixNano()
-		}, base.DefaultMaxClockOffset)
-		stopper := stop.NewStopper()
 		slStorage := slstorage.NewFakeStorage()
-		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage)
-		reader := instancestorage.NewReader(storage, slStorage)
-		return stopper, storage, slStorage, clock, reader
+		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, tableID, slStorage)
+		reader := instancestorage.NewTestingReader(storage, slStorage, s.RangeFeedFactory().(*rangefeed.Factory), keys.SystemSQLCodec, tableID, s.Clock(), s.Stopper())
+		return storage, slStorage, s.Clock(), reader
 	}
 
+	t.Run("unstarted-reader", func(t *testing.T) {
+		_, _, _, reader := setup(t)
+		_, err := reader.GetInstance(ctx, 1)
+		require.ErrorIs(t, err, sqlinstance.NotStartedError)
+	})
+
 	t.Run("basic-get-instance-data", func(t *testing.T) {
-		stopper, storage, slStorage, clock, reader := setup(t)
-		defer stopper.Stop(ctx)
+		storage, slStorage, clock, reader := setup(t)
+		require.NoError(t, reader.Start(ctx))
 		const sessionID = sqlliveness.SessionID("session_id")
 		const addr = "addr"
-		const expiration = time.Minute
+		// Set a high enough expiration to ensure the session stays
+		// live through the test.
+		const expiration = 10 * time.Minute
 		{
 			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 			id, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addr)
@@ -79,19 +86,47 @@ func TestReader(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			instanceInfo, err := reader.GetInstance(ctx, id)
-			require.NoError(t, err)
-			require.Equal(t, addr, instanceInfo.InstanceAddr)
+			testutils.SucceedsSoon(t, func() error {
+				instanceInfo, err := reader.GetInstance(ctx, id)
+				if err != nil {
+					return err
+				}
+				if addr != instanceInfo.InstanceAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", addr, instanceInfo.InstanceAddr)
+				}
+				return nil
+			})
 		}
 	})
 	t.Run("release-instance-get-all-instances", func(t *testing.T) {
-		const expiration = time.Minute
-		stopper, storage, slStorage, clock, reader := setup(t)
-		defer stopper.Stop(ctx)
-		// Create three instances and release one.
-		instanceIDs := [...]base.SQLInstanceID{1, 2, 3}
-		addresses := [...]string{"addr1", "addr2", "addr3"}
-		sessionIDs := [...]sqlliveness.SessionID{"session1", "session2", "session3"}
+		// Set a high enough expiration to ensure the session stays
+		// live through the test.
+		const expiration = 10 * time.Minute
+		storage, slStorage, clock, reader := setup(t)
+		require.NoError(t, reader.Start(ctx))
+
+		// Set up expected test data.
+		instanceIDs := []base.SQLInstanceID{1, 2, 3}
+		addresses := []string{"addr1", "addr2", "addr3"}
+		sessionIDs := []sqlliveness.SessionID{"session1", "session2", "session3"}
+
+		testOutputFn := func(expectedIDs []base.SQLInstanceID, expectedAddresses []string, expectedSessionIDs []sqlliveness.SessionID, actualInstances []sqlinstance.InstanceInfo) error {
+			if len(expectedIDs) != len(actualInstances) {
+				return errors.Newf("expected %d instances, got %d instances", len(expectedIDs), len(actualInstances))
+			}
+			for index, instance := range actualInstances {
+				if expectedIDs[index] != instance.InstanceID {
+					return errors.Newf("expected instance ID %d != actual instance ID %d", expectedIDs[index], instance.InstanceID)
+				}
+				if expectedAddresses[index] != instance.InstanceAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", expectedAddresses[index], instance.InstanceAddr)
+				}
+				if expectedSessionIDs[index] != instance.SessionID {
+					return errors.Newf("expected session ID %s != actual session ID %s", expectedSessionIDs[index], instance.SessionID)
+				}
+			}
+			return nil
+		}
 		{
 			// Set up mock data within instance and session storage.
 			for index, addr := range addresses {
@@ -105,21 +140,15 @@ func TestReader(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-		}
-
-		// Verify all instances are returned by GetAllInstances.
-		{
-			instances, err := reader.GetAllInstances(ctx)
-			sort.SliceStable(instances, func(idx1, idx2 int) bool {
-				return instances[idx1].InstanceID < instances[idx2].InstanceID
+			// Verify all instances are returned by GetAllInstances.
+			testutils.SucceedsSoon(t, func() error {
+				instances, err := reader.GetAllInstances(ctx)
+				if err != nil {
+					return err
+				}
+				sortInstances(instances)
+				return testOutputFn(instanceIDs, addresses, sessionIDs, instances)
 			})
-			require.NoError(t, err)
-			require.Equal(t, len(instanceIDs), len(instances))
-			for index, instance := range instances {
-				require.Equal(t, instanceIDs[index], instance.InstanceID)
-				require.Equal(t, sessionIDs[index], instance.SessionID)
-				require.Equal(t, addresses[index], instance.InstanceAddr)
-			}
 		}
 
 		// Release an instance and verify only active instances are returned.
@@ -128,15 +157,14 @@ func TestReader(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			instances, err := reader.GetAllInstances(ctx)
-			require.NoError(t, err)
-			require.Equal(t, 2, len(instances))
-			sortInstances(instances)
-			for index, instance := range instances {
-				require.Equal(t, instanceIDs[index+1], instance.InstanceID)
-				require.Equal(t, sessionIDs[index+1], instance.SessionID)
-				require.Equal(t, addresses[index+1], instance.InstanceAddr)
-			}
+			testutils.SucceedsSoon(t, func() error {
+				instances, err := reader.GetAllInstances(ctx)
+				if err != nil {
+					return err
+				}
+				sortInstances(instances)
+				return testOutputFn(instanceIDs[1:], addresses[1:], sessionIDs[1:], instances)
+			})
 		}
 
 		// Verify instances with expired sessions are filtered out.
@@ -145,23 +173,20 @@ func TestReader(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var instances []sqlinstance.InstanceInfo
-			instances, err = reader.GetAllInstances(ctx)
-			sortInstances(instances)
-			require.NoError(t, err)
-			// One instance ID has been released and one is associated with an expired session.
-			// So only one active instance exists at this point.
-			require.Equal(t, 1, len(instances))
-			require.Equal(t, instanceIDs[2], instances[0].InstanceID)
-			require.Equal(t, sessionIDs[2], instances[0].SessionID)
-			require.Equal(t, addresses[2], instances[0].InstanceAddr)
+			testutils.SucceedsSoon(t, func() error {
+				instances, err := reader.GetAllInstances(ctx)
+				if err != nil {
+					return err
+				}
+				sortInstances(instances)
+				return testOutputFn(instanceIDs[2:], addresses[2:], sessionIDs[2:], instances)
+			})
 		}
 
 		// When multiple instances have the same address, verify that only
 		// the latest instance information is returned. This heuristic is used
 		// when instance information isn't released correctly prior to SQL instance shutdown.
 		{
-			var instances []sqlinstance.InstanceInfo
 			sessionID := sqlliveness.SessionID("session4")
 			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 			id, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addresses[2])
@@ -172,19 +197,22 @@ func TestReader(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			instances, err = reader.GetAllInstances(ctx)
-			require.NoError(t, err)
-			// Verify returned instance information is for the latest instance.
-			require.Equal(t, 1, len(instances))
-			require.Equal(t, id, instances[0].InstanceID)
-			require.Equal(t, sessionID, instances[0].SessionID)
-			require.Equal(t, addresses[2], instances[0].InstanceAddr)
+			testutils.SucceedsSoon(t, func() error {
+				instances, err := reader.GetAllInstances(ctx)
+				if err != nil {
+					return err
+				}
+				sortInstances(instances)
+				return testOutputFn([]base.SQLInstanceID{id}, []string{addresses[2]}, []sqlliveness.SessionID{sessionID}, instances)
+			})
 		}
 	})
 	t.Run("release-instance-get-instance", func(t *testing.T) {
-		const expiration = time.Minute
-		stopper, storage, slStorage, clock, reader := setup(t)
-		defer stopper.Stop(ctx)
+		// Set a high enough expiration to ensure the session stays
+		// live through the test.
+		const expiration = 10 * time.Minute
+		storage, slStorage, clock, reader := setup(t)
+		require.NoError(t, reader.Start(ctx))
 		// Create three instances and release one.
 		instanceIDs := [...]base.SQLInstanceID{1, 2, 3}
 		addresses := [...]string{"addr1", "addr2", "addr3"}
@@ -206,9 +234,16 @@ func TestReader(t *testing.T) {
 
 		// Verify active instance data is returned with no error.
 		{
-			instanceInfo, err := reader.GetInstance(ctx, instanceIDs[0])
-			require.NoError(t, err)
-			require.Equal(t, addresses[0], instanceInfo.InstanceAddr)
+			testutils.SucceedsSoon(t, func() error {
+				instanceInfo, err := reader.GetInstance(ctx, instanceIDs[0])
+				if err != nil {
+					return err
+				}
+				if addresses[0] != instanceInfo.InstanceAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", addresses[0], instanceInfo.InstanceAddr)
+				}
+				return nil
+			})
 		}
 
 		// Verify request for released instance data results in an error.
@@ -217,9 +252,13 @@ func TestReader(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = reader.GetInstance(ctx, instanceIDs[0])
-			require.Error(t, err)
-			require.ErrorIs(t, err, sqlinstance.NonExistentInstanceError)
+			testutils.SucceedsSoon(t, func() error {
+				_, err = reader.GetInstance(ctx, instanceIDs[0])
+				if !errors.Is(err, sqlinstance.NonExistentInstanceError) {
+					return errors.Newf("expected non existent instance error")
+				}
+				return nil
+			})
 		}
 		// Verify request for instance with expired session results in an error.
 		{
@@ -227,9 +266,13 @@ func TestReader(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = reader.GetInstance(ctx, instanceIDs[1])
-			require.Error(t, err)
-			require.ErrorIs(t, err, sqlinstance.NonExistentInstanceError)
+			testutils.SucceedsSoon(t, func() error {
+				_, err = reader.GetInstance(ctx, instanceIDs[0])
+				if !errors.Is(err, sqlinstance.NonExistentInstanceError) {
+					return errors.Newf("expected non existent instance error")
+				}
+				return nil
+			})
 		}
 	})
 }

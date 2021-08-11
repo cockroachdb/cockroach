@@ -82,6 +82,7 @@ func (d *rowCodec) decodeRow(
 	addr string,
 	sessionID sqlliveness.SessionID,
 	timestamp hlc.Timestamp,
+	tombstone bool,
 	_ error,
 ) {
 	tbl := systemschema.SQLInstancesTable
@@ -92,21 +93,23 @@ func (d *rowCodec) decodeRow(
 		row := make([]rowenc.EncDatum, 1)
 		_, _, _, err := rowenc.DecodeIndexKey(d.codec, tbl, tbl.GetPrimaryIndex(), types, row, nil, kv.Key)
 		if err != nil {
-			return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, errors.Wrap(err, "failed to decode key")
+			return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, false, errors.Wrap(err, "failed to decode key")
 		}
 		if err := row[0].EnsureDecoded(types[0], &alloc); err != nil {
-			return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, err
+			return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, false, err
 		}
 		instanceID = base.SQLInstanceID(tree.MustBeDInt(row[0].Datum))
 	}
-
+	if !kv.Value.IsPresent() {
+		return instanceID, "", "", hlc.Timestamp{}, true, nil
+	}
 	// The rest of the columns are stored as a family, packed with diff-encoded
 	// column IDs followed by their values.
 	{
 		bytes, err := kv.Value.GetTuple()
 		timestamp = kv.Value.Timestamp
 		if err != nil {
-			return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, err
+			return instanceID, "", "", hlc.Timestamp{}, false, err
 		}
 		var colIDDiff uint32
 		var lastColID descpb.ColumnID
@@ -114,14 +117,14 @@ func (d *rowCodec) decodeRow(
 		for len(bytes) > 0 {
 			_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
 			if err != nil {
-				return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, err
+				return instanceID, "", "", hlc.Timestamp{}, false, err
 			}
 			colID := lastColID + descpb.ColumnID(colIDDiff)
 			lastColID = colID
 			if idx, ok := d.colIdxMap.Get(colID); ok {
 				res, bytes, err = rowenc.DecodeTableValue(&alloc, tbl.PublicColumns()[idx].GetType(), bytes)
 				if err != nil {
-					return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, err
+					return instanceID, "", "", hlc.Timestamp{}, false, err
 				}
 				switch colID {
 				case tbl.PublicColumns()[1].GetID(): // addr
@@ -133,12 +136,12 @@ func (d *rowCodec) decodeRow(
 						sessionID = sqlliveness.SessionID(tree.MustBeDBytes(res))
 					}
 				default:
-					return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, errors.Errorf("unknown column: %v", colID)
+					return instanceID, "", "", hlc.Timestamp{}, false, errors.Errorf("unknown column: %v", colID)
 				}
 			}
 		}
 	}
-	return instanceID, addr, sessionID, timestamp, nil
+	return instanceID, addr, sessionID, timestamp, false, nil
 }
 
 func makeTablePrefix(codec keys.SQLCodec, tableID descpb.ID) roachpb.Key {
