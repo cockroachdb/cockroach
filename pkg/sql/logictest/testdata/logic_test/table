@@ -598,6 +598,7 @@ regions                                NULL
 schema_changes                         NULL
 session_trace                          NULL
 session_variables                      NULL
+statement_statistics                   NULL
 table_columns                          NULL
 table_indexes                          NULL
 table_row_statistics                   NULL

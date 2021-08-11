@@ -57,7 +57,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -123,6 +125,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalLocalTransactionsTableID:         crdbInternalLocalTxnsTable,
 		catconstants.CrdbInternalLocalSessionsTableID:             crdbInternalLocalSessionsTable,
 		catconstants.CrdbInternalLocalMetricsTableID:              crdbInternalLocalMetricsTable,
+		catconstants.CrdbInternalNodeStmtStatsTableID:             crdbInternalNodeStmtStatsTable,
 		catconstants.CrdbInternalPartitionsTableID:                crdbInternalPartitionsTable,
 		catconstants.CrdbInternalPredefinedCommentsTableID:        crdbInternalPredefinedCommentsTable,
 		catconstants.CrdbInternalRangesNoLeasesTableID:            crdbInternalRangesNoLeasesTable,
@@ -871,7 +874,7 @@ func getSQLStats(p *planner, virtualTableName string) (sqlstats.Storage, error) 
 	return p.extendedEvalCtx.statsStorage, nil
 }
 
-var crdbInternalStmtStatsTable = virtualSchemaTable{
+var crdbInternalNodeStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (in-memory, not durable; local node only). ` +
 		`This table is wiped periodically (by default, at least every two hours)`,
 	schema: `
@@ -4957,6 +4960,84 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 						return pusher.pushRow(row...)
 					})
 				})
+		}
+		return setupGenerator(ctx, worker, stopper)
+	},
+}
+
+var crdbInternalStmtStatsTable = virtualSchemaTable{
+	comment: `statement statistics (cluster-wide).` +
+		`Querying this table is an expensive operation since it creates a ` +
+		`cluster-wide RPC-fanout.`,
+	schema: `
+CREATE TABLE crdb_internal.statement_statistics (
+    aggregated_ts  TIMESTAMPTZ NOT NULL,
+    fingerprint_id BYTES NOT NULL,
+    plan_hash      INT8 NOT NULL,
+    app_name       STRING NOT NULL,
+    metadata       JSONB NOT NULL,
+    statistics     JSONB NOT NULL,
+    sampled_plan   JSONB NOT NULL
+);`,
+	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+		// Perform RPC fanout.
+		stats, err := p.extendedEvalCtx.SQLStatusServer.Statements(ctx, &serverpb.StatementsRequest{})
+		if err != nil {
+			return nil, nil, err
+		}
+		memSQLStats, err := sslocal.NewTempSQLStatsFromExistingData(stats.Statements)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		execCfg := p.ExecCfg()
+		sqlStats := persistedsqlstats.New(&persistedsqlstats.Config{
+			Settings:         execCfg.Settings,
+			InternalExecutor: execCfg.InternalExecutor,
+			KvDB:             execCfg.DB,
+			SQLIDContainer:   execCfg.NodeID,
+		}, memSQLStats)
+
+		row := make(tree.Datums, 7 /* number of columns for this virtual table */)
+		worker := func(pusher rowPusher) error {
+			return sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
+				SortedAppNames: true,
+				SortedKey:      true,
+			}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+
+				aggregatedTs, err := tree.MakeDTimestampTZ(statistics.AggregatedTs, time.Microsecond)
+				if err != nil {
+					return err
+				}
+
+				fingerprintID := tree.NewDBytes(
+					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.ID))))
+
+				metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(statistics)
+				if err != nil {
+					return err
+				}
+				statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&statistics.Stats)
+				if err != nil {
+					return err
+				}
+				plan := sqlstatsutil.ExplainTreePlanNodeToJSON(&statistics.Stats.SensitiveInfo.MostRecentPlanDescription)
+
+				row = row[:0]
+				row = append(row,
+					aggregatedTs,  // aggregated_ts
+					fingerprintID, // fingerprint_id
+					// TODO(azhng): properly update plan_hash value once we can expose it
+					//  from the optimizer.
+					tree.NewDInt(tree.DInt(0)),          // plan_hash
+					tree.NewDString(statistics.Key.App), // app_name
+					tree.NewDJSON(metadataJSON),         // metadata
+					tree.NewDJSON(statisticsJSON),       // statistics
+					tree.NewDJSON(plan),                 // plan
+				)
+
+				return pusher.pushRow(row...)
+			})
 		}
 		return setupGenerator(ctx, worker, stopper)
 	},

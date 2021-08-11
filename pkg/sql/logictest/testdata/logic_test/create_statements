@@ -1044,6 +1044,23 @@ CREATE TABLE crdb_internal.session_variables (
    value STRING NOT NULL,
    hidden BOOL NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.statement_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   plan_hash INT8 NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   sampled_plan JSONB NOT NULL
+)  CREATE TABLE crdb_internal.statement_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   plan_hash INT8 NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   sampled_plan JSONB NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.table_columns (
    descriptor_id INT8 NULL,
    descriptor_name STRING NOT NULL,
