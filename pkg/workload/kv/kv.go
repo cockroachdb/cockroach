@@ -353,7 +353,7 @@ func (w *kv) Ops(
 			op.sfuStmt = op.sr.Define(sfuStmtStr)
 		}
 		op.spanStmt = op.sr.Define(spanStmtStr)
-		if err := op.sr.Init(ctx, "kv", mcp, w.connFlags); err != nil {
+		if err := op.sr.Init(ctx, mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		op.mcp = mcp
