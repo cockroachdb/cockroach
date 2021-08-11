@@ -77,7 +77,7 @@ sort
       │    │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) ps_availqty:3(int!null) ps_supplycost:4(float!null) s_suppkey:8(int!null) s_nationkey:11(int!null) n_nationkey:17(int!null) n_name:18(char!null)
       │    │    │    ├── key columns: [1 2] = [1 2]
       │    │    │    ├── lookup columns are key
-      │    │    │    ├── stats: [rows=32258.0645, distinct(1)=29783.4869, null(1)=0, distinct(2)=399.934613, null(2)=0, distinct(3)=9536.12259, null(3)=0, distinct(4)=27589.3232, null(4)=0, distinct(8)=399.934613, null(8)=0, distinct(11)=1, null(11)=0, distinct(17)=1, null(17)=0, distinct(18)=1, null(18)=0, distinct(3,4)=31617.9161, null(3,4)=0]
+      │    │    │    ├── stats: [rows=32258.0645, distinct(1)=29783.4869, null(1)=0, distinct(2)=399.934613, null(2)=0, distinct(3)=9536.12259, null(3)=0, distinct(4)=1000, null(4)=0, distinct(8)=399.934613, null(8)=0, distinct(11)=1, null(11)=0, distinct(17)=1, null(17)=0, distinct(18)=1, null(18)=0, distinct(3,4)=31617.9161, null(3,4)=0]
       │    │    │    ├── key: (1,8)
       │    │    │    ├── fd: ()-->(18), (1,2)-->(3,4), (8)-->(11), (11)==(17), (17)==(11), (2)==(8), (8)==(2)
       │    │    │    ├── inner-join (lookup partsupp@ps_sk)
@@ -152,7 +152,7 @@ sort
                           │    │    │    ├── columns: ps_suppkey:26(int!null) ps_availqty:27(int!null) ps_supplycost:28(float!null) s_suppkey:32(int!null) s_nationkey:35(int!null) n_nationkey:41(int!null) n_name:42(char!null)
                           │    │    │    ├── key columns: [25 26] = [25 26]
                           │    │    │    ├── lookup columns are key
-                          │    │    │    ├── stats: [rows=32258.0645, distinct(26)=399.934613, null(26)=0, distinct(27)=9536.12259, null(27)=0, distinct(28)=27589.3232, null(28)=0, distinct(32)=399.934613, null(32)=0, distinct(35)=1, null(35)=0, distinct(41)=1, null(41)=0, distinct(42)=1, null(42)=0, distinct(27,28)=31617.9161, null(27,28)=0]
+                          │    │    │    ├── stats: [rows=32258.0645, distinct(26)=399.934613, null(26)=0, distinct(27)=9536.12259, null(27)=0, distinct(28)=1000, null(28)=0, distinct(32)=399.934613, null(32)=0, distinct(35)=1, null(35)=0, distinct(41)=1, null(41)=0, distinct(42)=1, null(42)=0, distinct(27,28)=31617.9161, null(27,28)=0]
                           │    │    │    ├── fd: ()-->(42), (32)-->(35), (35)==(41), (41)==(35), (26)==(32), (32)==(26)
                           │    │    │    ├── inner-join (lookup partsupp@ps_sk)
                           │    │    │    │    ├── save-table-name: q11_lookup_join_14
@@ -252,7 +252,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {ps_availqty}    32258.00       1.02           9536.00             1.00                0.00            1.00
 {ps_partkey}     32258.00       1.02           29783.00            1.00                0.00            1.00
 {ps_suppkey}     32258.00       1.02           400.00              1.01                0.00            1.00
-{ps_supplycost}  32258.00       1.02           27589.00            1.01                0.00            1.00
+{ps_supplycost}  32258.00       1.02           1000.00             27.35 <==           0.00            1.00
 {s_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}      32258.00       1.02           400.00              1.01                0.00            1.00
 
@@ -340,7 +340,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {n_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
 {ps_availqty}    32258.00       1.02           9536.00             1.00                0.00            1.00
 {ps_suppkey}     32258.00       1.02           400.00              1.01                0.00            1.00
-{ps_supplycost}  32258.00       1.02           27589.00            1.01                0.00            1.00
+{ps_supplycost}  32258.00       1.02           1000.00             27.35 <==           0.00            1.00
 {s_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}      32258.00       1.02           400.00              1.01                0.00            1.00
 
