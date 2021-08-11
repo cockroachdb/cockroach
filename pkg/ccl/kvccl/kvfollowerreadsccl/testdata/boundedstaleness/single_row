@@ -1,0 +1,99 @@
+exec
+CREATE TABLE t(pk INT PRIMARY KEY);
+INSERT INTO t VALUES (1);
+----
+
+# If we try read a timestamp that is impossible to satisfy with a follower read,
+# we should always be looking at the leaseholder in the nearest_only=False case.
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:true,follower_read:false}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1ms') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:true,follower_read:false}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:true,follower_read:false}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1ms', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:true,follower_read:false}
+
+# Wait until the follower has caught up. Ensure reads are local, follower reads.
+query idx=2 show-events wait-until-follower-read
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:true}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:true}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:true}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:true}
+
+# Set a super high closed bounded staleness target and execute a schema change.
+exec
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1hr';
+ALTER TABLE t ADD COLUMN new_col INT NOT NULL DEFAULT 2
+----
+
+# Ensure we resort to the leaseholder as the schema change requires a recent read
+# in the nearest_only=False case.
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:true,follower_read:false}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:true,follower_read:false}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', false) WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:true,follower_read:false}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', false) WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:true,follower_read:false}
