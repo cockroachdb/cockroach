@@ -80,3 +80,14 @@ h2.base-heading {
   font-size: 14px;
   color: $colors--title;
 }
+
+.reset-btn {
+  background: transparent;
+  border: none;
+  color: $colors--primary-blue-3;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

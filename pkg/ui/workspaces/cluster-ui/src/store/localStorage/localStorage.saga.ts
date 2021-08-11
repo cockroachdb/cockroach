@@ -14,7 +14,11 @@ import { actions } from "./localStorage.reducer";
 
 export function* updateLocalStorageItemSaga(action: AnyAction) {
   const { key, value } = action.payload;
-  yield call({ context: localStorage, fn: localStorage.setItem }, key, value);
+  yield call(
+    { context: localStorage, fn: localStorage.setItem },
+    key,
+    JSON.stringify(value),
+  );
 }
 
 export function* localStorageSaga() {

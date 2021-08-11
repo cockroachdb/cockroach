@@ -8,20 +8,34 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { PayloadAction } from "@reduxjs/toolkit";
 import { all, call, put, delay, takeLatest } from "redux-saga/effects";
-import { getStatements } from "src/api/statementsApi";
-import { actions } from "./statements.reducer";
+import Long from "long";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import {
+  getStatements,
+  getCombinedStatements,
+  StatementsRequest,
+} from "src/api/statementsApi";
+import { actions as localStorageActions } from "src/store/localStorage";
+import { actions, UpdateDateRangePayload } from "./statements.reducer";
 import { rootActions } from "../reducers";
 
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 
-export function* refreshStatementsSaga() {
-  yield put(actions.request());
+export function* refreshStatementsSaga(
+  action?: PayloadAction<StatementsRequest>,
+) {
+  yield put(actions.request(action?.payload));
 }
 
-export function* requestStatementsSaga(): any {
+export function* requestStatementsSaga(
+  action?: PayloadAction<StatementsRequest>,
+): any {
   try {
-    const result = yield call(getStatements);
+    const result = yield action?.payload?.combined
+      ? call(getCombinedStatements, action.payload)
+      : call(getStatements);
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));
@@ -31,6 +45,25 @@ export function* requestStatementsSaga(): any {
 export function* receivedStatementsSaga(delayMs: number) {
   yield delay(delayMs);
   yield put(actions.invalidated());
+}
+
+export function* updateStatementesDateRangeSaga(
+  action: PayloadAction<UpdateDateRangePayload>,
+) {
+  const { start, end } = action.payload;
+  yield put(
+    localStorageActions.update({
+      key: "dateRange/StatementsPage",
+      value: { start, end },
+    }),
+  );
+  yield put(actions.invalidated());
+  const req = new cockroach.server.serverpb.StatementsRequest({
+    combined: true,
+    start: Long.fromNumber(start),
+    end: Long.fromNumber(end),
+  });
+  yield put(actions.refresh(req));
 }
 
 export function* statementsSaga(
@@ -49,5 +82,6 @@ export function* statementsSaga(
       receivedStatementsSaga,
       cacheInvalidationPeriod,
     ),
+    takeLatest(actions.updateDateRange, updateStatementesDateRangeSaga),
   ]);
 }

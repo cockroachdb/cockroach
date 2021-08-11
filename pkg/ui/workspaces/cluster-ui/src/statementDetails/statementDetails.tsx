@@ -18,6 +18,7 @@ import classNames from "classnames/bind";
 import { format as d3Format } from "d3-format";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
 
 import {
   intersperse,
@@ -59,7 +60,8 @@ import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import styles from "./statementDetails.module.scss";
 import { NodeSummaryStats } from "../nodes";
 import { UIConfigState } from "../store/uiConfig";
-import moment from "moment";
+import moment, { Moment } from "moment";
+import { StatementsRequest } from "src/api/statementsApi";
 
 const { TabPane } = Tabs;
 
@@ -125,7 +127,7 @@ export type NodesSummary = {
 };
 
 export interface StatementDetailsDispatchProps {
-  refreshStatements: () => void;
+  refreshStatements: (req?: StatementsRequest) => void;
   refreshStatementDiagnosticsRequests: () => void;
   refreshNodes: () => void;
   refreshNodesLiveness: () => void;
@@ -144,6 +146,7 @@ export interface StatementDetailsDispatchProps {
 export interface StatementDetailsStateProps {
   statement: SingleStatementStatistics;
   statementsError: Error | null;
+  dateRange?: [Moment, Moment];
   nodeNames: { [nodeId: string]: string };
   nodeRegions: { [nodeId: string]: string };
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
@@ -157,6 +160,17 @@ export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortedTableStyles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
+
+function statementsRequestFromProps(
+  props: StatementDetailsProps,
+): cockroach.server.serverpb.StatementsRequest | null {
+  if (props.isTenant || props.dateRange == null) return null;
+  return new cockroach.server.serverpb.StatementsRequest({
+    combined: true,
+    start: Long.fromNumber(props.dateRange[0].unix()),
+    end: Long.fromNumber(props.dateRange[1].unix()),
+  });
+}
 
 function AppLink(props: { app: string }) {
   if (!props.app) {
@@ -331,15 +345,20 @@ export class StatementDetails extends React.Component<
     }
   };
 
+  refreshStatements = () => {
+    const req = statementsRequestFromProps(this.props);
+    this.props.refreshStatements(req);
+  };
+
   componentDidMount() {
-    this.props.refreshStatements();
+    this.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
     this.props.refreshNodes();
     this.props.refreshNodesLiveness();
   }
 
   componentDidUpdate() {
-    this.props.refreshStatements();
+    this.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
     this.props.refreshNodes();
     this.props.refreshNodesLiveness();
