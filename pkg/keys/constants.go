@@ -390,7 +390,12 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
-	PublicSchemaID                       = 29 // pseudo
+	// TODO(richardjcai): Remove this in 22.2.
+	// PublicSchemaID refers to old references where Public schemas are
+	// descriptorless.
+	PublicSchemaID = 29 // pseudo
+	// SystemPublicSchema continues to use 29 as an ID.
+	SystemPublicSchemaID = 29 // pseudo
 	// New NamespaceTableID for cluster version >= 20.1
 	// Ensures that NamespaceTable does not get gossiped again
 	NamespaceTableID                    = 30
@@ -436,7 +441,6 @@ var PseudoTableIDs = []uint32{
 	SystemRangesID,
 	TimeseriesRangesID,
 	LivenessRangesID,
-	PublicSchemaID, // This needs to be removed if PublicSchema is added as a desc.
 	TenantsRangesID,
 }
 

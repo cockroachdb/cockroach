@@ -271,6 +271,8 @@ const (
 	SQLInstancesTable
 	// Can return new retryable rangefeed errors without crashing the client
 	NewRetryableRangefeedErrors
+	// Public schema is backed by a descriptor.
+	PublicSchemasWithDescriptors
 
 	// Step (1): Add new versions here.
 )
@@ -440,7 +442,10 @@ var versionsSingleton = keyedVersions{
 		Key:     NewRetryableRangefeedErrors,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
 	},
-
+	{
+		Key:     PublicSchemasWithDescriptors,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 126},
+	},
 	// Step (2): Add new versions here.
 }
 

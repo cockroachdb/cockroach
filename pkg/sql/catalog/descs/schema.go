@@ -102,8 +102,6 @@ func (tc *Collection) GetImmutableSchemaByID(
 func (tc *Collection) getSchemaByID(
 	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
-	// We have already considered if the schemaID is PublicSchemaID,
-	// if the id appears in staticSchemaIDMap, it must map to a virtual schema.
 	if sc, err := tc.virtual.getSchemaByID(
 		ctx, schemaID, flags.RequireMutable,
 	); sc != nil || err != nil {

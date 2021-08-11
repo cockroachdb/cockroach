@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -161,7 +162,6 @@ func (tc *Collection) getByName(
 	name string,
 	avoidCached, mutable bool,
 ) (found bool, desc catalog.Descriptor, err error) {
-
 	// Handle special specific behaviors for the implied type.
 	var parentID, parentSchemaID descpb.ID
 	switch {
@@ -170,6 +170,11 @@ func (tc *Collection) getByName(
 			return true, db, nil
 		}
 	case sc == nil: // schema
+		if db.GetID() == keys.SystemDatabaseID {
+			if sc := maybeGetSystemPublicSchema(name, mutable); sc != nil {
+				return true, sc, nil
+			}
+		}
 		return getSchemaByName(ctx, tc, txn, db, name, avoidCached, mutable)
 	default: // object
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
@@ -231,9 +236,6 @@ func getSchemaByName(
 	avoidCached bool,
 	mutable bool,
 ) (bool, catalog.Descriptor, error) {
-	//if name == tree.PublicSchema {
-	//	return true, schemadesc.GetPublicSchema(), nil
-	//}
 	if sc := tc.virtual.getSchemaByName(name); sc != nil {
 		return true, sc, nil
 	}
@@ -257,7 +259,9 @@ func getSchemaByName(
 			errors.Is(err, catalog.ErrDescriptorDropped) {
 			err = nil
 		}
-		return sc != nil, sc, err
+		if sc != nil {
+			return sc != nil, sc, err
+		}
 	}
 	return false, nil, nil
 }
@@ -308,6 +312,17 @@ func maybeGetSystemDatabase(name string, mutable bool) catalog.Descriptor {
 		return dbdesc.NewBuilder(proto).BuildExistingMutableDatabase()
 	}
 	return systemschema.MakeSystemDatabaseDesc()
+}
+
+func maybeGetSystemPublicSchema(schemaName string, mutable bool) catalog.Descriptor {
+	if schemaName != tree.PublicSchema {
+		return nil
+	}
+	if mutable {
+		proto := systemschema.MakeSystemPublicSchemaDesc().SchemaDesc()
+		return schemadesc.NewBuilder(proto).BuildExistingMutableSchema()
+	}
+	return systemschema.MakeSystemPublicSchemaDesc()
 }
 
 // filterDescriptorState wraps the more general catalog function to swallow

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -183,7 +184,11 @@ func (p *planner) LookupObject(
 			if err != nil || !found {
 				return found, prefix, nil, err
 			}
-			return true, prefix, typedesc.MakeSimpleAlias(alias, keys.PublicSchemaID), nil
+			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+				return true, prefix, typedesc.MakeSimpleAlias(alias, keys.PublicSchemaID), nil
+			}
+			// TODO(richardjcai): Add logic for getting the valid PublicSchemaID.
+			return false, catalog.ResolvedObjectPrefix{}, nil, err
 		}
 	}
 
@@ -1053,6 +1058,11 @@ type internalLookupCtx struct {
 
 	// fallback is utilized in GetDesc and GetNamespaceEntry.
 	fallback catalog.DescGetter
+
+	// TODO(richardjcai): Remove in 22.2.
+	// Used to determine if public schema has a descriptor or not.
+	ctx     context.Context
+	version clusterversion.Handle
 }
 
 // GetDesc implements the catalog.DescGetter interface.
@@ -1094,13 +1104,16 @@ type tableLookupFn = *internalLookupCtx
 // internalLookupCtx. It also hydrates any table descriptors with enum
 // information. It is intended only for use when dealing with backups.
 func newInternalLookupCtxFromDescriptors(
-	ctx context.Context, rawDescs []descpb.Descriptor, prefix catalog.DatabaseDescriptor,
+	ctx context.Context,
+	rawDescs []descpb.Descriptor,
+	prefix catalog.DatabaseDescriptor,
+	version clusterversion.Handle,
 ) (*internalLookupCtx, error) {
 	descriptors := make([]catalog.Descriptor, len(rawDescs))
 	for i := range rawDescs {
 		descriptors[i] = catalogkv.NewBuilder(&rawDescs[i]).BuildImmutable()
 	}
-	lCtx := newInternalLookupCtx(ctx, descriptors, prefix, nil /* fallback */)
+	lCtx := newInternalLookupCtx(ctx, descriptors, prefix, nil /* fallback */, version)
 	if err := descs.HydrateGivenDescriptors(ctx, descriptors); err != nil {
 		return nil, err
 	}
@@ -1114,13 +1127,16 @@ func newInternalLookupCtx(
 	descs []catalog.Descriptor,
 	prefix catalog.DatabaseDescriptor,
 	fallback catalog.DescGetter,
+	version clusterversion.Handle,
 ) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]catalog.DatabaseDescriptor)
 	schemaDescs := make(map[descpb.ID]catalog.SchemaDescriptor)
-	schemaNames := map[descpb.ID]string{
-		keys.PublicSchemaID: tree.PublicSchema,
+	schemaNames := make(map[descpb.ID]string)
+	if !version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		schemaNames[keys.PublicSchemaID] = tree.PublicSchema
 	}
+
 	tbDescs := make(map[descpb.ID]catalog.TableDescriptor)
 	typDescs := make(map[descpb.ID]catalog.TypeDescriptor)
 	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
@@ -1168,6 +1184,8 @@ func newInternalLookupCtx(
 		dbIDs:       dbIDs,
 		typIDs:      typIDs,
 		fallback:    fallback,
+		ctx:         ctx,
+		version:     version,
 	}
 }
 
@@ -1209,8 +1227,10 @@ func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (catalog.SchemaDescripto
 
 // getSchemaNameByID returns the schema name given an ID for a schema.
 func (l *internalLookupCtx) getSchemaNameByID(id descpb.ID) (string, error) {
-	if id == keys.PublicSchemaID {
-		return tree.PublicSchema, nil
+	if l.version.IsActive(l.ctx, clusterversion.PublicSchemasWithDescriptors) {
+		if id == keys.PublicSchemaID {
+			return tree.PublicSchema, nil
+		}
 	}
 	schema, err := l.getSchemaByID(id)
 	if err != nil {
@@ -1255,6 +1275,7 @@ func getParentAsTableName(
 		return tree.TableName{}, err
 	}
 	var parentSchemaName tree.Name
+	// TODO(richardjcai): Remove this in 22.2.
 	if parentTable.GetParentSchemaID() == keys.PublicSchemaID {
 		parentSchemaName = tree.PublicSchemaName
 	} else {
@@ -1285,6 +1306,7 @@ func getTableNameFromTableDescriptor(
 		return tree.TableName{}, err
 	}
 	var parentSchemaName tree.Name
+	// TODO(richardjcai): Remove this in 22.2.
 	if table.GetParentSchemaID() == keys.PublicSchemaID {
 		parentSchemaName = tree.PublicSchemaName
 	} else {
@@ -1311,6 +1333,7 @@ func getTypeNameFromTypeDescriptor(
 		return typeName, err
 	}
 	var parentSchemaName string
+	// TODO(richardjcai): Remove this in 22.2.
 	if typ.GetParentSchemaID() == keys.PublicSchemaID {
 		parentSchemaName = tree.PublicSchema
 	} else {

@@ -350,7 +350,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SQLInstancesTable)
 
 	// Add system schema.
-	//target.AddDescriptor(keys.SystemDatabaseID, systemschema.SystemPublicSchema)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SystemPublicSchema)
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied

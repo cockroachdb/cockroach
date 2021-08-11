@@ -20,17 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func schemaExists(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, schema string,
 ) (bool, descpb.ID, error) {
-	// Check statically known schemas.
-	if schema == tree.PublicSchema {
-		return true, descpb.InvalidID, nil
-	}
 	for _, s := range virtualSchemas {
 		if s.name == schema {
 			return true, descpb.InvalidID, nil

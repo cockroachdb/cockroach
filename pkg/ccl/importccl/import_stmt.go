@@ -1464,7 +1464,7 @@ func constructSchemaAndTableKey(
 	tableDesc *descpb.TableDescriptor, schemaIDToName map[descpb.ID]string,
 ) (schemaAndTableName, error) {
 	schemaName, ok := schemaIDToName[tableDesc.GetUnexposedParentSchemaID()]
-	if !ok && tableDesc.UnexposedParentSchemaID != keys.PublicSchemaID {
+	if !ok {
 		return schemaAndTableName{}, errors.Newf("invalid parent schema ID %d for table %s",
 			tableDesc.UnexposedParentSchemaID, tableDesc.GetName())
 	}

@@ -353,6 +353,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	}
 	scID := desc.GetParentSchemaID()
 	var scName tree.Name
+	// TODO(richardjcai): Remove this in 22.2.
 	if scID == keys.PublicSchemaID {
 		scName = tree.PublicSchemaName
 	} else {
