@@ -81,6 +81,7 @@ var (
 		"funcdeps":    memo.ExprFmtHideFuncDeps,
 		"ruleprops":   memo.ExprFmtHideRuleProps,
 		"stats":       memo.ExprFmtHideStats,
+		"hist":        memo.ExprFmtHideHistograms,
 		"cost":        memo.ExprFmtHideCost,
 		"qual":        memo.ExprFmtHideQualifications,
 		"scalars":     memo.ExprFmtHideScalars,
