@@ -13,6 +13,7 @@ package sqlstatsutil
 import (
 	"math/rand"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"text/template"
@@ -529,5 +530,69 @@ func TestExplainTreePlanNodeToJSON(t *testing.T) {
 	for _, testData := range testDataArr {
 		explainTreeJSON := ExplainTreePlanNodeToJSON(&testData.explainTree)
 		require.Equal(t, testData.expected, explainTreeJSON.String())
+
+		explainTreeProto, err := JSONToExplainTreePlanNode(explainTreeJSON)
+		require.NoError(t, err)
+		compareExplainTree(t, &testData.explainTree, explainTreeProto)
+	}
+}
+
+type nodeAttrList []*roachpb.ExplainTreePlanNode_Attr
+
+var _ sort.Interface = nodeAttrList{}
+
+func (n nodeAttrList) Len() int {
+	return len(n)
+}
+
+func (n nodeAttrList) Less(i, j int) bool {
+	return strings.Compare(n[i].Key, n[j].Key) == -1
+}
+
+func (n nodeAttrList) Swap(i, j int) {
+	tmp := n[i]
+	n[i] = n[j]
+	n[j] = tmp
+}
+
+type nodeList []*roachpb.ExplainTreePlanNode
+
+var _ sort.Interface = nodeList{}
+
+func (n nodeList) Len() int {
+	return len(n)
+}
+
+func (n nodeList) Less(i, j int) bool {
+	return strings.Compare(n[i].Name, n[j].Name) == -1
+}
+
+func (n nodeList) Swap(i, j int) {
+	tmp := n[i]
+	n[i] = n[j]
+	n[j] = tmp
+}
+
+func compareExplainTree(t *testing.T, expected, actual *roachpb.ExplainTreePlanNode) {
+	require.Equal(t, strings.ToLower(expected.Name), strings.ToLower(actual.Name))
+	require.Equal(t, len(expected.Attrs), len(actual.Attrs))
+
+	// Sorts the Attrs so we have consistent result.
+	sort.Sort(nodeAttrList(expected.Attrs))
+	sort.Sort(nodeAttrList(actual.Attrs))
+
+	for i := range expected.Attrs {
+		require.Equal(t, strings.ToLower(expected.Attrs[i].Key), strings.ToLower(actual.Attrs[i].Key))
+		require.Equal(t, expected.Attrs[i].Value, actual.Attrs[i].Value)
+	}
+
+	require.Equal(t, len(expected.Children), len(actual.Children), "expected %+v, but found %+v", expected.Children, actual.Children)
+
+	// Sorts the Children so we can recursively compare them.
+	sort.Sort(nodeList(expected.Children))
+	sort.Sort(nodeList(actual.Children))
+
+	for i := range expected.Children {
+		compareExplainTree(t, expected.Children[i], actual.Children[i])
 	}
 }
