@@ -140,17 +140,17 @@ const (
 	// surprising to users (like full scans instead of point lookups).
 	fullScanRowCountPenalty = 10
 
-	// unboundedMaxCardinalityScanRowCountPenalty adds a penalty to scans with
+	// unboundedMaxCardinalityScanCostPenalty adds a penalty to scans with
 	// unbounded maximum cardinality. This helps prevent surprising plans for very
 	// small tables or for when stats are stale. For full table scans, this
 	// penalty is added on top of the fullScanRowCountPenalty.
-	unboundedMaxCardinalityScanRowCountPenalty = fullScanRowCountPenalty
+	unboundedMaxCardinalityScanCostPenalty = 10
 
-	// largeMaxCardinalityScanRowCountPenalty is the maximum penalty to add to
-	// scans with a bounded maximum cardinality exceeding the row count estimate.
-	// This helps prevent surprising plans for very small tables or for when stats
-	// are stale.
-	largeMaxCardinalityScanRowCountPenalty = unboundedMaxCardinalityScanRowCountPenalty / 2
+	// largeMaxCardinalityScanCostPenalty is the maximum penalty to add to scans
+	// with a bounded maximum cardinality exceeding the row count estimate. This
+	// helps prevent surprising plans for very small tables or for when stats are
+	// stale.
+	largeMaxCardinalityScanCostPenalty = unboundedMaxCardinalityScanCostPenalty / 2
 
 	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
 	// we have a hint for preferring a lookup join.
@@ -656,7 +656,11 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	// Add a penalty if the cardinality exceeds the row count estimate. Adding a
 	// few rows worth of cost helps prevent surprising plans for very small tables
 	// or for when stats are stale.
-	rowCount += c.largeCardinalityRowCountPenalty(scan.Relational().Cardinality, rowCount)
+	//
+	// Note: we add this to the baseCost rather than the rowCount, so that the
+	// number of index columns does not have an outsized effect on the cost of
+	// the scan. See issue #68556.
+	baseCost += c.largeCardinalityCostPenalty(scan.Relational().Cardinality, rowCount)
 
 	if required.LimitHint != 0 {
 		rowCount = math.Min(rowCount, required.LimitHint)
@@ -1049,16 +1053,21 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 
 	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
 
-	// Add a penalty if the cardinality exceeds the row count estimate. Adding a
-	// few rows worth of cost helps prevent surprising plans for very small tables
-	// or for when stats are stale. This is also needed to ensure parity with the
-	// cost of scans.
-	rowCount += c.largeCardinalityRowCountPenalty(join.Relational().Cardinality, rowCount)
-
 	// Double the cost of emitting rows as well as the cost of seeking rows,
 	// given two indexes will be accessed.
 	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seqIOCostFactor) + scanCost + filterPerRow)
 	cost += filterSetup
+
+	// Add a penalty if the cardinality exceeds the row count estimate. Adding a
+	// few rows worth of cost helps prevent surprising plans for very small tables
+	// or for when stats are stale. This is also needed to ensure parity with the
+	// cost of scans.
+	//
+	// Note: we add this directly to the cost rather than the rowCount, so that
+	// the number of index columns does not have an outsized effect on the cost of
+	// the zigzag join. See issue #68556.
+	cost += c.largeCardinalityCostPenalty(join.Relational().Cardinality, rowCount)
+
 	return cost
 }
 
@@ -1282,23 +1291,23 @@ func (c *coster) rowBufferCost(rowCount float64) memo.Cost {
 	return memo.Cost(rowCount) * spillCostFactor * fraction
 }
 
-// largeCardinalityRowCountPenalty returns a penalty that should be added to the
-// row count of scans. It is non-zero for expressions with unbounded maximum
+// largeCardinalityCostPenalty returns a penalty that should be added to the
+// cost of scans. It is non-zero for expressions with unbounded maximum
 // cardinality or with maximum cardinality exceeding the row count estimate.
 // Adding a few rows worth of cost helps prevent surprising plans for very small
 // tables or for when stats are stale.
-func (c *coster) largeCardinalityRowCountPenalty(
+func (c *coster) largeCardinalityCostPenalty(
 	cardinality props.Cardinality, rowCount float64,
-) float64 {
+) memo.Cost {
 	if cardinality.IsUnbounded() {
-		return unboundedMaxCardinalityScanRowCountPenalty
+		return unboundedMaxCardinalityScanCostPenalty
 	}
 	if maxCard := float64(cardinality.Max); maxCard > rowCount {
 		penalty := maxCard - rowCount
-		if penalty > largeMaxCardinalityScanRowCountPenalty {
-			penalty = largeMaxCardinalityScanRowCountPenalty
+		if penalty > largeMaxCardinalityScanCostPenalty {
+			penalty = largeMaxCardinalityScanCostPenalty
 		}
-		return penalty
+		return memo.Cost(penalty)
 	}
 	return 0
 }

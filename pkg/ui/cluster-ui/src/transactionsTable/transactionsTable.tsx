@@ -33,6 +33,7 @@ import { SortSetting } from "../sortedtable";
 import {
   getStatementsByFingerprintId,
   collectStatementsText,
+  statementFingerprintIdsToText,
 } from "../transactionsPage/utils";
 import Long from "long";
 import classNames from "classnames/bind";
@@ -113,11 +114,9 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
       title: <>Transactions</>,
       cell: (item: TransactionInfo) =>
         textCell({
-          transactionText: collectStatementsText(
-            getStatementsByFingerprintId(
-              item.stats_data.statement_fingerprint_ids,
-              statements,
-            ),
+          transactionText: statementFingerprintIdsToText(
+            item.stats_data.statement_fingerprint_ids,
+            statements,
           ),
           transactionFingerprintIds: item.stats_data.statement_fingerprint_ids,
           transactionStats: item.stats_data.stats,

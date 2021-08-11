@@ -1361,14 +1361,14 @@ inner-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int) t.public.def.d:6(int!null) t.public.def.e:7(int!null) t.public.def.f:8(int)
  ├── key columns: [1 2] = [6 7]
  ├── stats: [rows=0.01, distinct(1)=0.01, null(1)=0, distinct(2)=0.01, null(2)=0, distinct(3)=0.00999500175, null(3)=0.0001, distinct(6)=0.01, null(6)=0, distinct(7)=0.01, null(7)=0, distinct(8)=0.00999995009, null(8)=0.0001, distinct(7,8)=0.00999999509, null(7,8)=0, distinct(1-3)=0.0099995001, null(1-3)=0]
- ├── cost: 2131.2407
+ ├── cost: 2130.6407
  ├── key: (6,7)
  ├── fd: (1,2)-->(3), (6,7)-->(8), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
  ├── interesting orderings: (+(1|6),+(2|7))
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
- │    ├── cost: 131.21
+ │    ├── cost: 130.61
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
  │    ├── prune: (1-3)
@@ -1389,14 +1389,14 @@ semi-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0, distinct(1-3)=100, null(1-3)=0]
- ├── cost: 2131.2406
+ ├── cost: 2130.6406
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
- │    ├── cost: 131.21
+ │    ├── cost: 130.61
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
  │    ├── prune: (1-3)
@@ -1414,14 +1414,14 @@ anti-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
  ├── stats: [rows=1e-10, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(3)=1e-10, null(3)=1e-10, distinct(7)=1e-10, null(7)=0, distinct(8)=1e-10, null(8)=0, distinct(7,8)=1e-10, null(7,8)=0, distinct(1-3)=1e-10, null(1-3)=0]
- ├── cost: 2131.2406
+ ├── cost: 2130.6406
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
- │    ├── cost: 131.21
+ │    ├── cost: 130.61
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
  │    ├── prune: (1-3)
@@ -1439,14 +1439,14 @@ semi-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
  ├── stats: [rows=0, distinct(1)=0, null(1)=0, distinct(2)=0, null(2)=0, distinct(3)=0, null(3)=0, distinct(7)=0, null(7)=0, distinct(8)=0, null(8)=0, distinct(7,8)=0, null(7,8)=0, distinct(1-3)=0, null(1-3)=0]
- ├── cost: 2131.2506
+ ├── cost: 2130.6506
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
- │    ├── cost: 131.21
+ │    ├── cost: 130.61
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
  │    ├── prune: (1-3)
@@ -1465,14 +1465,14 @@ anti-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0, distinct(1-3)=100, null(1-3)=0]
- ├── cost: 2131.2506
+ ├── cost: 2130.6506
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
- │    ├── cost: 131.21
+ │    ├── cost: 130.61
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
  │    ├── prune: (1-3)
