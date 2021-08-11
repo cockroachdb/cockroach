@@ -132,7 +132,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 			for i := 0; i < tc.NumServers(); i++ {
 				s := tc.Server(i)
 				_, r := getFirstStoreReplica(t, s, tablePrefix)
-				_, conf := r.DescAndSpanConfig()
+				conf := r.SpanConfig()
 				if conf.RangeMaxBytes != exp {
 					return fmt.Errorf("expected %d, got %d", exp, conf.RangeMaxBytes)
 				}

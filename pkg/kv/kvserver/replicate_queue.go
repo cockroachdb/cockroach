@@ -931,7 +931,7 @@ func (rq *replicateQueue) removeNonVoter(
 func (rq *replicateQueue) removeDecommissioning(
 	ctx context.Context, repl *Replica, targetType targetReplicaType, dryRun bool,
 ) (requeue bool, _ error) {
-	desc, _ := repl.DescAndSpanConfig()
+	desc := repl.Desc()
 	var decommissioningReplicas []roachpb.ReplicaDescriptor
 	switch targetType {
 	case voterTarget:

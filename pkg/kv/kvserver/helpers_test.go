@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -167,6 +168,12 @@ func (s *Store) SetReplicaScannerActive(active bool) {
 // the replica's Raft group into existence.
 func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.enqueueRaftUpdateCheck(rangeID)
+}
+
+// InjectSpanConfigUpdate injects the given span config update for testing
+// purposes.
+func (s *Store) InjectSpanConfigUpdate(update spanconfig.Update) {
+	s.onSpanConfigUpdate(update)
 }
 
 func manualQueue(s *Store, q queueImpl, repl *Replica) error {

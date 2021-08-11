@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -324,6 +326,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// Tables introduced in 21.2.
 	if target.codec.ForSystemTenant() {
 		// Only add the span configurations table if this is the system tenant.
+		// XXX: Write initial values during bootstrap
 		target.AddDescriptor(keys.SystemDatabaseID, systemschema.SpanConfigurationsTable)
 	}
 }
@@ -404,6 +407,61 @@ func addZoneConfigKVsToSchema(
 	}
 }
 
+// addSpanConfigKVsToSchema adds a kv pair for each of the statically defined
+// span configurations that should be populated in a newly bootstrapped cluster.
+func addSpanConfigKVToSchema(
+	target *MetadataSchema,
+	defaultSpanConfig roachpb.SpanConfig,
+) {
+	// Adding a new system table? It should be added here to the metadata schema,
+	// and also created as a migration for older cluster. The includedInBootstrap
+	// field should be set on the migration.
+
+	// Both the system tenant and secondary tenants get their own RANGE DEFAULT
+	// zone configuration.
+	// TODO(zcfgs-pod): This might be better suited to a single startup migration
+	// instead of adding it in two places for tenants -- here and in the tenant
+	// migration.
+
+	if !target.codec.ForSystemTenant() {
+		return
+	}
+
+	marshalled, err := protoutil.Marshal(&defaultSpanConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	codec := keys.SystemSQLCodec
+	kvs, err := rowenc.EncodePrimaryIndex(
+		codec,
+		systemschema.SpanConfigurationsTable,
+		systemschema.SpanConfigurationsTable.GetPrimaryIndex(),
+		catalog.ColumnIDToOrdinalMap(systemschema.SpanConfigurationsTable.PublicColumns()),
+		[]tree.Datum{
+			tree.NewDBytes(tree.DBytes(roachpb.KeyMin)), // start_key
+			tree.NewDBytes(tree.DBytes(roachpb.KeyMax)), // start_key
+			tree.NewDBytes(tree.DBytes(marshalled)),     // config
+		},
+		false, /* includeEmpty */
+	)
+	if err != nil {
+		panic(err)
+	}
+	// key := codec.SpanConfigurationsKey(roachpb.KeyMin)
+	// value := codec.SpanConfigurationsValue(roachpb.KeyMax, defaultSpanConfig)
+	// target.otherKV = append(target.otherKV, roachpb.KeyValue{
+	// 	Key:   key,
+	// 	Value: value,
+	// })
+	for _, kv := range kvs {
+		target.otherKV = append(target.otherKV, roachpb.KeyValue{
+			Key:   kv.Key,
+			Value: kv.Value,
+		})
+	}
+}
+
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the
 // System database, its tables and zone configurations.
 func addSystemDatabaseToSchema(
@@ -414,4 +472,5 @@ func addSystemDatabaseToSchema(
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
+	addSpanConfigKVToSchema(target, defaultZoneConfig.AsSpanConfig())
 }

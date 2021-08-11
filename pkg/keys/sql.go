@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -161,6 +162,29 @@ func (e sqlEncoder) ZoneKeyPrefix(id uint32) roachpb.Key {
 func (e sqlEncoder) ZoneKey(id uint32) roachpb.Key {
 	k := e.ZoneKeyPrefix(id)
 	return MakeFamilyKey(k, uint32(ZonesTableConfigColumnID))
+}
+
+// SpanConfigurationsKey returns the key for start key's entry in the
+// system.span_configurations table.
+func (e sqlEncoder) SpanConfigurationsKey(startKey roachpb.Key) roachpb.Key {
+	prefix := e.IndexPrefix(SpanConfigurationsTableID, 1)
+	k := encoding.EncodeBytesAscending(prefix, startKey)
+	return MakeFamilyKey(k, 0)
+}
+
+// SpanConfigurationsValue returns the key for start key's entry in the
+// system.span_configurations table.
+func (e sqlEncoder) SpanConfigurationsValue(endKey roachpb.Key, conf roachpb.SpanConfig) roachpb.Value {
+	prefix := e.IndexPrefix(SpanConfigurationsTableID, 1)
+	buf := encoding.EncodeBytesValue(prefix, 2, endKey)
+	marshalled, err := protoutil.Marshal(&conf)
+	if err != nil {
+		panic(err)
+	}
+	buf = encoding.EncodeBytesValue(buf, 3, marshalled)
+	value := roachpb.Value{RawBytes: buf}
+	value.ClearChecksum()
+	return value
 }
 
 // MigrationKeyPrefix returns the key prefix to store all migration details.

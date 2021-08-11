@@ -223,7 +223,7 @@ func generateTenantClusterSettingKV(
 		return roachpb.KeyValue{}, errors.NewAssertionErrorWithWrappedErrf(err,
 			"failed to encode current cluster version %v", &v)
 	}
-	kvs, err := rowenc.EncodePrimaryIndex(
+	kvs, err := rowenc.EncodePrimaryIndex( // XXX: Try this
 		codec,
 		systemschema.SettingsTable,
 		systemschema.SettingsTable.GetPrimaryIndex(),

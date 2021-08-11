@@ -399,8 +399,8 @@ type baseQueue struct {
 	// from the constructor function will return a queueImpl containing
 	// a pointer to a structure which is a copy of the one within which
 	// it is contained. DANGER.
-	impl   queueImpl
-	store  *Store
+	impl  queueImpl
+	store *Store
 	queueConfig
 	incoming         chan struct{} // Channel signaled when a new replica is added to the queue.
 	processSem       chan struct{}
@@ -611,7 +611,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		confReader, err = bq.store.GetConfReader()
 		if err != nil {
 			if errors.Is(err, errSysCfgUnavailable) && log.V(0) {
-					log.Warningf(ctx, "unable to retrieve system config, skipping: %v", err)
+				log.Warningf(ctx, "unable to retrieve system config, skipping: %v", err)
 			}
 			return
 		}
@@ -636,7 +636,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	if confReader != nil && bq.requiresSplit(ctx, confReader, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
-		if log.V(1) {
+		if log.V(0) {
 			log.Infof(ctx, "split needed; not adding")
 		}
 		return

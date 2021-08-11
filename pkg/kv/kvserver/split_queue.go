@@ -179,7 +179,7 @@ func (sq *splitQueue) processAttempt(
 	ctx context.Context, r *Replica, confReader spanconfig.QueueReader,
 ) (processed bool, err error) {
 	desc := r.Desc()
-	// First handle the case of splitting due to zone config maps.
+	// First handle the case of splitting due to span config maps.
 	if splitKey := confReader.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey); splitKey != nil {
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,
@@ -192,7 +192,7 @@ func (sq *splitQueue) processAttempt(
 			},
 			desc,
 			false, /* delayable */
-			"zone config",
+			"span config",
 		); err != nil {
 			return false, errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}

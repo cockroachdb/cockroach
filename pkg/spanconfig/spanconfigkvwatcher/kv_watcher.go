@@ -23,8 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-// New instantiates a KVWatcher that watches span configuration updates on
-//syste.span_configurations.
+// New instantiates a KVWatcher watching for updates to system.span_configurations.
 func New(db *kv.DB, clock *hlc.Clock, rangeFeedFactory *rangefeed.Factory) *KVWatcher {
 	return &KVWatcher{
 		db:               db,

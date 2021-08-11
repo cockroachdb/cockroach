@@ -962,12 +962,12 @@ func NewStore(
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
 		s.gcQueue = newGCQueue(s)
-		s.mergeQueue = newMergeQueue(s, s.db )
-		s.splitQueue = newSplitQueue(s, s.db )
-		s.replicateQueue = newReplicateQueue(s,  s.allocator)
-		s.replicaGCQueue = newReplicaGCQueue(s, s.db )
-		s.raftLogQueue = newRaftLogQueue(s, s.db )
-		s.raftSnapshotQueue = newRaftSnapshotQueue(s )
+		s.mergeQueue = newMergeQueue(s, s.db)
+		s.splitQueue = newSplitQueue(s, s.db)
+		s.replicateQueue = newReplicateQueue(s, s.allocator)
+		s.replicaGCQueue = newReplicaGCQueue(s, s.db)
+		s.raftLogQueue = newRaftLogQueue(s, s.db)
+		s.raftSnapshotQueue = newRaftSnapshotQueue(s)
 		s.consistencyQueue = newConsistencyQueue(s)
 		// NOTE: If more queue types are added, please also add them to the list of
 		// queues on the EnqueueRange debug page as defined in
@@ -2017,6 +2017,11 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		log.Event(ctx, "computed initial metrics")
 	})
 
+	if spanconfig.EnabledSetting.Get(&s.ClusterSettings().SV) {
+		// XXX: We're making the setting toggle from one to the other.
+		return
+	}
+
 	// We'll want to offer all replicas to the split and merge queues. Be a little
 	// careful about not spawning too many individual goroutines.
 
@@ -2058,11 +2063,30 @@ func (s *Store) onSpanConfigUpdate(update spanconfig.Update) {
 		s.spanConfigStore.SetSpanConfig(update.Entry.Span, update.Entry.Config)
 	}
 
-	log.Infof(ctx, "xxx: received update span=%s conf=%s deleted=%t", update.Entry.Span, update.Entry.Config.String(), update.Deleted)
+	if log.V(1) {
+		log.Infof(ctx, "xxx: received update span=%s conf=%s deleted=%t", update.Entry.Span, update.Entry.Config.String(), update.Deleted)
+	}
+	// XXX: we're installing something different when doing it through this
+	// code path. need to find where those differences arise.
+
+	if !spanconfig.EnabledSetting.Get(&s.ClusterSettings().SV) {
+		// XXX: Is this what we want? Do we want to be maintaining two confs
+		// on the replica object? Do we want to install a handler on the cluster
+		// setting change to iterate through the entire span config store on
+		// change?
+		return
+	}
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
-	shouldQueue := s.systemConfigUpdateQueueRateLimiter.AdmitN(1)
+	shouldQueue := s.spanConfigUpdateQueueRateLimiter.AdmitN(1)
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+		ctx := repl.AnnotateCtx(ctx)
+		replicaSpan := repl.Desc().RSpan().AsRawSpanWithNoLocals()
+
+		if !update.Entry.Span.Overlaps(replicaSpan) {
+			return true // more
+		}
+
 		key := repl.Desc().StartKey
 		conf, err := s.spanConfigStore.GetSpanConfigForKey(key)
 		if err != nil {
@@ -2072,17 +2096,16 @@ func (s *Store) onSpanConfigUpdate(update spanconfig.Update) {
 			conf = s.cfg.DefaultSpanConfig
 		}
 		repl.SetSpanConfig(conf)
-		if shouldQueue {
-			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		if shouldQueue || true {
+			s.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
-			s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			s.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 		}
 		return true // more
 	})
-
 
 	// We'll want to offer all replicas to the split and merge queues. Be a
 	// little careful about not spawning too many individual goroutines.
@@ -2948,8 +2971,8 @@ func (s *Store) ManuallyEnqueue(
 	confReader, err := s.GetConfReader()
 	if err != nil {
 		return nil, nil, errors.Wrap(err,
-			"unable to retrieve conf reader, cannot run queue; make sure " +
-			"the cluster has been initialized and all nodes connected to it")
+			"unable to retrieve conf reader, cannot run queue; make sure "+
+				"the cluster has been initialized and all nodes connected to it")
 	}
 
 	// Many queues are only meant to be run on leaseholder replicas, so attempt to

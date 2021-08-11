@@ -15,11 +15,11 @@ import (
 	"context"
 
 	"github.com/biogo/store/llrb"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Store is an in-memory data structure to store and retrieve span configs.
@@ -39,12 +39,13 @@ type Store struct {
 
 // NeedsSplit is part of the spanconfig.QueueReader interface.
 func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
-	return s.ComputeSplitKey(ctx, start, end) != nil
+	res := s.ComputeSplitKey(ctx, start, end) != nil
+	return res
 }
 
 // ComputeSplitKey is part of the spanconfig.QueueReader interface.
 func (s *Store) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
-	sp := roachpb.RSpan{Key: start, EndKey: end}.AsRawSpanWithNoLocals()
+	sp := roachpb.Span{Key: start.AsRawKey(), EndKey: end.AsRawKey()}
 	cfgs := s.GetConfigsForSpan(sp)
 	if len(cfgs) == 0 || len(cfgs) == 1 {
 		return nil
@@ -58,8 +59,8 @@ func (s *Store) GetSpanConfigForKey(key roachpb.RKey) (roachpb.SpanConfig, error
 	sp := roachpb.Span{Key: key.AsRawKey(), EndKey: key.Next().AsRawKey()}
 	cfgs := s.GetConfigsForSpan(sp)
 	if len(cfgs) == 0 {
-		return zonepb.DefaultZoneConfigRef().AsSpanConfig(), nil
-		// return roachpb.SpanConfig{}	, errors.New("span config not found") // should return default?
+		// return zonepb.DefaultZoneConfigRef().AsSpanConfig(), nil // XXX: should return default? We should be expecting a fully covering datastructure.
+		return roachpb.SpanConfig{}, errors.New("span config not found")
 	}
 	return cfgs[0].Config, nil
 }

@@ -3217,7 +3217,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 				for i := 0; i < tc.NumServers(); i++ {
 					s := tc.Server(i)
 					_, r := getFirstStoreReplica(t, s, tableKey)
-					if _, c := r.DescAndSpanConfig(); c.TTL().Seconds() != (time.Duration(exp) * time.Second).Seconds() {
+					if c := r.SpanConfig(); c.TTL().Seconds() != (time.Duration(exp) * time.Second).Seconds() {
 						_, sysCfg := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
 						sysCfg.RaftLock()
 						require.NoError(t, sysCfg.MaybeGossipSystemConfigRaftMuLocked(ctx))

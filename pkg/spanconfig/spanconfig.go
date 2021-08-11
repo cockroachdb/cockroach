@@ -78,8 +78,8 @@ type StoreReader interface {
 	GetSplitsBetween(start, end roachpb.Key) []roachpb.Key
 }
 
-// QueueReader is a an adaptor interface implemented by both the system config
-// span and spanconfig.Stores.
+// QueueReader is an adaptor interface implemented by both the system config
+// span and spanconfig.Store.
 //
 // TODO(zcfgs-pod): Merge this into the StoreReader interface.
 type QueueReader interface {
@@ -102,5 +102,3 @@ var EnabledSetting = settings.RegisterBoolSetting(
 	"enable the use of span configs",
 	false,
 )
-
-var _ = EnabledSetting // XXX: silence unused check.

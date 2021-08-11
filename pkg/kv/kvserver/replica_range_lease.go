@@ -1309,7 +1309,7 @@ func (r *Replica) checkLeaseRespectsPreferences(ctx context.Context) (bool, erro
 	if !r.OwnsValidLease(ctx, r.store.cfg.Clock.NowAsClockTimestamp()) {
 		return false, errors.Errorf("replica %s is not the leaseholder, cannot check lease preferences", r)
 	}
-	_, conf := r.DescAndSpanConfig()
+	conf := r.SpanConfig()
 	if len(conf.LeasePreferences) == 0 {
 		return true, nil
 	}

@@ -366,6 +366,10 @@ type Replica struct {
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.ClockTimestamp
 		// The span config for this replica.
+		//
+		// XXX: Instead of having this on the replica itself, we could include
+		// it as part of the adaptor interface? This way we don't need a switch
+		// to whoever it is that's writing it (gossip, or the other thing).
 		conf roachpb.SpanConfig
 		// proposalBuf buffers Raft commands as they are passed to the Raft
 		// replication subsystem. The buffer is populated by requests after
@@ -710,6 +714,8 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
 		}
 	}
 
+	ctx := r.AnnotateCtx(context.Background())
+	log.Infof(ctx, "xxx: setting conf=%s", conf.String())
 	r.mu.conf, r.mu.spanConfigExplicitlySet = conf, true
 }
 
@@ -743,6 +749,13 @@ func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanCon
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.state.Desc, r.mu.conf
+}
+
+// SpanConfig returns the authoritative span config for the replica.
+func (r *Replica) SpanConfig() roachpb.SpanConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.conf
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
