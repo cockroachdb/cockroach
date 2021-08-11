@@ -183,4 +183,3 @@ TABLE test_explicit_region  ALTER TABLE test_explicit_region CONFIGURE ZONE USIN
 # config.
 statement ok
 SELECT * FROM crdb_internal.validate_multi_region_zone_configs()
-

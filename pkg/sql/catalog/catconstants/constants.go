@@ -72,6 +72,7 @@ const (
 	CrdbInternalLocalTransactionsTableID
 	CrdbInternalLocalSessionsTableID
 	CrdbInternalLocalMetricsTableID
+	CrdbInternalNodeStmtStatsTableID
 	CrdbInternalPartitionsTableID
 	CrdbInternalPredefinedCommentsTableID
 	CrdbInternalRangesNoLeasesTableID
