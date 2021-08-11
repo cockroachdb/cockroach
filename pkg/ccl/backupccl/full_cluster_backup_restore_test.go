@@ -432,6 +432,41 @@ func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 	)
 }
 
+func TestClusterRestoreSystemTableOrdering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 10
+	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
+		tempDir,
+		InitManualReplication, base.TestClusterArgs{})
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	restoredSystemTables := make([]string, 0)
+	for _, server := range tcRestore.Servers {
+		registry := server.JobRegistry().(*jobs.Registry)
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*restoreResumer)
+				r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
+					restoredSystemTables = append(restoredSystemTables, systemTableName)
+					return nil
+				}
+				return r
+			},
+		}
+	}
+
+	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
+	// Check that the settings table is the last of the system tables to be
+	// restored.
+	require.Equal(t, restoredSystemTables[len(restoredSystemTables)-1],
+		systemschema.SettingsTable.GetName())
+}
+
 func TestDisallowFullClusterRestoreOfNonFullBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
