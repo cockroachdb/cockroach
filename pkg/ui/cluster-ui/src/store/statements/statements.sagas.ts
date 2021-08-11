@@ -9,7 +9,11 @@
 // licenses/APL.txt.
 
 import { all, call, put, delay, takeLatest } from "redux-saga/effects";
-import { getStatements } from "src/api/statementsApi";
+import {
+  getStatements,
+  getCombinedStatements,
+  CombinedStatementsRequest,
+} from "src/api/statementsApi";
 import { actions } from "./statements.reducer";
 import { rootActions } from "../reducers";
 

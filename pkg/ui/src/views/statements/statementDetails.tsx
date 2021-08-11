@@ -150,7 +150,7 @@ function filterByRouterParamsPredicate(
 }
 
 export const selectStatement = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.combinedStatements,
   (_state: AdminUIState, props: RouteComponentProps) => props,
   (statementsState, props) => {
     const statements = statementsState.data?.statements;
@@ -191,7 +191,7 @@ const mapStateToProps = (
   const statementFingerprint = statement?.statement;
   return {
     statement,
-    statementsError: state.cachedData.statements.lastError,
+    statementsError: state.cachedData.combinedStatements.lastError,
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(

@@ -11,9 +11,10 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
+import moment, { Moment } from "moment";
 
 import { AppState } from "src/store";
-import { actions as statementActions } from "src/store/statements";
+import { actions as combinedStatementActions } from "src/store/combinedStatements";
 import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
@@ -44,6 +45,7 @@ export const ConnectedStatementsPage = withRouter(
   >(
     (state: AppState, props: StatementsPageProps) => ({
       statements: selectStatements(state, props),
+      dateRange: [moment(), moment()] as [Moment, Moment],
       statementsError: selectStatementsLastError(state),
       apps: selectApps(state),
       databases: selectDatabases(state),
@@ -51,9 +53,23 @@ export const ConnectedStatementsPage = withRouter(
       lastReset: selectLastReset(state),
       columns: selectColumns(state),
       nodeRegions: nodeRegionsByIDSelector(state),
+      validStatementsDateRange: [
+        moment.utc().subtract(1, "year"),
+        moment.utc(),
+      ] as [Moment, Moment],
     }),
     (dispatch: Dispatch) => ({
-      refreshStatements: () => dispatch(statementActions.refresh()),
+      refreshStatements: () => {},
+      refreshCombinedStatements: () =>
+        dispatch(combinedStatementActions.refresh()),
+      onDateRangeChange: (start: Moment, end: Moment) => {
+        dispatch(
+          combinedStatementActions.updateDateRange({
+            start: start.unix(),
+            end: end.unix(),
+          }),
+        );
+      },
       refreshStatementDiagnosticsRequests: () =>
         dispatch(statementDiagnosticsActions.refresh()),
       resetSQLStats: () => dispatch(resetSQLStatsActions.request()),

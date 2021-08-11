@@ -44,7 +44,7 @@ const mapStateToProps = (
   const statementFingerprint = statement?.statement;
   return {
     statement,
-    statementsError: state.adminUI.statements.lastError,
+    statementsError: state.adminUI.combinedStatements.lastError,
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(

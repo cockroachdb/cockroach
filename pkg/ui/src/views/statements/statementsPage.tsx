@@ -11,11 +11,9 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import moment, { Moment } from "moment";
 import * as protos from "src/js/protos";
-import {
-  refreshStatementDiagnosticsRequests,
-  refreshStatements,
-} from "src/redux/apiReducers";
+import { refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
@@ -32,12 +30,15 @@ import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
+import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
 import { getMatchParamByName } from "src/util/query";
 
 import { StatementsPage, AggregateStatistics } from "@cockroachlabs/cluster-ui";
 import {
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
+  refreshCombinedStatementsAction,
+  setCombinedStatementsDateRangeAction,
 } from "src/redux/statements";
 import {
   trackDownloadDiagnosticsBundleAction,
@@ -63,7 +64,7 @@ interface StatementsSummaryData {
 // selectStatements returns the array of AggregateStatistics to show on the
 // StatementsPage, based on if the appAttr route parameter is set.
 export const selectStatements = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.combinedStatements,
   (_state: AdminUIState, props: RouteComponentProps) => props,
   selectDiagnosticsReportsPerStatement,
   (
@@ -128,7 +129,7 @@ export const selectStatements = createSelector(
 // selectApps returns the array of all apps with statement statistics present
 // in the data.
 export const selectApps = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.combinedStatements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return [];
@@ -163,7 +164,7 @@ export const selectApps = createSelector(
 // selectDatabases returns the array of all databases with statement statistics present
 // in the data.
 export const selectDatabases = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.combinedStatements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return [];
@@ -177,7 +178,7 @@ export const selectDatabases = createSelector(
 // selectTotalFingerprints returns the count of distinct statement fingerprints
 // present in the data.
 export const selectTotalFingerprints = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.combinedStatements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return 0;
@@ -190,12 +191,19 @@ export const selectTotalFingerprints = createSelector(
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
 export const selectLastReset = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.combinedStatements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return "unknown";
     }
     return PrintTime(TimestampToMoment(state.data.last_reset));
+  },
+);
+
+export const selectDateRange = createSelector(
+  statementsDateRangeLocalSetting.selector,
+  (state: { start: number; end: number }): [Moment, Moment] => {
+    return [moment.unix(state.start), moment.unix(state.end)];
   },
 );
 
@@ -209,16 +217,27 @@ export default withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
       statements: selectStatements(state, props),
-      statementsError: state.cachedData.statements.lastError,
+      statementsError: state.cachedData.combinedStatements.lastError,
+      dateRange: selectDateRange(state),
       apps: selectApps(state),
       databases: selectDatabases(state),
       totalFingerprints: selectTotalFingerprints(state),
       lastReset: selectLastReset(state),
       columns: statementColumnsLocalSetting.selectorToArray(state),
       nodeRegions: nodeRegionsByIDSelector(state),
+
+      // TODO (xinhaoz) derive these values from available statement data
+      // We currently don't have the support for determining the bounds
+      // of persisted statement data, aside from issuing a get all.
+      validStatementsDateRange: [
+        moment.utc().subtract(1, "year"),
+        moment.utc(),
+      ] as [Moment, Moment],
     }),
     {
-      refreshStatements,
+      refreshStatements: () => {},
+      refreshCombinedStatements: refreshCombinedStatementsAction,
+      onDateRangeChange: setCombinedStatementsDateRangeAction,
       refreshStatementDiagnosticsRequests,
       resetSQLStats: resetSQLStatsAction,
       dismissAlertMessage: () =>

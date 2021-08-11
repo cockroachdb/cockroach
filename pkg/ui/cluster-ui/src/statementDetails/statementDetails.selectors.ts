@@ -116,7 +116,7 @@ function filterByRouterParamsPredicate(
 }
 
 export const selectStatement = createSelector(
-  (state: AppState) => state.adminUI.statements,
+  (state: AppState) => state.adminUI.combinedStatements,
   (_state: AppState, props: RouteComponentProps) => props,
   (statementsState, props) => {
     const statements = statementsState.data?.statements;
