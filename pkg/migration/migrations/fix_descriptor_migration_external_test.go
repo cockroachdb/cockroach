@@ -19,14 +19,21 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
@@ -190,4 +197,104 @@ func TestFixPrivilegesMigration(t *testing.T) {
 		require.NoError(t, err)
 		tc.Stopper().Stop(ctx)
 	}
+}
+
+func TestFixDBDescriptorDroppedSchemaName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: 1,
+					BinaryVersionOverride: clusterversion.ByKey(
+						clusterversion.FixDescriptors - 1),
+				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+	s := tc.Server(0)
+	sqlDB := tc.ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// - Create database.
+	// - Read its descriptor, add the bad entry, write the descriptor
+	//   without validation.
+	// - Read the descriptor without validation and ensure that the bad
+	//   entry exists, while ensures that the bad entry is not removed
+	//   while writing the descriptor.
+	// - Run migration.
+	// - Read the descriptor without validation and ensure that the bad
+	//   entry does not exist.
+
+	const dbName = "t"
+	tdb.Exec(t, "CREATE DATABASE "+dbName)
+
+	// Write a corrupted descriptor.
+	var descID descpb.ID
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn *kv.Txn, collection *descs.Collection,
+	) error {
+		flags := tree.DatabaseLookupFlags{Required: true}
+		desc, err := collection.GetMutableDatabaseByName(ctx, txn, dbName, flags)
+		if err != nil {
+			return err
+		}
+		descID = desc.GetID()
+		desc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{dbName: {ID: descID, Dropped: true}}
+		builder := dbdesc.NewBuilder(desc.DatabaseDesc())
+		badDesc := builder.BuildCreatedMutable()
+		badDesc.MaybeIncrementVersion()
+		collection.SkipValidationOnWrite()
+		return collection.WriteDesc(ctx, false, badDesc, txn)
+	}))
+
+	// Checks whether the erroneous entry exists or not.
+	hasSameNameSchema := func(dbName string) bool {
+		exists := false
+		var desc catalog.DatabaseDescriptor
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+			ctx context.Context, txn *kv.Txn, collection *descs.Collection,
+		) error {
+			// Using this method to avoid calling RunPostDeserializationChanges().
+			allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, execCfg.Codec, false)
+			if err != nil {
+				return err
+			}
+			for _, d := range allDescs {
+				if d.GetID() == descID {
+					desc, err = catalog.AsDatabaseDescriptor(d)
+					require.NoError(t, err, "unable to cast to database descriptor")
+					return nil
+				}
+			}
+			return nil
+		}))
+		require.NoError(t, desc.ForEachSchemaInfo(
+			func(id descpb.ID, name string, isDropped bool) error {
+				if name == dbName {
+					exists = true
+				}
+				return nil
+			}))
+		return exists
+	}
+
+	// Validate that the bad entry does exist after writing the descriptor.
+	require.True(t, hasSameNameSchema(dbName), "bad entry does not exist")
+
+	// Migrate to the new version.
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING version = $1`,
+		clusterversion.ByKey(clusterversion.FixDescriptors).String())
+	require.NoError(t, err)
+
+	// Validate that the bad entry is removed.
+	require.False(t, hasSameNameSchema(dbName), "bad entry exists")
 }
