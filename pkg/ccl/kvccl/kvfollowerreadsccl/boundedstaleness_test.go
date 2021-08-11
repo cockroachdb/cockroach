@@ -11,6 +11,7 @@ package kvfollowerreadsccl_test
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -207,6 +208,12 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 			},
 		}
 	}
+	// Replace errors which are not deterministically output.
+	// In this case, it is the HLC timestamp of
+	// MinTimestampBoundUnsatisfiableErrors.
+	errorRegexp := regexp.MustCompile(
+		"((minimum timestamp bound|local resolved timestamp) of) [\\d.,]*",
+	)
 
 	datadriven.Walk(t, "testdata/boundedstaleness", func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 3, clusterArgs)
@@ -269,6 +276,10 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 			var ret string
 			testutils.SucceedsSoon(t, func() error {
 				ret = executeCmd()
+				ret = errorRegexp.ReplaceAllString(
+					ret,
+					"$1 XXX",
+				)
 				// If we're waiting until follower reads, retry until we are always
 				// reading follower reads.
 				if waitUntilFollowerReads {
