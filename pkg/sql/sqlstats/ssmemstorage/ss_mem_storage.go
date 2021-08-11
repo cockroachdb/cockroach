@@ -117,7 +117,10 @@ func New(
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
 	}
 
-	s.mu.acc = mon.MakeBoundAccount()
+	if mon != nil {
+		s.mu.acc = mon.MakeBoundAccount()
+	}
+
 	s.mu.stmts = make(map[stmtKey]*stmtStats)
 	s.mu.txns = make(map[roachpb.TransactionFingerprintID]*txnStats)
 
@@ -201,6 +204,29 @@ func (s *Container) StmtStatsIterator(options *sqlstats.IteratorOptions) *StmtSt
 // TxnStatsIterator returns an instance of TxnStatsIterator.
 func (s *Container) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStatsIterator {
 	return NewTxnStatsIterator(s, options)
+}
+
+// UnsafeInsertStmtStats inserts a roachpb.CollectedStatementStatistics into the
+// Container. This is done so without locking onto the mutex. This is used to
+// quickly bootstrap a Container with existing data without incurring the cost
+// of locking onto mutex.
+func (s *Container) UnsafeInsertStmtStats(
+	stmtFingerprintID roachpb.StmtFingerprintID,
+	serializedKey *roachpb.StatementStatisticsKey,
+	statistics *roachpb.StatementStatistics,
+) error {
+	key := stmtKey{
+		anonymizedStmt: serializedKey.Query,
+		failed:         serializedKey.Failed,
+		implicitTxn:    serializedKey.ImplicitTxn,
+		database:       serializedKey.Database,
+	}
+	stmtStats, _, throttled := s.getStatsForStmtWithKey(key, stmtFingerprintID, true /* createIfNonexistent */, true /* unsafe */)
+	if throttled {
+		return ErrFingerprintLimitReached
+	}
+	stmtStats.mu.data.Add(statistics)
+	return nil
 }
 
 type txnStats struct {
@@ -305,37 +331,48 @@ func (s *Container) getStatsForStmt(
 	// We first try and see if we can get by without creating a new entry for this
 	// key, as this allows us to not construct the statementFingerprintID from scratch (which
 	// is an expensive operation)
-	stats, _, _ = s.getStatsForStmtWithKey(key, invalidStmtFingerprintID, false /* createIfNonexistent */)
+	stats, _, _ = s.getStatsForStmtWithKey(key, invalidStmtFingerprintID, false /* createIfNonexistent */, false /* unsafe */)
 	if stats == nil {
 		stmtFingerprintID = constructStatementFingerprintIDFromStmtKey(key)
-		stats, created, throttled = s.getStatsForStmtWithKey(key, stmtFingerprintID, createIfNonexistent)
+		stats, created, throttled = s.getStatsForStmtWithKey(key, stmtFingerprintID, createIfNonexistent, false /* unsafe */)
 		return stats, key, stmtFingerprintID, created, throttled
 	}
 	return stats, key, stats.ID, false /* created */, false /* throttled */
 }
 
+// getStatsForStmtWithKey returns an instance of stmtStats.
+// If createIfNonexistent flag is set to true, then a new entry is created in
+// the Container if it does not yet exist.
+// If unsafe flag is set to true, then the new entry is fetched/created without
+// locking onto the mutex. This should only be used when caller is absolutely
+// sure that the Container is not being used concurrently by multiple goroutines.
 func (s *Container) getStatsForStmtWithKey(
-	key stmtKey, stmtFingerprintID roachpb.StmtFingerprintID, createIfNonexistent bool,
+	key stmtKey, stmtFingerprintID roachpb.StmtFingerprintID, createIfNonexistent bool, unsafe bool,
 ) (stats *stmtStats, created, throttled bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	if !unsafe {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+	}
 
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
 	stats, ok := s.mu.stmts[key]
 	if !ok && createIfNonexistent {
-		// We check if we have reached the limit of unique fingerprints we can
-		// store.
-		limit := s.uniqueStmtFingerprintLimit.Get(&s.st.SV)
-		incrementedFingerprintCount :=
-			atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, int64(1) /* delts */)
+		// If the uniqueStmtFingerprintCount is nil, then we don't check for
+		// fingerprint limit.
+		if s.atomic.uniqueStmtFingerprintCount != nil {
+			// We check if we have reached the limit of unique fingerprints we can
+			// store.
+			limit := s.uniqueStmtFingerprintLimit.Get(&s.st.SV)
+			incrementedFingerprintCount :=
+				atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, int64(1) /* delts */)
 
-		// Abort if we have exceeded limit of unique statement fingerprints.
-		if incrementedFingerprintCount > limit {
-			atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, -int64(1) /* delts */)
-			return stats, false /* created */, true /* throttled */
+			// Abort if we have exceeded limit of unique statement fingerprints.
+			if incrementedFingerprintCount > limit {
+				atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, -int64(1) /* delts */)
+				return stats, false /* created */, true /* throttled */
+			}
 		}
-
 		stats = &stmtStats{}
 		stats.ID = stmtFingerprintID
 		s.mu.stmts[key] = stats
@@ -432,7 +469,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 
 	// Merge the statement stats.
 	for k, v := range statMap {
-		stats, created, throttled := s.getStatsForStmtWithKey(k, v.ID, true /* createIfNonexistent */)
+		stats, created, throttled := s.getStatsForStmtWithKey(k, v.ID, true /* createIfNonexistent */, false /* unsafe */)
 
 		// If we have reached the limit of fingerprints, we skip this fingerprint.
 		// No cleanup necessary.
