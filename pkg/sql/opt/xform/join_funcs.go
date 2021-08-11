@@ -296,7 +296,11 @@ func (c *CustomFuncs) GenerateLookupJoinsWithVirtualCols(
 }
 
 // generateLookupJoinsImpl is the general implementation for generating lookup
-// joins. See GenerateLookupJoins and GenerateLookupJoinsWithVirtualCols for
+// joins. The rightCols argument must be the columns output by the right side of
+// matched join expression. projectedVirtualCols is the set of virtual columns
+// projected on the right side of the matched join expression.
+//
+// See GenerateLookupJoins and GenerateLookupJoinsWithVirtualCols for
 // more details.
 func (c *CustomFuncs) generateLookupJoinsImpl(
 	grp memo.RelExpr,
@@ -500,6 +504,25 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols()
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
+		// At this point the filter may have been reduced by partial index
+		// predicate implication and by removing parts of the filter that are
+		// represented by the key columns. If there are any outer columns of the
+		// filter that are not output columns of the right side of the join, we
+		// skip this index.
+		//
+		// This is possible when GenerateLookupJoinsWithVirtualColsAndFilter
+		// matches an expression on the right side of the join in the form
+		// (Project (Select (Scan))). The Select's filters may reference columns
+		// that are not passed through in the Project.
+		//
+		// TODO(mgartner): We could handle this by wrapping the lookup join in
+		// an index join to fetch these columns and filter by them, then
+		// wrapping the index join in a project that removes the columns.
+		filterColsFromRight := lookupJoin.On.OuterCols().Difference(inputProps.OutputCols)
+		if !filterColsFromRight.SubsetOf(rightCols) {
+			return
+		}
+
 		isCovering := rightCols.SubsetOf(indexCols)
 		if isCovering {
 			// Case 1 (see function comment).
@@ -528,7 +551,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 
 		_, isPartial := index.Predicate()
 		if isPartial && (joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp) {
-			// Typically, the index must cover all columns in the scanPrivate in
+			// Typically, the index must cover all columns from the right in
 			// order to generate a lookup join without an additional index join
 			// (case 1, see function comment). However, if the index is a
 			// partial index, the filters remaining after proving
