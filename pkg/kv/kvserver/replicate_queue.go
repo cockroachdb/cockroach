@@ -234,15 +234,6 @@ func (rq *replicateQueue) shouldQueue(
 	desc, zone := repl.DescAndZone()
 	action, priority := rq.allocator.ComputeAction(ctx, zone, desc)
 
-	// For simplicity, the first thing the allocator does is remove learners, so
-	// it can do all of its reasoning about only voters. We do the same here so
-	// the executions of the allocator's decisions can be in terms of voters.
-	if action == AllocatorRemoveLearner {
-		return true, priority
-	}
-	voterReplicas := desc.Replicas().VoterDescriptors()
-	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
-
 	if action == AllocatorNoop {
 		log.VEventf(ctx, 2, "no action to take")
 		return false, 0
@@ -251,6 +242,8 @@ func (rq *replicateQueue) shouldQueue(
 		return true, priority
 	}
 
+	voterReplicas := desc.Replicas().VoterDescriptors()
+	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 		rangeUsageInfo := rangeUsageInfoForRepl(repl)
 		_, _, _, ok := rq.allocator.RebalanceVoter(
@@ -548,7 +541,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		// See about transferring the lease away if we're about to remove the
 		// leaseholder.
 		done, err := rq.maybeTransferLeaseAway(
-			ctx, repl, existingVoters[removeIdx].StoreID, dryRun, nil /* canTransferLease */)
+			ctx, repl, existingVoters[removeIdx].StoreID, dryRun, nil /* canTransferLeaseFrom */)
 		if err != nil {
 			return false, err
 		}
@@ -805,7 +798,7 @@ func (rq *replicateQueue) findRemoveVoter(
 // true to indicate to the caller that it should not pursue the current
 // replication change further because it is no longer the leaseholder. When the
 // returned bool is false, it should continue. On error, the caller should also
-// stop. If canTransferLease is non-nil, it is consulted and an error is
+// stop. If canTransferLeaseFrom is non-nil, it is consulted and an error is
 // returned if it returns false.
 func (rq *replicateQueue) maybeTransferLeaseAway(
 	ctx context.Context,
@@ -854,7 +847,7 @@ func (rq *replicateQueue) removeVoter(
 		return false, err
 	}
 	done, err := rq.maybeTransferLeaseAway(
-		ctx, repl, removeVoter.StoreID, dryRun, nil /* canTransferLease */)
+		ctx, repl, removeVoter.StoreID, dryRun, nil /* canTransferLeaseFrom */)
 	if err != nil {
 		return false, err
 	}
