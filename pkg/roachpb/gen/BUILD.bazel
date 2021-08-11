@@ -7,18 +7,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 # order to generate newer revisions within the sandbox. For another example of
 # this pattern, see what we do in langgen[4].
 #
-# All dependants of //pkg/roachpb will need to depend on the file generated
+# All dependents of //pkg/roachpb will need to depend on the file generated
 # within the Bazel sandbox, which is achieved by [5]. Conversely, to instruct
 # gazelle/Bazel to resolve gen's import of //pkg/roachpb appropriately, we add
 # the resolve directive below.
-#
-# TODO(irfansharif): We'll eventually want to be able to implant the sandbox
-# generated files back into the source tree. This will be necessary for IDEs,
-# but also for a sane workflow for the engineers working on roachpb. If they
-# were only using Bazel today, roachpb dependent builds would misbehave as we
-# wouldn't be updating the checked-in batch_generated.go file used to build
-# roachpb itself (assuming any diffs there would result in different
-# code/compilation behavior). See #58018.
 #
 # [1]: //pkg/roachpb/gen-batch-generated
 # [2]: //pkg/roachpb:bootstrap
