@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -94,10 +96,23 @@ func (ev *boundedStalenessTraceEvent) EventOutput() string {
 	)
 }
 
+// boundedStalenessRetryEvent is a retry that has occurred from within the
+// transaction as a result of a nearest_only bounded staleness restart.
+type boundedStalenessRetryEvent struct {
+	nodeIdx int
+	*roachpb.MinTimestampBoundUnsatisfiableError
+	asOf tree.AsOfSystemTime
+}
+
+func (ev *boundedStalenessRetryEvent) EventOutput() string {
+	return fmt.Sprintf("transaction retry on node_idx: %d", ev.nodeIdx)
+}
+
 // boundedStalenessEvents tracks bounded staleness datadriven related events.
 type boundedStalenessEvents struct {
-	stmt   string
-	events []boundedStalenessDataDrivenEvent
+	stmt         string
+	events       []boundedStalenessDataDrivenEvent
+	lastTxnRetry *boundedStalenessRetryEvent
 }
 
 func (ti *boundedStalenessEvents) String() string {
@@ -115,11 +130,32 @@ func (ti *boundedStalenessEvents) String() string {
 	return sb.String()
 }
 
+func (ti *boundedStalenessEvents) onTxnRetry(
+	t *testing.T, nodeIdx int, autoRetryReason error, evalCtx *tree.EvalContext,
+) {
+	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
+	if autoRetryReason != nil && errors.As(autoRetryReason, &minTSErr) {
+		ev := &boundedStalenessRetryEvent{
+			nodeIdx:                             nodeIdx,
+			MinTimestampBoundUnsatisfiableError: minTSErr,
+			asOf:                                *evalCtx.AsOfSystemTime,
+		}
+		ti.events = append(ti.events, ev)
+		require.True(t, ev.asOf.BoundedStaleness)
+		// TODO(XXX): assert prev min timestamp bound is smaller.
+		if ti.lastTxnRetry != nil {
+			require.True(t, ev.MinTimestampBound.Less(ti.lastTxnRetry.MinTimestampBound), ev.MinTimestampBound, ti.lastTxnRetry.MinTimestampBound)
+			require.Equal(t, ev.asOf.Timestamp, ti.lastTxnRetry.asOf.Timestamp)
+		}
+		ti.lastTxnRetry = ev
+	}
+}
+
 func (ti *boundedStalenessEvents) onStmtTrace(
 	t *testing.T, nodeIdx int, rec tracing.Recording, stmt string,
 ) {
 	if ti.stmt == stmt {
-		t.Logf("trace of stmt %s:\n%v\n", stmt, rec)
+		//t.Logf("trace of stmt %s:\n%v\n", stmt, rec)
 
 		spans := make(map[uint64]tracingpb.RecordedSpan)
 		for _, sp := range rec {
@@ -151,6 +187,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	}
 	const numNodes = 3
 	var onStmtTraceFunc func(*testing.T, int, tracing.Recording, string)
+	var onTxnRetryFunc func(*testing.T, int, error, *tree.EvalContext)
 	for i := 0; i < numNodes; i++ {
 		i := i
 		clusterArgs.ServerArgsPerNode[i] = base.TestServerArgs{
@@ -159,6 +196,11 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 					WithStatementTrace: func(trace tracing.Recording, stmt string) {
 						if onStmtTraceFunc != nil {
 							onStmtTraceFunc(t, i, trace, stmt)
+						}
+					},
+					OnTxnRetry: func(err error, evalCtx *tree.EvalContext) {
+						if onTxnRetryFunc != nil {
+							onTxnRetryFunc(t, i, err, evalCtx)
 						}
 					},
 				},
@@ -183,6 +225,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 						stmt: d.Input,
 					}
 					onStmtTraceFunc = ti.onStmtTrace
+					onTxnRetryFunc = ti.onTxnRetry
 				}
 			}
 			dbConn := tc.ServerConn(0)
@@ -226,7 +269,8 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 			var ret string
 			testutils.SucceedsSoon(t, func() error {
 				ret = executeCmd()
-				// If we're waiting until follower reads, retry.
+				// If we're waiting until follower reads, retry until we are always
+				// reading follower reads.
 				if waitUntilFollowerReads {
 					allFollowerReads := true
 					for _, ev := range ti.events {

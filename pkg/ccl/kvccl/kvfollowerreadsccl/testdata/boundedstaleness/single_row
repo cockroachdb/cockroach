@@ -33,6 +33,21 @@ SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1ms', false) WHERE
 events (1 found):
  * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:true,follower_read:false}
 
+# If nearest_only=True, all small 1ms reads should fail.
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', true) WHERE pk = 1
+----
+pq: bounded staleness read with minimum timestamp bound of 1628657895.276791000,0 could not be satisfied by a local resolved timestamp of 1628657892.252827000,0
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1ms', true) WHERE pk = 1
+----
+pq: bounded staleness read with minimum timestamp bound of 1628657895.277801000,0 could not be satisfied by a local resolved timestamp of 1628657892.252827000,0
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+
 # Wait until the follower has caught up. Ensure reads are local, follower reads.
 query idx=2 show-events wait-until-follower-read
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
@@ -57,6 +72,20 @@ events (1 found):
 
 query idx=2 show-events
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:true}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', true) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:true}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 1
 ----
 1
 events (1 found):
@@ -97,3 +126,65 @@ SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', false) WHERE
 1 2
 events (1 found):
  * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:true,follower_read:false}
+
+# When nearest_only=True, we should only read the state before the schema change successfully.
+# Note the schema changes several times, hence the multiple events required.
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', true) WHERE pk = 1
+----
+1
+events (7 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 2: transaction retry on node_idx: 2
+ * event 3: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 4: transaction retry on node_idx: 2
+ * event 5: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 6: transaction retry on node_idx: 2
+ * event 7: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+
+query idx=2 show-events
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 1
+----
+1
+events (7 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 2: transaction retry on node_idx: 2
+ * event 3: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 4: transaction retry on node_idx: 2
+ * event 5: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 6: transaction retry on node_idx: 2
+ * event 7: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:true}
+
+# When creating a new schema, ensure when nearest_only=True, we correctly error
+# with the schema not existing.
+exec
+CREATE TABLE t2(pk INT PRIMARY KEY);
+INSERT INTO t2 VALUES (2);
+ALTER TABLE t2 ADD COLUMN new_col INT
+----
+
+query idx=2 show-events
+SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
+----
+pq: relation "t2" does not exist
+events (7 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 2: transaction retry on node_idx: 2
+ * event 3: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 4: transaction retry on node_idx: 2
+ * event 5: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 6: transaction retry on node_idx: 2
+ * event 7: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+
+query idx=2 show-events
+SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
+----
+pq: relation "t2" does not exist
+events (7 found):
+ * event 1: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 2: transaction retry on node_idx: 2
+ * event 3: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 4: transaction retry on node_idx: 2
+ * event 5: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
+ * event 6: transaction retry on node_idx: 2
+ * event 7: colbatchscan: {node_idx:2,local_read:true,remote_leaseholder_read:false,follower_read:false}
