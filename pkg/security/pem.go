@@ -38,7 +38,7 @@ func WritePEMToFile(path string, mode os.FileMode, overwrite bool, blocks ...*pe
 
 	for _, p := range blocks {
 		if err := pem.Encode(f, p); err != nil {
-			return errors.Errorf("could not encode PEM block: %v", err)
+			return errors.Wrap(err, "could not encode PEM block")
 		}
 	}
 
