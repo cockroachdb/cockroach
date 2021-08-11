@@ -102,6 +102,8 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			switch nextID {
 			case ALWAYS:
 				lval.id = GENERATED_ALWAYS
+			case BY:
+				lval.id = GENERATED_BY_DEFAULT
 			}
 
 		case WITH:
