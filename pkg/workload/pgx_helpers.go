@@ -13,11 +13,9 @@ package workload
 import (
 	"context"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/sync/errgroup"
 )
@@ -137,33 +135,6 @@ func (m *MultiConnPool) Get() *pgxpool.Pool {
 	}
 	i := atomic.AddUint32(&m.counter, 1) - 1
 	return m.Pools[i%uint32(len(m.Pools))]
-}
-
-// Prepare prepares the given statement on all the pools.
-func (m *MultiConnPool) Prepare(
-	ctx context.Context, name, sql string,
-) (*pgconn.StatementDescription, error) {
-	var res *pgconn.StatementDescription
-	var once sync.Once
-	var g errgroup.Group
-	for _, p := range m.Pools {
-		p := p
-		g.Go(func() error {
-			conn, err := p.Acquire(ctx)
-			if err != nil {
-				return err
-			}
-			ps, err := conn.Conn().Prepare(ctx, name, sql)
-			if err == nil {
-				// It doesn't matter which PreparedStatement we return, they should
-				// contain the same information.
-				once.Do(func() { res = ps })
-			}
-			return err
-		})
-	}
-	err := g.Wait()
-	return res, err
 }
 
 // Close closes all the pools.

@@ -174,7 +174,7 @@ func (w *indexes) Ops(
 			buf:    make([]byte, w.payload),
 		}
 		op.stmt = op.sr.Define(stmt)
-		if err := op.sr.Init(ctx, "indexes", mcp, w.connFlags); err != nil {
+		if err := op.sr.Init(ctx, mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
