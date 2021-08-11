@@ -118,22 +118,22 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  │         └── cost: 2124.52
  ├── G7: (filters G9)
  ├── G8: (index-join G10 t,cols=(1,2))
- │    ├── [ordering: +1] [limit hint: 13.50]
+ │    ├── [ordering: +1] [limit hint: 5.34]
  │    │    ├── best: (sort G8)
- │    │    └── cost: 22166.50
+ │    │    └── cost: 8755.99
  │    └── []
  │         ├── best: (index-join G10 t,cols=(1,2))
- │         └── cost: 21352.06
+ │         └── cost: 8465.67
  ├── G9: (function G11 st_intersects)
  ├── G10: (inverted-filter G12 g_inverted_key)
  │    └── []
  │         ├── best: (inverted-filter G12 g_inverted_key)
- │         └── cost: 3172.04
+ │         └── cost: 1268.99
  ├── G11: (scalar-list G13 G14)
  ├── G12: (scan t@secondary,cols=(3,6),constrained inverted)
  │    └── []
  │         ├── best: (scan t@secondary,cols=(3,6),constrained inverted)
- │         └── cost: 3142.02
+ │         └── cost: 1257.09
  ├── G13: (const '010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F')
  └── G14: (variable g)
 
