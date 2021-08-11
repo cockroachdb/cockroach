@@ -857,6 +857,7 @@ func init() {
 
 		intFlag(f, &demoCtx.SQLPort, cliflags.DemoSQLPort)
 		intFlag(f, &demoCtx.HTTPPort, cliflags.DemoHTTPPort)
+		stringFlag(f, &demoCtx.ListeningURLFile, cliflags.ListeningURLFile)
 	}
 
 	// statement-diag command.

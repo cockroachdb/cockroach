@@ -88,6 +88,10 @@ type Context struct {
 	// HTTPPort is the first HTTP port number to use when instantiating
 	// servers. Use zero for auto-allocated random ports.
 	HTTPPort int
+
+	// ListeningURLFile can be set to a file which is written to after
+	// the demo cluster has started, to contain a valid connection URL.
+	ListeningURLFile string
 }
 
 // IsInteractive returns true if the demo cluster configuration
