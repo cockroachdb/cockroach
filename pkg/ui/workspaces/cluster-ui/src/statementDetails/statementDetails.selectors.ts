@@ -116,10 +116,20 @@ function filterByRouterParamsPredicate(
 }
 
 export const selectStatement = createSelector(
+  (state: AppState) => state.adminUI.combinedStatements,
   (state: AppState) => state.adminUI.statements,
   (_state: AppState, props: RouteComponentProps) => props,
-  (statementsState, props) => {
-    const statements = statementsState.data?.statements;
+  (statementsState, combinedStatementsState, props) => {
+    // TODO (xinhaoz) We need both in-memory and peristed data right now since
+    // statement details could refer to statemetns from the transactions page or
+    // statements page.
+    const statements = [
+      ...(statementsState.data ? statementsState.data.statements : []),
+      ...(combinedStatementsState.data
+        ? combinedStatementsState.data.statements
+        : []),
+    ];
+
     if (!statements) {
       return null;
     }

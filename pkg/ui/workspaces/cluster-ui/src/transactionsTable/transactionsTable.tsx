@@ -41,7 +41,6 @@ import statsTablePageStyles from "src/statementsTable/statementsTableContent.mod
 
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
-type CollectedTransactionStatistics = protos.cockroach.sql.ICollectedTransactionStatistics;
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 interface TransactionsTable {

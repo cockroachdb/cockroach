@@ -15,20 +15,25 @@ import { StatementsRequest } from "src/api/statementsApi";
 
 type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 
-export type StatementsState = {
+export type CombinedStatementsState = {
   data: StatementsResponse;
   lastError: Error;
   valid: boolean;
 };
 
-const initialState: StatementsState = {
+const initialState: CombinedStatementsState = {
   data: null,
   lastError: null,
   valid: true,
 };
 
+export type UpdateDateRangePayload = {
+  start: number;
+  end: number;
+};
+
 const statementsSlice = createSlice({
-  name: `${DOMAIN_NAME}/statements`,
+  name: `${DOMAIN_NAME}/combinedStatements`,
   initialState,
   reducers: {
     received: (state, action: PayloadAction<StatementsResponse>) => {
@@ -43,8 +48,10 @@ const statementsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (_, action?: PayloadAction<StatementsRequest>) => {},
-    request: (_, action?: PayloadAction<StatementsRequest>) => {},
+    // Define actions that don't change state
+    refresh: (_, action: PayloadAction<StatementsRequest>) => {},
+    request: noopReducer,
+    updateDateRange: (_, action: PayloadAction<UpdateDateRangePayload>) => {},
   },
 });
 
