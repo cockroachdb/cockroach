@@ -11,6 +11,7 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DOMAIN_NAME, noopReducer } from "../utils";
+import { StatementsRequest } from "src/api/statementsApi";
 
 type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 
@@ -24,6 +25,11 @@ const initialState: StatementsState = {
   data: null,
   lastError: null,
   valid: true,
+};
+
+export type UpdateDateRangePayload = {
+  start: number;
+  end: number;
 };
 
 const statementsSlice = createSlice({
@@ -42,9 +48,9 @@ const statementsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    // Define actions that don't change state
-    refresh: noopReducer,
-    request: noopReducer,
+    refresh: (_, action?: PayloadAction<StatementsRequest>) => {},
+    request: (_, action?: PayloadAction<StatementsRequest>) => {},
+    updateDateRange: (_, action: PayloadAction<UpdateDateRangePayload>) => {},
   },
 });
 
