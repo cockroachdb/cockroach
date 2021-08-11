@@ -881,6 +881,8 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecsel/default_cmp_sel_ops.eg.go \
   pkg/sql/colexec/colexecsel/selection_ops.eg.go \
   pkg/sql/colexec/colexecsel/sel_like_ops.eg.go \
+  pkg/sql/colexec/colexecspan/span_assembler.eg.go \
+  pkg/sql/colexec/colexecspan/span_encoder.eg.go \
   pkg/sql/colexec/colexecwindow/first_value.eg.go \
   pkg/sql/colexec/colexecwindow/lag.eg.go \
   pkg/sql/colexec/colexecwindow/last_value.eg.go \

@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"sync/atomic"
 	"unsafe"
 
@@ -60,7 +59,8 @@ const invalidStmtFingerprintID = 0
 
 // Container holds per-application statement and transaction statistics.
 type Container struct {
-	st *cluster.Settings
+	st      *cluster.Settings
+	appName string
 
 	// uniqueStmtFingerprintLimit is the limit on number of unique statement
 	// fingerprints we can store in memory.
@@ -108,9 +108,11 @@ func New(
 	uniqueStmtFingerprintCount *int64,
 	uniqueTxnFingerprintCount *int64,
 	mon *mon.BytesMonitor,
+	appName string,
 ) *Container {
 	s := &Container{
 		st:                         st,
+		appName:                    appName,
 		uniqueStmtFingerprintLimit: uniqueStmtFingerprintLimit,
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
 	}
@@ -123,110 +125,6 @@ func New(
 	s.atomic.uniqueTxnFingerprintCount = uniqueTxnFingerprintCount
 
 	return s
-}
-
-// IterateStatementStats iterates through the stored statement statistics
-// stored in this Container.
-func (s *Container) IterateStatementStats(
-	ctx context.Context, appName string, orderedKey bool, visitor sqlstats.StatementVisitor,
-) error {
-	var stmtKeys stmtList
-	s.mu.Lock()
-	for k := range s.mu.stmts {
-		stmtKeys = append(stmtKeys, k)
-	}
-	s.mu.Unlock()
-	if orderedKey {
-		sort.Sort(stmtKeys)
-	}
-
-	for _, stmtKey := range stmtKeys {
-		stmtFingerprintID := constructStatementFingerprintIDFromStmtKey(stmtKey)
-		statementStats, _, _ :=
-			s.getStatsForStmtWithKey(stmtKey, invalidStmtFingerprintID, false /* createIfNonexistent */)
-
-		// If the key is not found (and we expected to find it), the table must
-		// have been cleared between now and the time we read all the keys. In
-		// that case we simply skip this key as there are no metrics to report.
-		if statementStats == nil {
-			continue
-		}
-
-		statementStats.mu.Lock()
-		data := statementStats.mu.data
-		distSQLUsed := statementStats.mu.distSQLUsed
-		vectorized := statementStats.mu.vectorized
-		fullScan := statementStats.mu.fullScan
-		database := statementStats.mu.database
-		statementStats.mu.Unlock()
-
-		collectedStats := roachpb.CollectedStatementStatistics{
-			Key: roachpb.StatementStatisticsKey{
-				Query:       stmtKey.anonymizedStmt,
-				DistSQL:     distSQLUsed,
-				Opt:         true,
-				Vec:         vectorized,
-				ImplicitTxn: stmtKey.implicitTxn,
-				FullScan:    fullScan,
-				Failed:      stmtKey.failed,
-				App:         appName,
-				Database:    database,
-			},
-			ID:    stmtFingerprintID,
-			Stats: data,
-		}
-
-		err := visitor(ctx, &collectedStats)
-		if err != nil {
-			return fmt.Errorf("sql stats iteration abort: %s", err)
-		}
-	}
-	return nil
-}
-
-// IterateTransactionStats iterates through the stored transaction statistics
-// stored in this Container.
-func (s *Container) IterateTransactionStats(
-	ctx context.Context, appName string, orderedKey bool, visitor sqlstats.TransactionVisitor,
-) error {
-	// Retrieve the transaction keys and optionally sort them.
-	var txnKeys txnList
-	s.mu.Lock()
-	for k := range s.mu.txns {
-		txnKeys = append(txnKeys, k)
-	}
-	s.mu.Unlock()
-	if orderedKey {
-		sort.Sort(txnKeys)
-	}
-
-	// Now retrieve the per-stmt stats proper.
-	for _, txnKey := range txnKeys {
-		// We don't want to create the key if it doesn't exist, so it's okay to
-		// pass nil for the statementFingerprintIDs, as they are only set when a key is
-		// constructed.
-		txnStats, _, _ := s.getStatsForTxnWithKey(txnKey, nil /* stmtFingerprintIDs */, false /* createIfNonexistent */)
-		// If the key is not found (and we expected to find it), the table must
-		// have been cleared between now and the time we read all the keys. In
-		// that case we simply skip this key as there are no metrics to report.
-		if txnStats == nil {
-			continue
-		}
-
-		txnStats.mu.Lock()
-		collectedStats := roachpb.CollectedTransactionStatistics{
-			StatementFingerprintIDs: txnStats.statementFingerprintIDs,
-			App:                     appName,
-			Stats:                   txnStats.mu.data,
-		}
-		txnStats.mu.Unlock()
-
-		err := visitor(ctx, txnKey, &collectedStats)
-		if err != nil {
-			return fmt.Errorf("sql stats iteration abort: %s", err)
-		}
-	}
-	return nil
 }
 
 // IterateAggregatedTransactionStats iterates through the stored aggregated
@@ -293,6 +191,16 @@ func (s *Container) GetTransactionStats(
 	}
 
 	return collectedStats, nil
+}
+
+// StmtStatsIterator returns an instance of StmtStatsIterator.
+func (s *Container) StmtStatsIterator(options *sqlstats.IteratorOptions) *StmtStatsIterator {
+	return NewStmtStatsIterator(s, options)
+}
+
+// TxnStatsIterator returns an instance of TxnStatsIterator.
+func (s *Container) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStatsIterator {
+	return NewTxnStatsIterator(s, options)
 }
 
 type txnStats struct {
