@@ -168,7 +168,40 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGenerat
 		if err != nil {
 			return err
 		}
+		fileContents, err := d.os.ReadFile(filepath.Join(workspace, "build/bazelutil/checked_in_genfiles.txt"))
+		if err != nil {
+			return err
+		}
+		renameMap := make(map[string]string)
+		for _, line := range strings.Split(fileContents, "\n") {
+			line = strings.TrimSpace(line)
+			if len(line) == 0 || strings.HasPrefix(line, "#") {
+				continue
+			}
+			components := strings.Split(line, "|")
+			target := components[0]
+			dir := strings.Split(strings.TrimPrefix(target, "//"), ":")[0]
+			oldBasename := components[1]
+			newBasename := components[2]
+			renameMap[filepath.Join(dir, oldBasename)] = filepath.Join(dir, newBasename)
+		}
+
 		for _, file := range goFiles {
+			// We definitely don't want any code that was put in the sandbox for gomock.
+			if strings.Contains(file, "_gomock_gopath") {
+				continue
+			}
+			// First case: generated Go code that's checked into tree.
+			relPath := strings.TrimPrefix(file, bazelBin+"/")
+			dst, ok := renameMap[relPath]
+			if ok {
+				err := d.os.CopyFile(file, filepath.Join(workspace, dst))
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			// Second case: the pathname contains github.com/cockroachdb/cockroach.
 			const cockroachURL = "github.com/cockroachdb/cockroach/"
 			ind := strings.LastIndex(file, cockroachURL)
 			if ind > 0 {
@@ -182,6 +215,8 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGenerat
 				}
 				continue
 			}
+			// Third case: apply a heuristic to see whether this file makes sense to be
+			// staged.
 			pathComponents := strings.Split(file, string(os.PathSeparator))
 			var skip bool
 			for _, component := range pathComponents[:len(pathComponents)-1] {
@@ -198,7 +233,7 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGenerat
 			}
 			if !skip {
 				// Failures here don't mean much. Just ignore them.
-				_ = d.os.CopyFile(file, filepath.Join(workspace, strings.TrimPrefix(file, bazelBin+"/")))
+				_ = d.os.CopyFile(file, filepath.Join(workspace, relPath))
 			}
 		}
 	}

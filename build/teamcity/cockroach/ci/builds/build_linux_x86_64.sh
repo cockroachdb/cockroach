@@ -47,6 +47,22 @@ do
         FAILED=1
     fi
 done
+# Ensure checked-in generated files are byte-for-byte identical with what's in
+# the checkout.
+for LINE in $(grep -v '^#' $root/build/bazelutil/checked_in_genfiles.txt)
+do
+    target=$(echo $LINE | cut -d'|' -f1)
+    dir=$(echo $target | sed 's|//||g' | cut -d: -f1)
+    old_basename=$(echo $LINE | cut -d'|' -f2)
+    new_basename=$(echo $LINE | cut -d'|' -f3)
+    RESULT=$(diff $root/artifacts/bazel-bin/$dir/$old_basename $root/$dir/$new_basename)
+    if [[ ! $? -eq 0 ]]
+    then
+        echo "Generated file $dir/$new_basename does not match with checked-in version. Got diff:"
+        echo "$RESULT"
+        FAILED=1
+    fi
+done
 
 if [[ ! -z "$FAILED" ]]
 then
