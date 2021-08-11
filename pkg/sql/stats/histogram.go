@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -63,6 +64,7 @@ func EquiDepthHistogram(
 			return HistogramData{}, errors.Errorf("NULL values not allowed in histogram")
 		}
 	}
+
 	sort.Slice(samples, func(i, j int) bool {
 		return samples[i].Compare(evalCtx, samples[j]) < 0
 	})
@@ -70,12 +72,8 @@ func EquiDepthHistogram(
 	if maxBuckets > numSamples {
 		numBuckets = numSamples
 	}
-	h := HistogramData{
-		Buckets: make([]HistogramData_Bucket, 0, numBuckets),
-	}
+	h := make(histogram, 0, numBuckets)
 	lowerBound := samples[0]
-	h.ColumnType = lowerBound.ResolvedType()
-	var distinctCountRange, distinctCountEq float64
 
 	// i keeps track of the current sample and advances as we form buckets.
 	for i, b := 0, 0; b < numBuckets && i < numSamples; b++ {
@@ -102,83 +100,146 @@ func EquiDepthHistogram(
 			}
 		}
 
-		numEq := int64(num-numLess) * numRows / int64(numSamples)
-		numRange := int64(numLess) * numRows / int64(numSamples)
-		distinctRange := estimatedDistinctValuesInRange(float64(numRange), lowerBound, upper)
-		encoded, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
+		// Estimate the number of rows equal to the upper bound. This may be adjusted
+		// later based on the distinct count.
+		numEq := float64(num-numLess) * float64(numRows) / float64(numSamples)
+
+		// Estimate the total number of rows represented by the bucket as well as
+		// the number of distinct values in the bucket. If there are no samples less
+		// than the upper bound, then the bucket is fully specified by numEq.
+		numBucket := numEq
+		distinctBucket := float64(1)
+		if numLess > 0 {
+			numBucket = float64(num) * float64(numRows) / float64(numSamples)
+			distinctBucket = estimatedDistinctValuesInBucket(evalCtx, numBucket, lowerBound, upper)
+		}
+
+		// Calculate numRange and distinctRange based on the total and distinct
+		// counts for the bucket and the upper bound.
+		numRange := numBucket - numEq
+		distinctRange := distinctBucket - 1
+
+		i += num
+		h = append(h, cat.HistogramBucket{
+			NumEq:         numEq,
+			NumRange:      numRange,
+			DistinctRange: distinctRange,
+			UpperBound:    upper,
+		})
+
+		lowerBound = getNextLowerBound(evalCtx, upper)
+	}
+
+	h.adjustCounts(float64(numRows), float64(distinctCount))
+	return h.toHistogramData(colType)
+}
+
+type histogram []cat.HistogramBucket
+
+// adjustCounts adjusts the row count and number of distinct values per bucket
+// based on the total row count and distinct count.
+func (h histogram) adjustCounts(rowCountTotal, distinctCountTotal float64) {
+	// Calculate the current state of the histogram so we can adjust it as needed.
+	// The number of rows and distinct values represented by the histogram should
+	// be adjusted so they equal rowCountTotal and distinctCountTotal.
+	var rowCountRange, rowCountEq float64
+	var distinctCountRange, distinctCountEq float64
+	for i := range h {
+		rowCountRange += h[i].NumRange
+		rowCountEq += h[i].NumEq
+		distinctCountRange += h[i].DistinctRange
+		if h[i].NumEq > 0 {
+			distinctCountEq++
+		}
+	}
+
+	// If the upper bounds account for all distinct values in the histogram, make the
+	// histogram consistent by clearing the ranges and adjusting the NumEq values
+	// to add up to the row count.
+	if distinctCountEq >= distinctCountTotal {
+		adjustmentFactorNumEq := rowCountTotal / rowCountEq
+		for i := range h {
+			h[i].NumRange = 0
+			h[i].DistinctRange = 0
+			h[i].NumEq *= adjustmentFactorNumEq
+		}
+		return
+	}
+
+	// The upper bounds do not account for all distinct values, so adjust the
+	// NumEq values if needed so they add up to less than the row count.
+	remDistinctCount := distinctCountTotal - distinctCountEq
+	if rowCountEq+remDistinctCount >= rowCountTotal {
+		targetRowCountEq := rowCountTotal - remDistinctCount
+		adjustmentFactorNumEq := targetRowCountEq / rowCountEq
+		for i := range h {
+			h[i].NumEq *= adjustmentFactorNumEq
+		}
+		rowCountEq = targetRowCountEq
+	}
+
+	// Make sure none of the ranges are empty except for the first one.
+	const epsilon = 0.01
+	for i := 1; i < len(h); i++ {
+		if h[i].NumRange == 0 {
+			h[i].NumRange = epsilon
+			rowCountRange += epsilon
+		}
+		if h[i].DistinctRange == 0 {
+			h[i].DistinctRange = epsilon
+			distinctCountRange += epsilon
+		}
+	}
+
+	// Adjust the values in the ranges so the row counts and distinct counts add
+	// up correctly.
+	adjustmentFactorDistinctRange := (distinctCountTotal - distinctCountEq) / distinctCountRange
+	adjustmentFactorNumRange := (rowCountTotal - rowCountEq) / rowCountRange
+	for i := range h {
+		h[i].DistinctRange *= adjustmentFactorDistinctRange
+		h[i].NumRange *= adjustmentFactorNumRange
+	}
+}
+
+// toHistogramData converts a histogram to a HistogramData protobuf with the
+// given type.
+func (h histogram) toHistogramData(colType *types.T) (HistogramData, error) {
+	histogramData := HistogramData{
+		Buckets:    make([]HistogramData_Bucket, len(h)),
+		ColumnType: colType,
+	}
+
+	for i := range h {
+		encoded, err := rowenc.EncodeTableKey(nil, h[i].UpperBound, encoding.Ascending)
 		if err != nil {
 			return HistogramData{}, err
 		}
 
-		i += num
-		h.Buckets = append(h.Buckets, HistogramData_Bucket{
-			NumEq:         numEq,
-			NumRange:      numRange,
-			DistinctRange: distinctRange,
+		histogramData.Buckets[i] = HistogramData_Bucket{
+			NumEq:         int64(h[i].NumEq),
+			NumRange:      int64(h[i].NumRange),
+			DistinctRange: h[i].DistinctRange,
 			UpperBound:    encoded,
-		})
-
-		// Keep track of the total number of estimated distinct values. This will
-		// be used to adjust the distinct count below.
-		distinctCountRange += distinctRange
-		if numEq > 0 {
-			distinctCountEq++
 		}
-
-		lowerBound = getNextLowerBound(evalCtx, upper)
 	}
-	h.adjustDistinctCount(float64(distinctCount), distinctCountRange, distinctCountEq)
-	return h, nil
+
+	return histogramData, nil
 }
 
-// adjustDistinctCount adjusts the number of distinct values per bucket based
-// on the total number of distinct values.
-func (h *HistogramData) adjustDistinctCount(
-	distinctCountTotal, distinctCountRange, distinctCountEq float64,
-) {
-	if distinctCountRange == 0 {
-		return
+// estimatedDistinctValuesInBucket returns the estimated number of distinct
+// values in the bucket with bounds [lowerBound, upperBound], given that the
+// total number of values is numBucket.
+//
+// If lowerBound and upperBound are not countable, the distinct count is just
+// equal to numBucket. If they are countable, we can estimate the distinct count
+// based on the total number of distinct values in the range.
+func estimatedDistinctValuesInBucket(
+	evalCtx *tree.EvalContext, numBucket float64, lowerBound, upperBound tree.Datum,
+) float64 {
+	if maxDistinct, ok := tree.MaxDistinctCount(evalCtx, lowerBound, upperBound); ok {
+		return expectedDistinctCount(numBucket, float64(maxDistinct))
 	}
-
-	adjustmentFactor := (distinctCountTotal - distinctCountEq) / distinctCountRange
-	if adjustmentFactor < 0 {
-		adjustmentFactor = 0
-	}
-	for i := range h.Buckets {
-		h.Buckets[i].DistinctRange *= adjustmentFactor
-	}
-}
-
-// estimatedDistinctValuesInRange returns the estimated number of distinct
-// values in the range [lowerBound, upperBound), given that the total number
-// of values is numRange.
-func estimatedDistinctValuesInRange(numRange float64, lowerBound, upperBound tree.Datum) float64 {
-	if maxDistinct, ok := maxDistinctValuesInRange(lowerBound, upperBound); ok {
-		return expectedDistinctCount(numRange, maxDistinct)
-	}
-	return numRange
-}
-
-// maxDistinctValuesInRange returns the maximum number of distinct values in
-// the range [lowerBound, upperBound). It returns ok=false when it is not
-// possible to determine a finite value (which is the case for all types other
-// than integers and dates).
-func maxDistinctValuesInRange(lowerBound, upperBound tree.Datum) (_ float64, ok bool) {
-	switch lowerBound.ResolvedType().Family() {
-	case types.IntFamily:
-		return float64(*upperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt)), true
-
-	case types.DateFamily:
-		lower := lowerBound.(*tree.DDate)
-		upper := upperBound.(*tree.DDate)
-		if lower.IsFinite() && upper.IsFinite() {
-			return float64(upper.PGEpochDays()) - float64(lower.PGEpochDays()), true
-		}
-		return 0, false
-
-	default:
-		return 0, false
-	}
+	return numBucket
 }
 
 func getNextLowerBound(evalCtx *tree.EvalContext, currentUpperBound tree.Datum) tree.Datum {
