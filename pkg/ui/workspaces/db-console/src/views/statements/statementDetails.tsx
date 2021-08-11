@@ -21,6 +21,7 @@ import {
   refreshNodes,
   refreshStatementDiagnosticsRequests,
   refreshStatements,
+  refreshCombinedStatements,
 } from "src/redux/apiReducers";
 import {
   nodeDisplayNameByIDSelector,
@@ -56,6 +57,7 @@ import {
   trackDownloadDiagnosticsBundleAction,
   trackStatementDetailsSubnavSelectionAction,
 } from "src/redux/analyticsActions";
+import { selectDateRange } from "src/views/statements/statementsPage";
 
 interface Fraction {
   numerator: number;
@@ -151,9 +153,17 @@ function filterByRouterParamsPredicate(
 
 export const selectStatement = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.combinedStatements,
   (_state: AdminUIState, props: RouteComponentProps) => props,
-  (statementsState, props) => {
-    const statements = statementsState.data?.statements;
+  (statementsState, combinedStatementsState, props) => {
+    // TODO (xinhaoz) We need both in-memory and combined in-memory and persisted
+    // data right now since statement details could refer to statements from the
+    // transactions page or statements page.
+    const statements = [
+      ...(statementsState.data?.statements || []),
+      ...(combinedStatementsState.data?.statements || []),
+    ];
+
     if (!statements) {
       return null;
     }
@@ -191,7 +201,10 @@ const mapStateToProps = (
   const statementFingerprint = statement?.statement;
   return {
     statement,
-    statementsError: state.cachedData.statements.lastError,
+    statementsError:
+      state.cachedData.combinedStatements.lastError ||
+      state.cachedData.statements.lastError,
+    dateRange: selectDateRange(state),
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
@@ -203,6 +216,7 @@ const mapStateToProps = (
 
 const mapDispatchToProps: StatementDetailsDispatchProps = {
   refreshStatements,
+  refreshCombinedStatements,
   refreshStatementDiagnosticsRequests,
   dismissStatementDiagnosticsAlertMessage: () =>
     createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
