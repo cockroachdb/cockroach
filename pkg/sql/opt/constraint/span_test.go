@@ -710,62 +710,69 @@ func TestSpan_KeyCount(t *testing.T) {
 			expected: "2",
 		},
 		{ // 4
+			// Multiple key span with DBool datum type.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "[/false - /true]", types.BoolFamily),
+			expected: "2",
+		},
+		{ // 5
 			// Single-key span with multiple-column key.
 			keyCtx:   kcAscAsc,
 			length:   2,
 			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/item]"),
 			expected: "1",
 		},
-		{ // 5
+		{ // 6
 			// Fails because the span is multiple-key and the type is not enumerable.
 			keyCtx:   kcAscAsc,
 			length:   2,
 			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/object]"),
 			expected: "FAIL",
 		},
-		{ // 6
+		{ // 7
 			// Descending multiple-key span.
 			keyCtx:   kcDescDesc,
 			length:   1,
 			span:     ParseSpan(&evalCtx, "[/5 - /-5]"),
 			expected: "11",
 		},
-		{ // 7
+		{ // 8
 			// Descending multiple-key span with multiple-column keys.
 			keyCtx:   kcDescDesc,
 			length:   2,
 			span:     ParseSpan(&evalCtx, "[/US_WEST/5 - /US_WEST/-5]"),
 			expected: "11",
 		},
-		{ // 8
+		{ // 9
 			// Fails because the keys can only differ in the last column.
 			keyCtx:   kcAscAsc,
 			length:   2,
 			span:     ParseSpan(&evalCtx, "[/US_WEST/1 - /US_EAST/1]"),
 			expected: "FAIL",
 		},
-		{ // 9
+		{ // 10
 			// Fails because both keys must be at least as long as the given length.
 			keyCtx:   kcAscAsc,
 			length:   2,
 			span:     ParseSpan(&evalCtx, "[/1/1 - /1]"),
 			expected: "FAIL",
 		},
-		{ // 10
+		{ // 11
 			// Fails because both keys must be at least as long as the given length.
 			keyCtx:   kcAscAsc,
 			length:   1,
 			span:     ParseSpan(&evalCtx, "[/1 - ]"),
 			expected: "FAIL",
 		},
-		{ // 11
+		{ // 12
 			// Fails because the given prefix length must be larger than zero.
 			keyCtx:   kcAscAsc,
 			length:   0,
 			span:     ParseSpan(&evalCtx, "[/1 - ]"),
 			expected: "FAIL",
 		},
-		{ // 12
+		{ // 13
 			// Case with postfix values beyond the given prefix length. Key count is
 			// calculated only between the prefixes; postfixes are ignored.
 			keyCtx:   kcAscAsc,
@@ -773,21 +780,21 @@ func TestSpan_KeyCount(t *testing.T) {
 			span:     ParseSpan(&evalCtx, "[/1/post - /5/fix]"),
 			expected: "5",
 		},
-		{ // 13
+		{ // 14
 			// Case with postfix for the start key, but not the end key.
 			keyCtx:   kcAscAsc,
 			length:   1,
 			span:     ParseSpan(&evalCtx, "[/1/post - /5]"),
 			expected: "5",
 		},
-		{ // 14
+		{ // 15
 			// Case with postfix for the end key, but not the start key.
 			keyCtx:   kcAscAsc,
 			length:   1,
 			span:     ParseSpan(&evalCtx, "[/1 - /5/fix]"),
 			expected: "5",
 		},
-		{ // 15
+		{ // 16
 			// Fails because of overflow.
 			keyCtx: kcAscAsc,
 			length: 1,
@@ -799,7 +806,7 @@ func TestSpan_KeyCount(t *testing.T) {
 			},
 			expected: "FAIL",
 		},
-		{ // 16
+		{ // 17
 			// Fails because of underflow.
 			keyCtx: kcDescDesc,
 			length: 1,
@@ -811,7 +818,7 @@ func TestSpan_KeyCount(t *testing.T) {
 			},
 			expected: "FAIL",
 		},
-		{ // 17
+		{ // 18
 			// Test enums.
 			keyCtx: kcAscAsc,
 			length: 1,
@@ -823,7 +830,7 @@ func TestSpan_KeyCount(t *testing.T) {
 			},
 			expected: "2",
 		},
-		{ // 18
+		{ // 19
 			// Test enums.
 			keyCtx: kcAscAsc,
 			length: 1,
@@ -835,21 +842,21 @@ func TestSpan_KeyCount(t *testing.T) {
 			},
 			expected: "3",
 		},
-		{ // 19
+		{ // 20
 			// Allow exclusive boundaries if the key is longer than the prefix.
 			keyCtx:   kcAscAsc,
 			length:   1,
 			span:     ParseSpan(&evalCtx, "(/US_WEST/post - /US_WEST]"),
 			expected: "1",
 		},
-		{ // 20
+		{ // 21
 			// Allow exclusive boundaries if the key is longer than the prefix.
 			keyCtx:   kcAscAsc,
 			length:   1,
 			span:     ParseSpan(&evalCtx, "[/1 - /2/fix)"),
 			expected: "2",
 		},
-		{ // 21
+		{ // 22
 			// Fails since the key is the same length as the prefix and the boundary
 			// is exclusive.
 			keyCtx:   kcAscAsc,
