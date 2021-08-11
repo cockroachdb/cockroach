@@ -16,7 +16,12 @@ import {
   resetSQLStatsCompleteAction,
   resetSQLStatsFailedAction,
 } from "./sqlStatsActions";
-import { invalidateStatements, refreshStatements } from "src/redux/apiReducers";
+import { refreshCombinedStatementsAction } from "../statements/statementsActions";
+import {
+  invalidateStatements,
+  refreshStatements,
+  invalidateCombinedStatements,
+} from "src/redux/apiReducers";
 
 import ResetSQLStatsRequest = cockroach.server.serverpb.ResetSQLStatsRequest;
 
@@ -27,6 +32,8 @@ export function* resetSQLStatsSaga() {
     yield put(resetSQLStatsCompleteAction());
     yield put(invalidateStatements());
     yield put(refreshStatements() as any);
+    yield put(invalidateCombinedStatements());
+    yield put(refreshCombinedStatementsAction() as any);
   } catch (e) {
     yield put(resetSQLStatsFailedAction());
   }
