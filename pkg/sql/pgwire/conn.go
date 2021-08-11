@@ -377,11 +377,13 @@ func (c *conn) serveImpl(
 			timeReceived := timeutil.Now()
 			log.VEventf(ctx, 2, "pgwire: processing %s", typ)
 
-			if ignoreUntilSync && typ != pgwirebase.ClientMsgSync {
-				log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
-				return false, nil
+			if ignoreUntilSync {
+				if typ != pgwirebase.ClientMsgSync {
+					log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
+					return false, nil
+				}
+				ignoreUntilSync = false
 			}
-			ignoreUntilSync = false
 
 			if !authDone {
 				if typ == pgwirebase.ClientMsgPassword {
