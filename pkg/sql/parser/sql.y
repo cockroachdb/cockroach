@@ -852,6 +852,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 // The grammar thinks these are keywords, but they are not in any category
 // and so can never be entered directly. The filter in scan.go creates these
 // tokens when required (based on looking one token ahead).
+// Reference: pkg/sql/parser/lexer.go
 //
 // NOT_LA exists so that productions such as NOT LIKE can be given the same
 // precedence as LIKE; otherwise they'd effectively have the same precedence as
@@ -861,7 +862,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 // extensions (CREATE FAMILY/CREATE FAMILY family_name). RESET_ALL is used
 // to differentiate `RESET var` from `RESET ALL`. ROLE_ALL and USER_ALL are
 // used in ALTER ROLE statements that affect all roles.
-%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS RESET_ALL ROLE_ALL USER_ALL
+%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL USER_ALL
 
 %union {
   id    int32
@@ -6168,11 +6169,11 @@ alter_schema_stmt:
 // Table constraints:
 //    PRIMARY KEY ( <colnames...> ) [USING HASH WITH BUCKET_COUNT = <shard_buckets>]
 //    FOREIGN KEY ( <colnames...> ) REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
-//    UNIQUE ( <colnames... ) [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
+//    UNIQUE ( <colnames...> ) [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
 //    CHECK ( <expr> )
 //
 // Column qualifiers:
-//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | NOT VISIBLE | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
+//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | NOT VISIBLE | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr> | GENERATED { ALWAYS | BY DEFAULT } AS IDENTITY [( <opt_sequence_option_list> )]}
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
 //   COLLATE <collationname>
@@ -6703,7 +6704,7 @@ col_qualification_elem:
     $$.val = &tree.ColumnDefault{Expr: $2.expr()}
   }
 | REFERENCES table_name opt_name_parens key_match reference_actions
- {
+  {
     name := $2.unresolvedObjectName().ToTableName()
     $$.val = &tree.ColumnFKConstraint{
       Table: name,
@@ -6711,20 +6712,28 @@ col_qualification_elem:
       Actions: $5.referenceActions(),
       Match: $4.compositeKeyMatchMethod(),
     }
- }
+  }
 | generated_as '(' a_expr ')' STORED
- {
+  {
     $$.val = &tree.ColumnComputedDef{Expr: $3.expr(), Virtual: false}
- }
+  }
 | generated_as '(' a_expr ')' VIRTUAL
- {
+  {
     $$.val = &tree.ColumnComputedDef{Expr: $3.expr(), Virtual: true}
- }
+  }
 | generated_as error
- {
+  {
     sqllex.Error("use AS ( <expr> ) STORED or AS ( <expr> ) VIRTUAL")
     return 1
- }
+  }
+| generated_always_as IDENTITY
+  {
+    $$.val = &tree.GeneratedAlwaysAsIdentity{}
+  }
+| generated_by_default_as IDENTITY
+  {
+    $$.val = &tree.GeneratedByDefAsIdentity{}
+  }
 
 opt_without_index:
   WITHOUT INDEX
@@ -6737,11 +6746,15 @@ opt_without_index:
     $$.val = false
   }
 
-// GENERATED ALWAYS is a noise word for compatibility with Postgres.
 generated_as:
   AS {}
-| GENERATED_ALWAYS ALWAYS AS {}
+| generated_always_as
 
+generated_always_as:
+  GENERATED_ALWAYS ALWAYS AS {}
+
+generated_by_default_as:
+  GENERATED_BY_DEFAULT BY DEFAULT AS {}
 
 index_def:
   INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
