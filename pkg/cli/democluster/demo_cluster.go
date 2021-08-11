@@ -381,6 +381,14 @@ func (c *transientCluster) Start(
 		}
 		c.connURL = purl.ToPQ().String()
 
+		// Write the URL to a file if this was requested by configuration.
+		if c.demoCtx.ListeningURLFile != "" {
+			c.infoLog(ctx, "listening URL file: %s", c.demoCtx.ListeningURLFile)
+			if err = ioutil.WriteFile(c.demoCtx.ListeningURLFile, []byte(fmt.Sprintf("%s\n", c.connURL)), 0644); err != nil {
+				c.warnLog(ctx, "failed writing the URL: %v", err)
+			}
+		}
+
 		// Start up the update check loop.
 		// We don't do this in (*server.Server).Start() because we don't want this
 		// overhead and possible interference in tests.
