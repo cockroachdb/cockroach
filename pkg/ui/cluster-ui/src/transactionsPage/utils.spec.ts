@@ -9,7 +9,11 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
-import { filterTransactions, getStatementsByFingerprintId } from "./utils";
+import {
+  filterTransactions,
+  getStatementsByFingerprintId,
+  statementFingerprintIdsToText,
+} from "./utils";
 import { Filters } from "../queryFilter/filter";
 import { data, nodeRegions } from "./transactions.fixture";
 import Long from "long";
@@ -213,6 +217,45 @@ describe("Filter transactions", () => {
         nodeRegions,
       ).transactions.length,
       9,
+    );
+  });
+});
+
+describe("statementFingerprintIdsToText", () => {
+  it("translate statement fingerprint IDs into queries", () => {
+    const statements = [
+      {
+        id: Long.fromInt(4104049045071304794),
+        key: {
+          // eslint-disable-next-line @typescript-eslint/camelcase
+          key_data: {
+            query: "SELECT _",
+          },
+        },
+      },
+      {
+        id: Long.fromInt(5104049045071304794),
+        key: {
+          // eslint-disable-next-line @typescript-eslint/camelcase
+          key_data: {
+            query: "SELECT _, _",
+          },
+        },
+      },
+    ];
+    const statementFingerprintIds = [
+      Long.fromInt(4104049045071304794),
+      Long.fromInt(5104049045071304794),
+      Long.fromInt(4104049045071304794),
+      Long.fromInt(4104049045071304794),
+    ];
+
+    assert.equal(
+      statementFingerprintIdsToText(statementFingerprintIds, statements),
+      `SELECT _
+SELECT _, _
+SELECT _
+SELECT _`,
     );
   });
 });

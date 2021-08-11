@@ -215,6 +215,22 @@ export function shortStatement(summary: StatementSummary, original: string) {
   }
 }
 
+export function makeStatementFingerprintColumn(
+  statType: StatisticType,
+  selectedApp: string,
+  search?: string,
+  onStatementClick?: (statement: string) => void,
+): ColumnDescriptor<AggregateStatistics> {
+  return {
+    name: "statements",
+    title: statisticsTableTitles.statements(statType),
+    className: cx("cl-table__col-query-text"),
+    cell: StatementTableCell.statements(search, selectedApp, onStatementClick),
+    sort: stmt => stmt.label,
+    alwaysShow: true,
+  };
+}
+
 export function makeStatementsColumns(
   statements: AggregateStatistics[],
   selectedApp: string,
@@ -228,18 +244,12 @@ export function makeStatementsColumns(
   onStatementClick?: (statement: string) => void,
 ): ColumnDescriptor<AggregateStatistics>[] {
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
-    {
-      name: "statements",
-      title: statisticsTableTitles.statements(statType),
-      className: cx("cl-table__col-query-text"),
-      cell: StatementTableCell.statements(
-        search,
-        selectedApp,
-        onStatementClick,
-      ),
-      sort: stmt => stmt.label,
-      alwaysShow: true,
-    },
+    makeStatementFingerprintColumn(
+      statType,
+      selectedApp,
+      search,
+      onStatementClick,
+    ),
   ];
   columns.push(
     ...makeCommonColumns(statements, totalWorkload, nodeRegions, statType),

@@ -62,6 +62,15 @@ export const getStatementsByFingerprintId = (
   );
 };
 
+export const statementFingerprintIdsToText = (
+  statementFingerprintIds: Long[],
+  statements: Statement[],
+): string => {
+  return statementFingerprintIds
+    .map(s => statements.find(stmt => stmt.id.eq(s)).key.key_data.query)
+    .join("\n");
+};
+
 export const aggregateStatements = (
   statements: Statement[],
 ): AggregateStatistics[] =>
@@ -217,11 +226,9 @@ const withFingerprint = function(
 ): TransactionWithFingerprint {
   return {
     ...t,
-    fingerprint: collectStatementsText(
-      getStatementsByFingerprintId(
-        t.stats_data.statement_fingerprint_ids,
-        stmts,
-      ),
+    fingerprint: statementFingerprintIdsToText(
+      t.stats_data.statement_fingerprint_ids,
+      stmts,
     ),
   };
 };
