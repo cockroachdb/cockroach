@@ -9,13 +9,30 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { fetchData } from "src/api";
+import { fetchData, propsToQueryString } from "src/api";
 
 const STATEMENTS_PATH = "/_status/statements";
+
+const COMBINED_STATEMENTS_PATH = "/_status/combinedstmts";
 
 export const getStatements = (): Promise<cockroach.server.serverpb.StatementsResponse> => {
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
     STATEMENTS_PATH,
+  );
+};
+
+export interface CombinedStatementsRequest {
+  start?: number;
+  end?: number;
+}
+
+export const getCombinedStatements = (
+  req: CombinedStatementsRequest,
+): Promise<cockroach.server.serverpb.StatementsResponse> => {
+  const queryStr = propsToQueryString(req);
+  return fetchData(
+    cockroach.server.serverpb.StatementsResponse,
+    `${COMBINED_STATEMENTS_PATH}?${queryStr}`,
   );
 };

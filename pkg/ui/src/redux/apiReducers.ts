@@ -285,6 +285,17 @@ const queriesReducerObj = new CachedDataReducer(
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
 
+const combinedStatementsReducerObj = new CachedDataReducer(
+  api.getCombinedStatements,
+  "combinedStatements",
+  moment.duration(5, "m"),
+  moment.duration(1, "m"),
+);
+
+export const invalidateCombinedStatements =
+  combinedStatementsReducerObj.invalidateData;
+export const refreshCombinedStatements = combinedStatementsReducerObj.refresh;
+
 const statementDiagnosticsReportsReducerObj = new CachedDataReducer(
   api.getStatementDiagnosticsReports,
   "statementDiagnosticsReports",
@@ -336,6 +347,7 @@ export interface APIReducersState {
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
+  combinedStatements: CachedDataReducerState<api.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
   statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
@@ -369,6 +381,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [sessionsReducerObj.actionNamespace]: sessionsReducerObj.reducer,
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
+  [combinedStatementsReducerObj.actionNamespace]:
+    combinedStatementsReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]:
     dataDistributionReducerObj.reducer,
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,

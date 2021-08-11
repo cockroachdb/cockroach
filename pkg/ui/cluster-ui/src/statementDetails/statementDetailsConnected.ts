@@ -26,7 +26,7 @@ import {
   nodeDisplayNameByIDSelector,
   nodeRegionsByIDSelector,
 } from "../store/nodes";
-import { actions as statementActions } from "src/store/statements";
+import { actions as combinedStatementsActions } from "src/store/combinedStatements";
 import {
   actions as statementDiagnosticsActions,
   selectDiagnosticsReportsByStatementFingerprint,
@@ -44,7 +44,7 @@ const mapStateToProps = (
   const statementFingerprint = statement?.statement;
   return {
     statement,
-    statementsError: state.adminUI.statements.lastError,
+    statementsError: state.adminUI.combinedStatements.lastError,
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
@@ -58,7 +58,7 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementDetailsDispatchProps => ({
-  refreshStatements: () => dispatch(statementActions.refresh()),
+  refreshStatements: () => dispatch(combinedStatementsActions.refresh()),
   refreshStatementDiagnosticsRequests: () =>
     dispatch(statementDiagnosticsActions.refresh()),
   refreshNodes: () => dispatch(nodesActions.refresh()),
