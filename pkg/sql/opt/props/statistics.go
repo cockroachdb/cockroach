@@ -134,6 +134,14 @@ func (s *Statistics) UnionWith(other *Statistics) {
 }
 
 func (s *Statistics) String() string {
+	return s.stringImpl(true)
+}
+
+func (s *Statistics) StringWithoutHistograms() string {
+	return s.stringImpl(false)
+}
+
+func (s *Statistics) stringImpl(includeHistograms bool) string {
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
@@ -147,17 +155,19 @@ func (s *Statistics) String() string {
 		fmt.Fprintf(&buf, ", null%s=%.9g", col.Cols.String(), col.NullCount)
 	}
 	buf.WriteString("]")
-	for _, col := range colStats {
-		if col.Histogram != nil {
-			label := fmt.Sprintf("histogram%s=", col.Cols.String())
-			indent := strings.Repeat(" ", tablewriter.DisplayWidth(label))
-			fmt.Fprintf(&buf, "\n%s", label)
-			histLines := strings.Split(strings.TrimRight(col.Histogram.String(), "\n"), "\n")
-			for i, line := range histLines {
-				if i != 0 {
-					fmt.Fprintf(&buf, "\n%s", indent)
+	if includeHistograms {
+		for _, col := range colStats {
+			if col.Histogram != nil {
+				label := fmt.Sprintf("histogram%s=", col.Cols.String())
+				indent := strings.Repeat(" ", tablewriter.DisplayWidth(label))
+				fmt.Fprintf(&buf, "\n%s", label)
+				histLines := strings.Split(strings.TrimRight(col.Histogram.String(), "\n"), "\n")
+				for i, line := range histLines {
+					if i != 0 {
+						fmt.Fprintf(&buf, "\n%s", indent)
+					}
+					fmt.Fprintf(&buf, "%s", strings.TrimRight(line, " "))
 				}
-				fmt.Fprintf(&buf, "%s", strings.TrimRight(line, " "))
 			}
 		}
 	}
