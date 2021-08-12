@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -95,6 +96,7 @@ func changefeedPlanHook(
 	var header colinfo.ResultColumns
 	unspecifiedSink := changefeedStmt.SinkURI == nil
 	avoidBuffering := false
+
 	if unspecifiedSink {
 		// An unspecified sink triggers a fairly radical change in behavior.
 		// Instead of setting up a system.job to emit to a sink in the
@@ -151,6 +153,15 @@ func changefeedPlanHook(
 		opts, err := optsFn()
 		if err != nil {
 			return err
+		}
+
+		if opts[changefeedbase.OptFormat] == changefeedbase.DeprecatedOptFormatAvro {
+			//TODO(zinger): See if there's a way to make this work with sinkless
+			p.BufferClientNotice(ctx, pgnotice.Newf(
+				`%[1]s is no longer experimental, use %[2]s=%[1]s`,
+				changefeedbase.OptFormatAvro, changefeedbase.OptFormat),
+			)
+			// Still serialize the experimental_ form for backwards compatibility
 		}
 
 		jobDescription, err := changefeedJobDescription(p, changefeedStmt, sinkURI, opts)
@@ -536,7 +547,7 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		switch v := changefeedbase.FormatType(details.Opts[opt]); v {
 		case ``, changefeedbase.OptFormatJSON:
 			details.Opts[opt] = string(changefeedbase.OptFormatJSON)
-		case changefeedbase.OptFormatAvro:
+		case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
 			// No-op.
 		default:
 			return jobspb.ChangefeedDetails{}, errors.Errorf(
