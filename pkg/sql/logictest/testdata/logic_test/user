@@ -192,3 +192,6 @@ SET ROLE = 'testuser'
 
 statement error unimplemented
 SET ROLE testuser
+
+statement error unimplemented
+RESET ROLE

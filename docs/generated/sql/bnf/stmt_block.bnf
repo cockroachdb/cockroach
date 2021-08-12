@@ -1515,6 +1515,7 @@ session_var ::=
 	| 'ALL'
 	| 'DATABASE'
 	| 'NAMES'
+	| 'ROLE'
 	| 'SESSION_USER'
 	| 'TIME' 'ZONE'
 
