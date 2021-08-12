@@ -5,6 +5,7 @@ documentation. Lines not beginning with // should be ignored.
 //docs/generated:gen-logsinks-md
 //docs/generated:gen-eventlog-md
 //docs/generated:gen-logformats-md
+//docs/generated/http
 //docs/generated/settings
 //docs/generated/settings:settings_for_tenants
 //docs/generated/sql

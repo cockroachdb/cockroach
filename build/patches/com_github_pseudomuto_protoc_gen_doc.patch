@@ -1,0 +1,22 @@
+diff -urN a/cmd/protoc-gen-doc/BUILD.bazel b/cmd/protoc-gen-doc/BUILD.bazel
+--- a/cmd/protoc-gen-doc/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/cmd/protoc-gen-doc/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -11,7 +11,6 @@
+     deps = [
+         "//:protoc-gen-doc",
+         "//extensions/google_api_http",
+-        "//extensions/lyft_validate",
+         "//extensions/validator_field",
+         "@com_github_pseudomuto_protokit//:protokit",
+     ],
+diff -urN a/cmd/protoc-gen-doc/main.go b/cmd/protoc-gen-doc/main.go
+--- a/cmd/protoc-gen-doc/main.go	1969-12-31 19:00:00.000000000 -0500
++++ b/cmd/protoc-gen-doc/main.go	2000-01-01 00:00:00.000000000 -0000
+@@ -21,7 +21,6 @@
+ 
+ 	gendoc "github.com/pseudomuto/protoc-gen-doc"
+ 	_ "github.com/pseudomuto/protoc-gen-doc/extensions/google_api_http" // imported for side effects
+-	_ "github.com/pseudomuto/protoc-gen-doc/extensions/lyft_validate"   // imported for side effects
+ 	_ "github.com/pseudomuto/protoc-gen-doc/extensions/validator_field" // imported for side effects
+ )
+ 

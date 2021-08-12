@@ -1082,6 +1082,7 @@ def go_deps():
     go_repository(
         name = "com_github_envoyproxy_protoc_gen_validate",
         build_file_proto_mode = "disable_global",
+        build_naming_convention = "go_default_library",
         importpath = "github.com/envoyproxy/protoc-gen-validate",
         sum = "h1:EQciDnbrYxy13PgWoY8AqoxGiPrpgBZ1R8UNe3ddc+A=",
         version = "v0.1.0",
@@ -3478,6 +3479,10 @@ def go_deps():
         name = "com_github_pseudomuto_protoc_gen_doc",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/pseudomuto/protoc-gen-doc",
+        patch_args = ["-p1"],
+        patches = [
+            "@cockroach//build/patches:com_github_pseudomuto_protoc_gen_doc.patch",
+        ],
         sum = "h1:61vWZuxYa8D7Rn4h+2dgoTNqnluBmJya2MgbqO32z6g=",
         version = "v1.3.2",
     )
