@@ -346,6 +346,8 @@ func NewDatumRowConverter(
 		tableDesc,
 		cols,
 		&rowenc.DatumAlloc{},
+		&evalCtx.Settings.SV,
+		evalCtx.SessionData.Internal,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")

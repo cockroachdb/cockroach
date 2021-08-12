@@ -1189,7 +1189,14 @@ func (ef *execFactory) ConstructInsert(
 
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, ef.planner.alloc,
+		ctx,
+		ef.planner.txn,
+		ef.planner.ExecCfg().Codec,
+		tabDesc,
+		colDescs,
+		ef.planner.alloc,
+		&ef.planner.ExecCfg().Settings.SV,
+		ef.planner.SessionData().Internal,
 	)
 	if err != nil {
 		return nil, err
@@ -1255,7 +1262,14 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, ef.planner.alloc,
+		ctx,
+		ef.planner.txn,
+		ef.planner.ExecCfg().Codec,
+		tabDesc,
+		colDescs,
+		ef.planner.alloc,
+		&ef.planner.ExecCfg().Settings.SV,
+		ef.planner.SessionData().Internal,
 	)
 	if err != nil {
 		return nil, err
@@ -1360,6 +1374,8 @@ func (ef *execFactory) ConstructUpdate(
 		fetchColDescs,
 		row.UpdaterDefault,
 		ef.planner.alloc,
+		&ef.planner.ExecCfg().Settings.SV,
+		ef.planner.SessionData().Internal,
 	)
 	if err != nil {
 		return nil, err
@@ -1460,6 +1476,8 @@ func (ef *execFactory) ConstructUpsert(
 		tabDesc,
 		insertColDescs,
 		ef.planner.alloc,
+		&ef.planner.ExecCfg().Settings.SV,
+		ef.planner.SessionData().Internal,
 	)
 	if err != nil {
 		return nil, err
@@ -1475,6 +1493,8 @@ func (ef *execFactory) ConstructUpsert(
 		fetchColDescs,
 		row.UpdaterDefault,
 		ef.planner.alloc,
+		&ef.planner.ExecCfg().Settings.SV,
+		ef.planner.SessionData().Internal,
 	)
 	if err != nil {
 		return nil, err
@@ -1546,7 +1566,13 @@ func (ef *execFactory) ConstructDelete(
 	// the deleter derives the columns that need to be fetched. By contrast, the
 	// CBO will have already determined the set of fetch columns, and passes
 	// those sets into the deleter (which will basically be a no-op).
-	rd := row.MakeDeleter(ef.planner.ExecCfg().Codec, tabDesc, fetchColDescs)
+	rd := row.MakeDeleter(
+		ef.planner.ExecCfg().Codec,
+		tabDesc,
+		fetchColDescs,
+		&ef.planner.ExecCfg().Settings.SV,
+		ef.planner.SessionData().Internal,
+	)
 
 	// Now make a delete node. We use a pool.
 	del := deleteNodePool.Get().(*deleteNode)
