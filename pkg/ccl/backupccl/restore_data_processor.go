@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -77,6 +78,13 @@ const restoreDataProcName = "restoreDataProcessor"
 
 const maxConcurrentRestoreWorkers = 32
 
+var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
+	"restore-worker-concurrency",
+	1, /* defaultValue */
+	1, /* metamorphic min */
+	8, /* metamorphic max */
+)
+
 // TODO(pbardea): It may be worthwhile to combine this setting with the one that
 // controls the number of concurrent AddSSTable requests if each restore worker
 // spends all if its time sending AddSSTable requests.
@@ -87,7 +95,7 @@ var numRestoreWorkers = settings.RegisterIntSetting(
 	"kv.bulk_io_write.restore_node_concurrency",
 	fmt.Sprintf("the number of workers processing a restore per job per node; maximum %d",
 		maxConcurrentRestoreWorkers),
-	1, /* default */
+	int64(defaultNumWorkers),
 	settings.PositiveInt,
 )
 
