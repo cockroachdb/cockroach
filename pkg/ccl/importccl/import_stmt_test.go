@@ -4592,8 +4592,6 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 			defer sqlDB.Exec(t, `DROP TABLE IF EXISTS users`)
 			data = test.data
 			var importStmt string
-			// Enabled expression indexes.
-			sqlDB.Exec(t, `SET experimental_enable_expression_indexes=true`)
 			if test.into {
 				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE users (%s)`, test.create))
 				importStmt = fmt.Sprintf(`IMPORT INTO users (%s) %s DATA (%q)`,
