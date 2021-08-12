@@ -1238,13 +1238,13 @@ func (n *Node) GossipSubscription(
 				// or system tenant-specific information to leak.
 				var ents config.SystemConfigEntries
 				if err := content.GetProto(&ents); err != nil {
-					return roachpb.Value{}, errors.Errorf("could not unmarshal system config: %v", err)
+					return roachpb.Value{}, errors.Wrap(err, "could not unmarshal system config")
 				}
 
 				var newContent roachpb.Value
 				newEnts := kvtenant.GossipSubscriptionSystemConfigMask.Apply(ents)
 				if err := newContent.SetProto(&newEnts); err != nil {
-					return roachpb.Value{}, errors.Errorf("could not marshal system config: %v", err)
+					return roachpb.Value{}, errors.Wrap(err, "could not marshal system config")
 				}
 				return newContent, nil
 			default:
