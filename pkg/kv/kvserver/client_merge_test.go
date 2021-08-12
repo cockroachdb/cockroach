@@ -4422,14 +4422,19 @@ func TestMergeQueue(t *testing.T) {
 	})
 
 	t.Run("sticky-bit-expiration", func(t *testing.T) {
-		skip.WithIssue(t, 66942, "flakey test")
-		manualSplitTTL := time.Millisecond * 200
+		manualSplitTTL := 10 * time.Millisecond
 		reset(t)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 
+		// Pause the clock for the duration of this subtest so that
+		// the sticky bit does not expire prematurely.
+		manualClock.Pause()
+		defer manualClock.Resume()
+
 		// Perform manual merge and verify that no merge occurred.
-		split(t, rhsStartKey.AsRawKey(), tc.Servers[0].Clock().Now().Add(manualSplitTTL.Nanoseconds(), 0) /* expirationTime */)
+		exp := tc.Servers[0].Clock().Now().Add(manualSplitTTL.Nanoseconds(), 0)
+		split(t, rhsStartKey.AsRawKey(), exp /* expirationTime */)
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
