@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,9 +49,12 @@ func MakeInserter(
 	tableDesc catalog.TableDescriptor,
 	insertCols []catalog.Column,
 	alloc *rowenc.DatumAlloc,
+	sv *settings.Values,
+	internal bool,
 ) (Inserter, error) {
 	ri := Inserter{
-		Helper:                newRowHelper(codec, tableDesc, tableDesc.WritableNonPrimaryIndexes()),
+		Helper: newRowHelper(codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), sv, internal),
+
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),

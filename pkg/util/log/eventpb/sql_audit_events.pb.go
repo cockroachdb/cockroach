@@ -198,6 +198,83 @@ func (m *SlowQuery) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SlowQuery proto.InternalMessageInfo
 
+// CommonLargeRowDetails contains the fields common to both LargeRow and
+// LargeRowInternal events.
+type CommonLargeRowDetails struct {
+	RowSize    uint32 `protobuf:"varint,1,opt,name=row_size,json=rowSize,proto3" json:",omitempty"`
+	TableID    uint32 `protobuf:"varint,2,opt,name=table_id,json=tableId,proto3" json:",omitempty"`
+	FamilyID   uint32 `protobuf:"varint,3,opt,name=family_id,json=familyId,proto3" json:",omitempty"`
+	PrimaryKey string `protobuf:"bytes,4,opt,name=primary_key,json=primaryKey,proto3" json:",omitempty"`
+}
+
+func (m *CommonLargeRowDetails) Reset()         { *m = CommonLargeRowDetails{} }
+func (m *CommonLargeRowDetails) String() string { return proto.CompactTextString(m) }
+func (*CommonLargeRowDetails) ProtoMessage()    {}
+func (*CommonLargeRowDetails) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b7a82d5e93041841, []int{4}
+}
+func (m *CommonLargeRowDetails) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CommonLargeRowDetails) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *CommonLargeRowDetails) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CommonLargeRowDetails.Merge(m, src)
+}
+func (m *CommonLargeRowDetails) XXX_Size() int {
+	return m.Size()
+}
+func (m *CommonLargeRowDetails) XXX_DiscardUnknown() {
+	xxx_messageInfo_CommonLargeRowDetails.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CommonLargeRowDetails proto.InternalMessageInfo
+
+// LargeRow is recorded when a statement tries to write a row larger than
+// cluster setting `sql.mutations.max_row_size.log` to the database. Multiple
+// LargeRow events will be recorded for statements writing multiple large rows.
+// LargeRow events are recorded before the transaction commits, so in the case
+// of transaction abort there will not be a corresponding row in the database.
+type LargeRow struct {
+	CommonEventDetails    `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonLargeRowDetails `protobuf:"bytes,2,opt,name=row,proto3,embedded=row" json:""`
+}
+
+func (m *LargeRow) Reset()         { *m = LargeRow{} }
+func (m *LargeRow) String() string { return proto.CompactTextString(m) }
+func (*LargeRow) ProtoMessage()    {}
+func (*LargeRow) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b7a82d5e93041841, []int{5}
+}
+func (m *LargeRow) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LargeRow) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *LargeRow) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LargeRow.Merge(m, src)
+}
+func (m *LargeRow) XXX_Size() int {
+	return m.Size()
+}
+func (m *LargeRow) XXX_DiscardUnknown() {
+	xxx_messageInfo_LargeRow.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LargeRow proto.InternalMessageInfo
+
 // SlowQueryInternal is recorded when a query triggers the "slow query" condition,
 // and the cluster setting `sql.log.slow_query.internal_queries.enabled` is
 // set.
@@ -213,7 +290,7 @@ func (m *SlowQueryInternal) Reset()         { *m = SlowQueryInternal{} }
 func (m *SlowQueryInternal) String() string { return proto.CompactTextString(m) }
 func (*SlowQueryInternal) ProtoMessage()    {}
 func (*SlowQueryInternal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b7a82d5e93041841, []int{4}
+	return fileDescriptor_b7a82d5e93041841, []int{6}
 }
 func (m *SlowQueryInternal) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -238,6 +315,42 @@ func (m *SlowQueryInternal) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SlowQueryInternal proto.InternalMessageInfo
 
+// LargeRowInternal is recorded when an internal query tries to write a row
+// larger than cluster setting `sql.mutations.max_row_size.log` to the database.
+type LargeRowInternal struct {
+	CommonEventDetails    `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonLargeRowDetails `protobuf:"bytes,2,opt,name=row,proto3,embedded=row" json:""`
+}
+
+func (m *LargeRowInternal) Reset()         { *m = LargeRowInternal{} }
+func (m *LargeRowInternal) String() string { return proto.CompactTextString(m) }
+func (*LargeRowInternal) ProtoMessage()    {}
+func (*LargeRowInternal) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b7a82d5e93041841, []int{7}
+}
+func (m *LargeRowInternal) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LargeRowInternal) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *LargeRowInternal) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LargeRowInternal.Merge(m, src)
+}
+func (m *LargeRowInternal) XXX_Size() int {
+	return m.Size()
+}
+func (m *LargeRowInternal) XXX_DiscardUnknown() {
+	xxx_messageInfo_LargeRowInternal.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LargeRowInternal proto.InternalMessageInfo
+
 // QueryExecute is recorded when a query is executed,
 // and the cluster setting `sql.trace.log_statement_execute` is set.
 type QueryExecute struct {
@@ -250,7 +363,7 @@ func (m *QueryExecute) Reset()         { *m = QueryExecute{} }
 func (m *QueryExecute) String() string { return proto.CompactTextString(m) }
 func (*QueryExecute) ProtoMessage()    {}
 func (*QueryExecute) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b7a82d5e93041841, []int{5}
+	return fileDescriptor_b7a82d5e93041841, []int{8}
 }
 func (m *QueryExecute) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -280,7 +393,10 @@ func init() {
 	proto.RegisterType((*SensitiveTableAccess)(nil), "cockroach.util.log.eventpb.SensitiveTableAccess")
 	proto.RegisterType((*AdminQuery)(nil), "cockroach.util.log.eventpb.AdminQuery")
 	proto.RegisterType((*SlowQuery)(nil), "cockroach.util.log.eventpb.SlowQuery")
+	proto.RegisterType((*CommonLargeRowDetails)(nil), "cockroach.util.log.eventpb.CommonLargeRowDetails")
+	proto.RegisterType((*LargeRow)(nil), "cockroach.util.log.eventpb.LargeRow")
 	proto.RegisterType((*SlowQueryInternal)(nil), "cockroach.util.log.eventpb.SlowQueryInternal")
+	proto.RegisterType((*LargeRowInternal)(nil), "cockroach.util.log.eventpb.LargeRowInternal")
 	proto.RegisterType((*QueryExecute)(nil), "cockroach.util.log.eventpb.QueryExecute")
 }
 
@@ -289,46 +405,55 @@ func init() {
 }
 
 var fileDescriptor_b7a82d5e93041841 = []byte{
-	// 612 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x95, 0xcf, 0x4f, 0x13, 0x4f,
-	0x18, 0xc6, 0xbb, 0x2d, 0x3f, 0xda, 0xb7, 0xf0, 0xfd, 0xc6, 0x09, 0x26, 0x1b, 0x12, 0xb7, 0xcd,
-	0x5e, 0x28, 0x89, 0x6e, 0x15, 0x12, 0x0f, 0xde, 0x28, 0x90, 0x48, 0x82, 0x9a, 0xfe, 0x38, 0x79,
-	0xd9, 0x0c, 0xd3, 0xd7, 0xba, 0x71, 0x76, 0x06, 0x76, 0x66, 0x61, 0xf9, 0x0f, 0x34, 0x7a, 0xe0,
-	0xcf, 0xe2, 0xc8, 0x91, 0x53, 0xa3, 0xe5, 0xc6, 0xd1, 0xab, 0x17, 0x33, 0xb3, 0x05, 0x95, 0xda,
-	0x88, 0x67, 0xbc, 0xf5, 0xc7, 0xf3, 0x7c, 0xde, 0x9d, 0x67, 0x9e, 0x37, 0x0b, 0x2b, 0xa9, 0x8e,
-	0x78, 0x93, 0xcb, 0x41, 0x13, 0x0f, 0x51, 0xe8, 0xfd, 0xbd, 0xa6, 0x3a, 0xe0, 0x21, 0x4d, 0xfb,
-	0x91, 0x0e, 0xed, 0x2f, 0x2a, 0xd8, 0x4f, 0xa4, 0x96, 0x64, 0x99, 0x49, 0xf6, 0x2e, 0x91, 0x94,
-	0xbd, 0x0d, 0x8c, 0x25, 0xe0, 0x72, 0x10, 0x8c, 0x2d, 0xcb, 0x4b, 0x03, 0x39, 0x90, 0x56, 0xd6,
-	0x34, 0x9f, 0x72, 0xc7, 0xf2, 0x83, 0x09, 0xf4, 0xcf, 0x40, 0xff, 0x5b, 0x09, 0x96, 0x36, 0x65,
-	0x1c, 0x4b, 0xd1, 0x6d, 0xef, 0x6e, 0x67, 0xc8, 0xb6, 0x50, 0xd3, 0x88, 0x2b, 0xb2, 0x05, 0x15,
-	0xcc, 0x90, 0x85, 0xb1, 0xec, 0xa3, 0xeb, 0xd4, 0x9d, 0x46, 0xa5, 0xb5, 0x72, 0x39, 0xac, 0xc1,
-	0x43, 0x19, 0x47, 0x1a, 0xe3, 0x7d, 0x7d, 0xfc, 0x75, 0x58, 0xbb, 0x9f, 0x60, 0x9f, 0x32, 0xfd,
-	0xcc, 0x17, 0x52, 0x28, 0x14, 0x2a, 0xd2, 0xd1, 0x21, 0xfa, 0x9d, 0xb2, 0x71, 0xbe, 0x90, 0x7d,
-	0x24, 0xab, 0x50, 0x16, 0x69, 0x1c, 0x26, 0xf2, 0x48, 0xb9, 0xc5, 0xba, 0xd3, 0x98, 0x69, 0xfd,
-	0xf7, 0x2b, 0xa4, 0x33, 0x2f, 0xd2, 0xb8, 0x23, 0x8f, 0x14, 0x79, 0x05, 0x65, 0x75, 0xc0, 0x95,
-	0xa6, 0x1a, 0xdd, 0x92, 0x9d, 0xb7, 0x3e, 0x1a, 0xd6, 0xca, 0xdd, 0xf6, 0x6e, 0xb7, 0xb7, 0xd1,
-	0xdb, 0xbe, 0xf5, 0xec, 0x2b, 0x08, 0x79, 0x04, 0x80, 0x49, 0x22, 0x93, 0x50, 0x63, 0xa6, 0xdd,
-	0x19, 0x8b, 0xbc, 0x39, 0xbd, 0x62, 0x15, 0x3d, 0xcc, 0x34, 0xa9, 0x43, 0x89, 0x0e, 0xd0, 0x9d,
-	0xad, 0x3b, 0x8d, 0xe2, 0x84, 0xce, 0xfc, 0x45, 0x9a, 0x50, 0xb5, 0x87, 0x41, 0x9d, 0x44, 0xa8,
-	0xdc, 0xb9, 0xba, 0xd3, 0x58, 0x9c, 0x50, 0x82, 0x39, 0x4f, 0xae, 0x20, 0x4f, 0xe1, 0xff, 0x37,
-	0x29, 0xe7, 0xa1, 0xa6, 0x7b, 0x1c, 0x43, 0xc5, 0xa8, 0x70, 0xe7, 0xeb, 0x4e, 0xa3, 0x3c, 0x61,
-	0x5a, 0x34, 0xb2, 0x9e, 0x51, 0x75, 0x19, 0x15, 0xd7, 0xbe, 0x48, 0xf4, 0x31, 0xcb, 0x7d, 0xe5,
-	0xe9, 0xbe, 0x1d, 0xa3, 0xb2, 0xbe, 0x26, 0x54, 0x75, 0x26, 0x42, 0x26, 0x53, 0xa1, 0x31, 0x71,
-	0x2b, 0xbf, 0x7f, 0x40, 0x9d, 0x89, 0xcd, 0x5c, 0xe1, 0x7f, 0x2a, 0xc1, 0x52, 0xf7, 0x2a, 0x3b,
-	0x3b, 0x7f, 0x83, 0x31, 0x54, 0x8a, 0xf4, 0x60, 0x8e, 0xd9, 0x56, 0xd8, 0xab, 0xaf, 0xae, 0x05,
-	0xc1, 0xf4, 0xe2, 0x05, 0x79, 0x7f, 0xb6, 0xcd, 0xb7, 0x71, 0x7b, 0x5a, 0x0b, 0xa7, 0xc3, 0x5a,
-	0xe1, 0x6c, 0x58, 0x73, 0x2e, 0x87, 0xb5, 0x42, 0x67, 0xcc, 0x22, 0x6d, 0x28, 0xa9, 0x03, 0x6e,
-	0x8b, 0x50, 0x5d, 0x7b, 0xf2, 0x67, 0xa4, 0xa9, 0xe4, 0x74, 0xaa, 0x61, 0x91, 0x0e, 0xcc, 0x98,
-	0xb2, 0xd9, 0xc6, 0x54, 0xd7, 0x1e, 0xdf, 0x8e, 0xf9, 0xa3, 0xe6, 0x37, 0x90, 0x96, 0x65, 0x8a,
-	0x93, 0xdf, 0x98, 0xa0, 0x31, 0x4e, 0x2b, 0x8e, 0x55, 0xbc, 0xa4, 0x31, 0x92, 0xe7, 0x50, 0xa5,
-	0x36, 0xb5, 0x7c, 0x57, 0x66, 0xff, 0x6e, 0x57, 0x20, 0xf7, 0x9a, 0x6d, 0xf1, 0x3f, 0x14, 0x01,
-	0x36, 0xfa, 0x71, 0x24, 0xda, 0x29, 0x26, 0xc7, 0x77, 0xfa, 0x12, 0xfc, 0xf7, 0x45, 0xa8, 0x74,
-	0xb9, 0x3c, 0xfa, 0x17, 0x85, 0x7f, 0x52, 0x84, 0x7b, 0xd7, 0x51, 0xec, 0x98, 0xc5, 0x15, 0x94,
-	0xdf, 0xed, 0x48, 0x3e, 0x16, 0x61, 0xc1, 0xc6, 0x61, 0x84, 0xa9, 0xc6, 0x3b, 0x9d, 0x46, 0x6b,
-	0xf5, 0xf4, 0x8b, 0x57, 0x38, 0x1d, 0x79, 0xce, 0xd9, 0xc8, 0x73, 0xce, 0x47, 0x9e, 0xf3, 0x79,
-	0xe4, 0x39, 0x27, 0x17, 0x5e, 0xe1, 0xec, 0xc2, 0x2b, 0x9c, 0x5f, 0x78, 0x85, 0xd7, 0xf3, 0x63,
-	0xe6, 0xde, 0x9c, 0x7d, 0xed, 0xaf, 0x7f, 0x0f, 0x00, 0x00, 0xff, 0xff, 0x35, 0xbf, 0x4c, 0x0f,
-	0x72, 0x08, 0x00, 0x00,
+	// 756 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x56, 0x4d, 0x4f, 0xe3, 0x56,
+	0x14, 0x8d, 0x13, 0x20, 0xce, 0x0d, 0xf4, 0xc3, 0x02, 0xc9, 0x8d, 0x54, 0x27, 0xf2, 0x86, 0x20,
+	0xb5, 0x49, 0x0b, 0x55, 0x2b, 0x75, 0x47, 0x80, 0xaa, 0x51, 0x69, 0xab, 0x7c, 0xac, 0xba, 0xb1,
+	0x1e, 0xf6, 0x25, 0xb5, 0xb0, 0xdf, 0x0b, 0xcf, 0xcf, 0x38, 0xe1, 0x17, 0xb4, 0x6a, 0x17, 0xfc,
+	0x97, 0x59, 0xce, 0x1f, 0x60, 0xc9, 0x92, 0x55, 0x34, 0x13, 0x76, 0x2c, 0x67, 0x3b, 0x9b, 0xd1,
+	0x7b, 0x4e, 0x98, 0x99, 0x64, 0xa2, 0x61, 0xa4, 0x61, 0xc5, 0xec, 0x12, 0xe7, 0x9c, 0x73, 0x73,
+	0xef, 0x39, 0xf7, 0xca, 0xb0, 0x19, 0x0b, 0x3f, 0xa8, 0x07, 0xac, 0x57, 0xc7, 0x33, 0xa4, 0xa2,
+	0x7f, 0x54, 0x8f, 0x4e, 0x03, 0x87, 0xc4, 0x9e, 0x2f, 0x1c, 0xf5, 0x24, 0xaa, 0xf5, 0x39, 0x13,
+	0xcc, 0x28, 0xb9, 0xcc, 0x3d, 0xe1, 0x8c, 0xb8, 0x7f, 0xd7, 0x24, 0xa5, 0x16, 0xb0, 0x5e, 0x6d,
+	0x42, 0x29, 0xad, 0xf7, 0x58, 0x8f, 0x29, 0x58, 0x5d, 0x7e, 0x4a, 0x19, 0xa5, 0xaf, 0xe7, 0xa4,
+	0xdf, 0x14, 0xb4, 0x5f, 0xe6, 0x60, 0x7d, 0x8f, 0x85, 0x21, 0xa3, 0x9d, 0xd6, 0xe1, 0xc1, 0x00,
+	0xdd, 0x7d, 0x14, 0xc4, 0x0f, 0x22, 0x63, 0x1f, 0x0a, 0x38, 0x40, 0xd7, 0x09, 0x99, 0x87, 0xa6,
+	0x56, 0xd1, 0xaa, 0x85, 0xc6, 0xe6, 0xed, 0xa8, 0x0c, 0xdf, 0xb0, 0xd0, 0x17, 0x18, 0xf6, 0xc5,
+	0xf0, 0xc5, 0xa8, 0xbc, 0xc1, 0xd1, 0x23, 0xae, 0xf8, 0xd9, 0xa6, 0x8c, 0x46, 0x48, 0x23, 0x5f,
+	0xf8, 0x67, 0x68, 0xb7, 0x75, 0xc9, 0xfc, 0x9d, 0x79, 0x68, 0x6c, 0x81, 0x4e, 0xe3, 0xd0, 0xe1,
+	0x2c, 0x89, 0xcc, 0x6c, 0x45, 0xab, 0x2e, 0x35, 0x3e, 0x7b, 0x5b, 0xa4, 0x9d, 0xa7, 0x71, 0xd8,
+	0x66, 0x49, 0x64, 0xfc, 0x09, 0x7a, 0x74, 0x1a, 0x44, 0x82, 0x08, 0x34, 0x73, 0xaa, 0xde, 0xce,
+	0x78, 0x54, 0xd6, 0x3b, 0xad, 0xc3, 0x4e, 0x77, 0xb7, 0x7b, 0x70, 0xef, 0xda, 0x53, 0x11, 0xe3,
+	0x5b, 0x00, 0xe4, 0x9c, 0x71, 0x47, 0xe0, 0x40, 0x98, 0x4b, 0x4a, 0x72, 0xb6, 0x7a, 0x41, 0x21,
+	0xba, 0x38, 0x10, 0x46, 0x05, 0x72, 0xa4, 0x87, 0xe6, 0x72, 0x45, 0xab, 0x66, 0xe7, 0x70, 0xf2,
+	0x27, 0xa3, 0x0e, 0x45, 0xd5, 0x0c, 0x0a, 0xee, 0x63, 0x64, 0xae, 0x54, 0xb4, 0xea, 0xda, 0x1c,
+	0x12, 0x64, 0x3f, 0x29, 0xc2, 0xf8, 0x11, 0x3e, 0x3f, 0x8e, 0x83, 0xc0, 0x11, 0xe4, 0x28, 0x40,
+	0x27, 0x72, 0x09, 0x35, 0xf3, 0x15, 0xad, 0xaa, 0xcf, 0x91, 0xd6, 0x24, 0xac, 0x2b, 0x51, 0x1d,
+	0x97, 0xd0, 0x3b, 0x9e, 0x4f, 0x3d, 0x1c, 0xa4, 0x3c, 0x7d, 0x31, 0xaf, 0x29, 0x51, 0x8a, 0x57,
+	0x87, 0xa2, 0x18, 0x50, 0xc7, 0x65, 0x31, 0x15, 0xc8, 0xcd, 0xc2, 0xbb, 0xff, 0xa0, 0x18, 0xd0,
+	0xbd, 0x14, 0x61, 0xff, 0x9f, 0x83, 0xf5, 0xce, 0x74, 0x76, 0xaa, 0xfe, 0xae, 0xeb, 0x62, 0x14,
+	0x19, 0x5d, 0x58, 0x71, 0x55, 0x2a, 0x94, 0xf5, 0xc5, 0xed, 0x5a, 0x6d, 0x71, 0xf0, 0x6a, 0x69,
+	0x7e, 0x0e, 0xe4, 0xb7, 0x49, 0x7a, 0x1a, 0xab, 0x97, 0xa3, 0x72, 0xe6, 0x6a, 0x54, 0xd6, 0x6e,
+	0x47, 0xe5, 0x4c, 0x7b, 0xa2, 0x65, 0xb4, 0x20, 0x17, 0x9d, 0x06, 0x2a, 0x08, 0xc5, 0xed, 0xef,
+	0xdf, 0x2f, 0x29, 0x23, 0xb9, 0x58, 0x55, 0x6a, 0x19, 0x6d, 0x58, 0x92, 0x61, 0x53, 0x89, 0x29,
+	0x6e, 0x7f, 0x77, 0x3f, 0xcd, 0xd7, 0x31, 0x9f, 0x91, 0x54, 0x5a, 0x32, 0x38, 0xa9, 0x63, 0x94,
+	0x84, 0xb8, 0x28, 0x38, 0x0a, 0xf1, 0x07, 0x09, 0xd1, 0xf8, 0x15, 0x8a, 0x44, 0x4d, 0x2d, 0xdd,
+	0x95, 0xe5, 0x0f, 0xdb, 0x15, 0x48, 0xb9, 0x72, 0x5b, 0xec, 0x7f, 0xb3, 0x00, 0xbb, 0x5e, 0xe8,
+	0xd3, 0x56, 0x8c, 0x7c, 0xf8, 0xa8, 0x4d, 0xb0, 0xff, 0xc9, 0x42, 0xa1, 0x13, 0xb0, 0xe4, 0xd3,
+	0x28, 0xec, 0xb1, 0x06, 0x1b, 0x29, 0xf8, 0x90, 0xf0, 0x1e, 0xb6, 0x59, 0x32, 0x3d, 0xd2, 0x5b,
+	0xa0, 0x73, 0x96, 0x38, 0x91, 0x7f, 0x9e, 0xde, 0xe8, 0xf9, 0x6d, 0xcf, 0x73, 0x96, 0x74, 0xfc,
+	0x73, 0x34, 0x7e, 0x00, 0x3d, 0x0d, 0xb5, 0xef, 0xa9, 0x86, 0xd7, 0x1a, 0x5f, 0x8d, 0x47, 0xe5,
+	0xbc, 0x5a, 0xfa, 0xe6, 0xfe, 0x2c, 0x4b, 0x41, 0x9b, 0x9e, 0xf1, 0x13, 0x14, 0x8e, 0x49, 0xe8,
+	0x07, 0x43, 0x49, 0xcb, 0x29, 0x5a, 0x49, 0x5e, 0xe5, 0x5f, 0xd4, 0xc3, 0x39, 0x9e, 0x9e, 0x82,
+	0x9b, 0x9e, 0x3c, 0x45, 0x7d, 0xee, 0x87, 0x84, 0x0f, 0x9d, 0x13, 0x1c, 0x2e, 0x58, 0x22, 0x98,
+	0x40, 0x7e, 0xc3, 0xa1, 0xfd, 0x44, 0x03, 0x7d, 0xda, 0xde, 0xc3, 0xd9, 0xcd, 0x59, 0x72, 0x7f,
+	0xbb, 0x67, 0xa6, 0x3d, 0x6b, 0x37, 0x67, 0x89, 0x7d, 0x91, 0x85, 0x2f, 0xef, 0x52, 0xda, 0x94,
+	0x37, 0x95, 0x92, 0xe0, 0x71, 0xa7, 0xf5, 0xa9, 0x06, 0x5f, 0x4c, 0x27, 0xf7, 0xf0, 0x13, 0xf9,
+	0xd8, 0x86, 0xfe, 0x97, 0x85, 0x55, 0x65, 0xa6, 0x6c, 0x33, 0x16, 0xf8, 0xa8, 0xbd, 0x6c, 0x6c,
+	0x5d, 0x3e, 0xb7, 0x32, 0x97, 0x63, 0x4b, 0xbb, 0x1a, 0x5b, 0xda, 0xf5, 0xd8, 0xd2, 0x9e, 0x8d,
+	0x2d, 0xed, 0xe2, 0xc6, 0xca, 0x5c, 0xdd, 0x58, 0x99, 0xeb, 0x1b, 0x2b, 0xf3, 0x57, 0x7e, 0xa2,
+	0x79, 0xb4, 0xa2, 0xde, 0x27, 0x77, 0x5e, 0x05, 0x00, 0x00, 0xff, 0xff, 0x5b, 0x62, 0x8b, 0xd7,
+	0xcb, 0x0a, 0x00, 0x00,
 }
 
 func (m *CommonSQLExecDetails) Marshal() (dAtA []byte, err error) {
@@ -589,6 +714,94 @@ func (m *SlowQuery) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *CommonLargeRowDetails) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CommonLargeRowDetails) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CommonLargeRowDetails) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.PrimaryKey) > 0 {
+		i -= len(m.PrimaryKey)
+		copy(dAtA[i:], m.PrimaryKey)
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(len(m.PrimaryKey)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.FamilyID != 0 {
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(m.FamilyID))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.TableID != 0 {
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(m.TableID))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.RowSize != 0 {
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(m.RowSize))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *LargeRow) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LargeRow) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LargeRow) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.CommonLargeRowDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
 func (m *SlowQueryInternal) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -621,6 +834,49 @@ func (m *SlowQueryInternal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1a
 	{
 		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *LargeRowInternal) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LargeRowInternal) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LargeRowInternal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.CommonLargeRowDetails.MarshalToSizedBuffer(dAtA[:i])
 		if err != nil {
 			return 0, err
 		}
@@ -798,6 +1054,41 @@ func (m *SlowQuery) Size() (n int) {
 	return n
 }
 
+func (m *CommonLargeRowDetails) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.RowSize != 0 {
+		n += 1 + sovSqlAuditEvents(uint64(m.RowSize))
+	}
+	if m.TableID != 0 {
+		n += 1 + sovSqlAuditEvents(uint64(m.TableID))
+	}
+	if m.FamilyID != 0 {
+		n += 1 + sovSqlAuditEvents(uint64(m.FamilyID))
+	}
+	l = len(m.PrimaryKey)
+	if l > 0 {
+		n += 1 + l + sovSqlAuditEvents(uint64(l))
+	}
+	return n
+}
+
+func (m *LargeRow) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	l = m.CommonLargeRowDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	return n
+}
+
 func (m *SlowQueryInternal) Size() (n int) {
 	if m == nil {
 		return 0
@@ -809,6 +1100,19 @@ func (m *SlowQueryInternal) Size() (n int) {
 	l = m.CommonSQLEventDetails.Size()
 	n += 1 + l + sovSqlAuditEvents(uint64(l))
 	l = m.CommonSQLExecDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	return n
+}
+
+func (m *LargeRowInternal) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	l = m.CommonLargeRowDetails.Size()
 	n += 1 + l + sovSqlAuditEvents(uint64(l))
 	return n
 }
@@ -1599,6 +1903,261 @@ func (m *SlowQuery) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *CommonLargeRowDetails) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSqlAuditEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CommonLargeRowDetails: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CommonLargeRowDetails: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RowSize", wireType)
+			}
+			m.RowSize = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RowSize |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableID", wireType)
+			}
+			m.TableID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TableID |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FamilyID", wireType)
+			}
+			m.FamilyID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.FamilyID |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PrimaryKey", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PrimaryKey = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSqlAuditEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LargeRow) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSqlAuditEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LargeRow: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LargeRow: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonLargeRowDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonLargeRowDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSqlAuditEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *SlowQueryInternal) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1724,6 +2283,122 @@ func (m *SlowQueryInternal) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.CommonSQLExecDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSqlAuditEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LargeRowInternal) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSqlAuditEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LargeRowInternal: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LargeRowInternal: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonLargeRowDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonLargeRowDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
