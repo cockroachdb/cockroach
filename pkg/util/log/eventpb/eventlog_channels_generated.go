@@ -218,7 +218,13 @@ func (m *ClientConnectionStart) LoggingChannel() logpb.Channel { return logpb.Ch
 func (m *ClientSessionEnd) LoggingChannel() logpb.Channel { return logpb.Channel_SESSIONS }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *LargeRow) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_PERF }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *SlowQuery) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_PERF }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *LargeRowInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_INTERNAL_PERF }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *SlowQueryInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_INTERNAL_PERF }
