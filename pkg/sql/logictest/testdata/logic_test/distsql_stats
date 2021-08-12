@@ -823,9 +823,6 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 2            0           0                    1
 3            0           0                    1
 
-statement ok
-SET experimental_enable_expression_indexes=true
-
 # Test that stats are not collected for virtual columns.
 statement ok
 CREATE TABLE virt (

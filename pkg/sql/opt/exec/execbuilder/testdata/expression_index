@@ -1,7 +1,4 @@
 statement ok
-SET experimental_enable_expression_indexes=true
-
-statement ok
 CREATE TABLE t (
   k INT PRIMARY KEY,
   a INT,

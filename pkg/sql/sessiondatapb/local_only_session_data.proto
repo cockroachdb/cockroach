@@ -120,9 +120,7 @@ message LocalOnlySessionData {
   bool synchronous_commit = 30;
   // EnableSeqScan is a dummy setting for the enable_seqscan var.
   bool enable_seq_scan = 31;
-  // EnableExpressionIndexes indicates whether creating expression indexes is
-  // allowed.
-  bool enable_expression_indexes = 32;
+  reserved 32;
   // EnableUniqueWithoutIndexConstraints indicates whether creating unique
   // constraints without an index is allowed.
   // TODO(rytaft): remove this once unique without index constraints are fully
