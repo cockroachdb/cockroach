@@ -143,6 +143,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 68701, "flaky test")
+
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
