@@ -39,6 +39,15 @@ PAUSE JOBS SELECT a -- literals removed
 PAUSE JOBS SELECT _ -- identifiers removed
 
 parse
+PAUSE JOBS SELECT a WITH REASON = 'abc'
+----
+PAUSE JOBS SELECT a WITH REASON = 'abc'
+PAUSE JOBS SELECT (a) WITH REASON = ('abc') -- fully parenthesized
+PAUSE JOBS SELECT a WITH REASON = _ -- literals removed
+PAUSE JOBS SELECT a WITH REASON = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+PAUSE JOBS SELECT _ WITH REASON = 'abc' -- identifiers removed
+
+parse
 EXPLAIN PAUSE JOBS SELECT a
 ----
 EXPLAIN PAUSE JOBS SELECT a
@@ -215,6 +224,15 @@ PAUSE JOBS VALUES (a) -- normalized!
 PAUSE JOBS VALUES ((a)) -- fully parenthesized
 PAUSE JOBS VALUES (a) -- literals removed
 PAUSE JOBS VALUES (_) -- identifiers removed
+
+parse
+PAUSE JOB a WITH REASON = 'abc'
+----
+PAUSE JOBS VALUES (a) WITH REASON = 'abc' -- normalized!
+PAUSE JOBS VALUES ((a)) WITH REASON = ('abc') -- fully parenthesized
+PAUSE JOBS VALUES (a) WITH REASON = _ -- literals removed
+PAUSE JOBS VALUES (a) WITH REASON = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+PAUSE JOBS VALUES (_) WITH REASON = 'abc' -- identifiers removed
 
 parse
 EXPLAIN PAUSE JOB a
