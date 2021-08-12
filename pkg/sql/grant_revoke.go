@@ -47,15 +47,10 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	grantees := make([]security.SQLUsername, len(n.Grantees))
-	for i, grantee := range n.Grantees {
-		normalizedGrantee, err := security.MakeSQLUsernameFromUserInput(string(grantee), security.UsernameValidation)
-		if err != nil {
-			return nil, err
-		}
-		grantees[i] = normalizedGrantee
+	grantees, err := n.Grantees.ToSQLUsernames()
+	if err != nil {
+		return nil, err
 	}
-
 	return &changePrivilegesNode{
 		isGrant:      true,
 		targets:      n.Targets,
