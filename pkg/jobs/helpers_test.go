@@ -96,6 +96,10 @@ var (
 
 	GcQuery = expiredJobsQuery
 
+	RemoveClaimsQuery = removeClaimsQuery
+
+	ProcessJobsQuery = processQueryWithBackoff
+
 	IntervalBaseSettingKey = intervalBaseSettingKey
 
 	AdoptIntervalSettingKey = adoptIntervalSettingKey

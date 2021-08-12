@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -799,6 +800,52 @@ func TestExponentialBackoffSettings(t *testing.T) {
 				}
 				return errors.Errorf("waiting for the job to complete")
 			})
+		})
+	}
+}
+
+func TestRegistryUsePartialIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Mock args.
+	const (
+		id  = 1
+		sid = "bytes"
+		iid = 1
+		lim = 10
+		d   = time.Millisecond
+	)
+	ts := timeutil.Now()
+
+	for _, test := range []struct {
+		name      string
+		query     string
+		queryArgs []interface{}
+	}{
+		{"remove claims", RemoveClaimsQuery, []interface{}{sid, lim}},
+		{"claim jobs", AdoptQuery, []interface{}{sid, iid, lim}},
+		{"process claimed jobs", ProcessJobsQuery, []interface{}{sid, iid, ts, d, d}},
+		{"serve cancel and pause", CancelQuery, []interface{}{sid, iid}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+			tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+			usingIndex := false
+			rows := tdb.Query(t, "EXPLAIN "+test.query, test.queryArgs...)
+			for rows.Next() {
+				var line string
+				require.NoError(t, rows.Scan(&line))
+				if strings.Contains(line, "table: jobs@jobs_run_stats_idx (partial index)") {
+					usingIndex = true
+					break
+				}
+			}
+			require.NoError(t, rows.Close())
+			require.True(t, usingIndex, "partial index is not used")
 		})
 	}
 }
