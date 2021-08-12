@@ -316,6 +316,7 @@ func newInternalPlanner(
 	}
 	sd.SessionData.Database = "system"
 	sd.SessionData.UserProto = user.EncodeProto()
+	sd.SessionData.Internal = true
 	dataMutator := &sessionDataMutator{
 		data: sd,
 		defaults: SessionDefaults(map[string]string{

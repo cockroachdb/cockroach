@@ -2108,6 +2108,7 @@ func NewFakeSessionData(sv *settings.Values) *sessiondata.SessionData {
 			Database:      "",
 			UserProto:     security.NodeUserName().EncodeProto(),
 			VectorizeMode: sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv)),
+			Internal:      true,
 		},
 		LocalOnlySessionData: sessiondata.LocalOnlySessionData{
 			DistSQLMode: sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
