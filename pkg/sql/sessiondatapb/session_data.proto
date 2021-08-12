@@ -56,6 +56,9 @@ message SessionData {
   // SeqState gives access to the SQL sequences that have been manipulated by
   // the session.
   SequenceState seq_state = 11 [(gogoproto.nullable) = false];
+  // Internal is true if this query came from InternalExecutor or an internal
+  // planner.
+  bool internal = 16;
 }
 
 // DataConversionConfig contains the parameters that influence the conversion

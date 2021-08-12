@@ -594,6 +594,7 @@ go_test(
         "//pkg/util/log/channel",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logconfig",
+        "//pkg/util/log/logpb",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",

@@ -622,6 +622,7 @@ func (ie *InternalExecutor) execInternal(
 		sd = ie.s.newSessionData(SessionArgs{})
 	}
 	applyOverrides(sessionDataOverride, sd)
+	sd.Internal = true
 	if sd.User().Undefined() {
 		return nil, errors.AssertionFailedf("no user specified for internal query")
 	}
