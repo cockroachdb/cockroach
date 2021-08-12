@@ -70,6 +70,7 @@ var maxRangeBytes = *zonepb.DefaultZoneConfig().RangeMaxBytes
 
 // CockroachBinary is the path to the host-side binary to use.
 var CockroachBinary = flag.String("b", "", "the host-side binary to run")
+var mountCockroachBinary = flag.Bool("mount-cockroach-binary", false, "Mount cockroach binary to the docker image")
 
 func exists(path string) bool {
 	if _, err := os.Stat(path); oserror.IsNotExist(err) {
@@ -322,7 +323,7 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 		filepath.Join(l.volumesDir, "logs") + ":/logs",
 	}
 
-	if *cockroachImage == defaultImage {
+	if *cockroachImage == defaultImage && *CockroachBinary != "" || *mountCockroachBinary {
 		path, err := filepath.Abs(*CockroachBinary)
 		maybePanic(err)
 		binds = append(binds, path+":"+CockroachBinaryInContainer)

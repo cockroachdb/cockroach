@@ -13,3 +13,21 @@ go_library(
     importpath = "noop",
     visibility = ["//pkg:__subpackages__"],
 )
+
+sh_binary(
+    name = "acceptance_test",
+    srcs = ["acceptance.sh"],
+    args = [
+        "-e", "/cockroach/cockroach",
+        "-i", "docker.io/rail/ubuntu:focal-21210119-ncurses5-tinfo5",
+        "-l", "artifacts/acceptance",
+        "--mount-cockroach-binary",
+    ],
+    data = [
+        # "//pkg/acceptance:acceptance_test",
+        # "//pkg/cmd/cockroach-short:cockroach-short",
+        "@go_sdk//:bin/go",
+    ],
+    deps = ["@bazel_tools//tools/bash/runfiles"],
+    testonly = 1,
+)

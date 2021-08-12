@@ -4,7 +4,7 @@ go_library(
     name = "acceptance",
     srcs = [
         "flags.go",
-        "test_main.go",
+        "test_acceptance.go",
         "util_cluster.go",
         "util_docker.go",
     ],
@@ -14,8 +14,13 @@ go_library(
         "//pkg/acceptance/cluster",
         "//pkg/base",
         "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
         "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
         "//pkg/util/log",
+        "//pkg/util/randutil",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_containerd_containerd//platforms",
@@ -27,6 +32,7 @@ go_library(
 go_test(
     name = "acceptance_test",
     size = "enormous",
+    visibility = ["//build/bazelutil:__subpackages__"],
     srcs = [
         "adapter_test.go",
         "cli_test.go",
@@ -34,9 +40,10 @@ go_test(
         "debug_remote_test.go",
         "main_test.go",
     ],
-    data = glob(["testdata/**"]),
+    gotags = ["acceptance"],
+    data = glob(["testdata/**"]) + ["//pkg/cmd/cockroach-short:cockroach-short"],
     embed = [":acceptance"],
-    tags = ["broken_in_bazel"],
+    # tags = ["broken_in_bazel"],
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/security",
