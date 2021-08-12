@@ -73,6 +73,9 @@ message SessionData {
   // lock in order to perform a non-locking read on a key.
   google.protobuf.Duration lock_timeout = 15 [(gogoproto.nullable) = false,
                                               (gogoproto.stdduration) = true];
+  // Internal is true if this query came from InternalExecutor or an internal
+  // planner.
+  bool internal = 16;
 }
 
 // DataConversionConfig contains the parameters that influence the output
