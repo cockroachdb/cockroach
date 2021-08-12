@@ -1,0 +1,82 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@import "src/core/index.module";
+
+.database-table-page {
+  &__indexes {
+    &--value {
+      text-align: right;
+    }
+  }
+}
+
+.cockroach--tabs {
+  :global(.ant-tabs-bar) {
+    border-bottom: 1px solid $grey2;
+  }
+
+  :global(.ant-tabs-tab) {
+    @include text--heading-5;
+    font-weight: $font-weight--medium;
+    color: $colors--neutral-7;
+  }
+
+  :global(.ant-tabs-tab-active) {
+    color: $colors--neutral-8;
+  }
+
+  :global(.ant-tabs-tab:hover) {
+    color: $colors--link;
+  }
+
+  :global(.ant-tabs-ink-bar) {
+    height: 3px;
+    border-radius: 40px;
+    background-color: $colors--link;
+  }
+}
+
+.summary-card {
+  h4 {
+    @include text--body-strong;
+    color: $colors--neutral-7;
+  }
+
+  p {
+    @include text--body;
+  }
+}
+
+.icon {
+  &__container {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  &--md {
+    height: 24px;
+    width: 24px;
+    margin-right: 12px;
+  }
+
+  &--xxs {
+    height: 8px;
+    width: 8px;
+  }
+
+  &--title {
+    fill: $colors--title;
+  }
+
+  &--primary {
+    fill: $colors--primary-text;
+  }
+}

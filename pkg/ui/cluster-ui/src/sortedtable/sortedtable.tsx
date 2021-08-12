@@ -379,7 +379,9 @@ export class SortedTable<T> extends React.Component<
           </tbody>
         </table>
         {loading && <TableSpinner loadingLabel={loadingLabel} />}
-        {count === 0 && <div className={noResultsClass}>{renderNoResult}</div>}
+        {!loading && count === 0 && (
+          <div className={noResultsClass}>{renderNoResult}</div>
+        )}
       </div>
     );
   }

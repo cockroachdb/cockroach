@@ -62,3 +62,18 @@ mkdir go/src/github.com/cockroachdb/cockroach/bin
 bazel info bazel-bin --color=no
 rm go/src/github.com/cockroachdb/cockroach/cockroach-short
 ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
+
+dev build cockroach-short --hoist-generated-code
+----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+bazel build --color=yes --experimental_convenience_symlinks=ignore //pkg/cmd/cockroach-short --config=dev
+bazel info workspace --color=no --config=dev
+mkdir go/src/github.com/cockroachdb/cockroach/bin
+bazel info bazel-bin --color=no --config=dev
+rm go/src/github.com/cockroachdb/cockroach/cockroach-short
+ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
+find /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg -name *.go
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/kv/kvserver/kvserver_go_proto_/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go go/src/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go

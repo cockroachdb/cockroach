@@ -19,3 +19,108 @@ go/src/github.com/cockroachdb/cockroach
 
 go/src/github.com/cockroachdb/cockroach/build/bazelutil/bazel-generate.sh
 ----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
+bazel info workspace --color=no --config=dev
+----
+go/src/github.com/cockroachdb/cockroach
+
+cat go/src/github.com/cockroachdb/cockroach/docs/generated/bazel_targets.txt
+----
+----
+This line is ignored.
+
+//docs/generated:gen-logging-md
+//docs/generated/sql
+----
+----
+
+bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev //docs/generated:gen-logging-md //docs/generated/sql
+----
+
+bazel info bazel-bin --color=no --config=dev
+----
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
+
+bazel query --output=xml //docs/generated:gen-logging-md
+----
+----
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<query version="2">
+    <rule class="genrule" location="/Users/ricky/go/src/github.com/cockroachdb/cockroach/docs/generated/BUILD.bazel:3:8" name="//docs/generated:gen-logging-md">
+        <string name="name" value="gen-logging-md"/>
+        <list name="srcs">
+            <label value="//pkg/util/log/logpb:log.proto"/>
+        </list>
+        <list name="exec_tools">
+            <label value="//pkg/util/log/gen:gen"/>
+        </list>
+        <list name="outs">
+            <output value="//docs/generated:logging.md"/>
+        </list>
+        <string name="cmd" value="&#10;        $(location //pkg/util/log/gen) $(location //pkg/util/log/logpb:log.proto)           logging.md $(location logging.md)&#10;       "/>
+        <rule-input name="//pkg/util/log/gen:gen"/>
+        <rule-input name="//pkg/util/log/logpb:log.proto"/>
+        <rule-input name="@bazel_tools//tools/genrule:genrule-setup.sh"/>
+        <rule-output name="//docs/generated:logging.md"/>
+    </rule>
+</query>
+----
+----
+
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/logging.md go/src/github.com/cockroachdb/cockroach/docs/generated/logging.md
+----
+
+bazel query --output=xml //docs/generated/sql
+----
+----
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<query version="2">
+    <rule class="genrule" location="/Users/ricky/go/src/github.com/cockroachdb/cockroach/docs/generated/sql/BUILD.bazel:1:8" name="//docs/generated/sql:sql">
+        <string name="name" value="sql"/>
+        <list name="exec_tools">
+            <label value="//pkg/cmd/docgen:docgen"/>
+        </list>
+        <list name="outs">
+            <output value="//docs/generated/sql:aggregates.md"/>
+            <output value="//docs/generated/sql:functions.md"/>
+            <output value="//docs/generated/sql:operators.md"/>
+            <output value="//docs/generated/sql:window_functions.md"/>
+        </list>
+        <string name="cmd" value="&#10;$(location //pkg/cmd/docgen) functions $(RULEDIR) --quiet&#10;"/>
+        <rule-input name="//pkg/cmd/docgen:docgen"/>
+        <rule-input name="@bazel_tools//tools/genrule:genrule-setup.sh"/>
+        <rule-output name="//docs/generated/sql:aggregates.md"/>
+        <rule-output name="//docs/generated/sql:functions.md"/>
+        <rule-output name="//docs/generated/sql:operators.md"/>
+        <rule-output name="//docs/generated/sql:window_functions.md"/>
+    </rule>
+</query>
+----
+----
+
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/aggregates.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/aggregates.md
+----
+
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/functions.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/functions.md
+----
+
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/operators.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/operators.md
+----
+
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/window_functions.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/window_functions.md
+----

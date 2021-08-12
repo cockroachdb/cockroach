@@ -28,6 +28,7 @@ import (
 // encountered:
 //   1. An inline value (non-user data)
 //   2. An intent whose timestamp lies within the time bounds
+//      (if not using enableWriteIntentAggregation)
 //
 // Note: The endTime is inclusive to be consistent with the non-incremental
 // iterator, where reads at a given timestamp return writes at that
@@ -156,8 +157,8 @@ func NewMVCCIncrementalIterator(
 }
 
 // SeekGE advances the iterator to the first key in the engine which is >= the
-// provided key. startKey should be a metadata key to ensure that the iterator
-// has a chance to observe any intents on the key if they are there.
+// provided key. startKey is not restricted to metadata key and could point to
+// any version within a history as required.
 func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 	if i.timeBoundIter != nil {
 		// Check which is the first key seen by the TBI.

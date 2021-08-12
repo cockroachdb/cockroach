@@ -38,11 +38,9 @@ import { EventPage } from "src/views/cluster/containers/events";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
-import {
-  DatabaseGrantsList,
-  DatabaseTablesList,
-} from "src/views/databases/containers/databases";
-import TableDetails from "src/views/databases/containers/tableDetails";
+import { DatabasesPage } from "src/views/databases/databasesPage";
+import { DatabaseDetailsPage } from "src/views/databases/databaseDetailsPage";
+import { DatabaseTablePage } from "src/views/databases/databaseTablePage";
 import Raft from "src/views/devtools/containers/raft";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
@@ -146,35 +144,29 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 <Route path="/jobs/:id" component={JobDetails} />
 
                 {/* databases */}
-                <Redirect exact from="/databases" to="/databases/tables" />
-                <Route
-                  path="/databases/tables"
-                  component={DatabaseTablesList}
-                />
-                <Route
-                  path="/databases/grants"
-                  component={DatabaseGrantsList}
-                />
+                <Route exact path="/databases" component={DatabasesPage} />
+                <Redirect exact from="/databases/tables" to="/databases" />
+                <Redirect exact from="/databases/grants" to="/databases" />
                 <Redirect
                   from={`/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
                   to={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
                 />
 
                 <Redirect exact from="/database" to="/databases" />
-                <Redirect
+                <Route
                   exact
-                  from={`/database/:${databaseNameAttr}`}
-                  to="/databases"
+                  path={`/database/:${databaseNameAttr}`}
+                  component={DatabaseDetailsPage}
                 />
                 <Redirect
                   exact
                   from={`/database/:${databaseNameAttr}/table`}
-                  to="/databases"
+                  to={`/database/:${databaseNameAttr}`}
                 />
                 <Route
                   exact
                   path={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
-                  component={TableDetails}
+                  component={DatabaseTablePage}
                 />
 
                 {/* data distribution */}
