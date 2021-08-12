@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -382,10 +381,6 @@ func replaceExpressionElemsWithVirtualCols(
 	for i := range elems {
 		elem := &elems[i]
 		if elem.Expr != nil {
-			if !sessionData.EnableExpressionIndexes {
-				return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
-			}
-
 			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.ExpressionIndexes) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"version %v must be finalized to use expression indexes",

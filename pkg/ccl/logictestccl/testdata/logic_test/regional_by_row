@@ -3140,9 +3140,6 @@ ALTER DATABASE drop_regions DROP REGION "ca-central-1";
 subtest virtual_columns
 
 statement ok
-SET experimental_enable_expression_indexes=true
-
-statement ok
 USE multi_region_test_db
 
 statement ok
