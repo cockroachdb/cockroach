@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -111,7 +112,25 @@ func (r *PebbleFileRegistry) maybeElideEntries() error {
 	proto.Merge(newProto, r.mu.currProto)
 	filesChanged := false
 	for filename, entry := range newProto.Files {
+		// Some entries may be elided. This is used within
+		// ccl/storageccl/engineccl to elide plaintext file entries.
 		if CanRegistryElideFunc != nil && CanRegistryElideFunc(entry) {
+			delete(newProto.Files, filename)
+			filesChanged = true
+			continue
+		}
+
+		// Files may exist within the registry but not on the filesystem
+		// because registry updates are not atomic with filesystem edits.
+		// Check if the file exists and elide the entry if the file does not
+		// exist. This elision happens during store initialization, ensuring no
+		// concurrent work should be ongoing which might have added an entry to
+		// the file registry but not yet created the referenced file.
+		path := filename
+		if !filepath.IsAbs(path) {
+			path = r.FS.PathJoin(r.DBDir, filename)
+		}
+		if _, err := r.FS.Stat(path); oserror.IsNotExist(err) {
 			delete(newProto.Files, filename)
 			filesChanged = true
 		}

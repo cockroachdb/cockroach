@@ -341,3 +341,232 @@ project
  │                   └── b
  └── projections
       └── a + 1
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  }
+]'
+----
+
+# Show histograms by default if stats are shown.
+opt
+SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
+----
+project
+ ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
+ ├── immutable
+ ├── stats: [rows=39.9984159]
+ ├── cost: 1111.72722
+ ├── key: (1)
+ ├── fd: (1)-->(6,7)
+ ├── ordering: +1
+ ├── prune: (1,6,7)
+ ├── sort
+ │    ├── columns: t.public.t.a:1(int) min:6(int!null)
+ │    ├── immutable
+ │    ├── stats: [rows=39.9984159, distinct(1)=39.9984159, null(1)=0]
+ │    ├── cost: 1110.91725
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6)
+ │    ├── ordering: +1
+ │    ├── prune: (6)
+ │    └── group-by
+ │         ├── columns: t.public.t.a:1(int) min:6(int!null)
+ │         ├── grouping columns: t.public.t.a:1(int)
+ │         ├── immutable
+ │         ├── stats: [rows=39.9984159, distinct(1)=39.9984159, null(1)=0]
+ │         ├── cost: 1105.04998
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(6)
+ │         ├── prune: (6)
+ │         ├── select
+ │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
+ │         │    ├── immutable
+ │         │    ├── stats: [rows=333.333333, distinct(1)=39.9984159, null(1)=0, distinct(2)=40, null(2)=0]
+ │         │    ├── cost: 1094.63
+ │         │    ├── key: (3)
+ │         │    ├── fd: (3)-->(1,2)
+ │         │    ├── interesting orderings: (+3)
+ │         │    ├── scan t.public.t
+ │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
+ │         │    │    ├── stats: [rows=1000, distinct(1)=40, null(1)=0, distinct(2)=40, null(2)=0]
+ │         │    │    │   histogram(1)=  0  0  100  100  100  100  100  200  100  200
+ │         │    │    │                <--- 0 ----- 100 ----- 200 ----- 300 ----- 400
+ │         │    │    │   histogram(2)=  0  0  100  100  100  100  100  200  100  200
+ │         │    │    │                <--- 0 ----- 100 ----- 200 ----- 300 ----- 400
+ │         │    │    ├── cost: 1084.61
+ │         │    │    ├── key: (3)
+ │         │    │    ├── fd: (3)-->(1,2)
+ │         │    │    ├── prune: (1-3)
+ │         │    │    └── interesting orderings: (+3)
+ │         │    └── filters
+ │         │         └── lt [type=bool, outer=(1-3), immutable, constraints=(/2: (/NULL - ])]
+ │         │              ├── variable: t.public.t.b:2 [type=int]
+ │         │              └── plus [type=int]
+ │         │                   ├── variable: t.public.t.k:3 [type=int]
+ │         │                   └── variable: t.public.t.a:1 [type=int]
+ │         └── aggregations
+ │              └── min [as=min:6, type=int, outer=(2)]
+ │                   └── variable: t.public.t.b:2 [type=int]
+ └── projections
+      └── plus [as="?column?":7, type=int, outer=(1), immutable]
+           ├── variable: t.public.t.a:1 [type=int]
+           └── const: 1 [type=int]
+
+# Do not show histograms.
+opt format=(hide-hist)
+SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
+----
+project
+ ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
+ ├── immutable
+ ├── stats: [rows=39.9984159]
+ ├── cost: 1111.72722
+ ├── key: (1)
+ ├── fd: (1)-->(6,7)
+ ├── ordering: +1
+ ├── prune: (1,6,7)
+ ├── sort
+ │    ├── columns: t.public.t.a:1(int) min:6(int!null)
+ │    ├── immutable
+ │    ├── stats: [rows=39.9984159, distinct(1)=39.9984159, null(1)=0]
+ │    ├── cost: 1110.91725
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6)
+ │    ├── ordering: +1
+ │    ├── prune: (6)
+ │    └── group-by
+ │         ├── columns: t.public.t.a:1(int) min:6(int!null)
+ │         ├── grouping columns: t.public.t.a:1(int)
+ │         ├── immutable
+ │         ├── stats: [rows=39.9984159, distinct(1)=39.9984159, null(1)=0]
+ │         ├── cost: 1105.04998
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(6)
+ │         ├── prune: (6)
+ │         ├── select
+ │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
+ │         │    ├── immutable
+ │         │    ├── stats: [rows=333.333333, distinct(1)=39.9984159, null(1)=0, distinct(2)=40, null(2)=0]
+ │         │    ├── cost: 1094.63
+ │         │    ├── key: (3)
+ │         │    ├── fd: (3)-->(1,2)
+ │         │    ├── interesting orderings: (+3)
+ │         │    ├── scan t.public.t
+ │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
+ │         │    │    ├── stats: [rows=1000, distinct(1)=40, null(1)=0, distinct(2)=40, null(2)=0]
+ │         │    │    ├── cost: 1084.61
+ │         │    │    ├── key: (3)
+ │         │    │    ├── fd: (3)-->(1,2)
+ │         │    │    ├── prune: (1-3)
+ │         │    │    └── interesting orderings: (+3)
+ │         │    └── filters
+ │         │         └── lt [type=bool, outer=(1-3), immutable, constraints=(/2: (/NULL - ])]
+ │         │              ├── variable: t.public.t.b:2 [type=int]
+ │         │              └── plus [type=int]
+ │         │                   ├── variable: t.public.t.k:3 [type=int]
+ │         │                   └── variable: t.public.t.a:1 [type=int]
+ │         └── aggregations
+ │              └── min [as=min:6, type=int, outer=(2)]
+ │                   └── variable: t.public.t.b:2 [type=int]
+ └── projections
+      └── plus [as="?column?":7, type=int, outer=(1), immutable]
+           ├── variable: t.public.t.a:1 [type=int]
+           └── const: 1 [type=int]
+
+# Do not show histograms if stats are hidden.
+opt format=(hide-stats,show-hist)
+SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
+----
+project
+ ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
+ ├── immutable
+ ├── cost: 1111.72722
+ ├── key: (1)
+ ├── fd: (1)-->(6,7)
+ ├── ordering: +1
+ ├── prune: (1,6,7)
+ ├── sort
+ │    ├── columns: t.public.t.a:1(int) min:6(int!null)
+ │    ├── immutable
+ │    ├── cost: 1110.91725
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6)
+ │    ├── ordering: +1
+ │    ├── prune: (6)
+ │    └── group-by
+ │         ├── columns: t.public.t.a:1(int) min:6(int!null)
+ │         ├── grouping columns: t.public.t.a:1(int)
+ │         ├── immutable
+ │         ├── cost: 1105.04998
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(6)
+ │         ├── prune: (6)
+ │         ├── select
+ │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
+ │         │    ├── immutable
+ │         │    ├── cost: 1094.63
+ │         │    ├── key: (3)
+ │         │    ├── fd: (3)-->(1,2)
+ │         │    ├── interesting orderings: (+3)
+ │         │    ├── scan t.public.t
+ │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
+ │         │    │    ├── cost: 1084.61
+ │         │    │    ├── key: (3)
+ │         │    │    ├── fd: (3)-->(1,2)
+ │         │    │    ├── prune: (1-3)
+ │         │    │    └── interesting orderings: (+3)
+ │         │    └── filters
+ │         │         └── lt [type=bool, outer=(1-3), immutable, constraints=(/2: (/NULL - ])]
+ │         │              ├── variable: t.public.t.b:2 [type=int]
+ │         │              └── plus [type=int]
+ │         │                   ├── variable: t.public.t.k:3 [type=int]
+ │         │                   └── variable: t.public.t.a:1 [type=int]
+ │         └── aggregations
+ │              └── min [as=min:6, type=int, outer=(2)]
+ │                   └── variable: t.public.t.b:2 [type=int]
+ └── projections
+      └── plus [as="?column?":7, type=int, outer=(1), immutable]
+           ├── variable: t.public.t.a:1 [type=int]
+           └── const: 1 [type=int]

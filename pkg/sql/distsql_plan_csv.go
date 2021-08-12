@@ -225,22 +225,26 @@ func DistIngest(
 
 	dsp.FinalizePlan(planCtx, p)
 
-	if err := job.FractionProgressed(ctx, nil, /* txn */
-		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-			prog := details.(*jobspb.Progress_Import).Import
-			prog.ReadProgress = make([]float32, len(from))
-			prog.ResumePos = make([]int64, len(from))
-			if prog.SequenceDetails == nil {
-				prog.SequenceDetails = make([]*jobspb.SequenceDetails, len(from))
-				for i := range prog.SequenceDetails {
-					prog.SequenceDetails[i] = &jobspb.SequenceDetails{}
+	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
+	if importDetails.ReadProgress == nil {
+		// Initialize the progress metrics on the first attempt.
+		if err := job.FractionProgressed(ctx, nil, /* txn */
+			func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				prog := details.(*jobspb.Progress_Import).Import
+				prog.ReadProgress = make([]float32, len(from))
+				prog.ResumePos = make([]int64, len(from))
+				if prog.SequenceDetails == nil {
+					prog.SequenceDetails = make([]*jobspb.SequenceDetails, len(from))
+					for i := range prog.SequenceDetails {
+						prog.SequenceDetails[i] = &jobspb.SequenceDetails{}
+					}
 				}
-			}
 
-			return 0.0
-		},
-	); err != nil {
-		return roachpb.BulkOpSummary{}, err
+				return 0.0
+			},
+		); err != nil {
+			return roachpb.BulkOpSummary{}, err
+		}
 	}
 
 	rowProgress := make([]int64, len(from))
