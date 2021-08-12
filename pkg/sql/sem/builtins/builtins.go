@@ -4197,6 +4197,23 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"session_user": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if ctx.SessionData.User().Undefined() {
+					return tree.DNull, nil
+				}
+				return tree.NewDString(ctx.SessionData.User().Normalized()), nil
+			},
+			Info: "Returns the session user. This function is provided for " +
+				"compatibility with PostgreSQL.",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	// https://www.postgresql.org/docs/10/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
 	"pg_collation_for": makeBuiltin(
 		tree.FunctionProperties{Category: categoryString},
