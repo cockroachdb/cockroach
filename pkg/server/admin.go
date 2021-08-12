@@ -1500,8 +1500,12 @@ func (s *adminServer) getUIData(
 		query.Append("$", tree.NewDString(makeUIKey(userName, key)))
 	}
 	query.Append(");")
-	if err := query.Errors(); err != nil {
-		return nil, errors.Errorf("error constructing query: %v", err)
+	if errs := query.Errors(); len(errs) > 0 {
+		var err error
+		for _, e := range errs {
+			err = errors.CombineErrors(err, e)
+		}
+		return nil, errors.Wrap(err, "error constructing query")
 	}
 	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-getUIData", nil, /* txn */

@@ -404,7 +404,7 @@ func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 		log.Fatalf(ctx, "n%d address is empty", desc.NodeID)
 	}
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, NodeDescriptorTTL); err != nil {
-		return errors.Errorf("n%d: couldn't gossip descriptor: %v", desc.NodeID, err)
+		return errors.Wrapf(err, "n%d: couldn't gossip descriptor", desc.NodeID)
 	}
 	g.updateClients()
 	return nil

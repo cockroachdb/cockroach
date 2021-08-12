@@ -111,11 +111,11 @@ func clearIndex(
 	sp := tableDesc.IndexSpan(execCfg.Codec, indexID)
 	start, err := keys.Addr(sp.Key)
 	if err != nil {
-		return errors.Errorf("failed to addr index start: %v", err)
+		return errors.Wrap(err, "failed to addr index start")
 	}
 	end, err := keys.Addr(sp.EndKey)
 	if err != nil {
-		return errors.Errorf("failed to addr index end: %v", err)
+		return errors.Wrap(err, "failed to addr index end")
 	}
 	rSpan := roachpb.RSpan{Key: start, EndKey: end}
 	return clearSpanData(ctx, execCfg.DB, execCfg.DistSender, rSpan)
