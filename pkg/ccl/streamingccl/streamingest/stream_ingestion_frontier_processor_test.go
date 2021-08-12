@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,6 +37,7 @@ type partitionToEvent map[streamingccl.PartitionAddress][]streamingccl.Event
 
 func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 68795, "flaky test")
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
