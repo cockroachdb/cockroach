@@ -14,6 +14,7 @@ package tree
 type ControlJobs struct {
 	Jobs    *Select
 	Command JobCommand
+	Reason  Expr
 }
 
 // JobCommand determines which type of action to effect on the selected job(s).
