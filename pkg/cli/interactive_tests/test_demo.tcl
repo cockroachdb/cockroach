@@ -213,3 +213,29 @@ eexpect eof
 
 
 end_test
+
+start_test "Check that demo populates the connection URL in a configured file"
+
+spawn $argv demo --no-example-database --listening-url-file=test.url
+eexpect "Welcome"
+eexpect "defaultdb>"
+
+# Check the URL is valid. If the connection fails, the system command will fail too.
+system "$argv sql --url `cat test.url` -e 'select 1'"
+
+interrupt
+eexpect eof
+
+# Ditto, insecure
+spawn $argv demo --no-example-database --listening-url-file=test.url --insecure
+eexpect "Welcome"
+eexpect "defaultdb>"
+
+# Check the URL is valid. If the connection fails, the system command will fail too.
+system "$argv sql --url `cat test.url` -e 'select 1'"
+
+interrupt
+eexpect eof
+
+
+end_test
