@@ -1193,7 +1193,7 @@ func TestRangeCacheClearOlderOverlapping(t *testing.T) {
 			}
 			newEntry := &CacheEntry{desc: tc.clearDesc}
 			newest, newer := cache.clearOlderOverlapping(ctx, newEntry)
-			all := cache.GetCachedOverlapping(ctx, roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax})
+			all := cache.GetCachedOverlapping(roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax})
 			var allDescs []roachpb.RangeDescriptor
 			if len(all) != 0 {
 				allDescs = make([]roachpb.RangeDescriptor, len(all))
