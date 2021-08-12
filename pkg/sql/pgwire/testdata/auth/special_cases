@@ -29,7 +29,7 @@ host   all      root 0.0.0.0/0 password
 
 connect user=root password=abc sslmode=verify-ca sslcert=
 ----
-ERROR: password authentication failed for user root
+ERROR: password authentication failed for user root (SQLSTATE 28000)
 
 subtest end root_user_cannot_use_password
 
@@ -61,7 +61,7 @@ host   all      testuser 0.0.0.0/0 cert
 
 connect user=testuser password=pass sslmode=verify-ca sslcert=
 ----
-ERROR: no TLS peer certificates, but required for auth
+ERROR: no TLS peer certificates, but required for auth (SQLSTATE 28000)
 
 subtest end user_has_both_cert_and_passwd/only_cert_implies_reject_password
 
@@ -82,7 +82,7 @@ host   all      testuser 0.0.0.0/0 password
 
 connect user=testuser
 ----
-ERROR: password authentication failed for user testuser
+ERROR: password authentication failed for user testuser (SQLSTATE 28000)
 
 subtest end user_has_both_cert_and_passwd/only_password_implies_reject_cert
 
@@ -121,6 +121,6 @@ host   all      nopassword 0.0.0.0/0 password
 
 connect user=nopassword
 ----
-ERROR: password authentication failed for user nopassword
+ERROR: password authentication failed for user nopassword (SQLSTATE 28000)
 
 subtest end user_has_null_hashed_password_column
