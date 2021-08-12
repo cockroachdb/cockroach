@@ -713,7 +713,19 @@ func (r *Registry) UpdateJobWithTxn(
 	return j.update(ctx, txn, useReadLock, updateFunc)
 }
 
+// TODO (sajjad): make maxAdoptionsPerLoop a cluster setting.
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
+
+const removeClaimsQuery = `
+UPDATE system.jobs
+   SET claim_session_id = NULL
+ WHERE claim_session_id in (
+SELECT claim_session_id
+ WHERE claim_session_id <> $1
+   AND status IN ` + claimableStatusTupleString + `
+   AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)
+ FETCH FIRST $2 ROWS ONLY)
+`
 
 // Start polls the current node for liveness failures and cancels all registered
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
@@ -749,16 +761,10 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := r.ex.ExecEx(
 				ctx, "expire-sessions", nil,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()}, `
-UPDATE system.jobs
-   SET claim_session_id = NULL
-WHERE claim_session_id in (
-SELECT claim_session_id
- WHERE claim_session_id <> $1
-   AND status IN `+claimableStatusTupleString+`
-   AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id) FETCH 
-	 FIRST `+strconv.Itoa(int(cancellationsUpdateLimitSetting.Get(&r.settings.SV)))+` ROWS ONLY)`,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				removeClaimsQuery,
 				s.ID().UnsafeBytes(),
+				cancellationsUpdateLimitSetting.Get(&r.settings.SV),
 			)
 			return err
 		}); err != nil {

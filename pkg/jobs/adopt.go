@@ -119,7 +119,7 @@ const (
 
 	// canRunArgs are used in canRunClause, which specify whether a job can be
 	// run now or not.
-	canRunArgs   = `(SELECT $3 AS ts, $4 AS initial_delay, $5 AS max_delay) args`
+	canRunArgs   = `(SELECT $3::TIMESTAMP AS ts, $4::FLOAT AS initial_delay, $5::FLOAT AS max_delay) args`
 	canRunClause = `
 args.ts >= COALESCE(last_run, created) + least(
           IF(
