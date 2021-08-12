@@ -4618,6 +4618,11 @@ set_rest:
     /* SKIP DOC */
     $$.val = &tree.SetVar{Name: "search_path", Values: tree.Exprs{$2.expr()}}
   }
+| ROLE var_value
+	{
+		/* SKIP DOC */
+    $$.val = &tree.SetVar{Name: "role", Values: tree.Exprs{$2.expr()}}
+	}
 
 set_rest_more:
 // SET syntaxes supported as a clause of other statements:
