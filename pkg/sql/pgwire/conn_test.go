@@ -1723,7 +1723,5 @@ func TestRoleDefaultSettings(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedSearchPath, actual)
 		})
-
 	}
-
 }
