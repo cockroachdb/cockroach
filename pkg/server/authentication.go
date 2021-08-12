@@ -435,7 +435,7 @@ func (s *authenticationServer) verifyPassword(
 		return false, false, err
 	}
 
-	if validUntil != nil {
+	if validUntil != nil && !username.IsRootUser() {
 		if validUntil.Time.Sub(timeutil.Now()) < 0 {
 			return false, true, nil
 		}

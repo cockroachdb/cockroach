@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -141,6 +142,20 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
 				return err
 			}
+		}
+	}
+
+	if !n.roleOptions.Contains(roleoption.VALIDUNTIL) {
+		if defaultDelay := security.DefaultPasswordExpirationDelay.Get(&params.p.ExecCfg().Settings.SV); defaultDelay != 0 {
+			defaultValidUntil := timeutil.Now().Add(defaultDelay).Format(timeutil.FullTimeFormat)
+
+			n.roleOptions = append(n.roleOptions, roleoption.RoleOption{
+				Option:   roleoption.VALIDUNTIL,
+				HasValue: true,
+				Value: func() (bool, string, error) {
+					return false, defaultValidUntil, nil
+				},
+			})
 		}
 	}
 
