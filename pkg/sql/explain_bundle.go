@@ -496,7 +496,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		if err != nil {
 			return enumVal
 		}
-		return sessiondata.DistSQLExecMode(n).String()
+		return sessiondatapb.DistSQLExecMode(n).String()
 	}
 
 	vectorizeConv := func(enumVal string) string {

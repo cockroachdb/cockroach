@@ -1351,7 +1351,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		// In cyclical reference situations, the number of cascading operations can
 		// be arbitrarily large. To avoid OOM, we enforce a limit. This is also a
 		// safeguard in case we have a bug that results in an infinite cascade loop.
-		if limit := evalCtx.SessionData.OptimizerFKCascadesLimit; len(plan.cascades) > limit {
+		if limit := int(evalCtx.SessionData.OptimizerFKCascadesLimit); len(plan.cascades) > limit {
 			telemetry.Inc(sqltelemetry.CascadesLimitReached)
 			err := pgerror.Newf(pgcode.TriggeredActionException, "cascades limit (%d) reached", limit)
 			recv.SetError(err)
