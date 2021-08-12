@@ -88,12 +88,15 @@ const (
 	OptEnvelopeDeprecatedRow EnvelopeType = `deprecated_row`
 	OptEnvelopeWrapped       EnvelopeType = `wrapped`
 
-	OptFormatJSON   FormatType = `json`
-	OptFormatAvro   FormatType = `experimental_avro`
+	OptFormatJSON FormatType = `json`
+	OptFormatAvro FormatType = `avro`
+
 	OptFormatNative FormatType = `native`
 
 	OptOnErrorFail  OnErrorType = `fail`
 	OptOnErrorPause OnErrorType = `pause`
+
+	DeprecatedOptFormatAvro = `experimental_avro`
 
 	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
 	OptKafkaSinkConfig = `kafka_sink_config`

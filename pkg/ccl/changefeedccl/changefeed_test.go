@@ -1453,6 +1453,23 @@ func TestChangefeedAuthorization(t *testing.T) {
 	}
 }
 
+func TestChangefeedAvroNotice(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, stop := startTestServer(t, feedTestOptions{})
+	defer stop()
+	schemaReg := cdctest.StartTestSchemaRegistry()
+	defer schemaReg.Close()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "CREATE table foo (i int)")
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+
+	sql := fmt.Sprintf("CREATE CHANGEFEED FOR d.foo INTO 'dummysink' WITH format=experimental_avro, confluent_schema_registry='%s'", schemaReg.URL())
+	expectNotice(t, s, sql, `avro is no longer experimental, use format=avro`)
+}
+
 func requireErrorSoon(
 	ctx context.Context, t *testing.T, f cdctest.TestFeed, errRegex *regexp.Regexp,
 ) {
@@ -1547,7 +1564,7 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
-			rbr := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR rbr WITH format=experimental_avro, confluent_schema_registry='%s'", schemaReg.URL()))
+			rbr := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR rbr WITH format=avro, confluent_schema_registry='%s'", schemaReg.URL()))
 			defer closeFeed(t, rbr)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (1, 2)`)
 			assertPayloads(t, rbr, []string{
@@ -1564,7 +1581,7 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT, region crdb_internal_region NOT NULL DEFAULT 'us-east-1')`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
-			rbr := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR rbr WITH format=experimental_avro, confluent_schema_registry='%s'", schemaReg.URL()))
+			rbr := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR rbr WITH format=avro, confluent_schema_registry='%s'", schemaReg.URL()))
 			defer closeFeed(t, rbr)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (1, 2)`)
 			assertPayloads(t, rbr, []string{
@@ -1616,7 +1633,7 @@ func TestChangefeedRBRAvroAddRegion(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY)`)
 	waitForSchemaChange(t, sqlDB, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
 	sqlDB.Exec(t, `INSERT INTO rbr VALUES (0)`)
-	rbr := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR rbr WITH format=experimental_avro, confluent_schema_registry='%s'", schemaReg.URL()))
+	rbr := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR rbr WITH format=avro, confluent_schema_registry='%s'", schemaReg.URL()))
 	defer closeFeed(t, rbr)
 	assertPayloads(t, rbr, []string{
 		`rbr: {"a":{"long":0},"crdb_region":{"string":"us-east1"}}->{"after":{"rbr":{"a":{"long":0},"crdb_region":{"string":"us-east1"}}}}`,
@@ -2720,20 +2737,20 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 	// The avro format doesn't support key_in_value or topic_in_value yet.
 	sqlDB.ExpectErr(
-		t, `key_in_value is not supported with format=experimental_avro`,
+		t, `key_in_value is not supported with format=avro`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH key_in_value, format='experimental_avro'`,
 		`kafka://nope`,
 	)
 	sqlDB.ExpectErr(
-		t, `topic_in_value is not supported with format=experimental_avro`,
+		t, `topic_in_value is not supported with format=avro`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH topic_in_value, format='experimental_avro'`,
 		`kafka://nope`,
 	)
 
 	// The cloudStorageSink is particular about the options it will work with.
 	sqlDB.ExpectErr(
-		t, `this sink is incompatible with format=experimental_avro`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
+		t, `this sink is incompatible with format=avro`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2`,
 		`experimental-nodelocal://0/bar`, schemaReg.URL(),
 	)
 	sqlDB.ExpectErr(
@@ -2816,8 +2833,8 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-http://fake-host`,
 	)
 	sqlDB.ExpectErr(
-		t, `this sink is incompatible with format=experimental_avro`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
+		t, `this sink is incompatible with format=avro`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2`,
 		`webhook-https://fake-host`, schemaReg.URL(),
 	)
 	sqlDB.ExpectErr(
