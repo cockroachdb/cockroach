@@ -11657,6 +11657,11 @@ special_function:
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_USER '(' error { return helpWithFunctionByName(sqllex, $1) }
+| SESSION_USER '(' ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| SESSION_USER '(' error { return helpWithFunctionByName(sqllex, $1) }
 | EXTRACT '(' extract_list ')'
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}
