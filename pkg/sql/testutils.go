@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -62,7 +63,7 @@ func CreateTestTableDescriptor(
 			&semaCtx,
 			&evalCtx,
 			&sessiondata.SessionData{
-				LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 					EnableUniqueWithoutIndexConstraints: true,
 					HashShardedIndexesEnabled:           true,
 				},

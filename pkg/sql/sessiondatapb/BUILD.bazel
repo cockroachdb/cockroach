@@ -4,7 +4,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "sessiondatapb",
-    srcs = ["session_data.go"],
+    srcs = [
+        "local_only_session_data.go",
+        "session_data.go",
+    ],
     embed = [":sessiondatapb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb",
     visibility = ["//visibility:public"],
@@ -13,7 +16,10 @@ go_library(
 
 proto_library(
     name = "sessiondatapb_proto",
-    srcs = ["session_data.proto"],
+    srcs = [
+        "local_only_session_data.proto",
+        "session_data.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [

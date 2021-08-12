@@ -968,7 +968,7 @@ func (s *SQLServer) preStart(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
 	migrationsExecutor.SetSessionData(
 		&sessiondata.SessionData{
-			LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 				// Migrations need an executor with query distribution turned off. This is
 				// because the node crashes if migrations fail to execute, and query
 				// distribution introduces more moving parts. Local execution is more
@@ -976,7 +976,7 @@ func (s *SQLServer) preStart(
 				// another node, but DistSQL doesn't. Also see #44101 for why DistSQL is
 				// particularly fragile immediately after a node is started (i.e. the
 				// present situation).
-				DistSQLMode: sessiondata.DistSQLOff,
+				DistSQLMode: sessiondatapb.DistSQLOff,
 			},
 		})
 	startupMigrationsMgr := startupmigrations.NewManager(

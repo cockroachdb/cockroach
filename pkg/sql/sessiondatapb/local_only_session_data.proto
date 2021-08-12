@@ -1,0 +1,176 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.sessiondatapb;
+option go_package = "sessiondatapb";
+
+import "gogoproto/gogo.proto";
+
+// LocalOnlySessionData contains the serializable components of session
+// parameters that only influence execution on the gateway nodes.
+message LocalOnlySessionData {
+  // SaveTablesPrefix indicates that a table should be created with the
+  // given prefix for the output of each subexpression in a query. If
+  // SaveTablesPrefix is empty, no tables are created.
+  string save_tables_prefix = 1;
+  // OptimizerFKCascadesLimit is the maximum number of cascading operations that
+  // are run for a single query.
+  int64 optimizer_fk_cascades_limit = 2 [(gogoproto.customname)="OptimizerFKCascadesLimit"];
+  // StmtTimeout is the duration a query is permitted to run before it is
+  // canceled by the session. If set to 0, there is no timeout.
+  int64 stmt_timeout = 3 [(gogoproto.casttype)="time.Duration"];
+  // IdleInSessionTimeout is the duration a session is permitted to idle before
+  // the session is canceled. If set to 0, there is no timeout.
+  int64 idle_in_session_timeout = 4 [(gogoproto.casttype)="time.Duration"];
+  // IdleInTransactionSessionTimeout is the duration a session is permitted to
+  // idle in a transaction before the session is canceled.
+  // If set to 0, there is no timeout.
+  int64 idle_in_transaction_session_timeout = 5 [(gogoproto.casttype)="time.Duration"];
+  // NoticeDisplaySeverity indicates the level of Severity to send notices for the given
+  // session. This should ideally be of type pgnotice.DisplaySeverity, but cannot be done
+  // due to a circular dependency.
+  uint32 notice_display_severity = 6;
+  // ReorderJoinsLimit indicates the number of joins at which the optimizer should
+  // stop attempting to reorder.
+  int64 reorder_joins_limit = 7;
+  // DefaultTxnPriority indicates the default priority of newly created
+  // transactions.
+  // NOTE: we'd prefer to use tree.UserPriority here, but doing so would
+  // introduce a package dependency cycle.
+  int64 default_txn_priority = 8;
+  // DefaultTxnReadOnly indicates the default read-only status of newly
+  // created transactions.
+  bool default_txn_read_only = 9;
+  // DefaultTxnUseFollowerReads indicates whether transactions should be
+  // created by default using an AS OF SYSTEM TIME clause far enough in the
+  // past to facilitate reads against followers. If true, transactions will
+  // also default to being read-only.
+  bool default_txn_use_follower_reads = 10;
+  // PartiallyDistributedPlansDisabled indicates whether the partially
+  // distributed plans produced by distSQLSpecExecFactory are disabled. It
+  // should be set to 'true' only in tests that verify that the old and the
+  // new factories return exactly the same physical plans.
+  // TODO(yuzefovich): remove it when deleting old sql.execFactory.
+  bool partially_distributed_plans_disabled = 11;
+  // OptimizerUseHistograms indicates whether we should use histograms for
+  // cardinality estimation in the optimizer.
+  bool optimizer_use_histograms = 12;
+  // OptimizerUseMultiColStats indicates whether we should use multi-column
+  // statistics for cardinality estimation in the optimizer.
+  bool optimizer_use_multi_col_stats = 13;
+  // LocalityOptimizedSearch indicates that the optimizer will try to plan scans
+  // and lookup joins in which local nodes (i.e., nodes in the gateway region)
+  // are searched for matching rows before remote nodes, in the hope that the
+  // execution engine can avoid visiting remote nodes.
+  bool locality_optimized_search = 14;
+  // SafeUpdates causes errors when the client
+  // sends syntax that may have unwanted side effects.
+  bool safe_updates = 15;
+  // PreferLookupJoinsForFKs causes foreign key operations to prefer lookup
+  // joins.
+  bool prefer_lookup_joins_for_fks = 16 [(gogoproto.customname)="PreferLookupJoinsForFKs"];
+  // ZigzagJoinEnabled indicates whether the optimizer should try and plan a
+  // zigzag join.
+  bool zigzag_join_enabled = 17;
+  // RequireExplicitPrimaryKeys indicates whether CREATE TABLE statements should
+  // error out if no primary key is provided.
+  bool require_explicit_primary_keys = 18;
+  // ForceSavepointRestart overrides the default SAVEPOINT behavior
+  // for compatibility with certain ORMs. When this flag is set,
+  // the savepoint name will no longer be compared against the magic
+  // identifier `cockroach_restart` in order use a restartable
+  // transaction.
+  bool force_savepoint_restart = 19;
+  // AllowPrepareAsOptPlan must be set to allow use of
+  //   PREPARE name AS OPT PLAN '...'
+  bool allow_prepare_as_opt_plan = 20;
+  // TempTablesEnabled indicates whether temporary tables can be created or not.
+  bool temp_tables_enabled = 21;
+  // ImplicitPartitioningEnabled indicates whether implicit column partitioning
+  // can be created.
+  bool implicit_column_partitioning_enabled = 22;
+  // DropEnumValueEnabled indicates whether enum values can be dropped.
+  bool drop_enum_value_enabled = 23;
+  // OverrideMultiRegionZoneConfigEnabled indicates whether zone configurations can be
+  // modified for multi-region databases and tables/indexes/partitions.
+  bool override_multi_region_zone_config_enabled = 24;
+  // HashShardedIndexesEnabled indicates whether hash sharded indexes can be created.
+  bool hash_sharded_indexes_enabled = 25;
+  // DisallowFullTableScans indicates whether queries that plan full table scans
+  // should be rejected.
+  bool disallow_full_table_scans = 26;
+  // ImplicitSelectForUpdate is true if FOR UPDATE locking may be used during
+  // the row-fetch phase of mutation statements.
+  bool implicit_select_for_update = 27;
+  // InsertFastPath is true if the fast path for insert (with VALUES input) may
+  // be used.
+  bool insert_fast_path = 28;
+  // AlterColumnTypeGeneralEnabled is true if ALTER TABLE ... ALTER COLUMN ...
+  // TYPE x may be used for general conversions requiring online schema change/
+  bool alter_column_type_general_enabled = 29;
+  // SynchronousCommit is a dummy setting for the synchronous_commit var.
+  bool synchronous_commit = 30;
+  // EnableSeqScan is a dummy setting for the enable_seqscan var.
+  bool enable_seq_scan = 31;
+  // EnableExpressionIndexes indicates whether creating expression indexes is
+  // allowed.
+  bool enable_expression_indexes = 32;
+  // EnableUniqueWithoutIndexConstraints indicates whether creating unique
+  // constraints without an index is allowed.
+  // TODO(rytaft): remove this once unique without index constraints are fully
+  // supported.
+  bool enable_unique_without_index_constraints = 33;
+  // StubCatalogTablesEnabled allows queries against virtual
+  // tables that are not yet implemented.
+  bool stub_catalog_tables_enabled = 34;
+  // ExperimentalComputedColumnRewrites allows automatic rewriting of computed
+  // column expressions in CREATE TABLE and ALTER TABLE statements. See the
+  // experimentalComputedColumnRewrites cluster setting for a description of the
+  // format.
+  string experimental_computed_column_rewrites = 35;
+  // CopyPartitioningWhenDeinterleavingTable indicates that when running an
+  // ALTER PRIMARY KEY that retains the same columns but removes any
+  // interleaving that zone configurations and partitioning from the root
+  // of that interleave should be applied to the new primary index.
+  bool copy_partitioning_when_deinterleaving_table = 36;
+  // EnableStreamReplication indicates whether to allow setting up a replication
+  // stream.
+  bool enable_stream_replication = 37;
+  // ResultsBufferSize specifies the size at which the pgwire results buffer
+  // will self-flush.
+  int64 results_buffer_size = 38;
+	// PropagateInputOrdering indicates that when planning a subquery or CTE, the
+	// inner ordering should be propagated to the outer scope if the outer scope
+	// is unordered. PropagateInputOrdering is currently experimental.
+	bool propagate_input_ordering = 39;
+  // ExperimentalDistSQLPlanningMode indicates whether the experimental
+  // DistSQL planning driven by the optimizer is enabled.
+  int64 experimental_distsql_planning_mode = 40 [
+    (gogoproto.customname)="ExperimentalDistSQLPlanningMode",
+    (gogoproto.casttype)="ExperimentalDistSQLPlanningMode"
+  ];
+  // DistSQLMode indicates whether to run queries using the distributed
+  // execution engine.
+  int64 dist_sql_mode = 41 [
+    (gogoproto.customname)="DistSQLMode",
+    (gogoproto.casttype)="DistSQLExecMode"
+  ];
+  // SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
+  int64 serial_normalization_mode = 42 [(gogoproto.casttype)="SerialNormalizationMode"];
+  // NewSchemaChangerMode indicates whether to use the new schema changer.
+  int64 new_schema_changer_mode = 43 [(gogoproto.casttype)="NewSchemaChangerMode"];
+
+  ///////////////////////////////////////////////////////////////////////////
+  // WARNING: consider whether a session parameter you're adding needs to  //
+  // be propagated to the remote nodes. If so, that parameter should live  //
+  // in the SessionData message instead.                                   //
+  ///////////////////////////////////////////////////////////////////////////
+}
