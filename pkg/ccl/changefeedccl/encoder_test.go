@@ -116,46 +116,46 @@ func TestEncoders(t *testing.T) {
 			delete:   `[1]->{"after": null, "before": {"a": 1, "b": "bar"}, "updated": "1.0000000002"}`,
 			resolved: `{"resolved":"1.0000000002"}`,
 		},
-		`format=experimental_avro,envelope=key_only`: {
+		`format=avro,envelope=key_only`: {
 			insert:   `{"a":{"long":1}}->`,
 			delete:   `{"a":{"long":1}}->`,
 			resolved: `{"resolved":{"string":"1.0000000002"}}`,
 		},
-		`format=experimental_avro,envelope=key_only,updated`: {
+		`format=avro,envelope=key_only,updated`: {
 			err: `updated is only usable with envelope=wrapped`,
 		},
-		`format=experimental_avro,envelope=key_only,diff`: {
+		`format=avro,envelope=key_only,diff`: {
 			err: `diff is only usable with envelope=wrapped`,
 		},
-		`format=experimental_avro,envelope=key_only,updated,diff`: {
+		`format=avro,envelope=key_only,updated,diff`: {
 			err: `updated is only usable with envelope=wrapped`,
 		},
-		`format=experimental_avro,envelope=row`: {
-			err: `envelope=row is not supported with format=experimental_avro`,
+		`format=avro,envelope=row`: {
+			err: `envelope=row is not supported with format=avro`,
 		},
-		`format=experimental_avro,envelope=row,updated`: {
-			err: `envelope=row is not supported with format=experimental_avro`,
+		`format=avro,envelope=row,updated`: {
+			err: `envelope=row is not supported with format=avro`,
 		},
-		`format=experimental_avro,envelope=row,diff`: {
-			err: `envelope=row is not supported with format=experimental_avro`,
+		`format=avro,envelope=row,diff`: {
+			err: `envelope=row is not supported with format=avro`,
 		},
-		`format=experimental_avro,envelope=row,updated,diff`: {
-			err: `envelope=row is not supported with format=experimental_avro`,
+		`format=avro,envelope=row,updated,diff`: {
+			err: `envelope=row is not supported with format=avro`,
 		},
-		`format=experimental_avro,envelope=wrapped`: {
+		`format=avro,envelope=wrapped`: {
 			insert: `{"a":{"long":1}}->` +
 				`{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}}}`,
 			delete:   `{"a":{"long":1}}->{"after":null}`,
 			resolved: `{"resolved":{"string":"1.0000000002"}}`,
 		},
-		`format=experimental_avro,envelope=wrapped,updated`: {
+		`format=avro,envelope=wrapped,updated`: {
 			insert: `{"a":{"long":1}}->` +
 				`{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}},` +
 				`"updated":{"string":"1.0000000002"}}`,
 			delete:   `{"a":{"long":1}}->{"after":null,"updated":{"string":"1.0000000002"}}`,
 			resolved: `{"resolved":{"string":"1.0000000002"}}`,
 		},
-		`format=experimental_avro,envelope=wrapped,diff`: {
+		`format=avro,envelope=wrapped,diff`: {
 			insert: `{"a":{"long":1}}->` +
 				`{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}},` +
 				`"before":null}`,
@@ -164,7 +164,7 @@ func TestEncoders(t *testing.T) {
 				`"before":{"foo_before":{"a":{"long":1},"b":{"string":"bar"}}}}`,
 			resolved: `{"resolved":{"string":"1.0000000002"}}`,
 		},
-		`format=experimental_avro,envelope=wrapped,updated,diff`: {
+		`format=avro,envelope=wrapped,updated,diff`: {
 			insert: `{"a":{"long":1}}->` +
 				`{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}},` +
 				`"before":null,` +
@@ -194,7 +194,7 @@ func TestEncoders(t *testing.T) {
 			case string(changefeedbase.OptFormatJSON):
 				rowStringFn = func(k, v []byte) string { return fmt.Sprintf(`%s->%s`, k, v) }
 				resolvedStringFn = func(r []byte) string { return string(r) }
-			case string(changefeedbase.OptFormatAvro):
+			case string(changefeedbase.OptFormatAvro), string(changefeedbase.DeprecatedOptFormatAvro):
 				reg := cdctest.StartTestSchemaRegistry()
 				defer reg.Close()
 				o[changefeedbase.OptConfluentSchemaRegistry] = reg.URL()
@@ -327,7 +327,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
 
 	opts := map[string]string{
-		changefeedbase.OptFormat:   "experimental_avro",
+		changefeedbase.OptFormat:   "avro",
 		changefeedbase.OptEnvelope: "key_only",
 	}
 	expected := struct {
@@ -340,7 +340,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		resolved: `{"resolved":{"string":"1.0000000002"}}`,
 	}
 
-	t.Run("format=experimental_avro,envelope=key_only", func(t *testing.T) {
+	t.Run("format=avro,envelope=key_only", func(t *testing.T) {
 		cert, certBase64, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 
