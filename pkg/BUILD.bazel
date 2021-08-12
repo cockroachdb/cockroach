@@ -298,6 +298,7 @@ ALL_TESTS = [
     "//pkg/sql/sqlliveness/slstorage:slstorage_test",
     "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil:sqlstatsutil_test",
     "//pkg/sql/sqlstats/persistedsqlstats:persistedsqlstats_test",
+    "//pkg/sql/sqlstats/sslocal:sslocal_test",
     "//pkg/sql/stats:stats_test",
     "//pkg/sql/stmtdiagnostics:stmtdiagnostics_test",
     "//pkg/sql/tests:tests_test",

@@ -66,6 +66,10 @@ server.shutdown.lease_transfer_wait	duration	5s	the amount of time a server wait
 server.shutdown.query_wait	duration	10s	the server will wait for at least this amount of time for active queries to finish
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead
 server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)
+server.web_session.auto_logout.timeout	duration	168h0m0s	the duration that web sessions will survive before being periodically purged, since they were last used
+server.web_session.purge.max_deletions_per_cycle	integer	10	the maximum number of old sessions to delete for each purge
+server.web_session.purge.period	duration	1h0m0s	the time until old sessions are deleted
+server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged
 server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid
 sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
@@ -149,4 +153,4 @@ trace.datadog.project	string	CockroachDB	the project under which traces will be 
 trace.debug.enable	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests
 trace.lightstep.token	string		if set, traces go to Lightstep using this token
 trace.zipkin.collector	string		if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'). Only one tracer can be configured at a time.
-version	version	21.1-124	set the active cluster version in the format '<major>.<minor>'
+version	version	21.1-126	set the active cluster version in the format '<major>.<minor>'
