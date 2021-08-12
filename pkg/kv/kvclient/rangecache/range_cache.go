@@ -543,10 +543,10 @@ func (rc *RangeCache) Lookup(ctx context.Context, key roachpb.RKey) (CacheEntry,
 
 // GetCachedOverlapping returns all the cached entries which overlap a given
 // span [Key, EndKey). The results are sorted ascendingly.
-func (rc *RangeCache) GetCachedOverlapping(ctx context.Context, span roachpb.RSpan) []*CacheEntry {
+func (rc *RangeCache) GetCachedOverlapping(span roachpb.RSpan) []*CacheEntry {
 	rc.rangeCache.RLock()
 	defer rc.rangeCache.RUnlock()
-	rawEntries := rc.getCachedOverlappingRLocked(ctx, span)
+	rawEntries := rc.getCachedOverlappingRLocked(span)
 	entries := make([]*CacheEntry, len(rawEntries))
 	for i, e := range rawEntries {
 		entries[i] = rc.getValue(e)
@@ -554,9 +554,7 @@ func (rc *RangeCache) GetCachedOverlapping(ctx context.Context, span roachpb.RSp
 	return entries
 }
 
-func (rc *RangeCache) getCachedOverlappingRLocked(
-	ctx context.Context, span roachpb.RSpan,
-) []*cache.Entry {
+func (rc *RangeCache) getCachedOverlappingRLocked(span roachpb.RSpan) []*cache.Entry {
 	var res []*cache.Entry
 	rc.rangeCache.cache.DoRangeReverseEntry(func(e *cache.Entry) (exit bool) {
 		desc := rc.getValue(e).Desc()
@@ -1020,7 +1018,7 @@ func (rc *RangeCache) clearOlderOverlappingLocked(
 	log.VEventf(ctx, 2, "clearing entries overlapping %s", newEntry.Desc())
 	newest := true
 	var newerFound *CacheEntry
-	overlapping := rc.getCachedOverlappingRLocked(ctx, newEntry.Desc().RSpan())
+	overlapping := rc.getCachedOverlappingRLocked(newEntry.Desc().RSpan())
 	for _, e := range overlapping {
 		entry := rc.getValue(e)
 		if newEntry.overrides(entry) {

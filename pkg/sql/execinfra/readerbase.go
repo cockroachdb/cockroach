@@ -53,7 +53,7 @@ func MisplannedRanges(
 		if err != nil {
 			panic(err)
 		}
-		overlapping := rdc.GetCachedOverlapping(ctx, rSpan)
+		overlapping := rdc.GetCachedOverlapping(rSpan)
 
 		for _, ri := range overlapping {
 			if _, ok := misplanned[ri.Desc().RangeID]; ok {
