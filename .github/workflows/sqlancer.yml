@@ -1,0 +1,44 @@
+name: SQLancer
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  sqlancer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.16.5'
+      - name: Checkout cockroach
+        uses: actions/checkout@v2
+        with:
+          path: /home/runner/go/src/github.com/cockroachdb/cockroach
+      - name: Run cockroach
+        run: |
+          cd /home/runner/go/src/github.com/cockroachdb/cockroach &&
+          make buildshort &&
+          ./cockroach start-single-node --insecure &
+          sleep 10
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+      - name: Checkout SQLancer
+        uses: actions/checkout@v2
+        with:
+          repository: sqlancer/sqlancer
+          path: sqlancer
+      - name: Create SQLancer user
+        run: |
+          cd /home/runner/go/src/github.com/cockroachdb/cockroach &&
+          ./cockroach sql --insecure -e "CREATE USER sqlancer; GRANT admin to sqlancer"
+      - name: Run SQLancer
+        run: |
+          cd /home/runner/sqlancer && COCKROACHDB_AVAILABLE=true mvn -Dtest=TestCockroachDB test
