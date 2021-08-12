@@ -128,7 +128,7 @@ func randAndOrExpr(rng *rand.Rand, left, right tree.Expr) tree.Expr {
 // returned nullability is NotNull if all columns referenced in the expression
 // have a NotNull nullability.
 func randExpr(
-	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef,
+	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef, nullOk bool,
 ) (tree.Expr, *types.T, tree.Nullability) {
 	nullability := tree.NotNull
 
@@ -189,7 +189,7 @@ func randExpr(
 
 	// Match the nullability with the nullability of the reference column.
 	nullability = x.Nullable.Nullability
-	nullOk := nullability != tree.NotNull
+	nullOk = nullOk && nullability != tree.NotNull
 
 	var expr tree.Expr
 	var typ *types.T

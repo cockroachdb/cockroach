@@ -215,7 +215,7 @@ func RandCreateTableWithInterleave(
 
 		// Make a random primary key with high likelihood.
 		if rng.Intn(8) != 0 {
-			indexDef, ok := randIndexTableDefFromCols(rng, columnDefs)
+			indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, false /* allowExpressions */)
 			if ok && !indexDef.Inverted {
 				defs = append(defs, &tree.UniqueConstraintTableDef{
 					PrimaryKey:    true,
@@ -247,7 +247,7 @@ func RandCreateTableWithInterleave(
 	// Make indexes.
 	nIdxs := rng.Intn(10)
 	for i := 0; i < nIdxs; i++ {
-		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs)
+		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, true /* allowExpressions */)
 		if !ok {
 			continue
 		}
@@ -362,7 +362,7 @@ func randComputedColumnTableDef(
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = (rng.Intn(2) == 0)
 
-	expr, typ, nullability := randExpr(rng, normalColDefs)
+	expr, typ, nullability := randExpr(rng, normalColDefs, true /* nullOk */)
 	newDef.Computed.Expr = expr
 	newDef.Type = typ
 	newDef.Nullable.Nullability = nullability
@@ -374,7 +374,7 @@ func randComputedColumnTableDef(
 // subset of the given columns and a random direction. If unsuccessful, ok=false
 // is returned.
 func randIndexTableDefFromCols(
-	rng *rand.Rand, columnTableDefs []*tree.ColumnTableDef,
+	rng *rand.Rand, columnTableDefs []*tree.ColumnTableDef, allowExpressions bool,
 ) (def tree.IndexTableDef, ok bool) {
 	cpy := make([]*tree.ColumnTableDef, len(columnTableDefs))
 	copy(cpy, columnTableDefs)
@@ -386,6 +386,22 @@ func randIndexTableDefFromCols(
 	def.Columns = make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
 		semType := tree.MustBeStaticallyKnownType(cols[i].Type)
+		elem := tree.IndexElem{
+			Column:    cols[i].Name,
+			Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
+		}
+
+		// Replace the column with an expression 10% of the time.
+		if allowExpressions && rng.Intn(10) == 0 {
+			var expr tree.Expr
+			// Expression indexes do not currently support references to
+			// computed columns, so only make expressions with non-computed
+			// columns. Do not allow NULL in expressions to avoid expressions
+			// that have an ambiguous type.
+			expr, semType, _ = randExpr(rng, nonComputedColumnTableDefs(columnTableDefs), false /* nullOk */)
+			elem.Expr = expr
+			elem.Column = ""
+		}
 
 		// The non-terminal index columns must be indexable.
 		if isLastCol := i == len(cols)-1; !isLastCol && !colinfo.ColumnTypeIsIndexable(semType) {
@@ -398,13 +414,22 @@ func randIndexTableDefFromCols(
 			def.Inverted = true
 		}
 
-		def.Columns = append(def.Columns, tree.IndexElem{
-			Column:    cols[i].Name,
-			Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
-		})
+		def.Columns = append(def.Columns, elem)
 	}
 
 	return def, true
+}
+
+// nonComputedColumnTableDefs returns a slice containing all the columns in cols
+// that are not computed columns.
+func nonComputedColumnTableDefs(cols []*tree.ColumnTableDef) []*tree.ColumnTableDef {
+	nonComputedCols := make([]*tree.ColumnTableDef, 0, len(cols))
+	for _, col := range cols {
+		if !col.Computed.Computed {
+			nonComputedCols = append(nonComputedCols, col)
+		}
+	}
+	return nonComputedCols
 }
 
 // TestingMakePrimaryIndexKey creates a key prefix that corresponds to
