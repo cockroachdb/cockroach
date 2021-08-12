@@ -26,7 +26,8 @@ type baseIterator struct {
 // inside of a ssmemstorage.Container.
 type StmtStatsIterator struct {
 	baseIterator
-	stmtKeys stmtList
+	stmtKeys     stmtList
+	currentValue *roachpb.CollectedStatementStatistics
 }
 
 // NewStmtStatsIterator returns a StmtStatsIterator.
@@ -56,57 +57,63 @@ func NewStmtStatsIterator(
 // true if the following Cur() call is valid, false otherwise.
 func (s *StmtStatsIterator) Next() bool {
 	s.idx++
-	return s.idx < len(s.stmtKeys)
+	if s.idx < len(s.stmtKeys) {
+		stmtKey := s.stmtKeys[s.idx]
+
+		stmtFingerprintID := constructStatementFingerprintIDFromStmtKey(stmtKey)
+		statementStats, _, _ :=
+			s.container.getStatsForStmtWithKey(stmtKey, invalidStmtFingerprintID, false /* createIfNonexistent */)
+
+		// If the key is not found (and we expected to find it), the table must
+		// have been cleared between now and the time we read all the keys. In
+		// that case we simply skip this key by keep advancing the iterator.
+		if statementStats == nil {
+			return s.Next()
+		}
+
+		statementStats.mu.Lock()
+		data := statementStats.mu.data
+		distSQLUsed := statementStats.mu.distSQLUsed
+		vectorized := statementStats.mu.vectorized
+		fullScan := statementStats.mu.fullScan
+		database := statementStats.mu.database
+		statementStats.mu.Unlock()
+
+		s.currentValue = &roachpb.CollectedStatementStatistics{
+			Key: roachpb.StatementStatisticsKey{
+				Query:       stmtKey.anonymizedStmt,
+				DistSQL:     distSQLUsed,
+				Opt:         true,
+				Vec:         vectorized,
+				ImplicitTxn: stmtKey.implicitTxn,
+				FullScan:    fullScan,
+				Failed:      stmtKey.failed,
+				App:         s.container.appName,
+				Database:    database,
+			},
+			ID:    stmtFingerprintID,
+			Stats: data,
+		}
+
+		return true
+	}
+
+	return false
 }
 
 // Cur returns the roachpb.CollectedStatementStatistics at the current internal
 // counter.
 func (s *StmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
-	stmtKey := s.stmtKeys[s.idx]
-
-	stmtFingerprintID := constructStatementFingerprintIDFromStmtKey(stmtKey)
-	statementStats, _, _ :=
-		s.container.getStatsForStmtWithKey(stmtKey, invalidStmtFingerprintID, false /* createIfNonexistent */)
-
-	// If the key is not found (and we expected to find it), the table must
-	// have been cleared between now and the time we read all the keys. In
-	// that case we simply skip this key as there are no metrics to report.
-	if statementStats == nil {
-		return nil
-	}
-
-	statementStats.mu.Lock()
-	data := statementStats.mu.data
-	distSQLUsed := statementStats.mu.distSQLUsed
-	vectorized := statementStats.mu.vectorized
-	fullScan := statementStats.mu.fullScan
-	database := statementStats.mu.database
-	statementStats.mu.Unlock()
-
-	collectedStats := roachpb.CollectedStatementStatistics{
-		Key: roachpb.StatementStatisticsKey{
-			Query:       stmtKey.anonymizedStmt,
-			DistSQL:     distSQLUsed,
-			Opt:         true,
-			Vec:         vectorized,
-			ImplicitTxn: stmtKey.implicitTxn,
-			FullScan:    fullScan,
-			Failed:      stmtKey.failed,
-			App:         s.container.appName,
-			Database:    database,
-		},
-		ID:    stmtFingerprintID,
-		Stats: data,
-	}
-
-	return &collectedStats
+	return s.currentValue
 }
 
 // TxnStatsIterator is an iterator that iterates over the transaction statistics
-// inside of a ssmemstorage.Container.
+// inside a ssmemstorage.Container.
 type TxnStatsIterator struct {
 	baseIterator
-	txnKeys txnList
+	txnKeys  txnList
+	curValue *roachpb.CollectedTransactionStatistics
+	curKey   roachpb.TransactionFingerprintID
 }
 
 // NewTxnStatsIterator returns a new instance of TxnStatsIterator.
@@ -136,7 +143,35 @@ func NewTxnStatsIterator(
 // true if the following Cur() call is valid, false otherwise.
 func (t *TxnStatsIterator) Next() bool {
 	t.idx++
-	return t.idx < len(t.txnKeys)
+	if t.idx < len(t.txnKeys) {
+		txnKey := t.txnKeys[t.idx]
+
+		// We don't want to create the key if it doesn't exist, so it's okay to
+		// pass nil for the statementFingerprintIDs, as they are only set when a key is
+		// constructed.
+		txnStats, _, _ := t.container.getStatsForTxnWithKey(txnKey, nil /* stmtFingerprintIDs */, false /* createIfNonexistent */)
+
+		// If the key is not found (and we expected to find it), the table must
+		// have been cleared between now and the time we read all the keys. In
+		// that case we simply skip this key and advance the iterator.
+		if txnStats == nil {
+			return t.Next()
+		}
+
+		txnStats.mu.Lock()
+		defer txnStats.mu.Unlock()
+
+		t.curKey = txnKey
+		t.curValue = &roachpb.CollectedTransactionStatistics{
+			StatementFingerprintIDs: txnStats.statementFingerprintIDs,
+			App:                     t.container.appName,
+			Stats:                   txnStats.mu.data,
+		}
+
+		return true
+	}
+
+	return false
 }
 
 // Cur returns the roachpb.CollectedTransactionStatistics at the current internal
@@ -145,25 +180,5 @@ func (t *TxnStatsIterator) Cur() (
 	roachpb.TransactionFingerprintID,
 	*roachpb.CollectedTransactionStatistics,
 ) {
-	txnKey := t.txnKeys[t.idx]
-
-	// We don't want to create the key if it doesn't exist, so it's okay to
-	// pass nil for the statementFingerprintIDs, as they are only set when a key is
-	// constructed.
-	txnStats, _, _ := t.container.getStatsForTxnWithKey(txnKey, nil /* stmtFingerprintIDs */, false /* createIfNonexistent */)
-	// If the key is not found (and we expected to find it), the table must
-	// have been cleared between now and the time we read all the keys. In
-	// that case we simply skip this key as there are no metrics to report.
-	if txnStats == nil {
-		return 0, nil
-	}
-
-	txnStats.mu.Lock()
-	defer txnStats.mu.Unlock()
-	collectedStats := roachpb.CollectedTransactionStatistics{
-		StatementFingerprintIDs: txnStats.statementFingerprintIDs,
-		App:                     t.container.appName,
-		Stats:                   txnStats.mu.data,
-	}
-	return txnKey, &collectedStats
+	return t.curKey, t.curValue
 }
