@@ -24,6 +24,8 @@ cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/b
 cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/functions.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/functions.md
 cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/operators.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/operators.md
 cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/window_functions.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/window_functions.md
+go/src/github.com/cockroachdb/cockroach/build/bazelutil/generate_redact_safe.sh
+echo MOCK_REDACT_SAFE_OUTPUT > go/src/github.com/cockroachdb/cockroach/docs/generated/redact_safe.md
 
 dev gen go
 ----
