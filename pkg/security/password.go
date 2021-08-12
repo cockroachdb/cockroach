@@ -15,6 +15,7 @@ import (
 	"crypto/sha256"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -80,14 +81,19 @@ func HashPassword(ctx context.Context, password string) ([]byte, error) {
 	return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
 }
 
-// MinPasswordLength is the cluster setting that configures the
-// minimum SQL password length.
-var MinPasswordLength = settings.RegisterIntSetting(
-	"server.user_login.min_password_length",
-	"the minimum length accepted for passwords set in cleartext via SQL. "+
-		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
-	1,
-	settings.NonNegativeInt,
+var (
+	MinPasswordLength = settings.RegisterIntSetting(
+		"server.user_login.min_password_length",
+		"the minimum length accepted for passwords set in cleartext via SQL. "+
+			"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
+		1,
+		settings.NonNegativeInt,
+	)
+	MaxPasswordExpirationDelay = settings.RegisterDurationSetting(
+		"server.user_login.max_password_expiration_delay",
+		"maximum duration that passwords are valid",
+		time.Hour,
+	).WithPublic()
 )
 
 // bcryptSemOnce wraps a semaphore that limits the number of concurrent calls

@@ -365,6 +365,13 @@ var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var passwordExpirationDelay = settings.RegisterDurationSetting(
+	"sql.defaults.password_expiration_delay",
+	"default duration after which passwords expire",
+	time.Hour,
+	settings.NonNegativeDuration,
+).WithPublic()
+
 var clusterStatementTimeout = settings.RegisterDurationSetting(
 	"sql.defaults.statement_timeout",
 	"default value for the statement_timeout; "+

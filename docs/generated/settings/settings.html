@@ -70,6 +70,7 @@
 <tr><td><code>server.shutdown.lease_transfer_wait</code></td><td>duration</td><td><code>5s</code></td><td>the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process</td></tr>
 <tr><td><code>server.shutdown.query_wait</code></td><td>duration</td><td><code>10s</code></td><td>the server will wait for at least this amount of time for active queries to finish</td></tr>
 <tr><td><code>server.time_until_store_dead</code></td><td>duration</td><td><code>5m0s</code></td><td>the time after which if there is no new gossiped information about a store, it is considered dead</td></tr>
+<tr><td><code>server.user_login.max_password_expiration_delay</code></td><td>duration</td><td><code>1h0m0s</code></td><td>maximum duration that passwords are valid</td></tr>
 <tr><td><code>server.user_login.timeout</code></td><td>duration</td><td><code>10s</code></td><td>timeout after which client authentication times out if some system range is unavailable (0 = no timeout)</td></tr>
 <tr><td><code>server.web_session.auto_logout.timeout</code></td><td>duration</td><td><code>168h0m0s</code></td><td>the duration that web sessions will survive before being periodically purged, since they were last used</td></tr>
 <tr><td><code>server.web_session.purge.max_deletions_per_cycle</code></td><td>integer</td><td><code>10</code></td><td>the maximum number of old sessions to delete for each purge</td></tr>
@@ -107,6 +108,7 @@
 <tr><td><code>sql.defaults.optimizer_use_histograms.enabled</code></td><td>boolean</td><td><code>true</code></td><td>default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default</td></tr>
 <tr><td><code>sql.defaults.optimizer_use_multicol_stats.enabled</code></td><td>boolean</td><td><code>true</code></td><td>default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default</td></tr>
 <tr><td><code>sql.defaults.override_multi_region_zone_config.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for override_multi_region_zone_config; allows for overriding the zone configs of a multi-region table or database</td></tr>
+<tr><td><code>sql.defaults.password_expiration_delay</code></td><td>duration</td><td><code>1h0m0s</code></td><td>default duration after which passwords expire</td></tr>
 <tr><td><code>sql.defaults.prefer_lookup_joins_for_fks.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible</td></tr>
 <tr><td><code>sql.defaults.primary_region</code></td><td>string</td><td><code></code></td><td>if not empty, all databases created without a PRIMARY REGION will implicitly have the given PRIMARY REGION</td></tr>
 <tr><td><code>sql.defaults.require_explicit_primary_keys.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for requiring explicit primary keys in CREATE TABLE statements</td></tr>
