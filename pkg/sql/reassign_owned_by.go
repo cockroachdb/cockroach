@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -28,7 +29,8 @@ import (
 
 // ReassignOwnedByNode represents a REASSIGN OWNED BY <role(s)> TO <role> statement.
 type reassignOwnedByNode struct {
-	n *tree.ReassignOwnedBy
+	n                  *tree.ReassignOwnedBy
+	normalizedOldRoles []security.SQLUsername
 }
 
 func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) (planNode, error) {
@@ -40,9 +42,13 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 		return nil, err
 	}
 
+	normalizedOldRole, err := n.OldRoles.ToSQLUsernames()
+	if err != nil {
+		return nil, err
+	}
 	// Check all roles in old roles exist. Checks in authorization.go will confirm that current user
 	// is a member of old roles and new roles and has CREATE privilege.
-	for _, oldRole := range n.OldRoles {
+	for _, oldRole := range normalizedOldRole {
 		roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), oldRole)
 		if err != nil {
 			return nil, err
@@ -51,7 +57,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", oldRole)
 		}
 	}
-	return &reassignOwnedByNode{n: n}, nil
+	return &reassignOwnedByNode{n: n, normalizedOldRoles: normalizedOldRole}, nil
 }
 
 func (n *reassignOwnedByNode) startExec(params runParams) error {
@@ -74,7 +80,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		currentDbDesc.ImmutableCopy().(catalog.DatabaseDescriptor), nil /* fallback */)
 
 	// Iterate through each object, check for ownership by an old role.
-	for _, oldRole := range n.n.OldRoles {
+	for _, oldRole := range n.normalizedOldRoles {
 		// There should only be one database (current).
 		for _, dbID := range lCtx.dbIDs {
 			if IsOwner(lCtx.dbDescs[dbID], oldRole) {

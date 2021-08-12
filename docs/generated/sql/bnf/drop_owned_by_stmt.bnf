@@ -1,2 +1,2 @@
 drop_owned_by_stmt ::=
-	'DROP' 'OWNED' 'BY' role_spec_list opt_drop_behavior
+	'DROP' 'OWNED' 'BY' name_list opt_drop_behavior

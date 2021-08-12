@@ -385,6 +385,11 @@ func (ctx *FmtCtx) FormatUsername(s security.SQLUsername) {
 	ctx.FormatName(s.Normalized())
 }
 
+//FormatUsernameN formats a username that is type Name
+func (ctx *FmtCtx) FormatUsernameN(s Name) {
+	ctx.FormatName(s.Normalize())
+}
+
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
 func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
