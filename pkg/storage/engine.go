@@ -386,8 +386,11 @@ type Reader interface {
 	// interval (startTS, endTS]. Passing exportAllRevisions exports
 	// every revision of a key for the interval, otherwise only the latest value
 	// within the interval is exported. Deletions are included if all revisions are
-	// requested or if the start.Timestamp is non-zero. Returns the bytes of an
-	// SSTable containing the exported keys, the size of exported data, or an error.
+	// requested or if the start.Timestamp is non-zero.
+	//
+	// firstKeyTS is either empty which represent starting from potential intent
+	// and continuing to versions or non-empty, which represents starting from
+	// particular version. firstKeyTS will always be empty when !stopMidKey
 	//
 	// If targetSize is positive, it indicates that the export should produce SSTs
 	// which are roughly target size. Specifically, it will return an SST such that
@@ -400,6 +403,11 @@ type Reader interface {
 	// to an SST that exceeds maxSize, an error will be returned. This parameter
 	// exists to prevent creating SSTs which are too large to be used.
 	//
+	// If stopMidKey is false, once function reaches targetSize it would continue
+	// adding all versions until it reaches next key or end of range. If true, it
+	// would stop immediately when targetSize is reached and return a next versions
+	// timestamp in resumeTs so that subsequent operation can pass it to firstKeyTs.
+	//
 	// If useTBI is true, the backing MVCCIncrementalIterator will initialize a
 	// time-bound iterator along with its regular iterator. The TBI will be used
 	// as an optimization to skip over swaths of uninteresting keys i.e. keys
@@ -407,12 +415,19 @@ type Reader interface {
 	//
 	// This function looks at MVCC versions and intents, and returns an error if an
 	// intent is found.
+	//
+	// Data is written to dest as it is collected. If error is returned content of
+	// dest is undefined.
+	//
+	// Returns summary containing number of exported bytes, resumeKey and resumeTS
+	// that allow resuming export if it was cut short because it reached limits or
+	// an error if export failed for some reason.
 	ExportMVCCToSst(
-		ctx context.Context, startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
-		exportAllRevisions bool, targetSize uint64, maxSize uint64, useTBI bool,
+		ctx context.Context, startKey, endKey roachpb.Key, startTS, endTS, firstKeyTS hlc.Timestamp,
+		exportAllRevisions bool, targetSize uint64, maxSize uint64, stopMidKey bool, useTBI bool,
 		dest io.Writer,
-	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
-	// Get returns the value for the given key, nil otherwise. Semantically, it
+	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, resumeTS hlc.Timestamp, _ error)
+	// MVCCGet returns the value for the given key, nil otherwise. Semantically, it
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
 	//
 	// Deprecated: use storage.MVCCGet instead.

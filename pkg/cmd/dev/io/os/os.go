@@ -12,9 +12,13 @@ package os
 
 import (
 	"fmt"
+	"io"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recording"
 	"github.com/cockroachdb/errors/oserror"
@@ -180,6 +184,63 @@ func (o *OS) ReadFile(filename string) (string, error) {
 
 	ret, err := o.replay(command)
 	return ret, err
+}
+
+// CopyFile copies a file from one location to another.
+func (o *OS) CopyFile(src, dst string) error {
+	command := fmt.Sprintf("cp %s %s", src, dst)
+	o.logger.Print(command)
+
+	if o.Recording == nil {
+		// Do the real thing.
+		srcFile, err := os.Open(src)
+		if err != nil {
+			return err
+		}
+		dstFile, err := os.Create(dst)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(dstFile, srcFile)
+		return err
+	}
+
+	_, err := o.replay(command)
+	return err
+}
+
+// ListFilesWithSuffix lists all the files under a directory recursively that
+// end in the given suffix.
+func (o *OS) ListFilesWithSuffix(root, suffix string) ([]string, error) {
+	command := fmt.Sprintf("find %s -name *%s", root, suffix)
+	o.logger.Print(command)
+
+	var ret []string
+	if o.Recording == nil {
+		// Do the real thing.
+		err := filepath.Walk(root, func(path string, info fs.FileInfo, err error) error {
+			// If there's an error walking the tree, throw it away -- there's nothing
+			// interesting we can do with it.
+			if err != nil || info.IsDir() {
+				//nolint:returnerrcheck
+				return nil
+			}
+			if strings.HasSuffix(path, suffix) {
+				ret = append(ret, path)
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		return ret, nil
+	}
+
+	lines, err := o.replay(command)
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(strings.TrimSpace(lines), "\n"), nil
 }
 
 // replay replays the specified command, erroring out if it's mismatched with
