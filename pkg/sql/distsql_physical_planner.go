@@ -3456,14 +3456,12 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 						"we expect that limited UNION ALL queries do not require a specific ordering",
 					)
 				}
-				// Here we don't force the serialization so that the unordered
-				// synchronizer is used. Additionally, because the plan will be fully
-				// local, we will use the flowinfra.FuseAggressively option. As a
-				// result, the plan will end up with a serial unordered synchronizer,
-				// which has exactly the behavior that we want (in particular, it won't
-				// execute the right child if the limit is reached by the left child).
+				// Force the serialization between the two streams so that the
+				// serial unordered synchronizer is used which has exactly the
+				// behavior that we want (in particular, it won't execute the
+				// right child if the limit is reached by the left child).
 				p.EnsureSingleStreamPerNode(
-					false, /* forceSerialization */
+					true, /* forceSerialization */
 					execinfrapb.PostProcessSpec{Limit: n.hardLimit},
 				)
 			}
