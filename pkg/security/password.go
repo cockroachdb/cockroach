@@ -80,14 +80,27 @@ func HashPassword(ctx context.Context, password string) ([]byte, error) {
 	return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
 }
 
-// MinPasswordLength is the cluster setting that configures the
-// minimum SQL password length.
-var MinPasswordLength = settings.RegisterIntSetting(
-	"server.user_login.min_password_length",
-	"the minimum length accepted for passwords set in cleartext via SQL. "+
-		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
-	1,
-	settings.NonNegativeInt,
+var (
+	MinPasswordLength = settings.RegisterIntSetting(
+		"server.user_login.min_password_length",
+		"the minimum length accepted for passwords set in cleartext via SQL. "+
+			"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
+		1,
+		settings.NonNegativeInt,
+	)
+	MaxPasswordExpirationDelay = settings.RegisterDurationSetting(
+		"server.user_login.max_password_expiration_delay",
+		"maximum duration that passwords are valid. If zero, there is no upper "+
+			"limit on the expiration delay.",
+		0,
+	).WithPublic()
+	DefaultPasswordExpirationDelay = settings.RegisterDurationSetting(
+		"server.user_login.default_password_expiration_delay",
+		"default duration after which passwords expire. If zero and the user "+
+			"does not specify an expiration delay, there is no password timeout.",
+		0,
+		settings.NonNegativeDuration,
+	).WithPublic()
 )
 
 // bcryptSemOnce wraps a semaphore that limits the number of concurrent calls

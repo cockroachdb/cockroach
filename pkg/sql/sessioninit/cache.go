@@ -101,12 +101,13 @@ func (a *Cache) GetAuthInfo(
 	readFromSystemTables func(
 		ctx context.Context,
 		txn *kv.Txn,
+		settings *cluster.Settings,
 		ie sqlutil.InternalExecutor,
 		username security.SQLUsername,
 	) (AuthInfo, error),
 ) (aInfo AuthInfo, err error) {
 	if !CacheEnabled.Get(&settings.SV) {
-		return readFromSystemTables(ctx, nil /* txn */, ie, username)
+		return readFromSystemTables(ctx, nil /* txn */, settings, ie, username)
 	}
 	err = f.Txn(ctx, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -138,6 +139,7 @@ func (a *Cache) GetAuthInfo(
 			aInfo, err = readFromSystemTables(
 				ctx,
 				txn,
+				settings,
 				ie,
 				username,
 			)
@@ -161,6 +163,7 @@ func (a *Cache) GetAuthInfo(
 			aInfo, err = readFromSystemTables(
 				ctx,
 				txn,
+				settings,
 				ie,
 				username,
 			)

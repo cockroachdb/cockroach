@@ -294,6 +294,82 @@ func TestVerifyPassword(t *testing.T) {
 	}
 }
 
+func TestPasswordExpirationDelay(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var (
+		ctx      = context.Background()
+		s, db, _ = serverutils.StartServer(t, base.TestServerArgs{})
+		ts       = s.(*TestServer)
+	)
+	defer s.Stopper().Stop(ctx)
+
+	// Verify that there is a default password expiration delay when the user does not define one.
+	// First, sanity check that authentication works given no user defined VALID UNTIL clause.
+	var (
+		username         = "cockroach"
+		password         = "12345"
+		validUntilClause = ""
+	)
+	if _, err := db.Exec(getCreateUserCmd(username, password, validUntilClause)); err != nil {
+		t.Fatalf("failed to create user: %s", err)
+	}
+	validateAuthentication(t, ts, username, password, validUntilClause, true /* shouldAuthenticate */)
+
+	// Set the default expiration delay to zero. Verify that the password immediately expires and that authentication fails.
+	if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.password_expiration_delay = '0h'`); err != nil {
+		t.Fatal(err)
+	}
+	username = "cockroachdb"
+	password = "67890"
+	validUntilClause = ""
+
+	if _, err := db.Exec(getCreateUserCmd(username, password, validUntilClause)); err != nil {
+		t.Fatalf("failed to create user: %s", err)
+	}
+	validateAuthentication(t, ts, username, password, validUntilClause, false /* shouldAuthenticate */)
+
+	// TODO: Verify that the max expiration delay cluster setting works.
+}
+
+func getCreateUserCmd(username string, password string, validUntilClause string) (cmd string) {
+	sqlUsername := security.MakeSQLUsernameFromPreNormalizedString(username)
+	return fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s' %s",
+		sqlUsername.SQLIdentifier(), password, validUntilClause)
+}
+
+func validateAuthentication(
+	t *testing.T,
+	ts *TestServer,
+	username string,
+	password string,
+	validUntilClause string,
+	shouldAuthenticate bool,
+) {
+	t.Run("", func(t *testing.T) {
+		sqlUsername := security.MakeSQLUsernameFromPreNormalizedString(username)
+		valid, expired, err := ts.authentication.verifyPassword(context.Background(), sqlUsername, password)
+		if err != nil {
+			t.Errorf(
+				"credentials %s/%s failed with error %s, wanted no error",
+				username,
+				password,
+				err,
+			)
+		}
+		if valid && !expired != shouldAuthenticate {
+			t.Errorf(
+				"credentials %s/%s valid = %t, wanted %t",
+				username,
+				password,
+				valid,
+				shouldAuthenticate,
+			)
+		}
+	})
+}
+
 func TestCreateSession(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

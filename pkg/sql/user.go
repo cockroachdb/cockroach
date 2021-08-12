@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -171,7 +172,11 @@ func retrieveSessionInitInfoWithCache(
 }
 
 func retrieveAuthInfo(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, username security.SQLUsername,
+	ctx context.Context,
+	txn *kv.Txn,
+	settings *cluster.Settings,
+	ie sqlutil.InternalExecutor,
+	username security.SQLUsername,
 ) (aInfo sessioninit.AuthInfo, retErr error) {
 	// Use fully qualified table name to avoid looking up "".system.users.
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
@@ -216,9 +221,25 @@ func retrieveAuthInfo(
 	// the for loop early (before Next() returns false).
 	defer func() { retErr = errors.CombineErrors(retErr, roleOptsIt.Close()) }()
 
+	var (
+		defaultPasswordExpirationDelay = security.DefaultPasswordExpirationDelay.Get(&settings.SV)
+
+		currTime          = timeutil.Now()
+		defaultValidUntil = currTime.Add(defaultPasswordExpirationDelay)
+		maxValidUntil     = currTime.Add(security.MaxPasswordExpirationDelay.Get(&settings.SV))
+	)
+
 	// To support users created before 20.1, allow all USERS/ROLES to login
 	// if NOLOGIN is not found.
 	aInfo.CanLogin = true
+
+	if defaultPasswordExpirationDelay != 0 {
+		if aInfo.ValidUntil, err = tree.MakeDTimestamp(defaultValidUntil, time.Microsecond); err != nil {
+			return sessioninit.AuthInfo{},
+				errors.Wrap(err, "error trying to make datum timestamp while retrieving role options")
+		}
+	}
+
 	var ok bool
 	for ok, err = roleOptsIt.Next(ctx); ok; ok, err = roleOptsIt.Next(ctx) {
 		row := roleOptsIt.Cur()
@@ -235,10 +256,15 @@ func retrieveAuthInfo(
 				// representation of a TimestampTZ which has the same underlying
 				// representation in the table as a Timestamp (UTC time).
 				timeCtx := tree.NewParseTimeContext(timeutil.Now())
-				aInfo.ValidUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
-				if err != nil {
-					return sessioninit.AuthInfo{}, errors.Wrap(err,
-						"error trying to parse timestamp while retrieving password valid until value")
+				if aInfo.ValidUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond); err != nil {
+					return sessioninit.AuthInfo{},
+						errors.Wrap(err, "error trying to parse timestamp while retrieving password valid until value")
+				}
+				if maxValidUntil.Sub(aInfo.ValidUntil.Time) < 0 {
+					if aInfo.ValidUntil, err = tree.MakeDTimestamp(maxValidUntil, time.Microsecond); err != nil {
+						return sessioninit.AuthInfo{},
+							errors.Wrap(err, "error trying to make datum timestamp while retrieving password valid until value")
+					}
 				}
 			}
 		}
