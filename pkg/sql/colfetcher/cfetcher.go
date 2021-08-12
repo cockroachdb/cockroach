@@ -743,6 +743,11 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				if rf.traceKV {
 					indexOrds = rf.table.allIndexColOrdinals
 				}
+				// For unique secondary indexes on tables with multiple column
+				// families, we must check all columns for NULL values in order
+				// to determine whether a KV belongs to the same row as the
+				// previous KV or a different row.
+				checkAllColsForNull := rf.table.isSecondaryIndex && rf.table.index.Unique && rf.table.desc.NumFamilies() != 1
 				key, matches, foundNull, err = colencoding.DecodeIndexKeyToCols(
 					&rf.table.da,
 					rf.machine.colvecs,
@@ -750,6 +755,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 					rf.table.desc,
 					rf.table.index,
 					indexOrds,
+					checkAllColsForNull,
 					rf.table.keyValTypes,
 					rf.table.indexColumnDirs,
 					rf.machine.nextKV.Key[rf.table.knownPrefixLength:],
@@ -781,23 +787,31 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				rf.machine.lastRowPrefix = rf.machine.nextKV.Key[:prefixLen]
 			}
 
-			// For unique secondary indexes, the index-key does not distinguish one row
-			// from the next if both rows contain identical values along with a NULL.
+			// For unique secondary indexes on tables with multiple column
+			// families, the index-key does not distinguish one row from the
+			// next if both rows contain identical values along with a NULL.
 			// Consider the keys:
 			//
 			//   /test/unique_idx/NULL/0
 			//   /test/unique_idx/NULL/1
 			//
-			// The index-key extracted from the above keys is /test/unique_idx/NULL. The
-			// trailing /0 and /1 are the primary key used to unique-ify the keys when a
-			// NULL is present. When a null is present in the index key, we cut off more
-			// of the index key so that the prefix includes the primary key columns.
+			// The index-key extracted from the above keys is
+			// /test/unique_idx/NULL. The trailing /0 and /1 are the primary key
+			// used to unique-ify the keys when a NULL is present. When a null
+			// is present in the index key, we include the primary key columns
+			// in lastRowPrefix.
 			//
-			// Note that we do not need to do this for non-unique secondary indexes because
-			// the extra columns in the primary key will _always_ be there, so we can decode
-			// them when processing the index. The difference with unique secondary indexes
-			// is that the extra columns are not always there, and are used to unique-ify
+			// Note that we do not need to do this for non-unique secondary
+			// indexes because the extra columns in the primary key will
+			// _always_ be there, so we can decode them when processing the
+			// index. The difference with unique secondary indexes is that the
+			// extra columns are not always there, and are used to unique-ify
 			// the index key, rather than provide the primary key column values.
+			//
+			// We also do not need to do this when a table has only one column
+			// family because it is guaranteed that there is only one KV per
+			// row. We entirely skip the check that determines if the row is
+			// unfinished.
 			if foundNull && rf.table.isSecondaryIndex && rf.table.index.Unique && rf.table.desc.NumFamilies() != 1 {
 				// We get the remaining bytes after the computed prefix, and then
 				// slice off the extra encoded columns from those bytes. We calculate
@@ -834,11 +848,15 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			if rf.table.rowLastModified.Less(rf.machine.nextKV.Value.Timestamp) {
 				rf.table.rowLastModified = rf.machine.nextKV.Value.Timestamp
 			}
+			// If the table has only one column family, then the next KV will
+			// always belong to a different row than the current KV.
 			if rf.table.desc.NumFamilies() == 1 {
 				rf.machine.state[0] = stateFinalizeRow
 				rf.machine.state[1] = stateInitFetch
 				continue
 			}
+			// If the table has more than one column family, then the next KV
+			// may belong to the same row as the current KV.
 			rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 		case stateSeekPrefix:
 			for {
@@ -1096,6 +1114,7 @@ func (rf *cFetcher) processValue(
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
 					extraColOrds,
+					false, /* checkAllColsForNull */
 					table.extraTypes,
 					nil,
 					&rf.machine.remainingValueColsByIdx,
