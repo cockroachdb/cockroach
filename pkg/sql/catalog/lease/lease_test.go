@@ -2196,6 +2196,7 @@ func ensureTestTakesLessThan(t *testing.T, allowed time.Duration) func() {
 // too old.
 func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 68801, "flaky test")
 	defer ensureTestTakesLessThan(t, 30*time.Second)()
 
 	ctx := context.Background()
