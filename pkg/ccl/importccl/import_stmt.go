@@ -882,7 +882,7 @@ func importPlanHook(
 				// resolution.
 				semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
 				tbl, err := MakeSimpleTableDescriptor(
-					ctx, semaCtxPtr, p.ExecCfg().Settings, create, db, sc, defaultCSVTableID, NoFKs, walltime)
+					ctx, semaCtxPtr, p.ExecCfg().Settings, create, db, sc, defaultCSVTableID, NoFKs, walltime, p.SessionData())
 				if err != nil {
 					return err
 				}
@@ -958,6 +958,7 @@ func importPlanHook(
 			Oversample:        oversample,
 			SkipFKs:           skipFKs,
 			ParseBundleSchema: importStmt.Bundle,
+			DefaultIntSize:    p.SessionData().DefaultIntSize,
 		}
 
 		jr := jobs.Record{
@@ -1789,6 +1790,9 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 	format := details.Format
 
 	owner := r.job.Payload().UsernameProto.Decode()
+
+	sessionMutator := p.ExtendedEvalContext().SessionMutator
+	sessionMutator.SetDefaultIntSize(details.DefaultIntSize)
 
 	if details.ParseBundleSchema {
 		var span *tracing.Span

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -374,7 +375,7 @@ func createPostgresTables(
 		// type resolver to protect against unexpected behavior on UDT resolution.
 		semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
 		desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), semaCtxPtr, p.ExecCfg().Settings,
-			create, parentDB, schema, getNextPlaceholderDescID(), fks, walltime)
+			create, parentDB, schema, getNextPlaceholderDescID(), fks, walltime, p.SessionData())
 		if err != nil {
 			return nil, err
 		}
@@ -582,6 +583,18 @@ func readPostgresStmt(
 			schemaObjects.createTbl[schemaQualifiedName] = stmt
 		} else {
 			schemaObjects.createTbl[schemaQualifiedName] = nil
+		}
+		for _, def := range stmt.Defs {
+			if d, ok := def.(*tree.ColumnTableDef); ok {
+				if d.Type.(*types.T).Equal(types.Int) {
+					switch p.ExtendedEvalContext().SessionData.DefaultIntSize {
+					case 4:
+						d.Type = types.Int4
+					case 0:
+						d.Type = types.Int
+					}
+				}
+			}
 		}
 	case *tree.CreateIndex:
 		if stmt.Predicate != nil {

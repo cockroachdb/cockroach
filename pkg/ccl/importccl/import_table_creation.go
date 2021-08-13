@@ -119,7 +119,7 @@ func MakeTestingSimpleTableDescriptor(
 			),
 		}).BuildCreatedMutableSchema()
 	}
-	return MakeSimpleTableDescriptor(ctx, semaCtx, st, create, db, sc, tableID, fks, walltime)
+	return MakeSimpleTableDescriptor(ctx, semaCtx, st, create, db, sc, tableID, fks, walltime, &sessiondata.SessionData{})
 }
 
 func makeSemaCtxWithoutTypeResolver(semaCtx *tree.SemaContext) *tree.SemaContext {
@@ -146,6 +146,7 @@ func MakeSimpleTableDescriptor(
 	tableID descpb.ID,
 	fks fkHandler,
 	walltime int64,
+	sessionData *sessiondata.SessionData,
 ) (*tabledesc.Mutable, error) {
 	create.HoistConstraints()
 	if create.IfNotExists {
@@ -205,7 +206,7 @@ func MakeSimpleTableDescriptor(
 	evalCtx := tree.EvalContext{
 		Context:            ctx,
 		Sequence:           &importSequenceOperators{},
-		SessionData:        &sessiondata.SessionData{},
+		SessionData:        sessionData,
 		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
 		Settings:           st,
 	}
@@ -226,7 +227,7 @@ func MakeSimpleTableDescriptor(
 		affected,
 		semaCtx,
 		&evalCtx,
-		&sessiondata.SessionData{}, /* sessionData */
+		evalCtx.SessionData, /* sessionData */
 		tree.PersistencePermanent,
 		// We need to bypass the LOCALITY on non multi-region check here because
 		// we cannot access the database region config at import level.

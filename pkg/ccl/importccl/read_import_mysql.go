@@ -480,6 +480,14 @@ func mysqlTableToCockroach(
 			}
 			def.DefaultExpr.Expr = expr
 		}
+		if def.Type.(*types.T).Equal(types.Int) && p != nil {
+			switch p.ExtendedEvalContext().SessionData.DefaultIntSize {
+			case 4:
+				def.Type = types.Int4
+			case 0:
+				def.Type = types.Int
+			}
+		}
 		stmt.Defs = append(stmt.Defs, def)
 	}
 
@@ -514,7 +522,7 @@ func mysqlTableToCockroach(
 	semaCtxPtr = makeSemaCtxWithoutTypeResolver(semaCtxPtr)
 	desc, err := MakeSimpleTableDescriptor(
 		ctx, semaCtxPtr, evalCtx.Settings, stmt, parentDB,
-		schemadesc.GetPublicSchema(), id, fks, time.WallTime,
+		schemadesc.GetPublicSchema(), id, fks, time.WallTime, evalCtx.SessionData,
 	)
 	if err != nil {
 		return nil, nil, err
