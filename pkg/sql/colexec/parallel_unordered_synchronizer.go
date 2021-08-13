@@ -71,9 +71,8 @@ type ParallelUnorderedSynchronizer struct {
 	cancelLocalInput []context.CancelFunc
 	// LocalPlan indicates whether this synchronizer is a part of the fully
 	// local plan.
-	LocalPlan            bool
-	UsesFakeSpanResolver bool
-	tracingSpans         []*tracing.Span
+	LocalPlan    bool
+	tracingSpans []*tracing.Span
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
 	// goroutines to wait on until the Next goroutine signals that it is safe to
@@ -170,7 +169,6 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 	for i, input := range s.inputs {
 		var inputCtx context.Context
 		inputCtx, s.tracingSpans[i] = execinfra.ProcessorSpan(s.Ctx, fmt.Sprintf("parallel unordered sync input %d", i))
-		// TODO: check whether UsesFakeSpanResolver is still needed.
 		if s.LocalPlan {
 			// If there plan is local, there are no colrpc.Inboxes in this input
 			// tree, and the synchronizer can cancel the current work eagerly
@@ -181,10 +179,6 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 			// because canceling the context would break the gRPC stream and
 			// make it impossible to fetch the remote metadata. Furthermore, it
 			// will result in the remote flow cancellation.
-			//
-			// We also carve out an exception for fakedist* logic test configs
-			// since although the plan might be "local", we need to treat it
-			// as distributed, and we cannot cancel the work eagerly.
 			inputCtx, s.cancelLocalInput[i] = context.WithCancel(inputCtx)
 		}
 		input.Root.Init(inputCtx)

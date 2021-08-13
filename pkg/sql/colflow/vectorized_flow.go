@@ -955,7 +955,6 @@ func (s *vectorizedFlowCreator) setupInput(
 			// concurrency.
 			sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
 			sync.LocalPlan = flowCtx.Local
-			sync.UsesFakeSpanResolver = flowCtx.TestingKnobs().UsesFakeSpanResolver
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
