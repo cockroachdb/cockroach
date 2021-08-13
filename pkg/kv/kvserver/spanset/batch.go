@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
@@ -234,8 +235,10 @@ func (i *MVCCIterator) SupportsPrev() bool {
 // EngineIterator wraps a storage.EngineIterator and ensures that it can
 // only be used to access spans in a SpanSet.
 type EngineIterator struct {
-	i     storage.EngineIterator
-	spans *SpanSet
+	i         storage.EngineIterator
+	spans     *SpanSet
+	spansOnly bool
+	ts        hlc.Timestamp
 }
 
 // Close is part of the storage.EngineIterator interface.
@@ -249,7 +252,12 @@ func (i *EngineIterator) SeekEngineKeyGE(key storage.EngineKey) (valid bool, err
 	if !valid {
 		return valid, err
 	}
-	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+	if key.IsMVCCKey() && !i.spansOnly {
+		mvccKey, _ := key.ToMVCCKey()
+		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
+			return false, err
+		}
+	} else if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return false, err
 	}
 	return valid, err
@@ -261,7 +269,12 @@ func (i *EngineIterator) SeekEngineKeyLT(key storage.EngineKey) (valid bool, err
 	if !valid {
 		return valid, err
 	}
-	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
+	if key.IsMVCCKey() && !i.spansOnly {
+		mvccKey, _ := key.ToMVCCKey()
+		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
+			return false, err
+		}
+	} else if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
 		return false, err
 	}
 	return valid, err
@@ -332,7 +345,13 @@ func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+	if key.IsMVCCKey() && !i.spansOnly {
+		mvccKey, _ := key.ToMVCCKey()
+		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
+			// Invalid, but no error.
+			return false, nil // nolint:returnerrcheck
+		}
+	} else if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		// Invalid, but no error.
 		return false, nil // nolint:returnerrcheck
 	}
@@ -467,11 +486,14 @@ func (s spanSetReader) NewMVCCIterator(
 
 func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) storage.EngineIterator {
 	if !s.spansOnly {
-		panic("cannot do timestamp checking for EngineIterator")
+		log.Warningf(context.Background(),
+			"cannot do strict timestamp checking of EngineIterator, resorting to best effort")
 	}
 	return &EngineIterator{
-		i:     s.r.NewEngineIterator(opts),
-		spans: s.spans,
+		i:         s.r.NewEngineIterator(opts),
+		spans:     s.spans,
+		spansOnly: s.spansOnly,
+		ts:        s.ts,
 	}
 }
 
