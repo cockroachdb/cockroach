@@ -262,7 +262,13 @@ func (n *recordScheduleExecutor) Metrics() metric.Struct {
 	return nil
 }
 
-func (n *recordScheduleExecutor) GetCreateScheduleStatement(_ *ScheduledJob) (string, error) {
+func (n *recordScheduleExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
 	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }
 
@@ -480,7 +486,13 @@ func (e *returnErrorExecutor) Metrics() metric.Struct {
 	return nil
 }
 
-func (e *returnErrorExecutor) GetCreateScheduleStatement(_ *ScheduledJob) (string, error) {
+func (e *returnErrorExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
 	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }
 
@@ -657,7 +669,13 @@ func (e *txnConflictExecutor) Metrics() metric.Struct {
 	return nil
 }
 
-func (e *txnConflictExecutor) GetCreateScheduleStatement(_ *ScheduledJob) (string, error) {
+func (e *txnConflictExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
 	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }
 

@@ -51,9 +51,11 @@ type ScheduledJobExecutor interface {
 	// Metrics returns optional metric.Struct object for this executor.
 	Metrics() metric.Struct
 
-	// GetCreateScheduleStatement returns the statement used to create schedule
-	// for the scheduled job executed by this executor
-	GetCreateScheduleStatement(schedule *ScheduledJob) (string, error)
+	// GetCreateScheduleStatement returns a `CREATE SCHEDULE` statement that is
+	// functionally equivalent to the statement that led to the creation of
+	// the passed in `schedule`.
+	GetCreateScheduleStatement(ctx context.Context, env scheduledjobs.JobSchedulerEnv, txn *kv.Txn,
+		schedule *ScheduledJob, ex sqlutil.InternalExecutor) (string, error)
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.

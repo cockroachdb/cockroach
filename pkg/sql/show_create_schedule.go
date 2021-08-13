@@ -16,6 +16,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -112,7 +113,8 @@ func (p *planner) ShowCreateSchedule(
 					return nil, err
 				}
 
-				createStmtStr, err := ex.GetCreateScheduleStatement(sj)
+				createStmtStr, err := ex.GetCreateScheduleStatement(ctx,
+					scheduledjobs.ProdJobSchedulerEnv, p.Txn(), sj, p.ExecCfg().InternalExecutor)
 				if err != nil {
 					return nil, err
 				}
