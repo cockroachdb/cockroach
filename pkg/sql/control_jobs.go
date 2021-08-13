@@ -63,6 +63,11 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		}
 	}
 
+	if n.desiredStatus != jobs.StatusPaused && len(n.reason) > 0 {
+		return errors.AssertionFailedf("status %v is not %v and thus does not support a reason %v",
+			n.desiredStatus, jobs.StatusPaused, n.reason)
+	}
+
 	reg := params.p.ExecCfg().JobRegistry
 	for {
 		ok, err := n.rows.Next(params)
