@@ -87,13 +87,20 @@ type boundedStalenessTraceEvent struct {
 }
 
 func (ev *boundedStalenessTraceEvent) EventOutput() string {
+	state := "??? undefined state ???"
+	switch {
+	case ev.localRead && ev.remoteLeaseholderRead && !ev.followerRead:
+		state = "local read then remote leaseholder read"
+	case ev.localRead && !ev.remoteLeaseholderRead && ev.followerRead:
+		state = "local follower read"
+	case ev.localRead && !ev.remoteLeaseholderRead && !ev.followerRead:
+		state = "local read"
+	}
 	return fmt.Sprintf(
-		"%s: {node_idx:%d,local_read:%t,remote_leaseholder_read:%t,follower_read:%t}",
+		"%s trace on node_idx %d: %s",
 		ev.operation,
 		ev.nodeIdx,
-		ev.localRead,
-		ev.remoteLeaseholderRead,
-		ev.followerRead,
+		state,
 	)
 }
 
@@ -111,15 +118,19 @@ func (ev *boundedStalenessRetryEvent) EventOutput() string {
 
 // boundedStalenessEvents tracks bounded staleness datadriven related events.
 type boundedStalenessEvents struct {
-	stmt         string
-	events       []boundedStalenessDataDrivenEvent
-	lastTxnRetry *boundedStalenessRetryEvent
+	stmt   string
+	events []boundedStalenessDataDrivenEvent
 }
 
-func (ti *boundedStalenessEvents) String() string {
+func (bse *boundedStalenessEvents) reset() {
+	bse.stmt = ""
+	bse.events = nil
+}
+
+func (bse *boundedStalenessEvents) String() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("events (%d found):\n", len(ti.events)))
-	for idx, event := range ti.events {
+	sb.WriteString(fmt.Sprintf("events (%d found):\n", len(bse.events)))
+	for idx, event := range bse.events {
 		sb.WriteString(
 			fmt.Sprintf(
 				" * event %d: %s\n",
@@ -131,9 +142,33 @@ func (ti *boundedStalenessEvents) String() string {
 	return sb.String()
 }
 
-func (ti *boundedStalenessEvents) onTxnRetry(
-	t *testing.T, nodeIdx int, autoRetryReason error, evalCtx *tree.EvalContext,
+func (bse *boundedStalenessEvents) validate(t *testing.T) {
+	var lastTxnRetry *boundedStalenessRetryEvent
+	for _, ev := range bse.events {
+		switch ev := ev.(type) {
+		case *boundedStalenessRetryEvent:
+			// TODO(XXX): assert prev min timestamp bound is smaller.
+			if lastTxnRetry != nil {
+				require.True(
+					t,
+					ev.MinTimestampBound.Less(lastTxnRetry.MinTimestampBound),
+					ev.MinTimestampBound,
+					lastTxnRetry.MinTimestampBound,
+				)
+				require.Equal(t, ev.asOf.Timestamp, lastTxnRetry.asOf.Timestamp)
+			}
+			require.True(t, ev.asOf.BoundedStaleness)
+			lastTxnRetry = ev
+		}
+	}
+}
+
+func (bse *boundedStalenessEvents) onTxnRetry(
+	nodeIdx int, autoRetryReason error, evalCtx *tree.EvalContext,
 ) {
+	if bse.stmt == "" {
+		return
+	}
 	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
 	if autoRetryReason != nil && errors.As(autoRetryReason, &minTSErr) {
 		ev := &boundedStalenessRetryEvent{
@@ -141,28 +176,17 @@ func (ti *boundedStalenessEvents) onTxnRetry(
 			MinTimestampBoundUnsatisfiableError: minTSErr,
 			asOf:                                *evalCtx.AsOfSystemTime,
 		}
-		ti.events = append(ti.events, ev)
-		require.True(t, ev.asOf.BoundedStaleness)
-		// TODO(XXX): assert prev min timestamp bound is smaller.
-		if ti.lastTxnRetry != nil {
-			require.True(t, ev.MinTimestampBound.Less(ti.lastTxnRetry.MinTimestampBound), ev.MinTimestampBound, ti.lastTxnRetry.MinTimestampBound)
-			require.Equal(t, ev.asOf.Timestamp, ti.lastTxnRetry.asOf.Timestamp)
-		}
-		ti.lastTxnRetry = ev
+		bse.events = append(bse.events, ev)
 	}
 }
 
-func (ti *boundedStalenessEvents) onStmtTrace(
-	t *testing.T, nodeIdx int, rec tracing.Recording, stmt string,
-) {
-	if ti.stmt == stmt {
-		//t.Logf("trace of stmt %s:\n%v\n", stmt, rec)
-
+func (bse *boundedStalenessEvents) onStmtTrace(nodeIdx int, rec tracing.Recording, stmt string) {
+	if bse.stmt != "" && bse.stmt == stmt {
 		spans := make(map[uint64]tracingpb.RecordedSpan)
 		for _, sp := range rec {
 			spans[sp.SpanID] = sp
 			if sp.Operation == "dist sender send" && spans[sp.ParentSpanID].Operation == "colbatchscan" {
-				ti.events = append(ti.events, &boundedStalenessTraceEvent{
+				bse.events = append(bse.events, &boundedStalenessTraceEvent{
 					operation:    spans[sp.ParentSpanID].Operation,
 					nodeIdx:      nodeIdx,
 					localRead:    tracing.LogsContainMsg(sp, kvbase.RoutingRequestLocallyMsg),
@@ -187,22 +211,17 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 		ServerArgsPerNode: map[int]base.TestServerArgs{},
 	}
 	const numNodes = 3
-	var onStmtTraceFunc func(*testing.T, int, tracing.Recording, string)
-	var onTxnRetryFunc func(*testing.T, int, error, *tree.EvalContext)
+	var bse boundedStalenessEvents
 	for i := 0; i < numNodes; i++ {
 		i := i
 		clusterArgs.ServerArgsPerNode[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					WithStatementTrace: func(trace tracing.Recording, stmt string) {
-						if onStmtTraceFunc != nil {
-							onStmtTraceFunc(t, i, trace, stmt)
-						}
+						bse.onStmtTrace(i, trace, stmt)
 					},
 					OnTxnRetry: func(err error, evalCtx *tree.EvalContext) {
-						if onTxnRetryFunc != nil {
-							onTxnRetryFunc(t, i, err, evalCtx)
-						}
+						bse.onTxnRetry(i, err, evalCtx)
 					},
 				},
 			},
@@ -214,35 +233,28 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	errorRegexp := regexp.MustCompile(
 		"((minimum timestamp bound|local resolved timestamp) of) [\\d.,]*",
 	)
+	replaceOutput := func(s string) string {
+		return errorRegexp.ReplaceAllString(s, "$1 XXX")
+	}
 
 	datadriven.Walk(t, "testdata/boundedstaleness", func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 3, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			var ti *boundedStalenessEvents
 			var showEvents bool
 			var waitUntilFollowerReads bool
 			defer func() {
-				onStmtTraceFunc = nil
+				bse.reset()
 			}()
-			initEvents := func() {
-				if ti == nil {
-					ti = &boundedStalenessEvents{
-						stmt: d.Input,
-					}
-					onStmtTraceFunc = ti.onStmtTrace
-					onTxnRetryFunc = ti.onTxnRetry
-				}
-			}
 			dbConn := tc.ServerConn(0)
 			for _, arg := range d.CmdArgs {
 				switch arg.Key {
 				case "show-events":
-					initEvents()
+					bse.stmt = d.Input
 					showEvents = true
 				case "wait-until-follower-read":
-					initEvents()
+					bse.stmt = d.Input
 					waitUntilFollowerReads = true
 				case "idx":
 					serverNum, err := strconv.ParseInt(arg.Vals[0], 10, 64)
@@ -253,7 +265,10 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 				}
 			}
 
-			executeCmd := func() string {
+			executeCmd := func() (retStr string) {
+				defer func() {
+					retStr = replaceOutput(retStr)
+				}()
 				switch d.Cmd {
 				case "exec":
 					_, err := dbConn.Exec(d.Input)
@@ -276,15 +291,11 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 			var ret string
 			testutils.SucceedsSoon(t, func() error {
 				ret = executeCmd()
-				ret = errorRegexp.ReplaceAllString(
-					ret,
-					"$1 XXX",
-				)
 				// If we're waiting until follower reads, retry until we are always
 				// reading follower reads.
 				if waitUntilFollowerReads {
 					allFollowerReads := true
-					for _, ev := range ti.events {
+					for _, ev := range bse.events {
 						switch ev := ev.(type) {
 						case *boundedStalenessTraceEvent:
 							allFollowerReads = allFollowerReads && ev.followerRead
@@ -293,18 +304,19 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 					if allFollowerReads {
 						return nil
 					}
-					ti = nil
-					initEvents()
-					return errors.AssertionFailedf("not follower reads found:\b%s", ti.String())
+					bse.reset()
+					bse.stmt = d.Input
+					return errors.AssertionFailedf("not follower reads found:\b%s", bse.String())
 				}
 				return nil
 			})
+			bse.validate(t)
 			// Append events to the output if desired.
 			if showEvents {
 				if !strings.HasSuffix(ret, "\n") {
 					ret += "\n"
 				}
-				ret += ti.String()
+				ret += bse.String()
 			}
 			return ret
 		})
