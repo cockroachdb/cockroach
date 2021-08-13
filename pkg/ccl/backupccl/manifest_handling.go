@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
@@ -86,6 +87,12 @@ const (
 	// latestFileName is the name of a file in the collection which contains the
 	// path of the most recently taken full backup in the backup collection.
 	latestFileName = "LATEST"
+)
+
+var writeMetadataSST = settings.RegisterBoolSetting(
+	"kv.bulkio.write_metadata_sst.enabled",
+	"write experimental new format BACKUP metadata file",
+	true,
 )
 
 // isGZipped detects whether the given bytes represent GZipped data. This check
