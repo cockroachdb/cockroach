@@ -1860,3 +1860,19 @@ CREATE TABLE public.t67234 (
    FAMILY fam_0_k_a_b (k, a, b),
    CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
 )
+
+# Sanity: Check the number of user errors and
+# database errors in the test.
+query I
+SELECT count(usage_count)
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.constraint_violation' and usage_count >= 13;
+----
+1
+
+query I
+SELECT count(usage_count)
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 4;
+----
+1

@@ -1079,28 +1079,20 @@ func (b *putBuffer) putIntentMeta(
 		return 0, 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
-	safe, err := writer.SafeToWriteSeparatedIntents(ctx)
-	if err != nil {
-		return 0, 0, 0, err
+	// All nodes in this cluster understand separated intents, so can fiddle
+	// with TxnDidNotUpdateMeta, which is not understood by older nodes (which
+	// are no longer present, and will never again be present).
+	//
+	// NB: the parameter txnDidNotUpdateMeta is about what happened prior to
+	// this Put, and is passed through to writer below. The field
+	// TxnDidNotUpdateMeta, in the MVCCMetadata we are about to write,
+	// includes what happened in this Put.
+	if state == NoExistingIntent {
+		meta.TxnDidNotUpdateMeta = &trueValue
+	} else {
+		// Absence represents false.
+		meta.TxnDidNotUpdateMeta = nil
 	}
-	if safe {
-		// All nodes in this cluster understand separated intents, so can fiddle
-		// with TxnDidNotUpdateMeta, which is not understood by older nodes (which
-		// are no longer present, and will never again be present).
-		//
-		// NB: the parameter txnDidNotUpdateMeta is about what happened prior to
-		// this Put, and is passed through to writer below. The field
-		// TxnDidNotUpdateMeta, in the MVCCMetadata we are about to write,
-		// includes what happened in this Put.
-		if state == NoExistingIntent {
-			meta.TxnDidNotUpdateMeta = &trueValue
-		} else {
-			// Absence represents false.
-			meta.TxnDidNotUpdateMeta = nil
-		}
-	}
-	// Else disallowSeparatedIntents, so don't set MVCCMetadata.TxnDidNotUpdateMeta
-	// for compatibility in mixed version clusters.
 
 	bytes, err := b.marshalMeta(meta)
 	if err != nil {

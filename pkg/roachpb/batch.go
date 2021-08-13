@@ -267,6 +267,14 @@ func (ba *BatchRequest) IsSingleCheckConsistencyRequest() bool {
 	return ba.isSingleRequestWithMethod(CheckConsistency)
 }
 
+// RequiresConsensus returns true iff the batch contains a request that should
+// always force replication and proposal through raft, even if evaluation is
+// a no-op. The Barrier request requires consensus even though its evaluation
+// is a no-op.
+func (ba *BatchRequest) RequiresConsensus() bool {
+	return ba.isSingleRequestWithMethod(Barrier)
+}
+
 // IsCompleteTransaction determines whether a batch contains every write in a
 // transactions.
 func (ba *BatchRequest) IsCompleteTransaction() bool {

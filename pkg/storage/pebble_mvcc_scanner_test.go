@@ -32,11 +32,9 @@ import (
 func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Force separated intents for writing.
+	// We default to separated intents enabled.
 	eng, err := Open(context.Background(), InMemory(),
-		CacheSize(1<<20),
-		Settings(makeSettingsForSeparatedIntents(
-			false /* oldClusterVersion */, true /* enabled */)))
+		CacheSize(1<<20))
 	require.NoError(t, err)
 	defer eng.Close()
 

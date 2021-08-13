@@ -97,6 +97,14 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		sqlInstancesTableMigration,
 	),
+	migration.NewSystemMigration(
+		"move over all intents to separate lock table",
+		toCV(clusterversion.SeparatedIntentsMigration),
+		separatedIntentsMigration),
+	migration.NewSystemMigration(
+		"run no-op migrate command on all ranges after lock table migration",
+		toCV(clusterversion.PostSeparatedIntentsMigration),
+		postSeparatedIntentsMigration),
 }
 
 func init() {

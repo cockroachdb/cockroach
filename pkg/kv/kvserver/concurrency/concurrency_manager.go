@@ -200,7 +200,7 @@ func (m *managerImpl) SequenceReq(
 		case OptimisticEval:
 			panic("optimistic eval cannot happen when re-sequencing")
 		case PessimisticAfterFailedOptimisticEval:
-			if shouldAcquireLatches(g.Req) {
+			if !shouldIgnoreLatches(g.Req) {
 				g.AssertLatches()
 			}
 			log.Event(ctx, "re-sequencing request after optimistic sequencing failed")
@@ -218,9 +218,16 @@ func (m *managerImpl) SequenceReq(
 
 func (m *managerImpl) sequenceReqWithGuard(ctx context.Context, g *Guard) (Response, *Error) {
 	// Some requests don't need to acquire latches at all.
-	if !shouldAcquireLatches(g.Req) {
+	if shouldIgnoreLatches(g.Req) {
 		log.Event(ctx, "not acquiring latches")
 		return nil, nil
+	}
+
+	// Check if this is a request that waits on latches, but does not acquire
+	// them.
+	if shouldWaitOnLatchesWithoutAcquiring(g.Req) {
+		log.Event(ctx, "waiting on latches without acquiring")
+		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans)
 	}
 
 	// Provide the manager with an opportunity to intercept the request. It
@@ -346,22 +353,30 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 	return nil, nil
 }
 
-// shouldAcquireLatches determines whether the request should acquire latches
+// shouldIgnoreLatches determines whether the request should ignore latches
 // before proceeding to evaluate. Latches are used to synchronize with other
 // conflicting requests, based on the Spans collected for the request. Most
-// request types will want to acquire latches.
-func shouldAcquireLatches(req Request) bool {
+// request types will want to acquire latches. Requests that return true for
+// shouldWaitOnLatchesWithoutAcquiring will not completely ignore latches as
+// they could wait on them, even if they don't acquire latches.
+func shouldIgnoreLatches(req Request) bool {
 	switch {
 	case req.ReadConsistency != roachpb.CONSISTENT:
 		// Only acquire latches for consistent operations.
-		return false
+		return true
 	case req.isSingle(roachpb.RequestLease):
-		// Do not acquire latches for lease requests. These requests are run on
-		// replicas that do not hold the lease, so acquiring latches wouldn't
-		// help synchronize with other requests.
-		return false
+		// Ignore latches for lease requests. These requests are run on replicas
+		// that do not hold the lease, so acquiring latches wouldn't help
+		// synchronize with other requests.
+		return true
 	}
-	return true
+	return false
+}
+
+// shouldWaitOnLatchesWithoutAcquiring determines if this is a request that
+// only waits on existing latches without acquiring any new ones.
+func shouldWaitOnLatchesWithoutAcquiring(req Request) bool {
+	return req.isSingle(roachpb.Barrier)
 }
 
 // FinishReq implements the RequestSequencer interface.
@@ -628,7 +643,7 @@ func (g *Guard) HoldingLatches() bool {
 // AssertLatches asserts that the guard is non-nil and holding latches, if the
 // request is supposed to hold latches while evaluating in the first place.
 func (g *Guard) AssertLatches() {
-	if shouldAcquireLatches(g.Req) && !g.HoldingLatches() {
+	if !shouldIgnoreLatches(g.Req) && !shouldWaitOnLatchesWithoutAcquiring(g.Req) && !g.HoldingLatches() {
 		panic("expected latches held, found none")
 	}
 }
