@@ -14,6 +14,7 @@ go_library(
         "object.go",
         "schema.go",
         "synthetic_descriptors.go",
+        "system_descriptors.go",
         "table.go",
         "temporary_descriptors.go",
         "txn.go",
@@ -24,6 +25,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/settings",
@@ -56,6 +58,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
     ],

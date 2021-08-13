@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",

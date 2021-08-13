@@ -2299,6 +2299,22 @@ var (
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
+
+	// UnleasableSystemDescriptors contains the system descriptors which cannot
+	// be leased. This includes the lease table itself, among others.
+	UnleasableSystemDescriptors = func(s []catalog.Descriptor) map[descpb.ID]catalog.Descriptor {
+		m := make(map[descpb.ID]catalog.Descriptor, len(s))
+		for _, d := range s {
+			m[d.GetID()] = d
+		}
+		return m
+	}([]catalog.Descriptor{
+		SystemDB,
+		LeaseTable,
+		DescriptorTable,
+		NamespaceTable,
+		RangeEventTable,
+	})
 )
 
 // newCommentPrivilegeDescriptor returns a privilege descriptor for comment table

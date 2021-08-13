@@ -70,7 +70,7 @@ func TestInitialKeys(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ms.AddDescriptor(keys.SystemDatabaseID, desc)
+		ms.AddDescriptor(desc)
 		kv, _ /* splits */ = ms.GetInitialValues()
 		expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 		if actual := len(kv); actual != expected {
