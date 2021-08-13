@@ -46,34 +46,14 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	)
 
 	var (
-		rng, _     = randutil.NewPseudoRand()
-		typs       = []*types.T{types.Int}
-		numInputs  = rng.Intn(maxInputs) + 1
-		numBatches = rng.Intn(maxBatches) + 1
+		rng, _ = randutil.NewPseudoRand()
+		typs   = []*types.T{types.Int}
+		// We want at least two inputs (one regular and one possibly blocking).
+		numInputs     = rng.Intn(maxInputs-1) + 2
+		numBatches    = rng.Intn(maxBatches) + 1
+		blockDuration = time.Second
+		errSuffix     = "test-induced metadata"
 	)
-
-	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
-	for i := range inputs {
-		source := colexecop.NewRepeatableBatchSource(
-			testAllocator,
-			coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64()),
-			typs,
-		)
-		source.ResetBatchesToReturn(numBatches)
-		inputs[i].Root = source
-		inputIdx := i
-		inputs[i].MetadataSources = []colexecop.MetadataSource{
-			colexectestutils.CallbackMetadataSource{DrainMetaCb: func() []execinfrapb.ProducerMetadata {
-				return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d test-induced metadata", inputIdx)}}
-			}},
-		}
-	}
-
-	ctx, cancelFn := context.WithCancel(context.Background())
-
-	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
-	s.Init(ctx)
 
 	type synchronizerTerminationScenario int
 	const (
@@ -83,8 +63,10 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		// synchronizerContextCanceled is a termination scenario where a
 		// cancellation requests that a synchronizer terminates.
 		synchronizerContextCanceled
-		// synchronizerPrematureDrainMeta is a termination scenario where DrainMeta
-		// is called prematurely on the synchronizer.
+		// synchronizerPrematureDrainMeta is a termination scenario where
+		// DrainMeta is called prematurely on the synchronizer. In this scenario
+		// we also ensure that the inputs are eagerly unblocked from their
+		// current Next work.
 		synchronizerPrematureDrainMeta
 		// synchronizerMaxTerminationScenario should be at the end of the
 		// termination scenario list so that it can be used as an upper bound to
@@ -92,6 +74,60 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		synchronizerMaxTerminationScenario
 	)
 	terminationScenario := synchronizerTerminationScenario(rng.Intn(int(synchronizerMaxTerminationScenario)))
+
+	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
+	for i := range inputs {
+		var source colexecop.Operator
+		batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
+		if i < numInputs-1 {
+			s := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
+			s.ResetBatchesToReturn(numBatches)
+			source = s
+		} else {
+			// Use the last input to possibly introduce some delay in Next.
+			numBatchesLeft := numBatches
+			var inputCtx context.Context
+			source = &colexecop.CallbackOperator{
+				InitCb: func(ctx context.Context) {
+					inputCtx = ctx
+				},
+				NextCb: func() coldata.Batch {
+					if numBatchesLeft == 0 {
+						return coldata.ZeroBatch
+					}
+					if terminationScenario == synchronizerPrematureDrainMeta {
+						// In PrematureDrainMeta scenario we want to block the
+						// input until the context is canceled in order to
+						// simulate that this operator is performing some
+						// intensive work that should be stopped immediately
+						// once the synchronizer transitions into the draining
+						// state.
+						select {
+						case <-inputCtx.Done():
+							colexecerror.ExpectedError(inputCtx.Err())
+						case <-time.After(blockDuration):
+							colexecerror.InternalError(errors.New("unexpectedly slept for a second"))
+						}
+					}
+					numBatchesLeft--
+					return batch
+				},
+			}
+		}
+		inputs[i].Root = source
+		inputIdx := i
+		inputs[i].MetadataSources = []colexecop.MetadataSource{
+			colexectestutils.CallbackMetadataSource{DrainMetaCb: func() []execinfrapb.ProducerMetadata {
+				return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d "+errSuffix, inputIdx)}}
+			}},
+		}
+	}
+
+	ctx, cancelFn := context.WithCancel(context.Background())
+
+	var wg sync.WaitGroup
+	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s.Init(ctx)
 
 	t.Run(fmt.Sprintf("numInputs=%d/numBatches=%d/terminationScenario=%d", numInputs, numBatches, terminationScenario), func(t *testing.T) {
 		if terminationScenario == synchronizerContextCanceled {
@@ -110,15 +146,6 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		batchesReturned := 0
 		expectedBatchesReturned := numInputs * numBatches
 		for {
-			expectZeroBatch := false
-			if terminationScenario == synchronizerPrematureDrainMeta && batchesReturned < expectedBatchesReturned {
-				// Call DrainMeta before the input is finished. Intentionally allow
-				// for Next to be called even though it's not technically supported to
-				// ensure that a zero-length batch is returned.
-				meta := s.DrainMeta()
-				require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
-				expectZeroBatch = true
-			}
 			var b coldata.Batch
 			if err := colexecerror.CatchVectorizedRuntimeError(func() { b = s.Next() }); err != nil {
 				if terminationScenario == synchronizerContextCanceled {
@@ -136,10 +163,18 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 				}
 				break
 			}
-			if expectZeroBatch {
-				t.Fatal("expected a zero batch to be returned after prematurely calling DrainMeta but that did not happen")
-			}
 			batchesReturned++
+			if terminationScenario == synchronizerPrematureDrainMeta && batchesReturned < expectedBatchesReturned {
+				// Call DrainMeta before the input is finished.
+				meta := s.DrainMeta()
+				// Make sure that all expected metadata is still propagated.
+				// Note that if the last input wasn't pre-emptied, then the
+				// error will not match.
+				require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
+				for _, m := range meta {
+					require.True(t, strings.Contains(m.Err.Error(), errSuffix))
+				}
+			}
 		}
 		if terminationScenario != synchronizerContextCanceled && terminationScenario != synchronizerPrematureDrainMeta {
 			require.Equal(t, expectedBatchesReturned, batchesReturned)
