@@ -16,7 +16,7 @@ INSERT INTO db.global VALUES (1, 1), (2,2)
 wait-for-zone-config-changes db-name=db table-name=global num-voters=3 num-non-voters=2 leaseholder=0 voter=1,2 non-voter=3,4 not-present=5
 ----
 
-refresh-range-descriptor-cache idx=0 table-name=global
+refresh-range-descriptor-cache db-name=db idx=0 table-name=global
 SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
@@ -27,7 +27,7 @@ SELECT * FROM db.global WHERE k = 1
 served locally: true
 served via follower read: false
 
-refresh-range-descriptor-cache idx=1 table-name=global
+refresh-range-descriptor-cache db-name=db idx=1 table-name=global
 SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
@@ -38,7 +38,7 @@ SELECT * FROM db.global WHERE k = 1
 served locally: true
 served via follower read: true
 
-refresh-range-descriptor-cache idx=2 table-name=global
+refresh-range-descriptor-cache db-name=db idx=2 table-name=global
 SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
@@ -49,7 +49,7 @@ SELECT * FROM db.global WHERE k = 1
 served locally: true
 served via follower read: true
 
-refresh-range-descriptor-cache idx=3 table-name=global
+refresh-range-descriptor-cache db-name=db idx=3 table-name=global
 SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
@@ -60,7 +60,7 @@ SELECT * FROM db.global WHERE k = 1
 served locally: true
 served via follower read: true
 
-refresh-range-descriptor-cache idx=4 table-name=global
+refresh-range-descriptor-cache db-name=db idx=4 table-name=global
 SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
@@ -71,7 +71,7 @@ SELECT * FROM db.global WHERE k = 1
 served locally: true
 served via follower read: true
 
-refresh-range-descriptor-cache idx=5 table-name=global
+refresh-range-descriptor-cache db-name=db idx=5 table-name=global
 SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
@@ -90,7 +90,7 @@ ALTER DATABASE db ADD REGION "eu-central-1"
 wait-for-zone-config-changes db-name=db table-name=global num-voters=3 num-non-voters=3 leaseholder=0 non-voter=5
 ----
 
-refresh-range-descriptor-cache idx=5 table-name=global
+refresh-range-descriptor-cache db-name=db idx=5 table-name=global
 SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
