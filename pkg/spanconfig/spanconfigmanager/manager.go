@@ -46,6 +46,8 @@ type Manager struct {
 	stopper  *stop.Stopper
 	settings *cluster.Settings
 	knobs    *spanconfig.TestingKnobs
+
+	spanconfig.KVAccessor
 }
 
 // New constructs a new Manager.
@@ -55,18 +57,20 @@ func New(
 	ie sqlutil.InternalExecutor,
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
+	kvAccessor spanconfig.KVAccessor,
 	knobs *spanconfig.TestingKnobs,
 ) *Manager {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &Manager{
-		db:       db,
-		jr:       jr,
-		ie:       ie,
-		stopper:  stopper,
-		settings: settings,
-		knobs:    knobs,
+		db:         db,
+		jr:         jr,
+		ie:         ie,
+		stopper:    stopper,
+		settings:   settings,
+		knobs:      knobs,
+		KVAccessor: kvAccessor,
 	}
 }
 

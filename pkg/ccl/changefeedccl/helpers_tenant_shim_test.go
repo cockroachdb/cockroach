@@ -69,6 +69,7 @@ func (t *testServerShim) RangeFeedFactory() interface{}         { panic(unsuppor
 func (t *testServerShim) Clock() *hlc.Clock                     { panic(unsupportedShimMethod) }
 func (t *testServerShim) DistSenderI() interface{}              { panic(unsupportedShimMethod) }
 func (t *testServerShim) MigrationServer() interface{}          { panic(unsupportedShimMethod) }
+func (t *testServerShim) SpanConfigAccessor() interface{}       { panic(unsupportedShimMethod) }
 func (t *testServerShim) SQLServer() interface{}                { panic(unsupportedShimMethod) }
 func (t *testServerShim) SQLLivenessProvider() interface{}      { panic(unsupportedShimMethod) }
 func (t *testServerShim) StartupMigrationsManager() interface{} { panic(unsupportedShimMethod) }

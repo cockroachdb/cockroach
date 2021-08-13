@@ -497,6 +497,20 @@ func (a internalClientAdapter) TokenBucket(
 	return a.server.TokenBucket(ctx, in)
 }
 
+// GetSpanConfigs is part of the roachpb.InternalClient interface.
+func (a internalClientAdapter) GetSpanConfigs(
+	ctx context.Context, req *roachpb.GetSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	return a.server.GetSpanConfigs(ctx, req)
+}
+
+// UpdateSpanConfigs is part of the roachpb.InternalClient interface.
+func (a internalClientAdapter) UpdateSpanConfigs(
+	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	return a.server.UpdateSpanConfigs(ctx, req)
+}
+
 type respStreamClientAdapter struct {
 	ctx   context.Context
 	respC chan interface{}

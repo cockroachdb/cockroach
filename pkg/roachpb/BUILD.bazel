@@ -1,4 +1,5 @@
 # gazelle:exclude string_test.go
+# gazelle:exclude client_test.go
 
 load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@rules_proto//proto:defs.bzl", "proto_library")
@@ -184,15 +185,19 @@ go_test(
 
 # keep
 go_test(
-    name = "string_test",
+    name = "external_test",
     size = "small",
-    srcs = ["string_test.go"],
+    srcs = [
+        "client_test.go",
+        "string_test.go",
+    ],
     deps = [
         ":with-mocks",
         "//pkg/cli/exit",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
+        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_redact//:redact",
