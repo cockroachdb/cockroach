@@ -634,8 +634,17 @@ func TestSstExportFailureIntentBatching(t *testing.T) {
 			require.NoError(t, fillInData(ctx, engine, data))
 
 			destination := &MemFile{}
-			_, _, _, err := engine.ExportMVCCToSst(ctx, key(10), key(20000), ts(999), ts(2000), hlc.Timestamp{},
-				true, 0, 0, false, true, destination)
+			_, _, _, err := engine.ExportMVCCToSst(ctx, ExportOptions{
+				StartKey:           MVCCKey{Key: key(10)},
+				EndKey:             key(20000),
+				StartTS:            ts(999),
+				EndTS:              ts(2000),
+				ExportAllRevisions: true,
+				TargetSize:         0,
+				MaxSize:            0,
+				StopMidKey:         false,
+				UseTBI:             true,
+			}, destination)
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
 			} else {
@@ -723,8 +732,17 @@ func TestExportSplitMidKey(t *testing.T) {
 				for !resumeKey.Equal(roachpb.Key{}) {
 					dest := &MemFile{}
 					_, resumeKey, firstKeyTS, _ = engine.ExportMVCCToSst(
-						ctx, resumeKey, key(3).Next(), hlc.Timestamp{}, hlc.Timestamp{WallTime: 9999},
-						firstKeyTS, test.exportAll, 1, maxSize, test.stopMidKey, test.useTBI, dest)
+						ctx, ExportOptions{
+							StartKey:           MVCCKey{Key: resumeKey, Timestamp: firstKeyTS},
+							EndKey:             key(3).Next(),
+							StartTS:            hlc.Timestamp{},
+							EndTS:              hlc.Timestamp{WallTime: 9999},
+							ExportAllRevisions: test.exportAll,
+							TargetSize:         1,
+							MaxSize:            maxSize,
+							StopMidKey:         test.stopMidKey,
+							UseTBI:             test.useTBI,
+						}, dest)
 					if !firstKeyTS.IsEmpty() {
 						resumeWithTs++
 					}
