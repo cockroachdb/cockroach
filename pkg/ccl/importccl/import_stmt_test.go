@@ -4371,7 +4371,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 			})
 
 			// Pause the job;
-			if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
+			if err := registry.PauseRequested(ctx, nil, jobID, ""); err != nil {
 				t.Fatal(err)
 			}
 			// Send cancellation and unblock breakpoint.
