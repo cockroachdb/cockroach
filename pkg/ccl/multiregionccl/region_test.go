@@ -343,7 +343,7 @@ func TestSettingPlacementAmidstAddDrop(t *testing.T) {
 	}{
 		{
 			name:        "add then set restricted",
-			placementOp: "ALTER DATABASE db SET PLACEMENT RESTRICTED",
+			placementOp: "ALTER DATABASE db PLACEMENT RESTRICTED",
 			regionOp:    `ALTER DATABASE db ADD REGION "us-east3"`,
 			expectedZcfg: `
 ALTER TABLE db.public.global CONFIGURE ZONE USING
@@ -359,7 +359,7 @@ ALTER TABLE db.public.global CONFIGURE ZONE USING
 		},
 		{
 			name:        "drop then set restricted",
-			placementOp: "ALTER DATABASE db SET PLACEMENT RESTRICTED",
+			placementOp: "ALTER DATABASE db PLACEMENT RESTRICTED",
 			regionOp:    `ALTER DATABASE db DROP REGION "us-east2"`,
 			expectedZcfg: `
 ALTER TABLE db.public.global CONFIGURE ZONE USING
