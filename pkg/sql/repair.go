@@ -161,6 +161,28 @@ func (p *planner) UnsafeUpsertDescriptor(
 		objectType = privilege.Schema
 	}
 
+	// Check that the descriptor ID is less than the counter used for creating new
+	// descriptor IDs. If not, and if the force flag is set, increment it.
+	maxDescIDKeyVal, err := p.extendedEvalCtx.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
+	if err != nil {
+		return err
+	}
+	maxDescID, err := maxDescIDKeyVal.Value.GetInt()
+	if err != nil {
+		return err
+	}
+	if maxDescID <= descID {
+		if !force {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition,
+				"descriptor ID %d must be less than the descriptor ID sequence value %d", descID, maxDescID)
+		}
+		inc := descID - maxDescID + 1
+		_, err = kv.IncrementValRetryable(ctx, p.extendedEvalCtx.DB, p.extendedEvalCtx.Codec.DescIDSequenceKey(), inc)
+		if err != nil {
+			return err
+		}
+	}
+
 	if force {
 		p.Descriptors().SkipValidationOnWrite()
 	}
