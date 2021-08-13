@@ -65,15 +65,22 @@ func TestStickyEngines(t *testing.T) {
 	require.True(t, engine1.Closed())
 	require.False(t, engine1.(*stickyInMemEngine).Engine.Closed())
 
-	// Refetching the engine should give back the same engine.
+	// Refetching the engine should give back a different engine with the same
+	// underlying fs.
+	fs1, err := registry.GetUnderlyingFS(spec1)
+	require.NoError(t, err)
 	engine1Refetched, err := registry.GetOrCreateStickyInMemEngine(ctx, &cfg1, spec1)
 	require.NoError(t, err)
-	require.Equal(t, engine1, engine1Refetched)
-	require.False(t, engine1.Closed())
+	fs1Refetched, err := registry.GetUnderlyingFS(spec1)
+	require.NoError(t, err)
+	require.NotEqual(t, engine1, engine1Refetched)
+	require.Equal(t, fs1, fs1Refetched)
+	require.True(t, engine1.Closed())
+	require.False(t, engine1Refetched.Closed())
 
 	// Cleaning up everything asserts everything is closed.
 	registry.CloseAllStickyInMemEngines()
-	for _, engine := range []storage.Engine{engine1, engine2} {
+	for _, engine := range []storage.Engine{engine1, engine2, engine1Refetched} {
 		require.True(t, engine.Closed())
 		require.True(t, engine.(*stickyInMemEngine).Engine.Closed())
 	}
