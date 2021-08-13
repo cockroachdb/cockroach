@@ -18,7 +18,6 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -165,51 +164,6 @@ func getScheduledBackupStatement(t *testing.T, arg *jobspb.ExecutionArguments) s
 	var backup ScheduledBackupExecutionArgs
 	require.NoError(t, pbtypes.UnmarshalAny(arg.Args, &backup))
 	return backup.BackupStatement
-}
-
-func validateScheduledJobCreateStmt(
-	t *testing.T, sj *jobs.ScheduledJob, createStmt string, fullBackupAlways bool,
-) {
-	stmt, err := parser.ParseOne(createStmt)
-	require.NoError(t, err)
-
-	outputNode, ok := stmt.AST.(*tree.ScheduledBackup)
-	require.True(t, ok)
-
-	args := &ScheduledBackupExecutionArgs{}
-	err = pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args)
-	require.NoError(t, err)
-
-	require.Equal(t, sj.ScheduleLabel(), strings.Trim(outputNode.ScheduleLabel.String(), "'"))
-	backupNode, err := parser.ParseOne(args.BackupStatement)
-	require.NoError(t, err)
-	backupStmt, ok := backupNode.AST.(*tree.Backup)
-	require.True(t, ok)
-	if fullBackupAlways {
-		require.True(t, outputNode.FullBackup.AlwaysFull)
-		require.True(t, outputNode.FullBackup.Recurrence == nil)
-		require.Equal(t, sj.ScheduleExpr(), strings.Trim(outputNode.Recurrence.String(), "'"))
-	} else {
-		if backupStmt.AppendToLatest {
-			require.Equal(t, sj.ScheduleExpr(), strings.Trim(outputNode.Recurrence.String(), "'"))
-			require.Equal(t, args.DependentScheduleCrontab, strings.Trim(outputNode.FullBackup.Recurrence.String(), "'"))
-		} else {
-			require.Equal(t, sj.ScheduleExpr(), strings.Trim(outputNode.FullBackup.Recurrence.String(), "'"))
-			require.Equal(t, args.DependentScheduleCrontab, strings.Trim(outputNode.Recurrence.String(), "'"))
-		}
-	}
-
-	for _, opt := range outputNode.ScheduleOptions {
-		switch opt.Key {
-		case optFirstRun:
-			firstRun, _ := tree.MakeDTimestampTZ(sj.ScheduledRunTime(), time.Microsecond)
-			require.Equal(t, firstRun.String(), opt.Value.String())
-		case optOnExecFailure:
-			require.Equal(t, sj.ScheduleDetails().OnError.String(), strings.Trim(opt.Value.String(), "'"))
-		case optOnPreviousRunning:
-			require.Equal(t, sj.ScheduleDetails().Wait.String(), strings.Trim(opt.Value.String(), "'"))
-		}
-	}
 }
 
 type userType bool
@@ -898,7 +852,68 @@ INSERT INTO t values (1), (10), (100);
 	})
 }
 
-func TestCreateStatement(t *testing.T) {
+func extractBackupNode(sj *jobs.ScheduledJob) (*tree.Backup, error) {
+	args := &ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
+		return nil, errors.Wrap(err, "un-marshaling args")
+	}
+
+	node, err := parser.ParseOne(args.BackupStatement)
+	if err != nil {
+		return nil, errors.Wrap(err, "parsing backup statement")
+	}
+
+	if backupStmt, ok := node.AST.(*tree.Backup); ok {
+		return backupStmt, nil
+	}
+
+	return nil, errors.Newf("unexpect node type %T", node)
+}
+
+func constructExpectedScheduledBackupNode(
+	t *testing.T, sj *jobs.ScheduledJob, fullBackupAlways bool, fullRecurrence, recurrence string,
+) *tree.ScheduledBackup {
+	t.Helper()
+	args := &ScheduledBackupExecutionArgs{}
+	err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args)
+	require.NoError(t, err)
+
+	backupNode, err := extractBackupNode(sj)
+	require.NoError(t, err)
+	firstRun, err := tree.MakeDTimestampTZ(sj.ScheduledRunTime(), time.Microsecond)
+	require.NoError(t, err)
+	scheduleOptions := tree.KVOptions{
+		tree.KVOption{
+			Key:   optFirstRun,
+			Value: firstRun,
+		},
+		tree.KVOption{
+			Key:   optOnExecFailure,
+			Value: tree.NewDString(sj.ScheduleDetails().OnError.String()),
+		},
+		tree.KVOption{
+			Key:   optOnPreviousRunning,
+			Value: tree.NewDString(sj.ScheduleDetails().Wait.String()),
+		},
+	}
+	sb := &tree.ScheduledBackup{
+		ScheduleLabel: tree.NewDString(sj.ScheduleLabel()),
+		Recurrence:    tree.NewDString(recurrence),
+		FullBackup: &tree.FullBackupClause{
+			AlwaysFull: fullBackupAlways,
+		},
+		Targets:         backupNode.Targets,
+		To:              backupNode.To,
+		BackupOptions:   backupNode.Options,
+		ScheduleOptions: scheduleOptions,
+	}
+	if !fullBackupAlways {
+		sb.FullBackup.Recurrence = tree.NewDString(fullRecurrence)
+	}
+	return sb
+}
+
+func TestShowCreateScheduleStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -909,19 +924,27 @@ func TestCreateStatement(t *testing.T) {
 		name             string
 		query            string
 		fullBackupAlways bool
+		fullRecurrence   string
+		recurrence       string
 	}{
 		{
-			name:  "full-backup",
-			query: `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'`,
+			name:           "full-incremental-schedule",
+			query:          `CREATE SCHEDULE foo FOR BACKUP INTO '%s' RECURRING '@hourly'`,
+			fullRecurrence: "@daily",
+			recurrence:     "@hourly",
 		},
 		{
-			name:             "full-backup-always",
-			query:            `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' FULL BACKUP ALWAYS`,
+			name:             "full-schedule",
+			query:            `CREATE SCHEDULE FOR BACKUP INTO '%s' RECURRING '@hourly' FULL BACKUP ALWAYS`,
 			fullBackupAlways: true,
+			fullRecurrence:   "@hourly",
+			recurrence:       "@hourly",
 		},
 		{
-			name:  "incremental-backup",
-			query: `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' FULL BACKUP '@daily'`,
+			name:           "full-incremental-schedule-with-option",
+			query:          `CREATE SCHEDULE FOR BACKUP INTO '%s' RECURRING '@hourly' FULL BACKUP '@daily' WITH SCHEDULE OPTIONS on_execution_failure = 'pause', ignore_existing_backups`,
+			fullRecurrence: "@daily",
+			recurrence:     "@hourly",
 		},
 	}
 
@@ -931,8 +954,20 @@ func TestCreateStatement(t *testing.T) {
 			defer th.clearSchedules(t)
 
 			destination := "nodelocal://0/" + tc.name
-			schedules, err := th.createBackupSchedule(t, tc.query, destination)
+			createScheduleQuery := fmt.Sprintf(tc.query, destination)
+			schedules, err := th.createBackupSchedule(t, createScheduleQuery)
 			require.NoError(t, err)
+
+			// Find the full schedule, it will be the one with a scheduled next run.
+			var fullSchedule *jobs.ScheduledJob
+			for _, schedule := range schedules {
+				if !schedule.ScheduledRunTime().IsZero() {
+					fullSchedule = schedule
+					break
+				}
+			}
+			expectedScheduleNode := constructExpectedScheduledBackupNode(t, fullSchedule,
+				tc.fullBackupAlways, tc.fullRecurrence, tc.recurrence)
 
 			t.Run("show-create-all-schedules", func(t *testing.T) {
 				rows := th.sqlDB.QueryStr(t, "SHOW CREATE ALL SCHEDULES")
@@ -942,29 +977,22 @@ func TestCreateStatement(t *testing.T) {
 				require.Equal(t, len(schedules), len(rows))
 				require.Equal(t, cols, []string{"schedule_id", "create_statement"})
 
-				scheduleIDToSchedule := make(map[string]*jobs.ScheduledJob)
-				for _, sj := range schedules {
-					scheduleIDToSchedule[strconv.Itoa(int(sj.ScheduleID()))] = sj
-				}
-
 				for _, row := range rows {
-					scheduleID := row[0]
-					createStmt := row[1]
-
-					sj := scheduleIDToSchedule[scheduleID]
-					validateScheduledJobCreateStmt(t, sj, createStmt, tc.fullBackupAlways)
+					// Ensure that each row has schedule_id, create_stmt.
+					require.Len(t, row, 2)
+					showCreateScheduleStmt := row[1]
+					require.Equal(t, expectedScheduleNode.String(), showCreateScheduleStmt)
 				}
 			})
 
 			t.Run("show-create-schedule-by-id", func(t *testing.T) {
 				for _, sj := range schedules {
 					rows := th.sqlDB.QueryStr(t, fmt.Sprintf("SHOW CREATE SCHEDULE %d", sj.ScheduleID()))
+					require.Equal(t, 1, len(rows))
 					cols, err := th.sqlDB.Query(t, fmt.Sprintf("SHOW CREATE SCHEDULE %d", sj.ScheduleID())).Columns()
 					require.NoError(t, err)
-					// The query should return exactly one row
-					require.Equal(t, 1, len(rows))
 					require.Equal(t, cols, []string{"schedule_id", "create_statement"})
-					validateScheduledJobCreateStmt(t, sj, rows[0][1], tc.fullBackupAlways)
+					require.Equal(t, expectedScheduleNode.String(), rows[0][1])
 				}
 			})
 		})
