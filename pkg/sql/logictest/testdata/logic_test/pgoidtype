@@ -8,35 +8,40 @@ SELECT 3::OID::INT::OID
 ----
 3
 
+query OOOOOOO
+SELECT 1::OID, 1::REGCLASS, 1::REGNAMESPACE, 1::REGPROC, 1::REGPROCEDURE, 1::REGROLE, 1::REGTYPE
+----
+1  1  1  1  1  1  1
+
 query OOOOOO
-SELECT 1::OID, 1::REGCLASS, 1::REGNAMESPACE, 1::REGPROC, 1::REGPROCEDURE, 1::REGTYPE
+SELECT 1::OID::REGCLASS, 1::OID::REGNAMESPACE, 1::OID::REGPROC, 1::OID::REGPROCEDURE, 1::OID::REGROLE, 1::OID::REGTYPE
 ----
 1  1  1  1  1  1
-
-query OOOOO
-SELECT 1::OID::REGCLASS, 1::OID::REGNAMESPACE, 1::OID::REGPROC, 1::OID::REGPROCEDURE, 1::OID::REGTYPE
-----
-1  1  1  1  1
 
 query TTT
 SELECT pg_typeof(1::OID), pg_typeof(1::REGCLASS), pg_typeof(1::REGNAMESPACE)
 ----
 oid  regclass  regnamespace
 
-query TTT
-SELECT pg_typeof(1::REGPROC), pg_typeof(1::REGPROCEDURE), pg_typeof(1::REGTYPE)
+query TTTT
+SELECT pg_typeof(1::REGPROC), pg_typeof(1::REGPROCEDURE), pg_typeof(1::REGROLE), pg_typeof(1::REGTYPE)
 ----
-regproc  regprocedure  regtype
+regproc  regprocedure  regrole  regtype
 
 query TTT
 SELECT pg_typeof('1'::OID), pg_typeof('pg_constraint'::REGCLASS), pg_typeof('public'::REGNAMESPACE)
 ----
 oid  regclass  regnamespace
 
-query TTT
-SELECT pg_typeof('upper'::REGPROC), pg_typeof('upper'::REGPROCEDURE), pg_typeof('bool'::REGTYPE)
+query TT
+SELECT pg_typeof('upper'::REGPROC), pg_typeof('upper'::REGPROCEDURE)
 ----
-regproc  regprocedure  regtype
+regproc  regprocedure
+
+query TT
+SELECT pg_typeof('root'::REGROLE), pg_typeof('bool'::REGTYPE)
+----
+regrole  regtype
 
 query OO
 SELECT 'pg_constraint'::REGCLASS, 'pg_catalog.pg_constraint'::REGCLASS
@@ -122,6 +127,11 @@ SELECT 'public'::REGNAMESPACE, 'public'::REGNAMESPACE::OID
 public  3426283741
 
 query OO
+SELECT 'root'::REGROLE, 'root'::REGROLE::OID
+----
+root  1546506610
+
+query OO
 SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID
 ----
 boolean  16
@@ -142,19 +152,22 @@ SELECT 'foo.'::REGTYPE
 query error pgcode 42P01 relation "blah" does not exist
 SELECT 'blah'::REGCLASS
 
-query error unknown function: blah\(\)
+query error pgcode 42883 unknown function: blah\(\)
 SELECT 'blah'::REGPROC
 
-query error unknown function: blah\(\)
+query error pgcode 42883 unknown function: blah\(\)
 SELECT 'blah'::REGPROCEDURE
 
-query error namespace 'blah' does not exist
+query error pgcode 42704 namespace 'blah' does not exist
 SELECT 'blah'::REGNAMESPACE
 
-query error type 'blah' does not exist
+query error pgcode 42704 role 'blah' does not exist
+SELECT 'blah'::REGROLE
+
+query error pgcode 42704 type 'blah' does not exist
 SELECT 'blah'::REGTYPE
 
-query error type 'pg_catalog.int' does not exist
+query error pgcode 42704 type 'pg_catalog.int' does not exist
 SELECT 'pg_catalog.int'::REGTYPE
 
 ## Test other cast syntaxes
@@ -368,15 +381,25 @@ SELECT NOT (prorettype::regtype::text = 'foo') AND proretset FROM pg_proc WHERE 
 ----
 false
 
-query TTTTT
-SELECT crdb_internal.create_regtype(10, 'foo'), crdb_internal.create_regclass(10, 'foo'), crdb_internal.create_regproc(10, 'foo'), crdb_internal.create_regprocedure(10, 'foo'), crdb_internal.create_regnamespace(10, 'foo')
+query TTTTTT
+SELECT crdb_internal.create_regtype(10, 'foo'),
+       crdb_internal.create_regclass(10, 'foo'),
+       crdb_internal.create_regproc(10, 'foo'),
+       crdb_internal.create_regprocedure(10, 'foo'),
+       crdb_internal.create_regnamespace(10, 'foo'),
+       crdb_internal.create_regrole(10, 'foo')
 ----
-foo foo foo foo foo
+foo  foo  foo  foo  foo  foo
 
-query OOOOO
-SELECT crdb_internal.create_regtype(10, 'foo')::oid, crdb_internal.create_regclass(10, 'foo')::oid, crdb_internal.create_regproc(10, 'foo')::oid, crdb_internal.create_regprocedure(10, 'foo')::oid, crdb_internal.create_regnamespace(10, 'foo')::oid
+query OOOOOO
+SELECT crdb_internal.create_regtype(10, 'foo')::oid,
+       crdb_internal.create_regclass(10, 'foo')::oid,
+       crdb_internal.create_regproc(10, 'foo')::oid,
+       crdb_internal.create_regprocedure(10, 'foo')::oid,
+       crdb_internal.create_regnamespace(10, 'foo')::oid,
+       crdb_internal.create_regrole(10, 'foo')::oid
 ----
-10 10 10 10 10
+10  10  10  10  10  10
 
 # Regression test for #32422: ensure that VALUES nodes properly retain special
 # OID properties.
