@@ -63,6 +63,19 @@ var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 	64<<20, /* 64 MiB */
 ).WithPublic()
 
+// ExportRequestMaxAllowedIterationCount controls resource throttling when performing
+// exports by limiting how much data could be iterated by export requests when creating
+// SSTs. Reaching this limit will stop export with currently collected data and caller
+// should resume export using provided resume span and timestamp.
+var ExportRequestMaxAllowedIterationCount = settings.RegisterIntSetting(
+	"kv.bulk_sst.max_iteration_count",
+	fmt.Sprintf("if positive, sets maximum number of iteration steps over storage "+
+		" allowed while creating SSTs from export requests",
+	),
+	0, /* No limit */
+	settings.NonNegativeInt,
+)
+
 const maxUploadRetries = 5
 
 func init() {
@@ -176,6 +189,13 @@ func evalExport(
 		maxSize = targetSize + uint64(allowedOverage)
 	}
 
+	var maxExportIteration int64
+	// Limiting iteration implies splitting mid key. If caller doesn't allow this, we should not use
+	// the limit.
+	if args.SplitMidKey {
+		maxExportIteration = ExportRequestMaxAllowedIterationCount.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+	}
+
 	// Time-bound iterators only make sense to use if the start time is set.
 	useTBI := args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty()
 	// Only use resume timestamp if splitting mid key is enabled.
@@ -190,15 +210,16 @@ func evalExport(
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
 		summary, resume, resumeTS, err := reader.ExportMVCCToSst(ctx, storage.ExportOptions{
-			StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
-			EndKey:             args.EndKey,
-			StartTS:            args.StartTime,
-			EndTS:              h.Timestamp,
-			ExportAllRevisions: exportAllRevisions,
-			TargetSize:         targetSize,
-			MaxSize:            maxSize,
-			StopMidKey:         args.SplitMidKey,
-			UseTBI:             useTBI,
+			StartKey:              storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
+			EndKey:                args.EndKey,
+			StartTS:               args.StartTime,
+			EndTS:                 h.Timestamp,
+			ExportAllRevisions:    exportAllRevisions,
+			TargetSize:            targetSize,
+			MaxSize:               maxSize,
+			StopMidKey:            args.SplitMidKey,
+			MaxAllowerdIterations: maxExportIteration,
+			UseTBI:                useTBI,
 		}, destFile)
 		if err != nil {
 			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
