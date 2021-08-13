@@ -57,17 +57,29 @@ import (
 // "exec-sql idx=server_number": executes the input SQL query on the target
 // server.
 //
-// "trace-sql idx=server_number":
+// "trace-sql idx=server_number [trace-analysis=simple]":
 // Similar to exec-sql, but also traces the input statement and analyzes the
-// trace. Currently, the trace analysis only works for "simple" queries which
-// perform a single kv operation. The trace is analyzed for the following:
-// 	 - served locally: prints true iff the query was routed to the local
-//   replica.
-//   - served via follower read: prints true iff the query was served using a
-//   follower read. This is omitted completely if the query was not served
-//   locally.
-// This is because it the replica the query is routed to may or may not be the
-// leaseholder.
+// trace.
+//
+// Supported trace analysis types:
+//   simple:
+//   	 - served locally: prints true iff the query was routed to the local
+//     replica.
+//     - served via follower read: prints true iff the query was served using a
+//     follower read. This is omitted completely if the query was not served
+//     locally.
+//   rbr:
+//     - attempted local search: prints true iff the locality-optimized search
+//     was executed on local data (as opposed to reaching out to the
+//     leaseholder)
+//     - served locality-optimized search via follower read: prints true iff the
+//     first search was local and served by a follower read. This is omitted
+//     completely if the first search was not local.
+//     - found in locality-optimized search: prints true iff there was only one
+//     search executed.
+//     - served remote read via follower read: prints true iff the second read
+//     executed was executed via a follower read. This is omitted completely if
+//     the query was served via locality-optimized search.
 //
 // "wait-for-zone-config-changes idx=server_number table-name=tbName
 // [num-voters=num] [num-non-voters=num] [leaseholder=idx] [voter=idx_list]
@@ -97,9 +109,10 @@ import (
 // inside a succeeds soon. The only way to do this is to accept these things as
 // arguments, instead of returning the result.
 //
-// "refresh-range-descriptor-cache idx=server_number table-name=tbName": runs
-// the given query to refresh the range descriptor cache. Then, using the
-// table-name argument, the closed timestamp policy is returned.
+// "refresh-range-descriptor-cache db-name=db idx=server_number
+// table-name=tbName [partition-name=ptName]": runs the given query to refresh
+// the range descriptor cache. Then, using the table-name argument, the closed
+// timestamp policy is returned.
 //
 // "sleep-for-follower-read": sleeps for 4,4 seconds, the target duration for
 // follower reads according to our cluster settings.
@@ -206,12 +219,23 @@ func TestMultiRegionDataDriven(t *testing.T) {
 
 			case "trace-sql":
 				mustHaveArgOrFatal(t, d, serverIdx)
-				queryFunc := func() (localRead bool, followerRead bool, err error) {
+
+				analysisType := "simple"
+				if d.HasArg(traceAnalysis) {
+					d.ScanArgs(t, traceAnalysis, &analysisType)
+				}
+
+				analysisFunc, found := analysisFuncs[analysisType]
+				if !found {
+					return errors.Newf("could not find trace analysis type %s", analysisType).Error()
+				}
+
+				queryFunc := func() (string, error) {
 					var idx int
 					d.ScanArgs(t, serverIdx, &idx)
 					sqlDB, err := ds.getSQLConn(idx)
 					if err != nil {
-						return false, false, err
+						return "", err
 					}
 
 					// Setup tracing for the input.
@@ -226,28 +250,19 @@ func TestMultiRegionDataDriven(t *testing.T) {
 
 					_, err = sqlDB.Query(d.Input)
 					if err != nil {
-						return false, false, err
+						return "", err
 					}
 					rec := <-recCh
-					localRead, followerRead, err = checkReadServedLocallyInSimpleRecording(rec)
-					if err != nil {
-						return false, false, err
-					}
-					return localRead, followerRead, nil
+
+					return analysisFunc(rec)
 				}
-				localRead, followerRead, err := queryFunc()
+
+				output, err := queryFunc()
 				if err != nil {
 					return err.Error()
 				}
-				var output strings.Builder
-				output.WriteString(
-					fmt.Sprintf("served locally: %s\n", strconv.FormatBool(localRead)))
-				// Only print follower read information if the query was served locally.
-				if localRead {
-					output.WriteString(
-						fmt.Sprintf("served via follower read: %s\n", strconv.FormatBool(followerRead)))
-				}
-				return output.String()
+
+				return output
 
 			case "refresh-range-descriptor-cache":
 				mustHaveArgOrFatal(t, d, tableName)
@@ -267,16 +282,12 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
-				// Ensure the range descriptor cache was indeed populated.
-				var tableID uint32
-				err = sqlDB.QueryRow(`SELECT id from system.namespace WHERE name=$1`,
-					tbName).Scan(&tableID)
+				cache := ds.tc.Server(idx).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
+				rangeKey, err := getRangeKeyForInput(t, d, ds.tc)
 				if err != nil {
 					return err.Error()
 				}
-				cache := ds.tc.Server(idx).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-				tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
-				entry := cache.GetCached(ctx, tablePrefix, false /* inverted */)
+				entry := cache.GetCached(ctx, keys.MustAddr(rangeKey), false /* inverted */)
 				if entry == nil {
 					return errors.Newf("no entry found for %s in cache", tbName).Error()
 				}
@@ -405,6 +416,7 @@ const (
 	partitionName    = "partition-name"
 	numVoters        = "num-voters"
 	numNonVoters     = "num-non-voters"
+	traceAnalysis    = "trace-analysis"
 )
 
 type replicaType int
@@ -472,20 +484,24 @@ func nodeIdToIdx(t *testing.T, tc serverutils.TestClusterInterface, id roachpb.N
 	return -1
 }
 
+var analysisFuncs = map[string]func(recording tracing.Recording) (string, error){
+	"simple": checkReadServedLocallyInSimpleRecording,
+	"rbr":    analyzeRegionalByRowQuery,
+}
+
 // checkReadServedLocallyInSimpleRecording looks at a "simple" trace and returns
 // if the query for served locally and if it was served via a follower read.
 // A "simple" trace is defined as one that contains a single "dist sender send"
 // message. An error is returned if more than one (or no) "dist sender send"
 // messages are found in the recording.
-func checkReadServedLocallyInSimpleRecording(
-	rec tracing.Recording,
-) (servedLocally bool, servedUsingFollowerReads bool, err error) {
+func checkReadServedLocallyInSimpleRecording(rec tracing.Recording) (string, error) {
 	foundDistSenderSend := false
+	servedLocally := false
+	servedUsingFollowerReads := false
 	for _, sp := range rec {
 		if sp.Operation == "dist sender send" {
 			if foundDistSenderSend {
-				return false,
-					false,
+				return "",
 					errors.New("recording contains > 1 dist sender send messages")
 			}
 			foundDistSenderSend = true
@@ -502,11 +518,92 @@ func checkReadServedLocallyInSimpleRecording(
 		}
 	}
 	if !foundDistSenderSend {
-		return false,
-			false,
+		return "",
 			errors.New("recording contains no dist sender send messages")
 	}
-	return servedLocally, servedUsingFollowerReads, nil
+
+	var output strings.Builder
+	output.WriteString(
+		fmt.Sprintf("served locally: %s\n", strconv.FormatBool(servedLocally)))
+	// Only print follower read information if the query was served locally.
+	if servedLocally {
+		output.WriteString(
+			fmt.Sprintf("served via follower read: %s\n", strconv.FormatBool(servedUsingFollowerReads)))
+	}
+
+	return output.String(), nil
+}
+
+// analyzeRegionalByRowQuery analyzes a trace to check if it follows the
+// expected regional by row semantics. These are:
+// - a locality-optimized read must be performed first.
+// - if a remote read comes after the local read, the data was remote.
+// Semantics of the output are described in the command description at the top.
+func analyzeRegionalByRowQuery(rec tracing.Recording) (string, error) {
+	foundLocalityOptimizedRead := false
+	foundRemoteRead := false
+	servedRemoteUsingFollowerReads := false
+	servedLocalUsingFollowerReads := false
+	attemptedLocalSearch := false
+	for _, sp := range rec {
+		if sp.Operation == "dist sender send" {
+			if !foundLocalityOptimizedRead {
+				foundLocalityOptimizedRead = true
+				attemptedLocalSearch = tracing.LogsContainMsg(sp, kvbase.RoutingRequestLocallyMsg)
+				for _, span := range rec {
+					if span.ParentSpanID == sp.SpanID {
+						if tracing.LogsContainMsg(span, kvbase.FollowerReadServingMsg) {
+							servedLocalUsingFollowerReads = true
+						}
+					}
+				}
+			} else if !foundRemoteRead {
+				foundRemoteRead = true
+				servedLocally := tracing.LogsContainMsg(sp, kvbase.RoutingRequestLocallyMsg)
+				// Check the child span to find out if the query was served using a
+				// follower read.
+				for _, span := range rec {
+					if span.ParentSpanID == sp.SpanID {
+						if tracing.LogsContainMsg(span, kvbase.FollowerReadServingMsg) {
+							servedRemoteUsingFollowerReads = true
+						}
+					}
+				}
+				if servedLocally && !servedRemoteUsingFollowerReads {
+					return "", errors.Newf(
+						"second query in REGIONAL BY ROW queries must only be local if it is a follower read",
+					)
+				}
+			} else {
+				return "", errors.Newf("found > 2 dist sender sends")
+			}
+		}
+	}
+
+	var output strings.Builder
+	output.WriteString(
+		fmt.Sprintf("attempted local search: %v\n", attemptedLocalSearch),
+	)
+	if attemptedLocalSearch {
+		output.WriteString(
+			fmt.Sprintf(
+				"served locality-optimized search via follower read: %v\n",
+				servedLocalUsingFollowerReads,
+			))
+	}
+	output.WriteString(
+		fmt.Sprintf("found in locality-optimized search: %v\n", !foundRemoteRead),
+	)
+	// Only print follower read information if the query was served locally.
+	if foundRemoteRead {
+		output.WriteString(
+			fmt.Sprintf(
+				"served remote read via follower read: %v\n",
+				servedRemoteUsingFollowerReads,
+			))
+	}
+
+	return output.String(), nil
 }
 
 // replicaPlacement keeps track of which nodes have what replica types for a
