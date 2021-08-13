@@ -40,7 +40,7 @@ lease_preferences = '[[+region=us-east-1]]'
 
 # Alter to RESTRICTED and see that we have no non-voter constraints.
 statement ok
-ALTER DATABASE testdb SET PLACEMENT RESTRICTED
+ALTER DATABASE testdb PLACEMENT RESTRICTED
 
 query TT
 SELECT partition_name, full_zone_config FROM [SHOW PARTITIONS FROM TABLE test]
@@ -133,7 +133,7 @@ lease_preferences = '[[+region=us-east-1]]'
 
 # Alter to DEFAULT and see that our constraints are back.
 statement ok
-ALTER DATABASE testdb SET PLACEMENT DEFAULT
+ALTER DATABASE testdb PLACEMENT DEFAULT
 
 # Check that coming back from placement restricted results in a valid zone
 # config.

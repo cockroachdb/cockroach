@@ -39,12 +39,12 @@ CREATE DATABASE to_be_restricted PRIMARY REGION "us-east-1"
 ----
 
 feature-usage
-ALTER DATABASE to_be_restricted SET PLACEMENT RESTRICTED
+ALTER DATABASE to_be_restricted PLACEMENT RESTRICTED
 ----
 sql.multiregion.alter_database.placement.restricted
 
 feature-usage
-ALTER DATABASE to_be_restricted SET PLACEMENT DEFAULT
+ALTER DATABASE to_be_restricted PLACEMENT DEFAULT
 ----
 sql.multiregion.alter_database.placement.default
 
