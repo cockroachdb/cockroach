@@ -725,6 +725,51 @@ func (db *DB) QueryResolvedTimestamp(
 	return r.ResolvedTS, nil
 }
 
+// ScanInterleavedIntents is a command that returns all interleaved intents
+// encountered in the request span. A resume span is returned if the entirety
+// of the request span was not scanned.
+func (db *DB) ScanInterleavedIntents(
+	ctx context.Context, begin, end interface{}, ts hlc.Timestamp,
+) ([]roachpb.Intent, *roachpb.Span, error) {
+	b := &Batch{Header: roachpb.Header{Timestamp: ts}}
+	b.scanInterleavedIntents(begin, end)
+	result, err := getOneResult(db.Run(ctx, b), b)
+	if err != nil {
+		return nil, nil, err
+	}
+	responses := b.response.Responses
+	if len(responses) == 0 {
+		return nil, nil, errors.Errorf("unexpected empty response for ScanInterleavedIntents")
+	}
+	resp, ok := responses[0].GetInner().(*roachpb.ScanInterleavedIntentsResponse)
+	if !ok {
+		return nil, nil, errors.Errorf("unexpected response of type %T for ScanInterleavedIntents",
+			responses[0].GetInner())
+	}
+	return resp.Intents, result.ResumeSpan, nil
+}
+
+// Barrier is a command that waits for conflicting operations such as earlier
+// writes on the specified key range to finish.
+func (db *DB) Barrier(ctx context.Context, begin, end interface{}) (hlc.Timestamp, error) {
+	b := &Batch{}
+	b.barrier(begin, end)
+	err := getOneErr(db.Run(ctx, b), b)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	responses := b.response.Responses
+	if len(responses) == 0 {
+		return hlc.Timestamp{}, errors.Errorf("unexpected empty response for Barrier")
+	}
+	resp, ok := responses[0].GetInner().(*roachpb.BarrierResponse)
+	if !ok {
+		return hlc.Timestamp{}, errors.Errorf("unexpected response of type %T for Barrier",
+			responses[0].GetInner())
+	}
+	return resp.Timestamp, nil
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.

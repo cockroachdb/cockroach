@@ -71,8 +71,8 @@ type JobDeps interface {
 	// if one exists.
 	GetMigration(key clusterversion.ClusterVersion) (Migration, bool)
 
-	// Cluster returns a handle to the cluster on a system tenant.
-	Cluster() Cluster
+	// SystemDeps returns a handle to migration dependencies on a system tenant.
+	SystemDeps() SystemDeps
 }
 
 type migration struct {

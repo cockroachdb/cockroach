@@ -112,7 +112,7 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 		storage.Attributes(spec.Attributes),
 		storage.CacheSize(cfg.CacheSize),
 		storage.MaxSize(spec.Size.InBytes),
-		storage.SettingsForTesting())
+		storage.ForTesting)
 
 	engineEntry := &stickyInMemEngine{
 		id:     spec.StickyInMemoryEngineID,

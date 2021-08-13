@@ -180,11 +180,6 @@ func (fw *SSTWriter) PutEngineKey(key EngineKey, value []byte) error {
 	return fw.fw.Set(fw.scratch, value)
 }
 
-// SafeToWriteSeparatedIntents implements the Writer interface.
-func (fw *SSTWriter) SafeToWriteSeparatedIntents(context.Context) (bool, error) {
-	return false, errors.Errorf("SSTWriter does not support SafeToWriteSeparatedIntents")
-}
-
 // put puts a kv entry into the sstable being built. An error is returned if it
 // is not greater than any previously added entry (according to the comparator
 // configured during writer creation). `Close` cannot have been called.

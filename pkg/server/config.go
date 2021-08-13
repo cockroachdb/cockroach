@@ -479,6 +479,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
 		cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck
+	disableSeparatedIntents := cfg.TestingKnobs.Store != nil &&
+		cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).StorageKnobs.DisableSeparatedIntents
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 		var sizeInBytes = spec.Size.InBytes
@@ -542,12 +544,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
 			storageConfig := base.StorageConfig{
-				Attrs:             spec.Attributes,
-				Dir:               spec.Path,
-				MaxSize:           sizeInBytes,
-				Settings:          cfg.Settings,
-				UseFileRegistry:   spec.UseFileRegistry,
-				EncryptionOptions: spec.EncryptionOptions,
+				Attrs:                   spec.Attributes,
+				Dir:                     spec.Path,
+				MaxSize:                 sizeInBytes,
+				Settings:                cfg.Settings,
+				UseFileRegistry:         spec.UseFileRegistry,
+				DisableSeparatedIntents: disableSeparatedIntents,
+				EncryptionOptions:       spec.EncryptionOptions,
 			}
 			pebbleConfig := storage.PebbleConfig{
 				StorageConfig: storageConfig,
