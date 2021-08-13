@@ -148,7 +148,14 @@ func initPGBuiltins() {
 	}
 
 	// Make crdb_internal.create_regfoo builtins.
-	for _, typ := range []*types.T{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {
+	for _, typ := range []*types.T{
+		types.RegClass,
+		types.RegNamespace,
+		types.RegProc,
+		types.RegProcedure,
+		types.RegRole,
+		types.RegType,
+	} {
 		typName := typ.SQLStandardName()
 		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(typ)
 	}

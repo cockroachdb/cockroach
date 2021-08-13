@@ -2054,6 +2054,7 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('regnamespace'::regtype, -1)),
        (format_type('regproc'::regtype, -1)),
        (format_type('regprocedure'::regtype, -1)),
+       (format_type('regrole'::regtype, -1)),
        (format_type('regtype'::regtype, -1)),
        (format_type('string'::regtype, -1)),
        (format_type('time'::regtype, -1)),
@@ -2097,6 +2098,7 @@ regclass
 regnamespace
 regproc
 regprocedure
+regrole
 regtype
 text
 time without time zone
