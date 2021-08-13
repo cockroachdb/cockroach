@@ -11,9 +11,11 @@ package utilccl
 import (
 	"strings"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/errors"
 )
 
 // IsDistSQLRetryableError returns true if the supplied error, or any of its parent
@@ -35,6 +37,11 @@ func IsDistSQLRetryableError(err error) bool {
 	return strings.Contains(errStr, `rpc error`)
 }
 
+// isBreakerOpenError returns true if err is a circuit.ErrBreakerOpen.
+func isBreakerOpenError(err error) bool {
+	return errors.Is(err, circuit.ErrBreakerOpen)
+}
+
 // IsPermanentBulkJobError returns true if the error results in a permanent
 // failure of a bulk job (IMPORT, BACKUP, RESTORE). This function is a allowlist
 // instead of a blocklist: only known safe errors are confirmed to not be
@@ -47,5 +54,6 @@ func IsPermanentBulkJobError(err error) bool {
 	return !IsDistSQLRetryableError(err) &&
 		!grpcutil.IsClosedConnection(err) &&
 		!flowinfra.IsNoInboundStreamConnectionError(err) &&
-		!kvcoord.IsSendError(err)
+		!kvcoord.IsSendError(err) &&
+		!isBreakerOpenError(err)
 }
