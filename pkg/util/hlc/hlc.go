@@ -172,6 +172,14 @@ func (m *HybridManualClock) Pause() {
 	m.mu.Unlock()
 }
 
+// Resume resumes the hybrid manual clock; the passage of time continues to
+// cause clock to tick.
+func (m *HybridManualClock) Resume() {
+	m.mu.Lock()
+	m.mu.nanosAtPause = 0
+	m.mu.Unlock()
+}
+
 // UnixNano returns the local machine's physical nanosecond
 // unix epoch timestamp as a convenience to create a HLC via
 // c := hlc.NewClock(hlc.UnixNano, ...).
