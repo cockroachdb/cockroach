@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -41,32 +42,37 @@ type Connector interface {
 	// Start starts the connector.
 	Start(context.Context) error
 
-	// Connector is capable of providing information on each of the KV nodes in
-	// the cluster in the form of NodeDescriptors. This obviates the need for
-	// SQL-only tenant processes to join the cluster-wide gossip network.
+	// NodeDescStore provides information on each of the KV nodes in the cluster
+	// in the form of NodeDescriptors. This obviates the need for SQL-only
+	// tenant processes to join the cluster-wide gossip network.
 	kvcoord.NodeDescStore
 
-	// Connector is capable of providing Range addressing information in the
-	// form of RangeDescriptors through delegated RangeLookup requests. This is
+	// RangeDescriptorDB provides range addressing information in the form of
+	// RangeDescriptors through delegated RangeLookup requests. This is
 	// necessary because SQL-only tenants are restricted from reading Range
 	// Metadata keys directly. Instead, the RangeLookup requests are proxied
 	// through existing KV nodes while being subject to additional validation
 	// (e.g. is the Range being requested owned by the requesting tenant?).
 	rangecache.RangeDescriptorDB
 
-	// Connector is capable of providing a filtered view of the SystemConfig
+	// SystemConfigProvider provides a filtered view of the SystemConfig
 	// containing only information applicable to secondary tenants. This
 	// obviates the need for SQL-only tenant processes to join the cluster-wide
 	// gossip network.
 	config.SystemConfigProvider
 
-	// Connector is capable of knowing every region in the cluster.
-	// This is necessary for region validation for zone configurations and
-	// multi-region primitives.
+	// RegionsServer provides access to a tenant's available regions. This is
+	// necessary for region validation for zone configurations and multi-region
+	// primitives.
 	serverpb.RegionsServer
 
-	// Connector is capable of providing an endpoint for the TokenBucket API.
+	// TokenBucketProvider provides access to the tenant cost control token
+	// bucket.
 	TokenBucketProvider
+
+	// KVAccessor provides access to the subset of the cluster's span configs
+	// applicable to secondary tenants.
+	spanconfig.KVAccessor
 }
 
 // TokenBucketProvider supplies an endpoint (to tenants) for the TokenBucket API

@@ -1628,3 +1628,13 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 		c.SQLPodsCPUSeconds -= other.SQLPodsCPUSeconds
 	}
 }
+
+// Unnest is a convenience method to return the slice-of-slices form of
+// GetSpanConfigsResponse.
+func (g *GetSpanConfigsResponse) Unnest() [][]SpanConfigEntry {
+	var ret [][]SpanConfigEntry
+	for _, result := range g.Results {
+		ret = append(ret, result.SpanConfigs)
+	}
+	return ret
+}
