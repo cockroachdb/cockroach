@@ -159,7 +159,7 @@ func TestMetricsRecorder(t *testing.T) {
 	// Generate Metrics Data & Expected Results
 	// ========================================
 
-	// Flatten the four registries into an array for ease of use.
+	// Unnest the four registries into an array for ease of use.
 	regList := []struct {
 		reg    *metric.Registry
 		prefix string

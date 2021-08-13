@@ -1534,7 +1534,9 @@ system              public             primary                                  
 system              public             630200280_47_1_not_null                                                              system         public        span_configurations              CHECK            NO             NO
 system              public             630200280_47_2_not_null                                                              system         public        span_configurations              CHECK            NO             NO
 system              public             630200280_47_3_not_null                                                              system         public        span_configurations              CHECK            NO             NO
+system              public             check_bounds                                                                         system         public        span_configurations              CHECK            NO             NO
 system              public             primary                                                                              system         public        span_configurations              PRIMARY KEY      NO             NO
+system              public             end_key_idx                                                                          system         public        span_configurations              UNIQUE           NO             NO
 system              public             630200280_46_1_not_null                                                              system         public        sql_instances                    CHECK            NO             NO
 system              public             primary                                                                              system         public        sql_instances                    PRIMARY KEY      NO             NO
 system              public             630200280_39_1_not_null                                                              system         public        sqlliveness                      CHECK            NO             NO
@@ -1764,6 +1766,7 @@ system              public             630200280_6_2_not_null                   
 system              public             630200280_6_3_not_null                                                               lastUpdated IS NOT NULL
 system              public             630200280_8_1_not_null                                                               id IS NOT NULL
 system              public             630200280_8_2_not_null                                                               active IS NOT NULL
+system              public             check_bounds                                                                         ((start_key < end_key))
 system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8  ((crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)))
 system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8            ((crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)))
 system              public             check_singleton                                                                      ((singleton))
@@ -1818,6 +1821,9 @@ system         public        role_options                     option            
 system         public        role_options                     username                                                                       system              public             primary
 system         public        scheduled_jobs                   schedule_id                                                                    system              public             primary
 system         public        settings                         name                                                                           system              public             primary
+system         public        span_configurations              end_key                                                                        system              public             check_bounds
+system         public        span_configurations              end_key                                                                        system              public             end_key_idx
+system         public        span_configurations              start_key                                                                      system              public             check_bounds
 system         public        span_configurations              start_key                                                                      system              public             primary
 system         public        sql_instances                    id                                                                             system              public             primary
 system         public        sqlliveness                      session_id                                                                     system              public             primary
