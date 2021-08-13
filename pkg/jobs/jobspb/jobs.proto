@@ -708,8 +708,10 @@ message Payload {
     MigrationDetails migration = 25;
   }
   reserved 26;
-
-  // NEXT ID: 27.
+  // pause_reason is used to describe the reason that the job is currently paused or has been requested
+  // to be paused.
+  string pause_reason = 27;
+  // NEXT ID: 28.
 }
 
 message Progress {

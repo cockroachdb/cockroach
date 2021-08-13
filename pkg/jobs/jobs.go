@@ -519,6 +519,8 @@ func (j *Job) PauseRequested(ctx context.Context, txn *kv.Txn, fn onPauseRequest
 			ju.UpdateProgress(md.Progress)
 		}
 		ju.UpdateStatus(StatusPauseRequested)
+		md.Payload.PauseReason = reason
+		ju.UpdatePayload(md.Payload)
 		log.Infof(ctx, "job %d: pause requested recorded with reason %s", j.ID(), reason)
 		return nil
 	})
