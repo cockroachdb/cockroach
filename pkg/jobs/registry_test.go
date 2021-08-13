@@ -441,7 +441,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	) {
 		assert.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			if pauseJob {
-				return registry.PauseRequested(ctx, txn, jobID)
+				return registry.PauseRequested(ctx, txn, jobID, "")
 			}
 			return registry.CancelRequested(ctx, txn, jobID)
 		}))
