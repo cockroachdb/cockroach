@@ -579,8 +579,6 @@ func (b *Builder) buildScan(
 
 	// Add the partial indexes after constructing the scan so we can use the
 	// logical properties of the scan to fully normalize the index predicates.
-	// We don't need to add deletable partial index predicates in the context of
-	// a scan.
 	b.addPartialIndexPredicatesForTable(tabMeta, outScope.expr)
 
 	if !virtualColIDs.Empty() {
