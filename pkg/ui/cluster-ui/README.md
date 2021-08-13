@@ -255,6 +255,8 @@ info npm email: xxxxxxxx@xxxxx.zzz
 ✨  Done in 0.05s.
 ```
 
+TODO(celia) -- do I need to go into the `pkg/ui` folder before doing the step below?
+  
 Once you have authenticated, you will run the publish command like so
 
 ```shell
