@@ -286,35 +286,20 @@ func (desc *Mutable) MaybeIncrementVersion() {
 	desc.ModificationTime = hlc.Timestamp{}
 }
 
-// OriginalName implements the MutableDescriptor interface.
-func (desc *Mutable) OriginalName() string {
-	if desc.ClusterVersion == nil {
-		return ""
-	}
-	return desc.ClusterVersion.Name
-}
-
-// OriginalID implements the MutableDescriptor interface.
-func (desc *Mutable) OriginalID() descpb.ID {
-	if desc.ClusterVersion == nil {
-		return descpb.InvalidID
-	}
-	return desc.ClusterVersion.ID
-}
-
-// OriginalVersion implements the MutableDescriptor interface.
-func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
-	if desc.ClusterVersion == nil {
-		return 0
-	}
-	return desc.ClusterVersion.Version
-}
-
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	imm := NewBuilder(desc.TypeDesc()).BuildImmutableType()
 	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
 	return imm
+}
+
+// ImmutableCopyOfOriginalVersion implements the MutableDescriptor interface.
+func (desc *Mutable) ImmutableCopyOfOriginalVersion() catalog.Descriptor {
+	if desc.ClusterVersion == nil {
+		empty := descpb.TypeDescriptor{}
+		return NewBuilder(&empty).BuildImmutable()
+	}
+	return NewBuilder(desc.ClusterVersion.TypeDesc()).BuildImmutable()
 }
 
 // IsNew implements the MutableDescriptor interface.

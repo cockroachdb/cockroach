@@ -1861,6 +1861,11 @@ func (t *T) Identical(other *T) bool {
 
 // Equal is for use in generated protocol buffer code only.
 func (t *T) Equal(other *T) bool {
+	if t == nil {
+		return other == nil
+	} else if other == nil {
+		return false
+	}
 	return t.Identical(other)
 }
 

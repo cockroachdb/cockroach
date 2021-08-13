@@ -29,12 +29,12 @@ type MutableDescriptor interface {
 	// SetDrainingNames sets the draining names for the descriptor.
 	SetDrainingNames([]descpb.NameInfo)
 
-	// Accessors for the original state of the descriptor prior to the mutations.
-	OriginalName() string
-	OriginalID() descpb.ID
-	OriginalVersion() descpb.DescriptorVersion
 	// ImmutableCopy returns an immutable copy of this descriptor.
 	ImmutableCopy() Descriptor
+	// ImmutableCopyOfOriginalVersion returns an immutable copy of the original
+	// version of this descriptor.
+	ImmutableCopyOfOriginalVersion() Descriptor
+
 	// IsNew returns whether the descriptor was created in this transaction.
 	IsNew() bool
 

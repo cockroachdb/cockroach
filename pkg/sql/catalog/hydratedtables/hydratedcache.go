@@ -41,7 +41,7 @@ import (
 // The cache's contract is a bit tricky. In order to use a hydrated type, the
 // caller needs to have a lease on the relevant type descriptor. The way that
 // this is made to work is that the user provides a handle to a leased
-// ImmutableCopy and then the cache will call through to type resolver for each
+// descriptor and then the cache will call through to type resolver for each
 // of the referenced types which ensures that user always uses properly leased
 // descriptors. While all of the types will need to be resolved, they should
 // already be cached so, in this way, this cache prevents the need to copy
@@ -132,7 +132,7 @@ type cachedType struct {
 	typDesc catalog.TypeDescriptor
 }
 
-// GetHydratedTableDescriptor returns an ImmutableCopy with the types
+// GetHydratedTableDescriptor returns a table descriptor with the types
 // hydrated. It may use a cached copy but all of the relevant type descriptors
 // will be retrieved via the TypeDescriptorResolver. Note that if the table
 // descriptor is modified, nil will be returned. If any of the types used by

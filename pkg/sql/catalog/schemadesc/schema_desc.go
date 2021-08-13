@@ -65,7 +65,7 @@ func formatSafeMessage(typeName string, desc catalog.SchemaDescriptor) string {
 //
 // Note: Today this isn't actually ever mutated but rather exists for a future
 // where we anticipate having a mutable copy of Schema descriptors. There's a
-// large amount of space to question this `Mutable|ImmutableCopy` version of each
+// large amount of space to question this `Mutable|immutable` version of each
 // descriptor type. Maybe it makes no sense but we're running with it for the
 // moment. This is an intermediate state on the road to descriptors being
 // handled outside of the catalog entirely as interfaces.
@@ -217,35 +217,20 @@ func (desc *Mutable) MaybeIncrementVersion() {
 	desc.ModificationTime = hlc.Timestamp{}
 }
 
-// OriginalName implements the MutableDescriptor interface.
-func (desc *Mutable) OriginalName() string {
-	if desc.ClusterVersion == nil {
-		return ""
-	}
-	return desc.ClusterVersion.Name
-}
-
-// OriginalID implements the MutableDescriptor interface.
-func (desc *Mutable) OriginalID() descpb.ID {
-	if desc.ClusterVersion == nil {
-		return descpb.InvalidID
-	}
-	return desc.ClusterVersion.ID
-}
-
-// OriginalVersion implements the MutableDescriptor interface.
-func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
-	if desc.ClusterVersion == nil {
-		return 0
-	}
-	return desc.ClusterVersion.Version
-}
-
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	imm := NewBuilder(desc.SchemaDesc()).BuildImmutable()
 	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
 	return imm
+}
+
+// ImmutableCopyOfOriginalVersion implements the MutableDescriptor interface.
+func (desc *Mutable) ImmutableCopyOfOriginalVersion() catalog.Descriptor {
+	if desc.ClusterVersion == nil {
+		empty := descpb.SchemaDescriptor{}
+		return NewBuilder(&empty).BuildImmutable()
+	}
+	return NewBuilder(desc.ClusterVersion.SchemaDesc()).BuildImmutable()
 }
 
 // IsNew implements the MutableDescriptor interface.

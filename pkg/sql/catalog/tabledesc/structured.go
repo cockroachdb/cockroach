@@ -963,21 +963,6 @@ func (desc *Mutable) MaybeIncrementVersion() {
 	desc.ModificationTime = hlc.Timestamp{}
 }
 
-// OriginalName implements the MutableDescriptor interface.
-func (desc *Mutable) OriginalName() string {
-	return desc.ClusterVersion.Name
-}
-
-// OriginalID implements the MutableDescriptor interface.
-func (desc *Mutable) OriginalID() descpb.ID {
-	return desc.ClusterVersion.ID
-}
-
-// OriginalVersion implements the MutableDescriptor interface.
-func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
-	return desc.ClusterVersion.Version
-}
-
 // FormatTableLocalityConfig formats the table locality.
 func FormatTableLocalityConfig(c *descpb.TableDescriptor_LocalityConfig, f *tree.FmtCtx) error {
 	switch v := c.Locality.(type) {
@@ -2113,7 +2098,6 @@ func (desc *Mutable) addMutation(m descpb.DescriptorMutation) {
 func (desc *wrapper) MakeFirstMutationPublic(
 	includeConstraints catalog.MutationPublicationFilter,
 ) (catalog.TableDescriptor, error) {
-	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
 	table := NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
 	mutationID := desc.Mutations[0].MutationID
 	i := 0
@@ -2138,9 +2122,9 @@ func (desc *wrapper) MakeFirstMutationPublic(
 	return table, nil
 }
 
-// MakePublic creates a Mutable from the immutable by making the it public.
+// MakePublic returns this table descriptor as a Mutable with the state set to
+// PUBLIC.
 func (desc *wrapper) MakePublic() catalog.TableDescriptor {
-	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
 	table := NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
 	table.State = descpb.DescriptorState_PUBLIC
 	table.Version++
