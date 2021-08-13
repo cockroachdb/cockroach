@@ -11,9 +11,14 @@
 package row
 
 import (
+	"context"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -21,7 +26,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
+
+const (
+	// maxRowSizeFloor is the lower bound for sql.mutations.max_row_size.{log|err}.
+	maxRowSizeFloor = 1 << 10
+	// maxRowSizeCeil is the upper bound for sql.mutations.max_row_size.{log|err}.
+	maxRowSizeCeil = 512 << 20
+)
+
+var maxRowSizeLog = settings.RegisterByteSizeSetting(
+	"sql.mutations.max_row_size.log",
+	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
+		"write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF "+
+		"if the mutating statement was internal); setting to 0 disables large row logging",
+	kvserver.MaxCommandSizeDefault,
+	func(size int64) error {
+		if size != 0 && size < maxRowSizeFloor {
+			return fmt.Errorf(
+				"cannot set sql.mutations.max_row_size.log to %v, must be 0 or >= %v",
+				size, maxRowSizeFloor,
+			)
+		} else if size > maxRowSizeCeil {
+			return fmt.Errorf(
+				"cannot set sql.mutations.max_row_size.log to %v, must be <= %v",
+				size, maxRowSizeCeil,
+			)
+		}
+		return nil
+	},
+).WithPublic()
 
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
@@ -41,12 +77,20 @@ type rowHelper struct {
 	primaryIndexKeyCols   catalog.TableColSet
 	primaryIndexValueCols catalog.TableColSet
 	sortedColumnFamilies  map[descpb.FamilyID][]descpb.ColumnID
+
+	// Used to check row size.
+	maxRowSizeLog uint32
+	internal      bool
 }
 
 func newRowHelper(
-	codec keys.SQLCodec, desc catalog.TableDescriptor, indexes []catalog.Index,
+	codec keys.SQLCodec,
+	desc catalog.TableDescriptor,
+	indexes []catalog.Index,
+	sv *settings.Values,
+	internal bool,
 ) rowHelper {
-	rh := rowHelper{Codec: codec, TableDesc: desc, Indexes: indexes}
+	rh := rowHelper{Codec: codec, TableDesc: desc, Indexes: indexes, internal: internal}
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
@@ -56,6 +100,8 @@ func newRowHelper(
 	for i := range rh.Indexes {
 		rh.secIndexValDirs[i] = catalogkeys.IndexKeyValDirs(rh.Indexes[i])
 	}
+
+	rh.maxRowSizeLog = uint32(maxRowSizeLog.Get(sv))
 
 	return rh
 }
@@ -168,4 +214,38 @@ func (rh *rowHelper) sortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnI
 	}
 	colIDs, ok := rh.sortedColumnFamilies[famID]
 	return colIDs, ok
+}
+
+func (rh *rowHelper) checkRowSize(
+	ctx context.Context,
+	key *roachpb.Key,
+	value *roachpb.Value,
+	primIndex bool,
+	secIndex int,
+	family descpb.FamilyID,
+) error {
+	size := uint32(len(*key)) + uint32(len(value.RawBytes))
+	if rh.maxRowSizeLog != 0 && size > rh.maxRowSizeLog {
+		valDirs := rh.primIndexValDirs
+		index := rh.TableDesc.GetPrimaryIndex()
+		if !primIndex {
+			valDirs = rh.secIndexValDirs[secIndex]
+			index = rh.Indexes[secIndex]
+		}
+		details := eventpb.CommonLargeRowDetails{
+			RowSize:  size,
+			TableID:  uint32(rh.TableDesc.GetID()),
+			IndexID:  uint32(index.GetID()),
+			FamilyID: uint32(family),
+			Key:      keys.PrettyPrint(valDirs, *key),
+		}
+		var event eventpb.EventPayload
+		if rh.internal {
+			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
+		} else {
+			event = &eventpb.LargeRow{CommonLargeRowDetails: details}
+		}
+		log.StructuredEvent(ctx, event)
+	}
+	return nil
 }

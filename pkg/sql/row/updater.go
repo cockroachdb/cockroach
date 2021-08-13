@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -83,6 +84,8 @@ func MakeUpdater(
 	requestedCols []catalog.Column,
 	updateType rowUpdaterType,
 	alloc *rowenc.DatumAlloc,
+	sv *settings.Values,
+	internal bool,
 ) (Updater, error) {
 	if requestedCols == nil {
 		return Updater{}, errors.AssertionFailedf("requestedCols is nil in MakeUpdater")
@@ -157,12 +160,12 @@ func MakeUpdater(
 
 	var deleteOnlyHelper *rowHelper
 	if len(deleteOnlyIndexes) > 0 {
-		rh := newRowHelper(codec, tableDesc, deleteOnlyIndexes)
+		rh := newRowHelper(codec, tableDesc, deleteOnlyIndexes, sv, internal)
 		deleteOnlyHelper = &rh
 	}
 
 	ru := Updater{
-		Helper:                newRowHelper(codec, tableDesc, includeIndexes),
+		Helper:                newRowHelper(codec, tableDesc, includeIndexes, sv, internal),
 		DeleteHelper:          deleteOnlyHelper,
 		FetchCols:             requestedCols,
 		FetchColIDtoRowIndex:  ColIDtoRowIndexFromCols(requestedCols),
@@ -177,9 +180,9 @@ func MakeUpdater(
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
 		var err error
-		ru.rd = MakeDeleter(codec, tableDesc, requestedCols)
+		ru.rd = MakeDeleter(codec, tableDesc, requestedCols, sv, internal)
 		if ru.ri, err = MakeInserter(
-			ctx, txn, codec, tableDesc, requestedCols, alloc,
+			ctx, txn, codec, tableDesc, requestedCols, alloc, sv, internal,
 		); err != nil {
 			return Updater{}, err
 		}
@@ -395,6 +398,11 @@ func (ru *Updater) UpdateRow(
 			// insert that new k/v.
 			for oldIdx < len(oldEntries) && newIdx < len(newEntries) {
 				oldEntry, newEntry := &oldEntries[oldIdx], &newEntries[newIdx]
+				if err := ru.Helper.checkRowSize(
+					ctx, &newEntry.Key, &newEntry.Value, false /* primIndex */, i, newEntry.Family,
+				); err != nil {
+					return nil, err
+				}
 				if oldEntry.Family == newEntry.Family {
 					// If the families are equal, then check if the keys have changed. If so, delete the old key.
 					// Then, issue a CPut for the new value of the key if the value has changed.

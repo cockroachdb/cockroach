@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -41,7 +42,11 @@ type Deleter struct {
 // FetchCols; otherwise, all columns that are part of the key of any index
 // (either primary or secondary) are included in FetchCols.
 func MakeDeleter(
-	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, requestedCols []catalog.Column,
+	codec keys.SQLCodec,
+	tableDesc catalog.TableDescriptor,
+	requestedCols []catalog.Column,
+	sv *settings.Values,
+	internal bool,
 ) Deleter {
 	indexes := tableDesc.DeletableNonPrimaryIndexes()
 
@@ -86,7 +91,7 @@ func MakeDeleter(
 	}
 
 	rd := Deleter{
-		Helper:               newRowHelper(codec, tableDesc, indexes),
+		Helper:               newRowHelper(codec, tableDesc, indexes, sv, internal),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
