@@ -1423,8 +1423,17 @@ func runExportToSst(
 	for i := 0; i < b.N; i++ {
 		startTS := hlc.Timestamp{WallTime: int64(numRevisions / 2)}
 		endTS := hlc.Timestamp{WallTime: int64(numRevisions + 2)}
-		_, _, _, err := engine.ExportMVCCToSst(context.Background(), keys.LocalMax, roachpb.KeyMax, startTS, endTS, hlc.Timestamp{},
-			exportAllRevisions, 0 /* targetSize */, 0 /* maxSize */, false, useTBI, noopWriter{})
+		_, _, _, err := engine.ExportMVCCToSst(context.Background(), ExportOptions{
+			StartKey:           MVCCKey{Key: keys.LocalMax},
+			EndKey:             roachpb.KeyMax,
+			StartTS:            startTS,
+			EndTS:              endTS,
+			ExportAllRevisions: exportAllRevisions,
+			TargetSize:         0,
+			MaxSize:            0,
+			StopMidKey:         false,
+			UseTBI:             useTBI,
+		}, noopWriter{})
 		if err != nil {
 			b.Fatal(err)
 		}
