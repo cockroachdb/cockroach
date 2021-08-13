@@ -61,6 +61,7 @@ const (
 	backupOptEncKMS             = "kms"
 	backupOptWithPrivileges     = "privileges"
 	backupOptAsJSON             = "as_json"
+	backupOptDebugMetadataSST   = "debug_dump_metadata_sst"
 	backupOptWithDebugIDs       = "debug_ids"
 	localityURLParam            = "COCKROACH_LOCALITY"
 	defaultLocalityValue        = "default"

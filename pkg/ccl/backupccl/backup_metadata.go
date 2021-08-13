@@ -379,13 +379,45 @@ func descID(in descpb.Descriptor) descpb.ID {
 	}
 }
 
+func deprefix(key roachpb.Key, prefix string) (roachpb.Key, error) {
+	if !bytes.HasPrefix(key, []byte(prefix)) {
+		return nil, errors.Errorf("malformed key missing expected prefix %s: %q", prefix, key)
+	}
+	return key[len(prefix):], nil
+}
+
 func encodeDescSSTKey(id descpb.ID) roachpb.Key {
 	return roachpb.Key(encoding.EncodeUvarintAscending([]byte(sstDescsPrefix), uint64(id)))
+}
+
+func decodeDescSSTKey(key roachpb.Key) (descpb.ID, error) {
+	key, err := deprefix(key, sstDescsPrefix)
+	if err != nil {
+		return 0, err
+	}
+	_, id, err := encoding.DecodeUvarintAscending(key)
+	return descpb.ID(id), err
 }
 
 func encodeFileSSTKey(spanStart roachpb.Key, filename string) roachpb.Key {
 	buf := encoding.EncodeBytesAscending([]byte(sstFilesPrefix), spanStart)
 	return roachpb.Key(encoding.EncodeStringAscending(buf, filename))
+}
+
+func decodeUnsafeFileSSTKey(key roachpb.Key) (roachpb.Key, string, error) {
+	key, err := deprefix(key, sstFilesPrefix)
+	if err != nil {
+		return nil, "", err
+	}
+	key, spanStart, err := encoding.DecodeBytesAscending(key, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	_, filename, err := encoding.DecodeUnsafeStringAscending(key, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	return roachpb.Key(spanStart), filename, err
 }
 
 func encodeNameSSTKey(parentDB, parentSchema descpb.ID, name string) roachpb.Key {
@@ -395,9 +427,42 @@ func encodeNameSSTKey(parentDB, parentSchema descpb.ID, name string) roachpb.Key
 	return roachpb.Key(encoding.EncodeStringAscending(buf, name))
 }
 
+func decodeUnsafeNameSSTKey(key roachpb.Key) (descpb.ID, descpb.ID, string, error) {
+	key, err := deprefix(key, sstNamesPrefix)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	key, parentID, err := encoding.DecodeUvarintAscending(key)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	key, schemaID, err := encoding.DecodeUvarintAscending(key)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	_, name, err := encoding.DecodeUnsafeStringAscending(key, nil)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	return descpb.ID(parentID), descpb.ID(schemaID), name, nil
+}
+
 func encodeSpanSSTKey(span roachpb.Span) roachpb.Key {
 	buf := encoding.EncodeBytesAscending([]byte(sstSpansPrefix), span.Key)
 	return roachpb.Key(encoding.EncodeBytesAscending(buf, span.EndKey))
+}
+
+func decodeSpanSSTKey(key roachpb.Key) (roachpb.Span, error) {
+	key, err := deprefix(key, sstSpansPrefix)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
+	key, start, err := encoding.DecodeBytesAscending(key, nil)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
+	_, end, err := encoding.DecodeBytesAscending(key, nil)
+	return roachpb.Span{Key: start, EndKey: end}, err
 }
 
 func encodeStatSSTKey(id descpb.ID, statID uint64) roachpb.Key {
@@ -405,7 +470,174 @@ func encodeStatSSTKey(id descpb.ID, statID uint64) roachpb.Key {
 	return roachpb.Key(encoding.EncodeUvarintAscending(buf, statID))
 }
 
+func decodeStatSSTKey(key roachpb.Key) (descpb.ID, uint64, error) {
+	key, err := deprefix(key, sstStatsPrefix)
+	if err != nil {
+		return 0, 0, err
+	}
+	key, id, err := encoding.DecodeUvarintAscending(key)
+	if err != nil {
+		return 0, 0, err
+	}
+	_, stat, err := encoding.DecodeUvarintAscending(key)
+	return descpb.ID(id), stat, err
+}
+
 func encodeTenantSSTKey(id uint64) roachpb.Key {
 	return encoding.EncodeUvarintAscending([]byte(sstTenantsPrefix), id)
 }
 
+func decodeTenantSSTKey(key roachpb.Key) (uint64, error) {
+	key, err := deprefix(key, sstTenantsPrefix)
+	if err != nil {
+		return 0, err
+	}
+	_, id, err := encoding.DecodeUvarintAscending(key)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func pbBytesToJSON(in []byte, msg protoutil.Message) (json.JSON, error) {
+	if err := protoutil.Unmarshal(in, msg); err != nil {
+		return nil, err
+	}
+	j, err := protoreflect.MessageToJSON(msg, false)
+	if err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+// DebugDumpMetadataSST is for debugging a metadata SST.
+func DebugDumpMetadataSST(
+	ctx context.Context,
+	store cloud.ExternalStorage,
+	path string,
+	enc *jobspb.BackupEncryptionOptions,
+	out func(rawKey, readableKey string, value json.JSON) error,
+) error {
+	var encOpts *roachpb.FileEncryptionOptions
+	if enc != nil {
+		key, err := getEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
+		if err != nil {
+			return err
+		}
+		encOpts = &roachpb.FileEncryptionOptions{Key: key}
+	}
+
+	iter, err := storageccl.ExternalSSTReader(ctx, store, path, encOpts)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	for iter.SeekGE(storage.MVCCKey{}); ; iter.Next() {
+		ok, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+		k := iter.UnsafeKey()
+		switch {
+		case bytes.Equal(k.Key, []byte(sstBackupKey)):
+			info, err := pbBytesToJSON(iter.UnsafeValue(), &BackupManifest{})
+			if err != nil {
+				return err
+			}
+			if err := out(k.String(), "backup info", info); err != nil {
+				return err
+			}
+
+		case bytes.HasPrefix(k.Key, []byte(sstDescsPrefix)):
+			id, err := decodeDescSSTKey(k.Key)
+			if err != nil {
+				return err
+			}
+			var desc json.JSON
+			if v := iter.UnsafeValue(); len(v) > 0 {
+				desc, err = pbBytesToJSON(v, &descpb.Descriptor{})
+				if err != nil {
+					return err
+				}
+			}
+			if err := out(k.String(), fmt.Sprintf("desc %d @ %v", id, k.Timestamp), desc); err != nil {
+				return err
+			}
+
+		case bytes.HasPrefix(k.Key, []byte(sstFilesPrefix)):
+			spanStart, path, err := decodeUnsafeFileSSTKey(k.Key)
+			if err != nil {
+				return err
+			}
+			f, err := pbBytesToJSON(iter.UnsafeValue(), &BackupManifest_File{})
+			if err != nil {
+				return err
+			}
+			if err := out(k.String(), fmt.Sprintf("file %s (%s)", path, spanStart.String()), f); err != nil {
+				return err
+			}
+		case bytes.HasPrefix(k.Key, []byte(sstNamesPrefix)):
+			db, sc, name, err := decodeUnsafeNameSSTKey(k.Key)
+			if err != nil {
+				return err
+			}
+			var id uint64
+			if v := iter.UnsafeValue(); len(v) > 0 {
+				_, id, err = encoding.DecodeUvarintAscending(v)
+				if err != nil {
+					return err
+				}
+			}
+			mapping := fmt.Sprintf("name db %d / schema %d / %q @ %v -> %d", db, sc, name, k.Timestamp, id)
+			if err := out(k.String(), mapping, nil); err != nil {
+				return err
+			}
+
+		case bytes.HasPrefix(k.Key, []byte(sstSpansPrefix)):
+			span, err := decodeSpanSSTKey(k.Key)
+			if err != nil {
+				return err
+			}
+			if err := out(k.String(), fmt.Sprintf("span %s @ %v", span, k.Timestamp), nil); err != nil {
+				return err
+			}
+
+		case bytes.HasPrefix(k.Key, []byte(sstStatsPrefix)):
+			tblID, statID, err := decodeStatSSTKey(k.Key)
+			if err != nil {
+				return err
+			}
+			s, err := pbBytesToJSON(iter.UnsafeValue(), &stats.TableStatisticProto{})
+			if err != nil {
+				return err
+			}
+			if err := out(k.String(), fmt.Sprintf("stats tbl %d, id %d", tblID, statID), s); err != nil {
+				return err
+			}
+
+		case bytes.HasPrefix(k.Key, []byte(sstTenantsPrefix)):
+			id, err := decodeTenantSSTKey(k.Key)
+			if err != nil {
+				return err
+			}
+			i, err := pbBytesToJSON(iter.UnsafeValue(), &descpb.TenantInfo{})
+			if err != nil {
+				return err
+			}
+			if err := out(k.String(), fmt.Sprintf("tenant %d", id), i); err != nil {
+				return err
+			}
+
+		default:
+			if err := out(k.String(), "unknown", json.FromString(fmt.Sprintf("%q", iter.UnsafeValue()))); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
