@@ -715,7 +715,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 		var explainVec []string
 		var explainVecVerbose []string
 		if planner.instrumentation.collectBundle && planner.curPlan.flags.IsSet(planFlagVectorized) {
-			flowCtx := newFlowCtxForExplainPurposes(p, planner, &planner.extendedEvalCtx.DistSQLPlanner.rpcCtx.ClusterID)
+			flowCtx := newFlowCtxForExplainPurposes(p, planner)
 			getExplain := func(verbose bool) []string {
 				explain, err := colflow.ExplainVec(
 					ctx, flowCtx, flows, p.infra.LocalProcessors, opChains,
