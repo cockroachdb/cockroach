@@ -175,8 +175,9 @@ var validationMap = []struct {
 			"DefaultExpr": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
-			"Hidden":       {status: iSolemnlySwearThisFieldIsValidated},
-			"Inaccessible": {status: iSolemnlySwearThisFieldIsValidated},
+			"Hidden":            {status: iSolemnlySwearThisFieldIsValidated},
+			"Inaccessible":      {status: iSolemnlySwearThisFieldIsValidated},
+			"GeneratedAsIdType": {status: iSolemnlySwearThisFieldIsValidated},
 			"UsesSequenceIds": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},

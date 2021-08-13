@@ -11,6 +11,7 @@
 package cat
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -35,6 +36,7 @@ type Column struct {
 	defaultExpr                 string
 	computedExpr                string
 	invertedSourceColumnOrdinal int
+	generatedAsIdentityType     descpb.GeneratedAsIdentityType
 }
 
 // Ordinal returns the position of the column in its table. The following always
@@ -189,6 +191,13 @@ func MaybeHidden(hidden bool) ColumnVisibility {
 	return Visible
 }
 
+// GetGeneratedAsIdentityType returns how
+// the creation of this column is associated with
+// the GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY token.
+func (c *Column) GetGeneratedAsIdentityType() descpb.GeneratedAsIdentityType {
+	return c.generatedAsIdentityType
+}
+
 // Init is used by catalog implementations to populate a non-inverted and
 // non-virtual Column. It should not be used anywhere else.
 func (c *Column) Init(
@@ -201,6 +210,7 @@ func (c *Column) Init(
 	visibility ColumnVisibility,
 	defaultExpr *string,
 	computedExpr *string,
+	generatedAsIDType descpb.GeneratedAsIdentityType,
 ) {
 	if kind == Inverted {
 		panic(errors.AssertionFailedf("incorrect init method"))
@@ -219,6 +229,7 @@ func (c *Column) Init(
 		nullable:                    nullable,
 		visibility:                  visibility,
 		invertedSourceColumnOrdinal: -1,
+		generatedAsIdentityType:     generatedAsIDType,
 	}
 	if defaultExpr != nil {
 		c.defaultExpr = *defaultExpr
