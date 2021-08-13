@@ -22,7 +22,7 @@ SELECT * FROM db.rbt WHERE k = 1
 served locally: true
 served via follower read: false
 
-refresh-range-descriptor-cache idx=1 table-name=rbt
+refresh-range-descriptor-cache db-name=db idx=1 table-name=rbt
 SELECT * FROM db.rbt WHERE k = 1
 ----
 LAG_BY_CLUSTER_SETTING
@@ -32,7 +32,7 @@ SELECT * FROM db.rbt WHERE k = 1
 ----
 served locally: false
 
-refresh-range-descriptor-cache idx=2 table-name=rbt
+refresh-range-descriptor-cache db-name=db idx=2 table-name=rbt
 SELECT * FROM db.rbt WHERE k = 2
 ----
 LAG_BY_CLUSTER_SETTING
@@ -46,7 +46,7 @@ served locally: false
 sleep-for-follower-read
 ----
 
-refresh-range-descriptor-cache idx=3 table-name=rbt
+refresh-range-descriptor-cache db-name=db idx=3 table-name=rbt
 SELECT * FROM db.rbt WHERE k = 1
 ----
 LAG_BY_CLUSTER_SETTING
@@ -62,7 +62,7 @@ SELECT * FROM db.rbt AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
 ----
 served locally: false
 
-refresh-range-descriptor-cache idx=7 table-name=rbt
+refresh-range-descriptor-cache db-name=db idx=7 table-name=rbt
 SELECT * FROM db.rbt WHERE k = 2
 ----
 LAG_BY_CLUSTER_SETTING
@@ -100,7 +100,7 @@ served locally: true
 served via follower read: false
 
 # Reads from us-east-1 now should be remote since we're homed in us-west-1.
-refresh-range-descriptor-cache idx=0 table-name=rbt
+refresh-range-descriptor-cache db-name=db idx=0 table-name=rbt
 SELECT * FROM db.rbt WHERE k = 2
 ----
 LAG_BY_CLUSTER_SETTING
@@ -140,7 +140,7 @@ wait-for-zone-config-changes db-name=db table-name=rbt num-voters=3 num-non-vote
 sleep-for-follower-read
 ----
 
-refresh-range-descriptor-cache idx=6 table-name=rbt
+refresh-range-descriptor-cache db-name=db idx=6 table-name=rbt
 SELECT * FROM db.rbt WHERE k = 1
 ----
 LAG_BY_CLUSTER_SETTING
@@ -201,17 +201,17 @@ sleep-for-follower-read
 
 # Bulk refresh all caches.
 
-refresh-range-descriptor-cache idx=6 table-name=rbt
+refresh-range-descriptor-cache db-name=db idx=6 table-name=rbt
 SELECT * FROM db.rbt WHERE k = 1
 ----
 LAG_BY_CLUSTER_SETTING
 
-refresh-range-descriptor-cache idx=7 table-name=rbt
+refresh-range-descriptor-cache db-name=db idx=7 table-name=rbt
 SELECT * FROM db.rbt WHERE k = 1
 ----
 LAG_BY_CLUSTER_SETTING
 
-refresh-range-descriptor-cache idx=8 table-name=rbt
+refresh-range-descriptor-cache db-name=db idx=8 table-name=rbt
 SELECT * FROM db.rbt WHERE k = 1
 ----
 LAG_BY_CLUSTER_SETTING
