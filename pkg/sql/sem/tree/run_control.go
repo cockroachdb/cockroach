@@ -39,6 +39,10 @@ func (n *ControlJobs) Format(ctx *FmtCtx) {
 	ctx.WriteString(JobCommandToStatement[n.Command])
 	ctx.WriteString(" JOBS ")
 	ctx.FormatNode(n.Jobs)
+	if n.Reason != nil {
+		ctx.WriteString(" WITH REASON = ")
+		ctx.FormatNode(n.Reason)
+	}
 }
 
 // CancelQueries represents a CANCEL QUERIES statement.

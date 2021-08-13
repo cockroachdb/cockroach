@@ -643,6 +643,9 @@ func (b *changefeedResumer) handleChangefeedError(
 		// note: we only want the job to pause here if a failure happens, not a
 		// user-initiated cancellation. if the job has been canceled, the ctx
 		// will handle it and the pause will return an error.
+		const errorFmt = "job failed (%v) but is being paused because of %s=%s"
+		errorMessage := fmt.Sprintf(errorFmt, changefeedErr,
+			changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
 		return b.job.PauseRequested(ctx, jobExec.ExtendedEvalContext().Txn, func(ctx context.Context,
 			planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
 			err := b.OnPauseRequest(ctx, jobExec, txn, progress)
@@ -650,12 +653,10 @@ func (b *changefeedResumer) handleChangefeedError(
 				return err
 			}
 			// directly update running status to avoid the running/reverted job status check
-			progress.RunningStatus = fmt.Sprintf("job failed (%v) but is being paused because of %s=%s", changefeedErr,
-				changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
-			log.Warningf(ctx, "job failed (%v) but is being paused because of %s=%s", changefeedErr,
-				changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
+			progress.RunningStatus = errorMessage
+			log.Warningf(ctx, errorFmt, changefeedErr, changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
 			return nil
-		})
+		}, errorMessage)
 	default:
 		return errors.Errorf("unrecognized option value: %s=%s",
 			changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])

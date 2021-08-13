@@ -1421,7 +1421,7 @@ func TestJobLifecycle(t *testing.T) {
 	t.Run("cancelable jobs can be paused until finished", func(t *testing.T) {
 		job, exp := startLeasedJob(t, defaultRecord)
 
-		if err := registry.PauseRequested(ctx, nil, job.ID()); err != nil {
+		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Paused(ctx); err != nil {
@@ -1445,7 +1445,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := registry.PauseRequested(ctx, nil, job.ID()); !testutils.IsError(err, "cannot be requested to be paused") {
+		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); !testutils.IsError(err, "cannot be requested to be paused") {
 			t.Fatalf("expected 'cannot pause succeeded job', but got '%s'", err)
 		}
 	})
@@ -1476,7 +1476,7 @@ func TestJobLifecycle(t *testing.T) {
 
 		{
 			job, exp := startLeasedJob(t, defaultRecord)
-			if err := registry.PauseRequested(ctx, nil, job.ID()); err != nil {
+			if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
 				t.Fatal(err)
 			}
 			if err := job.Paused(ctx); err != nil {
@@ -1636,7 +1636,7 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("progress on paused job fails", func(t *testing.T) {
 		job, _ := startLeasedJob(t, defaultRecord)
-		if err := registry.PauseRequested(ctx, nil, job.ID()); err != nil {
+		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(0.5)); !testutils.IsError(
@@ -2937,7 +2937,7 @@ func TestMetrics(t *testing.T) {
 			// We'll pause the job this time around and make sure it stops running.
 			<-resuming
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
-			require.NoError(t, registry.PauseRequested(ctx, nil, jobID))
+			require.NoError(t, registry.PauseRequested(ctx, nil, jobID, ""))
 			int64EqSoon(t, importMetrics.ResumeRetryError.Count, 2)
 			require.Equal(t, int64(0), importMetrics.ResumeFailed.Count())
 			require.Equal(t, int64(0), importMetrics.ResumeCompleted.Count())
@@ -3019,7 +3019,7 @@ func TestMetrics(t *testing.T) {
 			// We'll pause the job this time around and make sure it stops running.
 			<-resuming
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
-			require.NoError(t, registry.PauseRequested(ctx, nil, jobID))
+			require.NoError(t, registry.PauseRequested(ctx, nil, jobID, ""))
 			int64EqSoon(t, importMetrics.FailOrCancelRetryError.Count, 1)
 			require.Equal(t, int64(1), importMetrics.ResumeFailed.Count())
 			require.Equal(t, int64(0), importMetrics.ResumeCompleted.Count())

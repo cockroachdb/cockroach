@@ -6,42 +6,46 @@ build
 CANCEL JOBS SELECT 1
 ----
 control-jobs (CANCEL)
- └── project
-      ├── columns: "?column?":1!null
-      ├── values
-      │    └── ()
-      └── projections
-           └── 1 [as="?column?":1]
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── CAST(NULL AS STRING)
 
 build
 RESUME JOBS VALUES (1), (2), (3)
 ----
 control-jobs (RESUME)
- └── values
-      ├── columns: column1:1!null
-      ├── (1,)
-      ├── (2,)
-      └── (3,)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── CAST(NULL AS STRING)
 
 build
 PAUSE JOBS SELECT a FROM ab ORDER BY b
 ----
 control-jobs (PAUSE)
- └── sort
-      ├── columns: a:1  [hidden: b:2]
-      ├── ordering: +2
-      └── project
-           ├── columns: a:1 b:2
-           └── scan ab
-                └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ ├── sort
+ │    ├── columns: a:1  [hidden: b:2]
+ │    ├── ordering: +2
+ │    └── project
+ │         ├── columns: a:1 b:2
+ │         └── scan ab
+ │              └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── CAST(NULL AS STRING)
 
 build
 PAUSE JOB 1
 ----
 control-jobs (PAUSE)
- └── values
-      ├── columns: column1:1!null
-      └── (1,)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    └── (1,)
+ └── CAST(NULL AS STRING)
 
 build
 PAUSE JOBS SELECT 1.1

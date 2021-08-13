@@ -1931,11 +1931,26 @@ func (ef *execFactory) ConstructAlterTableRelocate(
 
 // ConstructControlJobs is part of the exec.Factory interface.
 func (ef *execFactory) ConstructControlJobs(
-	command tree.JobCommand, input exec.Node,
+	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
 ) (exec.Node, error) {
+	reasonDatum, err := reason.Eval(ef.planner.EvalContext())
+	if err != nil {
+		return nil, err
+	}
+
+	var reasonStr string
+	if reasonDatum != tree.DNull {
+		reasonStrDatum, ok := reasonDatum.(*tree.DString)
+		if !ok {
+			return nil, errors.Errorf("expected string value for the reason")
+		}
+		reasonStr = string(*reasonStrDatum)
+	}
+
 	return &controlJobsNode{
 		rows:          input.(planNode),
 		desiredStatus: jobCommandToDesiredStatus[command],
+		reason:        reasonStr,
 	}, nil
 }
 
