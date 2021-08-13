@@ -2517,7 +2517,9 @@ func (r *importResumer) dropTables(
 		// older-format (v1.1) descriptor. This enables ClearTableData to use a
 		// RangeClear for faster data removal, rather than removing by chunks.
 		empty[i].TableDesc().DropTime = dropTime
-		if err := gcjob.ClearTableData(ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, empty[i]); err != nil {
+		if err := gcjob.ClearTableData(
+			ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, &execCfg.Settings.SV, empty[i],
+		); err != nil {
 			return errors.Wrapf(err, "clearing data for table %d", empty[i].GetID())
 		}
 	}
