@@ -563,8 +563,45 @@ func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 	}).BuildImmutableDatabase()
 }
 
-func makeTable(desc descpb.TableDescriptor) catalog.TableDescriptor {
+func makeTable(
+	name string,
+	id descpb.ID,
+	columns []descpb.ColumnDescriptor,
+	families []descpb.ColumnFamilyDescriptor,
+	indexes []descpb.IndexDescriptor,
+) catalog.TableDescriptor {
 	ctx := context.Background()
+	desc := descpb.TableDescriptor{
+		Name:                    name,
+		ID:                      id,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns:                 columns,
+		Families:                families,
+		PrimaryIndex:            indexes[0],
+		Indexes:                 indexes[1:],
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[id], security.NodeUserName(),
+		),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+	for _, idx := range indexes {
+		if desc.NextIndexID <= idx.ID {
+			desc.NextIndexID = idx.ID + 1
+		}
+	}
+	for _, col := range columns {
+		if desc.NextColumnID <= col.ID {
+			desc.NextColumnID = col.ID + 1
+		}
+	}
+	for _, fam := range families {
+		if desc.NextFamilyID <= fam.ID {
+			desc.NextFamilyID = fam.ID + 1
+		}
+	}
 	b := tabledesc.NewBuilder(&desc)
 	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
 	if err != nil {
@@ -585,39 +622,28 @@ var (
 	// table should only be written to via KV puts, not via the SQL layer. Some
 	// code assumes that it only has KV entries for column family 4, not the
 	// "sentinel" column family 0 which would be written by SQL.
-	NamespaceTable = makeTable(descpb.TableDescriptor{
-		Name:                    catconstants.NamespaceTableName,
-		ID:                      keys.NamespaceTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
+	NamespaceTable = makeTable(
+		catconstants.NamespaceTableName,
+		keys.NamespaceTableID,
+		[]descpb.ColumnDescriptor{
 			{Name: "parentID", ID: 1, Type: types.Int},
 			{Name: "parentSchemaID", ID: 2, Type: types.Int},
 			{Name: "name", ID: 3, Type: types.String},
 			{Name: "id", ID: 4, Type: types.Int, Nullable: true},
 		},
-		NextColumnID: 5,
-		Families: []descpb.ColumnFamilyDescriptor{
+		[]descpb.ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "parentSchemaID", "name"}, ColumnIDs: []descpb.ColumnID{1, 2, 3}},
 			{Name: "fam_4_id", ID: catconstants.NamespaceTableFamilyID, ColumnNames: []string{"id"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
 		},
-		NextFamilyID: catconstants.NamespaceTableFamilyID + 1,
-		PrimaryIndex: descpb.IndexDescriptor{
+		[]descpb.IndexDescriptor{{
 			Name:                "primary",
 			ID:                  catconstants.NamespaceTablePrimaryIndexID,
 			Unique:              true,
 			KeyColumnNames:      []string{"parentID", "parentSchemaID", "name"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.NamespaceTableID], security.NodeUserName(),
-		),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+		}},
+	)
 
 	// DescriptorTable is the descriptor for the descriptor table.
 	DescriptorTable = makeTable(descpb.TableDescriptor{

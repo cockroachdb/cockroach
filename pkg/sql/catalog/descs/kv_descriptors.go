@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -215,9 +216,12 @@ func (kd *kvDescriptors) getDescriptor(
 	withNameLookup := maybeLookedUpName != ""
 	if id == keys.SystemDatabaseID {
 		// Special handling for the system database descriptor.
-		// This database descriptor must be immutable.
+		// The system database descriptor should never actually be mutated, which is
+		// why we return the same hard-coded descriptor every time. It's assumed
+		// that callers of this method will check the privileges on the descriptor
+		// (like any other database) and return an error.
 		if mutable {
-			return false, nil, errors.AssertionFailedf("system database descriptor cannot be mutable", id)
+			return true, dbdesc.NewBuilder(systemschema.SystemDB.DatabaseDesc()).BuildExistingMutable(), nil
 		}
 		return true, systemschema.SystemDB, nil
 	}

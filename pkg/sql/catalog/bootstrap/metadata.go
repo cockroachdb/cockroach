@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -38,6 +39,15 @@ type MetadataSchema struct {
 	descs         []catalog.Descriptor
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
+}
+
+var testDescriptorIDOffset descpb.ID
+
+func TestingSetDescriptorIDOffset(offset int) func() {
+	testDescriptorIDOffset = descpb.ID(offset)
+	return func() {
+		testDescriptorIDOffset = 0
+	}
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -59,12 +69,21 @@ func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
 		panic(errors.AssertionFailedf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
 	}
-	for _, d := range ms.descs {
-		if d.GetID() == desc.GetID() {
-			log.Errorf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
-			return
+	if tbl, ok := desc.(catalog.TableDescriptor); ok {
+		if _, isUnleasable := systemschema.UnleasableSystemDescriptors[desc.GetID()]; !isUnleasable {
+			// Maybe remap table descriptor IDs for testing.
+			tblCopy := *tbl.TableDesc()
+			tblCopy.ID += testDescriptorIDOffset
+			desc = tabledesc.NewBuilder(&tblCopy).BuildImmutable()
 		}
 	}
+
+	for _, d := range ms.descs {
+		if d.GetID() == desc.GetID() {
+			log.Fatalf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
+		}
+	}
+
 	ms.descs = append(ms.descs, desc)
 }
 
@@ -124,63 +143,44 @@ func (ms MetadataSchema) SystemDescriptorCount() int {
 func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey) {
 	var ret []roachpb.KeyValue
 	var splits []roachpb.RKey
+	add := func(key roachpb.Key, value roachpb.Value) {
+		ret = append(ret, roachpb.KeyValue{Key: key, Value: value})
+	}
 
 	// Save the ID generator value, which will generate descriptor IDs for user
 	// objects.
-	value := roachpb.Value{}
-	value.SetInt(int64(keys.MinUserDescID))
-	ret = append(ret, roachpb.KeyValue{
-		Key:   ms.codec.DescIDSequenceKey(),
-		Value: value,
-	})
-
-	// addDescriptor generates the needed KeyValue objects to install a
-	// descriptor on a new cluster.
-	addDescriptor := func(desc catalog.Descriptor) {
-		// Create name metadata key.
+	{
 		value := roachpb.Value{}
-		value.SetInt(int64(desc.GetID()))
-		if desc.GetParentID() != keys.RootNamespaceID {
-			ret = append(ret, roachpb.KeyValue{
-				Key:   catalogkeys.MakePublicObjectNameKey(ms.codec, desc.GetParentID(), desc.GetName()),
-				Value: value,
-			})
-		} else {
-			// Initializing a database. Databases must be initialized with
-			// the public schema, as all tables are scoped under the public schema.
-			publicSchemaValue := roachpb.Value{}
-			publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
-			ret = append(
-				ret,
-				roachpb.KeyValue{
-					Key:   catalogkeys.MakeDatabaseNameKey(ms.codec, desc.GetName()),
-					Value: value,
-				},
-				roachpb.KeyValue{
-					Key:   catalogkeys.MakePublicSchemaNameKey(ms.codec, desc.GetID()),
-					Value: publicSchemaValue,
-				})
-		}
-
-		// Create descriptor metadata key.
-		value = roachpb.Value{}
-		descDesc := desc.DescriptorProto()
-		if err := value.SetProto(descDesc); err != nil {
-			log.Fatalf(context.TODO(), "could not marshal %v", desc)
-		}
-		ret = append(ret, roachpb.KeyValue{
-			Key:   catalogkeys.MakeDescMetadataKey(ms.codec, desc.GetID()),
-			Value: value,
-		})
-		if desc.GetID() > keys.MaxSystemConfigDescID {
-			splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(uint32(desc.GetID()))))
-		}
+		value.SetInt(int64(ms.initialDescIDSequenceValue()))
+		add(ms.codec.DescIDSequenceKey(), value)
 	}
 
 	// Generate initial values for system databases and tables, which have
 	// static descriptors that were generated elsewhere.
 	for _, desc := range ms.descs {
-		addDescriptor(desc)
+		// Create name metadata key.
+		nameValue := roachpb.Value{}
+		nameValue.SetInt(int64(desc.GetID()))
+		if desc.GetParentID() != keys.RootNamespaceID {
+			add(catalogkeys.MakePublicObjectNameKey(ms.codec, desc.GetParentID(), desc.GetName()), nameValue)
+		} else {
+			// Initializing a database. Databases must be initialized with
+			// the public schema, as all tables are scoped under the public schema.
+			add(catalogkeys.MakeDatabaseNameKey(ms.codec, desc.GetName()), nameValue)
+			publicSchemaValue := roachpb.Value{}
+			publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
+			add(catalogkeys.MakePublicSchemaNameKey(ms.codec, desc.GetID()), publicSchemaValue)
+		}
+
+		// Create descriptor metadata key.
+		descValue := roachpb.Value{}
+		if err := descValue.SetProto(desc.DescriptorProto()); err != nil {
+			log.Fatalf(context.TODO(), "could not marshal %v", desc)
+		}
+		add(catalogkeys.MakeDescMetadataKey(ms.codec, desc.GetID()), descValue)
+		if desc.GetID() > keys.MaxSystemConfigDescID {
+			splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(uint32(desc.GetID()))))
+		}
 	}
 
 	// The splits slice currently has a split point for each of the object
@@ -215,6 +215,16 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	})
 
 	return ret, splits
+}
+
+func (ms MetadataSchema) initialDescIDSequenceValue() descpb.ID {
+	id := descpb.ID(keys.MaxReservedDescID)
+	for _, desc := range ms.descs {
+		if desc.GetID() > id {
+			id = desc.GetID()
+		}
+	}
+	return id + 1
 }
 
 // DescriptorIDs returns the descriptor IDs present in the metadata schema in
