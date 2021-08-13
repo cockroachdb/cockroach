@@ -155,8 +155,17 @@ func assertExportedErrs(
 ) {
 	const big = 1 << 30
 	sstFile := &MemFile{}
-	_, _, _, err := e.ExportMVCCToSst(context.Background(), startKey, endKey, startTime, endTime, hlc.Timestamp{},
-		revisions, big, big, false, useTBI, sstFile)
+	_, _, _, err := e.ExportMVCCToSst(context.Background(), ExportOptions{
+		StartKey:           MVCCKey{Key: startKey},
+		EndKey:             endKey,
+		StartTS:            startTime,
+		EndTS:              endTime,
+		ExportAllRevisions: revisions,
+		TargetSize:         big,
+		MaxSize:            big,
+		StopMidKey:         false,
+		UseTBI:             useTBI,
+	}, sstFile)
 	require.Error(t, err)
 
 	if intentErr := (*roachpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
@@ -184,8 +193,17 @@ func assertExportedKVs(
 ) {
 	const big = 1 << 30
 	sstFile := &MemFile{}
-	_, _, _, err := e.ExportMVCCToSst(context.Background(), startKey, endKey, startTime, endTime, hlc.Timestamp{},
-		revisions, big, big, false, useTBI, sstFile)
+	_, _, _, err := e.ExportMVCCToSst(context.Background(), ExportOptions{
+		StartKey:           MVCCKey{Key: startKey},
+		EndKey:             endKey,
+		StartTS:            startTime,
+		EndTS:              endTime,
+		ExportAllRevisions: revisions,
+		TargetSize:         big,
+		MaxSize:            big,
+		StopMidKey:         false,
+		UseTBI:             useTBI,
+	}, sstFile)
 	require.NoError(t, err)
 	data := sstFile.Data()
 	if data == nil {
