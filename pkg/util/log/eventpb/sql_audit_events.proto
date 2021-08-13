@@ -101,6 +101,25 @@ message SlowQuery {
   CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
+// CommonLargeRowDetails contains the fields common to both LargeRow and
+// LargeRowInternal events.
+message CommonLargeRowDetails {
+  uint32 row_size = 1 [(gogoproto.jsontag) = ",omitempty"];
+  uint32 max_row_size = 2 [(gogoproto.jsontag) = ",omitempty"];
+  uint32 table_id = 3 [(gogoproto.customname) = "TableID", (gogoproto.jsontag) = ",omitempty"];
+  uint32 index_id = 4 [(gogoproto.customname) = "IndexID", (gogoproto.jsontag) = ",omitempty"];
+  uint32 family_id = 5 [(gogoproto.customname) = "FamilyID", (gogoproto.jsontag) = ",omitempty"];
+  string key = 6 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// LargeRow is recorded when a row larger than cluster setting
+// `sql.mutations.max_row_size.warn` is added to the database. A single
+// statement could cause multiple LargeRow events to be emitted.
+message LargeRow {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonLargeRowDetails row = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
 // Category: SQL Slow Query Log (Internal)
 // Channel: SQL_INTERNAL_PERF
 //
@@ -121,6 +140,15 @@ message SlowQueryInternal {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// LargeRowInternal is recorded when a row larger than cluster setting
+// `sql.mutations.max_row_size.warn` is added to the database by an internal
+// query. A single internal query could cause multiple LargeRowInternal events
+// to be emitted.
+message LargeRowInternal {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonLargeRowDetails row = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
 // Category: SQL Execution Log
