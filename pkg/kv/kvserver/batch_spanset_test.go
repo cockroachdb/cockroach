@@ -385,7 +385,9 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 		Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}, hlc.Timestamp{WallTime: 2})
 
 	k1, v1 := storage.MakeMVCCMetadataKey(roachpb.Key("b")), []byte("b-value")
+	k1e := storage.EngineKey{Key: k1.Key}
 	k2, v2 := storage.MakeMVCCMetadataKey(roachpb.Key("d")), []byte("d-value")
+	k2e := storage.EngineKey{Key: k2.Key}
 
 	// Write values that we can try to read later.
 	if err := eng.PutUnversioned(k1.Key, v1); err != nil {
@@ -429,7 +431,7 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 		}
 	}()
 
-	{
+	func() {
 		// When accessing at t=2, we're only able to read through the latch declared at t=2.
 		iter := batchAt2.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
@@ -446,7 +448,7 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 		if !reflect.DeepEqual(iter.Key(), k2) {
 			t.Fatalf("expected key %s, got %s", k2, iter.Key())
 		}
-	}
+	}()
 
 	for _, batch := range []storage.Batch{batchAt3, batchNonMVCC} {
 		// When accessing at t=3, we're unable to read through any of the declared latches.
@@ -464,6 +466,57 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
 		}
 	}
+
+	// The behavior is the same as above for an EngineIterator.
+	func() {
+		// When accessing at t=1, we're able to read through latches declared at t=1 and t=2.
+		iter := batchAt1.NewEngineIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+		defer iter.Close()
+
+		if ok, err := iter.SeekEngineKeyGE(k1e); !ok {
+			t.Fatalf("expected valid iterator, err=%v", err)
+		}
+		engineKey, err := iter.EngineKey()
+		if err != nil {
+			t.Fatalf("expected no error, got err=%v", err)
+		}
+		if !reflect.DeepEqual(engineKey, k1e) {
+			t.Fatalf("expected key %s, got %s", k1e, engineKey)
+		}
+
+		if ok, err := iter.NextEngineKey(); !ok {
+			t.Fatalf("expected valid iterator, err=%v", err)
+		}
+		engineKey, err = iter.EngineKey()
+		if err != nil {
+			t.Fatalf("expected no error, got err=%v", err)
+		}
+		if !reflect.DeepEqual(engineKey, k2e) {
+			t.Fatalf("expected key %s, got %s", k2e, engineKey)
+		}
+	}()
+
+	func() {
+		// When accessing at t=2, we're only able to read through the latch declared at t=2.
+		iter := batchAt2.NewEngineIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+		defer iter.Close()
+
+		if ok, _ := iter.SeekEngineKeyGE(k1e); ok {
+			engineKey, err := iter.EngineKey()
+			t.Fatalf("expected invalid iterator; found valid at key %s, err=%v", engineKey, err)
+		}
+
+		if ok, err := iter.SeekEngineKeyGE(k2e); !ok {
+			t.Fatalf("expected valid iterator, err=%v", err)
+		}
+		engineKey, err := iter.EngineKey()
+		if err != nil {
+			t.Fatalf("expected no error, got err=%v", err)
+		}
+		if !reflect.DeepEqual(engineKey, k2e) {
+			t.Fatalf("expected key %s, got %s", k2e, engineKey)
+		}
+	}()
 }
 
 func TestSpanSetNonMVCCBatch(t *testing.T) {
