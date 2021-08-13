@@ -61,6 +61,79 @@ func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri 
 	return nil
 }
 
+type backupInfoReader interface {
+	showBackup(
+		context.Context,
+		cloud.ExternalStorage,
+		*jobspb.BackupEncryptionOptions,
+		[]string,
+		chan<- tree.Datums,
+	) error
+	header() colinfo.ResultColumns
+}
+
+type manifestInfoReader struct {
+	shower backupShower
+}
+
+var _ backupInfoReader = manifestInfoReader{}
+
+func (m manifestInfoReader) header() colinfo.ResultColumns {
+	return m.shower.header
+}
+
+func (m manifestInfoReader) showBackup(
+	ctx context.Context,
+	store cloud.ExternalStorage,
+	enc *jobspb.BackupEncryptionOptions,
+	incPaths []string,
+	resultsCh chan<- tree.Datums,
+) error {
+	var err error
+	manifests := make([]BackupManifest, len(incPaths)+1)
+	manifests[0], err = ReadBackupManifestFromStore(ctx, store, enc)
+	if err != nil {
+		return err
+	}
+
+	for i := range incPaths {
+		m, err := readBackupManifest(ctx, store, incPaths[i], enc)
+		if err != nil {
+			return err
+		}
+		// Blank the stats to prevent memory blowup.
+		m.DeprecatedStatistics = nil
+		manifests[i+1] = m
+	}
+
+	// Ensure that the descriptors in the backup manifests are up to date.
+	//
+	// This is necessary in particular for upgrading descriptors with old-style
+	// foreign keys which are no longer supported.
+	// If we are restoring a backup with old-style foreign keys, skip over the
+	// FKs for which we can't resolve the cross-table references. We can't
+	// display them anyway, because we don't have the referenced table names,
+	// etc.
+	err = maybeUpgradeDescriptorsInBackupManifests(ctx, manifests, true /* skipFKsWithNoMatchingTable */)
+	if err != nil {
+		return err
+	}
+
+	datums, err := m.shower.fn(manifests)
+	if err != nil {
+		return err
+	}
+
+	for _, row := range datums {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case resultsCh <- row:
+		}
+	}
+	return nil
+}
+
 // showBackupPlanHook implements PlanHookFn.
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -107,6 +180,7 @@ func showBackupPlanHook(
 		backup.Details = tree.BackupManifestAsJSON
 	}
 
+	var infoReader backupInfoReader
 	var shower backupShower
 	switch backup.Details {
 	case tree.BackupRangeDetails:
@@ -118,6 +192,7 @@ func showBackupPlanHook(
 	default:
 		shower = backupShowerDefault(ctx, p, backup.ShouldIncludeSchemas, opts)
 	}
+	infoReader = manifestInfoReader{shower}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
@@ -190,50 +265,10 @@ func showBackupPlanHook(
 			}
 		}
 
-		manifests := make([]BackupManifest, len(incPaths)+1)
-		manifests[0], err = ReadBackupManifestFromStore(ctx, store, encryption)
-		if err != nil {
-			return err
-		}
-
-		for i := range incPaths {
-			m, err := readBackupManifest(ctx, store, incPaths[i], encryption)
-			if err != nil {
-				return err
-			}
-			// Blank the stats to prevent memory blowup.
-			m.DeprecatedStatistics = nil
-			manifests[i+1] = m
-		}
-
-		// Ensure that the descriptors in the backup manifests are up to date.
-		//
-		// This is necessary in particular for upgrading descriptors with old-style
-		// foreign keys which are no longer supported.
-		// If we are restoring a backup with old-style foreign keys, skip over the
-		// FKs for which we can't resolve the cross-table references. We can't
-		// display them anyway, because we don't have the referenced table names,
-		// etc.
-		err = maybeUpgradeDescriptorsInBackupManifests(ctx, manifests, true /* skipFKsWithNoMatchingTable */)
-		if err != nil {
-			return err
-		}
-
-		datums, err := shower.fn(manifests)
-		if err != nil {
-			return err
-		}
-		for _, row := range datums {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case resultsCh <- row:
-			}
-		}
-		return nil
+		return infoReader.showBackup(ctx, store, encryption, incPaths, resultsCh)
 	}
 
-	return fn, shower.header, nil, false, nil
+	return fn, infoReader.header(), nil, false, nil
 }
 
 type backupShower struct {
