@@ -127,6 +127,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 	var wg sync.WaitGroup
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s.LocalPlan = true
 	s.Init(ctx)
 
 	t.Run(fmt.Sprintf("numInputs=%d/numBatches=%d/terminationScenario=%d", numInputs, numBatches, terminationScenario), func(t *testing.T) {
