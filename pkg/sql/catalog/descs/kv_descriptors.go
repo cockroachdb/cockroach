@@ -325,7 +325,8 @@ func (kd *kvDescriptors) getDescriptorsWithNewVersion() []lease.IDVersion {
 	_ = kd.uncommittedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
 		desc := entry.(*uncommittedDescriptor)
 		if mut := desc.mutable; !mut.IsNew() && mut.IsUncommittedVersion() {
-			descs = append(descs, lease.NewIDVersionPrev(mut.OriginalName(), mut.OriginalID(), mut.OriginalVersion()))
+			orig := mut.ImmutableCopyOfOriginalVersion()
+			descs = append(descs, lease.NewIDVersionPrev(orig.GetName(), orig.GetID(), orig.GetVersion()))
 		}
 		return nil
 	})
@@ -347,7 +348,13 @@ func (kd *kvDescriptors) getUncommittedTables() (tables []catalog.TableDescripto
 func (kd *kvDescriptors) validateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) error {
 	descs := make([]catalog.Descriptor, 0, kd.uncommittedDescriptors.Len())
 	_ = kd.uncommittedDescriptors.IterateByID(func(descriptor catalog.NameEntry) error {
-		descs = append(descs, descriptor.(*uncommittedDescriptor).immutable)
+		ud := descriptor.(*uncommittedDescriptor)
+		newVersion := ud.mutable.ImmutableCopy()
+		oldVersion := ud.mutable.ImmutableCopyOfOriginalVersion()
+		if !oldVersion.DescriptorProto().Equal(newVersion.DescriptorProto()) {
+			// Only validate descriptors which have changed.
+			descs = append(descs, ud.immutable)
+		}
 		return nil
 	})
 	if len(descs) == 0 {
@@ -388,7 +395,7 @@ func (kd *kvDescriptors) addUncommittedDescriptor(
 	desc catalog.MutableDescriptor,
 ) (*uncommittedDescriptor, error) {
 	version := desc.GetVersion()
-	origVersion := desc.OriginalVersion()
+	origVersion := desc.ImmutableCopyOfOriginalVersion().GetVersion()
 	if version != origVersion && version != origVersion+1 {
 		return nil, errors.AssertionFailedf(
 			"descriptor %d version %d not compatible with cluster version %d",

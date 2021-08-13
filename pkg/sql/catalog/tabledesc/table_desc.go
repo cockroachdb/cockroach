@@ -121,6 +121,11 @@ func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	return NewBuilder(desc.TableDesc()).BuildImmutable()
 }
 
+// ImmutableCopyOfOriginalVersion implements the MutableDescriptor interface.
+func (desc *Mutable) ImmutableCopyOfOriginalVersion() catalog.Descriptor {
+	return NewBuilder(&desc.ClusterVersion).BuildImmutable()
+}
+
 // IsUncommittedVersion implements the Descriptor interface.
 func (desc *Mutable) IsUncommittedVersion() bool {
 	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
