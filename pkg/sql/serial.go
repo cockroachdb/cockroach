@@ -49,7 +49,7 @@ var cachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
 		"A cache size of 1 means no caching. Any cache size less than 1 is invalid.",
 	256,
 	settings.PositiveInt,
-)
+).WithNonSystemTenantConfigurable()
 
 // processSerialInColumnDef analyzes a column definition and determines
 // whether to use a sequence if the requested type is SERIAL-like.

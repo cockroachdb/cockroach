@@ -120,14 +120,12 @@ func (d *DurationSetting) WithPublic() *DurationSetting {
 	return d
 }
 
-// WithSystemOnly marks this setting as system-only and can be chained.
-func (d *DurationSetting) WithSystemOnly() *DurationSetting {
-	d.common.systemOnly = true
+// WithNonSystemTenantConfigurable marks this setting as settable by
+// non-system tenants and can be chained.
+func (d *DurationSetting) WithNonSystemTenantConfigurable() *DurationSetting {
+	d.common.nonSystemTenantConfigurable = true
 	return d
 }
-
-// Defeat the linter.
-var _ = (*DurationSetting).WithSystemOnly
 
 // RegisterDurationSetting defines a new setting with type duration.
 func RegisterDurationSetting(

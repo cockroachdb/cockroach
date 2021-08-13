@@ -2634,7 +2634,7 @@ var experimentalBox2DClusterSetting = settings.RegisterBoolSetting(
 	experimentalBox2DClusterSettingName,
 	"enables the use of certain experimental box2d comparison operators",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 func checkExperimentalBox2DComparisonOperatorEnabled(ctx *EvalContext) error {
 	if !experimentalBox2DClusterSetting.Get(&ctx.Settings.SV) {

@@ -48,7 +48,7 @@ func (s *MaskedSetting) Typ() string {
 	return s.setting.Typ()
 }
 
-// SystemOnly returns the underlying setting's SystemOnly.
-func (s *MaskedSetting) SystemOnly() bool {
-	return s.setting.SystemOnly()
+// NonSystemTenantConfigurable returns the underlying setting's NonSystemTenantConfigurable.
+func (s *MaskedSetting) NonSystemTenantConfigurable() bool {
+	return s.setting.NonSystemTenantConfigurable()
 }

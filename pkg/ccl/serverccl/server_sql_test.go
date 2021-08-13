@@ -10,7 +10,6 @@ package serverccl
 
 import (
 	"context"
-	"errors"
 	"io/ioutil"
 	"net/http"
 	"testing"
@@ -19,13 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,26 +59,6 @@ func TestSQLServer(t *testing.T) {
 	r.Exec(t, `CREATE INDEX ON foo.kv (v)`)
 	t.Log(sqlutils.MatrixToStr(r.QueryStr(t, `SET distsql=off; SELECT * FROM foo.kv`)))
 	t.Log(sqlutils.MatrixToStr(r.QueryStr(t, `SET distsql=auto; SELECT * FROM foo.kv`)))
-}
-
-func TestTenantCannotSetClusterSetting(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-
-	// StartTenant with the default permissions to
-	_, db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: serverutils.TestTenantID(), AllowSettingClusterSettings: false})
-	defer db.Close()
-	_, err := db.Exec(`SET CLUSTER SETTING sql.defaults.vectorize=off`)
-	require.NoError(t, err)
-	_, err = db.Exec(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '2MiB';`)
-	var pqErr *pq.Error
-	ok := errors.As(err, &pqErr)
-	require.True(t, ok, "expected err to be a *pq.Error but is of type %T. error is: %v", err)
-	require.Equal(t, pq.ErrorCode(pgcode.InsufficientPrivilege.String()), pqErr.Code, "err %v has unexpected code", err)
 }
 
 func TestTenantUnauthenticatedAccess(t *testing.T) {

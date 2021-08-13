@@ -118,7 +118,7 @@ var ClusterSecret = func() *settings.StringSetting {
 		"cluster.secret",
 		"cluster specific secret",
 		"",
-	)
+	).WithNonSystemTenantConfigurable()
 	// Even though string settings are non-reportable by default, we
 	// still mark them explicitly in case a future code change flips the
 	// default.
@@ -137,7 +137,7 @@ var defaultIntSize = func() *settings.IntSetting {
 				return errors.New("only 4 or 8 are valid values")
 			}
 			return nil
-		}).WithPublic()
+		}).WithPublic().WithNonSystemTenantConfigurable()
 	s.SetVisibility(settings.Public)
 	return s
 }()
@@ -230,57 +230,57 @@ var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.require_explicit_primary_keys.enabled",
 	"default value for requiring explicit primary keys in CREATE TABLE statements",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_temporary_tables.enabled",
 	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_implicit_column_partitioning.enabled",
 	"default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var dropEnumValueEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.drop_enum_value.enabled",
 	"default value for enable_drop_enum_value; allows for dropping enum values",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.override_multi_region_zone_config.enabled",
 	"default value for override_multi_region_zone_config; "+
 		"allows for overriding the zone configs of a multi-region table or database",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_hash_sharded_indexes.enabled",
 	"default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.zigzag_join.enabled",
 	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default",
 	true,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var optDrivenFKCascadesClusterLimit = settings.RegisterIntSetting(
 	"sql.defaults.foreign_key_cascades_limit",
 	"default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query",
 	10000,
 	settings.NonNegativeInt,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
 	"sql.defaults.prefer_lookup_joins_for_fks.enabled",
 	"default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 // InterleavedTablesEnabled is the setting that controls whether it's possible
 // to create interleaved indexes or tables.
@@ -288,7 +288,7 @@ var InterleavedTablesEnabled = settings.RegisterBoolSetting(
 	"sql.defaults.interleaved_tables.enabled",
 	"allows creation of interleaved tables or indexes",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 // optUseHistogramsClusterMode controls the cluster default for whether
 // histograms are used by the optimizer for cardinality estimation.
@@ -300,7 +300,7 @@ var optUseHistogramsClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.optimizer_use_histograms.enabled",
 	"default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default",
 	true,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 // optUseMultiColStatsClusterMode controls the cluster default for whether
 // multi-column stats are used by the optimizer for cardinality estimation.
@@ -312,7 +312,7 @@ var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.optimizer_use_multicol_stats.enabled",
 	"default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default",
 	true,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 // localityOptimizedSearchMode controls the cluster default for the use of
 // locality optimized search. If enabled, the optimizer will try to plan scans
@@ -324,26 +324,26 @@ var localityOptimizedSearchMode = settings.RegisterBoolSetting(
 	"default value for locality_optimized_partitioned_index_scan session setting; "+
 		"enables searching for rows in the current region before searching remote regions",
 	true,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.implicit_select_for_update.enabled",
 	"default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements",
 	true,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var insertFastPathClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.insert_fast_path.enabled",
 	"default value for enable_insert_fast_path session setting; enables a specialized insert path",
 	true,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_alter_column_type.enabled",
 	"default value for experimental_alter_column_type session setting; "+
 		"enables the use of ALTER COLUMN TYPE for general conversions",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var clusterStatementTimeout = settings.RegisterDurationSetting(
 	"sql.defaults.statement_timeout",
@@ -353,7 +353,7 @@ var clusterStatementTimeout = settings.RegisterDurationSetting(
 		"there is no timeout",
 	0,
 	settings.NonNegativeDuration,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var clusterLockTimeout = settings.RegisterDurationSetting(
 	"sql.defaults.lock_timeout",
@@ -374,7 +374,7 @@ var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 		"if set to 0, there is no timeout",
 	0,
 	settings.NonNegativeDuration,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
 	"sql.defaults.idle_in_transaction_session_timeout",
@@ -383,14 +383,14 @@ var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
 		"session is terminated; if set to 0, there is no timeout",
 	0,
 	settings.NonNegativeDuration,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var experimentalExpressionIndexesMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_expression_indexes.enabled",
 	"default value for experimental_enable_expression_indexes session setting;"+
 		"disables expression indexes by default",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 // TODO(rytaft): remove this once unique without index constraints are fully
 // supported.
@@ -399,7 +399,7 @@ var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting
 	"default value for experimental_enable_unique_without_index_constraints session setting;"+
 		"disables unique without index constraints by default",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	"sql.defaults.experimental_new_schema_changer.enabled",
@@ -411,20 +411,20 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 		int64(sessiondatapb.UseNewSchemaChangerOn):           "on",
 		int64(sessiondatapb.UseNewSchemaChangerUnsafeAlways): "unsafe_always",
 	},
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var experimentalStreamReplicationEnabled = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_stream_replication.enabled",
 	"default value for experimental_stream_replication session setting;"+
 		"enables the ability to setup a replication stream",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
 	`sql.defaults.stub_catalog_tables.enabled`,
 	`default value for stub_catalog_tables session setting`,
 	true,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var experimentalComputedColumnRewrites = settings.RegisterValidatedStringSetting(
 	"sql.defaults.experimental_computed_column_rewrites",
@@ -435,19 +435,19 @@ var experimentalComputedColumnRewrites = settings.RegisterValidatedStringSetting
 		_, err := schemaexpr.ParseComputedColumnRewrites(val)
 		return err
 	},
-)
+).WithNonSystemTenantConfigurable()
 
 var copyPartitioningWhenDeinterleavingTable = settings.RegisterBoolSetting(
 	`sql.defaults.copy_partitioning_when_deinterleaving_table.enabled`,
 	`default value for enable_copying_partitioning_when_deinterleaving_table session variable`,
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var propagateInputOrdering = settings.RegisterBoolSetting(
 	`sql.defaults.propagate_input_ordering.enabled`,
 	`default value for the experimental propagate_input_ordering session variable`,
 	false,
-)
+).WithNonSystemTenantConfigurable()
 
 // settingWorkMemBytes is a cluster setting that determines the maximum amount
 // of RAM that a processor can use.
@@ -472,7 +472,7 @@ var experimentalDistSQLPlanningClusterMode = settings.RegisterEnumSetting(
 		int64(sessiondatapb.ExperimentalDistSQLPlanningOff): "off",
 		int64(sessiondatapb.ExperimentalDistSQLPlanningOn):  "on",
 	},
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 // VectorizeClusterSettingName is the name for the cluster setting that controls
 // the VectorizeClusterMode below.
@@ -490,7 +490,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 		int64(sessiondatapb.VectorizeExperimentalAlways): "experimental_always",
 		int64(sessiondatapb.VectorizeOff):                "off",
 	},
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var DistSQLClusterExecMode = settings.RegisterEnumSetting(
@@ -502,7 +502,7 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 		int64(sessiondatapb.DistSQLAuto): "auto",
 		int64(sessiondatapb.DistSQLOn):   "on",
 	},
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 // SerialNormalizationMode controls how the SERIAL type is interpreted in table
 // definitions.
@@ -516,13 +516,13 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 		int64(sessiondatapb.SerialUsesSQLSequences):       "sql_sequence",
 		int64(sessiondatapb.SerialUsesCachedSQLSequences): "sql_sequence_cached",
 	},
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var disallowFullTableScans = settings.RegisterBoolSetting(
 	`sql.defaults.disallow_full_table_scans.enabled`,
 	"setting to true rejects queries that have planned a full table scan",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 // intervalStyle controls intervals representation.
 var intervalStyle = settings.RegisterEnumSetting(
@@ -536,7 +536,7 @@ var intervalStyle = settings.RegisterEnumSetting(
 		}
 		return ret
 	}(),
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var dateStyleEnumMap = map[int64]string{
 	0: "ISO, MDY",
@@ -550,7 +550,7 @@ var dateStyle = settings.RegisterEnumSetting(
 	"default value for DateStyle session setting",
 	pgdate.DefaultDateStyle().SQLString(),
 	dateStyleEnumMap,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 // intervalStyleEnabled controls intervals representation.
 // TODO(#sql-experience): remove session setting in v22.1 and have this
@@ -568,7 +568,7 @@ var dateStyleEnabled = settings.RegisterBoolSetting(
 	"sql.defaults.datestyle.enabled",
 	"default value for datestyle_enabled session setting",
 	false,
-).WithPublic()
+).WithPublic().WithNonSystemTenantConfigurable()
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")

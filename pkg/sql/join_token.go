@@ -30,7 +30,7 @@ var FeatureTLSAutoJoinEnabled = settings.RegisterBoolSetting(
 	"feature.tls_auto_join.enabled",
 	"set to true to enable tls auto join through join tokens, false to disable; default is false",
 	false,
-)
+).WithNonSystemTenantConfigurable()
 
 // CreateJoinToken implements the tree.JoinTokenCreator interface.
 func (p *planner) CreateJoinToken(ctx context.Context) (string, error) {

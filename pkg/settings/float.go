@@ -103,14 +103,15 @@ func (f *FloatSetting) setToDefault(ctx context.Context, sv *Values) {
 	}
 }
 
-// WithSystemOnly indicates system-usage only and can be chained.
-func (f *FloatSetting) WithSystemOnly() *FloatSetting {
-	f.common.systemOnly = true
+// WithNonSystemTenantConfigurable marks this setting as settable by
+// non-system tenants and can be chained.
+func (f *FloatSetting) WithNonSystemTenantConfigurable() *FloatSetting {
+	f.common.nonSystemTenantConfigurable = true
 	return f
 }
 
-// Defeat the linter.
-var _ = (*FloatSetting).WithSystemOnly
+// Fool the unused linter.
+var _ = (*FloatSetting).WithNonSystemTenantConfigurable
 
 // RegisterFloatSetting defines a new setting with type float.
 func RegisterFloatSetting(

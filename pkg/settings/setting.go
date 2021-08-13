@@ -203,8 +203,9 @@ type Setting interface {
 	// listed out when retrieving all settings.
 	Visibility() Visibility
 
-	// SystemOnly indicates if a setting is only applicable to the system tenant.
-	SystemOnly() bool
+	// NonSystemTenantConfigurable indicates if a setting can be set by any
+	// non-system tenant.
+	NonSystemTenantConfigurable() bool
 }
 
 // WritableSetting is the exported interface of non-masked settings.
@@ -265,9 +266,9 @@ const (
 )
 
 type common struct {
-	description string
-	visibility  Visibility
-	systemOnly  bool
+	description                 string
+	visibility                  Visibility
+	nonSystemTenantConfigurable bool
 	// Each setting has a slotIdx which is used as a handle with Values.
 	slotIdx       int
 	nonReportable bool
@@ -303,8 +304,8 @@ func (i common) Visibility() Visibility {
 	return i.visibility
 }
 
-func (i common) SystemOnly() bool {
-	return i.systemOnly
+func (i common) NonSystemTenantConfigurable() bool {
+	return i.nonSystemTenantConfigurable
 }
 
 func (i common) isReportable() bool {
@@ -333,6 +334,15 @@ func (i *common) SetReportable(reportable bool) {
 func (i *common) SetVisibility(v Visibility) {
 	i.visibility = v
 }
+
+// SetNonSystemTenantConfigurable controls whether the non-system tenant can
+// configure this.
+func (i *common) SetNonSystemTenantConfigurable(b bool) {
+	i.nonSystemTenantConfigurable = b
+}
+
+// Fool the unused linter.
+var _ = (*common).SetNonSystemTenantConfigurable
 
 // SetRetired marks the setting as obsolete. It also hides
 // it from the output of SHOW CLUSTER SETTINGS.
