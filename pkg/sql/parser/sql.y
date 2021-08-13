@@ -1654,6 +1654,7 @@ alter_sequence_options_stmt:
 // ALTER DATABASE <name> DROP REGIONS <regions>
 // ALTER DATABASE <name> PRIMARY REGION <region>
 // ALTER DATABASE <name> SURVIVE <failure type>
+// ALTER DATABASE <name> PLACEMENT { RESTRICTED | DEFAULT }
 // %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:
   alter_rename_database_stmt
@@ -1676,12 +1677,12 @@ alter_database_owner:
   }
 
 alter_database_placement_stmt:
-  ALTER DATABASE database_name SET placement_clause
+  ALTER DATABASE database_name placement_clause
   {
     /* SKIP DOC */
     $$.val = &tree.AlterDatabasePlacement{
       Name: tree.Name($3),
-      Placement: $5.dataPlacement(),
+      Placement: $4.dataPlacement(),
     }
   }
 
