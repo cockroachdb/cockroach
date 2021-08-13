@@ -201,6 +201,10 @@ define AlterTableRelocatePrivate {
 define ControlJobs {
     # The input expression returns job IDs (as integers).
     Input RelExpr
+
+    # Reason is the reason string for the command job.
+    Reason ScalarExpr
+
     _ ControlJobsPrivate
 }
 
