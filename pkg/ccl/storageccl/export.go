@@ -189,8 +189,17 @@ func evalExport(
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
-		summary, resume, resumeTS, err := reader.ExportMVCCToSst(ctx, start, args.EndKey, args.StartTime,
-			h.Timestamp, resumeKeyTS, exportAllRevisions, targetSize, maxSize, args.SplitMidKey, useTBI, destFile)
+		summary, resume, resumeTS, err := reader.ExportMVCCToSst(ctx, storage.ExportOptions{
+			StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
+			EndKey:             args.EndKey,
+			StartTS:            args.StartTime,
+			EndTS:              h.Timestamp,
+			ExportAllRevisions: exportAllRevisions,
+			TargetSize:         targetSize,
+			MaxSize:            maxSize,
+			StopMidKey:         args.SplitMidKey,
+			UseTBI:             useTBI,
+		}, destFile)
 		if err != nil {
 			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
 				err = errors.WithHintf(err,
