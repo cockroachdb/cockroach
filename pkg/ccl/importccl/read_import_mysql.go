@@ -480,6 +480,11 @@ func mysqlTableToCockroach(
 			}
 			def.DefaultExpr.Expr = expr
 		}
+		// If the target table columns have data type INT or INTEGER, they need to
+		// be updated to conform to the session variable `default_int_size`.
+		if def.Type.(*types.T).Equivalent(types.Int) && p != nil {
+			def.Type = parser.NakedIntTypeFromDefaultIntSize(p.SessionData().DefaultIntSize)
+		}
 		stmt.Defs = append(stmt.Defs, def)
 	}
 
@@ -514,8 +519,7 @@ func mysqlTableToCockroach(
 	semaCtxPtr = makeSemaCtxWithoutTypeResolver(semaCtxPtr)
 	desc, err := MakeSimpleTableDescriptor(
 		ctx, semaCtxPtr, evalCtx.Settings, stmt, parentDB,
-		schemadesc.GetPublicSchema(), id, fks, time.WallTime,
-	)
+		schemadesc.GetPublicSchema(), id, fks, time.WallTime)
 	if err != nil {
 		return nil, nil, err
 	}

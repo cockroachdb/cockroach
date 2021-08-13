@@ -7023,3 +7023,96 @@ func TestImportJobEventLogging(t *testing.T) {
 		string(jobs.StatusRunning)}
 	backupccl.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT")
 }
+
+func TestImportIntCols(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	createTableQuery := `
+CREATE TABLE default_int (
+    id INTEGER PRIMARY KEY,
+    id2 INT
+);
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(createTableQuery))
+		}
+	}))
+	defer srv.Close()
+
+	tests := []struct {
+		name           string
+		query          string
+		defaultIntSize int32
+	}{
+		{
+			name:           "import pgdump with default int4",
+			query:          `IMPORT PGDUMP ($1)`,
+			defaultIntSize: 4,
+		},
+		{
+			name:           "import pgdump with default int8",
+			query:          `IMPORT PGDUMP ($1)`,
+			defaultIntSize: 8,
+		},
+		{
+			name:           "import table from pgdump with default int4",
+			query:          `IMPORT TABLE default_int FROM PGDUMP ($1)`,
+			defaultIntSize: 4,
+		},
+		{
+			name:           "import table from pgdump with default int8",
+			query:          `IMPORT TABLE default_int FROM PGDUMP ($1)`,
+			defaultIntSize: 8,
+		},
+		{
+			name:           "import mysqldump with default int4",
+			query:          `IMPORT MYSQLDUMP ($1)`,
+			defaultIntSize: 4,
+		},
+		{
+			name:           "import mysqldump with default int8",
+			query:          `IMPORT MYSQLDUMP ($1)`,
+			defaultIntSize: 8,
+		},
+		{
+			name:           "import table from mysqldump with default int4",
+			query:          `IMPORT TABLE default_int FROM MYSQLDUMP ($1)`,
+			defaultIntSize: 4,
+		},
+		{
+			name:           "import table from mysqldump with default int8",
+			query:          `IMPORT TABLE default_int FROM MYSQLDUMP ($1)`,
+			defaultIntSize: 8,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Set up clean testing environment.
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS default_int`)
+
+			sqlDB.Exec(t, fmt.Sprintf("set cluster setting sql.defaults.default_int_size = %d;", test.defaultIntSize))
+			sqlDB.Exec(t, fmt.Sprintf("set default_int_size = %d;", test.defaultIntSize))
+
+			sqlDB.Exec(t, test.query, srv.URL)
+
+			// Verify that the columns have the expected data type
+			colDefs := sqlDB.QueryStr(t, "SHOW COLUMNS FROM default_int")
+			for _, def := range colDefs {
+				if def[0] != "rowid" {
+					require.Equal(t, fmt.Sprintf("INT%d", test.defaultIntSize), def[1])
+				}
+			}
+		})
+	}
+}
