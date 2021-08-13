@@ -1,0 +1,130 @@
+new-cluster localities=us-east-1,us-east-1,us-east-1,us-central-1,us-central-1,us-central-1,us-west-1,us-west-1,us-west-1,eu-central-1,eu-west-1
+----
+
+exec-sql idx=0
+CREATE DATABASE db PRIMARY REGION "us-east-1" REGIONS  "us-west-1", "us-central-1", "eu-central-1";
+----
+
+exec-sql idx=0
+CREATE TABLE db.rbr(k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW;
+----
+
+exec-sql idx=0
+INSERT INTO db.rbr (k, v, crdb_region) VALUES (1, 1, 'us-east-1'), (2, 2, 'us-central-1'), (3, 3, 'us-west-1'), (4, 4, 'eu-central-1')
+----
+
+# We can't constrain non-voters to specific replicas other than 9 because we
+# have 7 candidates for non-voters, but only one per region will be allocated (3
+# total).
+wait-for-zone-config-changes db-name=db table-name=rbr partition-name=us-east-1 num-voters=3 num-non-voters=3 leaseholder=0 voter=1,2 non-voter=9 not-present=10
+----
+
+wait-for-zone-config-changes db-name=db table-name=rbr partition-name=us-central-1 num-voters=3 num-non-voters=3 leaseholder=3 voter=4,5 non-voter=9 not-present=10
+----
+
+wait-for-zone-config-changes db-name=db table-name=rbr partition-name=us-west-1 num-voters=3 num-non-voters=3 leaseholder=6 voter=7,8 non-voter=9 not-present=10
+----
+
+# We will rehome the (1, 1) row to us-west-1 and check that the same properties
+# apply to leaseholders, voters, nonvoters, and non-replicas.
+# We expect:
+# 1. Old leaseholder (0) can no longer serve local reads
+# 2. Leaseholder (6) can serve local lookups
+# 3. Voters (7,8) can immediately local region lookups from 6
+# 4. Non-voters (9) can serve stale reads
+# 5. Not-present (10) serves only remote simple reads
+
+exec-sql idx=0
+UPDATE db.rbr SET crdb_region = 'us-west-1' WHERE k = 1;
+----
+
+# When (1, 1) is relocated to us-west-1, node 0 may no longer be the us-east-1
+# leaseholder due to range merging. We wait here to ensure our leaseholders are
+# where we expect.
+
+wait-for-zone-config-changes db-name=db table-name=rbr partition-name=us-east-1 num-voters=3 num-non-voters=3 leaseholder=0 voter=1,2 non-voter=9 not-present=10
+----
+
+wait-for-zone-config-changes db-name=db table-name=rbr partition-name=us-west-1 num-voters=3 num-non-voters=3 leaseholder=6 voter=7,8 non-voter=9 not-present=10
+----
+
+refresh-range-descriptor-cache db-name=db idx=0 table-name=rbr partition-name=us-west-1
+SELECT * FROM db.rbr WHERE k = 1
+----
+LAG_BY_CLUSTER_SETTING
+
+# This is an old leaseholder, so scenario 1.
+trace-sql idx=0 trace-analysis=rbr
+SELECT * FROM db.rbr WHERE k = 1
+----
+served local region search on current node: true
+served local region search via follower read: false
+found in local region: false
+served remote region read via follower read: false
+
+refresh-range-descriptor-cache db-name=db idx=6 table-name=rbr partition-name=us-west-1
+SELECT * FROM db.rbr WHERE k = 1
+----
+LAG_BY_CLUSTER_SETTING
+
+# This is the new leaseholder, so scenario 2.
+trace-sql idx=6 trace-analysis=rbr
+SELECT * FROM db.rbr WHERE k = 1
+----
+served local region search on current node: true
+served local region search via follower read: false
+found in local region: true
+
+refresh-range-descriptor-cache db-name=db idx=7 table-name=rbr partition-name=us-west-1
+SELECT * FROM db.rbr WHERE k = 1
+----
+LAG_BY_CLUSTER_SETTING
+
+# This is a voter, so scenario 3.
+trace-sql idx=7 trace-analysis=rbr
+SELECT * FROM db.rbr WHERE k = 1
+----
+served local region search on current node: false
+found in local region: true
+
+# Sleep to ensure we can get follower reads.
+sleep-for-follower-read
+----
+
+refresh-range-descriptor-cache db-name=db idx=9 table-name=rbr partition-name=us-west-1
+SELECT * FROM db.rbr WHERE k = 1
+----
+LAG_BY_CLUSTER_SETTING
+
+# This is a non-voter, so scenario 4.
+trace-sql idx=9 trace-analysis=rbr
+SELECT * FROM db.rbr WHERE k = 1
+----
+served local region search on current node: true
+served local region search via follower read: false
+found in local region: false
+served remote region read via follower read: false
+
+trace-sql idx=9 trace-analysis=rbr
+SELECT * FROM db.rbr AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
+----
+served local region search on current node: true
+served local region search via follower read: false
+found in local region: false
+served remote region read via follower read: true
+
+refresh-range-descriptor-cache db-name=db idx=10 table-name=rbr partition-name=us-west-1
+SELECT * FROM db.rbr WHERE k = 1
+----
+LAG_BY_CLUSTER_SETTING
+
+# This node does not have a replica, so scenario 5.
+trace-sql idx=10 trace-analysis=simple
+SELECT * FROM db.rbr WHERE k = 1
+----
+served locally: false
+
+trace-sql idx=10 trace-analysis=simple
+SELECT * FROM db.rbr AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
+----
+served locally: false
