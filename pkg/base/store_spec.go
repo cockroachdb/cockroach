@@ -172,6 +172,9 @@ type StoreSpec struct {
 	// or the process has been terminated.
 	// This only applies to in-memory storage engine.
 	StickyInMemoryEngineID string
+	// ReplaceStickyInMemoryEngine is true if the sticky engine should be
+	// replaced with a new one that uses the same underlying in-memory FS.
+	ReplaceStickyInMemoryEngine bool
 	// UseFileRegistry is true if the "file registry" store version is desired.
 	// This is set by CCL code when encryption-at-rest is in use.
 	UseFileRegistry bool

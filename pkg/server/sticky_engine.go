@@ -96,18 +96,23 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
+	var fs vfs.FS
 	if engine, ok := registry.entries[spec.StickyInMemoryEngineID]; ok {
 		if !engine.closed {
 			return nil, errors.Errorf("sticky engine %s has not been closed", spec.StickyInMemoryEngineID)
 		}
-
-		log.Infof(ctx, "re-using sticky in-mem engine %s", spec.StickyInMemoryEngineID)
-		engine.closed = false
-		return engine, nil
+		if !spec.ReplaceStickyInMemoryEngine {
+			log.Infof(ctx, "re-using sticky in-mem engine %s", spec.StickyInMemoryEngineID)
+			engine.closed = false
+			return engine, nil
+		}
+		fs = engine.fs
+		registry.deleteEngine(spec.StickyInMemoryEngineID)
+	} else {
+		fs = vfs.NewMem()
 	}
 
 	log.Infof(ctx, "creating new sticky in-mem engine %s", spec.StickyInMemoryEngineID)
-	fs := vfs.NewMem()
 	engine := storage.InMemFromFS(ctx, fs, "",
 		storage.Attributes(spec.Attributes),
 		storage.CacheSize(cfg.CacheSize),
@@ -145,12 +150,17 @@ func (registry *stickyInMemEnginesRegistryImpl) CloseAllStickyInMemEngines() {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
-	for _, engine := range registry.entries {
-		engine.closed = true
-		engine.Engine.Close()
-	}
-
 	for id := range registry.entries {
-		delete(registry.entries, id)
+		registry.deleteEngine(id)
 	}
+}
+
+func (registry *stickyInMemEnginesRegistryImpl) deleteEngine(id string) {
+	engine, ok := registry.entries[id]
+	if !ok {
+		return
+	}
+	engine.closed = true
+	engine.Engine.Close()
+	delete(registry.entries, id)
 }
