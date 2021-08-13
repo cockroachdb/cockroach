@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -163,6 +164,52 @@ func (m manifestInfoReader) showBackup(
 	return nil
 }
 
+type metadataSSTInfoReader struct{}
+
+var _ backupInfoReader = manifestInfoReader{}
+
+func (m metadataSSTInfoReader) header() colinfo.ResultColumns {
+	return colinfo.ResultColumns{
+		{Name: "file", Typ: types.String},
+		{Name: "key", Typ: types.String},
+		{Name: "detail", Typ: types.Jsonb},
+	}
+}
+
+func (m metadataSSTInfoReader) showBackup(
+	ctx context.Context,
+	store cloud.ExternalStorage,
+	enc *jobspb.BackupEncryptionOptions,
+	incPaths []string,
+	resultsCh chan<- tree.Datums,
+) error {
+	filename := metadataSSTName
+	push := func(_, readable string, value json.JSON) error {
+		val := tree.DNull
+		if value != nil {
+			val = tree.NewDJSON(value)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case resultsCh <- []tree.Datum{tree.NewDString(filename), tree.NewDString(readable), val}:
+			return nil
+		}
+	}
+
+	if err := DebugDumpMetadataSST(ctx, store, filename, enc, push); err != nil {
+		return err
+	}
+
+	for _, i := range incPaths {
+		filename = strings.TrimSuffix(i, backupManifestName) + metadataSSTName
+		if err := DebugDumpMetadataSST(ctx, store, filename, enc, push); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // showBackupPlanHook implements PlanHookFn.
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -190,12 +237,13 @@ func showBackupPlanHook(
 	}
 
 	expected := map[string]sql.KVStringOptValidate{
-		backupOptEncPassphrase:  sql.KVStringOptRequireValue,
-		backupOptEncKMS:         sql.KVStringOptRequireValue,
-		backupOptWithPrivileges: sql.KVStringOptRequireNoValue,
-		backupOptAsJSON:         sql.KVStringOptRequireNoValue,
-		backupOptWithDebugIDs:   sql.KVStringOptRequireNoValue,
-		backupOptIncStorage:     sql.KVStringOptRequireValue,
+		backupOptEncPassphrase:    sql.KVStringOptRequireValue,
+		backupOptEncKMS:           sql.KVStringOptRequireValue,
+		backupOptWithPrivileges:   sql.KVStringOptRequireNoValue,
+		backupOptAsJSON:           sql.KVStringOptRequireNoValue,
+		backupOptWithDebugIDs:     sql.KVStringOptRequireNoValue,
+		backupOptIncStorage:       sql.KVStringOptRequireValue,
+		backupOptDebugMetadataSST: sql.KVStringOptRequireNoValue,
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
@@ -211,18 +259,22 @@ func showBackupPlanHook(
 	}
 
 	var infoReader backupInfoReader
-	var shower backupShower
-	switch backup.Details {
-	case tree.BackupRangeDetails:
-		shower = backupShowerRanges
-	case tree.BackupFileDetails:
-		shower = backupShowerFiles
-	case tree.BackupManifestAsJSON:
-		shower = jsonShower
-	default:
-		shower = backupShowerDefault(ctx, p, backup.ShouldIncludeSchemas, opts)
+	if _, dumpSST := opts[backupOptDebugMetadataSST]; dumpSST {
+		infoReader = metadataSSTInfoReader{}
+	} else {
+		var shower backupShower
+		switch backup.Details {
+		case tree.BackupRangeDetails:
+			shower = backupShowerRanges
+		case tree.BackupFileDetails:
+			shower = backupShowerFiles
+		case tree.BackupManifestAsJSON:
+			shower = jsonShower
+		default:
+			shower = backupShowerDefault(ctx, p, backup.ShouldIncludeSchemas, opts)
+		}
+		infoReader = manifestInfoReader{shower}
 	}
-	infoReader = manifestInfoReader{shower}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
