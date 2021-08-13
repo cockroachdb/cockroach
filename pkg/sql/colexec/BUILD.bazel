@@ -61,7 +61,6 @@ go_library(
         "//pkg/sql/colexec/execgen",  # keep
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
-        "//pkg/sql/colflow/colrpc",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
