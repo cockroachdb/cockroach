@@ -172,7 +172,11 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 }
 
 func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
 	sj *jobs.ScheduledJob,
+	ex sqlutil.InternalExecutor,
 ) (string, error) {
 	backupNode, err := extractBackupStatement(sj)
 	if err != nil {
@@ -186,22 +190,53 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 
 	recurrence := sj.ScheduleExpr()
 	fullBackup := &tree.FullBackupClause{AlwaysFull: true}
-	// If there exists any dependent schedules (full, incremental) for this
-	// scheduled job, we need to include the crontab of the dependent schedule.
-	// For incremental BACKUPs, the full BACKUP's crontab needs to be included
-	// in the full backup clause. Otherwise, update the recurrence
-	// to be the incremental BACKUP's crontab.
-	if args.DependentScheduleCrontab != "" {
+
+	// Check if sj has a dependent full or incremental schedule associated with it.
+	var dependentSchedule *jobs.ScheduledJob
+	if args.DependentScheduleID != 0 {
+		dependentSchedule, err = jobs.LoadScheduledJob(ctx, env, args.DependentScheduleID, ex, txn)
+		if err != nil {
+			return "", err
+		}
+
 		fullBackup.AlwaysFull = false
+		// If sj refers to the incremental schedule, then the dependentSchedule
+		// refers to the full schedule that sj was created as a child of. In this
+		// case, we want to set the full backup recurrence to the dependent full
+		// schedules recurrence.
 		if backupNode.AppendToLatest {
-			fullBackup.Recurrence = tree.NewDString(args.DependentScheduleCrontab)
+			fullBackup.Recurrence = tree.NewDString(dependentSchedule.ScheduleExpr())
 		} else {
+			// If sj refers to the full schedule, then the dependentSchedule refers to
+			// the incremental schedule that was created as a child of sj. In this
+			// case, we want to set the incremental recurrence to the dependent
+			// incremental schedules recurrence.
 			fullBackup.Recurrence = tree.NewDString(recurrence)
-			recurrence = args.DependentScheduleCrontab
+			recurrence = dependentSchedule.ScheduleExpr()
 		}
 	}
 
-	firstRun, err := tree.MakeDTimestampTZ(sj.ScheduledRunTime(), time.Microsecond)
+	// Pick first_run to be the sooner of the scheduled run time on sj and its
+	// dependent schedule. If both are null then set it to now().
+	//
+	// If a user were to execute the `CREATE SCHEDULE` query returned by this
+	// method, the statement would run a full backup at the time when the next
+	// backup was supposed to run, as part of the old schedule.
+	firstRunTime := sj.ScheduledRunTime()
+	if dependentSchedule != nil {
+		dependentScheduleFirstRun := dependentSchedule.ScheduledRunTime()
+		if firstRunTime.IsZero() {
+			firstRunTime = dependentScheduleFirstRun
+		}
+		if !dependentScheduleFirstRun.IsZero() && dependentScheduleFirstRun.Before(firstRunTime) {
+			firstRunTime = dependentScheduleFirstRun
+		}
+	}
+	if firstRunTime.IsZero() {
+		firstRunTime = env.Now()
+	}
+
+	firstRun, err := tree.MakeDTimestampTZ(firstRunTime, time.Microsecond)
 	if err != nil {
 		return "", err
 	}
