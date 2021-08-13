@@ -85,7 +85,7 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	// TODO(bdarnell): Create a new base image with the packages we need
 	// instead of installing them on every run.
 	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y update > logs/apt-upgrade.log 2>&1"`)
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y upgrade -o Dpkg::Options::='--force-confold' > logs/apt-upgrade.log 2>&1"`)
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade -o Dpkg::Options::='--force-confold' -o DPkg::options::='--force-confdef' > logs/apt-upgrade.log 2>&1"`)
 
 	// Install the binary on all nodes and package it as jepsen expects.
 	// TODO(bdarnell): copying the raw binary and compressing it on the
@@ -101,7 +101,7 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	// Install Jepsen's prereqs on the controller.
 	if out, err := c.RunWithBuffer(
 		ctx, t.l, controller, "sh", "-c",
-		`"sudo apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`,
+		`"sudo DEBIAN_FRONTEND=noninteractive apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`,
 	); err != nil {
 		if strings.Contains(string(out), "exit status 100") {
 			t.Skip("apt-get failure (#31944)", string(out))
