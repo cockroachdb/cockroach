@@ -1016,7 +1016,7 @@ func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id jobspb.J
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
-func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
+func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id jobspb.JobID, reason string) error {
 	job, resumer, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
@@ -1025,7 +1025,7 @@ func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id jobspb.Jo
 	if pr, ok := resumer.(PauseRequester); ok {
 		onPauseRequested = pr.OnPauseRequest
 	}
-	return job.PauseRequested(ctx, txn, onPauseRequested)
+	return job.PauseRequested(ctx, txn, onPauseRequested, reason)
 }
 
 // Succeeded marks the job with id as succeeded.

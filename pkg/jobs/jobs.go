@@ -486,7 +486,7 @@ type onPauseRequestFunc func(
 // not directly pause the job; it expects the node that runs the job will
 // actively cancel it when it notices that it is in state StatusPauseRequested
 // and will move it to state StatusPaused.
-func (j *Job) PauseRequested(ctx context.Context, txn *kv.Txn, fn onPauseRequestFunc) error {
+func (j *Job) PauseRequested(ctx context.Context, txn *kv.Txn, fn onPauseRequestFunc, reason string) error {
 	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		// Don't allow 19.2-style schema change jobs to undergo changes in job state
 		// before they undergo a migration to make them properly runnable in 20.1 and
@@ -519,7 +519,7 @@ func (j *Job) PauseRequested(ctx context.Context, txn *kv.Txn, fn onPauseRequest
 			ju.UpdateProgress(md.Progress)
 		}
 		ju.UpdateStatus(StatusPauseRequested)
-		log.Infof(ctx, "job %d: pause requested recorded", j.ID())
+		log.Infof(ctx, "job %d: pause requested recorded with reason %s", j.ID(), reason)
 		return nil
 	})
 }
