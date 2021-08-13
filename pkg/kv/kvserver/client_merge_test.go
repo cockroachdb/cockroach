@@ -2262,6 +2262,7 @@ func TestStoreRangeMergeCheckConsistencyAfterSubsumption(t *testing.T) {
 func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderStress(t, "falls apart with timeouts under high concurrency")
 
 	var store *kvserver.Store
 	manualClock := hlc.NewHybridManualClock()
