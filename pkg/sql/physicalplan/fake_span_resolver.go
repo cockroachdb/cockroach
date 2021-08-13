@@ -40,6 +40,12 @@ func NewFakeSpanResolver(nodes []*roachpb.NodeDescriptor) SpanResolver {
 	}
 }
 
+// IsFakeSpanResolver returns whether s is a fakeSpanResolver.
+func IsFakeSpanResolver(s SpanResolver) bool {
+	_, ok := s.(*fakeSpanResolver)
+	return ok
+}
+
 // fakeRange indicates that a range between startKey and endKey is owned by a
 // certain node.
 type fakeRange struct {

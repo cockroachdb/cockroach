@@ -234,6 +234,10 @@ type TestingKnobs struct {
 
 	// BackupRestoreTestingKnobs are backup and restore specific testing knobs.
 	BackupRestoreTestingKnobs base.ModuleTestingKnobs
+
+	// UsesFakeSpanResolver indicates whether the DistSQLPlanner uses a fake
+	// span resolver.
+	UsesFakeSpanResolver bool
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
