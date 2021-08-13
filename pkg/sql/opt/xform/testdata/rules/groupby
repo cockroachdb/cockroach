@@ -2010,16 +2010,19 @@ project
       │    │    │    ├── left columns: a:12 b:13
       │    │    │    ├── right columns: a:21 b:22
       │    │    │    ├── ordering: +2,+3
+      │    │    │    ├── limit hint: 3.00
       │    │    │    ├── scan regional@secondary
       │    │    │    │    ├── columns: a:12!null b:13!null
       │    │    │    │    ├── constraint: /11/12/13: [/'east' - /'east']
       │    │    │    │    ├── key: (12,13)
-      │    │    │    │    └── ordering: +12,+13
+      │    │    │    │    ├── ordering: +12,+13
+      │    │    │    │    └── limit hint: 3.00
       │    │    │    └── scan regional@secondary
       │    │    │         ├── columns: a:21!null b:22!null
       │    │    │         ├── constraint: /20/21/22: [/'west' - /'west']
       │    │    │         ├── key: (21,22)
-      │    │    │         └── ordering: +21,+22
+      │    │    │         ├── ordering: +21,+22
+      │    │    │         └── limit hint: 3.00
       │    │    └── aggregations
       │    │         └── count-rows [as=count_rows:10]
       │    └── filters
@@ -2063,22 +2066,27 @@ project
       │    │    │    ├── left columns: d:33 e:34
       │    │    │    ├── right columns: d:42 e:43
       │    │    │    ├── ordering: +5,+6
+      │    │    │    ├── limit hint: 3.00
       │    │    │    ├── select
       │    │    │    │    ├── columns: d:33!null e:34!null
       │    │    │    │    ├── ordering: +33,+34
+      │    │    │    │    ├── limit hint: 3.00
       │    │    │    │    ├── scan regional@secondary
       │    │    │    │    │    ├── columns: d:33!null e:34
       │    │    │    │    │    ├── constraint: /29/33/34: (/'east'/NULL - /'east']
-      │    │    │    │    │    └── ordering: +33,+34
+      │    │    │    │    │    ├── ordering: +33,+34
+      │    │    │    │    │    └── limit hint: 3.00
       │    │    │    │    └── filters
       │    │    │    │         └── e:34 IS NOT NULL [outer=(34), constraints=(/34: (/NULL - ]; tight)]
       │    │    │    └── select
       │    │    │         ├── columns: d:42!null e:43!null
       │    │    │         ├── ordering: +42,+43
+      │    │    │         ├── limit hint: 3.00
       │    │    │         ├── scan regional@secondary
       │    │    │         │    ├── columns: d:42!null e:43
       │    │    │         │    ├── constraint: /38/42/43: (/'west'/NULL - /'west']
-      │    │    │         │    └── ordering: +42,+43
+      │    │    │         │    ├── ordering: +42,+43
+      │    │    │         │    └── limit hint: 3.00
       │    │    │         └── filters
       │    │    │              └── e:43 IS NOT NULL [outer=(43), constraints=(/43: (/NULL - ]; tight)]
       │    │    └── aggregations
@@ -2124,18 +2132,21 @@ project
       │    │    │    ├── left columns: a:48 rowid:53
       │    │    │    ├── right columns: a:57 rowid:62
       │    │    │    ├── ordering: +2
+      │    │    │    ├── limit hint: 3.00
       │    │    │    ├── scan regional@partial_a,partial
       │    │    │    │    ├── columns: a:48!null rowid:53!null
       │    │    │    │    ├── constraint: /47/48: [/'east' - /'east']
       │    │    │    │    ├── key: (53)
       │    │    │    │    ├── fd: (53)-->(48), (48)-->(53)
-      │    │    │    │    └── ordering: +48
+      │    │    │    │    ├── ordering: +48
+      │    │    │    │    └── limit hint: 3.00
       │    │    │    └── scan regional@partial_a,partial
       │    │    │         ├── columns: a:57!null rowid:62!null
       │    │    │         ├── constraint: /56/57: [/'west' - /'west']
       │    │    │         ├── key: (62)
       │    │    │         ├── fd: (62)-->(57), (57)-->(62)
-      │    │    │         └── ordering: +57
+      │    │    │         ├── ordering: +57
+      │    │    │         └── limit hint: 3.00
       │    │    └── aggregations
       │    │         └── count-rows [as=count_rows:10]
       │    └── filters
@@ -2179,14 +2190,17 @@ project
       │    │    │    ├── left columns: d:51
       │    │    │    ├── right columns: d:60
       │    │    │    ├── ordering: +5
+      │    │    │    ├── limit hint: 3.00
       │    │    │    ├── scan regional@partial_d,partial
       │    │    │    │    ├── columns: d:51!null
       │    │    │    │    ├── constraint: /47/51: (/'east'/NULL - /'east']
-      │    │    │    │    └── ordering: +51
+      │    │    │    │    ├── ordering: +51
+      │    │    │    │    └── limit hint: 3.00
       │    │    │    └── scan regional@partial_d,partial
       │    │    │         ├── columns: d:60!null
       │    │    │         ├── constraint: /56/60: (/'west'/NULL - /'west']
-      │    │    │         └── ordering: +60
+      │    │    │         ├── ordering: +60
+      │    │    │         └── limit hint: 3.00
       │    │    └── aggregations
       │    │         └── count-rows [as=count_rows:10]
       │    └── filters
