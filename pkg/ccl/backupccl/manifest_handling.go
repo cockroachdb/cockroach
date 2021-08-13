@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -80,6 +81,12 @@ const (
 	// Also exported for testing backup inspection tooling.
 	DateBasedIntoFolderName = "/2006/01/02-150405.00"
 	latestFileName          = "LATEST"
+)
+
+var writeMetadataSST = settings.RegisterBoolSetting(
+	"kv.bulkio.write_metadata_sst.enabled",
+	"write experimental new format BACKUP metadata file",
+	true,
 )
 
 // isGZipped detects whether the given bytes represent GZipped data. This check
