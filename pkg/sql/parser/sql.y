@@ -920,6 +920,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> alter_zone_database_stmt
 %type <tree.Statement> alter_database_owner
 %type <tree.Statement> alter_database_placement_stmt
+%type <tree.Statement> alter_database_set_stmt
 
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
@@ -1655,6 +1656,8 @@ alter_sequence_options_stmt:
 // ALTER DATABASE <name> PRIMARY REGION <region>
 // ALTER DATABASE <name> SURVIVE <failure type>
 // ALTER DATABASE <name> PLACEMENT { RESTRICTED | DEFAULT }
+// ALTER DATABASE <name> SET var { TO | = } { value | DEFAULT }
+// ALTER DATABASE <name> RESET { var | ALL }
 // %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:
   alter_rename_database_stmt
@@ -1666,6 +1669,7 @@ alter_database_stmt:
 | alter_database_survival_goal_stmt
 | alter_database_primary_region_stmt
 | alter_database_placement_stmt
+| alter_database_set_stmt
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
@@ -1674,6 +1678,19 @@ alter_database_owner:
   ALTER DATABASE database_name OWNER TO role_spec
   {
     $$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: $6.user()}
+  }
+
+// This form is an alias for ALTER ROLE ALL IN DATABASE <db> SET ...
+alter_database_set_stmt:
+  ALTER DATABASE database_name set_or_reset_clause
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterRoleSet{
+      AllRoles: true,
+      DatabaseName: tree.Name($3),
+      IsRole: true,
+      SetOrReset: $4.setVar(),
+    }
   }
 
 alter_database_placement_stmt:
