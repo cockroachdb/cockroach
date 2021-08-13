@@ -89,6 +89,18 @@ func (*mockServer) TokenBucket(
 	panic("unimplemented")
 }
 
+func (m *mockServer) GetSpanConfigs(
+	context.Context, *roachpb.GetSpanConfigsRequest,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	panic("unimplemented")
+}
+
+func (m *mockServer) UpdateSpanConfigs(
+	context.Context, *roachpb.UpdateSpanConfigsRequest,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	panic("unimplemented")
+}
+
 func gossipEventForClusterID(clusterID uuid.UUID) *roachpb.GossipSubscriptionEvent {
 	return &roachpb.GossipSubscriptionEvent{
 		Key:            gossip.KeyClusterID,

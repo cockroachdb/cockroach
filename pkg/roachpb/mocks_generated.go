@@ -56,6 +56,26 @@ func (mr *MockInternalClientMockRecorder) Batch(arg0, arg1 interface{}, arg2 ...
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Batch", reflect.TypeOf((*MockInternalClient)(nil).Batch), varargs...)
 }
 
+// GetSpanConfigs mocks base method.
+func (m *MockInternalClient) GetSpanConfigs(arg0 context.Context, arg1 *GetSpanConfigsRequest, arg2 ...grpc.CallOption) (*GetSpanConfigsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetSpanConfigs", varargs...)
+	ret0, _ := ret[0].(*GetSpanConfigsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSpanConfigs indicates an expected call of GetSpanConfigs.
+func (mr *MockInternalClientMockRecorder) GetSpanConfigs(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSpanConfigs", reflect.TypeOf((*MockInternalClient)(nil).GetSpanConfigs), varargs...)
+}
+
 // GossipSubscription mocks base method.
 func (m *MockInternalClient) GossipSubscription(arg0 context.Context, arg1 *GossipSubscriptionRequest, arg2 ...grpc.CallOption) (Internal_GossipSubscriptionClient, error) {
 	m.ctrl.T.Helper()
@@ -174,6 +194,26 @@ func (mr *MockInternalClientMockRecorder) TokenBucket(arg0, arg1 interface{}, ar
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TokenBucket", reflect.TypeOf((*MockInternalClient)(nil).TokenBucket), varargs...)
+}
+
+// UpdateSpanConfigs mocks base method.
+func (m *MockInternalClient) UpdateSpanConfigs(arg0 context.Context, arg1 *UpdateSpanConfigsRequest, arg2 ...grpc.CallOption) (*UpdateSpanConfigsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateSpanConfigs", varargs...)
+	ret0, _ := ret[0].(*UpdateSpanConfigsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateSpanConfigs indicates an expected call of UpdateSpanConfigs.
+func (mr *MockInternalClientMockRecorder) UpdateSpanConfigs(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSpanConfigs", reflect.TypeOf((*MockInternalClient)(nil).UpdateSpanConfigs), varargs...)
 }
 
 // MockInternal_RangeFeedClient is a mock of Internal_RangeFeedClient interface.

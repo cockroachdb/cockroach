@@ -749,6 +749,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		rpcContext:               rpcContext,
 		nodeDescs:                g,
 		systemConfigProvider:     g,
+		spanConfigAccessor:       node,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
