@@ -90,6 +90,7 @@ const (
 )
 
 var writeMetadataSST = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
 	true,
