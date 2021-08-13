@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -107,6 +108,9 @@ var _ config.SystemConfigProvider = (*Connector)(nil)
 // This is necessary for region validation for zone configurations and
 // multi-region primitives.
 var _ serverpb.RegionsServer = (*Connector)(nil)
+
+// Connector is capable of accessing span configurations for secondary tenants.
+var _ spanconfig.KVAccessor = (*Connector)(nil)
 
 // NewConnector creates a new Connector.
 // NOTE: Calling Start will set cfg.RPCContext.ClusterID.
@@ -501,4 +505,43 @@ func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.Internal
 	if c.mu.client == client {
 		c.mu.client = nil
 	}
+}
+
+// GetSpanConfigEntriesFor implements the spanconfig.KVAccessor interface.
+func (c *Connector) GetSpanConfigEntriesFor(
+	ctx context.Context, spans []roachpb.Span,
+) ([][]roachpb.SpanConfigEntry, error) {
+	for ctx.Err() == nil {
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		resp, err := client.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{
+			Spans: spans,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return resp.Unnest(), nil
+	}
+	return nil, ctx.Err()
+}
+
+// UpdateSpanConfigEntries implements the spanconfig.KVAccessor
+// interface.
+func (c *Connector) UpdateSpanConfigEntries(
+	ctx context.Context, update []roachpb.SpanConfigEntry, delete []roachpb.Span,
+) error {
+	for ctx.Err() == nil {
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		_, err = client.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
+			SpanConfigsToUpdate: update,
+			SpansToDelete:       delete,
+		})
+		return err
+	}
+	return ctx.Err()
 }

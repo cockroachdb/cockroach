@@ -11,6 +11,7 @@
 package roachpb
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -301,5 +302,43 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 	c.Sub(&b)
 	if exp := (TenantConsumption{}); c != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, c)
+	}
+}
+
+func TestUnnestGetSpanConfigsResponse(t *testing.T) {
+	entry := func(i, j int) SpanConfigEntry {
+		return SpanConfigEntry{
+			Span: Span{
+				Key:    Key(fmt.Sprintf("start_%d", i)),
+				EndKey: Key(fmt.Sprintf("end_%d", j)),
+			},
+			Config: SpanConfig{
+				NumReplicas: int32(i),
+				NumVoters:   int32(j),
+			},
+		}
+	}
+
+	r := GetSpanConfigsResponse{}
+	const rows, columns = 5, 3
+	for i := 0; i < rows; i++ {
+		var entries []SpanConfigEntry
+		for j := 0; j < columns; j++ {
+			entries = append(entries, entry(i, j))
+		}
+		r.Results = append(r.Results, GetSpanConfigsResponse_Result{
+			SpanConfigs: entries,
+		})
+
+	}
+	result := r.Unnest()
+	require.Len(t, result, rows)
+
+	for i := 0; i < rows; i++ {
+		require.Len(t, result[i], columns)
+		for j := 0; j < columns; j++ {
+			expected := entry(i, j)
+			require.True(t, result[i][j].Equal(expected))
+		}
 	}
 }

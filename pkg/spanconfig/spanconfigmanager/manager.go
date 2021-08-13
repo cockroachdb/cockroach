@@ -33,22 +33,29 @@ type Manager struct {
 	jr    *jobs.Registry
 	ie    sqlutil.InternalExecutor
 	knobs *spanconfig.TestingKnobs
+
+	spanconfig.KVAccessor
 }
 
 var _ spanconfig.ReconciliationDependencies = &Manager{}
 
 // New constructs a new Manager.
 func New(
-	db *kv.DB, jr *jobs.Registry, ie sqlutil.InternalExecutor, knobs *spanconfig.TestingKnobs,
+	db *kv.DB,
+	jr *jobs.Registry,
+	ie sqlutil.InternalExecutor,
+	kvAccessor spanconfig.KVAccessor,
+	knobs *spanconfig.TestingKnobs,
 ) *Manager {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &Manager{
-		db:    db,
-		jr:    jr,
-		ie:    ie,
-		knobs: knobs,
+		db:         db,
+		jr:         jr,
+		ie:         ie,
+		KVAccessor: kvAccessor,
+		knobs:      knobs,
 	}
 }
 

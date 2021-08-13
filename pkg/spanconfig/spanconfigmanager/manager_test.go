@@ -66,6 +66,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		ts.DB(),
 		ts.JobRegistry().(*jobs.Registry),
 		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
 		&spanconfig.TestingKnobs{
 			ManagerCreatedJobInterceptor: func(jobI interface{}) {
 				job := jobI.(*jobs.Job)
@@ -150,6 +151,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 		ts.DB(),
 		ts.JobRegistry().(*jobs.Registry),
 		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
 		&spanconfig.TestingKnobs{
 			ManagerAfterCheckedReconciliationJobExistsInterceptor: func(exists bool) {
 				require.False(t, exists)

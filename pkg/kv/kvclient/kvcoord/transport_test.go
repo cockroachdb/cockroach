@@ -197,3 +197,15 @@ func (m *mockInternalClient) TokenBucket(
 ) (*roachpb.TokenBucketResponse, error) {
 	return nil, fmt.Errorf("unsupported TokenBucket call")
 }
+
+func (m *mockInternalClient) GetSpanConfigs(
+	_ context.Context, _ *roachpb.GetSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	return nil, fmt.Errorf("unsupported GetSpanConfigs call")
+}
+
+func (m *mockInternalClient) UpdateSpanConfigs(
+	_ context.Context, _ *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	return nil, fmt.Errorf("unsupported UpdateSpanConfigs call")
+}

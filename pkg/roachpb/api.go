@@ -1628,3 +1628,56 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 		c.SQLPodsCPUSeconds -= other.SQLPodsCPUSeconds
 	}
 }
+
+// Unnest is a convenience method to return the slice-of-slices form of
+// GetSpanConfigsResponse.
+func (r *GetSpanConfigsResponse) Unnest() [][]SpanConfigEntry {
+	var ret [][]SpanConfigEntry
+	for _, result := range r.Results {
+		ret = append(ret, result.SpanConfigs)
+	}
+	return ret
+}
+
+// Equal compares two span config entries.
+func (e SpanConfigEntry) Equal(other SpanConfigEntry) bool {
+	return e.Span.Equal(other.Span) && e.Config.Equal(other.Config)
+}
+
+// Validate returns an error the request is malformed. Spans included in the
+// request are expected to be valid, and have non-empty end keys. Additionally,
+// spans in each list (update/delete) are expected to be non-overlapping.
+func (r *UpdateSpanConfigsRequest) Validate() error {
+	spansToUpdate := func(ents []SpanConfigEntry) []Span {
+		var spans []Span
+		for _, ent := range ents {
+			spans = append(spans, ent.Span)
+		}
+		return spans
+	}(r.SpanConfigsToUpdate)
+
+	for _, list := range [][]Span{
+		r.SpansToDelete, spansToUpdate,
+	} {
+		for _, span := range list {
+			if !span.Valid() || len(span.EndKey) == 0 {
+				return errors.AssertionFailedf("invalid span: %s", span)
+			}
+		}
+
+		for i := range list {
+			for j := range list {
+				if i == j {
+					continue
+				}
+
+				if list[i].Overlaps(list[j]) {
+					return errors.AssertionFailedf("overlapping spans %s and %s in same list",
+						list[i], list[j])
+				}
+			}
+		}
+	}
+
+	return nil
+}
