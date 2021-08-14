@@ -40,6 +40,13 @@ func NewCrossJoiner(
 	rightTypes []*types.T,
 	diskAcc *mon.BoundAccount,
 ) colexecop.Operator {
+	switch joinType {
+	case descpb.InnerJoin,
+		descpb.LeftOuterJoin, descpb.RightOuterJoin,
+		descpb.LeftAntiJoin, descpb.RightAntiJoin:
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("%s is unsupported", joinType))
+	}
 	return &crossJoiner{
 		crossJoinerBase: newCrossJoinerBase(
 			unlimitedAllocator,
