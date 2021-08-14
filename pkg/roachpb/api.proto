@@ -115,6 +115,9 @@ message ResponseHeader {
   // When resume_span is populated, this specifies the reason why the operation
   // wasn't completed and needs to be resumed.
   ResumeReason resume_reason = 7;
+  // When resume_span is populated, this specifies the size of the next
+  // result entry.
+  int64 resume_next_bytes = 9;
 
   // The number of keys operated on.
   int64 num_keys = 5;

@@ -227,16 +227,18 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 
 // scan iterates until a limit is exceeded, the underlying iterator is
 // exhausted, or an error is encountered. If a limit was exceeded, it returns a
-// resume span and resume reason.
-func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, roachpb.ResumeReason, error) {
+// resume span, resume reason, and the size of the next result.
+func (p *pebbleMVCCScanner) scan(
+	ctx context.Context,
+) (*roachpb.Span, roachpb.ResumeReason, int64, error) {
 	p.isGet = false
 	if p.reverse {
 		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
-			return nil, 0, p.err
+			return nil, 0, 0, p.err
 		}
 	} else {
 		if !p.iterSeek(MVCCKey{Key: p.start}) {
-			return nil, 0, p.err
+			return nil, 0, 0, p.err
 		}
 	}
 
@@ -245,7 +247,7 @@ func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, roachpb.Re
 	p.maybeFailOnMoreRecent()
 
 	if p.err != nil {
-		return nil, 0, p.err
+		return nil, 0, 0, p.err
 	}
 
 	if p.resumeReason != 0 && (p.curExcluded || p.advanceKey()) {
@@ -269,9 +271,9 @@ func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, roachpb.Re
 				EndKey: p.end,
 			}
 		}
-		return resumeSpan, p.resumeReason, nil
+		return resumeSpan, p.resumeReason, int64(p.results.sizeOf(len(p.curRawKey), len(p.curValue))), nil
 	}
-	return nil, 0, nil
+	return nil, 0, 0, nil
 }
 
 // Increments itersBeforeSeek while ensuring it stays <= maxItersBeforeSeek

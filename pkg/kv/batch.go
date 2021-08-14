@@ -284,6 +284,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 				if h := reply.Header(); h.ResumeSpan != nil {
 					result.ResumeSpan = h.ResumeSpan
 					result.ResumeReason = h.ResumeReason
+					result.ResumeNextBytes = h.ResumeNextBytes
 				}
 			}
 		}
