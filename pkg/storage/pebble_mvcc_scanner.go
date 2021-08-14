@@ -123,10 +123,12 @@ type pebbleMVCCScanner struct {
 	start, end roachpb.Key
 	// Timestamp with which MVCCScan/MVCCGet was called.
 	ts hlc.Timestamp
-	// Max number of keys to return.
+	// Max number of keys to return. Can be negative, which returns an empty
+	// result but appropriate resume info.
 	maxKeys int64
 	// Stop adding keys once p.result.bytes matches or exceeds this threshold,
-	// if nonzero.
+	// if nonzero. Can be negative, which returns an empty result but appropriate
+	// resume info.
 	targetBytes int64
 	// If true, don't exceed targetBytes except for the first kv pair.
 	//
@@ -233,16 +235,21 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 
 // scan iterates until a limit is exceeded, the underlying iterator is
 // exhausted, or an error is encountered. If a limit was exceeded, it returns a
-// resume span and resume reason.
-func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, roachpb.ResumeReason, error) {
+// resume span, resume reason, and for targetBytes the size of the next result.
+func (p *pebbleMVCCScanner) scan(
+	ctx context.Context,
+) (*roachpb.Span, roachpb.ResumeReason, int64, error) {
 	p.isGet = false
+	if p.maxKeys < 0 {
+		return &roachpb.Span{Key: p.start, EndKey: p.end}, roachpb.RESUME_KEY_LIMIT, 0, nil
+	}
 	if p.reverse {
 		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
-			return nil, 0, p.err
+			return nil, 0, 0, p.err
 		}
 	} else {
 		if !p.iterSeek(MVCCKey{Key: p.start}) {
-			return nil, 0, p.err
+			return nil, 0, 0, p.err
 		}
 	}
 
@@ -251,7 +258,7 @@ func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, roachpb.Re
 	p.maybeFailOnMoreRecent()
 
 	if p.err != nil {
-		return nil, 0, p.err
+		return nil, 0, 0, p.err
 	}
 
 	if p.resumeReason != 0 && (p.curExcluded || p.advanceKey()) {
@@ -275,9 +282,13 @@ func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, roachpb.Re
 				EndKey: p.end,
 			}
 		}
-		return resumeSpan, p.resumeReason, nil
+		var resumeNextBytes int64
+		if p.resumeReason == roachpb.RESUME_BYTE_LIMIT && p.curExcluded {
+			resumeNextBytes = int64(p.results.sizeOf(len(p.curRawKey), len(p.curValue)))
+		}
+		return resumeSpan, p.resumeReason, resumeNextBytes, nil
 	}
-	return nil, 0, nil
+	return nil, 0, 0, nil
 }
 
 // Increments itersBeforeSeek while ensuring it stays <= maxItersBeforeSeek
@@ -710,9 +721,13 @@ func (p *pebbleMVCCScanner) addAndAdvance(ctx context.Context, rawKey []byte, va
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
-		if p.targetBytes > 0 && (p.results.count > 0 || p.targetBytesAllowEmpty) {
+		// Check if we should apply the targetBytes limit at all. We do this either
+		// if this is not the first result, or if targetBytesAllowEmpty is true, or
+		// if a negative limit is given (implying an empty result).
+		if p.targetBytes != 0 && (p.results.count > 0 || p.targetBytesAllowEmpty || p.targetBytes < 0) {
 			size := p.results.bytes
 			nextSize := int64(p.results.sizeOf(len(rawKey), len(val)))
+			// Check if we actually exceeded the limit.
 			if size >= p.targetBytes || (p.targetBytesAvoidExcess && size+nextSize > p.targetBytes) {
 				p.curExcluded = true
 				p.resumeReason = roachpb.RESUME_BYTE_LIMIT

@@ -33,14 +33,14 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
-	if h.MaxSpanRequestKeys < 0 || h.TargetBytes < 0 {
+	if h.MaxSpanRequestKeys < 0 || (h.TargetBytes < 0 && !h.TargetBytesRequireNextBytes) {
 		// Receipt of a GetRequest with negative MaxSpanRequestKeys or TargetBytes
 		// indicates that the request was part of a batch that has already exhausted
 		// its limit, which means that we should *not* serve the request and return
 		// a ResumeSpan for this GetRequest.
 		//
-		// This mirrors the logic in MVCCScan, though the logic in MVCCScan is
-		// slightly lower in the stack.
+		// However, if the caller requires us to populate ResumeNextBytes, we have
+		// to do the read below.
 		reply.ResumeSpan = &roachpb.Span{Key: args.Key}
 		if h.MaxSpanRequestKeys < 0 {
 			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
@@ -49,6 +49,7 @@ func Get(
 		}
 		return result.Result{}, nil
 	}
+
 	var val *roachpb.Value
 	var intent *roachpb.Intent
 	var err error
@@ -62,6 +63,10 @@ func Get(
 	if err != nil {
 		return result.Result{}, err
 	}
+	// NB: In the case of TargetBytes < 0 and TargetBytesRequireNextBytes == true,
+	// we don't return a resume span if the key does not exist; we've already done
+	// the read, and won't add any bytes to the result, so we may as well return
+	// the empty response.
 	if val != nil {
 		// NB: This calculation is different from Scan, since Scan responses include
 		// the key/value pair while Get only includes the value.
@@ -70,9 +75,12 @@ func Get(
 		// AvoidExcessTargetBytes cluster version is active.
 		avoidExcess := cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx,
 			clusterversion.AvoidExcessTargetBytes)
-		if h.TargetBytes > 0 && avoidExcess && h.TargetBytesAllowEmpty && numBytes > h.TargetBytes {
+		checkTargetBytes := (h.TargetBytes > 0 && avoidExcess && h.TargetBytesAllowEmpty) ||
+			h.TargetBytes < 0
+		if checkTargetBytes && numBytes > h.TargetBytes {
 			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
 			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+			reply.ResumeNextBytes = numBytes
 			return result.Result{}, nil
 		}
 		reply.NumKeys = 1
