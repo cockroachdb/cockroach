@@ -195,7 +195,6 @@ func (dsp *DistSQLPlanner) GatewayID() roachpb.NodeID {
 // responsibility to make sure the DistSQLPlanner is not in use.
 func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver physicalplan.SpanResolver) {
 	dsp.spanResolver = spanResolver
-	dsp.distSQLSrv.TestingKnobs.UsesFakeSpanResolver = physicalplan.IsFakeSpanResolver(spanResolver)
 }
 
 // distSQLExprCheckVisitor is a tree.Visitor that checks if expressions

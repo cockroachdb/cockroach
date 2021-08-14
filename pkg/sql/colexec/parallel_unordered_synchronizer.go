@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -68,12 +67,12 @@ type ParallelUnorderedSynchronizer struct {
 
 	inputs []colexecargs.OpWithMetaInfo
 	// cancelLocalInput stores context cancellation functions for each of the
-	// inputs. For each input tree, we examine whether it is fully local and
-	// only derive the cancellation function if so (i.e. there are no
-	// colrpc.Inboxes in the input tree).
-	cancelLocalInput     []context.CancelFunc
-	UsesFakeSpanResolver bool
-	tracingSpans         []*tracing.Span
+	// inputs. The functions are populated only if LocalPlan is true.
+	cancelLocalInput []context.CancelFunc
+	// LocalPlan indicates whether this synchronizer is a part of the fully
+	// local plan.
+	LocalPlan    bool
+	tracingSpans []*tracing.Span
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
 	// goroutines to wait on until the Next goroutine signals that it is safe to
@@ -170,17 +169,16 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 	for i, input := range s.inputs {
 		var inputCtx context.Context
 		inputCtx, s.tracingSpans[i] = execinfra.ProcessorSpan(s.Ctx, fmt.Sprintf("parallel unordered sync input %d", i))
-		// If there are no colrpc.Inboxes in this input tree, the synchronizer
-		// can cancel the current work eagerly when transitioning into draining.
-		// If there is at least one inbox, then it cannot do so because
-		// canceling the context would break the gRPC stream and make it
-		// impossible to fetch the remote metadata.
-		//
-		// We also carve out an exception for fakedist* logic test configs since
-		// although the input tree might not contain an inbox, the tree is
-		// treated as remote, and we cannot cancel such tree eagerly.
-		localInput := !containsInbox(input) && !s.UsesFakeSpanResolver
-		if localInput {
+		if s.LocalPlan {
+			// If there plan is local, there are no colrpc.Inboxes in this input
+			// tree, and the synchronizer can cancel the current work eagerly
+			// when transitioning into draining.
+			//
+			// If there plan is distributed, there might be an inbox in the
+			// input tree, and the synchronizer cannot cancel the work eagerly
+			// because canceling the context would break the gRPC stream and
+			// make it impossible to fetch the remote metadata. Furthermore, it
+			// will result in the remote flow cancellation.
 			inputCtx, s.cancelLocalInput[i] = context.WithCancel(inputCtx)
 		}
 		input.Root.Init(inputCtx)
@@ -190,27 +188,6 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 			}
 		}(input.Root, i)
 	}
-}
-
-// containsInbox returns true if there is at least one colrpc.Inbox in the
-// operator tree rooted in op.
-func containsInbox(op colexecargs.OpWithMetaInfo) bool {
-	// All inboxes must have been added to the MetadataSources, so rather than
-	// walking over the whole operator tree, we can just iterate over the
-	// MetadataSources.
-	for _, ms := range op.MetadataSources {
-		if util.CrdbTestBuild {
-			// If we have an InvariantsChecker around the MetadataSource, we
-			// have to unwrap it.
-			if i, ok := ms.(*InvariantsChecker); ok {
-				ms = i.Input.(colexecop.MetadataSource)
-			}
-		}
-		if _, ok := ms.(*colrpc.Inbox); ok {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *ParallelUnorderedSynchronizer) getState() parallelUnorderedSynchronizerState {
