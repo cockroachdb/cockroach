@@ -58,6 +58,10 @@ func ResolveIntentRange(
 	if resumeSpan != nil {
 		update.EndKey = resumeSpan.Key
 		reply.ResumeSpan = resumeSpan
+		// The given MaxSpanRequestKeys really specifies the number of intents
+		// resolved, not the number of keys scanned. We could return
+		// RESUME_INTENT_LIMIT here, but since the given limit is a key limit we
+		// return RESUME_KEY_LIMIT for symmetry.
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
