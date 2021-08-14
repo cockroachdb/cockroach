@@ -310,6 +310,45 @@ func TestListLogFiles(t *testing.T) {
 	}
 }
 
+func TestFilePermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
+	fileMode := os.FileMode(0o400) // not the default 0o644
+
+	fs := debugLog.getFileSink()
+	defer func(p os.FileMode) { fs.filePermissions = p }(fs.filePermissions)
+	fs.filePermissions = fileMode
+
+	Info(context.Background(), "x")
+
+	sb, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
+	if !ok {
+		t.Fatalf("buffer wasn't created")
+	}
+
+	results, err := ListLogFiles()
+	if err != nil {
+		t.Fatalf("error in ListLogFiles: %v", err)
+	}
+
+	expectedName := filepath.Base(sb.file.Name())
+	foundExpected := false
+	for _, r := range results {
+		if r.Name != expectedName {
+			continue
+		}
+		foundExpected = true
+		if os.FileMode(r.FileMode) != fileMode {
+			t.Errorf("Logfile %v has file mode %v, expected %v",
+				expectedName, os.FileMode(r.FileMode), fileMode)
+		}
+	}
+	if !foundExpected {
+		t.Fatalf("unexpected results: %q", results)
+	}
+}
+
 func TestGetLogReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer ScopeWithoutShowLogs(t).Close(t)
