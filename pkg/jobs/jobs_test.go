@@ -3257,3 +3257,41 @@ func TestNonCancelableJobsRetry(t *testing.T) {
 	close(rts.failOrCancelCheckCh)
 	rts.check(t, jobs.StatusFailed)
 }
+
+// TestExecutionLogToJSON tests conversion of an executionLog in jobs payload
+// to a JSON string.
+func TestExecutionLogToJSON(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, test := range []struct {
+		name         string
+		executionLog []*jobspb.ExecutionEvent
+		expected     string
+	}{
+		{
+			"empty",
+			[]*jobspb.ExecutionEvent{},
+			`[]`,
+		},
+		{
+			"with values",
+			[]*jobspb.ExecutionEvent{
+				{
+					InstanceId:      1,
+					Status:          string(jobs.StatusRunning),
+					EventTimeMicros: timeutil.ToUnixMicros(timeutil.Unix(1, 0)),
+					ExecutionError:  "error string",
+					Type:            jobspb.JobStartEvent,
+				},
+			},
+			`[{"eventTimeMicros": "1000000", "executionError": "error string", "instanceId": 1, "status": "` + string(jobs.StatusRunning) + `", "type": "START"}]`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			encoded, err := jobspb.ExecutionLogToJSON(test.executionLog)
+			require.NoError(t, err)
+			require.Equal(t, test.expected, encoded.String())
+		})
+	}
+}
