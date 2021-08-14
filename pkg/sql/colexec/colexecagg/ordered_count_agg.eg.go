@@ -42,7 +42,6 @@ func (a *countRowsOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *countRowsOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	var oldCurAggSize uintptr
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// Capture groups to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
@@ -86,10 +85,6 @@ func (a *countRowsOrderedAgg) Compute(
 		}
 	},
 	)
-	var newCurAggSize uintptr
-	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
-	}
 }
 
 func (a *countRowsOrderedAgg) Flush(outputIdx int) {
@@ -158,7 +153,6 @@ func (a *countOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *countOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	var oldCurAggSize uintptr
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
@@ -243,10 +237,6 @@ func (a *countOrderedAgg) Compute(
 		}
 	},
 	)
-	var newCurAggSize uintptr
-	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
-	}
 }
 
 func (a *countOrderedAgg) Flush(outputIdx int) {

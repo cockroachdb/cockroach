@@ -32,6 +32,7 @@ func NewLagOperator(
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
 	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
+	mainMemLimit := args.MemoryLimit - bufferMemLimit
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
 		args.FdSemaphore, args.InputTypes, args.DiskAcc, argIdx)
@@ -51,59 +52,70 @@ func NewLagOperator(
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &lagBoolWindow{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagBoolWindow{lagBase: base}, argType, mainMemLimit), nil
 		}
 	case types.BytesFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &lagBytesWindow{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagBytesWindow{lagBase: base}, argType, mainMemLimit), nil
 		}
 	case types.DecimalFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &lagDecimalWindow{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagDecimalWindow{lagBase: base}, argType, mainMemLimit), nil
 		}
 	case types.IntFamily:
 		switch argType.Width() {
 		case 16:
-			return newBufferedWindowOperator(args, &lagInt16Window{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagInt16Window{lagBase: base}, argType, mainMemLimit), nil
 		case 32:
-			return newBufferedWindowOperator(args, &lagInt32Window{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagInt32Window{lagBase: base}, argType, mainMemLimit), nil
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &lagInt64Window{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagInt64Window{lagBase: base}, argType, mainMemLimit), nil
 		}
 	case types.FloatFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &lagFloat64Window{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagFloat64Window{lagBase: base}, argType, mainMemLimit), nil
 		}
 	case types.TimestampTZFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &lagTimestampWindow{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagTimestampWindow{lagBase: base}, argType, mainMemLimit), nil
 		}
 	case types.IntervalFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &lagIntervalWindow{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagIntervalWindow{lagBase: base}, argType, mainMemLimit), nil
 		}
 	case types.JsonFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &lagJSONWindow{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagJSONWindow{lagBase: base}, argType, mainMemLimit), nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &lagDatumWindow{lagBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &lagDatumWindow{lagBase: base}, argType, mainMemLimit), nil
 		}
 	}
 	return nil, errors.Errorf("unsupported lag window operator type %s", argType.Name())

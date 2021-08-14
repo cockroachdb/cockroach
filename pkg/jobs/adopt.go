@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,16 +44,16 @@ const (
 	// NonTerminalStatusTupleString is a sql tuple corresponding to statuses of
 	// non-terminal jobs.
 	NonTerminalStatusTupleString = `(` + nonTerminalStatusList + `)`
-)
 
-const claimQuery = `
+	claimQuery = `
    UPDATE system.jobs
       SET claim_session_id = $1, claim_instance_id = $2
-    WHERE (claim_session_id IS NULL)
-      AND (status IN ` + claimableStatusTupleString + `)
+    WHERE ((claim_session_id IS NULL)
+      AND (status IN ` + claimableStatusTupleString + `))
  ORDER BY created DESC
     LIMIT $3
 RETURNING id;`
+)
 
 func (r *Registry) maybeDumpTrace(
 	resumerCtx context.Context, resumer Resumer, jobID, traceID int64, jobErr error,
@@ -96,11 +97,11 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 		}
 		numRows, err := r.ex.Exec(
 			ctx, "claim-jobs", txn, claimQuery,
-			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop,
-		)
+			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
 		}
+		r.metrics.ClaimedJobs.Inc(int64(numRows))
 		if log.ExpensiveLogEnabled(ctx, 1) || numRows > 0 {
 			log.Infof(ctx, "claimed %d jobs", numRows)
 		}
@@ -108,14 +109,75 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 	})
 }
 
+const (
+	// processQueryStatusTupleString includes the states of a job in which a
+	// job can be claimed and resumed.
+	processQueryStatusTupleString = `(` +
+		`'` + string(StatusRunning) + `', ` +
+		`'` + string(StatusReverting) + `'` +
+		`)`
+
+	// canRunArgs are used in canRunClause, which specify whether a job can be
+	// run now or not.
+	canRunArgs   = `(SELECT $3::TIMESTAMP AS ts, $4::FLOAT AS initial_delay, $5::FLOAT AS max_delay) args`
+	canRunClause = `
+args.ts >= COALESCE(last_run, created) + least(
+          IF(
+            args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT >= 0.0,
+            args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT,
+            args.max_delay
+         ),
+        args.max_delay
+)::INTERVAL
+`
+	// processQueryBase and processQueryWhereBase select IDs of the jobs that
+	// can be processed among the claimed jobs.
+	processQueryBase      = `SELECT id FROM system.jobs`
+	processQueryWhereBase = ` status IN ` + processQueryStatusTupleString + ` AND (claim_session_id = $1 AND claim_instance_id = $2)`
+
+	processQueryWithoutBackoff = processQueryBase + " WHERE " + processQueryWhereBase
+	processQueryWithBackoff    = processQueryBase + ", " + canRunArgs +
+		" WHERE " + processQueryWhereBase + " AND " + canRunClause
+
+	resumeQueryBaseCols       = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
+	resumeQueryWhereBase      = `id = $1 AND claim_session_id = $2`
+	resumeQueryWithoutBackoff = `SELECT ` + resumeQueryBaseCols + ` FROM system.jobs WHERE ` + resumeQueryWhereBase
+	resumeQueryWithBackoff    = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run` +
+		` FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
+)
+
+// getProcessQuery returns the query that selects the jobs that are claimed
+// by this node.
+func getProcessQuery(
+	ctx context.Context, s sqlliveness.Session, r *Registry,
+) (string, []interface{}) {
+	// Select the running or reverting jobs that this node has claimed.
+	query := processQueryWithoutBackoff
+	args := []interface{}{s.ID().UnsafeBytes(), r.ID()}
+	// Gating the version that introduced job retries with exponential backoff.
+	if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+		// Select only those jobs that can be executed right now.
+		query = processQueryWithBackoff
+		initDelay := retryInitialDelaySetting.Get(&r.settings.SV).Seconds()
+		maxDelay := retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
+		if r.knobs.IntervalOverrides.RetryInitialDelay != nil {
+			initDelay = r.knobs.IntervalOverrides.RetryInitialDelay.Seconds()
+		}
+		if r.knobs.IntervalOverrides.RetryMaxDelay != nil {
+			maxDelay = r.knobs.IntervalOverrides.RetryMaxDelay.Seconds()
+		}
+		args = append(args, r.clock.Now().GoTime(), initDelay, maxDelay)
+	}
+	return query, args
+}
+
 // processClaimedJobs processes all jobs currently claimed by the registry.
 func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
+	query, args := getProcessQuery(ctx, s, r)
+
 	it, err := r.ex.QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
-SELECT id FROM system.jobs
-WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)`,
-		StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID(),
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, query, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
@@ -134,7 +196,6 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
 	}
-
 	r.filterAlreadyRunningAndCancelFromPreviousSessions(ctx, s, claimedToResume)
 	r.resumeClaimedJobs(ctx, s, claimedToResume)
 	return nil
@@ -190,12 +251,24 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 // resumeJob resumes a claimed job.
 func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session) error {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
+	resumeQuery := resumeQueryWithoutBackoff
+	args := []interface{}{jobID, s.ID().UnsafeBytes()}
+	backoffIsActive := r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff)
+	if backoffIsActive {
+		resumeQuery = resumeQueryWithBackoff
+		initDelay := retryInitialDelaySetting.Get(&r.settings.SV).Seconds()
+		maxDelay := retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
+		if r.knobs.IntervalOverrides.RetryInitialDelay != nil {
+			initDelay = r.knobs.IntervalOverrides.RetryInitialDelay.Seconds()
+		}
+		if r.knobs.IntervalOverrides.RetryMaxDelay != nil {
+			maxDelay = r.knobs.IntervalOverrides.RetryMaxDelay.Seconds()
+		}
+		args = append(args, r.clock.Now().GoTime(), initDelay, maxDelay)
+	}
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
-SELECT status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)
-FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
-		jobID, s.ID().UnsafeBytes(),
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, resumeQuery, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "job %d: could not query job table row", jobID)
@@ -216,6 +289,26 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 
 	if isAlive := *row[3].(*tree.DBool); !isAlive {
 		return errors.Errorf("job %d: claim with session id %s has expired", jobID, s.ID())
+	}
+
+	if backoffIsActive {
+		// It's too soon to run the job.
+		//
+		// We need this check to address a race between adopt-loop and an existing
+		// resumer, e.g., in the following schedule:
+		// Adopt loop: Cl(j,n1) St(r1)     Cl(j, n1)                       St(r2)
+		// Resumer 1:                Rg(j)          Up(n1->n2) Fl(j) Ur(j)
+		// Resumer 2:                                                            x-| Starting too soon
+		// Where:
+		//  - Cl(j,nx): claim job j when num_runs is x
+		//  - St(r1): start resumer r1
+		//  - Rg(j): Add jobID of j in adoptedJobs, disabling further resumers
+		//  - Ur(j): Remove jobID of j from adoptedJobs, enabling further resumers
+		//  - Up(n1->2): Update number of runs from 1 to 2
+		//  - Fl(j): Job j fails
+		if !(*row[4].(*tree.DBool)) {
+			return nil
+		}
 	}
 
 	payload, err := UnmarshalPayload(row[1])
@@ -248,6 +341,7 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 
 	aj := &adoptedJob{sid: s.ID(), cancel: cancel}
 	r.addAdoptedJob(jobID, aj)
+	r.metrics.ResumedJobs.Inc(1)
 	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
 		// Wait for the job to finish. No need to print the error because if there
 		// was one it's been set in the job status already.
@@ -266,6 +360,9 @@ func (r *Registry) removeAdoptedJob(jobID jobspb.JobID) {
 }
 
 func (r *Registry) addAdoptedJob(jobID jobspb.JobID, aj *adoptedJob) {
+	// TODO(sajjad): We should check whether adoptedJobs already has jobID or not. If
+	// the ID exists, we should not add it again and the caller should not start
+	// another resumer.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.adoptedJobs[jobID] = aj
@@ -334,16 +431,18 @@ func (r *Registry) runJob(
 	return err
 }
 
-const cancelQuery = `
-UPDATE system.jobs
-SET status =
-    CASE
-      WHEN status = $1 THEN $2
-      WHEN status = $3 THEN $4
-      ELSE status
-    END
-WHERE (status IN ($1, $3)) AND ((claim_session_id = $5) AND (claim_instance_id = $6))
-RETURNING id, status`
+const pauseAndCancelUpdate = `
+   UPDATE system.jobs
+      SET status = 
+          CASE
+						 WHEN status = '` + string(StatusPauseRequested) + `' THEN '` + string(StatusPaused) + `'
+						 WHEN status = '` + string(StatusCancelRequested) + `' THEN '` + string(StatusReverting) + `'
+						 ELSE status
+          END
+    WHERE (status IN ('` + string(StatusPauseRequested) + `', '` + string(StatusCancelRequested) + `'))
+      AND ((claim_session_id = $1) AND (claim_instance_id = $2))
+RETURNING id, status
+`
 
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -358,10 +457,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 		// registry).
 		rows, err := r.ex.QueryBufferedEx(
 			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
-			cancelQuery,
-			StatusPauseRequested, StatusPaused,
-			StatusCancelRequested, StatusReverting,
-			s.ID().UnsafeBytes(), r.ID(),
+			pauseAndCancelUpdate, s.ID().UnsafeBytes(), r.ID(),
 		)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
@@ -381,6 +477,12 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)
 					md.Payload.FinalResumeError = &encodedErr
 					ju.UpdatePayload(md.Payload)
+					if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+						// When we cancel a job, we want to reset its last_run and num_runs
+						// so that the job can be picked-up in the next adopt-loop, sooner
+						// than its current next-retry time.
+						ju.UpdateRunStats(0 /* numRuns */, r.clock.Now().GoTime() /* lastRun */)
+					}
 					return nil
 				}); err != nil {
 					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting: %s", id, err)

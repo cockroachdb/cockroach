@@ -92,9 +92,13 @@ func (j *Job) Succeeded(ctx context.Context) error {
 var (
 	AdoptQuery = claimQuery
 
-	CancelQuery = cancelQuery
+	CancelQuery = pauseAndCancelUpdate
 
 	GcQuery = expiredJobsQuery
+
+	RemoveClaimsQuery = removeClaimsQuery
+
+	ProcessJobsQuery = processQueryWithBackoff
 
 	IntervalBaseSettingKey = intervalBaseSettingKey
 

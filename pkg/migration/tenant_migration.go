@@ -33,6 +33,7 @@ type TenantDeps struct {
 	CollectionFactory *descs.CollectionFactory
 	LeaseManager      *lease.Manager
 	InternalExecutor  sqlutil.InternalExecutor
+	TestingKnobs      *TestingKnobs
 }
 
 // TenantMigrationFunc is used to perform sql-level migrations. It may be run from

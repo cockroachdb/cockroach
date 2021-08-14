@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -420,7 +419,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 		},
 		// Inject a migration which would run to upgrade the cluster.
 		// We'll validate that we never create a job for this migration.
-		MigrationManager: &migrationmanager.TestingKnobs{
+		MigrationManager: &migration.TestingKnobs{
 			ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
 				return []clusterversion.ClusterVersion{to}
 			},

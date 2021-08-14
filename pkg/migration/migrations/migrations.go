@@ -105,6 +105,11 @@ var migrations = []migration.Migration{
 		"run no-op migrate command on all ranges after lock table migration",
 		toCV(clusterversion.PostSeparatedIntentsMigration),
 		postSeparatedIntentsMigration),
+	migration.NewTenantMigration(
+		"add last_run and num_runs columns to system.jobs",
+		toCV(clusterversion.RetryJobsWithExponentialBackoff),
+		NoPrecondition,
+		retryJobsWithExponentialBackoff),
 }
 
 func init() {

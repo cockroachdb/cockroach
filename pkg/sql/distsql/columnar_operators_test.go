@@ -1179,6 +1179,14 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 							// on.
 							continue
 						}
+						if strings.Contains(err.Error(), "integer out of range") &&
+							fun.AggregateFunc != nil && *fun.AggregateFunc == execinfrapb.SumInt {
+							// The columnar implementation of this window function uses the
+							// sliding window optimization, but the row engine version
+							// doesn't. As a result, in some cases the row engine will
+							// overflow while the vectorized engine doesn't.
+							continue
+						}
 						fmt.Printf("window function: %s\n", funcName)
 						fmt.Printf("partitionCols: %v\n", partitionBy)
 						fmt.Print("ordering: ")

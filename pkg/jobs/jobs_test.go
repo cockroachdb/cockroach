@@ -2288,7 +2288,7 @@ func TestJobInTxn(t *testing.T) {
 
 	// Set the adoption interval to be very long to test the adoption channel.
 	args := base.TestServerArgs{Knobs: base.TestingKnobs{
-		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour)},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour, time.Hour, time.Hour)},
 	}
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, args)
@@ -2885,7 +2885,7 @@ func TestMetrics(t *testing.T) {
 	) {
 		jobConstructorCleanup := jobs.ResetConstructors()
 		args := base.TestServerArgs{Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Millisecond, time.Millisecond)},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 		}
 		s, db, _ = serverutils.StartServer(t, args)
 		r = s.JobRegistry().(*jobs.Registry)
@@ -3054,7 +3054,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	// Disable the loops from messing with the job execution.
-	knobs := base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour)}
+	knobs := base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour, time.Hour, time.Hour)}
 
 	ctx := context.Background()
 

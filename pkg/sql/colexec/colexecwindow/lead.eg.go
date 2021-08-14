@@ -32,6 +32,7 @@ func NewLeadOperator(
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
 	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
+	mainMemLimit := args.MemoryLimit - bufferMemLimit
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
 		args.FdSemaphore, args.InputTypes, args.DiskAcc, argIdx)
@@ -51,59 +52,70 @@ func NewLeadOperator(
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &leadBoolWindow{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadBoolWindow{leadBase: base}, argType, mainMemLimit), nil
 		}
 	case types.BytesFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &leadBytesWindow{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadBytesWindow{leadBase: base}, argType, mainMemLimit), nil
 		}
 	case types.DecimalFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &leadDecimalWindow{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadDecimalWindow{leadBase: base}, argType, mainMemLimit), nil
 		}
 	case types.IntFamily:
 		switch argType.Width() {
 		case 16:
-			return newBufferedWindowOperator(args, &leadInt16Window{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadInt16Window{leadBase: base}, argType, mainMemLimit), nil
 		case 32:
-			return newBufferedWindowOperator(args, &leadInt32Window{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadInt32Window{leadBase: base}, argType, mainMemLimit), nil
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &leadInt64Window{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadInt64Window{leadBase: base}, argType, mainMemLimit), nil
 		}
 	case types.FloatFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &leadFloat64Window{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadFloat64Window{leadBase: base}, argType, mainMemLimit), nil
 		}
 	case types.TimestampTZFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &leadTimestampWindow{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadTimestampWindow{leadBase: base}, argType, mainMemLimit), nil
 		}
 	case types.IntervalFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &leadIntervalWindow{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadIntervalWindow{leadBase: base}, argType, mainMemLimit), nil
 		}
 	case types.JsonFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &leadJSONWindow{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadJSONWindow{leadBase: base}, argType, mainMemLimit), nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(args, &leadDatumWindow{leadBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &leadDatumWindow{leadBase: base}, argType, mainMemLimit), nil
 		}
 	}
 	return nil, errors.Errorf("unsupported lead window operator type %s", argType.Name())
