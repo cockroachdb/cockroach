@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -669,7 +670,11 @@ CREATE TABLE crdb_internal.jobs (
   high_water_timestamp  DECIMAL,
   error                 STRING,
   coordinator_id        INT,
-  trace_id              INT
+  trace_id              INT,
+  last_run              TIMESTAMP,
+  next_run              TIMESTAMP,
+  num_runs              INT,
+  execution_log         JSON
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -686,11 +691,26 @@ CREATE TABLE crdb_internal.jobs (
 
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
 		// out results that the current user is not able to see.
-		query := `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id FROM system.jobs`
+		const (
+			qSelect             = `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id`
+			qFrom               = ` FROM system.jobs`
+			queryWithoutBackoff = qSelect + qFrom
+			backoffArgs         = `(SELECT $1::FLOAT AS initial_delay, $2::FLOAT AS max_delay) args`
+			queryWithBackoff    = qSelect + `, last_run, COALESCE(num_runs, 0), ` + jobs.NextRunClause + ` as next_run` + qFrom + ", " + backoffArgs
+		)
+		query := queryWithoutBackoff
+		var args []interface{}
+		settings := p.execCfg.Settings
+		backoffIsEnabled := settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff)
+		if backoffIsEnabled {
+			query = queryWithBackoff
+			args = append(args, p.execCfg.JobRegistry.RetryInitialDelay(), p.execCfg.JobRegistry.RetryMaxDelay())
+		}
+
 		it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 			ctx, "crdb-internal-jobs-table", p.txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			query)
+			query, args...)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -709,7 +729,7 @@ CREATE TABLE crdb_internal.jobs (
 		}
 
 		// We'll reuse this container on each loop.
-		container := make(tree.Datums, 0, 16)
+		container := make(tree.Datums, 0, 21)
 		return func() (datums tree.Datums, e error) {
 			// Loop while we need to skip a row.
 			for {
@@ -723,7 +743,8 @@ CREATE TABLE crdb_internal.jobs (
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
 					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, coordinatorID,
-					traceID = tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
+					traceID, lastRun, nextRun, numRuns, executionLog = tree.DNull, tree.DNull, tree.DNull,
+					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull
 
@@ -822,6 +843,17 @@ CREATE TABLE crdb_internal.jobs (
 					}
 				}
 
+				if backoffIsEnabled {
+					lastRun, numRuns, nextRun = r[7], r[8], r[9]
+					if payload != nil && payload.ExecutionLog != nil && len(payload.ExecutionLog) > 0 {
+						execLogJSON, err := jobspb.ExecutionLogToJSON(payload.ExecutionLog)
+						if err != nil {
+							return nil, err
+						}
+						executionLog = tree.NewDJSON(execLogJSON)
+					}
+				}
+
 				container = container[:0]
 				container = append(container,
 					id,
@@ -841,6 +873,10 @@ CREATE TABLE crdb_internal.jobs (
 					errorStr,
 					coordinatorID,
 					traceID,
+					lastRun,
+					nextRun,
+					numRuns,
+					executionLog,
 				)
 				return container, nil
 			}

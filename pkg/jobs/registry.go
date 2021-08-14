@@ -1372,3 +1372,21 @@ func (r *Registry) unregister(jobID jobspb.JobID) {
 		delete(r.mu.adoptedJobs, jobID)
 	}
 }
+
+// RetryInitialDelay returns the value of retryInitialDelaySetting cluster setting,
+// in seconds, which is the initial delay in exponential-backoff delay calculation.
+func (r *Registry) RetryInitialDelay() float64 {
+	if r.knobs.IntervalOverrides.RetryInitialDelay != nil {
+		return r.knobs.IntervalOverrides.RetryInitialDelay.Seconds()
+	}
+	return retryInitialDelaySetting.Get(&r.settings.SV).Seconds()
+}
+
+// RetryMaxDelay returns the value of retryMaxDelaySetting cluster setting,
+// in seconds, which is the maximum delay between retries of a job.
+func (r *Registry) RetryMaxDelay() float64 {
+	if r.knobs.IntervalOverrides.RetryMaxDelay != nil {
+		return r.knobs.IntervalOverrides.RetryMaxDelay.Seconds()
+	}
+	return retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
+}
