@@ -106,6 +106,27 @@ func CacheSize(size int64) ConfigOption {
 	}
 }
 
+// UseFileRegistry configures an engine to use the encryption-at-rest file
+// registry. It is used to configure encryption-at-rest for in-memory engines,
+// which are used in tests.
+func UseFileRegistry(useRegistry bool) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.UseFileRegistry = useRegistry
+		return nil
+	}
+}
+
+// EncryptionOptions configures the encryption-at-rest options for an engine.
+// It is used to configure encryption-at-rest for in-memory engines, which are
+// used in tests.
+func EncryptionOptions(b []byte) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.EncryptionOptions = make([]byte, len(b))
+		copy(cfg.EncryptionOptions, b)
+		return nil
+	}
+}
+
 // Hook configures a hook to initialize additional storage options. It's used
 // to initialize encryption-at-rest details in CCL builds.
 func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
