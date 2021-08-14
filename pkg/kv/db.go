@@ -142,7 +142,7 @@ type Result struct {
 	ResumeSpan *roachpb.Span
 	// When ResumeSpan is populated, this specifies the reason why the operation
 	// wasn't completed and needs to be resumed.
-	ResumeReason roachpb.ResponseHeader_ResumeReason
+	ResumeReason roachpb.ResumeReason
 }
 
 // ResumeSpanAsValue returns the resume span as a value if one is set,
