@@ -2440,18 +2440,6 @@ func mvccScanToBytes(
 	if err := opts.validate(); err != nil {
 		return MVCCScanResult{}, err
 	}
-	if opts.MaxKeys < 0 {
-		return MVCCScanResult{
-			ResumeSpan:   &roachpb.Span{Key: key, EndKey: endKey},
-			ResumeReason: roachpb.RESUME_KEY_LIMIT,
-		}, nil
-	}
-	if opts.TargetBytes < 0 {
-		return MVCCScanResult{
-			ResumeSpan:   &roachpb.Span{Key: key, EndKey: endKey},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-		}, nil
-	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	defer mvccScanner.release()
@@ -2478,7 +2466,7 @@ func mvccScanToBytes(
 
 	var res MVCCScanResult
 	var err error
-	res.ResumeSpan, res.ResumeReason, err = mvccScanner.scan(ctx)
+	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = mvccScanner.scan(ctx)
 
 	if err != nil {
 		return MVCCScanResult{}, err
@@ -2607,7 +2595,9 @@ type MVCCScanOptions struct {
 	// structures, but it is guaranteed to exceed that of the bytes stored in
 	// the key and value itself.
 	//
-	// The zero value indicates no limit.
+	// The zero value indicates no limit. Negative values return an empty result
+	// with an appropriate resume span, but will still perform a scan to populate
+	// ResumeNextBytes.
 	TargetBytes int64
 	// TargetBytesAvoidExcess will prevent TargetBytes from being exceeded
 	// unless only a single key/value pair is returned.
@@ -2649,9 +2639,10 @@ type MVCCScanResult struct {
 	// used for encoding the uncompressed kv pairs contained in the result.
 	NumBytes int64
 
-	ResumeSpan   *roachpb.Span
-	ResumeReason roachpb.ResumeReason
-	Intents      []roachpb.Intent
+	ResumeSpan      *roachpb.Span
+	ResumeReason    roachpb.ResumeReason
+	ResumeNextBytes int64 // populated if TargetBytes != 0, size of next resume kv
+	Intents         []roachpb.Intent
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided reader up to some
