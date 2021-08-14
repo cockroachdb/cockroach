@@ -651,7 +651,7 @@ func TestEvaluateBatch(t *testing.T) {
 			}
 			d.AbortSpan = abortspan.New(1)
 			d.ba.Header.Timestamp = ts
-			d.ClusterSettings = cluster.MakeClusterSettings()
+			d.ClusterSettings = cluster.MakeTestingClusterSettings()
 
 			tc.setup(t, d)
 
