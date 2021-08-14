@@ -228,9 +228,13 @@ func checkResumeSpanScanResults(
 				i, spans[i], res.ResumeReason)
 		}
 		if rowLen == 0 {
-			if resumeKey != spans[i][0] {
-				t.Fatalf("scan %d: expected resume %s, got: %s",
-					i, spans[i][0], resumeKey)
+			if resumeKey < spans[i][0] {
+				t.Fatalf("scan %d: expected resume %s to be at or above scan start %s",
+					i, resumeKey, spans[i][0])
+			}
+			if resumeKey >= spans[i][1] {
+				t.Fatalf("scan %d: expected resume %s to be below scan end %s",
+					i, resumeKey, spans[i][1])
 			}
 		} else {
 			lastRes := expResults[i][rowLen-1]
@@ -277,9 +281,13 @@ func checkResumeSpanReverseScanResults(
 				i, spans[i], res.ResumeReason)
 		}
 		if rowLen == 0 {
-			if resumeKey != spans[i][1] {
-				t.Fatalf("scan %d (%s) expected resume %s, got: %s",
-					i, spans[i], spans[i][1], resumeKey)
+			if resumeKey <= spans[i][0] {
+				t.Fatalf("scan %d: expected resume %s to be at or above scan start %s",
+					i, resumeKey, spans[i][0])
+			}
+			if resumeKey > spans[i][1] {
+				t.Fatalf("scan %d: expected resume %s to be at or below scan end %s",
+					i, resumeKey, spans[i][1])
 			}
 		} else {
 			lastRes := expResults[i][rowLen-1]
@@ -305,6 +313,7 @@ func checkScanResults(
 	expSatisfied map[int]struct{},
 	opt checkOptions,
 ) {
+	t.Helper()
 	checkSpanResults(t, spans, results, expResults, expSatisfied, opt)
 	checkResumeSpanScanResults(t, spans, results, expResults, expSatisfied, opt)
 }
@@ -318,6 +327,7 @@ func checkReverseScanResults(
 	expSatisfied map[int]struct{},
 	opt checkOptions,
 ) {
+	t.Helper()
 	checkSpanResults(t, spans, results, expResults, expSatisfied, opt)
 	checkResumeSpanReverseScanResults(t, spans, results, expResults, expSatisfied, opt)
 }
