@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -645,6 +646,30 @@ func serverArgsRegion(args base.TestServerArgs) string {
 		}
 	}
 	return ""
+}
+
+// expectNotice creates a pretty crude database connection that doesn't involve
+// a lot of cdc test framework, use with caution. Driver-agnostic tools don't
+// have clean ways of inspecting incoming notices.
+func expectNotice(t *testing.T, s serverutils.TestServerInterface, sql string, expected string) {
+	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+	base, err := pq.NewConnector(url.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual := "(no notice)"
+	connector := pq.ConnectorWithNoticeHandler(base, func(n *pq.Error) {
+		actual = n.Message
+	})
+
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+	sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+	sqlDB.Exec(t, sql)
+
+	require.Equal(t, expected, actual)
 }
 
 func feed(
