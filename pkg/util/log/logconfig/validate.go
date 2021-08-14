@@ -43,10 +43,11 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		Criticality: &bf,
 	}
 	baseFileDefaults := FileDefaults{
-		Dir:            defaultLogDir,
-		BufferedWrites: &bt,
-		MaxFileSize:    func() *ByteSize { s := ByteSize(0); return &s }(),
-		MaxGroupSize:   func() *ByteSize { s := ByteSize(0); return &s }(),
+		Dir:             defaultLogDir,
+		BufferedWrites:  &bt,
+		MaxFileSize:     func() *ByteSize { s := ByteSize(0); return &s }(),
+		MaxGroupSize:    func() *ByteSize { s := ByteSize(0); return &s }(),
+		FilePermissions: func() *FilePermissions { s := FilePermissions(0o644); return &s }(),
 		CommonSinkConfig: CommonSinkConfig{
 			Format:      func() *string { s := DefaultFileFormat; return &s }(),
 			Criticality: &bt,
