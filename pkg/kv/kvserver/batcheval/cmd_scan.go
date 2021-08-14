@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,15 +41,16 @@ func Scan(
 	var err error
 
 	opts := storage.MVCCScanOptions{
-		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:                   h.Txn,
-		LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
-		MaxKeys:               h.MaxSpanRequestKeys,
-		MaxIntents:            storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		TargetBytes:           h.TargetBytes,
-		FailOnMoreRecent:      args.KeyLocking != lock.None,
-		Reverse:               false,
-		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
+		Inconsistent:           h.ReadConsistency != roachpb.CONSISTENT,
+		Txn:                    h.Txn,
+		LocalUncertaintyLimit:  cArgs.LocalUncertaintyLimit,
+		MaxKeys:                h.MaxSpanRequestKeys,
+		MaxIntents:             storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		TargetBytes:            h.TargetBytes,
+		TargetBytesAvoidExcess: cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.AvoidExcessTargetBytes),
+		FailOnMoreRecent:       args.KeyLocking != lock.None,
+		Reverse:                false,
+		MemoryAccount:          cArgs.EvalCtx.GetResponseMemoryAccount(),
 	}
 
 	switch args.ScanFormat {

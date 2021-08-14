@@ -1102,12 +1102,12 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 		{
 			maxKeys:       1,
 			expRespKeys:   []string{"a"},
-			expResumeSpan: "b",
+			expResumeSpan: "c",
 		},
 		{
 			maxKeys:       2,
 			expRespKeys:   []string{"a", "c"},
-			expResumeSpan: "d",
+			expResumeSpan: "f",
 		},
 		{
 			maxKeys:       3,

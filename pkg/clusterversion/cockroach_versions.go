@@ -321,6 +321,12 @@ const (
 	SQLStatsCompactionScheduledJob
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
 	DateAndIntervalStyle
+	// AvoidExcessTargetBytes prevents exceeding BatchRequest.Header.TargetBytes
+	// except when there is a single value in the response. 21.1 DistSender logic
+	// requires the limit to always be overshot in order to properly enforce
+	// limits when splitting requests.
+	AvoidExcessTargetBytes
+
 	// Step (1): Add new versions here.
 )
 
@@ -559,6 +565,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DateAndIntervalStyle,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 160},
+	},
+	{
+		Key:     AvoidExcessTargetBytes,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 162},
 	},
 	// Step (2): Add new versions here.
 }
