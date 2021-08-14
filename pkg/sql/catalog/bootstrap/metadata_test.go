@@ -27,7 +27,7 @@ func TestArbitrarySystemDescriptorIDs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Arbitrarily offset system descriptors
-	defer bootstrap.TestingSetDescriptorIDOffset(0)()
+	defer bootstrap.TestingSetDescriptorIDOffset(50)()
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -49,7 +49,7 @@ ORDER BY
 	tdb.CheckQueryResults(t, q1, [][]string{{"jobs", "15"}, {"lease", "11"}})
 
 	// Check that offset is property taken into account in descriptor creation.
-	tdb.Exec(t, `CREATE DATABASE 'test'`)
+	tdb.Exec(t, `CREATE DATABASE test`)
 	const q2 = `
 SELECT
 	name, id
@@ -59,5 +59,5 @@ WHERE
 	"parentID" = 0 AND "parentSchemaID" = 0 AND name = 'test'
 ORDER BY
 	name ASC;`
-	tdb.CheckQueryResults(t, q1, [][]string{{"test", "52"}})
+	tdb.CheckQueryResults(t, q2, [][]string{{"test", "52"}})
 }

@@ -158,7 +158,7 @@ func (p *planner) maybeLogStatementInternal(
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
 
-	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
+	// If hasAdminRoleCache IsSetIn is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
 
 	// Only log to adminAuditLog if the statement is executed by

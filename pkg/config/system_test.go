@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -168,7 +169,7 @@ func TestGetLargestID(t *testing.T) {
 		{[]roachpb.KeyValue{
 			sqlKV(keys.NamespaceTableID, 1, 1),
 			sqlKV(keys.NamespaceTableID, 1, 2),
-			sqlKV(keys.UsersTableID, 1, 3),
+			sqlKV(keys.LeaseTableID, 1, 3),
 		}, 0, 0, nil, "descriptor table not found"},
 
 		// Decoding error, unbounded max.
@@ -572,7 +573,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 
 		// Non-gossiped system tables should refer to themselves.
 		{tkey(keys.LeaseTableID), keys.LeaseTableID},
-		{tkey(keys.JobsTableID), keys.JobsTableID},
+		{tkey(uint32(systemschema.JobsTable.GetID())), config.SystemTenantObjectID(systemschema.JobsTable.GetID())},
 		{tkey(keys.LocationsTableID), keys.LocationsTableID},
 		{tkey(keys.NamespaceTableID), keys.NamespaceTableID},
 

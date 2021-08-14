@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -58,8 +59,12 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
-	ddb.changed = descpb.MaybeFixPrivileges(ddb.maybeModified.ID, ddb.maybeModified.ID,
-		&ddb.maybeModified.Privileges, privilege.Database)
+	ddb.changed = catprivilege.MaybeFixPrivileges(
+		&ddb.maybeModified.Privileges,
+		descpb.InvalidID,
+		descpb.InvalidID,
+		privilege.Database,
+		ddb.maybeModified.GetName())
 	return nil
 }
 

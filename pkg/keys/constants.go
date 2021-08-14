@@ -351,7 +351,6 @@ const (
 	// for pre-20.1 clusters.
 	DeprecatedNamespaceTableID = 2
 	DescriptorTableID          = 3
-	UsersTableID               = 4
 	ZonesTableID               = 5
 	SettingsTableID            = 6
 	DescIDSequenceID           = 7
@@ -372,44 +371,25 @@ const (
 	// to "Ranges" instead of a Table - these IDs are needed to store custom
 	// configuration for non-table ranges (e.g. Zone Configs).
 	// NOTE: IDs must be <= MaxReservedDescID.
-	LeaseTableID                         = 11
-	EventLogTableID                      = 12
-	RangeEventTableID                    = 13
-	UITableID                            = 14
-	JobsTableID                          = 15
-	MetaRangesID                         = 16 // pseudo
-	SystemRangesID                       = 17 // pseudo
-	TimeseriesRangesID                   = 18 // pseudo
-	WebSessionsTableID                   = 19
-	TableStatisticsTableID               = 20
-	LocationsTableID                     = 21
-	LivenessRangesID                     = 22 // pseudo
-	RoleMembersTableID                   = 23
-	CommentsTableID                      = 24
-	ReplicationConstraintStatsTableID    = 25
-	ReplicationCriticalLocalitiesTableID = 26
-	ReplicationStatsTableID              = 27
-	ReportsMetaTableID                   = 28
-	PublicSchemaID                       = 29 // pseudo
+	LeaseTableID                      = 11
+	RangeEventTableID                 = 13
+	MetaRangesID                      = 16 // pseudo
+	SystemRangesID                    = 17 // pseudo
+	TimeseriesRangesID                = 18 // pseudo
+	TableStatisticsTableID            = 20
+	LocationsTableID                  = 21
+	LivenessRangesID                  = 22 // pseudo
+	RoleMembersTableID                = 23
+	ReplicationConstraintStatsTableID = 25
+	ReplicationStatsTableID           = 27
+	PublicSchemaID                    = 29 // pseudo
 	// New NamespaceTableID for cluster version >= 20.1
 	// Ensures that NamespaceTable does not get gossiped again
-	NamespaceTableID                    = 30
-	ProtectedTimestampsMetaTableID      = 31
-	ProtectedTimestampsRecordsTableID   = 32
-	RoleOptionsTableID                  = 33
-	StatementBundleChunksTableID        = 34
-	StatementDiagnosticsRequestsTableID = 35
-	StatementDiagnosticsTableID         = 36
-	ScheduledJobsTableID                = 37
-	TenantsRangesID                     = 38 // pseudo
-	SqllivenessID                       = 39
-	MigrationsID                        = 40
-	JoinTokensTableID                   = 41
-	StatementStatisticsTableID          = 42
-	TransactionStatisticsTableID        = 43
-	DatabaseRoleSettingsTableID         = 44
-	TenantUsageTableID                  = 45
-	SQLInstancesTableID                 = 46
+	NamespaceTableID     = 30
+	ScheduledJobsTableID = 37
+	TenantsRangesID      = 38 // pseudo
+	SqllivenessID        = 39
+	SQLInstancesTableID  = 46
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0

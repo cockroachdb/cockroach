@@ -76,7 +76,6 @@ go_test(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
-        "//pkg/sql/privilege",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",

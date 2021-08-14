@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -548,30 +549,37 @@ var (
 )
 
 // SystemDatabaseName is the name of the system database.
-const SystemDatabaseName = "system"
+const SystemDatabaseName = catconstants.SystemDatabaseName
+
+var unspecifiedIDCounter = descpb.ID(keys.MinUserDescID)
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
 func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
+	priv := privilege.ReadData
 	return dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name:    SystemDatabaseName,
 		ID:      keys.SystemDatabaseID,
 		Version: 1,
 		// Assign max privileges to root user.
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.SystemDatabaseID], security.NodeUserName()),
+			priv, security.NodeUserName()),
 	}).BuildImmutableDatabase()
 }
 
-func descpbTable(
-	name string,
+func systemTable(
+	name catconstants.SystemTableName,
 	id descpb.ID,
 	columns []descpb.ColumnDescriptor,
 	families []descpb.ColumnFamilyDescriptor,
 	indexes ...descpb.IndexDescriptor,
 ) descpb.TableDescriptor {
+	if id == descpb.InvalidID {
+		id = unspecifiedIDCounter
+		unspecifiedIDCounter++
+	}
 	tbl := descpb.TableDescriptor{
-		Name:                    name,
+		Name:                    string(name),
 		ID:                      id,
 		ParentID:                keys.SystemDatabaseID,
 		UnexposedParentSchemaID: keys.PublicSchemaID,
@@ -580,11 +588,8 @@ func descpbTable(
 		Families:                families,
 		PrimaryIndex:            indexes[0],
 		Indexes:                 indexes[1:],
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[id], security.NodeUserName(),
-		),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
+		FormatVersion:           descpb.InterleavedFormatVersion,
+		NextMutationID:          1,
 	}
 	for _, col := range columns {
 		if tbl.NextColumnID <= col.ID {
@@ -604,12 +609,24 @@ func descpbTable(
 	return tbl
 }
 
-func buildTable(
+func toCatalogDescriptor(
 	tbl descpb.TableDescriptor, fns ...func(tbl *descpb.TableDescriptor),
 ) catalog.TableDescriptor {
 	ctx := context.Background()
 	for _, fn := range fns {
 		fn(&tbl)
+	}
+	{
+		nameInfo := descpb.NameInfo{
+			ParentID:       tbl.ParentID,
+			ParentSchemaID: tbl.UnexposedParentSchemaID,
+			Name:           tbl.Name,
+		}
+		privs := catprivilege.SystemSuperuserPrivileges(nameInfo)
+		if privs == nil {
+			log.Fatalf(ctx, "No superuser privileges found when building descriptor of system table %q", tbl.Name)
+		}
+		tbl.Privileges = descpb.NewCustomSuperuserPrivilegeDescriptor(privs, security.NodeUserName())
 	}
 	b := tabledesc.NewBuilder(&tbl)
 	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
@@ -631,8 +648,8 @@ var (
 	// table should only be written to via KV puts, not via the SQL layer. Some
 	// code assumes that it only has KV entries for column family 4, not the
 	// "sentinel" column family 0 which would be written by SQL.
-	NamespaceTable = buildTable(
-		descpbTable(
+	NamespaceTable = toCatalogDescriptor(
+		systemTable(
 			catconstants.NamespaceTableName,
 			keys.NamespaceTableID,
 			[]descpb.ColumnDescriptor{
@@ -656,9 +673,9 @@ var (
 		))
 
 	// DescriptorTable is the descriptor for the descriptor table.
-	DescriptorTable = buildTable(
-		descpbTable(
-			"descriptor",
+	DescriptorTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.DescriptorTableName,
 			keys.DescriptorTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int},
@@ -681,16 +698,15 @@ var (
 	trueBoolString  = "true"
 
 	// UsersTable is the descriptor for the users table.
-	UsersTable = buildTable(
-		descpbTable(
-			"users",
-			keys.UsersTableID,
+	UsersTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.UsersTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "hashedPassword", ID: 2, Type: types.Bytes, Nullable: true},
 				{Name: "isRole", ID: 3, Type: types.Bool, DefaultExpr: &falseBoolString},
 			},
-
 			[]descpb.ColumnFamilyDescriptor{
 				{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
 				{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
@@ -700,9 +716,9 @@ var (
 		))
 
 	// ZonesTable is the descriptor for the zones table.
-	ZonesTable = buildTable(
-		descpbTable(
-			"zones",
+	ZonesTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.ZonesTableName,
 			keys.ZonesTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int},
@@ -725,9 +741,9 @@ var (
 
 	// SettingsTable is the descriptor for the settings table.
 	// It contains all cluster settings for which a value has been set.
-	SettingsTable = buildTable(
-		descpbTable(
-			"settings",
+	SettingsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.SettingsTableName,
 			keys.SettingsTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "name", ID: 1, Type: types.String},
@@ -747,9 +763,9 @@ var (
 		))
 
 	// DescIDSequence is the descriptor for the descriptor ID sequence.
-	DescIDSequence = buildTable(
-		descpbTable(
-			"descriptor_id_seq",
+	DescIDSequence = toCatalogDescriptor(
+		systemTable(
+			catconstants.DescIDSequenceTableName,
 			keys.DescIDSequenceID,
 			[]descpb.ColumnDescriptor{
 				{Name: tabledesc.SequenceColumnName, ID: tabledesc.SequenceColumnID, Type: types.Int},
@@ -780,9 +796,9 @@ var (
 		},
 	)
 
-	TenantsTable = buildTable(
-		descpbTable(
-			"tenants",
+	TenantsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.TenantsTableName,
 			keys.TenantsTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int},
@@ -811,9 +827,9 @@ var (
 // suggestions on writing and maintaining them.
 var (
 	// LeaseTable is the descriptor for the leases table.
-	LeaseTable = buildTable(
-		descpbTable(
-			"lease",
+	LeaseTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.LeaseTableName,
 			keys.LeaseTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "descID", ID: 1, Type: types.Int},
@@ -837,10 +853,10 @@ var (
 	uuidV4String = "uuid_v4()"
 
 	// EventLogTable is the descriptor for the event log table.
-	EventLogTable = buildTable(
-		descpbTable(
-			"eventlog",
-			keys.EventLogTableID,
+	EventLogTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.EventLogTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "timestamp", ID: 1, Type: types.Timestamp},
 				{Name: "eventType", ID: 2, Type: types.String},
@@ -872,9 +888,9 @@ var (
 	uniqueRowIDString = "unique_rowid()"
 
 	// RangeEventTable is the descriptor for the range log table.
-	RangeEventTable = buildTable(
-		descpbTable(
-			"rangelog",
+	RangeEventTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.RangeEventTableName,
 			keys.RangeEventTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "timestamp", ID: 1, Type: types.Timestamp},
@@ -904,10 +920,10 @@ var (
 		))
 
 	// UITable is the descriptor for the ui table.
-	UITable = buildTable(
-		descpbTable(
-			"ui",
-			keys.UITableID,
+	UITable = toCatalogDescriptor(
+		systemTable(
+			catconstants.UITableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "key", ID: 1, Type: types.String},
 				{Name: "value", ID: 2, Type: types.Bytes, Nullable: true},
@@ -925,10 +941,10 @@ var (
 	nowTZString = "now():::TIMESTAMPTZ"
 
 	// JobsTable is the descriptor for the jobs table.
-	JobsTable = buildTable(
-		descpbTable(
-			"jobs",
-			keys.JobsTableID,
+	JobsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.JobsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
 				{Name: "status", ID: 2, Type: types.String},
@@ -990,10 +1006,10 @@ var (
 		))
 
 	// WebSessions table to authenticate sessions over stateless connections.
-	WebSessionsTable = buildTable(
-		descpbTable(
-			"web_sessions",
-			keys.WebSessionsTableID,
+	WebSessionsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.WebSessionsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
 				{Name: "hashedSecret", ID: 2, Type: types.Bytes},
@@ -1065,9 +1081,9 @@ var (
 		))
 
 	// TableStatistics table to hold statistics about columns and column groups.
-	TableStatisticsTable = buildTable(
-		descpbTable(
-			"table_statistics",
+	TableStatisticsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.TableStatisticsTableName,
 			keys.TableStatisticsTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "tableID", ID: 1, Type: types.Int},
@@ -1111,9 +1127,9 @@ var (
 	latLonDecimal = types.MakeDecimal(18, 15)
 
 	// LocationsTable is the descriptor for the locations table.
-	LocationsTable = buildTable(
-		descpbTable(
-			"locations",
+	LocationsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.LocationsTableName,
 			keys.LocationsTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "localityKey", ID: 1, Type: types.String},
@@ -1140,9 +1156,9 @@ var (
 		))
 
 	// RoleMembersTable is the descriptor for the role_members table.
-	RoleMembersTable = buildTable(
-		descpbTable(
-			"role_members",
+	RoleMembersTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.RoleMembersTableName,
 			keys.RoleMembersTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "role", ID: 1, Type: types.String},
@@ -1195,10 +1211,10 @@ var (
 		))
 
 	// CommentsTable is the descriptor for the comments table.
-	CommentsTable = buildTable(
-		descpbTable(
-			"comments",
-			keys.CommentsTableID,
+	CommentsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.CommentsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "type", ID: 1, Type: types.Int},
 				{Name: "object_id", ID: 2, Type: types.Int},
@@ -1219,10 +1235,10 @@ var (
 			},
 		))
 
-	ReportsMetaTable = buildTable(
-		descpbTable(
-			"reports_meta",
-			keys.ReportsMetaTableID,
+	ReportsMetaTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.ReportsMetaTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int},
 				{Name: "generated", ID: 2, Type: types.TimestampTZ},
@@ -1251,9 +1267,9 @@ var (
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationConstraintStatsTable = buildTable(
-		descpbTable(
-			"replication_constraint_stats",
+	ReplicationConstraintStatsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.ReplicationConstraintStatsTableName,
 			keys.ReplicationConstraintStatsTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "zone_id", ID: 1, Type: types.Int},
@@ -1295,10 +1311,10 @@ var (
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationCriticalLocalitiesTable = buildTable(
-		descpbTable(
-			"replication_critical_localities",
-			keys.ReplicationCriticalLocalitiesTableID,
+	ReplicationCriticalLocalitiesTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.ReplicationCriticalLocalitiesTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "zone_id", ID: 1, Type: types.Int},
 				{Name: "subzone_id", ID: 2, Type: types.Int},
@@ -1336,8 +1352,8 @@ var (
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationStatsTable = buildTable(
-		descpbTable(
+	ReplicationStatsTable = toCatalogDescriptor(
+		systemTable(
 			"replication_stats",
 			keys.ReplicationStatsTableID,
 			[]descpb.ColumnDescriptor{
@@ -1375,10 +1391,10 @@ var (
 			},
 		))
 
-	ProtectedTimestampsMetaTable = buildTable(
-		descpbTable(
-			"protected_ts_meta",
-			keys.ProtectedTimestampsMetaTableID,
+	ProtectedTimestampsMetaTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.ProtectedTimestampsMetaTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{
 					Name:        "singleton",
@@ -1418,10 +1434,10 @@ var (
 		},
 	)
 
-	ProtectedTimestampsRecordsTable = buildTable(
-		descpbTable(
-			"protected_ts_records",
-			keys.ProtectedTimestampsRecordsTableID,
+	ProtectedTimestampsRecordsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.ProtectedTimestampsRecordsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Uuid},
 				{Name: "ts", ID: 2, Type: types.Decimal},
@@ -1451,10 +1467,10 @@ var (
 		))
 
 	// RoleOptionsTable is the descriptor for the role_options table.
-	RoleOptionsTable = buildTable(
-		descpbTable(
-			"role_options",
-			keys.RoleOptionsTableID,
+	RoleOptionsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.RoleOptionsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "option", ID: 2, Type: types.String},
@@ -1478,10 +1494,10 @@ var (
 			},
 		))
 
-	StatementBundleChunksTable = buildTable(
-		descpbTable(
-			"statement_bundle_chunks",
-			keys.StatementBundleChunksTableID,
+	StatementBundleChunksTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.StatementBundleChunksTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
 				{Name: "description", ID: 2, Type: types.String, Nullable: true},
@@ -1499,10 +1515,10 @@ var (
 
 	// TODO(andrei): Add a foreign key reference to the statement_diagnostics table when
 	// it no longer requires us to create an index on statement_diagnostics_id.
-	StatementDiagnosticsRequestsTable = buildTable(
-		descpbTable(
-			"statement_diagnostics_requests",
-			keys.StatementDiagnosticsRequestsTableID,
+	StatementDiagnosticsRequestsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.StatementDiagnosticsRequestsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
 				{Name: "completed", ID: 2, Type: types.Bool, Nullable: false, DefaultExpr: &falseBoolString},
@@ -1532,10 +1548,10 @@ var (
 			},
 		))
 
-	StatementDiagnosticsTable = buildTable(
-		descpbTable(
-			"statement_diagnostics",
-			keys.StatementDiagnosticsTableID,
+	StatementDiagnosticsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.StatementDiagnosticsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
 				{Name: "statement_fingerprint", ID: 2, Type: types.String, Nullable: false},
@@ -1558,8 +1574,8 @@ var (
 		))
 
 	// ScheduledJobsTable is the descriptor for the scheduled jobs table.
-	ScheduledJobsTable = buildTable(
-		descpbTable(
+	ScheduledJobsTable = toCatalogDescriptor(
+		systemTable(
 			"scheduled_jobs",
 			keys.ScheduledJobsTableID,
 			[]descpb.ColumnDescriptor{
@@ -1605,9 +1621,9 @@ var (
 		))
 
 	// SqllivenessTable is the descriptor for the sqlliveness table.
-	SqllivenessTable = buildTable(
-		descpbTable(
-			"sqlliveness",
+	SqllivenessTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.SqllivenessTableName,
 			keys.SqllivenessID,
 			[]descpb.ColumnDescriptor{
 				{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
@@ -1628,10 +1644,10 @@ var (
 	// MigrationsTable is the descriptor for the migrations table. It stores facts
 	// about the completion state of long-running migrations. It is used to
 	// prevent migrations from running again after they have been completed.
-	MigrationsTable = buildTable(
-		descpbTable(
-			"migrations",
-			keys.MigrationsID,
+	MigrationsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.MigrationsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "major", ID: 1, Type: types.Int, Nullable: false},
 				{Name: "minor", ID: 2, Type: types.Int, Nullable: false},
@@ -1664,10 +1680,10 @@ var (
 		))
 
 	// JoinTokensTable is the descriptor for the join tokens table.
-	JoinTokensTable = buildTable(
-		descpbTable(
-			"join_tokens",
-			keys.JoinTokensTableID,
+	JoinTokensTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.JoinTokensTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Uuid, Nullable: false},
 				{Name: "secret", ID: 2, Type: types.Bytes, Nullable: false},
@@ -1696,10 +1712,10 @@ var (
 
 	// StatementStatisticsTable is the descriptor for the SQL statement stats table.
 	// It stores statistics for statement fingerprints.
-	StatementStatisticsTable = buildTable(
-		descpbTable(
-			"statement_statistics",
-			keys.StatementStatisticsTableID,
+	StatementStatisticsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.StatementStatisticsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
 				{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
@@ -1804,10 +1820,10 @@ var (
 
 	// TransactionStatisticsTable is the descriptor for the SQL transaction stats
 	// table. It stores statistics for transaction fingerprints.
-	TransactionStatisticsTable = buildTable(
-		descpbTable(
-			"transaction_statistics",
-			keys.TransactionStatisticsTableID,
+	TransactionStatisticsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.TransactionStatisticsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
 				{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
@@ -1909,10 +1925,10 @@ var (
 	// have stable OIDs associated with them, so this table continues the
 	// convention of keying based on the role name (which is how privileges
 	// work also).
-	DatabaseRoleSettingsTable = buildTable(
-		descpbTable(
-			"database_role_settings",
-			keys.DatabaseRoleSettingsTableID,
+	DatabaseRoleSettingsTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.DatabaseRoleSettingsTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "database_id", ID: 1, Type: types.Oid, Nullable: false},
 				{Name: "role_name", ID: 2, Type: types.String, Nullable: false},
@@ -1941,10 +1957,10 @@ var (
 
 	// TenantUsageTable is the descriptor for the tenant_usage table. It is used
 	// to coordinate throttling of tenant SQL pods and to track consumption.
-	TenantUsageTable = buildTable(
-		descpbTable(
-			"tenant_usage",
-			keys.TenantUsageTableID,
+	TenantUsageTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.TenantUsageTableName,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "tenant_id", ID: 1, Type: types.Int, Nullable: false},
 				{Name: "instance_id", ID: 2, Type: types.Int, Nullable: false},
@@ -1996,9 +2012,9 @@ var (
 	// SQLInstancesTable is the descriptor for the sqlinstances table
 	// It stores information about all the SQL instances for a tenant
 	// and their associated session and address information.
-	SQLInstancesTable = buildTable(
-		descpbTable(
-			"sql_instances",
+	SQLInstancesTable = toCatalogDescriptor(
+		systemTable(
+			catconstants.SQLInstancesTableName,
 			keys.SQLInstancesTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int, Nullable: false},

@@ -34,6 +34,49 @@ const DelegatedAppNamePrefix = "$$ "
 // the cockroach CLI by default
 const InternalSQLAppName = "cockroach sql"
 
+const SystemDatabaseName = "system"
+
+type SystemTableName string
+
+const (
+	NamespaceTableName                     SystemTableName = "namespace"
+	DescriptorTableName                                    = "descriptor"
+	UsersTableName                                         = "users"
+	ZonesTableName                                         = "zones"
+	SettingsTableName                                      = "settings"
+	DescIDSequenceTableName                                = "descriptor_id_seq"
+	TenantsTableName                                       = "tenants"
+	LeaseTableName                                         = "lease"
+	EventLogTableName                                      = "eventlog"
+	RangeEventTableName                                    = "rangelog"
+	UITableName                                            = "ui"
+	JobsTableName                                          = "jobs"
+	WebSessionsTableName                                   = "web_sessions"
+	TableStatisticsTableName                               = "table_statistics"
+	LocationsTableName                                     = "locations"
+	RoleMembersTableName                                   = "role_members"
+	CommentsTableName                                      = "comments"
+	ReportsMetaTableName                                   = "reports_meta"
+	ReplicationConstraintStatsTableName                    = "replication_constraint_stats"
+	ReplicationCriticalLocalitiesTableName                 = "replication_critical_localities"
+	ReplicationStatsTableName                              = "replication_stats"
+	ProtectedTimestampsMetaTableName                       = "protected_ts_meta"
+	ProtectedTimestampsRecordsTableName                    = "protected_ts_records"
+	RoleOptionsTableName                                   = "role_options"
+	StatementBundleChunksTableName                         = "statement_bundle_chunks"
+	StatementDiagnosticsRequestsTableName                  = "statement_diagnostics_requests"
+	StatementDiagnosticsTableName                          = "statement_diagnostics"
+	ScheduledJobsTableName                                 = "scheduled_jobs"
+	SqllivenessTableName                                   = "sqlliveness"
+	MigrationsTableName                                    = "migrations"
+	JoinTokensTableName                                    = "join_tokens"
+	StatementStatisticsTableName                           = "statement_statistics"
+	TransactionStatisticsTableName                         = "transaction_statistics"
+	DatabaseRoleSettingsTableName                          = "database_role_settings"
+	TenantUsageTableName                                   = "tenant_usage"
+	SQLInstancesTableName                                  = "sql_instances"
+)
+
 // Oid for virtual database and table.
 const (
 	CrdbInternalID = math.MaxUint32 - iota
