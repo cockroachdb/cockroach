@@ -117,6 +117,17 @@ message ResponseHeader {
   // When resume_span is populated, this specifies the reason why the operation
   // wasn't completed and needs to be resumed.
   ResumeReason resume_reason = 7;
+  // When resume_reason is RESUME_BYTE_LIMIT, this may contain the size of the
+  // next result entry which caused the limit to be exceeded, i.e. the size of
+  // the first entry when reading from the resume span. It is only supported by
+  // Get and Scan. In a batch, this will only be set on the first response that
+  // exceeds the limit.
+  //
+  // NB: This is best-effort, and may be 0 in some rare cases. Specifically, if
+  // TargetBytes is exactly satisfied by a result that exhausted a range scan,
+  // or by a response from a multi-request batch, we won't do additional work
+  // (e.g. send another RPC to the next range) only to obtain resume_next_bytes.
+  int64 resume_next_bytes = 9;
 
   // The number of keys operated on.
   int64 num_keys = 5;

@@ -49,33 +49,34 @@ func TestGetResumeSpan(t *testing.T) {
 	require.NoError(t, err)
 
 	testCases := []struct {
-		maxKeys      int64
-		targetBytes  int64
-		allowEmpty   bool
-		avoidExcess  bool
-		expectResume bool
-		expectReason roachpb.ResumeReason
+		maxKeys         int64
+		targetBytes     int64
+		allowEmpty      bool
+		avoidExcess     bool
+		expectResume    bool
+		expectReason    roachpb.ResumeReason
+		expectNextBytes int64
 	}{
-		{maxKeys: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT},
+		{maxKeys: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT, expectNextBytes: 0},
 		{maxKeys: 0, expectResume: false},
 		{maxKeys: 1, expectResume: false},
 		{maxKeys: 1, allowEmpty: true, expectResume: false},
 
-		{targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT},
+		{targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT, expectNextBytes: 0},
 		{targetBytes: 0, expectResume: false},
 		{targetBytes: 1, expectResume: false},
 		{targetBytes: 11, expectResume: false},
 		{targetBytes: 12, expectResume: false},
 		// allowEmpty takes precedence over avoidExcess at the RPC level, since
 		// callers have no control over avoidExcess.
-		{targetBytes: 1, allowEmpty: true, avoidExcess: false, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT},
+		{targetBytes: 1, allowEmpty: true, avoidExcess: false, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT, expectNextBytes: 11},
 		{targetBytes: 11, allowEmpty: true, expectResume: false},
 		{targetBytes: 12, allowEmpty: true, expectResume: false},
-		{targetBytes: 1, allowEmpty: true, avoidExcess: true, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT},
+		{targetBytes: 1, allowEmpty: true, avoidExcess: true, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT, expectNextBytes: 11},
 		{targetBytes: 11, allowEmpty: true, avoidExcess: true, expectResume: false},
 		{targetBytes: 12, allowEmpty: true, avoidExcess: true, expectResume: false},
 
-		{maxKeys: -1, targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT},
+		{maxKeys: -1, targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT, expectNextBytes: 0},
 		{maxKeys: 10, targetBytes: 100, expectResume: false},
 	}
 	for _, tc := range testCases {
@@ -106,6 +107,7 @@ func TestGetResumeSpan(t *testing.T) {
 				require.NotNil(t, resp.ResumeSpan)
 				require.Equal(t, &roachpb.Span{Key: key}, resp.ResumeSpan)
 				require.Equal(t, tc.expectReason, resp.ResumeReason)
+				require.Equal(t, tc.expectNextBytes, resp.ResumeNextBytes)
 				require.Nil(t, resp.Value)
 			} else {
 				require.Nil(t, resp.ResumeSpan)
