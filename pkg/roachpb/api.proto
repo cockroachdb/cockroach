@@ -58,6 +58,17 @@ enum RoutingPolicy {
   NEAREST = 1;
 }
 
+// ResumeReason specifies why a ResumeSpan was generated instead of a
+// complete result.
+enum ResumeReason {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // Zero value; no resume.
+  RESUME_UNKNOWN = 0;
+  // The spanning operation didn't finish because the key limit was
+  // exceeded.
+  RESUME_KEY_LIMIT = 1;
+}
+
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
   reserved 1, 2;
@@ -77,15 +88,6 @@ message RequestHeader {
 // ResponseHeader is returned with every storage node response. Note that this is
 // different from a BatchResponse's header.
 message ResponseHeader {
-  enum ResumeReason {
-    option (gogoproto.goproto_enum_prefix) = false;
-    // Zero value; no resume.
-    RESUME_UNKNOWN = 0;
-    // The spanning operation didn't finish because the key limit was
-    // exceeded.
-    RESUME_KEY_LIMIT = 1;
-  }
-
   // txn is non-nil if the request specified a non-nil transaction.
   // The transaction timestamp and/or priority may have been updated,
   // depending on the outcome of the request.
