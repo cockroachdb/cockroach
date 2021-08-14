@@ -13,6 +13,7 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,17 +38,19 @@ func Get(
 		// indicates that the request was part of a batch that has already exhausted
 		// its limit, which means that we should *not* serve the request and return
 		// a ResumeSpan for this GetRequest.
-		//
-		// This mirrors the logic in MVCCScan, though the logic in MVCCScan is
-		// slightly lower in the stack.
 		reply.ResumeSpan = &roachpb.Span{Key: args.Key}
 		if h.MaxSpanRequestKeys < 0 {
 			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 		} else if h.TargetBytes < 0 {
 			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
 		}
-		return result.Result{}, nil
+		// We'll still have to do the read below to populate ResumeNextBytes, unless
+		// the caller allows us to drop it.
+		if h.AllowEmptyResumeNextBytes {
+			return result.Result{}, nil
+		}
 	}
+
 	var val *roachpb.Value
 	var intent *roachpb.Intent
 	var err error
@@ -61,13 +64,29 @@ func Get(
 	if err != nil {
 		return result.Result{}, err
 	}
-	if val != nil {
-		// NB: The NumBytes calculation is different from Scan, since Scan responses
-		// include the key/value pair while a Get response only includes the value.
+	if val == nil {
+		// Since we already did the read, we may as well return the empty result
+		// instead of a resume span.
+		if reply.ResumeSpan != nil {
+			reply.ResumeSpan = nil
+			reply.ResumeReason = 0
+		}
+	} else {
+		// NB: This calculation is different from Scan, since Scan responses include
+		// the key/value pair while Get only includes the value.
 		numBytes := int64(len(val.RawBytes))
-		if h.TargetBytesAllowEmpty && h.TargetBytes > 0 && numBytes > h.TargetBytes {
+		// Populate ResumeNextBytes for negative limits (see above).
+		if reply.ResumeSpan != nil {
+			reply.ResumeNextBytes = numBytes
+			return result.Result{}, nil
+		}
+		// For consistency with Scan, TargetBytesAllowEmpty is only effective when the
+		// AvoidExcessTargetBytes cluster version is active.
+		avoidExcess := cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.AvoidExcessTargetBytes)
+		if avoidExcess && h.TargetBytesAllowEmpty && h.TargetBytes != 0 && numBytes > h.TargetBytes {
 			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
 			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+			reply.ResumeNextBytes = numBytes
 			return result.Result{}, nil
 		}
 		reply.NumKeys = 1

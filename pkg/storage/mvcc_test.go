@@ -1531,7 +1531,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 
 			// Attempt to delete no keys.
 			deleted, resumeSpan, num, err = MVCCDeleteRange(
-				ctx, engine, nil, testKey2, testKey6, -1, hlc.Timestamp{WallTime: 2}, nil, false)
+				ctx, engine, nil, testKey2, testKey6, -1, hlc.Timestamp{WallTime: 3}, nil, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1541,10 +1541,10 @@ func TestMVCCDeleteRange(t *testing.T) {
 			if num != 0 {
 				t.Fatalf("incorrect number of keys deleted: %d", num)
 			}
-			if expected := (roachpb.Span{Key: testKey2, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
+			if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 				t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 			}
-			res, _ = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 2},
+			res, _ = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 3},
 				MVCCScanOptions{})
 			if len(res.KVs) != 4 ||
 				!bytes.Equal(res.KVs[0].Key, testKey1) ||
@@ -1559,7 +1559,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 			}
 
 			deleted, resumeSpan, num, err = MVCCDeleteRange(
-				ctx, engine, nil, testKey4, keyMax, 0, hlc.Timestamp{WallTime: 2}, nil, false)
+				ctx, engine, nil, testKey4, keyMax, 0, hlc.Timestamp{WallTime: 3}, nil, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1572,7 +1572,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 			if resumeSpan != nil {
 				t.Fatalf("wrong resume key: expected nil, found %v", resumeSpan)
 			}
-			res, err = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 2},
+			res, err = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 3},
 				MVCCScanOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -1584,7 +1584,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 			}
 
 			deleted, resumeSpan, num, err = MVCCDeleteRange(
-				ctx, engine, nil, localMax, testKey2, 0, hlc.Timestamp{WallTime: 2}, nil, false)
+				ctx, engine, nil, localMax, testKey2, 0, hlc.Timestamp{WallTime: 3}, nil, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1597,7 +1597,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 			if resumeSpan != nil {
 				t.Fatalf("wrong resume key: expected nil, found %v", resumeSpan)
 			}
-			res, _ = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 2},
+			res, _ = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 3},
 				MVCCScanOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -1675,7 +1675,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 
 			// Attempt to delete no keys.
 			deleted, resumeSpan, num, err = MVCCDeleteRange(
-				ctx, engine, nil, testKey2, testKey6, -1, hlc.Timestamp{WallTime: 2}, nil, true)
+				ctx, engine, nil, testKey2, testKey6, -1, hlc.Timestamp{WallTime: 3}, nil, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1685,10 +1685,10 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 			if num != 0 {
 				t.Fatalf("incorrect number of keys deleted: %d", num)
 			}
-			if expected := (roachpb.Span{Key: testKey2, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
+			if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 				t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 			}
-			res, _ = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 2},
+			res, _ = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 3},
 				MVCCScanOptions{})
 			if len(res.KVs) != 4 ||
 				!bytes.Equal(res.KVs[0].Key, testKey1) ||
@@ -1703,7 +1703,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 			}
 
 			deleted, resumeSpan, num, err = MVCCDeleteRange(
-				ctx, engine, nil, testKey4, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, nil, true)
+				ctx, engine, nil, testKey4, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 3}, nil, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1725,7 +1725,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 			if resumeSpan != nil {
 				t.Fatalf("wrong resume key: expected nil, found %v", resumeSpan)
 			}
-			res, _ = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 2},
+			res, _ = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 3},
 				MVCCScanOptions{})
 			if len(res.KVs) != 1 ||
 				!bytes.Equal(res.KVs[0].Key, testKey1) ||
@@ -1734,7 +1734,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 			}
 
 			deleted, resumeSpan, num, err = MVCCDeleteRange(
-				ctx, engine, nil, localMax, testKey2, math.MaxInt64, hlc.Timestamp{WallTime: 2}, nil, true)
+				ctx, engine, nil, localMax, testKey2, math.MaxInt64, hlc.Timestamp{WallTime: 3}, nil, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1750,7 +1750,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 			if resumeSpan != nil {
 				t.Fatalf("wrong resume key: %v", resumeSpan)
 			}
-			res, _ = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 2},
+			res, _ = MVCCScan(ctx, engine, localMax, keyMax, hlc.Timestamp{WallTime: 3},
 				MVCCScanOptions{})
 			if len(res.KVs) != 0 {
 				t.Fatal("the value should be empty")
@@ -2695,7 +2695,7 @@ func TestMVCCReverseScan(t *testing.T) {
 			if len(res.KVs) != 0 {
 				t.Fatalf("unexpected value: %v", res.KVs)
 			}
-			if expected := (roachpb.Span{Key: testKey2, EndKey: testKey4}); !res.ResumeSpan.EqualValue(expected) {
+			if expected := (roachpb.Span{Key: testKey2, EndKey: append(testKey3, 0)}); !res.ResumeSpan.EqualValue(expected) {
 				t.Fatalf("expected = %+v, resumeSpan = %+v", expected, res.ResumeSpan)
 			}
 

@@ -93,7 +93,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		failOnMoreRecent: false,
 	}
 	mvccScanner.init(nil /* txn */, hlc.Timestamp{})
-	_, _, err = mvccScanner.scan(context.Background())
+	_, _, _, err = mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
 	kvData := mvccScanner.results.finish()
@@ -152,7 +152,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 		ts:      ts,
 	}
 	mvccScanner.init(nil /* txn */, hlc.Timestamp{})
-	_, _, err := mvccScanner.scan(context.Background())
+	_, _, _, err := mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
 	kvData := mvccScanner.results.finish()
@@ -226,9 +226,10 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 	}
 	scanner.init(&txn1, hlc.Timestamp{})
 	cleanup := scannerWithAccount(ctx, st, scanner, 6000)
-	resumeSpan, resumeReason, err := scanner.scan(ctx)
+	resumeSpan, resumeReason, resumeNextBytes, err := scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
 	require.Zero(t, resumeReason)
+	require.Zero(t, resumeNextBytes)
 	require.Nil(t, err)
 	cleanup()
 
@@ -241,9 +242,10 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 	}
 	scanner.init(&txn1, hlc.Timestamp{})
 	cleanup = scannerWithAccount(ctx, st, scanner, 6000)
-	resumeSpan, resumeReason, err = scanner.scan(ctx)
+	resumeSpan, resumeReason, resumeNextBytes, err = scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
 	require.Zero(t, resumeReason)
+	require.Zero(t, resumeNextBytes)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "memory budget exceeded")
 	cleanup()
@@ -260,9 +262,10 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		}
 		scanner.init(nil, hlc.Timestamp{})
 		cleanup = scannerWithAccount(ctx, st, scanner, 100)
-		resumeSpan, resumeReason, err = scanner.scan(ctx)
+		resumeSpan, resumeReason, resumeNextBytes, err = scanner.scan(ctx)
 		require.Nil(t, resumeSpan)
 		require.Zero(t, resumeReason)
+		require.Zero(t, resumeNextBytes)
 		require.NotNil(t, err)
 		require.Contains(t, err.Error(), "memory budget exceeded")
 		cleanup()

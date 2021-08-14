@@ -36,6 +36,22 @@ func Scan(
 	h := cArgs.Header
 	reply := resp.(*roachpb.ScanResponse)
 
+	if h.AllowEmptyResumeNextBytes && (h.MaxSpanRequestKeys < 0 || h.TargetBytes < 0) {
+		// Receipt of a ScanRequest with negative MaxSpanRequestKeys or TargetBytes
+		// indicates that the request was part of a batch that has already exhausted
+		// its limit, which means that we should *not* serve the request and return
+		// a ResumeSpan for this ScanRequest.
+		//
+		// We can only do this if the caller allows us to not populate ResumeNextBytes.
+		reply.ResumeSpan = &roachpb.Span{Key: args.Key, EndKey: args.EndKey}
+		if h.MaxSpanRequestKeys < 0 {
+			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		} else if h.TargetBytes < 0 {
+			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+		}
+		return result.Result{}, nil
+	}
+
 	var res result.Result
 	var scanRes storage.MVCCScanResult
 	var err error
@@ -79,6 +95,7 @@ func Scan(
 	if scanRes.ResumeSpan != nil {
 		reply.ResumeSpan = scanRes.ResumeSpan
 		reply.ResumeReason = scanRes.ResumeReason
+		reply.ResumeNextBytes = scanRes.ResumeNextBytes
 	}
 
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
