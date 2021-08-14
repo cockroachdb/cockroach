@@ -397,7 +397,8 @@ func evaluateBatch(
 		// of results from the limit going forward. Exhausting the limit results
 		// in a limit of -1. This makes sure that we still execute the rest of
 		// the batch, but with limit-aware operations returning no data.
-		if limit, retResults := baHeader.MaxSpanRequestKeys, reply.Header().NumKeys; limit > 0 {
+		h := reply.Header()
+		if limit, retResults := baHeader.MaxSpanRequestKeys, h.NumKeys; limit > 0 {
 			if retResults > limit {
 				index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
 				err := errorutil.UnexpectedWithIssueErrorf(46652,
@@ -431,7 +432,6 @@ func evaluateBatch(
 		// limit). We have to check the ResumeReason as well, since e.g. a Scan
 		// response may not include the value that pushed it across the limit.
 		if baHeader.TargetBytes > 0 {
-			h := reply.Header()
 			if h.ResumeReason == roachpb.RESUME_BYTE_LIMIT {
 				baHeader.TargetBytes = -1
 			} else if baHeader.TargetBytes > h.NumBytes {
