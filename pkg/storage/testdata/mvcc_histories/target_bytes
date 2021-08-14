@@ -75,9 +75,9 @@ with ts=300,0 k=a end=z targetbytes=-1
   scan
   scan reverse=true
 ----
-scan: resume span ["a","z")
+scan: resume span ["a","z") RESUME_BYTE_LIMIT
 scan: "a"-"z" -> <no data>
-scan: resume span ["a","z")
+scan: resume span ["a","z") RESUME_BYTE_LIMIT
 scan: "a"-"z" -> <no data>
 
 run ok
@@ -97,14 +97,14 @@ run ok
 scan     k=a end=z ts=300,0 targetbytes=1
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: resume span ["aa","z")
+scan: resume span ["aa","z") RESUME_BYTE_LIMIT
 scan: 34 bytes (target 1)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=34
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: resume span ["aa","z")
+scan: resume span ["aa","z") RESUME_BYTE_LIMIT
 scan: 34 bytes (target 34)
 
 run ok
@@ -112,7 +112,7 @@ scan     k=a end=z ts=300,0 targetbytes=35
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z")
+scan: resume span ["e","z") RESUME_BYTE_LIMIT
 scan: 74 bytes (target 35)
 
 run ok
@@ -120,7 +120,7 @@ scan     k=a end=z ts=300,0 targetbytes=74
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z")
+scan: resume span ["e","z") RESUME_BYTE_LIMIT
 scan: 74 bytes (target 74)
 
 run ok
@@ -136,7 +136,7 @@ run ok
 scan     k=b end=z ts=300 targetbytes=1
 ----
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z")
+scan: resume span ["e","z") RESUME_BYTE_LIMIT
 scan: 40 bytes (target 1)
 
 # Reverse scans.
@@ -145,14 +145,14 @@ run ok
 scan     k=a end=z ts=300,0 targetbytes=1 reverse=true
 ----
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: resume span ["a","c\x00")
+scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT
 scan: 34 bytes (target 1)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=34 reverse=true
 ----
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: resume span ["a","c\x00")
+scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT
 scan: 34 bytes (target 34)
 
 run ok
@@ -160,7 +160,7 @@ scan     k=a end=z ts=300,0 targetbytes=35 reverse=true
 ----
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["a","aa\x00")
+scan: resume span ["a","aa\x00") RESUME_BYTE_LIMIT
 scan: 74 bytes (target 35)
 
 run ok
@@ -168,7 +168,7 @@ scan     k=a end=z ts=300,0 targetbytes=74 reverse=true
 ----
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["a","aa\x00")
+scan: resume span ["a","aa\x00") RESUME_BYTE_LIMIT
 scan: 74 bytes (target 74)
 
 run ok
@@ -186,7 +186,7 @@ run ok
 scan     k=a end=z ts=300,0 targetbytes=34 tombstones=true
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: resume span ["aa","z")
+scan: resume span ["aa","z") RESUME_BYTE_LIMIT
 scan: 34 bytes (target 34)
 
 run ok
@@ -194,7 +194,7 @@ scan     k=a end=z ts=300,0 targetbytes=35 tombstones=true
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["c","z")
+scan: resume span ["c","z") RESUME_BYTE_LIMIT
 scan: 58 bytes (target 35)
 
 run ok
@@ -202,7 +202,7 @@ scan     k=a end=z ts=300,0 targetbytes=58 tombstones=true
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["c","z")
+scan: resume span ["c","z") RESUME_BYTE_LIMIT
 scan: 58 bytes (target 58)
 
 run ok
@@ -211,7 +211,7 @@ scan     k=a end=z ts=300,0 targetbytes=59 tombstones=true
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z")
+scan: resume span ["e","z") RESUME_BYTE_LIMIT
 scan: 98 bytes (target 59)
 
 # ... and similarly in reverse.
@@ -220,7 +220,7 @@ run ok
 scan    k=a end=d ts=300,0 targetbytes=40 reverse=true tombstones=true
 ----
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["a","aa\x00")
+scan: resume span ["a","aa\x00") RESUME_BYTE_LIMIT
 scan: 40 bytes (target 40)
 
 run ok
@@ -228,7 +228,7 @@ scan    k=a end=d ts=300,0 targetbytes=41 reverse=true tombstones=true
 ----
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["a","a\x00")
+scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT
 scan: 64 bytes (target 41)
 
 run ok
@@ -236,7 +236,7 @@ scan    k=a end=d ts=300,0 targetbytes=64 reverse=true tombstones=true
 ----
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["a","a\x00")
+scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT
 scan: 64 bytes (target 64)
 
 run ok
@@ -274,11 +274,11 @@ with t=A ts=11,0 targetbytes=32
 ----
 scan: "k" -> /BYTES/b @11.000000000,0
 scan: "l" -> /BYTES/b @11.000000000,0
-scan: resume span ["m","o")
+scan: resume span ["m","o") RESUME_BYTE_LIMIT
 scan: 50 bytes (target 32)
 scan: "n" -> /BYTES/b @11.000000000,0
 scan: "m" -> /BYTES/b @11.000000000,0
-scan: resume span ["k","l\x00")
+scan: resume span ["k","l\x00") RESUME_BYTE_LIMIT
 scan: 50 bytes (target 32)
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0

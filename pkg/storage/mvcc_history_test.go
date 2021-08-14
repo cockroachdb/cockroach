@@ -807,7 +807,7 @@ func cmdScan(e *evalCtx) error {
 		fmt.Fprintf(e.results.buf, "scan: %v -> %v @%v\n", val.Key, val.Value.PrettyPrint(), val.Value.Timestamp)
 	}
 	if res.ResumeSpan != nil {
-		fmt.Fprintf(e.results.buf, "scan: resume span [%s,%s)\n", res.ResumeSpan.Key, res.ResumeSpan.EndKey)
+		fmt.Fprintf(e.results.buf, "scan: resume span [%s,%s) %s\n", res.ResumeSpan.Key, res.ResumeSpan.EndKey, res.ResumeReason)
 	}
 	if opts.TargetBytes > 0 {
 		fmt.Fprintf(e.results.buf, "scan: %d bytes (target %d)\n", res.NumBytes, opts.TargetBytes)

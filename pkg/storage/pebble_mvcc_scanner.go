@@ -130,6 +130,9 @@ type pebbleMVCCScanner struct {
 	// Not used in inconsistent scans.
 	// Ignored if zero.
 	maxIntents int64
+	// resumeReason contains the reason why an iteration was ended prematurely,
+	// i.e. which of the above limits were exceeded.
+	resumeReason roachpb.ResumeReason
 	// Transaction epoch and sequence number.
 	txn               *roachpb.Transaction
 	txnEpoch          enginepb.TxnEpoch
@@ -214,17 +217,18 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	p.maybeFailOnMoreRecent()
 }
 
-// scan iterates until maxKeys records are in results, or the underlying
-// iterator is exhausted, or an error is encountered.
-func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, error) {
+// scan iterates until a limit is exceeded, the underlying iterator is
+// exhausted, or an error is encountered. If a limit was exceeded, it returns a
+// resume span and resume reason.
+func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, roachpb.ResumeReason, error) {
 	p.isGet = false
 	if p.reverse {
 		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
-			return nil, p.err
+			return nil, 0, p.err
 		}
 	} else {
 		if !p.iterSeek(MVCCKey{Key: p.start}) {
-			return nil, p.err
+			return nil, 0, p.err
 		}
 	}
 
@@ -232,8 +236,12 @@ func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, error) {
 	}
 	p.maybeFailOnMoreRecent()
 
-	var resume *roachpb.Span
-	if p.maxKeys > 0 && p.results.count == p.maxKeys && p.advanceKey() {
+	if p.err != nil {
+		return nil, 0, p.err
+	}
+
+	if p.resumeReason != 0 && p.advanceKey() {
+		var resumeSpan *roachpb.Span
 		if p.reverse {
 			// curKey was not added to results, so it needs to be included in the
 			// resume span.
@@ -244,18 +252,19 @@ func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, error) {
 			curKey := p.curUnsafeKey.Key
 			curKeyCopy := make(roachpb.Key, len(curKey), len(curKey)+1)
 			copy(curKeyCopy, curKey)
-			resume = &roachpb.Span{
+			resumeSpan = &roachpb.Span{
 				Key:    p.start,
 				EndKey: curKeyCopy.Next(),
 			}
 		} else {
-			resume = &roachpb.Span{
+			resumeSpan = &roachpb.Span{
 				Key:    append(roachpb.Key(nil), p.curUnsafeKey.Key...),
 				EndKey: p.end,
 			}
 		}
+		return resumeSpan, p.resumeReason, nil
 	}
-	return resume, p.err
+	return nil, 0, nil
 }
 
 // Increments itersBeforeSeek while ensuring it stays <= maxItersBeforeSeek
@@ -457,18 +466,6 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve
 		// it.
-		if p.maxKeys > 0 && p.results.count == p.maxKeys {
-			// TODO(oleg): This check seems broken and it should never
-			// reach this point with results count reaching max. We
-			// always get out of getAndAdvance either by addAndAdvance or
-			// by seekVersion which is also calling addAndAdvance.
-			//
-			// We've already retrieved the desired number of keys and now
-			// we're adding the resume key. We don't want to add the
-			// intent here as the intents should only correspond to KVs
-			// that lie before the resume key.
-			return false
-		}
 		// p.intents is a pebble.Batch which grows its byte slice capacity in
 		// chunks to amortize allocations. The memMonitor is under-counting here
 		// by only accounting for the key and value bytes.
@@ -510,6 +507,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		}
 		// Limit number of intents returned in write intent error.
 		if p.maxIntents > 0 && int64(p.intents.Count()) >= p.maxIntents {
+			p.resumeReason = roachpb.RESUME_INTENT_LIMIT
 			return false
 		}
 		return p.advanceKey()
@@ -703,14 +701,11 @@ func (p *pebbleMVCCScanner) addAndAdvance(ctx context.Context, rawKey []byte, va
 			return false
 		}
 		if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
-			// When the target bytes are met or exceeded, stop producing more
-			// keys. We implement this by reducing maxKeys to the current
-			// number of keys.
-			//
-			// TODO(bilal): see if this can be implemented more transparently.
-			p.maxKeys = p.results.count
+			p.resumeReason = roachpb.RESUME_BYTE_LIMIT
+			return false
 		}
 		if p.maxKeys > 0 && p.results.count == p.maxKeys {
+			p.resumeReason = roachpb.RESUME_KEY_LIMIT
 			return false
 		}
 	}
