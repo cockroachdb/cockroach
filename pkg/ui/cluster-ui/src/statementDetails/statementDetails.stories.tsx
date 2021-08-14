@@ -68,10 +68,10 @@ storiesOf("StatementDetails", module)
     props.uiConfig.showStatementDiagnosticsLink = false;
     return <StatementDetails {...props} />;
   })
-  .add("Logical Plan tab", () => {
+  .add("Explain Plan tab", () => {
     const props = getStatementDetailsPropsFixture();
     props.history.location.search = new URLSearchParams([
-      ["tab", "logical-plan"],
+      ["tab", "explain-plan"],
     ]).toString();
     return <StatementDetails {...props} />;
   })

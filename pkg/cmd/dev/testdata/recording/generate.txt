@@ -124,3 +124,48 @@ cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/b
 
 cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/window_functions.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/window_functions.md
 ----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
+bazel info workspace --color=no --config=dev
+----
+go/src/github.com/cockroachdb/cockroach
+
+cat go/src/github.com/cockroachdb/cockroach/build/bazelutil/checked_in_genfiles.txt
+----
+----
+# Comment
+//pkg/roachpb:gen-batch-generated|batch_generated-gen.go|batch_generated.go
+//pkg/sql/opt/optgen/lang:gen-expr|expr-gen.og.go|expr.og.go
+//pkg/sql/opt/optgen/lang:gen-operator|operator-gen.og.go|operator.og.go
+----
+----
+
+bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/roachpb:gen-batch-generated //pkg/sql/opt/optgen/lang:gen-expr //pkg/sql/opt/optgen/lang:gen-operator
+----
+
+bazel info bazel-bin --color=no --config=dev
+----
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
+
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/roachpb/batch_generated-gen.go go/src/github.com/cockroachdb/cockroach/pkg/roachpb/batch_generated.go
+----
+
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/sql/opt/optgen/lang/expr-gen.og.go go/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/expr.og.go
+----
+
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/sql/opt/optgen/lang/operator-gen.og.go go/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/operator.og.go
+----
