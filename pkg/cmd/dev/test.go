@@ -123,6 +123,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 
 	for _, pkg := range pkgs {
 		pkg = strings.TrimPrefix(pkg, "//")
+		pkg = strings.TrimRight(pkg, "/")
 
 		if !strings.HasPrefix(pkg, "pkg/") {
 			return errors.Newf("malformed package %q, expecting %q", pkg, "pkg/{...}")

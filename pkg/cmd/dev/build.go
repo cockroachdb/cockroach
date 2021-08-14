@@ -274,6 +274,7 @@ func getBasicBuildArgs(targets []string) (args, fullTargets []string, err error)
 	}
 
 	for _, target := range targets {
+		target = strings.TrimRight(target, "/")
 		// Assume that targets beginning with `//` or containing `/`
 		// don't need to be munged.
 		if strings.HasPrefix(target, "//") || strings.Contains(target, "/") {
