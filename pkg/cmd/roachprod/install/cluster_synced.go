@@ -69,7 +69,7 @@ type SyncedCluster struct {
 	Nodes          []int
 	Secure         bool
 	CertsDir       string
-	Env            string
+	Env            []string
 	Args           []string
 	Tag            string
 	Impl           ClusterImpl
