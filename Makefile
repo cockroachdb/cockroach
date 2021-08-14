@@ -887,12 +887,14 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecwindow/lag.eg.go \
   pkg/sql/colexec/colexecwindow/last_value.eg.go \
   pkg/sql/colexec/colexecwindow/lead.eg.go \
+  pkg/sql/colexec/colexecwindow/min_max_removable_agg.eg.go \
   pkg/sql/colexec/colexecwindow/ntile.eg.go \
   pkg/sql/colexec/colexecwindow/nth_value.eg.go \
   pkg/sql/colexec/colexecwindow/range_offset_handler.eg.go \
   pkg/sql/colexec/colexecwindow/rank.eg.go \
   pkg/sql/colexec/colexecwindow/relative_rank.eg.go \
   pkg/sql/colexec/colexecwindow/row_number.eg.go \
+  pkg/sql/colexec/colexecwindow/window_aggregator.eg.go \
   pkg/sql/colexec/colexecwindow/window_framer.eg.go \
   pkg/sql/colexec/colexecwindow/window_peer_grouper.eg.go
 

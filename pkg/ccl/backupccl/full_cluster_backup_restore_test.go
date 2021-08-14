@@ -665,9 +665,10 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 						},
 					}
 				}
-
 				// The initial restore will return an error, and restart.
 				sqlDBRestore.ExpectErr(t, `injected error: restarting in background`, `RESTORE FROM $1`, LocalFoo)
+				// Reduce retry delays.
+				sqlDBRestore.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.initial_delay = '1ms'")
 				// Expect the restore to succeed.
 				sqlDBRestore.CheckQueryResultsRetry(t,
 					`SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE' AND status = 'succeeded'`,

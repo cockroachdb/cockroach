@@ -42,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
+	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1414,9 +1414,9 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 			from := clusterversion.ClusterVersion{Version: cfg.bootstrapVersion}
 			to := clusterversion.ClusterVersion{Version: cfg.binaryVersion}
 			if len(clusterversion.ListBetween(from, to)) == 0 {
-				mm, ok := nodeParams.Knobs.MigrationManager.(*migrationmanager.TestingKnobs)
+				mm, ok := nodeParams.Knobs.MigrationManager.(*migration.TestingKnobs)
 				if !ok {
-					mm = &migrationmanager.TestingKnobs{}
+					mm = &migration.TestingKnobs{}
 					nodeParams.Knobs.MigrationManager = mm
 				}
 				mm.ListBetweenOverride = func(

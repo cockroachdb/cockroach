@@ -42,7 +42,6 @@ func (a *countRowsHashAgg) SetOutput(vec coldata.Vec) {
 func (a *countRowsHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	var oldCurAggSize uintptr
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
 			{
@@ -55,10 +54,6 @@ func (a *countRowsHashAgg) Compute(
 		}
 	},
 	)
-	var newCurAggSize uintptr
-	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
-	}
 }
 
 func (a *countRowsHashAgg) Flush(outputIdx int) {
@@ -116,7 +111,6 @@ func (a *countHashAgg) SetOutput(vec coldata.Vec) {
 func (a *countHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	var oldCurAggSize uintptr
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
@@ -143,10 +137,6 @@ func (a *countHashAgg) Compute(
 		}
 	},
 	)
-	var newCurAggSize uintptr
-	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
-	}
 }
 
 func (a *countHashAgg) Flush(outputIdx int) {

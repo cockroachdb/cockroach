@@ -1190,7 +1190,15 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			}
 		} else if fun.AggregateFunc != nil {
 			var argIdxs []int
-			if *fun.AggregateFunc != execinfrapb.CountRows {
+			switch *fun.AggregateFunc {
+			case execinfrapb.CountRows:
+				// CountRows has a specialized implementation.
+				return NewCountRowsOperator(
+					args,
+					NormalizeWindowFrame(nil),
+					&execinfrapb.Ordering{Columns: orderingCols},
+				)
+			default:
 				// Supported aggregate functions other than CountRows take one argument.
 				argIdxs = []int{arg1ColIdx}
 			}
@@ -1215,8 +1223,9 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			)
 			require.NoError(b, err)
 			op = NewWindowAggregatorOperator(
-				args, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
-				[]int{arg1ColIdx}, aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
+				args, *fun.AggregateFunc, NormalizeWindowFrame(nil),
+				&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx},
+				aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
 		} else {
 			require.Fail(b, "expected non-nil window function")
 		}
@@ -1259,9 +1268,8 @@ func BenchmarkWindowFunctions(b *testing.B) {
 	runBench := func(fun execinfrapb.WindowerSpec_Func, fnName string, numArgs int) {
 		b.Run(fnName, func(b *testing.B) {
 			for _, nRows := range rowsOptions {
-				if fun.AggregateFunc != nil && nRows == 32*coldata.BatchSize() {
-					// Aggregate functions are too slow until the sliding window approach
-					// is implemented.
+				if !isWindowFnLinear(fun) && nRows == 32*coldata.BatchSize() {
+					// Skip functions that scale poorly for the larger row size.
 					continue
 				}
 				b.Run(fmt.Sprintf("rows=%d", nRows), func(b *testing.B) {

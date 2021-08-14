@@ -50,7 +50,7 @@ func NewNTileOperator(args *WindowArgs, argIdx int) colexecop.Operator {
 	} else {
 		windower = &nTileWithPartition{base}
 	}
-	return newBufferedWindowOperator(args, windower, types.Int)
+	return newBufferedWindowOperator(args, windower, types.Int, args.MemoryLimit)
 }
 
 // nTileBase extracts common fields and methods of the two variations of ntile

@@ -12,8 +12,12 @@ package jobs
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"math"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,13 +32,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -344,6 +353,499 @@ func TestBatchJobsCreation(t *testing.T) {
 						[][]string{{"succeeded"}})
 				}
 			}
+		})
+	}
+}
+
+// TestRetriesWithExponentialBackoff tests the working of exponential delays
+// when jobs are retried. Moreover, it tests the effectiveness of the upper
+// bound on the retry delay.
+func TestRetriesWithExponentialBackoff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const (
+		// Number of retries should be reasonably large such that they are sufficient
+		// to test long delays but not too many to increase the test time.
+		retries = 50
+
+		unitTime = time.Millisecond
+		// initDelay and maxDelay can be large as we jump in time through a fake clock.
+		initialDelay = time.Second
+		maxDelay     = time.Hour
+
+		pause  = true
+		cancel = false
+	)
+
+	// createJob creates a mock job.
+	createJob := func(
+		ctx context.Context, s serverutils.TestServerInterface, r *Registry, tdb *sqlutils.SQLRunner, kvDB *kv.DB,
+	) (jobspb.JobID, time.Time) {
+		jobID := r.MakeJobID()
+		require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := r.CreateJobWithTxn(ctx, Record{
+				Details:  jobspb.ImportDetails{},
+				Progress: jobspb.ImportProgress{},
+			}, jobID, txn)
+			return err
+		}))
+		var lastRun time.Time
+		tdb.QueryRow(t,
+			"SELECT created FROM system.jobs where id = $1", jobID,
+		).Scan(&lastRun)
+		return jobID, lastRun
+	}
+	validateResumeCounts := func(t *testing.T, expected, found int64) {
+		require.Equal(t, expected, found, "unexpected number of jobs resumed")
+	}
+	waitUntilCount := func(t *testing.T, counter *metric.Counter, count int64) {
+		testutils.SucceedsSoon(t, func() error {
+			cnt := counter.Count()
+			if cnt >= count {
+				return nil
+			}
+			return errors.Errorf(
+				"waiting for %v to reach %d, currently at %d", counter.GetName(), count, cnt,
+			)
+		})
+	}
+	waitUntilStatus := func(t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, status Status) {
+		tdb.CheckQueryResultsRetry(t,
+			fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", jobID),
+			[][]string{{string(status)}})
+	}
+	// pauseOrCancelJob pauses or cancels a job. If pauseJob is true, the job is paused,
+	// otherwise the job is canceled.
+	pauseOrCancelJob := func(
+		t *testing.T, ctx context.Context, db *kv.DB, registry *Registry, jobID jobspb.JobID, pauseJob bool,
+	) {
+		assert.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if pauseJob {
+				return registry.PauseRequested(ctx, txn, jobID)
+			}
+			return registry.CancelRequested(ctx, txn, jobID)
+		}))
+	}
+	// nextDelay returns the next delay based calculated from the given retryCnt
+	// and exponential-backoff parameters.
+	nextDelay := func(retryCnt int, initDelay time.Duration, maxDelay time.Duration) time.Duration {
+		delay := initDelay * ((1 << int(math.Min(62, float64(retryCnt)))) - 1)
+		if delay < 0 {
+			delay = maxDelay
+		}
+		return time.Duration(math.Min(float64(delay), float64(maxDelay)))
+	}
+
+	type BackoffTestInfra struct {
+		s                        serverutils.TestServerInterface
+		tdb                      *sqlutils.SQLRunner
+		kvDB                     *kv.DB
+		registry                 *Registry
+		clock                    *timeutil.ManualTime
+		resumeCh                 chan struct{}
+		failOrCancelCh           chan struct{}
+		transitionCh             chan struct{}
+		errCh                    chan error
+		done                     atomic.Value
+		jobMetrics               *JobTypeMetrics
+		adopted                  *metric.Counter
+		resumed                  *metric.Counter
+		afterJobStateMachineKnob func()
+	}
+	testInfraSetUp := func(ctx context.Context, bti *BackoffTestInfra) func() {
+		// We use a manual clock to control and evaluate job execution times.
+		// We initialize the clock with Now() because the job-creation timestamp,
+		// 'created' column in system.jobs, of a new job is set from txn's time.
+		bti.clock = timeutil.NewManualTime(timeutil.Now())
+		timeSource := hlc.NewClock(func() int64 {
+			return bti.clock.Now().UnixNano()
+		}, base.DefaultMaxClockOffset)
+		// Set up the test cluster.
+		knobs := &TestingKnobs{
+			TimeSource: timeSource,
+		}
+		if bti.afterJobStateMachineKnob != nil {
+			knobs.AfterJobStateMachine = bti.afterJobStateMachineKnob
+		}
+		cs := cluster.MakeTestingClusterSettings()
+		// Set a small adopt and cancel intervals to reduce test time.
+		adoptIntervalSetting.Override(ctx, &cs.SV, unitTime)
+		cancelIntervalSetting.Override(ctx, &cs.SV, unitTime)
+		retryInitialDelaySetting.Override(ctx, &cs.SV, initialDelay)
+		retryMaxDelaySetting.Override(ctx, &cs.SV, maxDelay)
+		args := base.TestServerArgs{
+			Settings: cs,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: knobs,
+			},
+		}
+		var sqlDB *gosql.DB
+		bti.s, sqlDB, bti.kvDB = serverutils.StartServer(t, args)
+		cleanup := func() {
+			close(bti.errCh)
+			close(bti.resumeCh)
+			close(bti.failOrCancelCh)
+			bti.s.Stopper().Stop(ctx)
+		}
+		bti.tdb = sqlutils.MakeSQLRunner(sqlDB)
+		bti.registry = bti.s.JobRegistry().(*Registry)
+		bti.resumeCh = make(chan struct{})
+		bti.failOrCancelCh = make(chan struct{})
+		bti.transitionCh = make(chan struct{})
+		bti.errCh = make(chan error)
+		bti.done.Store(false)
+		bti.jobMetrics = bti.registry.metrics.JobMetrics[jobspb.TypeImport]
+		bti.adopted = bti.registry.metrics.AdoptIterations
+		bti.resumed = bti.registry.metrics.ResumedJobs
+		RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+			return FakeResumer{
+				OnResume: func(ctx context.Context) error {
+					if bti.done.Load().(bool) {
+						return nil
+					}
+					bti.resumeCh <- struct{}{}
+					return <-bti.errCh
+				},
+				FailOrCancel: func(ctx context.Context) error {
+					if bti.done.Load().(bool) {
+						return nil
+					}
+					bti.failOrCancelCh <- struct{}{}
+					return <-bti.errCh
+				},
+			}
+		})
+		return cleanup
+	}
+
+	runTest := func(t *testing.T, jobID jobspb.JobID, retryCnt int, expectedResumed int64, lastRun time.Time, bti *BackoffTestInfra, waitFn func(int64)) {
+		// We retry for a fixed number. For each retry:
+		// - We first advance the clock such that it is a little behind the
+		//   next retry time.
+		// - We then wait until a few adopt-loops complete to ensure that
+		//   the registry gets a chance to pick up a job if it can.
+		// - We validate that the number of resumed jobs has not increased to
+		//   ensure that a job is not started/resumed/reverted before its next
+		//   retry time.
+		// - We then advance the clock to the exact next retry time. Now the job
+		//   can be retried in the next adopt-loop.
+		// - We wait until the resumer completes one execution and the job needs
+		//   to be picked up again in the next adopt-loop.
+		// - Now we validate that resumedJobs counter has increment, which ensures
+		//   that the job has completed only one cycle in this time.
+		//
+		// If retries do not happen based on exponential-backoff times, our counters
+		// will not match, causing the test to fail in validateCount.
+
+		for i := 0; i < retries; i++ {
+			// Exponential delay in the next retry.
+			delay := nextDelay(retryCnt, initialDelay, maxDelay)
+			// The delay must not exceed the max delay setting. It ensures that
+			// we are expecting correct timings from our test code, which in turn
+			// ensures that the jobs are resumed with correct exponential delays.
+			require.GreaterOrEqual(t, maxDelay, delay, "delay exceeds the max")
+			// Advance the clock such that it is before the next expected retry time.
+			bti.clock.AdvanceTo(lastRun.Add(delay - unitTime))
+			// This allows adopt-loops to run for a few times, which ensures that
+			// adopt-loops do not resume jobs without correctly following the job
+			// schedules.
+			waitUntilCount(t, bti.adopted, bti.adopted.Count()+2)
+			// Validate that the job is not resumed yet.
+			validateResumeCounts(t, expectedResumed, bti.resumed.Count())
+			// Advance the clock by delta from the expected time of next retry.
+			bti.clock.Advance(unitTime)
+			// Wait until the resumer completes its execution.
+			waitFn(int64(retryCnt))
+			expectedResumed++
+			retryCnt++
+			// Validate that the job is resumed only once.
+			validateResumeCounts(t, expectedResumed, bti.resumed.Count())
+			lastRun = bti.clock.Now()
+		}
+		bti.done.Store(true)
+		// Let the job be retried one more time.
+		bti.clock.Advance(nextDelay(retryCnt, initialDelay, maxDelay))
+		// Wait until the job completes.
+		testutils.SucceedsSoon(t, func() error {
+			var found Status
+			bti.tdb.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", jobID).Scan(&found)
+			if found.Terminal() {
+				return nil
+			}
+			retryCnt++
+			bti.clock.Advance(nextDelay(retryCnt, initialDelay, maxDelay))
+			return errors.Errorf("waiting job %d to reach a terminal state, currently %s", jobID, found)
+		})
+	}
+
+	t.Run("running", func(t *testing.T) {
+		ctx := context.Background()
+		bti := BackoffTestInfra{}
+		bti.afterJobStateMachineKnob = func() {
+			if bti.done.Load().(bool) {
+				return
+			}
+			bti.transitionCh <- struct{}{}
+		}
+		cleanup := testInfraSetUp(ctx, &bti)
+		defer cleanup()
+
+		jobID, lastRun := createJob(ctx, bti.s, bti.registry, bti.tdb, bti.kvDB)
+		retryCnt := 0
+		expectedResumed := int64(0)
+		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(_ int64) {
+			<-bti.resumeCh
+			bti.errCh <- NewRetryJobError("injecting error to retry running")
+			<-bti.transitionCh
+		})
+	})
+
+	t.Run("pause running", func(t *testing.T) {
+		ctx := context.Background()
+		bti := BackoffTestInfra{}
+		bti.afterJobStateMachineKnob = func() {
+			if bti.done.Load().(bool) {
+				return
+			}
+			bti.transitionCh <- struct{}{}
+		}
+		cleanup := testInfraSetUp(ctx, &bti)
+		defer cleanup()
+
+		jobID, lastRun := createJob(ctx, bti.s, bti.registry, bti.tdb, bti.kvDB)
+		retryCnt := 0
+		expectedResumed := int64(0)
+		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(_ int64) {
+			<-bti.resumeCh
+			pauseOrCancelJob(t, ctx, bti.kvDB, bti.registry, jobID, pause)
+			bti.errCh <- nil
+			<-bti.transitionCh
+			waitUntilStatus(t, bti.tdb, jobID, StatusPaused)
+			require.NoError(t, bti.registry.Unpause(ctx, nil, jobID))
+		})
+	})
+
+	t.Run("revert on fail", func(t *testing.T) {
+		ctx := context.Background()
+		bti := BackoffTestInfra{}
+		bti.afterJobStateMachineKnob = func() {
+			if bti.done.Load().(bool) {
+				return
+			}
+			bti.transitionCh <- struct{}{}
+		}
+		cleanup := testInfraSetUp(ctx, &bti)
+		defer cleanup()
+
+		jobID, lastRun := createJob(ctx, bti.s, bti.registry, bti.tdb, bti.kvDB)
+		bti.clock.AdvanceTo(lastRun)
+		<-bti.resumeCh
+		bti.errCh <- errors.Errorf("injecting error to revert")
+		<-bti.failOrCancelCh
+		bti.errCh <- NewRetryJobError("injecting error in reverting state to retry")
+		<-bti.transitionCh
+		expectedResumed := bti.resumed.Count()
+		retryCnt := 1
+		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(_ int64) {
+			<-bti.failOrCancelCh
+			bti.errCh <- NewRetryJobError("injecting error in reverting state to retry")
+			<-bti.transitionCh
+		})
+	})
+
+	t.Run("revert on cancel", func(t *testing.T) {
+		ctx := context.Background()
+		bti := BackoffTestInfra{}
+		cleanup := testInfraSetUp(ctx, &bti)
+		defer cleanup()
+
+		jobID, lastRun := createJob(ctx, bti.s, bti.registry, bti.tdb, bti.kvDB)
+		bti.clock.AdvanceTo(lastRun)
+		<-bti.resumeCh
+		pauseOrCancelJob(t, ctx, bti.kvDB, bti.registry, jobID, cancel)
+		bti.errCh <- nil
+		<-bti.failOrCancelCh
+		bti.errCh <- NewRetryJobError("injecting error in reverting state")
+		expectedResumed := bti.resumed.Count()
+		retryCnt := 1
+		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(retryCnt int64) {
+			<-bti.failOrCancelCh
+			bti.errCh <- NewRetryJobError("injecting error in reverting state")
+			waitUntilCount(t, bti.jobMetrics.FailOrCancelRetryError, retryCnt+1)
+		})
+	})
+
+	t.Run("pause reverting", func(t *testing.T) {
+		ctx := context.Background()
+		bti := BackoffTestInfra{}
+		bti.afterJobStateMachineKnob = func() {
+			if bti.done.Load().(bool) {
+				return
+			}
+			bti.transitionCh <- struct{}{}
+		}
+		cleanup := testInfraSetUp(ctx, &bti)
+		defer cleanup()
+
+		jobID, lastRun := createJob(ctx, bti.s, bti.registry, bti.tdb, bti.kvDB)
+		bti.clock.AdvanceTo(lastRun)
+		<-bti.resumeCh
+		bti.errCh <- errors.Errorf("injecting error to revert")
+		<-bti.failOrCancelCh
+		bti.errCh <- NewRetryJobError("injecting error in reverting state to retry")
+		<-bti.transitionCh
+		expectedResumed := bti.resumed.Count()
+		retryCnt := 1
+		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(_ int64) {
+			<-bti.failOrCancelCh
+			pauseOrCancelJob(t, ctx, bti.kvDB, bti.registry, jobID, pause)
+			// We have to return error here because, otherwise, the job will be marked as
+			// failed regardless of the fact that it is currently pause-requested in the
+			// jobs table. This is because we currently do not check the current status
+			// of a job before marking it as failed.
+			bti.errCh <- NewRetryJobError("injecting error in reverting state to retry")
+			<-bti.transitionCh
+			waitUntilStatus(t, bti.tdb, jobID, StatusPaused)
+			require.NoError(t, bti.registry.Unpause(ctx, nil, jobID))
+		})
+	})
+}
+
+// TestExponentialBackoffSettings tests the cluster settings of exponential backoff delays.
+func TestExponentialBackoffSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, test := range [...]struct {
+		name string // Test case ID.
+		// The setting to test.
+		settingKey string
+		// The value of the setting to set.
+		value time.Duration
+	}{
+		{
+			name:       "backoff initial delay setting",
+			settingKey: retryInitialDelaySettingKey,
+			value:      2 * time.Millisecond,
+		},
+		{
+			name:       "backoff max delay setting",
+			settingKey: retryMaxDelaySettingKey,
+			value:      2 * time.Millisecond,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			var tdb *sqlutils.SQLRunner
+			var finished atomic.Value
+			finished.Store(false)
+			var intercepted atomic.Value
+			intercepted.Store(false)
+			intercept := func(orig, updated JobMetadata) error {
+				// If this updated is not to mark as succeeded or the test has already failed.
+				if updated.Status != StatusSucceeded {
+					return nil
+				}
+
+				// If marking the first time, prevent the marking and update the cluster
+				// setting based on test params. The setting value should be reduced
+				// from a large value to a small value.
+				if !intercepted.Load().(bool) {
+					tdb.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = '%v'", test.settingKey, test.value))
+					intercepted.Store(true)
+					return errors.Errorf("preventing the job from succeeding")
+				}
+				// Let the job to succeed. As we began with a long interval and prevented
+				// the job than succeeding in the first attempt, its re-execution
+				// indicates that the setting is updated successfully and is in effect.
+				finished.Store(true)
+				return nil
+			}
+
+			// Setup the test cluster.
+			cs := cluster.MakeTestingClusterSettings()
+			// Set a small adopt interval to reduce test time.
+			adoptIntervalSetting.Override(ctx, &cs.SV, 2*time.Millisecond)
+			// Begin with a long delay.
+			retryInitialDelaySetting.Override(ctx, &cs.SV, time.Hour)
+			retryMaxDelaySetting.Override(ctx, &cs.SV, time.Hour)
+			args := base.TestServerArgs{
+				Settings: cs,
+				Knobs:    base.TestingKnobs{JobsTestingKnobs: &TestingKnobs{BeforeUpdate: intercept}},
+			}
+			s, sdb, kvDB := serverutils.StartServer(t, args)
+			defer s.Stopper().Stop(ctx)
+			tdb = sqlutils.MakeSQLRunner(sdb)
+			// Create and run a dummy job.
+			RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
+				return FakeResumer{}
+			})
+			registry := s.JobRegistry().(*Registry)
+			id := registry.MakeJobID()
+			require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				_, err := registry.CreateJobWithTxn(ctx, Record{
+					// Job does not accept an empty Details field, so arbitrarily provide
+					// ImportDetails.
+					Details:  jobspb.ImportDetails{},
+					Progress: jobspb.ImportProgress{},
+				}, id, txn)
+				return err
+			}))
+
+			// Wait for the job to be succeed.
+			testutils.SucceedsSoon(t, func() error {
+				if finished.Load().(bool) {
+					return nil
+				}
+				return errors.Errorf("waiting for the job to complete")
+			})
+		})
+	}
+}
+
+func TestRegistryUsePartialIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Mock args.
+	const (
+		id  = 1
+		sid = "bytes"
+		iid = 1
+		lim = 10
+		d   = time.Millisecond
+	)
+	ts := timeutil.Now()
+
+	for _, test := range []struct {
+		name      string
+		query     string
+		queryArgs []interface{}
+	}{
+		{"remove claims", RemoveClaimsQuery, []interface{}{sid, lim}},
+		{"claim jobs", AdoptQuery, []interface{}{sid, iid, lim}},
+		{"process claimed jobs", ProcessJobsQuery, []interface{}{sid, iid, ts, d, d}},
+		{"serve cancel and pause", CancelQuery, []interface{}{sid, iid}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+			tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+			usingIndex := false
+			rows := tdb.Query(t, "EXPLAIN "+test.query, test.queryArgs...)
+			for rows.Next() {
+				var line string
+				require.NoError(t, rows.Scan(&line))
+				if strings.Contains(line, "table: jobs@jobs_run_stats_idx (partial index)") {
+					usingIndex = true
+					break
+				}
+			}
+			require.NoError(t, rows.Close())
+			require.True(t, usingIndex, "partial index is not used")
 		})
 	}
 }

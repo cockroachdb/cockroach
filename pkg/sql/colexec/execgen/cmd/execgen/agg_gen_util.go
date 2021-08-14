@@ -57,6 +57,11 @@ type aggTmplInfoBase struct {
 	canonicalTypeFamily types.Family
 }
 
+// CopyVal is a function that should only be used in templates.
+func (b *aggTmplInfoBase) CopyVal(dest, src string) string {
+	return copyVal(b.canonicalTypeFamily, dest, src)
+}
+
 // SetVariableSize is a function that should only be used in templates. See the
 // comment on setVariableSize for more details.
 func (b aggTmplInfoBase) SetVariableSize(target, value string) string {
@@ -67,4 +72,5 @@ func (b aggTmplInfoBase) SetVariableSize(target, value string) string {
 var (
 	a aggTmplInfoBase
 	_ = a.SetVariableSize
+	_ = a.CopyVal
 )

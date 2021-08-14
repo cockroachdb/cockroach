@@ -1383,34 +1383,48 @@ func NewColOperator(
 					opName := opNamePrefix + strings.ToLower(wf.Func.AggregateFunc.String())
 					result.finishBufferedWindowerArgs(
 						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
-					aggArgs := colexecagg.NewAggregatorArgs{
-						Allocator:  windowArgs.MainAllocator,
-						InputTypes: argTypes,
-						EvalCtx:    evalCtx,
+					aggType := *wf.Func.AggregateFunc
+					switch *wf.Func.AggregateFunc {
+					case execinfrapb.CountRows:
+						// count_rows has a specialized implementation.
+						result.Root = colexecwindow.NewCountRowsOperator(windowArgs, wf.Frame, &wf.Ordering)
+					default:
+						aggArgs := colexecagg.NewAggregatorArgs{
+							Allocator:  windowArgs.MainAllocator,
+							InputTypes: argTypes,
+							EvalCtx:    evalCtx,
+						}
+						// The aggregate function will be presented with a ColVec slice
+						// containing only the argument columns.
+						colIdx := make([]uint32, len(argTypes))
+						for i := range argIdxs {
+							colIdx[i] = uint32(i)
+						}
+						aggregations := []execinfrapb.AggregatorSpec_Aggregation{{
+							Func:   aggType,
+							ColIdx: colIdx,
+						}}
+						semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
+						aggArgs.Constructors, aggArgs.ConstArguments, aggArgs.OutputTypes, err =
+							colexecagg.ProcessAggregations(evalCtx, semaCtx, aggregations, argTypes)
+						var toClose colexecop.Closers
+						var aggFnsAlloc *colexecagg.AggregateFuncsAlloc
+						if (aggType != execinfrapb.Min && aggType != execinfrapb.Max) ||
+							wf.Frame.Exclusion != execinfrapb.WindowerSpec_Frame_NO_EXCLUSION ||
+							!colexecwindow.WindowFrameCanShrink(wf.Frame, &wf.Ordering) {
+							// Min and max window functions have specialized implementations
+							// when the frame can shrink and has a default exclusion clause.
+							aggFnsAlloc, _, toClose, err = colexecagg.NewAggregateFuncsAlloc(
+								&aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
+							)
+							if err != nil {
+								colexecerror.InternalError(err)
+							}
+						}
+						result.Root = colexecwindow.NewWindowAggregatorOperator(
+							windowArgs, aggType, wf.Frame, &wf.Ordering, argIdxs,
+							aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
 					}
-					// The aggregate function will be presented with a ColVec slice
-					// containing only the argument columns.
-					colIdx := make([]uint32, len(argTypes))
-					for i := range argIdxs {
-						colIdx[i] = uint32(i)
-					}
-					aggregations := []execinfrapb.AggregatorSpec_Aggregation{{
-						Func:   *wf.Func.AggregateFunc,
-						ColIdx: colIdx,
-					}}
-					semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
-					aggArgs.Constructors, aggArgs.ConstArguments, aggArgs.OutputTypes, err =
-						colexecagg.ProcessAggregations(evalCtx, semaCtx, aggregations, argTypes)
-					// Window functions reuse the hash aggregate function implementation.
-					aggFnsAlloc, _, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-						&aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
-					)
-					if err != nil {
-						colexecerror.InternalError(err)
-					}
-					result.Root = colexecwindow.NewWindowAggregatorOperator(
-						windowArgs, wf.Frame, &wf.Ordering, argIdxs,
-						aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
 				} else {
 					colexecerror.InternalError(errors.AssertionFailedf("window function spec is nil"))
 				}

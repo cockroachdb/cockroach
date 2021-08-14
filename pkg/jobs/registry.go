@@ -195,6 +195,9 @@ func MakeRegistry(
 	}
 	if knobs != nil {
 		r.knobs = *knobs
+		if knobs.TimeSource != nil {
+			r.clock = knobs.TimeSource
+		}
 	}
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 	r.metrics.init(histogramWindowInterval)
@@ -540,7 +543,6 @@ VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBy
 	); err != nil {
 		return nil, err
 	}
-
 	return j, nil
 }
 
@@ -711,7 +713,19 @@ func (r *Registry) UpdateJobWithTxn(
 	return j.update(ctx, txn, useReadLock, updateFunc)
 }
 
+// TODO (sajjad): make maxAdoptionsPerLoop a cluster setting.
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
+
+const removeClaimsQuery = `
+UPDATE system.jobs
+   SET claim_session_id = NULL
+ WHERE claim_session_id in (
+SELECT claim_session_id
+ WHERE claim_session_id <> $1
+   AND status IN ` + claimableStatusTupleString + `
+   AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)
+ FETCH FIRST $2 ROWS ONLY)
+`
 
 // Start polls the current node for liveness failures and cancels all registered
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
@@ -747,16 +761,10 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := r.ex.ExecEx(
 				ctx, "expire-sessions", nil,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()}, `
-UPDATE system.jobs
-   SET claim_session_id = NULL
-WHERE claim_session_id in (
-SELECT claim_session_id
- WHERE claim_session_id <> $1
-   AND status IN `+claimableStatusTupleString+`
-   AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id) FETCH 
-	 FIRST `+strconv.Itoa(int(cancellationsUpdateLimitSetting.Get(&r.settings.SV)))+` ROWS ONLY)`,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				removeClaimsQuery,
 				s.ID().UnsafeBytes(),
+				cancellationsUpdateLimitSetting.Get(&r.settings.SV),
 			)
 			return err
 		}); err != nil {
@@ -779,6 +787,7 @@ SELECT claim_session_id
 	// claimJobs iterates the set of jobs which are not currently claimed and
 	// claims jobs up to maxAdoptionsPerLoop.
 	claimJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
+		r.metrics.AdoptIterations.Inc(1)
 		if err := r.claimJobs(ctx, s); err != nil {
 			log.Errorf(ctx, "error claiming jobs: %s", err)
 		}
@@ -907,6 +916,8 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 	}
 }
 
+// TODO (sajjad): Why are we returning column 'created' in this query? It's not
+// being used.
 const expiredJobsQuery = "SELECT id, payload, status, created FROM system.jobs " +
 	"WHERE (created < $1) AND (id > $2) " +
 	"ORDER BY id " + // the ordering is important as we keep track of the maximum ID we've seen
@@ -1154,6 +1165,7 @@ func (r *Registry) stepThroughStateMachine(
 	jobType := payload.Type()
 	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
+
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
@@ -1161,11 +1173,11 @@ func (r *Registry) stepThroughStateMachine(
 				"job %d: resuming with non-nil error", job.ID())
 		}
 		resumeCtx := logtags.AddTag(ctx, "job", job.ID())
-		if payload.StartedMicros == 0 {
-			if err := job.started(ctx, nil /* txn */); err != nil {
-				return err
-			}
+
+		if err := job.started(ctx, nil /* txn */); err != nil {
+			return err
 		}
+
 		var err error
 		func() {
 			jm.CurrentlyRunning.Inc(1)
@@ -1186,8 +1198,6 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.
-		// TODO(spaskob,lucy): Add metrics on job retries. Consider having a backoff
-		// mechanism (possibly combined with a retry limit).
 		if errors.Is(err, retryJobErrorSentinel) {
 			jm.ResumeRetryError.Inc(1)
 			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)

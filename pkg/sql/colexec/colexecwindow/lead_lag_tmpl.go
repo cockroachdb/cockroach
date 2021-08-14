@@ -54,6 +54,7 @@ func New_UPPERCASE_NAMEOperator(
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
 	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
+	mainMemLimit := args.MemoryLimit - bufferMemLimit
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
 		args.FdSemaphore, args.InputTypes, args.DiskAcc, argIdx)
@@ -74,7 +75,8 @@ func New_UPPERCASE_NAMEOperator(
 		switch argType.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			return newBufferedWindowOperator(args, &_OP_NAME_TYPEWindow{_OP_NAMEBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &_OP_NAME_TYPEWindow{_OP_NAMEBase: base}, argType, mainMemLimit), nil
 			// {{end}}
 		}
 		// {{end}}

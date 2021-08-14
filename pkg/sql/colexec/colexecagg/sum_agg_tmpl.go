@@ -50,6 +50,12 @@ func _ASSIGN_ADD(_, _, _, _, _, _ string) {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
+// _ASSIGN_SUBTRACT is the template subtraction function for assigning the first
+// input to the result of the second input - the third input.
+func _ASSIGN_SUBTRACT(_, _, _, _, _, _ string) {
+	colexecerror.InternalError(errors.AssertionFailedf(""))
+}
+
 // */}}
 
 func newSum_SUMKIND_AGGKINDAggAlloc(
@@ -87,9 +93,9 @@ type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	curAgg _RET_GOTYPE
 	// col points to the output vector we are updating.
 	col []_RET_GOTYPE
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 	// {{if .NeedsHelper}}
 	// {{/*
 	// overloadHelper is used only when we perform the summation of integers
@@ -200,10 +206,16 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	// {{end}}
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
+		// {{if eq "_AGGKIND" "Window"}}
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		execgen.COPYVAL(a.col[outputIdx], a.curAgg)
+		// {{else}}
 		a.col[outputIdx] = a.curAgg
+		// {{end}}
 	}
 }
 
@@ -212,7 +224,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	// {{end}}
 	a.curAgg = zero_RET_TYPEValue
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type sum_SUMKIND_TYPE_AGGKINDAggAlloc struct {
@@ -236,6 +248,38 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// {{if eq "_AGGKIND" "Window"}}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	// {{if .NeedsHelper}}
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "overloadHelper".
+	_overloadHelper := a.overloadHelper
+	// {{end}}
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.TemplateType(), vec.Nulls()
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+			_REMOVE_ROW(a, nulls, i, true)
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+			_REMOVE_ROW(a, nulls, i, false)
+		}
+	}
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+// {{end}}
 // {{end}}
 // {{end}}
 // {{end}}
@@ -258,7 +302,7 @@ func _ACCUMULATE_SUM(
 		if !a.isFirstGroup {
 			// If we encounter a new group, and we haven't found any non-nulls for the
 			// current group, the output for this group should be null.
-			if !a.foundNonNullForCurrentGroup {
+			if a.numNonNull == 0 {
 				a.nulls.SetNull(a.curIdx)
 			} else {
 				a.col[a.curIdx] = a.curAgg
@@ -273,7 +317,7 @@ func _ACCUMULATE_SUM(
 			// nulls, this will be updated unconditionally below.
 			// */}}
 			// {{if .HasNulls}}
-			a.foundNonNullForCurrentGroup = false
+			a.numNonNull = 0
 			// {{end}}
 		}
 		a.isFirstGroup = false
@@ -292,9 +336,30 @@ func _ACCUMULATE_SUM(
 		// {{end}}
 		v := col.Get(i)
 		_ASSIGN_ADD(a.curAgg, a.curAgg, v, _, _, col)
-		a.foundNonNullForCurrentGroup = true
+		a.numNonNull++
 	}
 	// {{end}}
 
+	// {{/*
+} // */}}
+
+// {{/*
+// _REMOVE_ROW removes the value of the ith row from the output for the
+// current aggregation.
+func _REMOVE_ROW(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+	// {{define "removeRow"}}
+	var isNull bool
+	// {{if .HasNulls}}
+	isNull = nulls.NullAt(i)
+	// {{else}}
+	isNull = false
+	// {{end}}
+	if !isNull {
+		//gcassert:bce
+		v := col.Get(i)
+		_ASSIGN_SUBTRACT(a.curAgg, a.curAgg, v, _, _, col)
+		a.numNonNull--
+	}
+	// {{end}}
 	// {{/*
 } // */}}
