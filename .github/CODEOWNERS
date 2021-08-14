@@ -27,6 +27,8 @@
 
 /Makefile                    @cockroachdb/dev-inf
 
+/pkg/sql/                    @cockroachdb/sql-queries-noreview
+
 /pkg/sql/opt/                @cockroachdb/sql-opt-prs
 /pkg/sql/stats/              @cockroachdb/sql-opt-prs
 
@@ -206,8 +208,7 @@
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
 /pkg/security/               @cockroachdb/server-prs
 /pkg/settings/               @cockroachdb/server-prs
-/pkg/sql/                    @cockroachdb/sql-queries-noreview
-/pkg/startupmigrations/      @cockroachdb/sql-queries-noreview
+/pkg/startupmigrations/      @cockroachdb/server-prs @cockroachdb/sql-schema
 /pkg/streaming/              @cockroachdb/bulk-prs
 /pkg/testutils/              @cockroachdb/test-eng
 /pkg/ts/                     @cockroachdb/kv

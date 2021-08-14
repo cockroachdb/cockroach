@@ -11,8 +11,12 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { PlanView } from "./planView";
-import { logicalPlan } from "./planView.fixtures";
+import { logicalPlan, globalProperties } from "./planView.fixtures";
 
 storiesOf("PlanView", module).add("default", () => (
-  <PlanView title="Logical Plan" plan={logicalPlan} />
+  <PlanView
+    title="Explain Plan"
+    globalProperties={globalProperties}
+    plan={logicalPlan}
+  />
 ));
