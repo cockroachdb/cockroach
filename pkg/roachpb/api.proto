@@ -64,9 +64,14 @@ enum ResumeReason {
   option (gogoproto.goproto_enum_prefix) = false;
   // Zero value; no resume.
   RESUME_UNKNOWN = 0;
-  // The spanning operation didn't finish because the key limit was
-  // exceeded.
+  // A key limit was exceeded.
   RESUME_KEY_LIMIT = 1;
+  // A byte limit was exceeded.
+  // NB: 21.1 and below will return RESUME_KEY_LIMIT instead.
+  RESUME_BYTE_LIMIT = 2;
+  // An intent limit was exceeded.
+  // NB: 21.1 and below will return RESUME_KEY_LIMIT instead.
+  RESUME_INTENT_LIMIT = 3;
 }
 
 // RequestHeader is supplied with every storage node request.
@@ -97,9 +102,10 @@ message ResponseHeader {
   // network.
   Transaction txn = 3;
   // The next span to resume from when the response doesn't cover the full span
-  // requested. This can happen when a bound on the keys is set through
-  // max_span_request_keys in the batch header or when a scan has been stopped
-  // before covering the requested data because of scan_options.
+  // requested. This can happen when a bound on the result size is set through
+  // max_span_request_keys or target_bytes in the batch header or when a scan
+  // has been stopped before covering the requested data because of
+  // scan_options.
   //
   // ResumeSpan is unset when the entire span of keys have been
   // operated on. The span is set to the original span if the request
@@ -108,9 +114,6 @@ message ResponseHeader {
   Span resume_span = 4;
   // When resume_span is populated, this specifies the reason why the operation
   // wasn't completed and needs to be resumed.
-  // This field appeared in v2.0. Responses from storage coming from older
-  // servers will not contain it, but the conversion from a BatchResponse to a
-  // client.Result always fills it in.
   ResumeReason resume_reason = 7;
 
   // The number of keys operated on.

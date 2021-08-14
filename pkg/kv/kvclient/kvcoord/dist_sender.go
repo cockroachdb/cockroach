@@ -1344,7 +1344,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 					ba.TargetBytes -= replyBytes
 					if ba.TargetBytes <= 0 {
 						couldHaveSkippedResponses = true
-						resumeReason = roachpb.RESUME_KEY_LIMIT
+						resumeReason = roachpb.RESUME_BYTE_LIMIT
 						return
 					}
 				}

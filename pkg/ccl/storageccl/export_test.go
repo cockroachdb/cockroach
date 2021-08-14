@@ -317,12 +317,12 @@ INTO
 		expect(t, res7, 2, 100, 2, 100)
 		latestRespHeader := roachpb.ResponseHeader{
 			ResumeSpan:   nil,
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader := roachpb.ResponseHeader{
 			ResumeSpan:   nil,
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -339,7 +339,7 @@ INTO
 				Key:    []byte("/Table/53/1/2"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = roachpb.ResponseHeader{
@@ -347,7 +347,7 @@ INTO
 				Key:    []byte("/Table/53/1/2"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -363,7 +363,7 @@ INTO
 				Key:    []byte("/Table/53/1/3/0"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = roachpb.ResponseHeader{
@@ -371,7 +371,7 @@ INTO
 				Key:    []byte("/Table/53/1/3/0"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -386,7 +386,7 @@ INTO
 				Key:    []byte("/Table/53/1/100/0"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = roachpb.ResponseHeader{
@@ -394,7 +394,7 @@ INTO
 				Key:    []byte("/Table/53/1/100/0"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -408,12 +408,12 @@ INTO
 		expect(t, res7, 100, 100, 100, 100)
 		latestRespHeader = roachpb.ResponseHeader{
 			ResumeSpan:   nil,
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     100 * kvByteSize,
 		}
 		allRespHeader = roachpb.ResponseHeader{
 			ResumeSpan:   nil,
-			ResumeReason: 2,
+			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     100 * kvByteSize,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)

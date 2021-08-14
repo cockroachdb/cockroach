@@ -2388,7 +2388,7 @@ func mvccScanToBytes(
 
 	var res MVCCScanResult
 	var err error
-	res.ResumeSpan, err = mvccScanner.scan(ctx)
+	res.ResumeSpan, res.ResumeReason, err = mvccScanner.scan(ctx)
 
 	if err != nil {
 		return MVCCScanResult{}, err
@@ -2545,8 +2545,9 @@ type MVCCScanResult struct {
 	// used for encoding the uncompressed kv pairs contained in the result.
 	NumBytes int64
 
-	ResumeSpan *roachpb.Span
-	Intents    []roachpb.Intent
+	ResumeSpan   *roachpb.Span
+	ResumeReason roachpb.ResumeReason
+	Intents      []roachpb.Intent
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided reader up to some

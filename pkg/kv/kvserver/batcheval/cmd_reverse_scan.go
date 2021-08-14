@@ -74,7 +74,7 @@ func ReverseScan(
 
 	if scanRes.ResumeSpan != nil {
 		reply.ResumeSpan = scanRes.ResumeSpan
-		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		reply.ResumeReason = scanRes.ResumeReason
 	}
 
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
