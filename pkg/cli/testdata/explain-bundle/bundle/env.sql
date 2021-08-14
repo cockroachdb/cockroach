@@ -213,7 +213,6 @@
 --   sql.defaults.experimental_computed_column_rewrites =   (allows rewriting computed column expressions in CREATE TABLE and ALTER TABLE statements; the format is: '(before expression) -> (after expression) [, (before expression) -> (after expression) ...]')
 --   sql.defaults.experimental_distsql_planning = off  (default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning [off = 0, on = 1])
 --   sql.defaults.experimental_enable_unique_without_index_constraints.enabled = false  (default value for experimental_enable_unique_without_index_constraints session setting;disables unique without index constraints by default)
---   sql.defaults.experimental_expression_indexes.enabled = false  (default value for experimental_enable_expression_indexes session setting;disables expression indexes by default)
 --   sql.defaults.experimental_hash_sharded_indexes.enabled = false  (default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default)
 --   sql.defaults.experimental_implicit_column_partitioning.enabled = false  (default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning)
 --   sql.defaults.experimental_new_schema_changer.enabled = off  (default value for experimental_use_new_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe_always = 2])

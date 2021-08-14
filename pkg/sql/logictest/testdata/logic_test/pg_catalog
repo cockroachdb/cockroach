@@ -394,9 +394,6 @@ CREATE TABLE constraint_db.t5 (
 )
 
 statement ok
-SET experimental_enable_expression_indexes=true
-
-statement ok
 CREATE TABLE constraint_db.t6 (
   a INT,
   b INT,
@@ -3861,7 +3858,6 @@ enable_seqscan                                         on                  NULL 
 enable_zigzag_join                                     on                  NULL      NULL        NULL        string
 escape_string_warning                                  on                  NULL      NULL        NULL        string
 experimental_distsql_planning                          off                 NULL      NULL        NULL        string
-experimental_enable_expression_indexes                 on                  NULL      NULL        NULL        string
 experimental_enable_hash_sharded_indexes               off                 NULL      NULL        NULL        string
 experimental_enable_implicit_column_partitioning       off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables                        off                 NULL      NULL        NULL        string
@@ -3948,7 +3944,6 @@ enable_seqscan                                         on                  NULL 
 enable_zigzag_join                                     on                  NULL  user     NULL      on                  on
 escape_string_warning                                  on                  NULL  user     NULL      on                  on
 experimental_distsql_planning                          off                 NULL  user     NULL      off                 off
-experimental_enable_expression_indexes                 on                  NULL  user     NULL      off                 off
 experimental_enable_hash_sharded_indexes               off                 NULL  user     NULL      off                 off
 experimental_enable_implicit_column_partitioning       off                 NULL  user     NULL      off                 off
 experimental_enable_temp_tables                        off                 NULL  user     NULL      off                 off
@@ -4031,7 +4026,6 @@ enable_seqscan                                         NULL    NULL     NULL    
 enable_zigzag_join                                     NULL    NULL     NULL     NULL        NULL
 escape_string_warning                                  NULL    NULL     NULL     NULL        NULL
 experimental_distsql_planning                          NULL    NULL     NULL     NULL        NULL
-experimental_enable_expression_indexes                 NULL    NULL     NULL     NULL        NULL
 experimental_enable_hash_sharded_indexes               NULL    NULL     NULL     NULL        NULL
 experimental_enable_implicit_column_partitioning       NULL    NULL     NULL     NULL        NULL
 experimental_enable_temp_tables                        NULL    NULL     NULL     NULL        NULL

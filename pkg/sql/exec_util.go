@@ -385,13 +385,6 @@ var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 ).WithPublic()
 
-var experimentalExpressionIndexesMode = settings.RegisterBoolSetting(
-	"sql.defaults.experimental_expression_indexes.enabled",
-	"default value for experimental_enable_expression_indexes session setting;"+
-		"disables expression indexes by default",
-	false,
-).WithPublic()
-
 // TODO(rytaft): remove this once unique without index constraints are fully
 // supported.
 var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting(
@@ -2594,11 +2587,6 @@ func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {
 
 func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
-}
-
-// TODO(mgartner): remove this once expression indexes are fully supported.
-func (m *sessionDataMutator) SetExpressionIndexes(val bool) {
-	m.data.EnableExpressionIndexes = val
 }
 
 // TODO(rytaft): remove this once unique without index constraints are fully

@@ -1,27 +1,3 @@
-statement error unimplemented: only simple columns are supported as index elements
-CREATE TABLE err (
-  k INT PRIMARY KEY,
-  a INT,
-  b INT,
-  INDEX ((a + b))
-)
-
-statement ok
-CREATE TABLE t (
-  k INT PRIMARY KEY,
-  a INT,
-  b INT
-)
-
-statement error unimplemented: only simple columns are supported as index elements
-CREATE INDEX err ON t ((a + b))
-
-statement ok
-DROP TABLE t
-
-statement ok
-SET experimental_enable_expression_indexes=true
-
 statement ok
 CREATE TABLE t (
   k INT PRIMARY KEY,
