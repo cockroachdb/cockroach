@@ -185,7 +185,7 @@ Available clusters:
 	c.Nodes = nodes
 	c.Secure = secure
 	c.CertsDir = certsDir
-	c.Env = strings.Join(nodeEnv, " ")
+	c.Env = nodeEnv
 	c.Args = nodeArgs
 	if tag != "" {
 		c.Tag = "/" + tag
