@@ -49,6 +49,7 @@ func Get(
 		}
 		return result.Result{}, nil
 	}
+
 	var val *roachpb.Value
 	var intent *roachpb.Intent
 	var err error
@@ -73,6 +74,7 @@ func Get(
 		if h.TargetBytes > 0 && avoidExcess && h.TargetBytesAllowEmpty && numBytes > h.TargetBytes {
 			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
 			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+			reply.ResumeNextBytes = numBytes
 			return result.Result{}, nil
 		}
 		reply.NumKeys = 1
