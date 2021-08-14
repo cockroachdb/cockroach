@@ -426,13 +426,18 @@ func evaluateBatch(
 					errors.Safe(ba.Summary()), errors.Safe(index))
 			}
 		}
-		// Same as for MaxSpanRequestKeys above, keep track of the limit and
-		// make sure to fall through to -1 instead of hitting zero (which
-		// means no limit).
+		// Same as for MaxSpanRequestKeys above, keep track of the limit and make
+		// sure to fall through to -1 instead of hitting zero (which means no
+		// limit). We have to check the ResumeReason as well, since e.g. a Scan
+		// response may not include the value that pushed it across the limit.
 		if baHeader.TargetBytes > 0 {
-			retBytes := reply.Header().NumBytes
-			if baHeader.TargetBytes > retBytes {
-				baHeader.TargetBytes -= retBytes
+			h := reply.Header()
+			// We don't have to worry about 21.1 compatibility here, since we're
+			// evaluating the batch locally.
+			if h.ResumeReason == roachpb.RESUME_BYTE_LIMIT {
+				baHeader.TargetBytes = -1
+			} else if baHeader.TargetBytes > h.NumBytes {
+				baHeader.TargetBytes -= h.NumBytes
 			} else {
 				baHeader.TargetBytes = -1
 			}

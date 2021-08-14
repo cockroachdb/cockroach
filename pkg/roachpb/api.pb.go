@@ -6648,8 +6648,8 @@ type Header struct {
 	// If set to a non-zero value, sets a target (in bytes) for how large the
 	// response may grow. This is only supported for (forward and reverse) scans
 	// and limits the number of rows scanned (and returned). The target will be
-	// overshot; in particular, at least one row will always be returned (assuming
-	// one exists). A suitable resume span will be returned.
+	// overshot when the first result is larger than the target. A suitable resume
+	// span will be returned.
 	//
 	// The semantics around overlapping requests, unordered requests, and
 	// supported requests from max_span_request_keys apply to the target_bytes

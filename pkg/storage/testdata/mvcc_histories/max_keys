@@ -23,7 +23,7 @@ with ts=300,0 k=a end=z max=1
   scan reverse=true
 ----
 scan: "a" -> /BYTES/val-a @1.000000000,0
-scan: resume span ["aa","z")
+scan: resume span ["c","z")
 scan: "e" -> /BYTES/val-e @1.000000000,0
 scan: resume span ["a","c\x00")
 

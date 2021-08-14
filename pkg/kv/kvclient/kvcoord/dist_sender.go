@@ -1322,11 +1322,18 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				var replyResults int64
 				var replyBytes int64
 				for _, r := range resp.reply.Responses {
-					replyResults += r.GetInner().Header().NumKeys
-					replyBytes += r.GetInner().Header().NumBytes
+					h := r.GetInner().Header()
+					replyResults += h.NumKeys
+					replyBytes += h.NumBytes
+					if h.ResumeSpan != nil {
+						couldHaveSkippedResponses = true
+						resumeReason = h.ResumeReason
+						return
+					}
 				}
-				// Update MaxSpanRequestKeys, if applicable. Note that ba might be
-				// passed recursively to further divideAndSendBatchToRanges() calls.
+				// Update MaxSpanRequestKeys and TargetBytes, if applicable, since ba
+				// might be passed recursively to further divideAndSendBatchToRanges()
+				// calls.
 				if ba.MaxSpanRequestKeys > 0 {
 					if replyResults > ba.MaxSpanRequestKeys {
 						log.Fatalf(ctx, "received %d results, limit was %d",
