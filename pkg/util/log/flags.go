@@ -13,6 +13,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"math"
 	"strings"
 
@@ -145,6 +146,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		bt, bf := true, false
 		mf := logconfig.ByteSize(math.MaxInt64)
 		f := logconfig.DefaultFileFormat
+		fm := logconfig.FilePermissions(0o644)
 		fakeConfig := logconfig.FileSinkConfig{
 			FileDefaults: logconfig.FileDefaults{
 				CommonSinkConfig: logconfig.CommonSinkConfig{
@@ -158,10 +160,11 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 					// impression to the entry parser.
 					Redactable: &bf,
 				},
-				Dir:            config.CaptureFd2.Dir,
-				MaxGroupSize:   config.CaptureFd2.MaxGroupSize,
-				MaxFileSize:    &mf,
-				BufferedWrites: &bf,
+				Dir:             config.CaptureFd2.Dir,
+				MaxGroupSize:    config.CaptureFd2.MaxGroupSize,
+				MaxFileSize:     &mf,
+				BufferedWrites:  &bf,
+				FilePermissions: &fm,
 			},
 		}
 		fileSinkInfo, fileSink, err := newFileSinkInfo("stderr", fakeConfig)
@@ -330,7 +333,9 @@ func newFileSinkInfo(
 		*c.BufferedWrites,
 		int64(*c.MaxFileSize),
 		int64(*c.MaxGroupSize),
-		info.getStartLines)
+		info.getStartLines,
+		fs.FileMode(*c.FilePermissions),
+	)
 	info.sink = fileSink
 	return info, fileSink, nil
 }

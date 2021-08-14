@@ -270,4 +270,5 @@ message FileInfo {
   int64 size_bytes = 2;
   int64 mod_time_nanos = 3;
   FileDetails details = 4 [(gogoproto.nullable) = false];
+  uint32 file_mode = 5;
 }
