@@ -397,7 +397,8 @@ func evaluateBatch(
 		// of results from the limit going forward. Exhausting the limit results
 		// in a limit of -1. This makes sure that we still execute the rest of
 		// the batch, but with limit-aware operations returning no data.
-		if limit, retResults := baHeader.MaxSpanRequestKeys, reply.Header().NumKeys; limit > 0 {
+		h := reply.Header()
+		if limit, retResults := baHeader.MaxSpanRequestKeys, h.NumKeys; limit > 0 {
 			if retResults > limit {
 				index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
 				err := errorutil.UnexpectedWithIssueErrorf(46652,
@@ -429,11 +430,8 @@ func evaluateBatch(
 		// Same as for MaxSpanRequestKeys above, keep track of the limit and make
 		// sure to fall through to -1 instead of hitting zero (which means no
 		// limit). We have to check the ResumeReason as well, since e.g. a Scan
-		// response may not include the value that pushed it across the limit.
+		// response may omit the value that pushed it over the limit.
 		if baHeader.TargetBytes > 0 {
-			h := reply.Header()
-			// We don't have to worry about 21.1 compatibility here, since we're
-			// evaluating the batch locally.
 			if h.ResumeReason == roachpb.RESUME_BYTE_LIMIT {
 				baHeader.TargetBytes = -1
 			} else if baHeader.TargetBytes > h.NumBytes {
@@ -441,6 +439,13 @@ func evaluateBatch(
 			} else {
 				baHeader.TargetBytes = -1
 			}
+		}
+
+		// If a response contains resume info then we don't want to do further work
+		// to determine additional ResumeNextBytes, since only the first resume span
+		// and its ResumeNextBytes will be of interest anyway.
+		if h.ResumeSpan != nil {
+			baHeader.AllowEmptyResumeNextBytes = true
 		}
 	}
 
