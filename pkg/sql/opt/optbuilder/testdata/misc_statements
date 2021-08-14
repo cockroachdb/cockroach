@@ -189,4 +189,4 @@ build
 ANALYZE ab
 ----
 create-statistics
- └── CREATE STATISTICS "" FROM ab
+ └── CREATE STATISTICS "" FROM ab WITH OPTIONS AS OF SYSTEM TIME '-0.001ms'
