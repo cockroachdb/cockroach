@@ -15,7 +15,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -47,39 +49,54 @@ func TestGetResumeSpan(t *testing.T) {
 	require.NoError(t, err)
 
 	testCases := []struct {
-		maxKeys      int64
-		targetBytes  int64
-		allowEmpty   bool
-		expectResume bool
-		expectReason roachpb.ResumeReason
+		maxKeys             int64
+		targetBytes         int64
+		allowEmpty          bool
+		avoidExcess         bool
+		allowEmptyNextBytes bool
+		expectResume        bool
+		expectReason        roachpb.ResumeReason
+		expectNextBytes     int64
 	}{
-		{maxKeys: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT},
+		{maxKeys: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT, expectNextBytes: 11},
+		{maxKeys: -1, allowEmptyNextBytes: true, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT, expectNextBytes: 0},
 		{maxKeys: 0, expectResume: false},
 		{maxKeys: 1, expectResume: false},
 		{maxKeys: 1, allowEmpty: true, expectResume: false},
 
-		{targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT},
+		{targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT, expectNextBytes: 11},
+		{targetBytes: -1, allowEmptyNextBytes: true, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT, expectNextBytes: 0},
 		{targetBytes: 0, expectResume: false},
 		{targetBytes: 1, expectResume: false},
 		{targetBytes: 11, expectResume: false},
 		{targetBytes: 12, expectResume: false},
-		{targetBytes: 1, allowEmpty: true, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT},
-		{targetBytes: 11, allowEmpty: true, expectResume: false},
-		{targetBytes: 12, allowEmpty: true, expectResume: false},
+		{targetBytes: 1, allowEmpty: true, avoidExcess: true, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT, expectNextBytes: 11},
+		{targetBytes: 11, allowEmpty: true, avoidExcess: true, expectResume: false},
+		{targetBytes: 12, allowEmpty: true, avoidExcess: true, expectResume: false},
+		{targetBytes: 1, allowEmpty: true, avoidExcess: false, expectResume: false},
 
-		{maxKeys: -1, targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT},
+		{maxKeys: -1, targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT, expectNextBytes: 11},
+		{maxKeys: -1, targetBytes: -1, allowEmptyNextBytes: true, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT, expectNextBytes: 0},
 		{maxKeys: 10, targetBytes: 100, expectResume: false},
 	}
 	for _, tc := range testCases {
-		name := fmt.Sprintf("maxKeys=%d targetBytes=%d allowEmpty=%t", tc.maxKeys, tc.targetBytes, tc.allowEmpty)
+		name := fmt.Sprintf("maxKeys=%d targetBytes=%d allowEmpty=%t avoidExcess=%t allowEmptyNextBytes=%t",
+			tc.maxKeys, tc.targetBytes, tc.allowEmpty, tc.avoidExcess, tc.allowEmptyNextBytes)
 		t.Run(name, func(t *testing.T) {
+			version := clusterversion.TestingBinaryVersion
+			if !tc.avoidExcess {
+				version = clusterversion.ByKey(clusterversion.AvoidExcessTargetBytes - 1)
+			}
+			settings := cluster.MakeTestingClusterSettingsWithVersions(version, clusterversion.TestingBinaryMinSupportedVersion, true)
+
 			resp := roachpb.GetResponse{}
 			_, err := Get(ctx, db, CommandArgs{
-				EvalCtx: (&MockEvalCtx{}).EvalContext(),
+				EvalCtx: (&MockEvalCtx{ClusterSettings: settings}).EvalContext(),
 				Header: roachpb.Header{
-					MaxSpanRequestKeys:    tc.maxKeys,
-					TargetBytes:           tc.targetBytes,
-					TargetBytesAllowEmpty: tc.allowEmpty,
+					MaxSpanRequestKeys:        tc.maxKeys,
+					TargetBytes:               tc.targetBytes,
+					TargetBytesAllowEmpty:     tc.allowEmpty,
+					AllowEmptyResumeNextBytes: tc.allowEmptyNextBytes,
 				},
 				Args: &roachpb.GetRequest{
 					RequestHeader: roachpb.RequestHeader{Key: key},
@@ -91,6 +108,7 @@ func TestGetResumeSpan(t *testing.T) {
 				require.NotNil(t, resp.ResumeSpan)
 				require.Equal(t, &roachpb.Span{Key: key}, resp.ResumeSpan)
 				require.Equal(t, tc.expectReason, resp.ResumeReason)
+				require.Equal(t, tc.expectNextBytes, resp.ResumeNextBytes)
 				require.Nil(t, resp.Value)
 			} else {
 				require.Nil(t, resp.ResumeSpan)

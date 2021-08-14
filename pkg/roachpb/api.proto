@@ -116,6 +116,11 @@ message ResponseHeader {
   // When resume_span is populated, this specifies the reason why the operation
   // wasn't completed and needs to be resumed.
   ResumeReason resume_reason = 7;
+  // When resume_span is populated, this specifies the size of the next result
+  // entry. Only the first response with a resume_span in a batch will contain
+  // this field, to avoid doing additional reads for every request that could
+  // lead to quadratic behavior.
+  int64 resume_next_bytes = 9;
 
   // The number of keys operated on.
   int64 num_keys = 5;
@@ -2139,6 +2144,12 @@ message Header {
   // target_bytes. Only effective on 21.2 clusters, since 21.1 always overshoots
   // the limit. Not supported for ExportRequest.
   bool target_bytes_allow_empty = 23;
+  // If true, allow returning a response without resume_next_bytes. This is
+  // primarily for internal use when max_span_request_keys or target_bytes
+  // is set to -1, to signal whether the request needs to do additional reads
+  // to figure out resume_next_bytes, or if this information has already been
+  // obtained from an earlier request in the same batch.
+  bool allow_empty_resume_next_bytes = 24;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTxnRequest. Currently set conservatively: a request might be
