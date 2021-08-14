@@ -14,7 +14,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -22,12 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestArbitrarySystemDescriptorIDs(t *testing.T) {
+func TestBootstrappedSystemDescriptorIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// Arbitrarily offset system descriptors
-	defer bootstrap.TestingSetDescriptorIDOffset(50)()
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -46,7 +42,7 @@ WHERE
 	"parentID" = 1 AND "parentSchemaID" = 29 AND name IN ('lease', 'jobs')
 ORDER BY
 	name ASC;`
-	tdb.CheckQueryResults(t, q1, [][]string{{"jobs", "15"}, {"lease", "11"}})
+	tdb.CheckQueryResults(t, q1, [][]string{{"jobs", "53"}, {"lease", "11"}})
 
 	// Check that offset is property taken into account in descriptor creation.
 	tdb.Exec(t, `CREATE DATABASE test`)
@@ -59,5 +55,5 @@ WHERE
 	"parentID" = 0 AND "parentSchemaID" = 0 AND name = 'test'
 ORDER BY
 	name ASC;`
-	tdb.CheckQueryResults(t, q2, [][]string{{"test", "52"}})
+	tdb.CheckQueryResults(t, q2, [][]string{{"test", "72"}})
 }

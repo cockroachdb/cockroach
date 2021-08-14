@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -39,15 +38,6 @@ type MetadataSchema struct {
 	descs         []catalog.Descriptor
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
-}
-
-var testDescriptorIDOffset descpb.ID
-
-func TestingSetDescriptorIDOffset(offset int) func() {
-	testDescriptorIDOffset = descpb.ID(offset)
-	return func() {
-		testDescriptorIDOffset = 0
-	}
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -66,24 +56,11 @@ func MakeMetadataSchema(
 
 // AddDescriptor adds a new non-config descriptor to the system schema.
 func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
-	if id := desc.GetID(); id > keys.MaxReservedDescID {
-		panic(errors.AssertionFailedf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
-	}
-	if tbl, ok := desc.(catalog.TableDescriptor); ok {
-		if _, isUnleasable := systemschema.UnleasableSystemDescriptors[desc.GetID()]; !isUnleasable {
-			// Maybe remap table descriptor IDs for testing.
-			tblCopy := *tbl.TableDesc()
-			tblCopy.ID += testDescriptorIDOffset
-			desc = tabledesc.NewBuilder(&tblCopy).BuildImmutable()
-		}
-	}
-
 	for _, d := range ms.descs {
 		if d.GetID() == desc.GetID() {
 			log.Fatalf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
 		}
 	}
-
 	ms.descs = append(ms.descs, desc)
 }
 

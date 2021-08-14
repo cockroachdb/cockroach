@@ -613,9 +613,6 @@ func toCatalogDescriptor(
 	tbl descpb.TableDescriptor, fns ...func(tbl *descpb.TableDescriptor),
 ) catalog.TableDescriptor {
 	ctx := context.Background()
-	for _, fn := range fns {
-		fn(&tbl)
-	}
 	{
 		nameInfo := descpb.NameInfo{
 			ParentID:       tbl.ParentID,
@@ -627,6 +624,9 @@ func toCatalogDescriptor(
 			log.Fatalf(ctx, "No superuser privileges found when building descriptor of system table %q", tbl.Name)
 		}
 		tbl.Privileges = descpb.NewCustomSuperuserPrivilegeDescriptor(privs, security.NodeUserName())
+	}
+	for _, fn := range fns {
+		fn(&tbl)
 	}
 	b := tabledesc.NewBuilder(&tbl)
 	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
@@ -1233,7 +1233,15 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
 			},
-		))
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Privileges.Version = descpb.Version21_2
+			tbl.Privileges.Users = append(tbl.Privileges.Users, descpb.UserPrivileges{
+				UserProto:  security.PublicRoleName().EncodeProto(),
+				Privileges: privilege.List{privilege.SELECT}.ToBitField(),
+			})
+		},
+	)
 
 	ReportsMetaTable = toCatalogDescriptor(
 		systemTable(
@@ -2049,28 +2057,3 @@ var (
 		RangeEventTable,
 	})
 )
-
-// newCommentPrivilegeDescriptor returns a privilege descriptor for comment table
-func newCommentPrivilegeDescriptor(
-	priv privilege.List, owner security.SQLUsername,
-) *descpb.PrivilegeDescriptor {
-	selectPriv := privilege.List{privilege.SELECT}
-	return &descpb.PrivilegeDescriptor{
-		OwnerProto: owner.EncodeProto(),
-		Users: []descpb.UserPrivileges{
-			{
-				UserProto:  security.AdminRoleName().EncodeProto(),
-				Privileges: priv.ToBitField(),
-			},
-			{
-				UserProto:  security.PublicRoleName().EncodeProto(),
-				Privileges: selectPriv.ToBitField(),
-			},
-			{
-				UserProto:  security.RootUserName().EncodeProto(),
-				Privileges: priv.ToBitField(),
-			},
-		},
-		Version: descpb.Version21_2,
-	}
-}
