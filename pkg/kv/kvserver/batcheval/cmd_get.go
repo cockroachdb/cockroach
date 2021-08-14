@@ -32,22 +32,6 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
-	if h.MaxSpanRequestKeys < 0 || h.TargetBytes < 0 {
-		// Receipt of a GetRequest with negative MaxSpanRequestKeys or TargetBytes
-		// indicates that the request was part of a batch that has already exhausted
-		// its limit, which means that we should *not* serve the request and return
-		// a ResumeSpan for this GetRequest.
-		//
-		// This mirrors the logic in MVCCScan, though the logic in MVCCScan is
-		// slightly lower in the stack.
-		reply.ResumeSpan = &roachpb.Span{Key: args.Key}
-		if h.MaxSpanRequestKeys < 0 {
-			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
-		} else if h.TargetBytes < 0 {
-			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
-		}
-		return result.Result{}, nil
-	}
 	var val *roachpb.Value
 	var intent *roachpb.Intent
 	var err error
@@ -65,9 +49,27 @@ func Get(
 		// NB: The NumBytes calculation is different from Scan, since Scan responses
 		// include the key/value pair while a Get response only includes the value.
 		numBytes := int64(len(val.RawBytes))
+		if h.MaxSpanRequestKeys < 0 || h.TargetBytes < 0 {
+			// Receipt of a GetRequest with negative MaxSpanRequestKeys or TargetBytes
+			// indicates that the request was part of a batch that has already exhausted
+			// its limit. We still have to actually do the read above though to populate
+			// ResumeNextBytes.
+			//
+			// This mirrors the logic in MVCCScan, though the logic in MVCCScan is
+			// slightly lower in the stack.
+			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
+			reply.ResumeNextBytes = numBytes
+			if h.MaxSpanRequestKeys < 0 {
+				reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+			} else if h.TargetBytes < 0 {
+				reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+			}
+			return result.Result{}, nil
+		}
 		if h.TargetBytesAllowEmpty && h.TargetBytes > 0 && numBytes > h.TargetBytes {
 			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
 			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+			reply.ResumeNextBytes = numBytes
 			return result.Result{}, nil
 		}
 		reply.NumKeys = 1

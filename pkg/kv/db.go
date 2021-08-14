@@ -144,6 +144,8 @@ type Result struct {
 	// When ResumeSpan is populated, this specifies the reason why the operation
 	// wasn't completed and needs to be resumed.
 	ResumeReason roachpb.ResumeReason
+	// ResumeNextBytes is the size of the next result when ResumeSpan is populated.
+	ResumeNextBytes int64
 }
 
 // ResumeSpanAsValue returns the resume span as a value if one is set,
