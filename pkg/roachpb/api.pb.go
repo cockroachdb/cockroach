@@ -6645,9 +6645,11 @@ type Header struct {
 	MaxSpanRequestKeys int64 `protobuf:"varint,8,opt,name=max_span_request_keys,json=maxSpanRequestKeys,proto3" json:"max_span_request_keys,omitempty"`
 	// If set to a non-zero value, sets a target (in bytes) for how large the
 	// response may grow. This is only supported for (forward and reverse) scans
-	// and limits the number of rows scanned (and returned). The target will be
-	// overshot; in particular, at least one row will always be returned (assuming
-	// one exists). A suitable resume span will be returned.
+	// and limits the number of rows scanned (and returned). For cluster versions
+	// 21.2 and below, the target will be overshot. For 22.1 and above, the
+	// target will only be overshot when the first result is larger than the
+	// target (see TargetBytesAvoidExcess cluster version). A suitable resume
+	// span will be returned.
 	//
 	// The semantics around overlapping requests, unordered requests, and
 	// supported requests from max_span_request_keys apply to the target_bytes
