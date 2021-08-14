@@ -1570,7 +1570,7 @@ WHERE
 			allowResponse <- struct{}{}
 		}
 
-		testutils.SucceedsSoon(t, func() error {
+		err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 			return check(ctx, inProgressState{
 				DB:            conn,
 				backupTableID: backupTableID,
@@ -1586,6 +1586,10 @@ WHERE
 
 		if err := <-jobDone; err != nil {
 			t.Fatalf("%q: %+v", query, err)
+		}
+
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 
