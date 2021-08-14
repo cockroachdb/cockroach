@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -44,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
@@ -802,4 +805,57 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 			rowIdx++
 		}
 	})
+}
+
+func TestInternalJobsRetryColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+	registry := s.JobRegistry().(*jobs.Registry)
+	syncCh := make(chan struct{})
+	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+		jobspb.TypeSchemaChangeGC: func(raw jobs.Resumer) jobs.Resumer {
+			syncCh <- struct{}{}
+			<-syncCh
+			return raw
+		},
+	}
+
+	// Create a mock job.
+	var jobID jobspb.JobID
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
+	tdb.Exec(t, "DROP TABLE foo CASCADE;")
+	tdb.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'`).Scan(&jobID)
+
+	// Wait for the job to be adopted, but intercept it before the resumer starts to test NULL last_run value.
+	<-syncCh
+
+	var lastRunNull bool
+	var nextRunNull bool
+	var nextRun time.Time
+	var numRuns int
+	query := fmt.Sprintf("SELECT last_run IS NULL, next_run IS NULL, next_run, num_runs FROM [SHOW JOBS] WHERE job_id = %d", jobID)
+	tdb.QueryRow(t, query).Scan(&lastRunNull, &nextRunNull, &nextRun, &numRuns)
+	require.True(t, lastRunNull)
+	require.False(t, nextRunNull)
+	// nextRun value is the current time as the job has not executed yet.
+	require.True(t, timeutil.Now().After(nextRun))
+	require.Equal(t, 0, numRuns)
+
+	close(syncCh)
+
+	tdb.CheckQueryResults(t,
+		fmt.Sprintf("SELECT status FROM [SHOW JOB WHEN COMPLETE %d]", jobID),
+		[][]string{{string(jobs.StatusSucceeded)}},
+	)
+
+	var runTime time.Time
+	query = fmt.Sprintf("SELECT last_run, num_runs FROM [SHOW JOBS] WHERE job_id = %d", jobID)
+	tdb.QueryRow(t, query).Scan(&runTime, &numRuns)
+	require.True(t, runTime.After(nextRun))
+	require.Equal(t, 1, numRuns)
 }
