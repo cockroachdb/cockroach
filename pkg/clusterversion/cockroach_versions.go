@@ -292,6 +292,17 @@ const (
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
 
+	// v22.1 versions.
+	//
+	// Start22_1 demarcates work towards CockroachDB v22.1.
+	Start22_1
+
+	// AvoidExcessTargetBytes prevents exceeding BatchRequest.Header.TargetBytes
+	// except when there is a single value in the response. 21.2 DistSender logic
+	// requires the limit to always be overshot in order to properly enforce
+	// limits when splitting requests.
+	AvoidExcessTargetBytes
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -494,6 +505,17 @@ var versionsSingleton = keyedVersions{
 		Key:     V21_2,
 		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
+
+	// v22.1 versions.
+	{
+		Key:     Start22_1,
+		Version: roachpb.Version{Major: 22, Minor: 1},
+	},
+	{
+		Key:     AvoidExcessTargetBytes,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 2},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
