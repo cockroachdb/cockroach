@@ -19,12 +19,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -44,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
@@ -801,5 +805,103 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 			require.NotEmpty(t, jaegarJSON)
 			rowIdx++
 		}
+	})
+}
+
+// TestInternalJobsTableRetryColumns tests values of last_run, next_run, and
+// num_runs columns in crdb_internal.jobs table. The test creates a job in
+// system.jobs table and retrieves the job's information from crdb_internal.jobs
+// table for validation.
+func TestInternalJobsTableRetryColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(validateFn func(context.Context, *sqlutils.SQLRunner)) func(t *testing.T) {
+		return func(t *testing.T) {
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					JobsTestingKnobs: &jobs.TestingKnobs{
+						DisableAdoptions: true,
+					},
+				},
+			})
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+			tdb := sqlutils.MakeSQLRunner(db)
+
+			tdb.Exec(t,
+				"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, 'test'::bytes)",
+				1, jobs.StatusRunning, timeutil.Now(),
+			)
+
+			validateFn(ctx, tdb)
+		}
+	}
+
+	t.Run("null values", testFn(func(_ context.Context, tdb *sqlutils.SQLRunner) {
+		// Values should be NULL if not populated.
+		tdb.CheckQueryResults(t, `
+SELECT last_run IS NULL,
+       next_run IS NOT NULL,
+       num_runs = 0,
+       execution_log IS NULL
+  FROM crdb_internal.jobs WHERE job_id = 1`,
+			[][]string{{"true", "true", "true", "true"}})
+	}))
+
+	t.Run("valid backoff params", testFn(func(_ context.Context, tdb *sqlutils.SQLRunner) {
+		lastRun := timeutil.Unix(1, 0)
+		tdb.Exec(t, "UPDATE system.jobs SET last_run = $1, num_runs = 1 WHERE id = 1", lastRun)
+		tdb.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.initial_delay = '1s'")
+		tdb.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.max_delay = '1s'")
+
+		var validLastRun, validNextRun, validNumRuns bool
+		tdb.QueryRow(t,
+			"SELECT last_run = $1, next_run = $2, num_runs = 1 FROM crdb_internal.jobs WHERE job_id = 1",
+			lastRun, lastRun.Add(time.Second),
+		).Scan(&validLastRun, &validNextRun, &validNumRuns)
+		require.True(t, validLastRun)
+		require.True(t, validNextRun)
+		require.True(t, validNumRuns)
+	}))
+
+	t.Run("without new columns", func(t *testing.T) {
+		// This test validates the use of new columns in a cluster that does not
+		// support new system.jobs table. It creates the test cluster with a version
+		// that does not have exponential-backoff params columns in system.jobs table.
+		// We expect NULL values for the new columns in the internal jobs table when
+		// system.jobs does not have corresponding columns.
+
+		clusterArgs := base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						DisableAutomaticVersionUpgrade: 1,
+						BinaryVersionOverride: clusterversion.ByKey(
+							clusterversion.RetryJobsWithExponentialBackoff - 1),
+					},
+					JobsTestingKnobs: &jobs.TestingKnobs{
+						DisableAdoptions: true,
+					},
+				},
+			},
+		}
+
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 1, clusterArgs)
+		defer tc.Stopper().Stop(ctx)
+		sqlDB := tc.ServerConn(0)
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		tdb.Exec(t,
+			"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, 'test'::bytes)",
+			1, jobs.StatusRunning, timeutil.Now(),
+		)
+		tdb.CheckQueryResults(t, `
+SELECT last_run IS NULL,
+       next_run IS NULL,
+       num_runs IS NULL,
+       execution_log IS NULL
+  FROM crdb_internal.jobs WHERE job_id = 1`,
+			[][]string{{"true", "true", "true", "true"}})
 	})
 }
