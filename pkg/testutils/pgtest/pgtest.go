@@ -103,11 +103,18 @@ func (p *PGTest) SendOneLine(line string) error {
 		msgBytes := []byte(sp[1])
 		switch msg := msg.(type) {
 		case *pgproto3.CopyData:
-			var data struct{ Data string }
+			var data struct {
+				Data       string
+				BinaryData []byte
+			}
 			if err := json.Unmarshal(msgBytes, &data); err != nil {
 				return err
 			}
-			msg.Data = []byte(data.Data)
+			if data.BinaryData != nil {
+				msg.Data = data.BinaryData
+			} else {
+				msg.Data = []byte(data.Data)
+			}
 		default:
 			if err := json.Unmarshal(msgBytes, msg); err != nil {
 				return err
