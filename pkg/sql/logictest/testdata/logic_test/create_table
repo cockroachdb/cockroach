@@ -475,3 +475,21 @@ CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_transaction_statistics);
 
 query error crdb_internal.node_txn_stats cannot be used in this context
 CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_txn_stats);
+
+statement ok
+CREATE SEQUENCE serial_test_sequence start 1 increment 1
+
+query T noticetrace
+CREATE TABLE serial_test1 (id INT PRIMARY KEY DEFAULT nextval('serial_test_sequence'), temp string)
+----
+NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/v21.2/serial.html
+
+query T noticetrace
+CREATE TABLE serial_test2 (id SERIAL PRIMARY KEY, temp string )
+----
+NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/v21.2/serial.html
+
+query T noticetrace
+CREATE TABLE serial_test3 (id SERIAL , temp string, PRIMARY KEY (id))
+----
+NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/v21.2/serial.html
