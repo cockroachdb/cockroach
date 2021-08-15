@@ -226,8 +226,12 @@ func (c *copyMachine) run(ctx context.Context) error {
 	defer c.rowsMemAcc.Close(ctx)
 	defer c.bufMemAcc.Close(ctx)
 
+	format := pgwirebase.FormatText
+	if c.format == tree.CopyFormatBinary {
+		format = pgwirebase.FormatBinary
+	}
 	// Send the message describing the columns to the client.
-	if err := c.conn.BeginCopyIn(ctx, c.resultColumns); err != nil {
+	if err := c.conn.BeginCopyIn(ctx, c.resultColumns, format); err != nil {
 		return err
 	}
 

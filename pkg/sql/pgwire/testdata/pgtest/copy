@@ -310,3 +310,30 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"3"},{"text":"three"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 3"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that the format code is reported as binary.
+# This also verifies that the protocol checks for the correct
+# binary signature.
+send
+Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN WITH BINARY"}
+CopyData {"BinaryData": "UEdDT1BZCv8NCgAAAAAAAAAAAAACAAAACAAAAAAAAAABAAAAA2NhdAACAAAACAAAAAAAAAACAAAAA2RvZw=="}
+CopyDone
+Query {"String": "SELECT * FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[1,1]}
+{"Type":"CommandComplete","CommandTag":"COPY 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"cat"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"dog"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
