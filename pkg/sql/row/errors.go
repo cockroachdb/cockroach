@@ -51,6 +51,11 @@ func (f *singleKVFetcher) nextBatch(
 func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch) error {
 	origPErr := b.MustPErr()
 	switch v := origPErr.GetDetail().(type) {
+	case *roachpb.MinTimestampBoundUnsatisfiableError:
+		return pgerror.WithCandidateCode(
+			origPErr.GoError(),
+			pgcode.UnsatisfiableBoundedStaleness,
+		)
 	case *roachpb.ConditionFailedError:
 		if origPErr.Index == nil {
 			break
@@ -85,11 +90,20 @@ type KeyToDescTranslator interface {
 // ConvertFetchError attempts to map a key-value error generated during a
 // key-value fetch to a user friendly SQL error.
 func ConvertFetchError(ctx context.Context, descForKey KeyToDescTranslator, err error) error {
-	var wiErr *roachpb.WriteIntentError
-	if errors.As(err, &wiErr) {
-		key := wiErr.Intents[0].Key
+	var errs struct {
+		wi *roachpb.WriteIntentError
+		bs *roachpb.MinTimestampBoundUnsatisfiableError
+	}
+	switch {
+	case errors.As(err, &errs.wi):
+		key := errs.wi.Intents[0].Key
 		desc, _ := descForKey.KeyToDesc(key)
-		return NewLockNotAvailableError(ctx, desc, key, wiErr.Reason)
+		return NewLockNotAvailableError(ctx, desc, key, errs.wi.Reason)
+	case errors.As(err, &errs.bs):
+		return pgerror.WithCandidateCode(
+			err,
+			pgcode.UnsatisfiableBoundedStaleness,
+		)
 	}
 	return err
 }
