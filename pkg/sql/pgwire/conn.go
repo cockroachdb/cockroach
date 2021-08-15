@@ -1086,12 +1086,14 @@ func (c *conn) handleFlush(ctx context.Context) error {
 }
 
 // BeginCopyIn is part of the pgwirebase.Conn interface.
-func (c *conn) BeginCopyIn(ctx context.Context, columns []colinfo.ResultColumn) error {
+func (c *conn) BeginCopyIn(
+	ctx context.Context, columns []colinfo.ResultColumn, format pgwirebase.FormatCode,
+) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyInResponse)
-	c.msgBuilder.writeByte(byte(pgwirebase.FormatText))
+	c.msgBuilder.writeByte(byte(format))
 	c.msgBuilder.putInt16(int16(len(columns)))
 	for range columns {
-		c.msgBuilder.putInt16(int16(pgwirebase.FormatText))
+		c.msgBuilder.putInt16(int16(format))
 	}
 	return c.msgBuilder.finishMsg(c.conn)
 }
