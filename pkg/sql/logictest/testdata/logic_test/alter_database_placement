@@ -1,8 +1,0 @@
-statement ok
-CREATE DATABASE d;
-
-statement error altering database placement is not yet supported
-ALTER DATABASE d SET PLACEMENT DEFAULT
-
-statement error altering database placement is not yet supported
-ALTER DATABASE d SET PLACEMENT RESTRICTED

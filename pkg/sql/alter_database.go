@@ -748,6 +748,19 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		return err
 	}
 
+	// Update all GLOBAL tables' zone configurations. This is required as if
+	// LOCALITY GLOBAL is used with PLACEMENT RESTRICTED, the global tables' zone
+	// configs must be explicitly rebuilt so as to move their primary region.
+	if updatedRegionConfig.IsPlacementRestricted() {
+		if err := params.p.updateZoneConfigsForTables(
+			params.ctx,
+			n.desc,
+			WithOnlyGlobalTables,
+		); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -844,6 +857,7 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 		tree.SurvivalGoalDefault,
 		n.n.PrimaryRegion,
 		[]tree.Name{n.n.PrimaryRegion},
+		tree.DataPlacementUnspecified,
 	)
 	if err != nil {
 		return err
@@ -999,6 +1013,15 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		)
 	}
 
+	if n.n.SurvivalGoal == tree.SurvivalGoalRegionFailure &&
+		n.desc.RegionConfig.Placement == descpb.DataPlacement_RESTRICTED {
+		return errors.WithDetailf(
+			pgerror.New(pgcode.InvalidParameterValue,
+				"a region-survivable database cannot also have a restricted placement policy"),
+			"PLACEMENT RESTRICTED may only be used with SURVIVE ZONE FAILURE",
+		)
+	}
+
 	if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		params.ctx,
 		n.desc,
@@ -1045,7 +1068,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 
 	// Update all REGIONAL BY TABLE tables' zone configurations. This is required as replica
 	// placement for REGIONAL BY TABLE tables is dependant on the survival goal.
-	if err := params.p.updateZoneConfigsForAllTables(params.ctx, n.desc); err != nil {
+	if err := params.p.updateZoneConfigsForTables(params.ctx, n.desc); err != nil {
 		return err
 	}
 
@@ -1064,3 +1087,120 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 func (n *alterDatabaseSurvivalGoalNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterDatabaseSurvivalGoalNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabaseSurvivalGoalNode) Close(context.Context)        {}
+
+type alterDatabasePlacementNode struct {
+	n    *tree.AlterDatabasePlacement
+	desc *dbdesc.Mutable
+}
+
+// AlterDatabasePlacement transforms a tree.AlterDatabasePlacement into a plan node.
+func (p *planner) AlterDatabasePlacement(
+	ctx context.Context, n *tree.AlterDatabasePlacement,
+) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	// TODO(pawalt): #68598 add a check for placement enabled cluster setting
+
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	return &alterDatabasePlacementNode{n: n, desc: dbDesc}, nil
+}
+
+func (n *alterDatabasePlacementNode) startExec(params runParams) error {
+	// If the database is not a multi-region database, the survival goal cannot be changed.
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidName,
+				"database must have associated regions before a placement policy can be set",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.Name.String(),
+		)
+	}
+
+	if n.n.Placement == tree.DataPlacementRestricted &&
+		n.desc.RegionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		return errors.WithDetailf(
+			pgerror.New(pgcode.InvalidParameterValue,
+				"a region-survivable database cannot also have a restricted placement policy"),
+			"PLACEMENT RESTRICTED may only be used with SURVIVE ZONE FAILURE",
+		)
+	}
+
+	if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+		params.ctx,
+		n.desc,
+	); err != nil {
+		return err
+	}
+
+	// Update the placement strategy in the database descriptor
+	newPlacement, err := TranslateDataPlacement(n.n.Placement)
+	if err != nil {
+		return err
+	}
+	n.desc.SetPlacement(newPlacement)
+
+	if err := params.p.writeNonDropDatabaseChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	if err != nil {
+		return err
+	}
+
+	// Update the database's zone configuration.
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
+		params.ctx,
+		n.desc.ID,
+		regionConfig,
+		params.p.txn,
+		params.p.execCfg,
+	); err != nil {
+		return err
+	}
+
+	// Update all GLOBAL tables' zone configurations. This is required because
+	// GLOBAL table's can inherit the database's zone configuration under the
+	// DEFAULT placement policy. However, under the RESTRICTED placement policy,
+	// non-voters are removed from the database. But global tables need non-voters
+	// to behave properly, and as such, need a bespoke zone configuration.
+	// Regardless of the transition direction (DEFAULT -> RESTRICTED, RESTRICTED
+	// -> DEFAULT), we need to refresh the zone configuration of all GLOBAL
+	// table's inside the database to either carry a bespoke configuration or go
+	// back to inheriting it from the database.
+	if err := params.p.updateZoneConfigsForTables(
+		params.ctx,
+		n.desc,
+		WithOnlyGlobalTables,
+	); err != nil {
+		return err
+	}
+
+	// TODO(pawalt): #68597 add telemetry/logging for PLACEMENT events.
+	return nil
+}
+
+func (n *alterDatabasePlacementNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabasePlacementNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabasePlacementNode) Close(context.Context)        {}

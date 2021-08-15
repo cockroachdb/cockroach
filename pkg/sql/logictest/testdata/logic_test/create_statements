@@ -283,6 +283,7 @@ CREATE TABLE crdb_internal.databases (
    primary_region STRING NULL,
    regions STRING[] NULL,
    survival_goal STRING NULL,
+   placement_policy STRING NULL,
    create_statement STRING NOT NULL
 )  CREATE TABLE crdb_internal.databases (
    id INT8 NOT NULL,
@@ -291,6 +292,7 @@ CREATE TABLE crdb_internal.databases (
    primary_region STRING NULL,
    regions STRING[] NULL,
    survival_goal STRING NULL,
+   placement_policy STRING NULL,
    create_statement STRING NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.default_privileges (
