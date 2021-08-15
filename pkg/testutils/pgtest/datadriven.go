@@ -48,7 +48,10 @@ func WalkWithNewServer(
 // "send": Sends messages to a server. Takes a newline-delimited list of
 // pgproto3.FrontendMessage types. Can fill in values by adding a space then
 // a JSON object. No output. Messages with a []byte type (like CopyData) should
-// not base64 encode the data, instead use Go-escaped strings.
+// not base64 encode the data, instead use Go-escaped strings. If the input
+// data actually has binary input or characters not allowed in JSON strings
+// (like '\n'), then a base64-encoded value should be used as the `BinaryData`
+// field.
 //
 // "until": Receives all messages from a server until messages of the given
 // types have been seen. Converts them to JSON one per line as output. Takes
