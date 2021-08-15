@@ -339,9 +339,6 @@ func (b *Builder) buildStmt(
 	case *tree.Export:
 		return b.buildExport(stmt, inScope)
 
-	case *tree.AlterDatabasePlacement:
-		panic(pgerror.New(pgcode.FeatureNotSupported, "altering database placement is not yet supported"))
-
 	default:
 		// See if this statement can be rewritten to another statement using the
 		// delegate functionality.

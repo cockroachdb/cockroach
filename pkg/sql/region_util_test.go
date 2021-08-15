@@ -362,7 +362,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 						},
 					},
 				},
-				Constraints:                 []zonepb.ConstraintsConjunction{},
+				Constraints:                 nil,
 				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
@@ -397,7 +397,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 						},
 					},
 				},
-				Constraints:                 []zonepb.ConstraintsConjunction{},
+				Constraints:                 nil,
 				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{

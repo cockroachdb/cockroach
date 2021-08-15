@@ -86,11 +86,30 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		)
 	}
 
-	if n.SurvivalGoal != tree.SurvivalGoalDefault && n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
+	if n.SurvivalGoal != tree.SurvivalGoalDefault &&
+		n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
 		return nil, pgerror.New(
 			pgcode.InvalidDatabaseDefinition,
 			"PRIMARY REGION must be specified when using SURVIVE",
 		)
+	}
+
+	if n.Placement != tree.DataPlacementUnspecified {
+		// TODO(pawalt): #68598 add cluster setting checking for placement.
+		if n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
+			return nil, pgerror.New(
+				pgcode.InvalidDatabaseDefinition,
+				"PRIMARY REGION must be specified when using PLACEMENT",
+			)
+		}
+
+		if n.Placement == tree.DataPlacementRestricted &&
+			n.SurvivalGoal == tree.SurvivalGoalRegionFailure {
+			return nil, pgerror.New(
+				pgcode.InvalidDatabaseDefinition,
+				"PLACEMENT RESTRICTED can only be used with SURVIVE ZONE FAILURE",
+			)
+		}
 	}
 
 	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
@@ -98,7 +117,10 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		return nil, err
 	}
 	if !hasCreateDB {
-		return nil, pgerror.New(pgcode.InsufficientPrivilege, "permission denied to create database")
+		return nil, pgerror.New(
+			pgcode.InsufficientPrivilege,
+			"permission denied to create database",
+		)
 	}
 
 	return &createDatabaseNode{n: n}, nil
