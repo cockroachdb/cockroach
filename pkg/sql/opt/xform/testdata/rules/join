@@ -9849,3 +9849,36 @@ left-join (lookup metric_values)
  │    └── fd: (1)-->(2)
  └── filters
       └── name:2 = 'cpu' [outer=(2), constraints=(/2: [/'cpu' - /'cpu']; tight), fd=()-->(2)]
+
+# Regression test for #68975. Ensure that findJoinFilterRange does not panic
+# from trying to access the 0-th constraint in an empty constraint set.
+exec-ddl
+CREATE TABLE t68975 (
+    s STRING,
+    i INT CHECK (false),
+    INDEX (s DESC)
+);
+----
+
+opt
+SELECT NULL
+FROM t68975 AS t1 JOIN t68975 AS t2
+ON t1.s = t2.s;
+----
+project
+ ├── columns: "?column?":11
+ ├── fd: ()-->(11)
+ ├── inner-join (merge)
+ │    ├── columns: t1.s:1!null t2.s:6!null
+ │    ├── left ordering: -1
+ │    ├── right ordering: -6
+ │    ├── fd: (1)==(6), (6)==(1)
+ │    ├── scan t68975@secondary [as=t1]
+ │    │    ├── columns: t1.s:1
+ │    │    └── ordering: -1
+ │    ├── scan t68975@secondary [as=t2]
+ │    │    ├── columns: t2.s:6
+ │    │    └── ordering: -6
+ │    └── filters (true)
+ └── projections
+      └── NULL [as="?column?":11]
