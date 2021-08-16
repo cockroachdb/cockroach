@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -331,13 +332,13 @@ func doCreateBackupSchedules(
 	unpauseOnSuccessID := jobs.InvalidScheduleID
 
 	// If needed, create incremental.
+	var inc *jobs.ScheduledJob
+	var incScheduledBackupArgs *ScheduledBackupExecutionArgs
 	if incRecurrence != nil {
 		backupNode.AppendToLatest = true
-		inc, err := makeBackupSchedule(
-			env, p.User(), scheduleLabel,
-			incRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess,
-			backupNode, fullRecurrence)
-
+		inc, incScheduledBackupArgs, err = makeBackupSchedule(
+			env, p.User(), scheduleLabel, incRecurrence, details, unpauseOnSuccessID,
+			updateMetricOnSuccess, backupNode)
 		if err != nil {
 			return err
 		}
@@ -357,10 +358,10 @@ func doCreateBackupSchedules(
 
 	// Create FULL backup schedule.
 	backupNode.AppendToLatest = false
-	full, err := makeBackupSchedule(
-		env, p.User(), scheduleLabel,
-		fullRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess,
-		backupNode, incRecurrence)
+	var fullScheduledBackupArgs *ScheduledBackupExecutionArgs
+	full, fullScheduledBackupArgs, err := makeBackupSchedule(
+		env, p.User(), scheduleLabel, fullRecurrence, details, unpauseOnSuccessID,
+		updateMetricOnSuccess, backupNode)
 	if err != nil {
 		return err
 	}
@@ -376,13 +377,49 @@ func doCreateBackupSchedules(
 		full.SetNextRun(env.Now())
 	}
 
-	// Create the schedule (we need its ID to create incremental below).
+	// Create the schedule (we need its ID to link dependent schedules below).
 	if err := full.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
 		return err
 	}
+
+	// If schedule creation has resulted in a full and incremental schedule then
+	// we update both the schedules with the ID of the other "dependent" schedule.
+	if incRecurrence != nil {
+		if err := setDependentSchedule(ctx, ex, fullScheduledBackupArgs, full, inc.ScheduleID(),
+			p.ExtendedEvalContext().Txn); err != nil {
+			return errors.Wrap(err,
+				"failed to update full schedule with dependent incremental schedule id")
+		}
+		if err := setDependentSchedule(ctx, ex, incScheduledBackupArgs, inc, full.ScheduleID(),
+			p.ExtendedEvalContext().Txn); err != nil {
+			return errors.Wrap(err,
+				"failed to update incremental schedule with dependent full schedule id")
+		}
+	}
+
 	collectScheduledBackupTelemetry(incRecurrence, firstRun, fullRecurrencePicked, details)
 	return emitSchedule(full, backupNode, destinations, nil /* incrementalFrom */, kmsURIs,
 		resultsCh)
+}
+
+func setDependentSchedule(
+	ctx context.Context,
+	ex *sql.InternalExecutor,
+	scheduleExecutionArgs *ScheduledBackupExecutionArgs,
+	schedule *jobs.ScheduledJob,
+	dependentID int64,
+	txn *kv.Txn,
+) error {
+	scheduleExecutionArgs.DependentScheduleID = dependentID
+	any, err := pbtypes.MarshalAny(scheduleExecutionArgs)
+	if err != nil {
+		return errors.Wrap(err, "marshaling args")
+	}
+	schedule.SetExecutionDetails(
+		schedule.ExecutorType(),
+		jobspb.ExecutionArguments{Args: any},
+	)
+	return schedule.Update(ctx, ex, txn)
 }
 
 // checkForExistingBackupsInCollection checks that there are no existing backups
@@ -436,21 +473,15 @@ func makeBackupSchedule(
 	unpauseOnSuccess int64,
 	updateLastMetricOnSuccess bool,
 	backupNode *tree.Backup,
-	dependentScheduleRecurrence *scheduleRecurrence,
-) (*jobs.ScheduledJob, error) {
+) (*jobs.ScheduledJob, *ScheduledBackupExecutionArgs, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(label)
 	sj.SetOwner(owner)
 
-	var dependentCrontab string
-	if dependentScheduleRecurrence != nil {
-		dependentCrontab = dependentScheduleRecurrence.cron
-	}
 	// Prepare arguments for scheduled backup execution.
 	args := &ScheduledBackupExecutionArgs{
-		UnpauseOnSuccess:         unpauseOnSuccess,
-		UpdatesLastBackupMetric:  updateLastMetricOnSuccess,
-		DependentScheduleCrontab: dependentCrontab,
+		UnpauseOnSuccess:        unpauseOnSuccess,
+		UpdatesLastBackupMetric: updateLastMetricOnSuccess,
 	}
 	if backupNode.AppendToLatest {
 		args.BackupType = ScheduledBackupExecutionArgs_INCREMENTAL
@@ -459,7 +490,7 @@ func makeBackupSchedule(
 	}
 
 	if err := sj.SetSchedule(recurrence.cron); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	sj.SetScheduleDetails(details)
@@ -472,14 +503,14 @@ func makeBackupSchedule(
 	args.BackupStatement = tree.AsStringWithFlags(backupNode, tree.FmtSimple|tree.FmtShowPasswords)
 	any, err := pbtypes.MarshalAny(args)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sj.SetExecutionDetails(
 		tree.ScheduledBackupExecutor.InternalName(),
 		jobspb.ExecutionArguments{Args: any},
 	)
 
-	return sj, nil
+	return sj, args, nil
 }
 
 func emitSchedule(
