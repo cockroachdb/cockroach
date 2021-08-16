@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -470,8 +471,8 @@ func downloadUserfile(
 		return 0, err
 	}
 
-	// os.Create uses a permissive 0666 mode so use OpenFile directly.
-	localFile, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+	// os.Create uses a permissive 0666 mode so use sysutil.OpenFile directly.
+	localFile, err := sysutil.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return 0, err
 	}

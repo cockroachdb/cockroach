@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	tracezipper "github.com/cockroachdb/cockroach/pkg/util/tracing/zipper"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -108,7 +109,7 @@ func constructJobTraceZipBundle(ctx context.Context, sqlConn clisqlclient.Conn, 
 
 	var f *os.File
 	filename := fmt.Sprintf("%d-%s", jobID, jobTraceZipSuffix)
-	if f, err = os.Create(filename); err != nil {
+	if f, err = sysutil.Create(filename); err != nil {
 		return err
 	}
 	_, err = f.Write(zipBytes)
