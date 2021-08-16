@@ -68,6 +68,19 @@ func getRelevantDescChanges(
 	// point in the interval.
 	interestingIDs := make(map[descpb.ID]struct{}, len(descs))
 
+	isInterestingID := func(id descpb.ID) bool {
+		// We're interested in changes to all descriptors if we're targeting all
+		// descriptors except for the system database itself.
+		if descriptorCoverage == tree.AllDescriptors && id != keys.SystemDatabaseID {
+			return true
+		}
+		// A change to an ID that we're interested in is obviously interesting.
+		if _, ok := interestingIDs[id]; ok {
+			return true
+		}
+		return false
+	}
+
 	// The descriptors that currently (endTime) match the target spec (desc) are
 	// obviously interesting to our backup.
 	for _, i := range descs {
@@ -104,7 +117,7 @@ func getRelevantDescChanges(
 					interestingIDs[desc.GetID()] = struct{}{}
 				}
 			}
-			if _, ok := interestingIDs[i.GetID()]; ok {
+			if isInterestingID(i.GetID()) {
 				desc := i
 				// We inject a fake "revision" that captures the starting state for
 				// matched descriptor, to allow restoring to times before its first rev
@@ -116,19 +129,6 @@ func getRelevantDescChanges(
 				interestingChanges = append(interestingChanges, initial)
 			}
 		}
-	}
-
-	isInterestingID := func(id descpb.ID) bool {
-		// We're interested in changes to all descriptors if we're targeting all
-		// descriptors except for the system database itself.
-		if descriptorCoverage == tree.AllDescriptors && id != keys.SystemDatabaseID {
-			return true
-		}
-		// A change to an ID that we're interested in is obviously interesting.
-		if _, ok := interestingIDs[id]; ok {
-			return true
-		}
-		return false
 	}
 
 	for _, change := range allChanges {
@@ -208,46 +208,6 @@ func getAllDescChanges(
 		}
 	}
 	return res, nil
-}
-
-func loadAllDescsInInterval(
-	ctx context.Context, codec keys.SQLCodec, db *kv.DB, startTime, endTime hlc.Timestamp,
-) ([]catalog.Descriptor, error) {
-	seen := make(map[descpb.ID]struct{})
-	allDescs := make([]catalog.Descriptor, 0)
-
-	currentDescs, err := backupresolver.LoadAllDescs(ctx, codec, db, endTime)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, desc := range currentDescs {
-		if _, wasSeen := seen[desc.GetID()]; wasSeen {
-			continue
-		}
-		seen[desc.GetID()] = struct{}{}
-		allDescs = append(allDescs, desc)
-	}
-
-	revs, err := getAllDescChanges(ctx, codec, db, startTime, endTime, nil /* priorIDs */)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, rev := range revs {
-		if rev.Desc == nil {
-			// rev.Desc may be nil when the descriptor was deleted in this revision.
-			continue
-		}
-		desc := catalogkv.NewBuilder(rev.Desc).BuildImmutable()
-		if _, wasSeen := seen[desc.GetID()]; wasSeen {
-			continue
-		}
-		seen[desc.GetID()] = struct{}{}
-		allDescs = append(allDescs, desc)
-	}
-
-	return allDescs, nil
 }
 
 // validateMultiRegionBackup validates that for all tables included in the
