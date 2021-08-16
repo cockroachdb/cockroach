@@ -412,11 +412,12 @@ const (
 	SQLInstancesTableID                 = 46
 
 	// CommentType is type for system.comments
-	DatabaseCommentType = 0
-	TableCommentType    = 1
-	ColumnCommentType   = 2
-	IndexCommentType    = 3
-	SchemaCommentType   = 4
+	DatabaseCommentType   = 0
+	TableCommentType      = 1
+	ColumnCommentType     = 2
+	IndexCommentType      = 3
+	SchemaCommentType     = 4
+	ConstraintCommentType = 5
 )
 
 const (

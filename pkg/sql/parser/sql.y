@@ -3390,6 +3390,11 @@ comment_stmt:
   {
     $$.val = &tree.CommentOnIndex{Index: $4.tableIndexName(), Comment: $6.strPtr()}
   }
+
+| COMMENT ON CONSTRAINT constraint_name ON table_name IS comment_text
+  {
+    $$.val = &tree.CommentOnConstraint{Constraint:tree.Name($4), Table: $6.unresolvedObjectName(), Comment: $8.strPtr()}
+  }
 | COMMENT ON EXTENSION error { return unimplemented(sqllex, "comment on extension") }
 
 comment_text:
