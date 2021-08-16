@@ -7,11 +7,13 @@ go_library(
         "json_encoding.go",
         "json_impl.go",
         "testutils.go",
+        "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb:with-mocks",
+        "//pkg/sql/sem/tree",
         "//pkg/util/encoding",
         "//pkg/util/json",
         "@com_github_cockroachdb_apd_v2//:apd",

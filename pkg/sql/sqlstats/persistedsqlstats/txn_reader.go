@@ -144,7 +144,7 @@ func rowToTxnStats(row tree.Datums) (*roachpb.CollectedTransactionStatistics, er
 
 	stats.AggregatedTs = tree.MustBeDTimestampTZ(row[0]).Time
 
-	value, err := datumToUint64(row[1])
+	value, err := sqlstatsutil.DatumToUint64(row[1])
 	if err != nil {
 		return nil, err
 	}

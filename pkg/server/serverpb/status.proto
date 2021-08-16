@@ -1005,19 +1005,25 @@ message StoresResponse {
 // tenant pods.
 message StatementsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  // If this field is set we will use the combined statements API instead.
+  bool combined = 2;
+  // These fields are used for the combined statements API.
+  int64 start = 3 [(gogoproto.nullable) = true];
+  int64 end = 4 [(gogoproto.nullable) = true];
 }
 
 message StatementsResponse {
   message ExtendedStatementStatisticsKey {
     cockroach.sql.StatementStatisticsKey key_data = 1 [(gogoproto.nullable) = false];
     int32 node_id = 2 [(gogoproto.customname) = "NodeID",
-                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    google.protobuf.Timestamp aggregated_ts = 3 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
   }
 
   message CollectedStatementStatistics {
     ExtendedStatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
     uint64 id = 3 [(gogoproto.customname) = "ID",
-                   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
     cockroach.sql.StatementStatistics stats = 2 [(gogoproto.nullable) = false];
   }
 
@@ -1037,6 +1043,12 @@ message StatementsResponse {
   // Transactions is transaction-level statistics for the collection of
   // statements in this response.
   repeated ExtendedCollectedTransactionStatistics transactions = 5 [(gogoproto.nullable) = false];
+}
+
+message CombinedStatementsStatsRequest {
+  // Unix time range for aggregated statements.
+  int64 start = 1 [(gogoproto.nullable) = true];
+  int64 end = 2 [(gogoproto.nullable) = true];
 }
 
 message StatementDiagnosticsReport {
@@ -1407,6 +1419,13 @@ service Status {
   rpc Statements(StatementsRequest) returns (StatementsResponse) {
     option (google.api.http) = {
       get: "/_status/statements"
+    };
+  }
+
+  // Retrieve the combined in-memory and persisted statement stats by date range.
+  rpc CombinedStatementStats(CombinedStatementsStatsRequest) returns (StatementsResponse) {
+    option (google.api.http) = {
+      get: "/_status/combinedstmts"
     };
   }
   rpc CreateStatementDiagnosticsReport(CreateStatementDiagnosticsReportRequest) returns (CreateStatementDiagnosticsReportResponse) {
