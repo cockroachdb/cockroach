@@ -1520,6 +1520,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 			case keys.ColumnCommentType, keys.TableCommentType:
 				objID = tree.NewDOid(tree.MustBeDInt(objID))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
+			case keys.ConstraintCommentType:
+				objID = tree.NewDOid(tree.MustBeDInt(objID))
+				objSubID = tree.DZero
+				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
 			case keys.IndexCommentType:
 				objID = makeOidHasher().IndexOid(
 					descpb.ID(tree.MustBeDInt(objID)),
