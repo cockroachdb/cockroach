@@ -1710,6 +1710,89 @@ func TestStatusAPIStatements(t *testing.T) {
 	}
 }
 
+func TestStatusAPICombinedStatements(t *testing.T) {
+	// This test is equivalent TestStatusAPIStatements. The CombinedStatements API should have the
+	// same behaviour as the Statements API when there are no persisted statements.
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	statements := []struct {
+		stmt          string
+		fingerprinted string
+	}{
+		{stmt: `CREATE DATABASE roachblog`},
+		{stmt: `SET database = roachblog`},
+		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
+		{
+			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
+		},
+		{stmt: `SELECT * FROM posts`},
+	}
+
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt.stmt)
+	}
+
+	// Test that non-admin without VIEWACTIVITY privileges cannot access.
+	var resp serverpb.StatementsResponse
+	err := getStatusJSONProtoWithAdminOption(firstServerProto, "combinedstmts", &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	// Grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, "ALTER USER $1 VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized())
+
+	// Hit query endpoint.
+	if err := getStatusJSONProtoWithAdminOption(firstServerProto, "combinedstmts", &resp, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// See if the statements returned are what we executed.
+	var expectedStatements []string
+	for _, stmt := range statements {
+		var expectedStmt = stmt.stmt
+		if stmt.fingerprinted != "" {
+			expectedStmt = stmt.fingerprinted
+		}
+		expectedStatements = append(expectedStatements, expectedStmt)
+	}
+
+	var statementsInResponse []string
+	for _, respStatement := range resp.Statements {
+		if respStatement.Key.KeyData.Failed {
+			// We ignore failed statements here as the INSERT statement can fail and
+			// be automatically retried, confusing the test success check.
+			continue
+		}
+		if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
+			// We ignore internal queries, these are not relevant for the
+			// validity of this test.
+			continue
+		}
+		if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
+			// Ignore the ALTER USER ... VIEWACTIVITY statement.
+			continue
+		}
+		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
+	}
+
+	sort.Strings(expectedStatements)
+	sort.Strings(statementsInResponse)
+
+	if !reflect.DeepEqual(expectedStatements, statementsInResponse) {
+		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s",
+			expectedStatements, statementsInResponse, pretty.Sprint(resp))
+	}
+}
+
 func TestListSessionsSecurity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
