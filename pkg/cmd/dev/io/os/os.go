@@ -186,6 +186,21 @@ func (o *OS) ReadFile(filename string) (string, error) {
 	return ret, err
 }
 
+// WriteFile wraps around ioutil.ReadFile, writing the given contents to
+// the given file on disk.
+func (o *OS) WriteFile(filename, contents string) error {
+	command := fmt.Sprintf("echo %s > %s", strings.TrimSpace(contents), filename)
+	o.logger.Print(command)
+
+	if o.Recording == nil {
+		// Do the real thing.
+		return ioutil.WriteFile(filename, []byte(contents), 0666)
+	}
+
+	_, err := o.replay(command)
+	return err
+}
+
 // CopyFile copies a file from one location to another.
 func (o *OS) CopyFile(src, dst string) error {
 	command := fmt.Sprintf("cp %s %s", src, dst)

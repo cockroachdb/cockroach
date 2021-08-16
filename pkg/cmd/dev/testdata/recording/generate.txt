@@ -125,6 +125,13 @@ cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/b
 cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/docs/generated/sql/window_functions.md go/src/github.com/cockroachdb/cockroach/docs/generated/sql/window_functions.md
 ----
 
+go/src/github.com/cockroachdb/cockroach/build/bazelutil/generate_redact_safe.sh
+----
+MOCK_REDACT_SAFE_OUTPUT
+
+echo MOCK_REDACT_SAFE_OUTPUT > go/src/github.com/cockroachdb/cockroach/docs/generated/redact_safe.md
+----
+
 getenv PATH
 ----
 /usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
