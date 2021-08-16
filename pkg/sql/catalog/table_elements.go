@@ -228,6 +228,13 @@ type Column interface {
 	// empty string otherwise.
 	GetDefaultExpr() string
 
+	// HasOnUpdate returns true iff the column has an on update expression set.
+	HasOnUpdate() bool
+
+	// GetOnUpdateExpr returns the column on update expression if it exists,
+	// empty string otherwise.
+	GetOnUpdateExpr() string
+
 	// IsComputed returns true iff the column is a computed column.
 	IsComputed() bool
 
