@@ -856,7 +856,11 @@ func (f *clusterFactory) newCluster(
 		}
 
 		// Logs for creating a new cluster go to a dedicated log file.
-		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", c.name+".log")
+		var retryStr string
+		if i > 0 {
+			retryStr = "-retry" + strconv.Itoa(i)
+		}
+		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", c.name+retryStr+".log")
 		l, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)
