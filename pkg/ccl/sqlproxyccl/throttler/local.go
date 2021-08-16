@@ -9,11 +9,9 @@
 package throttler
 
 import (
-	"context"
-	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -27,57 +25,39 @@ var errRequestDenied = errors.New("request denied")
 
 type timeNow func() time.Time
 
-type limiter struct {
-	// The next time an operation on this limiter can proceed.
-	nextTime time.Time
-	// The number of operation attempts that have been performed. On success, the
-	// limiter will be removed.
-	attempts int
-	// The index of the limiter in the addresses array.
-	index int
-}
-
 // localService is an throttler service that manages state purely in local
-// memory. Internally, it maintains a map from IP address to rate limiting info
-// for that address. In order to put a cap on memory usage, the map is capped
-// at a maximum size, at which point a random IP address will be evicted.
+// memory. Internally, it maintains two datastructures:
 //
-// TODO(peter): Rather than a per-IP count, at some point we should use a
-// count-min-sketch: https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch.
+// successCache: Tracks (IP, TenantID) pairs that have successfully connected. If
+// a connection request matches an entry in the successCache it is allowed through
+// without deducting a token.
 //
-// The count-min-sketch structure is essentially a counting bloom filter and
-// provides a probabilistic count of the number of times a key (i.e. an IP
-// address) has been seen. A challenge with using count-min-sketch is that they
-// do not support eviction. The general idea for handling this (courtesy of
-// Aaron) is to maintain a laddered set of sketches. For example, 1 for each of
-// the past 30 days. Each day, we would discard the oldest sketch and
-// instantiated a new one. Whenever an IP address performs an action we update
-// all of the sketched, but checks for activity are only performed against the
-// oldest sketch. The end result is that the oldest sketch has the activity for
-// the past 30 days.
+// ipCache: An IP -> TokenBucket map. Each connection request for unknown (IP, TenantID)
+// pairs deducts a token from that IP's token bucket. After a successful connection the
+// token is returned and the (IP, TenantID) pair is added tot he success cache.
 type localService struct {
-	clock      timeNow
-	baseDelay  time.Duration
-	maxDelay   time.Duration
-	maxMapSize int
+	clock        timeNow
+	maxCacheSize int
+
+	policy BucketPolicy
 
 	mu struct {
 		syncutil.Mutex
-		// Map from IP address to limiter.
-		limiters map[string]*limiter
-		// Array of addresses, used for randomly evicting an address when the max
-		// entries is reached.
-		addrs []string
+		// ipCache is approximately a map[string]*tokenBucket
+		ipCache *cache.UnorderedCache
+		// successCache is approximately a map[ConnectionTags]nil
+		successCache *cache.UnorderedCache
 	}
 }
 
 // LocalOption allows configuration of a local admission service.
 type LocalOption func(s *localService)
 
-// WithBaseDelay specifies the base delay for rate limiting repeated accesses.
-func WithBaseDelay(d time.Duration) LocalOption {
+// WithPolicy configures the token bucket used by clients with no history of
+// successful connection.
+func WithPolicy(policy BucketPolicy) LocalOption {
 	return func(s *localService) {
-		s.baseDelay = d
+		s.policy = policy
 	}
 }
 
@@ -85,77 +65,56 @@ func WithBaseDelay(d time.Duration) LocalOption {
 // local memory.
 func NewLocalService(opts ...LocalOption) Service {
 	s := &localService{
-		clock:      time.Now,
-		maxDelay:   60 * 60 * time.Second,
-		maxMapSize: maxMapSize,
+		clock:        time.Now,
+		maxCacheSize: maxMapSize,
 	}
-	WithBaseDelay(2 * time.Second)(s)
-	s.mu.limiters = make(map[string]*limiter)
+	cacheConfig := cache.Config{
+		Policy:      cache.CacheLRU,
+		ShouldEvict: func(size int, key, value interface{}) bool { return s.maxCacheSize < size },
+	}
+	s.mu.ipCache = cache.NewUnorderedCache(cacheConfig)
+	s.mu.successCache = cache.NewUnorderedCache(cacheConfig)
 
 	for _, opt := range opts {
 		opt(s)
 	}
+
 	return s
 }
 
-func (s *localService) LoginCheck(ipAddress string, now time.Time) error {
+func (s *localService) LoginCheck(connection ConnectionTags) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	l := s.mu.limiters[ipAddress]
-	if l == nil {
-		l = s.addLocked(ipAddress)
+	if _, ok := s.mu.successCache.Get(connection); ok {
+		return nil
 	}
-	if now.Before(l.nextTime) {
+
+	bucket, ok := s.mu.ipCache.Get(connection.IP)
+	if !ok {
+		bucket = newBucket(s.clock(), s.policy)
+		s.mu.ipCache.Add(connection.IP, bucket)
+	}
+
+	b := bucket.(*tokenBucket)
+	b.fill(s.clock())
+	if !b.tryConsume() {
 		return errRequestDenied
 	}
-	s.nextLimitLocked(l)
+
 	return nil
 }
 
-func (s *localService) addLocked(addr string) *limiter {
-	if len(s.mu.addrs) >= s.maxMapSize {
-		addrToEvict := s.mu.addrs[rand.Intn(len(s.mu.limiters))]
-		log.Infof(context.Background(), "evicting due to map size limit - addr: %s", addrToEvict)
-		s.evictLocked(addrToEvict)
+func (s *localService) ReportSuccess(connection ConnectionTags) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if bucket, ok := s.mu.ipCache.Get(connection.IP); ok {
+		b := bucket.(*tokenBucket)
+		b.returnToken()
 	}
 
-	l := &limiter{
-		index: len(s.mu.limiters),
+	if _, ok := s.mu.successCache.Get(connection); !ok {
+		s.mu.successCache.Add(connection, nil)
 	}
-	s.mu.limiters[addr] = l
-	s.mu.addrs = append(s.mu.addrs, addr)
-	return l
-}
-
-func (s *localService) evictLocked(addr string) {
-	l := s.mu.limiters[addr]
-	if l == nil {
-		return
-	}
-
-	// Swap the address we're evicting to the end of the address array.
-	n := len(s.mu.addrs) - 1
-	s.mu.addrs[l.index], s.mu.addrs[n] = s.mu.addrs[n], s.mu.addrs[l.index]
-	// Fix-up the index of the limiter we're keeping.
-	s.mu.limiters[s.mu.addrs[l.index]].index = l.index
-	// Trim the evicted address from the address array.
-	s.mu.addrs = s.mu.addrs[:n]
-	// Delete the address from the limiters map.
-	delete(s.mu.limiters, addr)
-}
-
-func (s *localService) nextLimitLocked(l *limiter) {
-	// This calculation implements a simple capped exponential backoff. No
-	// randomization is done. We could use github.com/cenkalti/backoff, but this
-	// gives us a more control over the precise calculation and is about half the
-	// size in terms of memory usage. The latter part may be important for IP
-	// address based admission control.
-	delay := s.baseDelay * (1 << l.attempts)
-	if delay >= s.maxDelay {
-		delay = s.maxDelay
-	}
-	l.attempts++
-
-	l.nextTime = s.clock().Add(delay)
 }

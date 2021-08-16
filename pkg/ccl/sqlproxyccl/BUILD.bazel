@@ -17,7 +17,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/sqlproxyccl/cache",
         "//pkg/ccl/sqlproxyccl/denylist",
         "//pkg/ccl/sqlproxyccl/idle",
         "//pkg/ccl/sqlproxyccl/tenant",
