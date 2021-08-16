@@ -25,6 +25,14 @@ import (
 func (s *statusServer) Statements(
 	ctx context.Context, req *serverpb.StatementsRequest,
 ) (*serverpb.StatementsResponse, error) {
+	if req.Combined {
+		combinedRequest := serverpb.CombinedStatementsStatsRequest{
+			Start: req.Start,
+			End:   req.End,
+		}
+		return s.CombinedStatementStats(ctx, &combinedRequest)
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
