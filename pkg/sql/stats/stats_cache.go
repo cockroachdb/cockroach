@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -206,7 +207,7 @@ func decodeTableStatisticsKV(
 	return descpb.ID(uint32(*tableID)), nil
 }
 
-// GetTableStats looks up statistics for the requested table ID in the cache,
+// GetTableStats looks up statistics for the requested table in the cache,
 // and if the stats are not present in the cache, it looks them up in
 // system.table_statistics.
 //
@@ -216,18 +217,37 @@ func decodeTableStatisticsKV(
 //
 // The statistics are ordered by their CreatedAt time (newest-to-oldest).
 func (sc *TableStatisticsCache) GetTableStats(
-	ctx context.Context, tableID descpb.ID,
+	ctx context.Context, table catalog.TableDescriptor,
 ) ([]*TableStatistic, error) {
-	if descpb.IsReservedID(tableID) {
+	if !hasStatistics(table) {
+		return nil, nil
+	}
+	return sc.getTableStatsFromCache(ctx, table.GetID())
+}
+
+// hasStatistics returns true if the table can have statistics collected for it.
+func hasStatistics(table catalog.TableDescriptor) bool {
+	if catalog.IsSystemDescriptor(table) {
 		// Don't try to get statistics for system tables (most importantly,
 		// for table_statistics itself).
-		return nil, nil
+		return false
 	}
-	if descpb.IsVirtualTable(tableID) {
+	if table.IsVirtualTable() {
 		// Don't try to get statistics for virtual tables.
-		return nil, nil
+		return false
 	}
+	if table.IsView() {
+		// Don't try to get statistics for views.
+		return false
+	}
+	return true
+}
 
+// getTableStatsFromCache is like GetTableStats but assumes that the table ID
+// is safe to fetch statistics for: non-system, non-virtual, non-view, etc.
+func (sc *TableStatisticsCache) getTableStatsFromCache(
+	ctx context.Context, tableID descpb.ID,
+) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 

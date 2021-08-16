@@ -273,7 +273,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		}
 
 		return testutils.SucceedsSoonError(func() error {
-			tableStats, err := cache.GetTableStats(ctx, tableID)
+			tableStats, err := cache.getTableStatsFromCache(ctx, tableID)
 			if err != nil {
 				return err
 			}
@@ -281,7 +281,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 			for i := range testData {
 				stat := &testData[i]
 				if stat.TableID != tableID {
-					stats, err := cache.GetTableStats(ctx, stat.TableID)
+					stats, err := cache.getTableStatsFromCache(ctx, stat.TableID)
 					if err != nil {
 						return err
 					}

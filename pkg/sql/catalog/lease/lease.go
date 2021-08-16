@@ -106,32 +106,30 @@ func (m *Manager) WaitForNoVersion(
 }
 
 // WaitForOneVersion returns once there are no unexpired leases on the
-// previous version of the descriptor. It returns the current version.
+// previous version of the descriptor. It returns the descriptor with the
+// current version.
 // After returning there can only be versions of the descriptor >= to the
 // returned version. Lease acquisition (see acquire()) maintains the
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
 func (m *Manager) WaitForOneVersion(
 	ctx context.Context, id descpb.ID, retryOpts retry.Options,
-) (descpb.DescriptorVersion, error) {
-	var version descpb.DescriptorVersion
+) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
-		var desc catalog.Descriptor
 		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, m.Codec(), id)
 			return err
 		}); err != nil {
-			return 0, err
+			return nil, err
 		}
 
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
-		version = desc.GetVersion()
 		count, err := CountLeases(ctx, m.storage.internalExecutor, descs, now)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		if count == 0 {
 			break
@@ -141,7 +139,7 @@ func (m *Manager) WaitForOneVersion(
 			log.Infof(ctx, "waiting for %d leases to expire: desc=%v", count, descs)
 		}
 	}
-	return version, nil
+	return desc, nil
 }
 
 // IDVersion represents a descriptor ID, version pair that are

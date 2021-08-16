@@ -104,7 +104,8 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 	if len(details.InterleavedIndexes) > 0 {
 		// Before deleting any indexes, ensure that old versions of the table
 		// descriptor are no longer in use.
-		if err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, details.InterleavedTable.ID); err != nil {
+		_, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, details.InterleavedTable.ID)
+		if err != nil {
 			return err
 		}
 		interleavedIndexIDs := make([]descpb.IndexID, len(details.InterleavedIndexes))

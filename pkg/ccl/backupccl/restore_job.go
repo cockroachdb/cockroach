@@ -1830,7 +1830,8 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 func (r *restoreResumer) notifyStatsRefresherOfNewTables() {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	for i := range details.TableDescs {
-		r.execCfg.StatsRefresher.NotifyMutation(details.TableDescs[i].GetID(), math.MaxInt32 /* rowsAffected */)
+		desc := tabledesc.NewBuilder(details.TableDescs[i]).BuildImmutableTable()
+		r.execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
 	}
 }
 
