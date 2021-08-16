@@ -1,0 +1,3 @@
+I210801 21:05:59.364923 1 :70  [config] CockroachDB
+I210801 21:05:59.364923 1 :70  [config] arguments: [./cockroach start]
+I210801 21:05:59.364923 1 :70  line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=✓
