@@ -886,7 +886,7 @@ func (f *clusterFactory) newCluster(
 		c.Destroy(ctx, closeLogger, l)
 		if i > maxAttempts {
 			// Here we have to release the alloc, as we are giving up.
-			c.destroyState.alloc.Release()
+			cfg.alloc.Release()
 			return nil, err
 		}
 		// Try again to create the cluster.
