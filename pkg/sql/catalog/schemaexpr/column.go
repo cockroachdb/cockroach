@@ -100,6 +100,14 @@ func FormatColumnForDisplay(
 		}
 		f.WriteString(defExpr)
 	}
+	if col.HasOnUpdate() {
+		f.WriteString(" ON UPDATE ")
+		onUpdateExpr, err := FormatExprForDisplay(ctx, tbl, col.GetOnUpdateExpr(), semaCtx, tree.FmtParsable)
+		if err != nil {
+			return "", err
+		}
+		f.WriteString(onUpdateExpr)
+	}
 	if col.IsComputed() {
 		f.WriteString(" AS (")
 		compExpr, err := FormatExprForDisplay(ctx, tbl, col.GetComputeExpr(), semaCtx, tree.FmtParsable)
