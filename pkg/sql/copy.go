@@ -387,6 +387,15 @@ func (c *copyMachine) readTextData(ctx context.Context, final bool) (brk bool, e
 }
 
 func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, err error) {
+	// Don't try to parse the CSV until we read all the data. This is because
+	// newlines can appear in the middle of CSV input if it's quoted, so
+	// we don't have a good way of knowing how many bytes to read for the next
+	// record ahead of time (without reimplementing all the CSV parsing logic
+	// here). This means the input buffer will keep growing -- the memory is
+	// accounted in processCopyData.
+	if !final {
+		return true, nil
+	}
 	record, err := c.csvReader.Read()
 	// Look for end of data before checking for errors, since a field count
 	// error will still return record data.
