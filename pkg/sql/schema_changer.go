@@ -602,7 +602,8 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
+		latestDesc, err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
+		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return err
 			}
@@ -614,7 +615,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
 		if refreshStats {
-			sc.refreshStats()
+			sc.refreshStats(latestDesc)
 		}
 		return nil
 	}
@@ -761,7 +762,8 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
+		desc, err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
+		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return err
 			}
@@ -773,7 +775,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
 		if refreshStats {
-			sc.refreshStats()
+			sc.refreshStats(desc)
 		}
 		return nil
 	}
@@ -1009,7 +1011,9 @@ func (sc *SchemaChanger) createIndexGCJob(
 
 // WaitToUpdateLeases until the entire cluster has been updated to the latest
 // version of the descriptor.
-func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID descpb.ID) error {
+func WaitToUpdateLeases(
+	ctx context.Context, leaseMgr *lease.Manager, descID descpb.ID,
+) (catalog.Descriptor, error) {
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
 	retryOpts := retry.Options{
@@ -1018,9 +1022,13 @@ func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID des
 		Multiplier:     1.5,
 	}
 	log.Infof(ctx, "waiting for a single version...")
-	version, err := leaseMgr.WaitForOneVersion(ctx, descID, retryOpts)
+	desc, err := leaseMgr.WaitForOneVersion(ctx, descID, retryOpts)
+	var version descpb.DescriptorVersion
+	if desc != nil {
+		version = desc.GetVersion()
+	}
 	log.Infof(ctx, "waiting for a single version... done (at v %d)", version)
-	return err
+	return desc, err
 }
 
 // done finalizes the mutations (adds new cols/indexes to the table).
@@ -1465,11 +1473,13 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(ctx context.Context) error {
 	return sc.done(ctx)
 }
 
-func (sc *SchemaChanger) refreshStats() {
+func (sc *SchemaChanger) refreshStats(desc catalog.Descriptor) {
 	// Initiate an asynchronous run of CREATE STATISTICS. We use a large number
 	// for rowsAffected because we want to make sure that stats always get
 	// created/refreshed here.
-	sc.execCfg.StatsRefresher.NotifyMutation(sc.descID, math.MaxInt32 /* rowsAffected */)
+	if tableDesc, ok := desc.(catalog.TableDescriptor); ok {
+		sc.execCfg.StatsRefresher.NotifyMutation(tableDesc, math.MaxInt32 /* rowsAffected */)
+	}
 }
 
 // maybeReverseMutations reverses the direction of all the mutations with the
