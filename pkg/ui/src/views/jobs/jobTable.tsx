@@ -12,7 +12,7 @@ import React, { MouseEvent } from "react";
 import _ from "lodash";
 import { cockroach } from "src/js/protos";
 import { TimestampToMoment } from "src/util/convert";
-import { DATE_FORMAT } from "src/util/format";
+import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { JobStatusCell } from "src/views/jobs/jobStatusCell";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -59,7 +59,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   {
     name: "creationTime",
     title: "Creation Time",
-    cell: (job) => TimestampToMoment(job?.created).format(DATE_FORMAT),
+    cell: (job) => TimestampToMoment(job?.created).format(DATE_FORMAT_24_UTC),
     sort: (job) => TimestampToMoment(job?.created).valueOf(),
   },
   {
