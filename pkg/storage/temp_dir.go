@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/vfs"
@@ -88,7 +89,7 @@ func CreateTempDir(parentDir, prefix string, stopper *stop.Stopper) (string, err
 // facilitate cleanup of the temporary directory on subsequent startups.
 func RecordTempDir(recordPath, tempPath string) error {
 	// If the file does not exist, create it, or append to the file.
-	f, err := os.OpenFile(recordPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := sysutil.OpenFile(recordPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -109,7 +110,7 @@ func CleanupTempDirs(recordPath string) error {
 	// Reading the entire file into memory shouldn't be a problem since
 	// it is extremely rare for this record file to contain more than a few
 	// entries.
-	f, err := os.OpenFile(recordPath, os.O_RDWR, 0644)
+	f, err := sysutil.OpenFile(recordPath, os.O_RDWR, 0644)
 	// There is no existing record file and thus nothing to clean up.
 	if oserror.IsNotExist(err) {
 		return nil

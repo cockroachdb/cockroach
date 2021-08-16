@@ -13,7 +13,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
 	"os"
 	"runtime/pprof"
 	"strings"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -124,7 +124,7 @@ func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
 				now := timeutil.Now()
 				name := cpuProfFileNamePrefix + now.Format(cpuProfTimeFormat)
 				path := profilestore.GetFullPath(name)
-				if err := ioutil.WriteFile(path, buf.Bytes(), 0644); err != nil {
+				if err := sysutil.WriteFile(path, buf.Bytes(), 0640); err != nil {
 					return err
 				}
 				profilestore.GC(ctx, now, profiler)

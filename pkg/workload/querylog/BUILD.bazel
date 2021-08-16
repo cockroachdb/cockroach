@@ -10,6 +10,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/log",
+        "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "//pkg/workload",
