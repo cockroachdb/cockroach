@@ -4584,6 +4584,32 @@ The paths themselves are given in the direction of the first geometry.`,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"delta_x", types.Float},
+				{"delta_y", types.Float},
+				{"delta_z", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				deltaX := float64(tree.MustBeDFloat(args[1]))
+				deltaY := float64(tree.MustBeDFloat(args[2]))
+				deltaZ := float64(tree.MustBeDFloat(args[3]))
+
+				ret, err := geomfn.Translate(g.Geometry, []float64{deltaX, deltaY, deltaZ})
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry translated by the given deltas.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_affine": makeBuiltin(
 		defProps(),

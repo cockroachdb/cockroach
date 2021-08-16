@@ -159,6 +159,28 @@ FROM (VALUES
 2
 3
 
+# ST_Translate tests
+
+query TT
+SELECT
+  ST_AsText(geom) d,
+  ST_AsText(ST_Translate(geom, 1, 1, 1))
+FROM 
+( VALUES
+  ('POINT(1.0 1.0 1.0)'::geometry),
+  ('MULTIPOINT (1 1 1, 2 2 2)'::geometry),
+  ('LINESTRING (1 1 1, 2 2 2)'::geometry),
+  ('MULTILINESTRING ((1 1 1, 2 2 2), (3 3 3, 4 4 4))'::geometry),
+  ('POLYGON ((0 0 0, 1 0 0, 1 1 0, 0 0 0))'::geometry)
+) AS t(geom)
+ORDER BY d ASC
+----
+LINESTRING Z (1 1 1, 2 2 2)                         LINESTRING Z (2 2 2, 3 3 3)
+MULTILINESTRING Z ((1 1 1, 2 2 2), (3 3 3, 4 4 4))  MULTILINESTRING Z ((2 2 2, 3 3 3), (4 4 4, 5 5 5))
+MULTIPOINT Z (1 1 1, 2 2 2)                         MULTIPOINT Z (2 2 2, 3 3 3)
+POINT Z (1 1 1)                                     POINT Z (2 2 2)
+POLYGON Z ((0 0 0, 1 0 0, 1 1 0, 0 0 0))            POLYGON Z ((1 1 1, 2 1 1, 2 2 1, 1 1 1))
+
 # Builtins for forcing geometries into other dimensions
 query T
 SELECT st_astext(st_force2d(geom)) FROM
