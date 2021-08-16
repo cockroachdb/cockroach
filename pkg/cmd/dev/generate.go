@@ -133,7 +133,12 @@ func (d *dev) generateDocs(cmd *cobra.Command) error {
 			}
 		}
 	}
-	return nil
+	// docs/generated/redact_safe.md needs special handling.
+	output, err := d.exec.CommandContextSilent(ctx, filepath.Join(workspace, "build", "bazelutil", "generate_redact_safe.sh"))
+	if err != nil {
+		return err
+	}
+	return d.os.WriteFile(filepath.Join(workspace, "docs", "generated", "redact_safe.md"), string(output))
 }
 
 func (d *dev) generateGo(cmd *cobra.Command) error {

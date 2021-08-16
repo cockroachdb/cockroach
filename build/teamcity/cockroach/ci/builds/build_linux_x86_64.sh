@@ -25,6 +25,7 @@ do
     then
         echo "File $FILE does not match with checked-in version. Got diff:"
         echo "$RESULT"
+        echo "Run './dev generate docs'"
         FAILED=1
     fi
 done
@@ -60,9 +61,17 @@ do
     then
         echo "Generated file $dir/$new_basename does not match with checked-in version. Got diff:"
         echo "$RESULT"
+        echo "Run './dev generate go'"
         FAILED=1
     fi
 done
+# docs/generated/redact_safe.md needs special handling.
+REAL_REDACT_SAFE=$($root/build/bazelutil/generate_redact_safe.sh)
+RESULT=$(diff <(echo "$REAL_REDACT_SAFE") $root/docs/generated/redact_safe.md)
+if [[ ! $? -eq 0 ]]
+then
+    echo "docs/generated/redact_safe.md is not up-to-date. Run './dev generate docs'"
+fi
 
 if [[ ! -z "$FAILED" ]]
 then
