@@ -86,18 +86,56 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 		}
 
 		foundQueries := make(map[string]struct{})
-		require.NoError(t, sqlStats.IterateStatementStats(context.Background(), &sqlstats.IteratorOptions{
-			SortedKey:      true,
-			SortedAppNames: true,
-		}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
-			if expectedExecCount, ok := expectedStmtFingerprints[statistics.Key.Query]; ok {
-				_, ok = foundQueries[statistics.Key.Query]
-				require.False(t, ok, "should only found one stats entry for %s, but found more than one", statistics.Key.Query)
-				foundQueries[statistics.Key.Query] = struct{}{}
-				require.Equal(t, expectedExecCount, statistics.Stats.Count, "query: %s", statistics.Key.Query)
-			}
-			return nil
-		}))
+		foundTxns := make(map[string]struct{})
+		stmtFingerprintIDToQueries := make(map[roachpb.StmtFingerprintID]string)
+
+		require.NoError(t,
+			sqlStats.IterateStatementStats(
+				context.Background(),
+				&sqlstats.IteratorOptions{
+					SortedKey:      true,
+					SortedAppNames: true,
+				},
+				func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+					if expectedExecCount, ok := expectedStmtFingerprints[statistics.Key.Query]; ok {
+						_, ok = foundQueries[statistics.Key.Query]
+						require.False(
+							t,
+							ok,
+							"should only found one stats entry for %s, but found more than one", statistics.Key.Query,
+						)
+						foundQueries[statistics.Key.Query] = struct{}{}
+						stmtFingerprintIDToQueries[statistics.ID] = statistics.Key.Query
+						require.Equal(t, expectedExecCount, statistics.Stats.Count, "query: %s", statistics.Key.Query)
+					}
+					return nil
+				}))
+
+		require.NoError(t,
+			sqlStats.IterateTransactionStats(
+				context.Background(),
+				&sqlstats.IteratorOptions{},
+				func(
+					ctx context.Context,
+					id roachpb.TransactionFingerprintID,
+					statistics *roachpb.CollectedTransactionStatistics,
+				) error {
+					if len(statistics.StatementFingerprintIDs) == 1 {
+						if query, ok := stmtFingerprintIDToQueries[statistics.StatementFingerprintIDs[0]]; ok {
+							if expectedExecCount, ok := expectedStmtFingerprints[query]; ok {
+								_, ok = foundTxns[query]
+								require.False(
+									t,
+									ok,
+									"should only found one txn stats entry for %s, but found more than one", query,
+								)
+								foundTxns[query] = struct{}{}
+								require.Equal(t, expectedExecCount, statistics.Stats.Count)
+							}
+						}
+					}
+					return nil
+				}))
 
 		for expectedStmtFingerprint := range expectedStmtFingerprints {
 			_, ok := foundQueries[expectedStmtFingerprint]
@@ -112,16 +150,45 @@ func verifyStoredStmtFingerprints(
 	sqlStats *persistedsqlstats.PersistedSQLStats,
 ) {
 	foundQueries := make(map[string]struct{})
-	require.NoError(t, sqlStats.IterateStatementStats(context.Background(), &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
-		if expectedExecCount, ok := expectedStmtFingerprints[statistics.Key.Query]; ok {
-			foundQueries[statistics.Key.Query] = struct{}{}
-			require.Equal(t, expectedExecCount, statistics.Stats.Count)
-		}
-		return nil
-	}))
+	foundTxns := make(map[string]struct{})
+	stmtFingerprintIDToQueries := make(map[roachpb.StmtFingerprintID]string)
+	require.NoError(t,
+		sqlStats.IterateStatementStats(
+			context.Background(),
+			&sqlstats.IteratorOptions{},
+			func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+				if expectedExecCount, ok := expectedStmtFingerprints[statistics.Key.Query]; ok {
+					foundQueries[statistics.Key.Query] = struct{}{}
+					stmtFingerprintIDToQueries[statistics.ID] = statistics.Key.Query
+					require.Equal(t, expectedExecCount, statistics.Stats.Count)
+				}
+				return nil
+			}))
+
+	require.NoError(t,
+		sqlStats.IterateTransactionStats(
+			context.Background(),
+			&sqlstats.IteratorOptions{},
+			func(
+				ctx context.Context,
+				id roachpb.TransactionFingerprintID,
+				statistics *roachpb.CollectedTransactionStatistics,
+			) error {
+				if len(statistics.StatementFingerprintIDs) == 1 {
+					if query, ok := stmtFingerprintIDToQueries[statistics.StatementFingerprintIDs[0]]; ok {
+						if expectedExecCount, ok := expectedStmtFingerprints[query]; ok {
+							foundTxns[query] = struct{}{}
+							require.Equal(t, expectedExecCount, statistics.Stats.Count)
+						}
+					}
+				}
+				return nil
+			}))
 
 	for expectedStmtFingerprint := range expectedStmtFingerprints {
 		_, ok := foundQueries[expectedStmtFingerprint]
+		require.True(t, ok, "expected %s to be returned, but it didn't", expectedStmtFingerprint)
+		_, ok = foundTxns[expectedStmtFingerprint]
 		require.True(t, ok, "expected %s to be returned, but it didn't", expectedStmtFingerprint)
 	}
 }
