@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -56,8 +57,13 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
-	tdb.changed = descpb.MaybeFixPrivileges(tdb.maybeModified.ID, tdb.maybeModified.ID,
-		&tdb.maybeModified.Privileges, privilege.Type)
+	tdb.changed = catprivilege.MaybeFixPrivileges(
+		&tdb.maybeModified.Privileges,
+		tdb.maybeModified.GetParentID(),
+		tdb.maybeModified.GetParentSchemaID(),
+		privilege.Type,
+		tdb.maybeModified.GetName(),
+	)
 	return nil
 }
 

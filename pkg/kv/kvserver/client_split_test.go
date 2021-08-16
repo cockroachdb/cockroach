@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -2563,7 +2564,7 @@ func TestUnsplittableRange(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add a single large row to /Table/14.
-	tableKey := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.UITableID))
+	tableKey := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(uint32(systemschema.UITable.GetID())))
 	row1Key := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
 	col1Key := keys.MakeFamilyKey(append([]byte(nil), row1Key...), 0)
 	valueLen := 0.9 * maxBytes

@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
@@ -478,7 +479,7 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 
 	switch desc.Kind {
 	case descpb.TypeDescriptor_MULTIREGION_ENUM:
-		vea.Report(desc.Privileges.Validate(desc.ID, privilege.Type))
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Type))
 		// Check presence of region config
 		if desc.RegionConfig == nil {
 			vea.Report(errors.AssertionFailedf("no region config on %s type desc", desc.Kind.String()))
@@ -497,7 +498,7 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			}
 		}
 	case descpb.TypeDescriptor_ENUM:
-		vea.Report(desc.Privileges.Validate(desc.ID, privilege.Type))
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Type))
 		if desc.RegionConfig != nil {
 			vea.Report(errors.AssertionFailedf("found region config on %s type desc", desc.Kind.String()))
 		}

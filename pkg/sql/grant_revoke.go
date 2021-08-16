@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -184,13 +185,15 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			// Postgres does not actually enforce this, instead of checking that
 			// superusers have all the privileges, Postgres allows superusers to
 			// bypass privilege checks.
-			if err := privileges.ValidateSuperuserPrivileges(descriptor.GetID(), n.grantOn); err != nil {
+			err = catprivilege.ValidateSuperuserPrivileges(*privileges, descriptor, n.grantOn)
+			if err != nil {
 				return err
 			}
 
 			// Validate privilege descriptors directly as the db/table level Validate
 			// may fix up the descriptor.
-			if err := privileges.Validate(descriptor.GetID(), n.grantOn); err != nil {
+			err = catprivilege.Validate(*privileges, descriptor, n.grantOn)
+			if err != nil {
 				return err
 			}
 		}

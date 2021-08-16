@@ -186,6 +186,7 @@ ALL_TESTS = [
     "//pkg/sql/catalog/catalogkeys:catalogkeys_test",
     "//pkg/sql/catalog/catalogkv:catalogkv_test",
     "//pkg/sql/catalog/catformat:catformat_test",
+    "//pkg/sql/catalog/catprivilege:catprivilege_test",
     "//pkg/sql/catalog/colinfo:colinfo_test",
     "//pkg/sql/catalog/dbdesc:dbdesc_test",
     "//pkg/sql/catalog/descpb:descpb_test",

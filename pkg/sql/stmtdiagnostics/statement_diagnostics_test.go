@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -166,7 +167,7 @@ func TestChangePollInterval(t *testing.T) {
 	ctx := context.Background()
 
 	// We'll inject a request filter to detect scans due to the polling.
-	tableStart := keys.SystemSQLCodec.TablePrefix(keys.StatementDiagnosticsRequestsTableID)
+	tableStart := keys.SystemSQLCodec.TablePrefix(uint32(systemschema.StatementDiagnosticsRequestsTable.GetID()))
 	tableSpan := roachpb.Span{
 		Key:    tableStart,
 		EndKey: tableStart.PrefixEnd(),

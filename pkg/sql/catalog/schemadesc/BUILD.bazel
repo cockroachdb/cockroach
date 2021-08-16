@@ -16,6 +16,7 @@ go_library(
         "//pkg/keys",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

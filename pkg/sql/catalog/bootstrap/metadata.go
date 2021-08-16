@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -34,14 +35,9 @@ import (
 // start running correctly, thus requiring this special initialization.
 type MetadataSchema struct {
 	codec         keys.SQLCodec
-	descs         []metadataDescriptor
+	descs         []catalog.Descriptor
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
-}
-
-type metadataDescriptor struct {
-	parentID descpb.ID
-	desc     catalog.Descriptor
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -59,17 +55,46 @@ func MakeMetadataSchema(
 }
 
 // AddDescriptor adds a new non-config descriptor to the system schema.
-func (ms *MetadataSchema) AddDescriptor(parentID descpb.ID, desc catalog.Descriptor) {
-	if id := desc.GetID(); id > keys.MaxReservedDescID {
-		panic(errors.AssertionFailedf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
-	}
+func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
 	for _, d := range ms.descs {
-		if d.desc.GetID() == desc.GetID() {
-			log.Errorf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
-			return
+		if d.GetID() == desc.GetID() {
+			log.Fatalf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
 		}
 	}
-	ms.descs = append(ms.descs, metadataDescriptor{parentID, desc})
+	ms.descs = append(ms.descs, desc)
+}
+
+// AddDescriptorForSystemTenant is like AddDescriptor but only for the system
+// tenant.
+func (ms *MetadataSchema) AddDescriptorForSystemTenant(desc catalog.Descriptor) {
+	if !ms.codec.ForSystemTenant() {
+		return
+	}
+	ms.AddDescriptor(desc)
+}
+
+// AddDescriptorForNonSystemTenant is like AddDescriptor but only for non-system
+// tenants.
+func (ms *MetadataSchema) AddDescriptorForNonSystemTenant(desc catalog.Descriptor) {
+	if ms.codec.ForSystemTenant() {
+		return
+	}
+	ms.AddDescriptor(desc)
+}
+
+// ForEachCatalogDescriptor iterates through each catalog.Descriptor object in
+// this schema.
+// iterutil.StopIteration is supported.
+func (ms MetadataSchema) ForEachCatalogDescriptor(fn func(desc catalog.Descriptor) error) error {
+	for _, desc := range ms.descs {
+		if err := fn(desc); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // AddSplitIDs adds some "table ids" to the MetadataSchema such that
@@ -94,63 +119,44 @@ func (ms MetadataSchema) SystemDescriptorCount() int {
 func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey) {
 	var ret []roachpb.KeyValue
 	var splits []roachpb.RKey
+	add := func(key roachpb.Key, value roachpb.Value) {
+		ret = append(ret, roachpb.KeyValue{Key: key, Value: value})
+	}
 
 	// Save the ID generator value, which will generate descriptor IDs for user
 	// objects.
-	value := roachpb.Value{}
-	value.SetInt(int64(keys.MinUserDescID))
-	ret = append(ret, roachpb.KeyValue{
-		Key:   ms.codec.DescIDSequenceKey(),
-		Value: value,
-	})
-
-	// addDescriptor generates the needed KeyValue objects to install a
-	// descriptor on a new cluster.
-	addDescriptor := func(parentID descpb.ID, desc catalog.Descriptor) {
-		// Create name metadata key.
+	{
 		value := roachpb.Value{}
-		value.SetInt(int64(desc.GetID()))
-		if parentID != keys.RootNamespaceID {
-			ret = append(ret, roachpb.KeyValue{
-				Key:   catalogkeys.MakePublicObjectNameKey(ms.codec, parentID, desc.GetName()),
-				Value: value,
-			})
-		} else {
-			// Initializing a database. Databases must be initialized with
-			// the public schema, as all tables are scoped under the public schema.
-			publicSchemaValue := roachpb.Value{}
-			publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
-			ret = append(
-				ret,
-				roachpb.KeyValue{
-					Key:   catalogkeys.MakeDatabaseNameKey(ms.codec, desc.GetName()),
-					Value: value,
-				},
-				roachpb.KeyValue{
-					Key:   catalogkeys.MakePublicSchemaNameKey(ms.codec, desc.GetID()),
-					Value: publicSchemaValue,
-				})
-		}
-
-		// Create descriptor metadata key.
-		value = roachpb.Value{}
-		descDesc := desc.DescriptorProto()
-		if err := value.SetProto(descDesc); err != nil {
-			log.Fatalf(context.TODO(), "could not marshal %v", desc)
-		}
-		ret = append(ret, roachpb.KeyValue{
-			Key:   catalogkeys.MakeDescMetadataKey(ms.codec, desc.GetID()),
-			Value: value,
-		})
-		if desc.GetID() > keys.MaxSystemConfigDescID {
-			splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(uint32(desc.GetID()))))
-		}
+		value.SetInt(keys.MinUserDescID)
+		add(ms.codec.DescIDSequenceKey(), value)
 	}
 
 	// Generate initial values for system databases and tables, which have
 	// static descriptors that were generated elsewhere.
-	for _, sysObj := range ms.descs {
-		addDescriptor(sysObj.parentID, sysObj.desc)
+	for _, desc := range ms.descs {
+		// Create name metadata key.
+		nameValue := roachpb.Value{}
+		nameValue.SetInt(int64(desc.GetID()))
+		if desc.GetParentID() != keys.RootNamespaceID {
+			add(catalogkeys.MakePublicObjectNameKey(ms.codec, desc.GetParentID(), desc.GetName()), nameValue)
+		} else {
+			// Initializing a database. Databases must be initialized with
+			// the public schema, as all tables are scoped under the public schema.
+			add(catalogkeys.MakeDatabaseNameKey(ms.codec, desc.GetName()), nameValue)
+			publicSchemaValue := roachpb.Value{}
+			publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
+			add(catalogkeys.MakePublicSchemaNameKey(ms.codec, desc.GetID()), publicSchemaValue)
+		}
+
+		// Create descriptor metadata key.
+		descValue := roachpb.Value{}
+		if err := descValue.SetProto(desc.DescriptorProto()); err != nil {
+			log.Fatalf(context.TODO(), "could not marshal %v", desc)
+		}
+		add(catalogkeys.MakeDescMetadataKey(ms.codec, desc.GetID()), descValue)
+		if desc.GetID() > keys.MaxSystemConfigDescID {
+			splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(uint32(desc.GetID()))))
+		}
 	}
 
 	// The splits slice currently has a split point for each of the object
@@ -191,70 +197,11 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 // sorted order.
 func (ms MetadataSchema) DescriptorIDs() descpb.IDs {
 	descriptorIDs := descpb.IDs{}
-	for _, md := range ms.descs {
-		descriptorIDs = append(descriptorIDs, md.desc.GetID())
+	for _, d := range ms.descs {
+		descriptorIDs = append(descriptorIDs, d.GetID())
 	}
 	sort.Sort(descriptorIDs)
 	return descriptorIDs
-}
-
-// systemTableIDCache is used to accelerate name lookups on table descriptors.
-// It relies on the fact that table IDs under MaxReservedDescID are fixed.
-//
-// Mapping: [systemTenant][tableName] => tableID
-var systemTableIDCache = func() [2]map[string]descpb.ID {
-	cacheForTenant := func(systemTenant bool) map[string]descpb.ID {
-		cache := make(map[string]descpb.ID)
-
-		codec := keys.SystemSQLCodec
-		if !systemTenant {
-			codec = keys.MakeSQLCodec(roachpb.MinTenantID)
-		}
-
-		ms := MetadataSchema{codec: codec}
-		addSystemDescriptorsToSchema(&ms)
-		for _, d := range ms.descs {
-			t, ok := d.desc.(catalog.TableDescriptor)
-			if !ok || t.GetParentID() != keys.SystemDatabaseID || t.GetID() > keys.MaxReservedDescID {
-				// We only cache table descriptors under 'system' with a
-				// reserved table ID.
-				continue
-			}
-			cache[t.GetName()] = t.GetID()
-		}
-
-		return cache
-	}
-
-	var cache [2]map[string]descpb.ID
-	for _, b := range []bool{false, true} {
-		cache[boolToInt(b)] = cacheForTenant(b)
-	}
-	return cache
-}()
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}
-
-// LookupSystemTableDescriptorID uses the lookup cache above
-// to bypass a KV lookup when resolving the name of system tables.
-func LookupSystemTableDescriptorID(
-	codec keys.SQLCodec, dbID descpb.ID, tableName string,
-) descpb.ID {
-	if dbID != systemschema.SystemDB.GetID() {
-		return descpb.InvalidID
-	}
-
-	systemTenant := boolToInt(codec.ForSystemTenant())
-	dbID, ok := systemTableIDCache[systemTenant][tableName]
-	if !ok {
-		return descpb.InvalidID
-	}
-	return dbID
 }
 
 // addSystemDescriptorsToSchema populates the supplied MetadataSchema
@@ -263,76 +210,66 @@ func LookupSystemTableDescriptorID(
 // can be used to persist these descriptors to the cockroach store.
 func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// Add system database.
-	target.AddDescriptor(keys.RootNamespaceID, systemschema.SystemDB)
+	target.AddDescriptor(systemschema.SystemDB)
 
 	// Add system config tables.
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.NamespaceTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.DescriptorTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.UsersTable)
-	if target.codec.ForSystemTenant() {
-		target.AddDescriptor(keys.SystemDatabaseID, systemschema.ZonesTable)
-	}
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SettingsTable)
-	if !target.codec.ForSystemTenant() {
-		// Only add the descriptor ID sequence if this is a non-system tenant.
-		// System tenants use the global descIDGenerator key. See #48513.
-		target.AddDescriptor(keys.SystemDatabaseID, systemschema.DescIDSequence)
-	}
-	if target.codec.ForSystemTenant() {
-		// Only add the tenant table if this is the system tenant.
-		target.AddDescriptor(keys.SystemDatabaseID, systemschema.TenantsTable)
-	}
+	target.AddDescriptor(systemschema.NamespaceTable)
+	target.AddDescriptor(systemschema.DescriptorTable)
+	target.AddDescriptor(systemschema.UsersTable)
+	target.AddDescriptorForSystemTenant(systemschema.ZonesTable)
+	target.AddDescriptor(systemschema.SettingsTable)
+	// Only add the descriptor ID sequence if this is a non-system tenant.
+	// System tenants use the global descIDGenerator key. See #48513.
+	target.AddDescriptorForNonSystemTenant(systemschema.DescIDSequence)
+	target.AddDescriptorForSystemTenant(systemschema.TenantsTable)
 
 	// Add all the other system tables.
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.LeaseTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.EventLogTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.RangeEventTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.UITable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.JobsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.WebSessionsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.RoleOptionsTable)
+	target.AddDescriptor(systemschema.LeaseTable)
+	target.AddDescriptor(systemschema.EventLogTable)
+	target.AddDescriptor(systemschema.RangeEventTable)
+	target.AddDescriptor(systemschema.UITable)
+	target.AddDescriptor(systemschema.JobsTable)
+	target.AddDescriptor(systemschema.WebSessionsTable)
+	target.AddDescriptor(systemschema.RoleOptionsTable)
 
 	// Tables introduced in 2.0, added here for 2.1.
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.TableStatisticsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.LocationsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.RoleMembersTable)
+	target.AddDescriptor(systemschema.TableStatisticsTable)
+	target.AddDescriptor(systemschema.LocationsTable)
+	target.AddDescriptor(systemschema.RoleMembersTable)
 
 	// The CommentsTable has been introduced in 2.2. It was added here since it
 	// was introduced, but it's also created as a migration for older clusters.
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.CommentsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ReportsMetaTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ReplicationConstraintStatsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ReplicationStatsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ReplicationCriticalLocalitiesTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ProtectedTimestampsMetaTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ProtectedTimestampsRecordsTable)
+	target.AddDescriptor(systemschema.CommentsTable)
+	target.AddDescriptor(systemschema.ReportsMetaTable)
+	target.AddDescriptor(systemschema.ReplicationConstraintStatsTable)
+	target.AddDescriptor(systemschema.ReplicationStatsTable)
+	target.AddDescriptor(systemschema.ReplicationCriticalLocalitiesTable)
+	target.AddDescriptor(systemschema.ProtectedTimestampsMetaTable)
+	target.AddDescriptor(systemschema.ProtectedTimestampsRecordsTable)
 
 	// Tables introduced in 20.1.
 
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.StatementBundleChunksTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.StatementDiagnosticsRequestsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.StatementDiagnosticsTable)
+	target.AddDescriptor(systemschema.StatementBundleChunksTable)
+	target.AddDescriptor(systemschema.StatementDiagnosticsRequestsTable)
+	target.AddDescriptor(systemschema.StatementDiagnosticsTable)
 
 	// Tables introduced in 20.2.
 
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ScheduledJobsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SqllivenessTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.MigrationsTable)
+	target.AddDescriptor(systemschema.ScheduledJobsTable)
+	target.AddDescriptor(systemschema.SqllivenessTable)
+	target.AddDescriptor(systemschema.MigrationsTable)
 
 	// Tables introduced in 21.1.
 
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.JoinTokensTable)
+	target.AddDescriptor(systemschema.JoinTokensTable)
 
 	// Tables introduced in 21.2.
 
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.StatementStatisticsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.TransactionStatisticsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.DatabaseRoleSettingsTable)
-
-	if target.codec.ForSystemTenant() {
-		target.AddDescriptor(keys.SystemDatabaseID, systemschema.TenantUsageTable)
-	}
-	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SQLInstancesTable)
+	target.AddDescriptor(systemschema.StatementStatisticsTable)
+	target.AddDescriptor(systemschema.TransactionStatisticsTable)
+	target.AddDescriptor(systemschema.DatabaseRoleSettingsTable)
+	target.AddDescriptorForSystemTenant(systemschema.TenantUsageTable)
+	target.AddDescriptor(systemschema.SQLInstancesTable)
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied

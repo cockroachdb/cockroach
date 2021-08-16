@@ -556,19 +556,6 @@ func MustGetDescriptorByID(
 	return getDescriptorByID(ctx, txn, codec, id, immutable, catalog.Any, mustGet)
 }
 
-// GetMutableDescriptorByID looks up the mutable descriptor given its ID,
-// returning nil if the descriptor is not found. If you want the "not found"
-// condition to return an error, use MustGetMutableDescriptorByID instead.
-func GetMutableDescriptorByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (catalog.MutableDescriptor, error) {
-	desc, err := getDescriptorByID(ctx, txn, codec, id, mutable, catalog.Any, bestEffort)
-	if err != nil || desc == nil {
-		return nil, err
-	}
-	return desc.(catalog.MutableDescriptor), err
-}
-
 // MustGetMutableDescriptorByID looks up the mutable descriptor given its ID,
 // returning an error if the descriptor is not found.
 func MustGetMutableDescriptorByID(
