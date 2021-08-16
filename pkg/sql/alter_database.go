@@ -1105,7 +1105,13 @@ func (p *planner) AlterDatabasePlacement(
 		return nil, err
 	}
 
-	// TODO(pawalt): #68598 add a check for placement enabled cluster setting
+	if !p.EvalContext().SessionData.PlacementEnabled {
+		return nil, pgerror.New(
+			pgcode.InvalidDatabaseDefinition,
+			"ALTER DATABASE PLACEMENT requires that the cluster setting "+
+				"sql.defaults.experimental_placement is enabled",
+		)
+	}
 
 	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
