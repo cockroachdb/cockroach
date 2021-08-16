@@ -79,9 +79,11 @@ func getSink(
 	}
 
 	newSink := func() (Sink, error) {
-		switch {
-		case u.Scheme == changefeedbase.SinkSchemeBuffer:
+		if feedCfg.SinkURI == "" {
 			return &bufferSink{}, nil
+		}
+
+		switch {
 		case u.Scheme == changefeedbase.SinkSchemeNull:
 			return makeNullSink(sinkURL{URL: u})
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
@@ -98,6 +100,8 @@ func getSink(
 		case u.Scheme == changefeedbase.SinkSchemeHTTP || u.Scheme == changefeedbase.SinkSchemeHTTPS:
 			return nil, errors.Errorf(`unsupported sink: %s. HTTP endpoints can be used with %s and %s`,
 				u.Scheme, changefeedbase.SinkSchemeWebhookHTTPS, changefeedbase.SinkSchemeCloudStorageHTTPS)
+		case u.Scheme == "":
+			return nil, errors.Errorf(`no scheme found for sink URL %q`, feedCfg.SinkURI)
 		default:
 			return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
 		}

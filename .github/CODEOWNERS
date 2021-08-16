@@ -69,7 +69,7 @@
 # last-rule-wins so bulk i/o takes userfile.go even though cli-prs takes pkg/cli
 /pkg/cli/userfile.go         @cockroachdb/bulk-prs
 /pkg/cli/demo*.go            @cockroachdb/cli-prs @cockroachdb/sql-experience @cockroachdb/server-prs
-/pkg/cli/debug*.go           @cockroachdb/cli-prs @cockroachdb/kv
+/pkg/cli/debug*.go           @cockroachdb/cli-prs @cockroachdb/kv-prs
 /pkg/cli/debug_job_trace*.go @cockroachdb/bulk-prs
 /pkg/cli/doctor*.go          @cockroachdb/cli-prs @cockroachdb/sql-schema
 /pkg/cli/import_test.go      @cockroachdb/cli-prs @cockroachdb/bulk-prs
@@ -98,7 +98,7 @@
 
 /pkg/geo/                    @cockroachdb/geospatial
 
-/pkg/kv/                     @cockroachdb/kv
+/pkg/kv/                     @cockroachdb/kv-prs
 
 /pkg/storage/                @cockroachdb/storage
 
@@ -138,8 +138,8 @@
 /pkg/ccl/utilccl/            @cockroachdb/server-prs
 /pkg/ccl/workloadccl/        @cockroachdb/sql-experience
 /pkg/ccl/benchccl/rttanalysisccl/     @cockroachdb/sql-experience
-/pkg/clusterversion/         @cockroachdb/kv
-/pkg/cmd/allocsim/           @cockroachdb/kv
+/pkg/clusterversion/         @cockroachdb/kv-prs
+/pkg/cmd/allocsim/           @cockroachdb/kv-prs
 /pkg/cmd/bazci/              @cockroachdb/dev-inf
 /pkg/cmd/cmdutil/            @cockroachdb/dev-inf
 /pkg/cmd/cmp-protocol/       @cockroachdb/sql-experience
@@ -160,7 +160,7 @@
 /pkg/cmd/geoviz/             @cockroachdb/geospatial
 /pkg/cmd/github-post/        @cockroachdb/test-eng
 /pkg/cmd/github-pull-request-make/ @cockroachdb/dev-inf
-/pkg/cmd/gossipsim/          @cockroachdb/kv
+/pkg/cmd/gossipsim/          @cockroachdb/kv-prs
 /pkg/cmd/import-tools/       @cockroachdb/dev-inf
 /pkg/cmd/internal/issues/    @cockroachdb/test-eng
 /pkg/cmd/prereqs/            @cockroachdb/dev-inf
@@ -192,18 +192,18 @@
 /pkg/docs/                   @cockroachdb/docs
 /pkg/featureflag/            @cockroachdb/cli-prs-noreview
 /pkg/gossip/                 @cockroachdb/kv-noreview
-/pkg/internal/client/requestbatcher/ @cockroachdb/kv
+/pkg/internal/client/requestbatcher/ @cockroachdb/kv-prs
 /pkg/internal/codeowners/    @cockroachdb/test-eng
 /pkg/internal/reporoot       @cockroachdb/dev-inf
 /pkg/internal/rsg/           @cockroachdb/sql-queries
 /pkg/internal/sqlsmith/      @cockroachdb/sql-queries
 /pkg/internal/team/          @cockroachdb/test-eng
 /pkg/jobs/                   @cockroachdb/sql-schema
-/pkg/keys/                   @cockroachdb/kv
+/pkg/keys/                   @cockroachdb/kv-prs
 /pkg/migration/              @cockroachdb/kv @cockroachdb/sql-schema
 /pkg/multitenant             @cockroachdb/unowned
 /pkg/release/                @cockroachdb/dev-inf
-/pkg/roachpb/                @cockroachdb/kv
+/pkg/roachpb/                @cockroachdb/kv-prs
 /pkg/rpc/                    @cockroachdb/server-prs
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
 /pkg/security/               @cockroachdb/server-prs
@@ -211,7 +211,7 @@
 /pkg/startupmigrations/      @cockroachdb/server-prs @cockroachdb/sql-schema
 /pkg/streaming/              @cockroachdb/bulk-prs
 /pkg/testutils/              @cockroachdb/test-eng
-/pkg/ts/                     @cockroachdb/kv
+/pkg/ts/                     @cockroachdb/kv-prs
 /pkg/ts/catalog/             @cockroachdb/obs-inf-prs
 /pkg/util/                   @cockroachdb/unowned
 /pkg/util/log                @cockroachdb/server-prs

@@ -4,8 +4,11 @@ go_library(
     name = "persistedsqlstats",
     srcs = [
         "cluster_settings.go",
+        "combined_iterator.go",
         "flush.go",
+        "mem_iterator.go",
         "provider.go",
+        "stmt_reader.go",
         "test_utils.go",
         "writer.go",
     ],
@@ -26,6 +29,7 @@ go_library(
         "//pkg/sql/sqlstats/sslocal",
         "//pkg/sql/sqlstats/ssmemstorage",
         "//pkg/sql/sqlutil",
+        "//pkg/util/encoding",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
@@ -39,6 +43,7 @@ go_test(
     srcs = [
         "flush_test.go",
         "main_test.go",
+        "reader_test.go",
     ],
     deps = [
         ":persistedsqlstats",

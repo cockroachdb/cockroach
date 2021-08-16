@@ -110,7 +110,6 @@ const (
 	SinkParamSkipTLSVerify          = `insecure_tls_skip_verify`
 	SinkParamTopicPrefix            = `topic_prefix`
 	SinkParamTopicName              = `topic_name`
-	SinkSchemeBuffer                = ``
 	SinkSchemeCloudStorageAzure     = `experimental-azure`
 	SinkSchemeCloudStorageGCS       = `experimental-gs`
 	SinkSchemeCloudStorageHTTP      = `experimental-http`

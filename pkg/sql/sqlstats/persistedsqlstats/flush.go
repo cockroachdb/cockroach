@@ -34,14 +34,14 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 
 	// The flush routine directly logs errors if they are encountered. Therefore,
 	// no error is returned here.
-	_ = s.IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+	_ = s.SQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
 		s.doFlush(ctx, func() error {
 			return s.doFlushSingleStmtStats(ctx, statistics)
 		}, "failed to flush statement statistics" /* errMsg */)
 
 		return nil
 	})
-	_ = s.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, func(ctx context.Context, key roachpb.TransactionFingerprintID, statistics *roachpb.CollectedTransactionStatistics) error {
+	_ = s.SQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, func(ctx context.Context, key roachpb.TransactionFingerprintID, statistics *roachpb.CollectedTransactionStatistics) error {
 		s.doFlush(ctx, func() error {
 			return s.doFlushSingleTxnStats(ctx, key, statistics)
 		}, "failed to flush transaction statistics" /* errMsg */)
