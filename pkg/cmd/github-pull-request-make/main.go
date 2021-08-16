@@ -11,8 +11,8 @@
 // This utility detects new tests added in a given pull request, and runs them
 // under stress in our CI infrastructure.
 //
-// Note that this program will directly exec `make`, so there is no need to
-// process its output. See build/teamcity-test{,race}.sh for usage examples.
+// Note that this program will directly invoke the build system, so there is no
+// need to process its output. See build/teamcity-support.sh for usage examples.
 //
 // Note that our CI infrastructure has no notion of "pull requests", forcing
 // the approach taken here be quite brute-force with respect to its use of the
@@ -24,7 +24,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"go/build"
 	"io"
 	"log"
 	"net/http"
@@ -35,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
@@ -42,26 +42,23 @@ import (
 
 const githubAPITokenEnv = "GITHUB_API_TOKEN"
 const teamcityVCSNumberEnv = "BUILD_VCS_NUMBER"
-const makeTargetEnv = "TARGET"
+const targetEnv = "TARGET"
 
 // https://github.com/golang/go/blob/go1.7.3/src/cmd/go/test.go#L1260:L1262
 //
 // It is a Test (say) if there is a character after Test that is not a lower-case letter.
 // We don't want TesticularCancer.
 const goTestStr = `func (Test[^a-z]\w*)\(.*\*testing\.TB?\) {$`
-const goBenchmarkStr = `func (Benchmark[^a-z]\w*)\(.*\*testing\.T?B\) {$`
 
 var currentGoTestRE = regexp.MustCompile(`.*` + goTestStr)
-var currentGoBenchmarkRE = regexp.MustCompile(`.*` + goBenchmarkStr)
 var newGoTestRE = regexp.MustCompile(`^\+\s*` + goTestStr)
-var newGoBenchmarkRE = regexp.MustCompile(`^\+\s*` + goBenchmarkStr)
 
 type pkg struct {
-	tests, benchmarks []string
+	tests []string
 }
 
 // pkgsFromDiff parses a git-style diff and returns a mapping from directories
-// to tests and benchmarks added in those directories in the given diff.
+// to tests added in those directories in the given diff.
 func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 	const newFilePrefix = "+++ b/"
 	const replacement = "$1"
@@ -70,7 +67,6 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 
 	var curPkgName string
 	var curTestName string
-	var curBenchmarkName string
 	var inPrefix bool
 	for reader := bufio.NewReader(r); ; {
 		line, isPrefix, err := reader.ReadLine()
@@ -97,36 +93,16 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 			curPkg := pkgs[curPkgName]
 			curPkg.tests = append(curPkg.tests, string(newGoTestRE.ReplaceAll(line, []byte(replacement))))
 			pkgs[curPkgName] = curPkg
-		case newGoBenchmarkRE.Match(line):
-			curPkg := pkgs[curPkgName]
-			curPkg.benchmarks = append(curPkg.benchmarks, string(newGoBenchmarkRE.ReplaceAll(line, []byte(replacement))))
-			pkgs[curPkgName] = curPkg
 		case currentGoTestRE.Match(line):
 			curTestName = ""
-			curBenchmarkName = ""
 			if !bytes.HasPrefix(line, []byte{'-'}) {
 				curTestName = string(currentGoTestRE.ReplaceAll(line, []byte(replacement)))
 			}
-		case currentGoBenchmarkRE.Match(line):
-			curTestName = ""
-			curBenchmarkName = ""
-			if !bytes.HasPrefix(line, []byte{'-'}) {
-				curBenchmarkName = string(currentGoBenchmarkRE.ReplaceAll(line, []byte(replacement)))
-			}
 		case bytes.HasPrefix(line, []byte{'-'}) && bytes.Contains(line, []byte(".Skip")):
-			if curPkgName != "" {
-				switch {
-				case len(curTestName) > 0:
-					if !(curPkgName == "build" && curTestName == "TestStyle") {
-						curPkg := pkgs[curPkgName]
-						curPkg.tests = append(curPkg.tests, curTestName)
-						pkgs[curPkgName] = curPkg
-					}
-				case len(curBenchmarkName) > 0:
-					curPkg := pkgs[curPkgName]
-					curPkg.benchmarks = append(curPkg.benchmarks, curBenchmarkName)
-					pkgs[curPkgName] = curPkg
-				}
+			if curPkgName != "" && len(curTestName) > 0 {
+				curPkg := pkgs[curPkgName]
+				curPkg.tests = append(curPkg.tests, curTestName)
+				pkgs[curPkgName] = curPkg
 			}
 		}
 	}
@@ -188,15 +164,18 @@ func main() {
 		log.Fatalf("VCS number environment variable %s is not set", teamcityVCSNumberEnv)
 	}
 
-	target, ok := os.LookupEnv(makeTargetEnv)
+	target, ok := os.LookupEnv(targetEnv)
 	if !ok {
-		log.Fatalf("make target variable %s is not set", makeTargetEnv)
+		log.Fatalf("target variable %s is not set", targetEnv)
+	}
+	if target != "stress" && target != "stressrace" {
+		log.Fatalf("environment variable %s is %s; expected 'stress' or 'stressrace'", targetEnv, target)
 	}
 
 	const org = "cockroachdb"
 	const repo = "cockroach"
 
-	crdb, err := build.Import(fmt.Sprintf("github.com/%s/%s", org, repo), "", build.FindOnly)
+	crdb, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -215,76 +194,86 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if target == "checkdeps" {
-		var vendorChanged bool
-		for _, path := range []string{"Gopkg.lock", "vendor"} {
-			if strings.Contains(diff, fmt.Sprintf("\n--- a/%[1]s\n+++ b/%[1]s\n", path)) {
-				vendorChanged = true
-				break
+	pkgs, err := pkgsFromDiff(strings.NewReader(diff))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(pkgs) > 0 {
+		for name, pkg := range pkgs {
+			// 20 minutes total seems OK, but at least 2 minutes per test.
+			// This should be reduced. See #46941.
+			duration := (20 * time.Minute) / time.Duration(len(pkgs))
+			minDuration := (2 * time.Minute) * time.Duration(len(pkg.tests))
+			if duration < minDuration {
+				duration = minDuration
 			}
-		}
-		if vendorChanged {
-			cmd := exec.Command("dep", "ensure", "-v")
-			cmd.Dir = crdb.Dir
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			log.Println(cmd.Args)
-			if err := cmd.Run(); err != nil {
-				log.Fatal(err)
+			// Use a timeout shorter than the duration so that hanging tests don't
+			// get a free pass.
+			timeout := (3 * duration) / 4
+
+			// The stress -p flag defaults to the number of CPUs, which is too
+			// aggressive on big machines and can cause tests to fail. Under nightly
+			// stress, we usually use 4 or 2, so run with 8 here to make sure the
+			// test becomes an obvious candidate for skipping under race before it
+			// has to deal with the nightlies.
+			parallelism := 16
+			if target == "stressrace" {
+				parallelism = 8
 			}
 
-			// Check for diffs.
-			var foundDiff bool
-			for _, dir := range []string{filepath.Join(crdb.Dir, "vendor"), crdb.Dir} {
-				cmd := exec.Command("git", "diff")
-				cmd.Dir = dir
-				log.Println(cmd.Dir, cmd.Args)
-				if output, err := cmd.CombinedOutput(); err != nil {
-					log.Fatalf("%s: %s", err, string(output))
-				} else if len(output) > 0 {
-					foundDiff = true
-					log.Printf("unexpected diff:\n%s", output)
+			var args []string
+			if bazel.BuiltWithBazel() {
+				args = append(args, "test")
+				// NB: We use a pretty dumb technique to list the bazel test
+				// targets: we ask bazel query to enumerate all the tests in this
+				// package. bazel queries can take a second or so to run, so it's
+				// conceivable that the delay introduced by this could be
+				// noticeable. For packages that have two or more test targets, the
+				// test filters should mean that we don't execute more tests than
+				// we need to. This should be refactored to improve performance and
+				// to strip out the unnecessary calls to `bazel`, but that might
+				// better be saved for when we no longer need `make` support and
+				// don't have to worry about accidentally breaking it.
+				out, err := exec.Command("bazel", "query", fmt.Sprintf("kind(go_test, //%s:all)", name), "--output=label").Output()
+				if err != nil {
+					log.Fatal(err)
 				}
-			}
-			if foundDiff {
-				os.Exit(1)
-			}
-		}
-	} else {
-		pkgs, err := pkgsFromDiff(strings.NewReader(diff))
-		if err != nil {
-			log.Fatal(err)
-		}
-		if len(pkgs) > 0 {
-			for name, pkg := range pkgs {
-				// 20 minutes total seems OK, but at least 2 minutes per test.
-				// This should be reduced. See #46941.
-				duration := (20 * time.Minute) / time.Duration(len(pkgs))
-				minDuration := (2 * time.Minute) * time.Duration(len(pkg.tests))
-				if duration < minDuration {
-					duration = minDuration
+				for _, target := range strings.Split(string(out), "\n") {
+					target = strings.TrimSpace(target)
+					if target != "" {
+						args = append(args, target)
+					}
 				}
-				// Use a timeout shorter than the duration so that hanging tests don't
-				// get a free pass.
-				timeout := (3 * duration) / 4
-
+				args = append(args, "--")
+				var filters []string
+				for _, test := range pkg.tests {
+					filters = append(filters, "^"+test+"$")
+				}
+				args = append(args, fmt.Sprintf("--test_filter=%s", strings.Join(filters, "|")))
+				args = append(args, "--test_env=COCKROACH_NIGHTLY_STRESS=true")
+				args = append(args, "--test_arg=-test.timeout", fmt.Sprintf("--test_arg=%s", timeout))
+				// Give the entire test 1 more minute than the duration to wrap up.
+				args = append(args, fmt.Sprintf("--test_timeout=%d", int((duration+1*time.Minute).Seconds())))
+				// NB: stress and bazci are expected to be put in `PATH` by the caller.
+				args = append(args, "--run_under", fmt.Sprintf("stress -stderr -maxfails 1 -maxtime %s -p %d", duration, parallelism))
+				if target == "stressrace" {
+					args = append(args, "--@io_bazel_rules_go//go/config:race")
+				}
+				cmd := exec.Command("bazci", args...)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				log.Println(cmd.Args)
+				if err := cmd.Run(); err != nil {
+					log.Fatal(err)
+				}
+			} else {
 				tests := "-"
 				if len(pkg.tests) > 0 {
 					tests = "(" + strings.Join(pkg.tests, "$$|") + "$$)"
 				}
 
-				// The stress -p flag defaults to the number of CPUs, which is too
-				// aggressive on big machines and can cause tests to fail. Under nightly
-				// stress, we usually use 4 or 2, so run with 8 here to make sure the
-				// test becomes an obvious candidate for skipping under race before it
-				// has to deal with the nightlies.
-				parallelism := 16
-				if target == "stressrace" {
-					parallelism = 8
-				}
-
-				cmd := exec.Command(
-					"make",
+				args = append(
+					args,
 					target,
 					fmt.Sprintf("PKG=./%s", name),
 					fmt.Sprintf("TESTS=%s", tests),
@@ -292,8 +281,9 @@ func main() {
 					"GOTESTFLAGS=-json", // allow TeamCity to parse failures
 					fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s -p %d", duration, parallelism),
 				)
+				cmd := exec.Command("make", args...)
 				cmd.Env = append(os.Environ(), "COCKROACH_NIGHTLY_STRESS=true")
-				cmd.Dir = crdb.Dir
+				cmd.Dir = crdb
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 				log.Println(cmd.Args)
