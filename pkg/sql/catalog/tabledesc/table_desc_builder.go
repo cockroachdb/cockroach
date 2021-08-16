@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -198,10 +199,19 @@ func maybeFillInDescriptor(
 			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeSecondaryIndexFormatVersion(idx)
 		}
 	}
-
-	changes.UpgradedPrivileges = descpb.MaybeFixPrivileges(desc.ID, desc.GetParentID(), &desc.Privileges, privilege.Table)
-
 	changes.UpgradedNamespaceName = maybeUpgradeNamespaceName(desc)
+
+	parentSchemaID := desc.GetUnexposedParentSchemaID()
+	if parentSchemaID == descpb.InvalidID {
+		parentSchemaID = keys.PublicSchemaID
+	}
+	changes.UpgradedPrivileges = catprivilege.MaybeFixPrivileges(
+		&desc.Privileges,
+		desc.GetParentID(),
+		parentSchemaID,
+		privilege.Table,
+		desc.GetName(),
+	)
 
 	if dg != nil {
 		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
@@ -547,6 +557,6 @@ func maybeUpgradeNamespaceName(d *descpb.TableDescriptor) (hasChanged bool) {
 	if d.ID != keys.NamespaceTableID || d.Name != catconstants.PreMigrationNamespaceTableName {
 		return false
 	}
-	d.Name = catconstants.NamespaceTableName
+	d.Name = string(catconstants.NamespaceTableName)
 	return true
 }

@@ -47,16 +47,21 @@ func TestDeleteDeprecatedNamespaceDescriptorMigration(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	// Inject deprecated namespace table descriptor and namespace entries.
+	// Inject deprecated namespace table descriptors and namespace entries.
 	err := tc.Servers[0].DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		codec := keys.SystemSQLCodec
 		deprecated := *systemschema.NamespaceTable.TableDesc()
 		deprecated.ID = keys.DeprecatedNamespaceTableID
-		descProto := &descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &deprecated}}
+		deprecatedDescProto := &descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &deprecated}}
+		namespace2 := *systemschema.NamespaceTable.TableDesc()
+		namespace2.ID = keys.NamespaceTableID
+		namespace2.Name = `namespace2`
+		ns2DescProto := &descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &namespace2}}
 		b := txn.NewBatch()
-		b.Put(catalogkeys.MakeDescMetadataKey(codec, keys.DeprecatedNamespaceTableID), descProto)
+		b.Put(catalogkeys.MakeDescMetadataKey(codec, keys.DeprecatedNamespaceTableID), deprecatedDescProto)
 		namespaceKey := catalogkeys.MakePublicObjectNameKey(codec, keys.SystemDatabaseID, `namespace`)
 		b.Put(namespaceKey, keys.DeprecatedNamespaceTableID)
+		b.Put(catalogkeys.MakeDescMetadataKey(codec, keys.NamespaceTableID), ns2DescProto)
 		namespace2Key := catalogkeys.MakePublicObjectNameKey(codec, keys.SystemDatabaseID, `namespace2`)
 		b.Put(namespace2Key, keys.NamespaceTableID)
 		return txn.Run(ctx, b)
