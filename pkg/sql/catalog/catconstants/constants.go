@@ -34,6 +34,52 @@ const DelegatedAppNamePrefix = "$$ "
 // the cockroach CLI by default
 const InternalSQLAppName = "cockroach sql"
 
+// SystemDatabaseName is the name of the system database.
+const SystemDatabaseName = "system"
+
+// SystemTableName is a type for system table names.
+type SystemTableName string
+
+// Names of tables in the system database.
+const (
+	NamespaceTableName                     SystemTableName = "namespace"
+	DescriptorTableName                    SystemTableName = "descriptor"
+	UsersTableName                         SystemTableName = "users"
+	ZonesTableName                         SystemTableName = "zones"
+	SettingsTableName                      SystemTableName = "settings"
+	DescIDSequenceTableName                SystemTableName = "descriptor_id_seq"
+	TenantsTableName                       SystemTableName = "tenants"
+	LeaseTableName                         SystemTableName = "lease"
+	EventLogTableName                      SystemTableName = "eventlog"
+	RangeEventTableName                    SystemTableName = "rangelog"
+	UITableName                            SystemTableName = "ui"
+	JobsTableName                          SystemTableName = "jobs"
+	WebSessionsTableName                   SystemTableName = "web_sessions"
+	TableStatisticsTableName               SystemTableName = "table_statistics"
+	LocationsTableName                     SystemTableName = "locations"
+	RoleMembersTableName                   SystemTableName = "role_members"
+	CommentsTableName                      SystemTableName = "comments"
+	ReportsMetaTableName                   SystemTableName = "reports_meta"
+	ReplicationConstraintStatsTableName    SystemTableName = "replication_constraint_stats"
+	ReplicationCriticalLocalitiesTableName SystemTableName = "replication_critical_localities"
+	ReplicationStatsTableName              SystemTableName = "replication_stats"
+	ProtectedTimestampsMetaTableName       SystemTableName = "protected_ts_meta"
+	ProtectedTimestampsRecordsTableName    SystemTableName = "protected_ts_records"
+	RoleOptionsTableName                   SystemTableName = "role_options"
+	StatementBundleChunksTableName         SystemTableName = "statement_bundle_chunks"
+	StatementDiagnosticsRequestsTableName  SystemTableName = "statement_diagnostics_requests"
+	StatementDiagnosticsTableName          SystemTableName = "statement_diagnostics"
+	ScheduledJobsTableName                 SystemTableName = "scheduled_jobs"
+	SqllivenessTableName                   SystemTableName = "sqlliveness"
+	MigrationsTableName                    SystemTableName = "migrations"
+	JoinTokensTableName                    SystemTableName = "join_tokens"
+	StatementStatisticsTableName           SystemTableName = "statement_statistics"
+	TransactionStatisticsTableName         SystemTableName = "transaction_statistics"
+	DatabaseRoleSettingsTableName          SystemTableName = "database_role_settings"
+	TenantUsageTableName                   SystemTableName = "tenant_usage"
+	SQLInstancesTableName                  SystemTableName = "sql_instances"
+)
+
 // Oid for virtual database and table.
 const (
 	CrdbInternalID = math.MaxUint32 - iota

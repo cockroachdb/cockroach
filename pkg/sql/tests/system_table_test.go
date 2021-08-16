@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -59,7 +58,6 @@ func TestInitialKeys(t *testing.T) {
 		}
 
 		// Add an additional table.
-		descpb.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
 		desc, err := sql.CreateTestTableDescriptor(
 			context.Background(),
 			keys.SystemDatabaseID,
@@ -70,7 +68,7 @@ func TestInitialKeys(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ms.AddDescriptor(keys.SystemDatabaseID, desc)
+		ms.AddDescriptor(desc)
 		kv, _ /* splits */ = ms.GetInitialValues()
 		expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 		if actual := len(kv); actual != expected {
@@ -159,50 +157,49 @@ func TestSystemTableLiterals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	type testcase struct {
-		id     descpb.ID
 		schema string
 		pkg    catalog.TableDescriptor
 	}
 
 	for _, test := range []testcase{
-		{keys.NamespaceTableID, systemschema.NamespaceTableSchema, systemschema.NamespaceTable},
-		{keys.DescriptorTableID, systemschema.DescriptorTableSchema, systemschema.DescriptorTable},
-		{keys.UsersTableID, systemschema.UsersTableSchema, systemschema.UsersTable},
-		{keys.ZonesTableID, systemschema.ZonesTableSchema, systemschema.ZonesTable},
-		{keys.LeaseTableID, systemschema.LeaseTableSchema, systemschema.LeaseTable},
-		{keys.EventLogTableID, systemschema.EventLogTableSchema, systemschema.EventLogTable},
-		{keys.RangeEventTableID, systemschema.RangeEventTableSchema, systemschema.RangeEventTable},
-		{keys.UITableID, systemschema.UITableSchema, systemschema.UITable},
-		{keys.JobsTableID, systemschema.JobsTableSchema, systemschema.JobsTable},
-		{keys.SettingsTableID, systemschema.SettingsTableSchema, systemschema.SettingsTable},
-		{keys.DescIDSequenceID, systemschema.DescIDSequenceSchema, systemschema.DescIDSequence},
-		{keys.TenantsTableID, systemschema.TenantsTableSchema, systemschema.TenantsTable},
-		{keys.WebSessionsTableID, systemschema.WebSessionsTableSchema, systemschema.WebSessionsTable},
-		{keys.TableStatisticsTableID, systemschema.TableStatisticsTableSchema, systemschema.TableStatisticsTable},
-		{keys.LocationsTableID, systemschema.LocationsTableSchema, systemschema.LocationsTable},
-		{keys.RoleMembersTableID, systemschema.RoleMembersTableSchema, systemschema.RoleMembersTable},
-		{keys.CommentsTableID, systemschema.CommentsTableSchema, systemschema.CommentsTable},
-		{keys.ProtectedTimestampsMetaTableID, systemschema.ProtectedTimestampsMetaTableSchema, systemschema.ProtectedTimestampsMetaTable},
-		{keys.ProtectedTimestampsRecordsTableID, systemschema.ProtectedTimestampsRecordsTableSchema, systemschema.ProtectedTimestampsRecordsTable},
-		{keys.RoleOptionsTableID, systemschema.RoleOptionsTableSchema, systemschema.RoleOptionsTable},
-		{keys.StatementBundleChunksTableID, systemschema.StatementBundleChunksTableSchema, systemschema.StatementBundleChunksTable},
-		{keys.StatementDiagnosticsRequestsTableID, systemschema.StatementDiagnosticsRequestsTableSchema, systemschema.StatementDiagnosticsRequestsTable},
-		{keys.StatementDiagnosticsTableID, systemschema.StatementDiagnosticsTableSchema, systemschema.StatementDiagnosticsTable},
-		{keys.ScheduledJobsTableID, systemschema.ScheduledJobsTableSchema, systemschema.ScheduledJobsTable},
-		{keys.SqllivenessID, systemschema.SqllivenessTableSchema, systemschema.SqllivenessTable},
-		{keys.MigrationsID, systemschema.MigrationsTableSchema, systemschema.MigrationsTable},
-		{keys.JoinTokensTableID, systemschema.JoinTokensTableSchema, systemschema.JoinTokensTable},
-		{keys.StatementStatisticsTableID, systemschema.StatementStatisticsTableSchema, systemschema.StatementStatisticsTable},
-		{keys.TransactionStatisticsTableID, systemschema.TransactionStatisticsTableSchema, systemschema.TransactionStatisticsTable},
-		{keys.DatabaseRoleSettingsTableID, systemschema.DatabaseRoleSettingsTableSchema, systemschema.DatabaseRoleSettingsTable},
-		{keys.TenantUsageTableID, systemschema.TenantUsageTableSchema, systemschema.TenantUsageTable},
-		{keys.SQLInstancesTableID, systemschema.SQLInstancesTableSchema, systemschema.SQLInstancesTable},
+		{systemschema.NamespaceTableSchema, systemschema.NamespaceTable},
+		{systemschema.DescriptorTableSchema, systemschema.DescriptorTable},
+		{systemschema.UsersTableSchema, systemschema.UsersTable},
+		{systemschema.ZonesTableSchema, systemschema.ZonesTable},
+		{systemschema.LeaseTableSchema, systemschema.LeaseTable},
+		{systemschema.EventLogTableSchema, systemschema.EventLogTable},
+		{systemschema.RangeEventTableSchema, systemschema.RangeEventTable},
+		{systemschema.UITableSchema, systemschema.UITable},
+		{systemschema.JobsTableSchema, systemschema.JobsTable},
+		{systemschema.SettingsTableSchema, systemschema.SettingsTable},
+		{systemschema.DescIDSequenceSchema, systemschema.DescIDSequence},
+		{systemschema.TenantsTableSchema, systemschema.TenantsTable},
+		{systemschema.WebSessionsTableSchema, systemschema.WebSessionsTable},
+		{systemschema.TableStatisticsTableSchema, systemschema.TableStatisticsTable},
+		{systemschema.LocationsTableSchema, systemschema.LocationsTable},
+		{systemschema.RoleMembersTableSchema, systemschema.RoleMembersTable},
+		{systemschema.CommentsTableSchema, systemschema.CommentsTable},
+		{systemschema.ProtectedTimestampsMetaTableSchema, systemschema.ProtectedTimestampsMetaTable},
+		{systemschema.ProtectedTimestampsRecordsTableSchema, systemschema.ProtectedTimestampsRecordsTable},
+		{systemschema.RoleOptionsTableSchema, systemschema.RoleOptionsTable},
+		{systemschema.StatementBundleChunksTableSchema, systemschema.StatementBundleChunksTable},
+		{systemschema.StatementDiagnosticsRequestsTableSchema, systemschema.StatementDiagnosticsRequestsTable},
+		{systemschema.StatementDiagnosticsTableSchema, systemschema.StatementDiagnosticsTable},
+		{systemschema.ScheduledJobsTableSchema, systemschema.ScheduledJobsTable},
+		{systemschema.SqllivenessTableSchema, systemschema.SqllivenessTable},
+		{systemschema.MigrationsTableSchema, systemschema.MigrationsTable},
+		{systemschema.JoinTokensTableSchema, systemschema.JoinTokensTable},
+		{systemschema.StatementStatisticsTableSchema, systemschema.StatementStatisticsTable},
+		{systemschema.TransactionStatisticsTableSchema, systemschema.TransactionStatisticsTable},
+		{systemschema.DatabaseRoleSettingsTableSchema, systemschema.DatabaseRoleSettingsTable},
+		{systemschema.TenantUsageTableSchema, systemschema.TenantUsageTable},
+		{systemschema.SQLInstancesTableSchema, systemschema.SQLInstancesTable},
 	} {
 		privs := *test.pkg.GetPrivileges()
 		gen, err := sql.CreateTestTableDescriptor(
 			context.Background(),
 			keys.SystemDatabaseID,
-			test.id,
+			test.pkg.GetID(),
 			test.schema,
 			&privs,
 		)
