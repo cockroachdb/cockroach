@@ -1548,6 +1548,80 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// Test for the use of file IO functions that should be wrapped by `sysutil`'s file io
+	// functions.
+	t.Run("TestNoFileIOInCode", func(t *testing.T) {
+		t.Parallel()
+
+		forbiddenIOFuncs := map[string]string{
+			"os.OpenFile":      "sysutil.OpenFile",
+			"os.Create":        "sysutil.Create",
+			"ioutil.WriteFile": "sysutil.WriteFile",
+		}
+
+		// grepBuf creates a grep string that matches any forbidden import pkgs.
+		var grepBuf bytes.Buffer
+		grepBuf.WriteByte('(')
+		i := 0
+		for forbiddenFunc := range forbiddenIOFuncs {
+			if i != 0 {
+				grepBuf.WriteByte('|')
+			}
+			grepBuf.WriteString(regexp.QuoteMeta(forbiddenFunc))
+			i++
+		}
+		grepBuf.WriteString(")")
+
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			grepBuf.String(),
+			"--",
+			"*.go",
+			":!*/*_test.go",
+			":!util/sysutil/io.go",
+			":!util/sysutil/mutex_sync_race.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			found := false
+			errPieces := strings.Split(s, ":")
+			if len(errPieces) >= 3 {
+				file, number, line := errPieces[0], errPieces[1], errPieces[2]
+				for forbiddenFunc, expectedFunc := range forbiddenIOFuncs {
+					if strings.Contains(line, forbiddenFunc) {
+						found = true
+						t.Errorf("\n%s:%s using %s, please use sysutil.%s instead", file, number, forbiddenFunc, expectedFunc)
+					}
+				}
+			}
+			if !found {
+				t.Errorf("\n%s <- using an unsupported File IO function, please use sysutil equivalent instead", s)
+			}
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+
+		t.Errorf("Grepping `%s`", grepBuf.String())
+
+		t.Error("Should have failed in IO test")
+	})
+
 	// TODO(tamird): replace this with errcheck.NewChecker() when
 	// https://github.com/dominikh/go-tools/issues/57 is fixed.
 	t.Run("TestErrCheck", func(t *testing.T) {
