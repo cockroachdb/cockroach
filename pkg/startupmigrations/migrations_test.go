@@ -546,17 +546,6 @@ func TestCreateSystemTable(t *testing.T) {
 	table := tabledesc.NewBuilder(systemschema.NamespaceTable.TableDesc()).BuildExistingMutableTable()
 	table.ID = keys.MaxReservedDescID
 
-	prevPrivileges, ok := descpb.SystemAllowedPrivileges[table.ID]
-	defer func() {
-		if ok {
-			// Restore value of privileges.
-			descpb.SystemAllowedPrivileges[table.ID] = prevPrivileges
-		} else {
-			delete(descpb.SystemAllowedPrivileges, table.ID)
-		}
-	}()
-	descpb.SystemAllowedPrivileges[table.ID] = descpb.SystemAllowedPrivileges[keys.NamespaceTableID]
-
 	table.Name = "dummy"
 	nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, table.ParentID, table.Name)
 	descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, table.ID)
@@ -789,7 +778,7 @@ CREATE TABLE system.web_sessions (
 	oldWebSessionsTable, err := sql.CreateTestTableDescriptor(
 		context.Background(),
 		keys.SystemDatabaseID,
-		keys.WebSessionsTableID,
+		systemschema.WebSessionsTable.GetID(),
 		oldWebSessionsTableSchema,
 		systemschema.WebSessionsTable.GetPrivileges(),
 	)

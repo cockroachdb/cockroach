@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -55,8 +56,13 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
 	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
-	sdb.changed = descpb.MaybeFixPrivileges(sdb.maybeModified.GetID(), sdb.maybeModified.GetParentID(),
-		&sdb.maybeModified.Privileges, privilege.Schema)
+	sdb.changed = catprivilege.MaybeFixPrivileges(
+		&sdb.maybeModified.Privileges,
+		sdb.maybeModified.GetParentID(),
+		descpb.InvalidID,
+		privilege.Schema,
+		sdb.maybeModified.GetName(),
+	)
 	return nil
 }
 

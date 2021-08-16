@@ -12,19 +12,14 @@ package descs
 
 import (
 	"context"
-	"fmt"
-	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -150,10 +145,6 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 	return desc, nil
 }
 
-func isSchemaPrefix(parentID, parentSchemaID descpb.ID) bool {
-	return parentID != descpb.InvalidID && parentSchemaID == descpb.InvalidID
-}
-
 func (tc *Collection) getByName(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -163,20 +154,14 @@ func (tc *Collection) getByName(
 	avoidCached, mutable bool,
 ) (found bool, desc catalog.Descriptor, err error) {
 
-	// Handle special specific behaviors for the implied type.
 	var parentID, parentSchemaID descpb.ID
-	switch {
-	case db == nil && sc == nil: // database
-		if db := maybeGetSystemDatabase(name, mutable); db != nil {
-			return true, db, nil
+	if db != nil {
+		if sc == nil {
+			// Schema descriptors are handled in a special way, see getSchemaByName
+			// function declaration for details.
+			return getSchemaByName(ctx, tc, txn, db, name, avoidCached, mutable)
 		}
-	case sc == nil: // schema
-		return getSchemaByName(ctx, tc, txn, db, name, avoidCached, mutable)
-	default: // object
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
-		// Note that we do not attempt to resolve virtual objects here.
-		// We resolve virtual objects by name at a higher level.
-		avoidCached = avoidCached || !canUseLeasingForObject(parentID, name)
 	}
 
 	if found, sd := tc.synthetic.getByName(parentID, parentSchemaID, name); found {
@@ -272,50 +257,6 @@ func getSchemaByName(
 
 func isTemporarySchema(name string) bool {
 	return strings.HasPrefix(name, catconstants.PgTempSchemaName)
-}
-
-// TODO(vivek): Ideally we'd avoid caching for only the
-// system.descriptor and system.lease tables, because they are
-// used for acquiring leases, creating a chicken&egg problem.
-// But doing so turned problematic and the tests pass only by also
-// disabling caching of system.eventlog, system.rangelog, and
-// system.users. For now we're sticking to disabling caching of
-// all system descriptors except role_members, role_options, users, and
-// database_role_settings (i.e., the ones used during authn/authz flows).
-// TODO (lucy): Reevaluate the above. We have many more system tables now and
-// should be able to lease most of them.
-var (
-	allowedCachedSystemTables = []string{
-		systemschema.RoleMembersTable.GetName(),
-		systemschema.RoleOptionsTable.GetName(),
-		systemschema.UsersTable.GetName(),
-		systemschema.JobsTable.GetName(),
-		systemschema.EventLogTable.GetName(),
-		systemschema.DatabaseRoleSettingsTable.GetName(),
-	}
-	allowedCachedSystemTableNameRE = regexp.MustCompile(fmt.Sprintf(
-		"^%s$", strings.Join(allowedCachedSystemTables, "|"),
-	))
-)
-
-func canUseLeasingForObject(parentID descpb.ID, name string) bool {
-	return parentID != keys.SystemDatabaseID ||
-		allowedCachedSystemTableNameRE.MatchString(name)
-}
-
-func maybeGetSystemDatabase(name string, mutable bool) catalog.Descriptor {
-	if name != systemschema.SystemDatabaseName {
-		return nil
-	}
-	// The system database descriptor should never actually be mutated, which is
-	// why we return the same hard-coded descriptor every time. It's assumed
-	// that callers of this method will check the privileges on the descriptor
-	// (like any other database) and return an error.
-	if mutable {
-		proto := systemschema.MakeSystemDatabaseDesc().DatabaseDesc()
-		return dbdesc.NewBuilder(proto).BuildExistingMutableDatabase()
-	}
-	return systemschema.MakeSystemDatabaseDesc()
 }
 
 // filterDescriptorState wraps the more general catalog function to swallow
