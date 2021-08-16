@@ -67,7 +67,8 @@ var sstWriteSyncRate = settings.RegisterByteSizeSetting(
 // named by filename -- but with rate limiting and periodic fsyncing controlled
 // by settings and the passed limiter (should be the store's limiter). Periodic
 // fsync provides smooths out disk IO, as mentioned in #20352 and #20279, and
-// provides back-pressure, along with the explicit rate limiting. If the file
+// provides back-pressure, along with the explicit rate limiting.
+// (TODO: catj, is this true because `perm` is used nowhere) If the file
 // does not exist, WriteFile creates it with permissions perm; otherwise
 // WriteFile truncates it before writing.
 func writeFileSyncing(
@@ -75,7 +76,7 @@ func writeFileSyncing(
 	filename string,
 	data []byte,
 	eng storage.Engine,
-	perm os.FileMode,
+	_ os.FileMode,
 	settings *cluster.Settings,
 	limiter *rate.Limiter,
 ) error {
