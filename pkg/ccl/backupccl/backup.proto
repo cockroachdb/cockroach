@@ -158,10 +158,12 @@ message ScheduledBackupExecutionArgs {
   string backup_statement = 2;
   int64 unpause_on_success = 3;
   bool updates_last_backup_metric = 4;
-  // If the scheduled BACKUP was created along with another schedule, the
-  // crontab of its dependent schedule is stored in this field. Otherwise, the
-  // field will be an empty string.
-  string dependent_schedule_crontab = 5;
+  // If the schedule is one of the two  that were created when setting up a
+  // full+incremental schedule backup, then DependentScheduleID will be set to
+  // the schedule ID of the other "dependent" schedule.
+  // i.e. the full schedule will have the inc schedules ID and vice versa.
+  // A value of 0 indicates that there is no dependent schedule.
+  int64 dependent_schedule_id = 5 [(gogoproto.customname) = "DependentScheduleID"];
 }
 
 // RestoreProgress is the information that the RestoreData processor sends back
