@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/cache"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/idle"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
@@ -56,8 +55,6 @@ const (
 	// For example:
 	// "foo-7-10" -> cluster name is "foo-7" and tenant id is 10.
 	clusterTenantSep = "-"
-	// TODO(spaskob): add ballpark estimate.
-	maxKnownConnCacheSize = 5e6 // 5 million.
 )
 
 // ProxyOptions is the information needed to construct a new proxyHandler.
@@ -100,6 +97,10 @@ type ProxyOptions struct {
 	// DrainTimeout if set, will close DRAINING connections that have been idle
 	// for this duration.
 	DrainTimeout time.Duration
+
+	// Token bucket policy used to throttle (IP, TenantID) connection pairs that
+	// have no history of successful authentication.
+	ThrottlePolicy throttler.BucketPolicy
 }
 
 // proxyHandler is the default implementation of a proxy handler.
@@ -131,9 +132,6 @@ type proxyHandler struct {
 
 	// CertManger keeps up to date the certificates used.
 	certManager *certmgr.CertManager
-
-	//connCache is used to keep track of all current connections.
-	connCache cache.ConnCache
 }
 
 // newProxyHandler will create a new proxy handler with configuration based on
@@ -163,8 +161,9 @@ func newProxyHandler(
 		handler.denyListWatcher = denylist.NilWatcher()
 	}
 
-	handler.throttleService = throttler.NewLocalService(throttler.WithBaseDelay(options.RatelimitBaseDelay))
-	handler.connCache = cache.NewCappedConnCache(maxKnownConnCacheSize)
+	handler.throttleService = throttler.NewLocalService(
+		throttler.WithPolicy(handler.ThrottlePolicy),
+	)
 
 	if handler.DirectoryAddr != "" {
 		conn, err := grpc.Dial(handler.DirectoryAddr, grpc.WithInsecure())
@@ -257,7 +256,10 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 	defer removeListener()
 
-	if err = handler.throttle(ctx, tenID, ipAddr); err != nil {
+	throttleTags := throttler.ConnectionTags{IP: ipAddr, TenantID: tenID.String()}
+	if err := handler.throttleService.LoginCheck(throttleTags); err != nil {
+		log.Errorf(ctx, "throttler refused connection: %v", err.Error())
+		err = newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
 		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
 		return err
 	}
@@ -375,10 +377,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 
 	handler.metrics.SuccessfulConnCount.Inc(1)
-
-	handler.connCache.Insert(
-		&cache.ConnKey{IPAddress: ipAddr, TenantID: tenID},
-	)
+	handler.throttleService.ReportSuccess(throttleTags)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -472,23 +471,6 @@ func (handler *proxyHandler) outgoingAddress(
 		return "", status.Error(codes.NotFound, err.Error())
 	}
 	return addr, nil
-}
-
-func (handler *proxyHandler) throttle(
-	ctx context.Context, tenID roachpb.TenantID, ipAddr string,
-) error {
-	// Admit the connection
-	connKey := cache.ConnKey{IPAddress: ipAddr, TenantID: tenID}
-	if !handler.connCache.Exists(&connKey) {
-		// Unknown previous successful connections from this IP and tenant.
-		// Hence we need to rate limit.
-		if err := handler.throttleService.LoginCheck(ipAddr, timeutil.Now()); err != nil {
-			log.Errorf(ctx, "throttler refused connection: %v", err.Error())
-			return newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
-		}
-	}
-
-	return nil
 }
 
 // incomingTLSConfig gets back the current TLS config for the incoming client
