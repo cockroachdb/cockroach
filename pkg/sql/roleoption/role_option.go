@@ -228,3 +228,16 @@ func (rol List) GetPassword() (isNull bool, password string, err error) {
 	// Password option not found.
 	return false, "", errors.New("password not found in role options")
 }
+
+// GetValidUntil returns the ValidUntil timestamp or whether the
+// field was set to NULL. Returns error if the timestamp was invalid
+// or if no valid until option is found.
+func (rol List) GetValidUntil() (isNull bool, timestamp string, err error) {
+	for _, ro := range rol {
+		if ro.Option == VALIDUNTIL {
+			return ro.Value()
+		}
+	}
+	// VALIDUNTIL option not found.
+	return false, "", errors.New("timestamp not found in role options")
+}

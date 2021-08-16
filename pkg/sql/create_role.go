@@ -13,9 +13,11 @@ package sql
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,6 +37,22 @@ type CreateRoleNode struct {
 	roleOptions roleoption.List
 	userNameInfo
 }
+
+var clusterDefaultPasswordTimeout = settings.RegisterDurationSetting(
+	"server.default_password_timeout",
+	"default value for password timeout; controls the duration"+
+		"a password is considered valid; if set to 0, there is no timeout",
+	0,
+	settings.NonNegativeDuration,
+).WithPublic()
+
+var clusterMaxPasswordTimeout = settings.RegisterDurationSetting(
+	"server.max_password_timeout",
+	"max value for the password timeout; controls the duration"+
+		"a password is considered valid; if set to 0, there is no timeout",
+	0,
+	settings.NonNegativeDuration,
+).WithPublic()
 
 var userTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "users")
 
@@ -140,6 +159,45 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		if !isNull {
 			if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
 				return err
+			}
+
+			var validUntil time.Time
+			hasValidUntil := false
+			st := params.p.ExecCfg().Settings
+
+			if !n.roleOptions.Contains(roleoption.VALIDUNTIL) {
+				defaultPasswordTimeout := clusterDefaultPasswordTimeout.Get(&st.SV)
+				if defaultPasswordTimeout != 0 {
+					validUntil = timeutil.Now().Add(defaultPasswordTimeout)
+					hasValidUntil = true
+				}
+			} else {
+				_, validUntilString, err := n.roleOptions.GetValidUntil()
+				if err != nil {
+					return err
+				}
+				validUntil, err = time.Parse(time.RFC3339, validUntilString)
+				hasValidUntil = true
+				if err != nil {
+					return err
+				}
+			}
+
+			maxPasswordTimeout := clusterMaxPasswordTimeout.Get(&st.SV)
+			if hasValidUntil {
+				if maxPasswordTimeout != 0 {
+					synthesizedTimestamp := timeutil.Now().Add(maxPasswordTimeout)
+					if validUntil.After(synthesizedTimestamp) {
+						validUntil = synthesizedTimestamp
+					}
+				}
+				n.roleOptions = append(n.roleOptions,
+					roleoption.RoleOption{
+						Option:   roleoption.VALIDUNTIL,
+						HasValue: true,
+						Value: func() (bool, string, error) {
+							return false, validUntil.Format(time.RFC3339), nil
+						}})
 			}
 		}
 	}
