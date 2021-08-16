@@ -1632,6 +1632,8 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer jobs.TestingSetProgressThresholds()()
 
+	skip.UnderStressRace(t, "test takes too long to run under stressrace")
+
 	checkFraction := func(ctx context.Context, ip inProgressState) error {
 		jobID, err := ip.latestJobID()
 		if err != nil {
