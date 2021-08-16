@@ -161,7 +161,7 @@ func (m *Manager) PublishMultiple(
 			if err != nil {
 				return nil, err
 			}
-			expectedVersions[id] = expected
+			expectedVersions[id] = expected.GetVersion()
 		}
 
 		descs := make(map[descpb.ID]catalog.MutableDescriptor)

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,18 +43,15 @@ func gcIndexes(
 	// Before deleting any indexes, ensure that old versions of the table descriptor
 	// are no longer in use. This is necessary in the case of truncate, where we
 	// schedule a GC Job in the transaction that commits the truncation.
-	if err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID); err != nil {
+	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID)
+	if err != nil {
 		return err
 	}
 
-	var parentTable catalog.TableDescriptor
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		parentTable, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, parentID)
-		return err
-	}); err != nil {
-		return errors.Wrapf(err, "fetching parent table %d", parentID)
+	parentTable, isTable := parentDesc.(catalog.TableDescriptor)
+	if !isTable {
+		return errors.AssertionFailedf("expected descriptor %d to be a table, not %T", parentID, parentDesc)
 	}
-
 	for _, index := range droppedIndexes {
 		if index.Status != jobspb.SchemaChangeGCProgress_DELETING {
 			continue
