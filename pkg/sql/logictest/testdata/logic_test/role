@@ -784,6 +784,15 @@ CREATE USER public
 statement error role name "public" is reserved
 CREATE ROLE public
 
+statement error role name "none" is reserved
+CREATE ROLE none
+
+statement error role name "pg_otan" is reserved
+CREATE ROLE pg_otan
+
+statement error role name "crdb_internal_otan" is reserved
+CREATE ROLE crdb_internal_otan
+
 statement error cannot drop role/user public: grants still exist on system.public.comments
 DROP USER public
 
