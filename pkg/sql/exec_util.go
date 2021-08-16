@@ -233,6 +233,13 @@ var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var placementEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.multiregion_placement_policy.enabled",
+	"default value for enable_multiregion_placement_policy;"+
+		" allows for use of PLACEMENT RESTRICTED",
+	false,
+)
+
 var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_temporary_tables.enabled",
 	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
@@ -2582,6 +2589,10 @@ func (m *sessionDataMutator) SetAllowPrepareAsOptPlan(val bool) {
 
 func (m *sessionDataMutator) SetSaveTablesPrefix(prefix string) {
 	m.data.SaveTablesPrefix = prefix
+}
+
+func (m *sessionDataMutator) SetPlacementEnabled(val bool) {
+	m.data.PlacementEnabled = val
 }
 
 func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {

@@ -20,6 +20,10 @@ CREATE DATABASE d PRIMARY REGION "us-east-1" REGION "ca-central-1"
 sql.multiregion.create_database
 sql.multiregion.create_database.survival_goal.survive_default
 
+exec
+SET enable_multiregion_placement_policy = true;
+----
+
 feature-usage
 CREATE DATABASE create_placement PRIMARY REGION "us-east-1" PLACEMENT RESTRICTED
 ----
