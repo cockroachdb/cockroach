@@ -1217,7 +1217,7 @@ type BackupRestoreTestingKnobs struct {
 
 	// RunAfterExportingSpanEntry allows blocking the BACKUP job after a single
 	// span has been exported.
-	RunAfterExportingSpanEntry func(ctx context.Context)
+	RunAfterExportingSpanEntry func(ctx context.Context, response *roachpb.ExportResponse)
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
