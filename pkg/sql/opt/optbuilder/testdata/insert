@@ -53,6 +53,20 @@ CREATE TABLE decimals (
 )
 ----
 
+exec-ddl
+CREATE TABLE on_update_bare (
+    a INT NOT NULL,
+    v INT ON UPDATE 5
+)
+----
+
+exec-ddl
+CREATE TABLE on_update_with_default (
+    a INT NOT NULL,
+    v INT DEFAULT 3 ON UPDATE 10
+)
+----
+
 # Unknown target table.
 build
 INSERT INTO unknown VALUES (1, 2, 3)
@@ -1268,3 +1282,79 @@ insert t67100
            ├── false [as=check1:7]
            ├── 0 > 1 [as=check2:8]
            └── true AND (0 > 1) [as=check3:9]
+
+# ------------------------------------------------------------------------------
+# ON UPDATE tests.
+# ------------------------------------------------------------------------------
+
+build
+INSERT INTO on_update_bare VALUES (1, 2)
+----
+insert on_update_bare
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => v:2
+ │    └── rowid_default:8 => rowid:3
+ └── project
+      ├── columns: rowid_default:8 column1:6!null column2:7!null
+      ├── values
+      │    ├── columns: column1:6!null column2:7!null
+      │    └── (1, 2)
+      └── projections
+           └── unique_rowid() [as=rowid_default:8]
+
+build
+INSERT INTO on_update_bare VALUES (1)
+----
+insert on_update_bare
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── v_default:7 => v:2
+ │    └── rowid_default:8 => rowid:3
+ └── project
+      ├── columns: v_default:7 rowid_default:8 column1:6!null
+      ├── values
+      │    ├── columns: column1:6!null
+      │    └── (1,)
+      └── projections
+           ├── NULL::INT8 [as=v_default:7]
+           └── unique_rowid() [as=rowid_default:8]
+
+
+build
+INSERT INTO on_update_with_default VALUES (1, 2)
+----
+insert on_update_with_default
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => v:2
+ │    └── rowid_default:8 => rowid:3
+ └── project
+      ├── columns: rowid_default:8 column1:6!null column2:7!null
+      ├── values
+      │    ├── columns: column1:6!null column2:7!null
+      │    └── (1, 2)
+      └── projections
+           └── unique_rowid() [as=rowid_default:8]
+
+
+build
+INSERT INTO on_update_with_default VALUES (1)
+----
+insert on_update_with_default
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── v_default:7 => v:2
+ │    └── rowid_default:8 => rowid:3
+ └── project
+      ├── columns: v_default:7!null rowid_default:8 column1:6!null
+      ├── values
+      │    ├── columns: column1:6!null
+      │    └── (1,)
+      └── projections
+           ├── 3 [as=v_default:7]
+           └── unique_rowid() [as=rowid_default:8]
