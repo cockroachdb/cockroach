@@ -137,6 +137,13 @@ message ColumnDescriptor {
   optional string default_expr = 5;
   reserved 9;
 
+  // On update expression to use to populate the column on update if no
+  // value is provided. Note that it is not correct to use OnUpdateExpr
+  // as output to display to a user. User defined types within OnUpdateExpr
+  // have been serialized in a internal format. Instead, use one of the
+  // schemaexpr.FormatExpr* functions.
+  optional string on_update_expr = 18;
+
   // A hidden column does not appear in star expansion, but can be referenced in
   // queries and can be viewed when inspecting a table via SHOW CREATE TABLE. A
   // column cannot be both hidden and inaccessible.
@@ -149,7 +156,8 @@ message ColumnDescriptor {
   optional bool inaccessible = 17 [(gogoproto.nullable) = false];
 
   reserved 7;
-  // Ids of sequences used in this column's DEFAULT expression, in calls to nextval().
+  // Ids of sequences used in this column's DEFAULT and ON UPDATE expressions,
+  // in calls to nextval().
   repeated uint32 uses_sequence_ids = 10 [(gogoproto.casttype) = "ID"];
   // Ids of sequences that the column owns.
   repeated uint32 owns_sequence_ids = 12 [(gogoproto.casttype) = "ID"];
