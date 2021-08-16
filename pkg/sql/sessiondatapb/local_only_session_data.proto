@@ -166,6 +166,9 @@ message LocalOnlySessionData {
   // NewSchemaChangerMode indicates whether to use the new schema changer.
   int64 new_schema_changer_mode = 43 [(gogoproto.casttype)="NewSchemaChangerMode"];
 
+  // PlacementEnabled indicates whether PLACEMENT can be used or not.
+  bool placement_enabled = 44;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
