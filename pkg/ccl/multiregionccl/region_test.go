@@ -400,7 +400,8 @@ ALTER TABLE db.public.global CONFIGURE ZONE USING
 
 			_, err := sqlDB.Exec(`
 CREATE DATABASE db PRIMARY REGION "us-east1" REGIONS "us-east2";
-CREATE TABLE db.global () LOCALITY GLOBAL;`)
+CREATE TABLE db.global () LOCALITY GLOBAL;
+SET CLUSTER SETTING sql.defaults.multiregion_placement_policy.enabled = true;`)
 			require.NoError(t, err)
 
 			go func() {
@@ -703,7 +704,8 @@ func TestRollbackDuringAddDropRegionPlacementRestricted(t *testing.T) {
 	)
 	defer cleanup()
 	_, err := sqlDB.Exec(
-		`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2" PLACEMENT RESTRICTED`,
+		`SET enable_multiregion_placement_policy = true;
+CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2" PLACEMENT RESTRICTED;`,
 	)
 	require.NoError(t, err)
 
