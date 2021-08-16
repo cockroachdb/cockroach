@@ -34,6 +34,7 @@ type Column struct {
 	virtualComputed             bool
 	defaultExpr                 string
 	computedExpr                string
+	onUpdateExpr                string
 	invertedSourceColumnOrdinal int
 }
 
@@ -101,6 +102,19 @@ func (c *Column) HasDefault() bool {
 // columns.
 func (c *Column) DefaultExprStr() string {
 	return c.defaultExpr
+}
+
+// HasOnUpdate returns true if the column has an ON UPDATE expression.
+func (c *Column) HasOnUpdate() bool {
+	return c.onUpdateExpr != ""
+}
+
+// OnUpdateExprStr is set to the SQL expression string that describes the
+// column's ON UPDATE expression. It is used when the user does not provide a
+// value for the column when updating a row. ON UPDATE expressions cannot depend
+// on other columns.
+func (c *Column) OnUpdateExprStr() string {
+	return c.onUpdateExpr
 }
 
 // IsComputed returns true if the column is a computed value. ComputedExprStr
@@ -201,6 +215,7 @@ func (c *Column) Init(
 	visibility ColumnVisibility,
 	defaultExpr *string,
 	computedExpr *string,
+	onUpdateExpr *string,
 ) {
 	if kind == Inverted {
 		panic(errors.AssertionFailedf("incorrect init method"))
@@ -225,6 +240,9 @@ func (c *Column) Init(
 	}
 	if computedExpr != nil {
 		c.computedExpr = *computedExpr
+	}
+	if onUpdateExpr != nil {
+		c.onUpdateExpr = *onUpdateExpr
 	}
 }
 
