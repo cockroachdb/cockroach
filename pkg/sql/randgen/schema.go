@@ -215,7 +215,7 @@ func RandCreateTableWithInterleave(
 
 		// Make a random primary key with high likelihood.
 		if rng.Intn(8) != 0 {
-			indexDef, ok := randIndexTableDefFromCols(rng, columnDefs)
+			indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, false /* allowExpressions */)
 			if ok && !indexDef.Inverted {
 				defs = append(defs, &tree.UniqueConstraintTableDef{
 					PrimaryKey:    true,
@@ -247,7 +247,7 @@ func RandCreateTableWithInterleave(
 	// Make indexes.
 	nIdxs := rng.Intn(10)
 	for i := 0; i < nIdxs; i++ {
-		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs)
+		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, true /* allowExpressions */)
 		if !ok {
 			continue
 		}
@@ -362,115 +362,10 @@ func randComputedColumnTableDef(
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = (rng.Intn(2) == 0)
 
-	if rng.Intn(2) == 0 {
-		// Try to find a set of numeric columns with the same type; the computed
-		// expression will be of the form "a+b+c".
-		var cols []*tree.ColumnTableDef
-		var fam types.Family
-		for _, idx := range rng.Perm(len(normalColDefs)) {
-			x := normalColDefs[idx]
-			xFam := x.Type.(*types.T).Family()
-
-			if len(cols) == 0 {
-				switch xFam {
-				case types.IntFamily, types.FloatFamily, types.DecimalFamily:
-					fam = xFam
-					cols = append(cols, x)
-				}
-			} else if fam == xFam {
-				cols = append(cols, x)
-				if len(cols) > 1 && rng.Intn(2) == 0 {
-					break
-				}
-			}
-		}
-		if len(cols) > 1 {
-			// If any of the columns are nullable, set the computed column to be
-			// nullable.
-			for _, x := range cols {
-				if x.Nullable.Nullability != tree.NotNull {
-					newDef.Nullable.Nullability = x.Nullable.Nullability
-					break
-				}
-			}
-
-			var expr tree.Expr
-			expr = tree.NewUnresolvedName(string(cols[0].Name))
-			for _, x := range cols[1:] {
-				expr = &tree.BinaryExpr{
-					Operator: tree.MakeBinaryOperator(tree.Plus),
-					Left:     expr,
-					Right:    tree.NewUnresolvedName(string(x.Name)),
-				}
-			}
-			newDef.Type = cols[0].Type
-			newDef.Computed.Expr = expr
-			return newDef
-		}
-	}
-
-	// Pick a single column and create a computed column that depends on it.
-	// The expression is as follows:
-	//  - for numeric types (int, float, decimal), the expression is "x+1";
-	//  - for string type, the expression is "lower(x)";
-	//  - for types that can be cast to string in computed columns, the expression
-	//    is "lower(x::string)";
-	//  - otherwise, the expression is `CASE WHEN x IS NULL THEN 'foo' ELSE 'bar'`.
-	x := normalColDefs[randutil.RandIntInRange(rng, 0, len(normalColDefs))]
-	xTyp := x.Type.(*types.T)
-
-	// Match the nullability of the computed column with the nullability of the
-	// reference column.
-	newDef.Nullable.Nullability = x.Nullable.Nullability
-	nullOk := newDef.Nullable.Nullability != tree.NotNull
-
-	switch xTyp.Family() {
-	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
-		newDef.Type = xTyp
-		newDef.Computed.Expr = &tree.BinaryExpr{
-			Operator: tree.MakeBinaryOperator(tree.Plus),
-			Left:     tree.NewUnresolvedName(string(x.Name)),
-			Right:    RandDatum(rng, xTyp, nullOk),
-		}
-
-	case types.StringFamily:
-		newDef.Type = types.String
-		newDef.Computed.Expr = &tree.FuncExpr{
-			Func:  tree.WrapFunction("lower"),
-			Exprs: tree.Exprs{tree.NewUnresolvedName(string(x.Name))},
-		}
-
-	default:
-		volatility, ok := tree.LookupCastVolatility(xTyp, types.String, nil /* sessionData */)
-		if ok && volatility <= tree.VolatilityImmutable {
-			// We can cast to string; use lower(x::string)
-			newDef.Type = types.String
-			newDef.Computed.Expr = &tree.FuncExpr{
-				Func: tree.WrapFunction("lower"),
-				Exprs: tree.Exprs{
-					&tree.CastExpr{
-						Expr: tree.NewUnresolvedName(string(x.Name)),
-						Type: types.String,
-					},
-				},
-			}
-		} else {
-			// We cannot cast this type to string in a computed column expression.
-			// Use CASE WHEN x IS NULL THEN 'foo' ELSE 'bar'.
-			newDef.Type = types.String
-			newDef.Computed.Expr = &tree.CaseExpr{
-				Whens: []*tree.When{
-					{
-						Cond: &tree.IsNullExpr{
-							Expr: tree.NewUnresolvedName(string(x.Name)),
-						},
-						Val: RandDatum(rng, types.String, nullOk),
-					},
-				},
-				Else: RandDatum(rng, types.String, nullOk),
-			}
-		}
-	}
+	expr, typ, nullability := randExpr(rng, normalColDefs, true /* nullOk */)
+	newDef.Computed.Expr = expr
+	newDef.Type = typ
+	newDef.Nullable.Nullability = nullability
 
 	return newDef
 }
@@ -479,7 +374,7 @@ func randComputedColumnTableDef(
 // subset of the given columns and a random direction. If unsuccessful, ok=false
 // is returned.
 func randIndexTableDefFromCols(
-	rng *rand.Rand, columnTableDefs []*tree.ColumnTableDef,
+	rng *rand.Rand, columnTableDefs []*tree.ColumnTableDef, allowExpressions bool,
 ) (def tree.IndexTableDef, ok bool) {
 	cpy := make([]*tree.ColumnTableDef, len(columnTableDefs))
 	copy(cpy, columnTableDefs)
@@ -491,6 +386,22 @@ func randIndexTableDefFromCols(
 	def.Columns = make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
 		semType := tree.MustBeStaticallyKnownType(cols[i].Type)
+		elem := tree.IndexElem{
+			Column:    cols[i].Name,
+			Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
+		}
+
+		// Replace the column with an expression 10% of the time.
+		if allowExpressions && rng.Intn(10) == 0 {
+			var expr tree.Expr
+			// Expression indexes do not currently support references to
+			// computed columns, so only make expressions with non-computed
+			// columns. Do not allow NULL in expressions to avoid expressions
+			// that have an ambiguous type.
+			expr, semType, _ = randExpr(rng, nonComputedColumnTableDefs(columnTableDefs), false /* nullOk */)
+			elem.Expr = expr
+			elem.Column = ""
+		}
 
 		// The non-terminal index columns must be indexable.
 		if isLastCol := i == len(cols)-1; !isLastCol && !colinfo.ColumnTypeIsIndexable(semType) {
@@ -503,13 +414,22 @@ func randIndexTableDefFromCols(
 			def.Inverted = true
 		}
 
-		def.Columns = append(def.Columns, tree.IndexElem{
-			Column:    cols[i].Name,
-			Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
-		})
+		def.Columns = append(def.Columns, elem)
 	}
 
 	return def, true
+}
+
+// nonComputedColumnTableDefs returns a slice containing all the columns in cols
+// that are not computed columns.
+func nonComputedColumnTableDefs(cols []*tree.ColumnTableDef) []*tree.ColumnTableDef {
+	nonComputedCols := make([]*tree.ColumnTableDef, 0, len(cols))
+	for _, col := range cols {
+		if !col.Computed.Computed {
+			nonComputedCols = append(nonComputedCols, col)
+		}
+	}
+	return nonComputedCols
 }
 
 // TestingMakePrimaryIndexKey creates a key prefix that corresponds to
