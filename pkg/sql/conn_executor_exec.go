@@ -588,9 +588,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		if asOf != nil {
 			p.extendedEvalCtx.AsOfSystemTime = asOf
-			p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
-			if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
-				return makeErrEvent(err)
+			if !asOf.BoundedStaleness {
+				p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
+				if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
+					return makeErrEvent(err)
+				}
 			}
 		}
 	} else {
