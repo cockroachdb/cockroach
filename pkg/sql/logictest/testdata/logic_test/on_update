@@ -1,0 +1,366 @@
+statement ok
+CREATE TABLE test_simple (p STRING, k STRING ON UPDATE 'regress')
+
+# Simple ON UPDATE usage with explicit UPDATE
+subtest SimpleUsage
+
+statement ok
+INSERT INTO test_simple VALUES ('pk1', 'to_be_changed')
+
+query TT
+SELECT p, k FROM test_simple
+----
+pk1  to_be_changed
+
+statement ok
+UPDATE test_simple SET p = 'pk2' WHERE p = 'pk1'
+
+query TT
+SELECT p, k FROM test_simple
+----
+pk2  regress
+
+statement ok
+CREATE TABLE test_with_default (p STRING, k STRING DEFAULT 'def' ON UPDATE 'regress')
+
+statement ok
+INSERT INTO test_with_default VALUES ('pk1')
+
+query TT
+SELECT p, k FROM test_with_default
+----
+pk1  def
+
+statement ok
+UPDATE test_with_default SET p = 'pk2' WHERE p = 'pk1'
+
+query TT
+SELECT p, k FROM test_with_default
+----
+pk2  regress
+
+# ON UPDATE usage with UPSERT
+subtest Upsert
+
+statement ok
+CREATE TABLE test_upsert (p STRING PRIMARY KEY, j STRING, k STRING DEFAULT 'def' ON UPDATE 'regress')
+
+statement ok
+INSERT INTO test_upsert VALUES ('pk1', 'val1', 'whatevs')
+
+query TTT
+SELECT p, j, k FROM test_upsert
+----
+pk1  val1  whatevs
+
+statement ok
+UPSERT INTO test_upsert (p, j) VALUES ('pk1', 'val2'), ('pk2', 'val3')
+
+query TTT
+SELECT p, j, k FROM test_upsert ORDER BY p
+----
+pk1  val2  regress
+pk2  val3  def
+
+# ON UPDATE usage by running ALTER TABLE
+subtest OnUpdateAlterTable
+
+statement ok
+CREATE TABLE test_alter (p STRING, k STRING)
+
+statement ok
+INSERT INTO test_alter VALUES ('pk1', 'to_be_changed')
+
+query TT
+SELECT p, k FROM test_alter
+----
+pk1  to_be_changed
+
+statement ok
+UPDATE test_alter SET p = 'pk2' WHERE p = 'pk1'
+
+query TT
+SELECT p, k FROM test_alter
+----
+pk2  to_be_changed
+
+statement ok
+ALTER TABLE test_alter ALTER COLUMN k SET ON UPDATE 'regress'
+
+statement ok
+UPDATE test_alter SET p = 'pk3' WHERE p = 'pk2'
+
+query TT
+SELECT p, k FROM test_alter
+----
+pk3  regress
+
+statement ok
+ALTER TABLE test_alter ALTER COLUMN k DROP ON UPDATE
+
+statement ok
+UPDATE test_alter SET k = 'should_not_change' WHERE p = 'pk3'
+
+statement ok
+UPDATE test_alter SET p = 'pk4' WHERE p = 'pk3'
+
+query TT
+SELECT p, k FROM test_alter
+----
+pk4  should_not_change
+
+# ON UPDATE usage with foreign key cascading. Specifically we want to test that
+# if a column `j` is modified via a foreign key cascade, an ON UPDATE column `k`
+# will have its ON UPDATE expression applied.
+subtest ForeignKeyCascade
+
+statement ok
+CREATE TABLE test_fk_base (p STRING PRIMARY KEY, j STRING UNIQUE)
+
+statement ok
+CREATE TABLE test_fk_ref (p STRING PRIMARY KEY, j STRING REFERENCES test_fk_base (j) ON UPDATE CASCADE, k STRING DEFAULT 'def' ON UPDATE 'regress')
+
+statement ok
+INSERT INTO test_fk_base VALUES ('pk1', 'val1'), ('pk2', 'val2')
+
+statement ok
+UPSERT INTO test_fk_ref (p, j) VALUES ('pk1', 'val1'), ('pk2', 'val2')
+
+statement ok
+UPDATE test_fk_base SET j = 'arbitrary' WHERE p = 'pk1'
+
+query TT
+SELECT p, j FROM test_fk_base ORDER BY p
+----
+pk1  arbitrary
+pk2  val2
+
+query TTT
+SELECT p, j, k FROM test_fk_ref ORDER BY p
+----
+pk1  arbitrary  regress
+pk2  val2       def
+
+# ON UPDATE error cases - conflict with a FK ON UPDATE. Specifically, we want to
+# check that a column cannot have both a FK with an ON UPDATE action and an ON
+# UPDATE expression. We place this restriction in order to eliminate ambiguity
+# as to which ON UPDATE should be applied.
+subtest OnUpdateFKConflict
+
+statement error pq: cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column with ID 2
+CREATE TABLE test_fk_invalid_inline (p STRING PRIMARY KEY, j STRING REFERENCES test_fk_base (j) ON UPDATE CASCADE ON UPDATE 'test')
+
+statement error pq: cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column with ID 2
+CREATE TABLE test_fk_invalid (p STRING PRIMARY KEY, j STRING ON UPDATE 'test', CONSTRAINT fk FOREIGN KEY (j) REFERENCES test_fk_base(j) ON UPDATE SET NULL)
+
+statement ok
+CREATE TABLE alter_fk (p STRING PRIMARY KEY, j STRING REFERENCES test_fk_base (j) ON UPDATE CASCADE)
+
+statement error pq: column j\(2\) cannot have both an ON UPDATE expression and a foreign key ON UPDATE action
+ALTER TABLE alter_fk ALTER COLUMN j SET ON UPDATE 'failure'
+
+statement ok
+CREATE TABLE alter_update (p STRING PRIMARY KEY, j STRING DEFAULT 'def' ON UPDATE 'upd')
+
+statement error pq: cannot specify a foreign key update action and an ON UPDATE expression on the same column
+ALTER TABLE alter_update ADD CONSTRAINT fk FOREIGN KEY (j) REFERENCES test_fk_base (j) ON UPDATE SET DEFAULT
+
+# SHOW CREATE TABLE tests
+subtest ShowCreateTable
+
+statement ok
+CREATE TABLE test_show_default (
+  p STRING NOT NULL,
+  k STRING NULL DEFAULT 'def' ON UPDATE 'regress',
+  CONSTRAINT "primary" PRIMARY KEY (p ASC),
+  FAMILY fam_0_p (p),
+  FAMILY fam_1_k (k)
+)
+
+query TT
+SHOW CREATE TABLE test_show_default
+----
+test_show_default  CREATE TABLE public.test_show_default (
+                   p STRING NOT NULL,
+                   k STRING NULL DEFAULT 'def':::STRING ON UPDATE 'regress':::STRING,
+                   CONSTRAINT "primary" PRIMARY KEY (p ASC),
+                   FAMILY fam_0_p (p),
+                   FAMILY fam_1_k (k)
+)
+
+statement ok
+CREATE TABLE test_show_fk (
+  p STRING PRIMARY KEY,
+  j STRING REFERENCES test_fk_base (j) ON UPDATE CASCADE,
+  k STRING ON UPDATE 'regress',
+  FAMILY fam_0_p (p),
+  FAMILY fam_1_j (j),
+  FAMILY fam_2_k (k)
+)
+
+query TT
+SHOW CREATE TABLE test_show_fk
+----
+test_show_fk  CREATE TABLE public.test_show_fk (
+              p STRING NOT NULL,
+              j STRING NULL,
+              k STRING NULL ON UPDATE 'regress':::STRING,
+              CONSTRAINT "primary" PRIMARY KEY (p ASC),
+              CONSTRAINT fk_j_ref_test_fk_base FOREIGN KEY (j) REFERENCES public.test_fk_base(j) ON UPDATE CASCADE,
+              FAMILY fam_0_p (p),
+              FAMILY fam_1_j (j),
+              FAMILY fam_2_k (k)
+)
+
+# Sequence tests
+subtest SequenceDependencies
+
+statement ok
+CREATE SEQUENCE test_seq
+
+statement ok
+CREATE TABLE test_table_seq (p STRING, k INT ON UPDATE nextval('test_seq'))
+
+statement ok
+INSERT INTO test_table_seq VALUES ('pk1', 20)
+
+query TI
+SELECT p, k FROM test_table_seq
+----
+pk1  20
+
+statement ok
+UPDATE test_table_seq SET p = 'pk2' WHERE p = 'pk1'
+
+query TI
+SELECT p, k FROM test_table_seq
+----
+pk2  1
+
+statement ok
+UPDATE test_table_seq SET p = 'pk3' WHERE p = 'pk2'
+
+query TI
+SELECT p, k FROM test_table_seq
+----
+pk3  2
+
+statement ok
+ALTER TABLE test_table_seq ALTER COLUMN k SET DEFAULT nextval('test_seq')
+
+statement ok
+INSERT INTO test_table_seq VALUES ('pk1')
+
+query TI
+SELECT p, k FROM test_table_seq ORDER BY p
+----
+pk1  3
+pk3  2
+
+# Make sure that our ON UPDATE has a dependency on test_seq
+statement error pq: cannot drop sequence test_seq because other objects depend on it
+DROP SEQUENCE test_seq
+
+statement ok
+ALTER TABLE test_table_seq ALTER COLUMN k DROP ON UPDATE
+
+# Make sure that our DEFAULT still has a dependency on test_seq after dropping
+# ON UPDATE
+statement error pq: cannot drop sequence test_seq because other objects depend on it
+DROP SEQUENCE test_seq
+
+statement ok
+INSERT INTO test_table_seq VALUES ('pk2')
+
+query TI
+SELECT p, k FROM test_table_seq ORDER BY p
+----
+pk1  3
+pk2  4
+pk3  2
+
+subtest EnumDependencies
+
+statement ok
+CREATE TYPE test_enum AS ENUM ('x', 'y', 'z')
+
+statement ok
+CREATE TABLE test_table_enum (p STRING, k test_enum ON UPDATE 'x')
+
+statement ok
+INSERT INTO test_table_enum VALUES ('pk1', 'y')
+
+query TT
+SELECT p, k FROM test_table_enum
+----
+pk1  y
+
+statement ok
+SET enable_drop_enum_value = true
+
+statement ok
+ALTER TYPE test_enum DROP VALUE 'z'
+
+statement error pq: could not remove enum value "x" as it is being used in an ON UPDATE expression of "test_table_enum"
+ALTER TYPE test_enum DROP VALUE 'x'
+
+statement ok
+ALTER TYPE test_enum ADD VALUE 'z'
+
+statement ok
+UPDATE test_table_enum SET p = 'pk2' WHERE p = 'pk1'
+
+query TT
+SELECT p, k FROM test_table_enum
+----
+pk2  x
+
+# Make sure that our ON UPDATE has a dependency on test_enum
+statement error pq: cannot drop type "test_enum" because other objects \(\[test.public.test_table_enum\]\) still depend on it
+DROP TYPE test_enum
+
+statement ok
+ALTER TABLE test_table_enum ALTER COLUMN k SET DEFAULT 'z'
+
+statement ok
+INSERT INTO test_table_enum VALUES ('pk3')
+
+query TT
+SELECT p, k FROM test_table_enum ORDER BY p
+----
+pk2  x
+pk3  z
+
+statement ok
+ALTER TABLE test_table_enum ALTER COLUMN k DROP ON UPDATE
+
+statement ok
+DELETE FROM test_table_enum WHERE p = 'pk2'
+
+statement ok
+ALTER TYPE test_enum DROP VALUE 'x'
+
+# Make sure that our DEFAULT has a dependency on test_enum
+statement error pq: cannot drop type "test_enum" because other objects \(\[test.public.test_table_enum\]\) still depend on it
+DROP TYPE test_enum
+
+statement ok
+ALTER TABLE test_table_enum DROP COLUMN k
+
+statement ok
+DROP TYPE test_enum
+
+statement ok
+CREATE TYPE test_enum AS ENUM ('x', 'y', 'z')
+
+statement ok
+CREATE TABLE test_array_enum (p STRING, k test_enum[] ON UPDATE ARRAY['x', 'y'])
+
+statement ok
+ALTER TYPE test_enum DROP VALUE 'z'
+
+statement error pq: could not remove enum value "x" as it is being used in an ON UPDATE expression of "test_array_enum"
+ALTER TYPE test_enum DROP VALUE 'x'
+
+statement error pq: could not remove enum value "y" as it is being used in an ON UPDATE expression of "test_array_enum"
+ALTER TYPE test_enum DROP VALUE 'y'
