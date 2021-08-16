@@ -381,7 +381,7 @@ func runBackupProcessor(
 
 					if backupKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
 						if backupKnobs.RunAfterExportingSpanEntry != nil {
-							backupKnobs.RunAfterExportingSpanEntry(ctx)
+							backupKnobs.RunAfterExportingSpanEntry(ctx, res)
 						}
 					}
 
