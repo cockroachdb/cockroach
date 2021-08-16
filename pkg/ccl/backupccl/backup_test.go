@@ -1598,6 +1598,8 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer jobs.TestingSetProgressThresholds()()
 
+	skip.WithIssue(t, 68949, "flaky test")
+
 	checkFraction := func(ctx context.Context, ip inProgressState) error {
 		jobID, err := ip.latestJobID()
 		if err != nil {
