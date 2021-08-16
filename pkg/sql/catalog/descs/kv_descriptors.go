@@ -347,7 +347,10 @@ func (kd *kvDescriptors) getUncommittedTables() (tables []catalog.TableDescripto
 func (kd *kvDescriptors) validateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) error {
 	descs := make([]catalog.Descriptor, 0, kd.uncommittedDescriptors.Len())
 	_ = kd.uncommittedDescriptors.IterateByID(func(descriptor catalog.NameEntry) error {
-		descs = append(descs, descriptor.(*uncommittedDescriptor).immutable)
+		desc := descriptor.(*uncommittedDescriptor).immutable
+		if desc.IsUncommittedVersion() {
+			descs = append(descs, desc)
+		}
 		return nil
 	})
 	if len(descs) == 0 {
