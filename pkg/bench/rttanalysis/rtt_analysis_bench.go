@@ -79,11 +79,11 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 func ExecuteRoundTripTest(
 	b *testing.B, sql *sqlutils.SQLRunner, stmtToKvBatchRequests *sync.Map, tc RoundTripBenchTestCase,
 ) {
-	expData := readExpectationsFile(b)
+	expData := ReadExpectationsFile(b)
 
 	defer log.Scope(b).Close(b)
 
-	exp, haveExp := expData.find(strings.TrimPrefix(b.Name(), "Benchmark"))
+	exp, haveExp := expData.Find(strings.TrimPrefix(b.Name(), "Benchmark"))
 
 	roundTrips := 0
 	b.ResetTimer()
@@ -121,7 +121,7 @@ func ExecuteRoundTripTest(
 	}
 
 	res := float64(roundTrips) / float64(b.N)
-	if haveExp && !exp.matches(int(res)) && *rewriteFlag == "" {
+	if haveExp && !exp.Matches(int(res)) && *RewriteFlag == "" {
 		b.Fatalf(`got %v, expected %v. trace:
 %v
 (above trace from test %s. got %v, expected %v)

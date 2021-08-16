@@ -31,17 +31,17 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type benchmarkResult struct {
-	name   string
-	result int
+type BenchmarkResult struct {
+	Name   string
+	Result int
 }
 
-type benchmarkExpectation struct {
-	name string
+type BenchmarkExpectation struct {
+	Name string
 
-	// min and max are the expected number KV round-trips that should be performed
+	// Min and Max are the expected number KV round-trips that should be performed
 	// in this benchmark.
-	min, max int
+	Min, Max int
 }
 
 const expectationsFilename = "benchmark_expectations"
@@ -49,14 +49,14 @@ const expectationsFilename = "benchmark_expectations"
 var expectationsHeader = []string{"exp", "benchmark"}
 
 var (
-	rewriteFlag = flag.String("rewrite", "",
+	RewriteFlag = flag.String("rewrite", "",
 		"if non-empty, a regexp of benchmarks to rewrite")
-	rewriteIterations = flag.Int("rewrite-iterations", 50,
+	RewriteIterations = flag.Int("rewrite-iterations", 50,
 		"if re-writing, the number of times to execute each benchmark to "+
 			"determine the range of possible values")
 )
 
-func getBenchmarks(t *testing.T) (benchmarks []string) {
+func GetBenchmarks(t *testing.T) (benchmarks []string) {
 	cmd := exec.Command(os.Args[0], "--test.list", "^Benchmark")
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -68,7 +68,8 @@ func getBenchmarks(t *testing.T) (benchmarks []string) {
 	require.NoError(t, sc.Err())
 	return benchmarks
 }
-func runBenchmarks(t *testing.T, flags ...string) []benchmarkResult {
+
+func RunBenchmarks(t *testing.T, flags ...string) []BenchmarkResult {
 	cmd := exec.Command(os.Args[0], flags...)
 
 	// Disable metamorphic testing in the subprocesses.
@@ -98,8 +99,8 @@ var (
 	roundtripsIdx     = benchmarkResultRe.SubexpIndex("roundtrips")
 )
 
-func readBenchmarkResults(t *testing.T, benchmarkOutput io.Reader) []benchmarkResult {
-	var ret []benchmarkResult
+func readBenchmarkResults(t *testing.T, benchmarkOutput io.Reader) []BenchmarkResult {
+	var ret []BenchmarkResult
 	sc := bufio.NewScanner(benchmarkOutput)
 	for sc.Scan() {
 		match := benchmarkResultRe.FindStringSubmatch(sc.Text())
@@ -109,32 +110,32 @@ func readBenchmarkResults(t *testing.T, benchmarkOutput io.Reader) []benchmarkRe
 		testName := match[testNameIdx]
 		got, err := strconv.ParseFloat(match[roundtripsIdx], 64)
 		require.NoError(t, err)
-		ret = append(ret, benchmarkResult{
-			name:   testName,
-			result: int(got),
+		ret = append(ret, BenchmarkResult{
+			Name:   testName,
+			Result: int(got),
 		})
 	}
 	require.NoError(t, sc.Err())
 	return ret
 }
 
-// rewriteBenchmarkExpectations re-runs the specified benchmarks and throws out
+// RewriteBenchmarkExpectations re-runs the specified benchmarks and throws out
 // the existing values in the results file. All other values are preserved.
-func rewriteBenchmarkExpecations(t *testing.T, benchmarks []string) {
+func RewriteBenchmarkExpectations(t *testing.T, benchmarks []string) {
 
 	// Split off the filter so as to avoid spinning off unnecessary subprocesses.
-	slashIdx := strings.Index(*rewriteFlag, "/")
+	slashIdx := strings.Index(*RewriteFlag, "/")
 	var afterSlash string
 	if slashIdx == -1 {
-		slashIdx = len(*rewriteFlag)
+		slashIdx = len(*RewriteFlag)
 	} else {
-		afterSlash = (*rewriteFlag)[slashIdx+1:]
+		afterSlash = (*RewriteFlag)[slashIdx+1:]
 	}
-	benchmarkFilter, err := regexp.Compile((*rewriteFlag)[:slashIdx])
+	benchmarkFilter, err := regexp.Compile((*RewriteFlag)[:slashIdx])
 	require.NoError(t, err)
 
 	var g errgroup.Group
-	resChan := make(chan []benchmarkResult)
+	resChan := make(chan []BenchmarkResult)
 	run := func(b string) {
 		if !benchmarkFilter.MatchString(b) {
 			return
@@ -145,13 +146,13 @@ func rewriteBenchmarkExpecations(t *testing.T, benchmarks []string) {
 					"--test.run", "^$",
 					"--test.benchtime", "1x",
 					"--test.bench", b + "/" + afterSlash,
-					"--rewrite", *rewriteFlag,
-					"--test.count", strconv.Itoa(*rewriteIterations),
+					"--rewrite", *RewriteFlag,
+					"--test.count", strconv.Itoa(*RewriteIterations),
 				}
 				if testing.Verbose() {
 					flags = append(flags, "--test.v")
 				}
-				resChan <- runBenchmarks(t, flags...)
+				resChan <- RunBenchmarks(t, flags...)
 			})
 			return nil
 		})
@@ -160,14 +161,14 @@ func rewriteBenchmarkExpecations(t *testing.T, benchmarks []string) {
 		run(b)
 	}
 	go func() { _ = g.Wait(); close(resChan) }()
-	var results []benchmarkResult
+	var results []BenchmarkResult
 	for res := range resChan {
 		results = append(results, res...)
 	}
 
-	rewritePattern, err := regexp.Compile(*rewriteFlag)
+	rewritePattern, err := regexp.Compile(*RewriteFlag)
 	require.NoError(t, err)
-	expectations := readExpectationsFile(t)
+	expectations := ReadExpectationsFile(t)
 	expectations = removeMatching(expectations, rewritePattern)
 	expectations = append(removeMatching(expectations, rewritePattern),
 		resultsToExpectations(results)...)
@@ -175,8 +176,8 @@ func rewriteBenchmarkExpecations(t *testing.T, benchmarks []string) {
 
 	// Verify there aren't any duplicates.
 	for i := 1; i < len(expectations); i++ {
-		if expectations[i-1].name == expectations[i].name {
-			t.Fatalf("duplicate expecatations for Name %s", expectations[i].name)
+		if expectations[i-1].Name == expectations[i].Name {
+			t.Fatalf("duplicate expecatations for Name %s", expectations[i].Name)
 		}
 	}
 
@@ -184,11 +185,11 @@ func rewriteBenchmarkExpecations(t *testing.T, benchmarks []string) {
 }
 
 func removeMatching(
-	expectations benchmarkExpectations, rewritePattern *regexp.Regexp,
-) benchmarkExpectations {
+	expectations BenchmarkExpectations, rewritePattern *regexp.Regexp,
+) BenchmarkExpectations {
 	truncated := expectations[:0]
 	for i := range expectations {
-		if rewritePattern.MatchString(expectations[i].name) {
+		if rewritePattern.MatchString(expectations[i].Name) {
 			continue
 		}
 		truncated = append(truncated, expectations[i])
@@ -196,38 +197,38 @@ func removeMatching(
 	return truncated
 }
 
-func resultsToExpectations(results []benchmarkResult) benchmarkExpectations {
+func resultsToExpectations(results []BenchmarkResult) BenchmarkExpectations {
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].name < results[j].name
+		return results[i].Name < results[j].Name
 	})
-	var res benchmarkExpectations
-	var cur benchmarkExpectation
+	var res BenchmarkExpectations
+	var cur BenchmarkExpectation
 	for _, result := range results {
-		if result.name != cur.name {
-			if cur != (benchmarkExpectation{}) {
+		if result.Name != cur.Name {
+			if cur != (BenchmarkExpectation{}) {
 				res = append(res, cur)
-				cur = benchmarkExpectation{}
+				cur = BenchmarkExpectation{}
 			}
-			cur = benchmarkExpectation{
-				name: result.name,
-				min:  result.result,
-				max:  result.result,
+			cur = BenchmarkExpectation{
+				Name: result.Name,
+				Min:  result.Result,
+				Max:  result.Result,
 			}
 		}
-		if result.result < cur.min {
-			cur.min = result.result
+		if result.Result < cur.Min {
+			cur.Min = result.Result
 		}
-		if result.result > cur.max {
-			cur.max = result.result
+		if result.Result > cur.Max {
+			cur.Max = result.Result
 		}
 	}
-	if cur != (benchmarkExpectation{}) {
+	if cur != (BenchmarkExpectation{}) {
 		res = append(res, cur)
 	}
 	return res
 }
 
-func writeExpectationsFile(t *testing.T, expectations benchmarkExpectations) {
+func writeExpectationsFile(t *testing.T, expectations BenchmarkExpectations) {
 	f, err := os.Create(testutils.TestDataPath(t, expectationsFilename))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, f.Close()) }()
@@ -235,13 +236,14 @@ func writeExpectationsFile(t *testing.T, expectations benchmarkExpectations) {
 	w.Comma = ','
 	require.NoError(t, w.Write(expectationsHeader))
 	for _, exp := range expectations {
-		require.NoError(t, w.Write([]string{exp.String(), exp.name}))
+		require.NoError(t, w.Write([]string{exp.String(), exp.Name}))
 	}
 	w.Flush()
 	require.NoError(t, w.Error())
 }
 
-func readExpectationsFile(t testing.TB) benchmarkExpectations {
+// ReadExpectationsFile reads the benchmark performance expectations from file.
+func ReadExpectationsFile(t testing.TB) BenchmarkExpectations {
 	f, err := os.Open(testutils.TestDataPath(t, expectationsFilename))
 	require.NoError(t, err)
 	defer func() { _ = f.Close() }()
@@ -253,7 +255,7 @@ func readExpectationsFile(t testing.TB) benchmarkExpectations {
 	require.GreaterOrEqual(t, len(records), 1, "must have at least a header")
 	require.Equal(t, expectationsHeader, records[0])
 	records = records[1:] // strip header
-	ret := make(benchmarkExpectations, len(records))
+	ret := make(BenchmarkExpectations, len(records))
 
 	parseExp := func(expStr string) (min, max int, err error) {
 		split := strings.Split(expStr, "-")
@@ -274,39 +276,71 @@ func readExpectationsFile(t testing.TB) benchmarkExpectations {
 	for i, r := range records {
 		min, max, err := parseExp(r[0])
 		require.NoErrorf(t, err, "line %d", i+1)
-		ret[i] = benchmarkExpectation{min: min, max: max, name: r[1]}
+		ret[i] = BenchmarkExpectation{Min: min, Max: max, Name: r[1]}
 	}
 	sort.Sort(ret)
 	return ret
 }
 
-func (b benchmarkExpectations) find(name string) (benchmarkExpectation, bool) {
+// MakeBenchmarkSubtest creates a subtest function for the given benchmark based
+// on these expectations.
+func (b BenchmarkExpectations) MakeBenchmarkSubtest(benchmark string) func(t *testing.T) {
+	flags := []string{
+		"--test.run=^$",
+		"--test.bench=" + benchmark,
+		"--test.benchtime=1x",
+	}
+	if testing.Verbose() {
+		flags = append(flags, "--test.v")
+	}
+
+	return func(t *testing.T) {
+		results := RunBenchmarks(t, flags...)
+
+		for _, r := range results {
+			exp, ok := b.Find(r.Name)
+			if !ok {
+				t.Logf("no expectation for benchmark %s, got %d", r.Name, r.Result)
+				continue
+			}
+			if !exp.Matches(r.Result) {
+				t.Errorf("fail: expected %s to perform KV lookups in [%d, %d], got %d",
+					r.Name, exp.Min, exp.Max, r.Result)
+			} else {
+				t.Logf("success: expected %s to perform KV lookups in [%d, %d], got %d",
+					r.Name, exp.Min, exp.Max, r.Result)
+			}
+		}
+	}
+}
+
+func (b BenchmarkExpectations) Find(name string) (BenchmarkExpectation, bool) {
 	idx := sort.Search(len(b), func(i int) bool {
-		return b[i].name >= name
+		return b[i].Name >= name
 	})
-	if idx < len(b) && b[idx].name == name {
+	if idx < len(b) && b[idx].Name == name {
 		return b[idx], true
 	}
-	return benchmarkExpectation{}, false
+	return BenchmarkExpectation{}, false
 }
 
-func (e benchmarkExpectation) matches(roundTrips int) bool {
-	return e.min <= roundTrips && roundTrips <= e.max
+func (e BenchmarkExpectation) Matches(roundTrips int) bool {
+	return e.Min <= roundTrips && roundTrips <= e.Max
 }
 
-func (e benchmarkExpectation) String() string {
-	expStr := strconv.Itoa(e.min)
-	if e.min != e.max {
+func (e BenchmarkExpectation) String() string {
+	expStr := strconv.Itoa(e.Min)
+	if e.Min != e.Max {
 		expStr += "-"
-		expStr += strconv.Itoa(e.max)
+		expStr += strconv.Itoa(e.Max)
 	}
 	return expStr
 }
 
-type benchmarkExpectations []benchmarkExpectation
+type BenchmarkExpectations []BenchmarkExpectation
 
-var _ sort.Interface = (benchmarkExpectations)(nil)
+var _ sort.Interface = (BenchmarkExpectations)(nil)
 
-func (b benchmarkExpectations) Len() int           { return len(b) }
-func (b benchmarkExpectations) Less(i, j int) bool { return b[i].name < b[j].name }
-func (b benchmarkExpectations) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
+func (b BenchmarkExpectations) Len() int           { return len(b) }
+func (b BenchmarkExpectations) Less(i, j int) bool { return b[i].Name < b[j].Name }
+func (b BenchmarkExpectations) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }

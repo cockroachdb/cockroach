@@ -1,19 +1,18 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package rttanalysis
+package rttanalysisccl
 
 import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/bench/rttanalysis"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
@@ -28,11 +27,11 @@ func TestBenchmarkExpectation(t *testing.T) {
 	skip.UnderRace(t)
 	skip.UnderShort(t)
 
-	expectations := ReadExpectationsFile(t)
+	expectations := rttanalysis.ReadExpectationsFile(t)
 
-	benchmarks := GetBenchmarks(t)
-	if *RewriteFlag != "" {
-		RewriteBenchmarkExpectations(t, benchmarks)
+	benchmarks := rttanalysis.GetBenchmarks(t)
+	if *rttanalysis.RewriteFlag != "" {
+		rttanalysis.RewriteBenchmarkExpectations(t, benchmarks)
 		return
 	}
 
