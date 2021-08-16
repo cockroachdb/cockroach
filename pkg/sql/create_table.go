@@ -2194,6 +2194,10 @@ func NewTableDesc(
 		}
 	}
 
+	if err := tabledesc.ValidateOnUpdate(desc.AllColumns(), desc.GetOutboundFKs()); err != nil {
+		return nil, pgerror.New(pgcode.InvalidTableDefinition, err.Error())
+	}
+
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
 	// happens to work in gc, but does not work in gccgo.
 	//

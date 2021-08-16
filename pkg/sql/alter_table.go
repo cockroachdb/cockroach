@@ -360,6 +360,22 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.ForeignKeyConstraintTableDef:
+				// We want to reject uses of ON UPDATE actions where there is already an
+				// ON UPDATE expression for the column.
+				if d.Actions.Update != tree.NoAction && d.Actions.Update != tree.Restrict {
+					for _, fromCol := range d.FromCols {
+						for _, toCheck := range n.tableDesc.Columns {
+							if fromCol == toCheck.ColName() && toCheck.HasOnUpdate() {
+								return pgerror.Newf(
+									pgcode.InvalidTableDefinition,
+									"cannot specify a foreign key update action and an ON UPDATE"+
+										" expression on the same column",
+								)
+							}
+						}
+					}
+				}
+
 				affected := make(map[descpb.ID]*tabledesc.Mutable)
 
 				// If there are any FKs, we will need to update the table descriptor of the
@@ -1161,7 +1177,66 @@ func applyColumnMutation(
 		}
 
 	case *tree.AlterTableSetOnUpdate:
-		return errors.Newf("unimplemented")
+		// We want to reject uses of ON UPDATE where there is also a foreign key ON
+		// UPDATE.
+		for _, fk := range tableDesc.OutboundFKs {
+			for _, colID := range fk.OriginColumnIDs {
+				if colID == col.GetID() &&
+					fk.OnUpdate != descpb.ForeignKeyReference_NO_ACTION &&
+					fk.OnUpdate != descpb.ForeignKeyReference_RESTRICT {
+					return pgerror.Newf(
+						pgcode.InvalidColumnDefinition,
+						"column %s(%d) cannot have both an ON UPDATE expression and a foreign"+
+							" key ON UPDATE action",
+						col.GetName(),
+						col.GetID(),
+					)
+				}
+			}
+		}
+
+		if col.NumUsesSequences() > 0 {
+			if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, col); err != nil {
+				return err
+			}
+		}
+		if t.Expr == nil {
+			col.ColumnDesc().OnUpdateExpr = nil
+		} else {
+			colDatumType := col.GetType()
+			expr, err := schemaexpr.SanitizeVarFreeExpr(
+				params.ctx, t.Expr, colDatumType, "ON UPDATE", &params.p.semaCtx, tree.VolatilityVolatile,
+			)
+			if err != nil {
+				return pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
+			}
+
+			s := tree.Serialize(expr)
+			col.ColumnDesc().OnUpdateExpr = &s
+
+			// Add references to the sequence descriptors this column is now using.
+			changedSeqDescs, err := maybeAddSequenceDependencies(
+				params.ctx,
+				params.p.ExecCfg().Settings,
+				params.p,
+				tableDesc,
+				col.ColumnDesc(),
+				expr,
+				nil, /* backrefs */
+			)
+			if err != nil {
+				return err
+			}
+			for _, changedSeqDesc := range changedSeqDescs {
+				if err := params.p.writeSchemaChange(
+					params.ctx, changedSeqDesc, descpb.InvalidMutationID,
+					fmt.Sprintf("updating dependent sequence %s(%d) for table %s(%d)",
+						changedSeqDesc.Name, changedSeqDesc.ID, tableDesc.Name, tableDesc.ID,
+					)); err != nil {
+					return err
+				}
+			}
+		}
 
 	case *tree.AlterTableSetVisible:
 		column, err := tableDesc.FindActiveOrNewColumnByName(col.ColName())
