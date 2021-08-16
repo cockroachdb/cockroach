@@ -34,6 +34,26 @@ var (
 		Description: "Listen address for incoming connections.",
 	}
 
+	AuthenticatedFillPeriod = FlagInfo{
+		Name:        "authenticated-bucket-period",
+		Description: "Number of miliseconds before a token is added to the connection attempt bucket.",
+	}
+
+	AuthenticatedBucketSize = FlagInfo{
+		Name:        "authenticated-bucket-size",
+		Description: "Size of the token bucket used to throttle connection attempts.",
+	}
+
+	UnauthenticatedFillPeriod = FlagInfo{
+		Name:        "unauthenticated-bucket-period",
+		Description: "Number of miliseconds before a token is added to the connection attempt bucket.",
+	}
+
+	UnauthenticatedBucketSize = FlagInfo{
+		Name:        "unauthenticated-bucket-size",
+		Description: "Size of the token bucket used to throttle connection attempts.",
+	}
+
 	ListenCert = FlagInfo{
 		Name:        "listen-cert",
 		Description: "File containing PEM-encoded x509 certificate for listen address.",

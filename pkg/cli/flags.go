@@ -989,10 +989,15 @@ func init() {
 		stringFlag(f, &proxyContext.DirectoryAddr, cliflags.DirectoryAddr)
 		boolFlag(f, &proxyContext.SkipVerify, cliflags.SkipVerify)
 		boolFlag(f, &proxyContext.Insecure, cliflags.InsecureBackend)
-		durationFlag(f, &proxyContext.RatelimitBaseDelay, cliflags.RatelimitBaseDelay)
 		durationFlag(f, &proxyContext.ValidateAccessInterval, cliflags.ValidateAccessInterval)
 		durationFlag(f, &proxyContext.PollConfigInterval, cliflags.PollConfigInterval)
 		durationFlag(f, &proxyContext.DrainTimeout, cliflags.DrainTimeout)
+
+		// TODO fix this rate period imbalance
+		intFlag(f, &proxyContext.AuthenticatedBucketPolicy.Capacity, cliflags.AuthenticatedBucketSize)
+		durationFlag(f, &proxyContext.AuthenticatedBucketPolicy.FillPeriod, cliflags.AuthenticatedFillPeriod)
+		intFlag(f, &proxyContext.UnauthenticatedBucketPolicy.Capacity, cliflags.UnauthenticatedBucketSize)
+		durationFlag(f, &proxyContext.UnauthenticatedBucketPolicy.FillPeriod, cliflags.UnauthenticatedFillPeriod)
 	}
 	// Multi-tenancy test directory command flags.
 	{

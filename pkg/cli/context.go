@@ -598,6 +598,10 @@ func setProxyContextDefaults() {
 	proxyContext.ValidateAccessInterval = 30 * time.Second
 	proxyContext.PollConfigInterval = 30 * time.Second
 	proxyContext.DrainTimeout = 0
+	proxyContext.AuthenticatedBucketPolicy.Capacity = 600
+	proxyContext.AuthenticatedBucketPolicy.FillPeriod = time.Second
+	proxyContext.UnauthenticatedBucketPolicy.Capacity = 60
+	proxyContext.UnauthenticatedBucketPolicy.FillPeriod = time.Minute
 }
 
 var testDirectorySvrContext struct {
