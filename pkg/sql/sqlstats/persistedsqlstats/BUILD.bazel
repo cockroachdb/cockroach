@@ -10,6 +10,7 @@ go_library(
         "provider.go",
         "stmt_reader.go",
         "test_utils.go",
+        "txn_reader.go",
         "writer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats",

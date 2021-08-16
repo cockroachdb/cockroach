@@ -196,3 +196,182 @@ func compareStmtStats(lhs, rhs *roachpb.CollectedStatementStatistics) int {
 
 	return 0
 }
+
+// CombinedTxnStatsIterator is an iterator that iterates through both
+// in-memory and persisted txn stats provided by the in-memory iterator and
+// the on-disk iterator.
+type CombinedTxnStatsIterator struct {
+	nextToReadKey  roachpb.TransactionFingerprintID
+	nextToReadVal  *roachpb.CollectedTransactionStatistics
+	expectedColCnt int
+
+	mem struct {
+		canBeAdvanced bool
+		paused        bool
+		it            *memTxnStatsIterator
+	}
+
+	disk struct {
+		canBeAdvanced bool
+		paused        bool
+		it            sqlutil.InternalRows
+	}
+}
+
+// NewCombinedTxnStatsIterator returns a new instance of
+// CombinedTxnStatsIterator.
+func NewCombinedTxnStatsIterator(
+	memIter *memTxnStatsIterator, diskIter sqlutil.InternalRows, expectedColCnt int,
+) *CombinedTxnStatsIterator {
+	c := &CombinedTxnStatsIterator{
+		expectedColCnt: expectedColCnt,
+	}
+
+	c.mem.it = memIter
+	c.mem.canBeAdvanced = true
+
+	c.disk.it = diskIter
+	c.disk.canBeAdvanced = true
+
+	return c
+}
+
+// Next increments the internal counter of the CombinedTxnStatsIterator. It
+// returns true if the following Cur() call will be valid, false otherwise.
+func (c *CombinedTxnStatsIterator) Next(ctx context.Context) (bool, error) {
+	var err error
+
+	if c.mem.canBeAdvanced && !c.mem.paused {
+		c.mem.canBeAdvanced = c.mem.it.Next()
+	}
+
+	if c.disk.canBeAdvanced && !c.disk.paused {
+		c.disk.canBeAdvanced, err = c.disk.it.Next(ctx)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	// Both iterators are exhausted, no new value can be produced.
+	if !c.mem.canBeAdvanced && !c.disk.canBeAdvanced {
+		// Sanity check.
+		if c.mem.paused || c.disk.paused {
+			return false, errors.AssertionFailedf("bug: leaked iterator")
+		}
+		return false, nil
+	}
+
+	// If memIter is exhausted, but disk iterator can still move forward.
+	// We promote the disk.Cur() and resume the disk iterator if it was paused.
+	if !c.mem.canBeAdvanced {
+		row := c.disk.it.Cur()
+		if row == nil {
+			return false, errors.New("unexpected nil row")
+		}
+
+		if len(row) != c.expectedColCnt {
+			return false, errors.AssertionFailedf("unexpectedly received %d columns", len(row))
+		}
+
+		c.nextToReadKey, c.nextToReadVal, err = rowToTxnStats(c.disk.it.Cur())
+		if err != nil {
+			return false, err
+		}
+
+		if c.disk.canBeAdvanced {
+			c.disk.paused = false
+		}
+		return true, nil
+	}
+
+	// If diskIter is exhausted, but mem iterator can still move forward.
+	// We promote the mem.Cur() and resume the mem iterator if it was paused.
+	if !c.disk.canBeAdvanced {
+		c.nextToReadKey, c.nextToReadVal = c.mem.it.Cur()
+
+		if c.mem.canBeAdvanced {
+			c.mem.paused = false
+		}
+		return true, nil
+	}
+
+	// Both iterators can be moved forward. Now we check the value of Cur()
+	// for both iterators. We will have a few scenarios:
+	// 1. mem.Cur() < disk.Cur():
+	//    we promote mem.Cur() to c.nextToRead. We then pause
+	//    the disk iterator and resume the mem iterator for next iteration.
+	// 2. mem.Cur() == disk.Cur():
+	//    we promote both mem.Cur() and disk.Cur() by merging both
+	//    stats. We resume both iterators for next iteration.
+	// 3. mem.Cur() > disk.Cur():
+	//    we promote disk.Cur() to c.nextToRead. We then pause
+	//    mem iterator and resume disk iterator for next iteration.
+	memCurKey, memCurVal := c.mem.it.Cur()
+	diskCurKey, diskCurVal, err := rowToTxnStats(c.disk.it.Cur())
+	if err != nil {
+		return false, err
+	}
+
+	switch compareTxnStats(memCurKey, diskCurKey, memCurVal, diskCurVal) {
+	case -1:
+		// First Case.
+		c.nextToReadKey = memCurKey
+		c.nextToReadVal = memCurVal
+		c.mem.paused = false
+		c.disk.paused = true
+	case 0:
+		// Second Case.
+		c.nextToReadKey = memCurKey
+		c.nextToReadVal = memCurVal
+		c.nextToReadVal.Stats.Add(&diskCurVal.Stats)
+		c.mem.paused = false
+		c.disk.paused = false
+	case 1:
+		// Third Case.
+		c.nextToReadKey = diskCurKey
+		c.nextToReadVal = diskCurVal
+		c.mem.paused = true
+		c.disk.paused = false
+	default:
+		return false, errors.AssertionFailedf("bug: impossible state")
+	}
+
+	return true, nil
+}
+
+// Cur returns the roachpb.CollectedTransactionStatistics at the current internal
+// counter.
+func (c *CombinedTxnStatsIterator) Cur() (
+	roachpb.TransactionFingerprintID,
+	*roachpb.CollectedTransactionStatistics,
+) {
+	return c.nextToReadKey, c.nextToReadVal
+}
+
+func compareTxnStats(
+	lhsKey, rhsKey roachpb.TransactionFingerprintID, lhs, rhs *roachpb.CollectedTransactionStatistics,
+) int {
+	// 1. we compare their aggregated_ts
+	if lhs.AggregatedTs.Before(rhs.AggregatedTs) {
+		return -1
+	}
+	if lhs.AggregatedTs.After(rhs.AggregatedTs) {
+		return 1
+	}
+
+	// 2. we compare their app name.
+	cmp := strings.Compare(lhs.App, rhs.App)
+	if cmp != 0 {
+		return cmp
+	}
+
+	// 3. we compared the transaction fingerprint ID.
+	if lhsKey < rhsKey {
+		return -1
+	}
+	if lhsKey > rhsKey {
+		return 1
+	}
+
+	return 0
+}

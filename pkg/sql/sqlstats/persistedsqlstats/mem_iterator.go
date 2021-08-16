@@ -44,3 +44,33 @@ func (m *memStmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
 	c.AggregatedTs = m.aggregatedTs
 	return c
 }
+
+// memTxnStatsIterator wraps a sslocal.TxnStatsIterator. Since in-memory
+// transaction statistics does not have aggregated_ts field populated,
+// memTxnStatsIterator overrides the sslocal.TxnStatsIterator's Cur() method
+// to populate the aggregated_ts field on the returning
+// roachpb.CollectedTransactionStatistics.
+type memTxnStatsIterator struct {
+	*sslocal.TxnStatsIterator
+	aggregatedTs time.Time
+}
+
+func newMemTxnStatsIterator(
+	stats *sslocal.SQLStats, options *sqlstats.IteratorOptions, aggregatedTS time.Time,
+) *memTxnStatsIterator {
+	return &memTxnStatsIterator{
+		TxnStatsIterator: stats.TxnStatsIterator(options),
+		aggregatedTs:     aggregatedTS,
+	}
+}
+
+// Cur calls the m.TxnStatsIterator.Cur() and populates the m.aggregatedTs
+// field.
+func (m *memTxnStatsIterator) Cur() (
+	roachpb.TransactionFingerprintID,
+	*roachpb.CollectedTransactionStatistics,
+) {
+	id, stats := m.TxnStatsIterator.Cur()
+	stats.AggregatedTs = m.aggregatedTs
+	return id, stats
+}
