@@ -443,3 +443,18 @@ func (desc *Mutable) SetDefaultPrivilegeDescriptor(
 ) {
 	desc.DefaultPrivileges = defaultPrivilegeDescriptor
 }
+
+// maybeRemoveDroppedSelfEntryFromSchemas removes an entry in the Schemas map corresponding to the
+// database itself which was added due to a bug in prior versions when dropping any user-defined schema.
+// The bug inserted an entry for the database rather than the schema being dropped. This function fixes the
+// problem by deleting the erroneous entry.
+func maybeRemoveDroppedSelfEntryFromSchemas(dbDesc *descpb.DatabaseDescriptor) bool {
+	if dbDesc == nil {
+		return false
+	}
+	if sc, ok := dbDesc.Schemas[dbDesc.Name]; ok && sc.ID == dbDesc.ID {
+		delete(dbDesc.Schemas, dbDesc.Name)
+		return true
+	}
+	return false
+}

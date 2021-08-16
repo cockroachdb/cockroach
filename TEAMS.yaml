@@ -37,6 +37,7 @@ cockroachdb/sql-observability:
 cockroachdb/kv:
   aliases:
     cockroachdb/kv-triage: roachtest
+    cockroachdb/kv-prs: other
   triage_column_id: 14242655
 cockroachdb/geospatial:
   triage_column_id: 9487269

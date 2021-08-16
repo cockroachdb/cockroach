@@ -19,7 +19,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -502,4 +509,58 @@ func TestRestoreOldBackupMissingOfflineIndexes(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	const (
+		dbName    = "foo"
+		backupDir = "testdata/restore_with_dropped_schema/exports/v20.2.7"
+		fromDir   = "nodelocal://0/"
+	)
+
+	args := base.TestServerArgs{ExternalIODir: backupDir}
+	s, sqlDB, _ := serverutils.StartServer(t, args)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(ctx)
+
+	tdb.Exec(t, fmt.Sprintf("RESTORE DATABASE %s FROM '%s'", dbName, fromDir))
+	query := fmt.Sprintf("SELECT database_name FROM [SHOW DATABASES] WHERE database_name = '%s'", dbName)
+	tdb.CheckQueryResults(t, query, [][]string{{dbName}})
+
+	// Read descriptor without validation.
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	hasSameNameSchema := func(dbName string) bool {
+		exists := false
+		var desc catalog.DatabaseDescriptor
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+			ctx context.Context, txn *kv.Txn, collection *descs.Collection,
+		) error {
+			// Using this method to avoid validation.
+			allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, execCfg.Codec, false)
+			if err != nil {
+				return err
+			}
+			for _, d := range allDescs {
+				if d.GetName() == dbName {
+					desc, err = catalog.AsDatabaseDescriptor(d)
+					require.NoError(t, err, "unable to cast to database descriptor")
+					return nil
+				}
+			}
+			return nil
+		}))
+		require.NoError(t, desc.ForEachSchemaInfo(
+			func(id descpb.ID, name string, isDropped bool) error {
+				if name == dbName {
+					exists = true
+				}
+				return nil
+			}))
+		return exists
+	}
+	require.Falsef(t, hasSameNameSchema(dbName), "corrupted descriptor exists")
 }

@@ -1466,7 +1466,7 @@ func TestChangefeedAvroNotice(t *testing.T) {
 	sqlDB.Exec(t, "CREATE table foo (i int)")
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
 
-	sql := fmt.Sprintf("CREATE CHANGEFEED FOR d.foo INTO 'dummysink' WITH format=experimental_avro, confluent_schema_registry='%s'", schemaReg.URL())
+	sql := fmt.Sprintf("CREATE CHANGEFEED FOR d.foo INTO 'null://' WITH format=experimental_avro, confluent_schema_registry='%s'", schemaReg.URL())
 	expectNotice(t, s, sql, `avro is no longer experimental, use format=avro`)
 }
 
@@ -2613,6 +2613,12 @@ func TestChangefeedErrors(t *testing.T) {
 	unknownParams := func(sink string, params ...string) string {
 		return fmt.Sprintf(`unknown %s sink query parameters: [%s]`, sink, strings.Join(params, ", "))
 	}
+
+	// Check that sink URLs have valid scheme
+	sqlDB.ExpectErr(
+		t, `no scheme found for sink URL`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka%3A%2F%2Fnope%0A'`,
+	)
 
 	// Check that confluent_schema_registry is only accepted if format is avro.
 	// TODO: This should be testing it as a WITH option and check avro_schema_prefix too

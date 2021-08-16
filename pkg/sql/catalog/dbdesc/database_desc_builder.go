@@ -58,8 +58,10 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
-	ddb.changed = descpb.MaybeFixPrivileges(ddb.maybeModified.ID, ddb.maybeModified.ID,
+	privsChanged := descpb.MaybeFixPrivileges(ddb.maybeModified.ID, ddb.maybeModified.ID,
 		&ddb.maybeModified.Privileges, privilege.Database)
+	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
+	ddb.changed = privsChanged || removedSelfEntryInSchemas
 	return nil
 }
 
