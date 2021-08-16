@@ -104,6 +104,21 @@ func MakeColumnDefDescs(
 		}
 	}
 
+	if d.HasOnUpdateExpr() {
+		// Verify the on update expression type is compatible with the column type
+		// and does not contain invalid functions.
+		var err error
+		if typedExpr, err = schemaexpr.SanitizeVarFreeExpr(
+			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, tree.VolatilityVolatile,
+		); err != nil {
+			return nil, nil, nil, err
+		}
+
+		d.OnUpdateExpr.Expr = typedExpr
+		s := tree.Serialize(d.OnUpdateExpr.Expr)
+		col.OnUpdateExpr = &s
+	}
+
 	if d.IsComputed() {
 		// Note: We do not validate the computed column expression here because
 		// it may reference columns that have not yet been added to a table

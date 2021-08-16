@@ -641,6 +641,48 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		vea.Report(err)
 		return nil
 	})
+
+	// Validate that there are no column with both a foreign key ON UPDATE and an
+	// ON UPDATE expression. This check is made to ensure that we know which ON
+	// UPDATE action to perform when a FK UPDATE happens.
+	if err := ValidateOnUpdate(desc.AllColumns(), desc.GetOutboundFKs()); err != nil {
+		vea.Report(err)
+	}
+}
+
+// ValidateOnUpdate returns an error if there is a column with both a foreign
+// key constraint and an ON UPDATE expression, nil otherwise.
+func ValidateOnUpdate(cols []catalog.Column, outboundFks []descpb.ForeignKeyConstraint) error {
+	var onUpdateCols catalog.TableColSet
+	for _, col := range cols {
+		if col.HasOnUpdate() {
+			onUpdateCols.Add(col.GetID())
+		}
+	}
+
+	var foundErrors []error
+	for _, fk := range outboundFks {
+		if fk.OnUpdate == descpb.ForeignKeyReference_NO_ACTION ||
+			fk.OnUpdate == descpb.ForeignKeyReference_RESTRICT {
+			continue
+		}
+		for _, fkCol := range fk.OriginColumnIDs {
+			if onUpdateCols.Contains(fkCol) {
+				foundErrors = append(foundErrors, pgerror.Newf(pgcode.InvalidTableDefinition,
+					"cannot specify both ON UPDATE expression and a foreign key"+
+						" ON UPDATE action for column with ID %d",
+					fkCol,
+				))
+			}
+		}
+	}
+
+	var combinedError error
+	for i := 0; i < len(foundErrors); i++ {
+		combinedError = errors.CombineErrors(combinedError, foundErrors[i])
+	}
+
+	return combinedError
 }
 
 func (desc *wrapper) validateColumns(
@@ -698,6 +740,13 @@ func (desc *wrapper) validateColumns(
 			}
 		} else if column.IsVirtual() {
 			return errors.Newf("virtual column %q is not computed", column.GetName())
+		}
+
+		if column.HasOnUpdate() && column.IsComputed() {
+			return errors.Newf(
+				"computed column %q cannot also have an ON UPDATE expression",
+				column.GetName(),
+			)
 		}
 
 		if column.IsHidden() && column.IsInaccessible() {

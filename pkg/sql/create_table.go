@@ -2202,6 +2202,15 @@ func NewTableDesc(
 		}
 	}
 
+	// We validate the table descriptor, checking for ON UPDATE expressions that
+	// conflict with FK ON UPDATE actions. We perform this validation after
+	// constructing the table descriptor so that we can check all foreign key
+	// constraints in on place as opposed to traversing the input and finding all
+	// inline/explicit foreign key constraints.
+	if err := tabledesc.ValidateOnUpdate(desc.AllColumns(), desc.GetOutboundFKs()); err != nil {
+		return nil, err
+	}
+
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
 	// happens to work in gc, but does not work in gccgo.
 	//
