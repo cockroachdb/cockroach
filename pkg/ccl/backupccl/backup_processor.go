@@ -79,6 +79,11 @@ var (
 		16<<20,
 		settings.NonNegativeInt,
 	)
+	splitKeysOnTimestamps = settings.RegisterBoolSetting(
+		"bulkio.backup.split_keys_on_timestamps",
+		"split backup data on timestamps when writing revision history",
+		false,
+	)
 )
 
 // maxSinkQueueFiles is how many replies we'll queue up before flushing to allow
@@ -168,6 +173,7 @@ type spanAndTime struct {
 	// spanIdx is a unique identifier of this object.
 	spanIdx    int
 	span       roachpb.Span
+	firstKeyTS hlc.Timestamp
 	start, end hlc.Timestamp
 	attempts   int
 	lastTried  time.Time
@@ -193,12 +199,12 @@ func runBackupProcessor(
 	todo := make(chan spanAndTime, totalSpans)
 	var spanIdx int
 	for _, s := range spec.IntroducedSpans {
-		todo <- spanAndTime{spanIdx: spanIdx, span: s, start: hlc.Timestamp{},
+		todo <- spanAndTime{spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: hlc.Timestamp{},
 			end: spec.BackupStartTime}
 		spanIdx++
 	}
 	for _, s := range spec.Spans {
-		todo <- spanAndTime{spanIdx: spanIdx, span: s, start: spec.BackupStartTime,
+		todo <- spanAndTime{spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: spec.BackupStartTime,
 			end: spec.BackupEndTime}
 		spanIdx++
 	}
@@ -267,13 +273,23 @@ func runBackupProcessor(
 					return ctx.Err()
 				case span := <-todo:
 					header := roachpb.Header{Timestamp: span.end}
+
+					splitMidKey := splitKeysOnTimestamps.Get(&clusterSettings.SV)
+					// If we started splitting already, we must continue until we reach the end
+					// of split span.
+					if !span.firstKeyTS.IsEmpty() {
+						splitMidKey = true
+					}
+
 					req := &roachpb.ExportRequest{
 						RequestHeader:                       roachpb.RequestHeaderFromSpan(span.span),
+						ResumeKeyTS:                         span.firstKeyTS,
 						StartTime:                           span.start,
 						EnableTimeBoundIteratorOptimization: useTBI.Get(&clusterSettings.SV),
 						MVCCFilter:                          spec.MVCCFilter,
 						TargetFileSize:                      storageccl.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
 						ReturnSST:                           true,
+						SplitMidKey:                         splitMidKey,
 					}
 
 					// If we're doing re-attempts but are not yet in the priority regime,
@@ -369,12 +385,20 @@ func runBackupProcessor(
 						if !res.ResumeSpan.Valid() {
 							return errors.Errorf("invalid resume span: %s", res.ResumeSpan)
 						}
+
+						resumeTS := hlc.Timestamp{}
+						// This looks pretty bad, timestamp should have been be pushed to response
+						if fileCount := len(res.Files); fileCount > 0 {
+							resumeTS = res.Files[fileCount-1].EndKeyTS
+							log.Infof(ctx, "Resuming span %v with first key TS %v", res.ResumeSpan, resumeTS)
+						}
 						resumeSpan := spanAndTime{
-							span:      *res.ResumeSpan,
-							start:     span.start,
-							end:       span.end,
-							attempts:  span.attempts,
-							lastTried: span.lastTried,
+							span:       *res.ResumeSpan,
+							firstKeyTS: resumeTS,
+							start:      span.start,
+							end:        span.end,
+							attempts:   span.attempts,
+							lastTried:  span.lastTried,
 						}
 						todo <- resumeSpan
 					}
@@ -701,8 +725,9 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 	s.completedSpans += resp.completedSpans
 	s.flushedSize += int64(len(resp.sst))
 
-	// If our accumulated SST is now big enough, flush it.
-	if s.flushedSize > targetFileSize.Get(s.conf.settings) {
+	// If our accumulated SST is now big enough, and we are positioned at the end
+	// of a range flush it.
+	if s.flushedSize > targetFileSize.Get(s.conf.settings) && resp.completedSpans > 0 {
 		s.stats.sizeFlushes++
 		log.VEventf(ctx, 2, "flushing backup file %s with size %d", s.outName, s.flushedSize)
 		if err := s.flushFile(ctx); err != nil {
