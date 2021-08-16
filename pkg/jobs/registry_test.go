@@ -299,7 +299,6 @@ func TestBatchJobsCreation(t *testing.T) {
 		{"small batch", 10},
 		{"medium batch", 501},
 		{"large batch", 1001},
-		{"extra large batch", 5001},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			{
