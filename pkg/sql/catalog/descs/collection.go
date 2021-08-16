@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -53,6 +52,7 @@ func makeCollection(
 		virtual:        makeVirtualDescriptors(virtualSchemas),
 		leased:         makeLeasedDescriptors(leaseMgr),
 		synthetic:      makeSyntheticDescriptors(),
+		uncommitted:    makeUncommittedDescriptors(),
 		kv:             makeKVDescriptors(codec),
 		temporary:      makeTemporaryDescriptors(codec, sessionData),
 	}
@@ -74,6 +74,15 @@ type Collection struct {
 	// A collection of descriptors valid for the timestamp. They are released once
 	// the transaction using them is complete.
 	leased leasedDescriptors
+
+	// Descriptors modified by the uncommitted transaction affiliated with this
+	// Collection. This allows a transaction to see its own modifications while
+	// bypassing the descriptor lease mechanism. The lease mechanism will have its
+	// own transaction to read the descriptor and will hang waiting for the
+	// uncommitted changes to the descriptor if this transaction is PRIORITY HIGH.
+	// These descriptors are local to this Collection and their state is thus not
+	// visible to other transactions.
+	uncommitted uncommittedDescriptors
 
 	// A collection of descriptors which were read from the store.
 	kv kvDescriptors
@@ -149,6 +158,7 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 // ReleaseAll calls ReleaseLeases.
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
+	tc.uncommitted.reset()
 	tc.kv.reset()
 	tc.synthetic.reset()
 	tc.deletedDescs = nil
@@ -157,13 +167,13 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 // HasUncommittedTables returns true if the Collection contains uncommitted
 // tables.
 func (tc *Collection) HasUncommittedTables() bool {
-	return tc.kv.hasUncommittedTables()
+	return tc.uncommitted.hasUncommittedTables()
 }
 
 // HasUncommittedTypes returns true if the Collection contains uncommitted
 // types.
 func (tc *Collection) HasUncommittedTypes() bool {
-	return tc.kv.hasUncommittedTypes()
+	return tc.uncommitted.hasUncommittedTypes()
 }
 
 // Satisfy the linter.
@@ -179,23 +189,7 @@ var _ = (*Collection).HasUncommittedTypes
 // immutably will return a copy of the descriptor in the current state. A deep
 // copy is performed in this call.
 func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) error {
-	_, err := tc.kv.addUncommittedDescriptor(desc)
-	return err
-}
-
-// maybeRefreshCachedFieldsOnTypeDescriptor refreshes the cached fields on a
-// Mutable if the given descriptor is a type descriptor and works as a pass
-// through for all other descriptors. Mutable type descriptors are refreshed to
-// reconstruct enumMetadata. This ensures that tables hydration following a
-// type descriptor update (in the same txn) happens using the modified fields.
-func maybeRefreshCachedFieldsOnTypeDescriptor(
-	desc catalog.MutableDescriptor,
-) (catalog.MutableDescriptor, error) {
-	typeDesc, ok := desc.(catalog.TypeDescriptor)
-	if ok {
-		return typedesc.UpdateCachedFieldsOnModifiedMutable(typeDesc)
-	}
-	return desc, nil
+	return tc.uncommitted.checkIn(desc)
 }
 
 // ValidateOnWriteEnabled is the cluster setting used to enable or disable
@@ -238,27 +232,18 @@ func (tc *Collection) WriteDesc(
 // undergone a schema change. Returns nil for no schema changes. The version
 // returned for each schema change is ClusterVersion - 1, because that's the one
 // that will be used when checking for table descriptor two version invariance.
-func (tc *Collection) GetDescriptorsWithNewVersion() []lease.IDVersion {
-	return tc.kv.getDescriptorsWithNewVersion()
+func (tc *Collection) GetDescriptorsWithNewVersion() (originalVersions []lease.IDVersion) {
+	_ = tc.uncommitted.iterateNewVersionByID(func(_ catalog.NameEntry, originalVersion lease.IDVersion) error {
+		originalVersions = append(originalVersions, originalVersion)
+		return nil
+	})
+	return originalVersions
 }
 
 // GetUncommittedTables returns all the tables updated or created in the
 // transaction.
 func (tc *Collection) GetUncommittedTables() (tables []catalog.TableDescriptor) {
-	return tc.kv.getUncommittedTables()
-}
-
-// ValidateUncommittedDescriptors validates all uncommitted descriptors.
-// Validation includes cross-reference checks. Referenced descriptors are
-// read from the store unless they happen to also be part of the uncommitted
-// descriptor set. We purposefully avoid using leased descriptors as those may
-// be one version behind, in which case it's possible (and legitimate) that
-// those are missing back-references which would cause validation to fail.
-func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) error {
-	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
-		return nil
-	}
-	return tc.kv.validateUncommittedDescriptors(ctx, txn)
+	return tc.uncommitted.getUncommittedTables()
 }
 
 func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {

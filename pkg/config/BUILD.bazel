@@ -43,6 +43,7 @@ go_test(
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/testutils",
         "//pkg/util/encoding",

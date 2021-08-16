@@ -44,6 +44,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",

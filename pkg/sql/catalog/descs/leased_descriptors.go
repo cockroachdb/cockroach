@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -96,6 +97,14 @@ func (ld *leasedDescriptors) getByName(
 		return cached.(lease.LeasedDescriptor).Underlying(), false, nil
 	}
 
+	for _, d := range systemschema.UnleasableSystemDescriptors {
+		if parentID == d.GetParentID() &&
+			parentSchemaID == d.GetParentSchemaID() &&
+			name == d.GetName() {
+			return nil, true, nil
+		}
+	}
+
 	readTimestamp := txn.ReadTimestamp()
 	ldesc, err := ld.lm.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
 	const setTxnDeadline = true
@@ -116,6 +125,10 @@ func (ld *leasedDescriptors) getByID(
 				cached.GetParentID(), cached.GetParentSchemaID(), cached.GetName(), id)
 		}
 		return cached.(lease.LeasedDescriptor).Underlying(), false, nil
+	}
+
+	if _, isUnleasable := systemschema.UnleasableSystemDescriptors[id]; isUnleasable {
+		return nil, true, nil
 	}
 
 	readTimestamp := txn.ReadTimestamp()
