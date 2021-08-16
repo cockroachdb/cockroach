@@ -116,7 +116,7 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			return nil, catalog.ErrDescriptorNotFound
 		}
 
-		desc, shouldReadFromStore, err := tc.leased.getByID(ctx, txn, id, setTxnDeadline)
+		desc, shouldReadFromStore, err := tc.leased.getByID(ctx, tc.deadlineHolder(txn), id, setTxnDeadline)
 		if err != nil {
 			return nil, err
 		}
@@ -207,8 +207,9 @@ func (tc *Collection) getByName(
 	}
 
 	desc, shouldReadFromStore, err := tc.leased.getByName(
-		ctx, txn, parentID, parentSchemaID, name)
+		ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
 	if err != nil {
+
 		return false, nil, err
 	}
 	if shouldReadFromStore {
@@ -217,6 +218,13 @@ func (tc *Collection) getByName(
 		)
 	}
 	return desc != nil, desc, nil
+}
+
+func (tc *Collection) deadlineHolder(txn *kv.Txn) deadlineHolder {
+	if tc.maxTimestampBound == nil {
+		return txn
+	}
+	return &maxTimestampBoundDeadlineHolder{maxTimestampBound: *tc.maxTimestampBound}
 }
 
 // Getting a schema by name uses a special resolution path which can avoid
