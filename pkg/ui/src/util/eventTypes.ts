@@ -32,6 +32,8 @@ export const ALTER_DATABASE_DROP_REGION = "alter_database_drop_region";
 export const ALTER_DATABASE_PRIMARY_REGION = "alter_database_primary_region";
 // Recorded when the survival goal of a database is altered.
 export const ALTER_DATABASE_SURVIVAL_GOAL = "alter_database_survival_goal";
+// Recorded when the placement policy of a database is altered.
+export const ALTER_DATABASE_PLACEMENT = "alter_database_placement";
 // Recorded when a table's owner is changed.
 export const ALTER_TABLE_OWNER = "alter_table_owner";
 // Recorded when a table is created.

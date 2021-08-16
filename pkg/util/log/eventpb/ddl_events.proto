@@ -90,6 +90,16 @@ message AlterDatabaseSurvivalGoal {
   string survival_goal = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+// AlterDatabasePlacement is recorded when the database placement is modified.
+message AlterDatabasePlacement {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the database.
+  string database_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The new placement policy.
+  string placement = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // RenameDatabase is recorded when a database is renamed.
 message RenameDatabase {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];

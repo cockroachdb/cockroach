@@ -191,6 +191,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `Primary Region Changed: User ${info.User} changed primary region of database ${info.DatabaseName} to ${info.PrimaryRegionName}`;
     case eventTypes.ALTER_DATABASE_SURVIVAL_GOAL:
       return `Survival Goal Changed: User ${info.User} changed survival goal of database ${info.DatabaseName} to ${info.SurvivalGoal}`;
+    case eventTypes.ALTER_DATABASE_PLACEMENT:
+      return `Placement Policy Changed: User ${info.User} changed placement policy of database ${info.DatabaseName} to ${info.Placement}`;
     case (eventTypes.UNSAFE_UPSERT_NAMESPACE_ENTRY,
     eventTypes.UNSAFE_DELETE_NAMESPACE_ENTRY,
     eventTypes.UNSAFE_UPSERT_DESCRIPTOR,
@@ -256,6 +258,7 @@ export interface EventInfo {
   RegionName?: string;
   PrimaryRegionName?: string;
   SurvivalGoal?: string;
+  Placement?: string;
   ParentID?: string;
   ParentSchemaID?: string;
   Name?: string;
