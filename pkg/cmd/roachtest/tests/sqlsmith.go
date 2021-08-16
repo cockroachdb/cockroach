@@ -132,11 +132,17 @@ func registerSQLSmith(r registry.Registry) {
 		// other setup queries have already completed, including the smither
 		// instantiation (otherwise, the setup might fail because of the
 		// injected panics).
-		injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
-		if _, err := conn.Exec(injectPanicsStmt); err != nil {
-			t.Fatal(err)
+		if rng.Float64() < 0.5 {
+			// TODO(yuzefovich): at the moment we're only injecting panics with
+			// 50% probability in order to test the hypothesis that this panic
+			// injection is the root cause of the inbox communication errors we
+			// have been seeing sporadically.
+			injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
+			if _, err := conn.Exec(injectPanicsStmt); err != nil {
+				t.Fatal(err)
+			}
+			logStmt(injectPanicsStmt)
 		}
-		logStmt(injectPanicsStmt)
 
 		t.Status("smithing")
 		until := time.After(t.Spec().(*registry.TestSpec).Timeout / 2)
