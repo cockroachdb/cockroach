@@ -156,6 +156,24 @@ func (t *tenantStatusServer) ResetSQLStats(
 	return &serverpb.ResetSQLStatsResponse{}, nil
 }
 
+func (t *tenantStatusServer) CombinedStatementStats(
+	ctx context.Context, req *serverpb.CombinedStatementsStatsRequest,
+) (*serverpb.StatementsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	return getCombinedStatementStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(),
+		t.sqlServer.internalExecutor)
+}
+
 // Statements implements the relevant endpoint on the StatusServer by
 // fanning out a request to all pods on the current tenant via gRPC to collect
 // in-memory statistics and append them together for the caller.
