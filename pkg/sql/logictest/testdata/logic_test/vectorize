@@ -1323,3 +1323,14 @@ bar
 
 statement ok
 RESET vectorize
+
+# Regression test for ignoring the escaping in the LIKE pattern (#68040).
+statement ok
+RESET vectorize;
+CREATE TABLE t68040 (c) AS SELECT 'string with \ backslash';
+SET vectorize = experimental_always
+
+query T
+SELECT c FROM t68040 WHERE c LIKE '%\\%'
+----
+string with \ backslash
