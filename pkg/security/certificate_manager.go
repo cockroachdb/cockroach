@@ -962,7 +962,7 @@ func (cm *CertificateManager) getTenantClientCertLocked() (*CertInfo, error) {
 }
 
 // GetTenantClientTLSConfig returns the most up-to-date tenant client
-// tls.Config.
+// tls.Config with the .ServerName set to "tenant-{tenantID}".
 func (cm *CertificateManager) GetTenantClientTLSConfig() (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -989,6 +989,14 @@ func (cm *CertificateManager) GetTenantClientTLSConfig() (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Tenant servers are expected to have the SAN tenant-%d. In most cases,
+	// especially in the case of CockroachCloud Serverless, tenant servers use
+	// a shared certificate and don't have any wildcard-able DNS available to
+	// them. Rather than forcing the operators, human or automated, to re-mint
+	// certificates for every Tenant server, they share the ServerName of
+	// tenant-%d.
+	cfg.ServerName = fmt.Sprintf("tenant-%d", cm.tenantIdentifier)
 
 	cm.tenantClientConfig = cfg
 	return cfg, nil
