@@ -24,7 +24,8 @@ CREATE TABLE abcdef (
     d INT AS (b + c + 1) STORED,
     e INT AS (a) STORED,
     f INT CHECK (f > 2),
-    g INT AS (a+b) VIRTUAL
+    g INT AS (a+b) VIRTUAL,
+    h INT ON UPDATE 3
 )
 ----
 
@@ -39,6 +40,7 @@ TABLE abcdef
  ├── e int as (a) stored
  ├── f int
  ├── g int as (a + b) virtual
+ ├── h int on update (3)
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]

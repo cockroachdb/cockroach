@@ -1520,8 +1520,31 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		// Temporary tables.
 		{ // 16
+			err: `referenced type ID 500: descriptor not found`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:             1,
+					Name:           "bar",
+					KeyColumnIDs:   []descpb.ColumnID{1},
+					KeyColumnNames: []string{"a"},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{
+						Name:         "a",
+						ID:           1,
+						Type:         types.Int,
+						OnUpdateExpr: pointer("a::@100500"),
+					},
+				},
+			},
+		},
+		// Temporary tables.
+		{ // 17
 			err: "",
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
