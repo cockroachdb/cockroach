@@ -2216,6 +2216,9 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 		Settings:   s.Cfg.Settings,
 		Clock:      s.Clock,
 		Stopper:    s.Stopper(),
+		// Disable transaction heartbeats so that they don't disrupt our attempt to
+		// track the requests issued by the transactions.
+		HeartbeatInterval: -1,
 	}, senderFn)
 	db := kv.NewDB(ambientCtx, tsf, s.Clock, s.Stopper())
 
