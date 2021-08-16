@@ -108,6 +108,20 @@ func (w column) GetDefaultExpr() string {
 	return *w.desc.DefaultExpr
 }
 
+// HasOnUpdate returns true iff the column has an on update expression set.
+func (w column) HasOnUpdate() bool {
+	return w.desc.HasOnUpdate()
+}
+
+// GetOnUpdateExpr returns the column on update expression if it exists,
+// empty string otherwise.
+func (w column) GetOnUpdateExpr() string {
+	if !w.HasOnUpdate() {
+		return ""
+	}
+	return *w.desc.OnUpdateExpr
+}
+
 // IsComputed returns true iff the column is a computed column.
 func (w column) IsComputed() bool {
 	return w.desc.IsComputed()

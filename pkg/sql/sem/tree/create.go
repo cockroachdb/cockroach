@@ -633,14 +633,6 @@ func NewColumnTableDef(
 		}
 	}
 
-	if d.HasOnUpdateExpr() && d.References.Actions.Update != NoAction {
-		return nil, pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"ON UPDATE expression and ON UPDATE foreign key action both specified for column %q",
-			name,
-		)
-	}
-
 	return d, nil
 }
 
