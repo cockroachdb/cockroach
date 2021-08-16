@@ -20,6 +20,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,7 +32,7 @@ func WritePEMToFile(path string, mode os.FileMode, overwrite bool, blocks ...*pe
 	if !overwrite {
 		flags |= os.O_EXCL
 	}
-	f, err := os.OpenFile(path, flags, mode)
+	f, err := sysutil.OpenFile(path, flags, mode)
 	if err != nil {
 		return err
 	}
@@ -53,7 +54,7 @@ func SafeWriteToFile(path string, mode os.FileMode, overwrite bool, contents []b
 	if !overwrite {
 		flags |= os.O_EXCL
 	}
-	f, err := os.OpenFile(path, flags, mode)
+	f, err := sysutil.OpenFile(path, flags, mode)
 	if err != nil {
 		return err
 	}
