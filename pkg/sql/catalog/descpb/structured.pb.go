@@ -2569,8 +2569,10 @@ type TableDescriptor_CheckConstraint struct {
 	// An ordered list of column IDs used by the check constraint.
 	ColumnIDs           []ColumnID `protobuf:"varint,5,rep,name=column_ids,json=columnIds,casttype=ColumnID" json:"column_ids,omitempty"`
 	IsNonNullConstraint bool       `protobuf:"varint,6,opt,name=is_non_null_constraint,json=isNonNullConstraint" json:"is_non_null_constraint"`
-	// Whether the check constraint should show up in the result of a `SHOW CREATE
-	// TABLE..` statement.
+	// Hidden is set to true for hash-sharded column check constraints.
+	// Previously, this field was used to hide these constraints in the output
+	// of SHOW CREATE TABLE. We no longer them in order to make the output to be
+	// round-trippable, but we still set this field for now. See #68031.
 	Hidden bool `protobuf:"varint,7,opt,name=hidden" json:"hidden"`
 }
 
