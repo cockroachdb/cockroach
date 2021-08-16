@@ -331,6 +331,9 @@ func formatColumn(col *Column, buf *bytes.Buffer) {
 	if col.HasDefault() {
 		fmt.Fprintf(buf, " default (%s)", col.DefaultExprStr())
 	}
+	if col.HasOnUpdate() {
+		fmt.Fprintf(buf, " on update (%s)", col.OnUpdateExprStr())
+	}
 	kind := col.Kind()
 	// Omit the visibility for mutation and inverted columns, which are always
 	// inaccessible.
