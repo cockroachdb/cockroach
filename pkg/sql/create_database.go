@@ -95,7 +95,15 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	}
 
 	if n.Placement != tree.DataPlacementUnspecified {
-		// TODO(pawalt): #68598 add cluster setting checking for placement.
+		if !p.EvalContext().SessionData.PlacementEnabled {
+			return nil, pgerror.New(
+				pgcode.InvalidDatabaseDefinition,
+
+				"PLACEMENT requires that the cluster setting sql.defaults.experimental_placement "+
+					"is enabled",
+			)
+		}
+
 		if n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
 			return nil, pgerror.New(
 				pgcode.InvalidDatabaseDefinition,
