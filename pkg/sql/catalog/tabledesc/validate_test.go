@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"google.golang.org/protobuf/proto"
 )
 
 type validateStatus int
@@ -190,6 +191,7 @@ var validationMap = []struct {
 				reason: "initial import: TODO(features): add validation"},
 			"AlterColumnTypeInProgress": {status: thisFieldReferencesNoObjects},
 			"SystemColumnKind":          {status: thisFieldReferencesNoObjects},
+			"OnUpdateExpr":              {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -1107,6 +1109,26 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  3,
 			}},
+		{`computed column "bar" cannot also have an ON UPDATE expression`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:           1,
+						Name:         "bar",
+						ComputeExpr:  proto.String("'blah'"),
+						OnUpdateExpr: proto.String("'blah'"),
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+			}},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
@@ -1520,8 +1542,31 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		// Temporary tables.
 		{ // 16
+			err: `referenced type ID 500: descriptor not found`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:             1,
+					Name:           "bar",
+					KeyColumnIDs:   []descpb.ColumnID{1},
+					KeyColumnNames: []string{"a"},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{
+						Name:         "a",
+						ID:           1,
+						Type:         types.Int,
+						OnUpdateExpr: pointer("a::@100500"),
+					},
+				},
+			},
+		},
+		// Temporary tables.
+		{ // 17
 			err: "",
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
