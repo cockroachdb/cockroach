@@ -1050,7 +1050,7 @@ SELECT k FROM e WHERE i IS NOT DISTINCT FROM NULL::FLOAT
 project
  ├── columns: k:1(int!null)
  ├── stats: [rows=10.0000001]
- ├── cost: 24.9200001
+ ├── cost: 24.5200001
  ├── key: (1)
  ├── prune: (1)
  ├── interesting orderings: (+1)
@@ -1058,7 +1058,7 @@ project
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int)
       ├── constraint: /2/1: [/NULL - /NULL]
       ├── stats: [rows=10.0000001, distinct(2)=1, null(2)=10]
-      ├── cost: 24.8100001
+      ├── cost: 24.4100001
       ├── key: (1)
       ├── fd: ()-->(2)
       ├── prune: (1)
@@ -1070,7 +1070,7 @@ SELECT k FROM e WHERE i IS DISTINCT FROM NULL::FLOAT
 project
  ├── columns: k:1(int!null)
  ├── stats: [rows=990]
- ├── cost: 1053.92
+ ├── cost: 1053.52
  ├── key: (1)
  ├── prune: (1)
  ├── interesting orderings: (+1)
@@ -1078,7 +1078,7 @@ project
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int!null)
       ├── constraint: /2/1: (/NULL - ]
       ├── stats: [rows=990, distinct(2)=100, null(2)=0]
-      ├── cost: 1044.01
+      ├── cost: 1043.61
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1)

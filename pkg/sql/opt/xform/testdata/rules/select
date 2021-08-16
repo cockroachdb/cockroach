@@ -266,39 +266,39 @@ memo (optimized, ~14KB, required=[presentation: i:1,f:2,s:3,b:4])
  ├── G1: (select G2 G3) (index-join G4 p,cols=(1-4)) (index-join G5 p,cols=(1-4)) (index-join G6 p,cols=(1-4)) (index-join G7 p,cols=(1-4))
  │    └── [presentation: i:1,f:2,s:3,b:4]
  │         ├── best: (index-join G4 p,cols=(1-4))
- │         └── cost: 59.80
+ │         └── cost: 59.00
  ├── G2: (scan p,cols=(1-4))
  │    └── []
  │         ├── best: (scan p,cols=(1-4))
- │         └── cost: 1115.81
+ │         └── cost: 1114.91
  ├── G3: (filters G8 G9)
  ├── G4: (select G10 G11)
  │    └── []
  │         ├── best: (select G10 G11)
- │         └── cost: 25.73
+ │         └── cost: 24.93
  ├── G5: (select G12 G13)
  │    └── []
  │         ├── best: (select G12 G13)
- │         └── cost: 364.43
+ │         └── cost: 364.03
  ├── G6: (scan p@idx,partial,cols=(1-3,5),constrained)
  │    └── []
  │         ├── best: (scan p@idx,partial,cols=(1-3,5),constrained)
- │         └── cost: 24.89
+ │         └── cost: 24.09
  ├── G7: (scan p@idx2,partial,cols=(3,5),constrained)
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(3,5),constrained)
- │         └── cost: 24.12
+ │         └── cost: 23.72
  ├── G8: (gt G14 G15)
  ├── G9: (eq G16 G17)
  ├── G10: (scan p@idx,partial,cols=(1-3,5))
  │    └── []
  │         ├── best: (scan p@idx,partial,cols=(1-3,5))
- │         └── cost: 25.61
+ │         └── cost: 24.81
  ├── G11: (filters G8)
  ├── G12: (scan p@idx2,partial,cols=(3,5))
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(3,5))
- │         └── cost: 361.08
+ │         └── cost: 360.68
  ├── G13: (filters G9)
  ├── G14: (variable i)
  ├── G15: (const 0)
@@ -314,16 +314,16 @@ memo (optimized, ~8KB, required=[presentation: i:1])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 1105.54
+ │         └── cost: 1104.84
  ├── G2: (select G4 G5)
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1105.43
+ │         └── cost: 1104.73
  ├── G3: (projections)
  ├── G4: (scan p,cols=(1,3))
  │    └── []
  │         ├── best: (scan p,cols=(1,3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.71
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable s)
@@ -422,7 +422,7 @@ memo (optimized, ~5KB, required=[presentation: k:1])
  ├── G2: (scan a,cols=(1)) (scan a@u,cols=(1)) (scan a@v,cols=(1))
  │    └── []
  │         ├── best: (scan a,cols=(1))
- │         └── cost: 1064.81
+ │         └── cost: 1064.41
  ├── G3: (filters G4)
  ├── G4: (eq G5 G6)
  ├── G5: (variable k)
@@ -447,16 +447,16 @@ memo (optimized, ~6KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
- │         └── cost: 364.67
+ │         └── cost: 364.17
  ├── G2: (select G4 G5) (scan a@v,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan a@v,cols=(1,3),constrained)
- │         └── cost: 361.36
+ │         └── cost: 360.86
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,3)) (scan a@u,cols=(1,3)) (scan a@v,cols=(1,3))
  │    └── []
  │         ├── best: (scan a,cols=(1,3))
- │         └── cost: 1075.01
+ │         └── cost: 1074.51
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
  ├── G7: (variable v)
@@ -493,7 +493,7 @@ memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1075.01
+ │         └── cost: 1074.51
  ├── G5: (filters G8 G9)
  ├── G6: (scan a,cols=(1,2),constrained)
  │    └── []
@@ -539,7 +539,7 @@ memo (optimized, ~8KB, required=[presentation: k:1])
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1075.01
+ │         └── cost: 1074.51
  ├── G5: (filters G8 G9)
  ├── G6: (scan a,cols=(1,2),constrained)
  │    └── []
@@ -591,12 +591,12 @@ memo (optimized, ~8KB, required=[presentation: k:1])
  ├── G4: (scan a,cols=(1-3)) (scan a@u,cols=(1-3)) (scan a@v,cols=(1-3))
  │    └── []
  │         ├── best: (scan a,cols=(1-3))
- │         └── cost: 1085.21
+ │         └── cost: 1084.61
  ├── G5: (filters G10 G11)
  ├── G6: (scan a@u,cols=(1-3),constrained)
  │    └── []
  │         ├── best: (scan a@u,cols=(1-3),constrained)
- │         └── cost: 25.21
+ │         └── cost: 24.61
  ├── G7: (filters G11)
  ├── G8: (scan a@v,cols=(1-3),constrained)
  │    └── []
@@ -678,7 +678,7 @@ memo (optimized, ~5KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G2: (scan b,cols=(1-4))
  │    └── []
  │         ├── best: (scan b,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.81
  ├── G3: (filters G5)
  ├── G4: (scan b@v,cols=(1,3),constrained)
  │    └── []
@@ -740,12 +740,12 @@ memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G2: (scan b,cols=(1-4))
  │    └── []
  │         ├── best: (scan b,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.81
  ├── G3: (filters G7 G8)
  ├── G4: (scan b,cols=(1-4),constrained)
  │    └── []
  │         ├── best: (scan b,cols=(1-4),constrained)
- │         └── cost: 374.81
+ │         └── cost: 374.01
  ├── G5: (filters G7)
  ├── G6: (select G9 G10)
  │    └── []
@@ -838,7 +838,7 @@ memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G2: (scan b,cols=(1-4))
  │    └── []
  │         ├── best: (scan b,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.81
  ├── G3: (filters G6 G7)
  ├── G4: (index-join G8 b,cols=(1-4))
  │    └── []
@@ -902,12 +902,12 @@ memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G2: (scan b,cols=(1-4))
  │    └── []
  │         ├── best: (scan b,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.81
  ├── G3: (filters G8 G9 G10)
  ├── G4: (scan b,cols=(1-4),constrained)
  │    └── []
  │         ├── best: (scan b,cols=(1-4),constrained)
- │         └── cost: 374.81
+ │         └── cost: 374.01
  ├── G5: (filters G8 G9)
  ├── G6: (index-join G11 b,cols=(1-4))
  │    └── []
@@ -966,22 +966,22 @@ memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G3)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G3)
- │         └── cost: 584.05
+ │         └── cost: 583.65
  ├── G2: (scan b,cols=(1-4))
  │    └── []
  │         ├── best: (scan b,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.81
  ├── G3: (filters G5 G6)
  ├── G4: (index-join G7 b,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G7 b,cols=(1-4))
- │         └── cost: 583.22
+ │         └── cost: 582.82
  ├── G5: (gt G8 G9)
  ├── G6: (lt G8 G10)
  ├── G7: (scan b@u,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan b@u,cols=(1,2),constrained)
- │         └── cost: 97.61
+ │         └── cost: 97.21
  ├── G8: (tuple G11)
  ├── G9: (tuple G12)
  ├── G10: (tuple G13)
@@ -1124,25 +1124,25 @@ memo (optimized, ~6KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
  ├── G1: (select G2 G3) (scan kifs@s_idx,cols=(2-4),constrained) (index-join G4 kifs,cols=(2-4))
  │    ├── [presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 26.58
+ │    │    └── cost: 25.88
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(2-4),constrained)
- │         └── cost: 25.41
+ │         └── cost: 24.71
  ├── G2: (scan kifs,cols=(2-4)) (scan kifs@s_idx,cols=(2-4))
  │    ├── [ordering: +2 opt(4)]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1344.74
+ │    │    └── cost: 1344.04
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(2-4))
- │         └── cost: 1095.41
+ │         └── cost: 1094.71
  ├── G3: (filters G5)
  ├── G4: (scan kifs@si_idx,cols=(1,2,4),constrained)
  │    ├── [ordering: +2 opt(4)]
  │    │    ├── best: (scan kifs@si_idx,rev,cols=(1,2,4),constrained)
- │    │    └── cost: 26.07
+ │    │    └── cost: 25.04
  │    └── []
  │         ├── best: (scan kifs@si_idx,cols=(1,2,4),constrained)
- │         └── cost: 25.41
+ │         └── cost: 24.71
  ├── G5: (eq G6 G7)
  ├── G6: (variable s)
  └── G7: (const 'foo')
@@ -1154,21 +1154,21 @@ memo (optimized, ~7KB, required=[presentation: j:5])
  ├── G1: (project G2 G3 j)
  │    └── [presentation: j:5]
  │         ├── best: (project G2 G3 j)
- │         └── cost: 25.32
+ │         └── cost: 24.72
  ├── G2: (select G4 G5) (index-join G6 kifs,cols=(4,5)) (scan kifs@si_idx,cols=(4,5),constrained)
  │    └── []
  │         ├── best: (scan kifs@si_idx,cols=(4,5),constrained)
- │         └── cost: 25.21
+ │         └── cost: 24.61
  ├── G3: (projections)
  ├── G4: (scan kifs,cols=(4,5)) (scan kifs@si_idx,cols=(4,5))
  │    └── []
  │         ├── best: (scan kifs@si_idx,cols=(4,5))
- │         └── cost: 1085.21
+ │         └── cost: 1084.61
  ├── G5: (filters G7)
  ├── G6: (scan kifs@s_idx,cols=(1,4),constrained)
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(1,4),constrained)
- │         └── cost: 25.21
+ │         └── cost: 24.61
  ├── G7: (eq G8 G9)
  ├── G8: (variable s)
  └── G9: (const 'foo')
@@ -1180,16 +1180,16 @@ memo (optimized, ~6KB, required=[presentation: i:2,k:1])
  ├── G1: (project G2 G3 k i)
  │    └── [presentation: i:2,k:1]
  │         ├── best: (project G2 G3 k i)
- │         └── cost: 374.72
+ │         └── cost: 374.02
  ├── G2: (select G4 G5) (scan kifs@s_idx,cols=(1,2,4),constrained) (scan kifs@si_idx,cols=(1,2,4),constrained)
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(1,2,4),constrained)
- │         └── cost: 371.38
+ │         └── cost: 370.68
  ├── G3: (projections)
  ├── G4: (scan kifs,cols=(1,2,4)) (scan kifs@s_idx,cols=(1,2,4)) (scan kifs@si_idx,cols=(1,2,4))
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(1,2,4))
- │         └── cost: 1095.41
+ │         └── cost: 1094.71
  ├── G5: (filters G6)
  ├── G6: (ge G7 G8)
  ├── G7: (variable s)
@@ -1588,48 +1588,48 @@ memo (optimized, ~18KB, required=[presentation: i:1])
  ├── G1: (project G2 G3 i) (project G4 G3 i) (project G5 G3 i)
  │    └── [presentation: i:1]
  │         ├── best: (project G5 G3 i)
- │         └── cost: 15.38
+ │         └── cost: 14.98
  ├── G2: (select G6 G7) (select G8 G9) (index-join G4 p,cols=(1,3)) (select G10 G9) (index-join G5 p,cols=(1,3))
  │    └── []
  │         ├── best: (index-join G5 p,cols=(1,3))
- │         └── cost: 20.90
+ │         └── cost: 20.50
  ├── G3: (projections)
  ├── G4: (select G11 G9)
  │    └── []
  │         ├── best: (select G11 G9)
- │         └── cost: 24.93
+ │         └── cost: 24.53
  ├── G5: (scan p@idx2,partial,cols=(1,5),constrained)
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(1,5),constrained)
- │         └── cost: 15.36
+ │         └── cost: 14.96
  ├── G6: (scan p,cols=(1,3))
  │    └── []
  │         ├── best: (scan p,cols=(1,3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.71
  ├── G7: (filters G12 G13)
  ├── G8: (index-join G14 p,cols=(1,3))
  │    └── []
  │         ├── best: (index-join G14 p,cols=(1,3))
- │         └── cost: 385.03
+ │         └── cost: 384.63
  ├── G9: (filters G12)
  ├── G10: (index-join G15 p,cols=(1,3))
  │    └── []
  │         ├── best: (index-join G15 p,cols=(1,3))
- │         └── cost: 80.78
+ │         └── cost: 80.38
  ├── G11: (scan p@idx2,partial,cols=(1,5))
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(1,5))
- │         └── cost: 24.81
+ │         └── cost: 24.41
  ├── G12: (eq G16 G17)
  ├── G13: (eq G18 G19)
  ├── G14: (select G20 G21)
  │    └── []
  │         ├── best: (select G20 G21)
- │         └── cost: 364.43
+ │         └── cost: 364.03
  ├── G15: (scan p@idx,partial,cols=(3,5),constrained)
  │    └── []
  │         ├── best: (scan p@idx,partial,cols=(3,5),constrained)
- │         └── cost: 24.12
+ │         └── cost: 23.72
  ├── G16: (variable i)
  ├── G17: (const 3)
  ├── G18: (variable s)
@@ -1637,7 +1637,7 @@ memo (optimized, ~18KB, required=[presentation: i:1])
  ├── G20: (scan p@idx,partial,cols=(3,5))
  │    └── []
  │         ├── best: (scan p@idx,partial,cols=(3,5))
- │         └── cost: 361.08
+ │         └── cost: 360.68
  └── G21: (filters G13)
 
 exec-ddl
@@ -1661,16 +1661,16 @@ memo (optimized, ~7KB, required=[presentation: i:1])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 1105.46
+ │         └── cost: 1104.76
  ├── G2: (select G4 G5)
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1105.44
+ │         └── cost: 1104.74
  ├── G3: (projections)
  ├── G4: (scan p,cols=(1,3))
  │    └── []
  │         ├── best: (scan p,cols=(1,3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.71
  ├── G5: (filters G6 G7)
  ├── G6: (eq G8 G9)
  ├── G7: (eq G10 G11)
@@ -1894,20 +1894,20 @@ memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k) (project G4 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G4 G3 k)
- │         └── cost: 129.86
+ │         └── cost: 129.56
  ├── G2: (select G5 G6) (index-join G4 b,cols=(1,4))
  │    └── []
  │         ├── best: (index-join G4 b,cols=(1,4))
- │         └── cost: 799.81
+ │         └── cost: 799.51
  ├── G3: (projections)
  ├── G4: (scan b@j_inv_idx,cols=(1),constrained inverted)
  │    └── []
  │         ├── best: (scan b@j_inv_idx,cols=(1),constrained inverted)
- │         └── cost: 128.75
+ │         └── cost: 128.45
  ├── G5: (scan b,cols=(1,4))
  │    └── []
  │         ├── best: (scan b,cols=(1,4))
- │         └── cost: 1085.21
+ │         └── cost: 1084.61
  ├── G6: (filters G7)
  ├── G7: (contains G8 G9)
  ├── G8: (variable j)
@@ -3521,27 +3521,27 @@ memo (optimized, ~11KB, required=[presentation: k:1,s:2,j:3])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 pi,cols=(1-3))
  │    └── [presentation: k:1,s:2,j:3]
  │         ├── best: (index-join G6 pi,cols=(1-3))
- │         └── cost: 22.17
+ │         └── cost: 21.87
  ├── G2: (scan pi,cols=(1-3))
  │    └── []
  │         ├── best: (scan pi,cols=(1-3))
- │         └── cost: 1085.21
+ │         └── cost: 1084.61
  ├── G3: (filters G7 G8)
  ├── G4: (index-join G9 pi,cols=(1-3))
  │    └── []
  │         ├── best: (index-join G9 pi,cols=(1-3))
- │         └── cost: 30.08
+ │         └── cost: 29.78
  ├── G5: (filters G8)
  ├── G6: (scan pi@idx2,partial,cols=(1),constrained inverted)
  │    └── []
  │         ├── best: (scan pi@idx2,partial,cols=(1),constrained inverted)
- │         └── cost: 15.45
+ │         └── cost: 15.15
  ├── G7: (contains G10 G11)
  ├── G8: (eq G12 G13)
  ├── G9: (scan pi@idx,partial,cols=(1),constrained inverted)
  │    └── []
  │         ├── best: (scan pi@idx,partial,cols=(1),constrained inverted)
- │         └── cost: 16.60
+ │         └── cost: 16.30
  ├── G10: (variable j)
  ├── G11: (const '{"a": "b"}')
  ├── G12: (variable s)
@@ -3569,11 +3569,11 @@ memo (optimized, ~7KB, required=[presentation: k:1,s:2,j:3])
  ├── G1: (select G2 G3)
  │    └── [presentation: k:1,s:2,j:3]
  │         ├── best: (select G2 G3)
- │         └── cost: 1095.24
+ │         └── cost: 1094.64
  ├── G2: (scan pi,cols=(1-3))
  │    └── []
  │         ├── best: (scan pi,cols=(1-3))
- │         └── cost: 1085.21
+ │         └── cost: 1084.61
  ├── G3: (filters G4 G5)
  ├── G4: (contains G6 G7)
  ├── G5: (eq G8 G9)
@@ -4354,40 +4354,40 @@ memo (optimized, ~13KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 22.83
+ │         └── cost: 11.93
  ├── G2: (scan pqr,cols=(2,3))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,3))
- │         └── cost: 10725.41
+ │         └── cost: 10724.71
  ├── G3: (filters G9 G10)
  ├── G4: (index-join G11 pqr,cols=(2,3))
  │    └── []
  │         ├── best: (index-join G11 pqr,cols=(2,3))
- │         └── cost: 84.88
+ │         └── cost: 84.48
  ├── G5: (filters G10)
  ├── G6: (index-join G12 pqr,cols=(2,3))
  │    └── []
  │         ├── best: (index-join G12 pqr,cols=(2,3))
- │         └── cost: 725.42
+ │         └── cost: 725.02
  ├── G7: (filters G9)
  ├── G8: (index-join G13 pqr,cols=(2,3))
  │    └── []
  │         ├── best: (index-join G13 pqr,cols=(2,3))
- │         └── cost: 726.52
+ │         └── cost: 726.02
  ├── G9: (eq G14 G15)
  ├── G10: (eq G16 G17)
  ├── G11: (scan pqr@q,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 24.72
+ │         └── cost: 24.32
  ├── G12: (scan pqr@r,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 118.41
+ │         └── cost: 118.01
  ├── G13: (scan pqr@rs,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan pqr@rs,cols=(1,3),constrained)
- │         └── cost: 119.51
+ │         └── cost: 119.01
  ├── G14: (variable q)
  ├── G15: (const 1)
  ├── G16: (variable r)
@@ -4435,45 +4435,45 @@ memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
- │         └── cost: 28.47
+ │         └── cost: 17.47
  ├── G2: (scan pqr,cols=(2-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2-4))
- │         └── cost: 10825.61
+ │         └── cost: 10824.81
  ├── G3: (filters G11 G12)
  ├── G4: (index-join G13 pqr,cols=(2-4))
  │    └── []
  │         ├── best: (index-join G13 pqr,cols=(2-4))
- │         └── cost: 84.98
+ │         └── cost: 84.58
  ├── G5: (filters G12)
  ├── G6: (index-join G14 pqr,cols=(2-4))
  │    └── []
  │         ├── best: (index-join G14 pqr,cols=(2-4))
- │         └── cost: 726.42
+ │         └── cost: 726.02
  ├── G7: (filters G11)
  ├── G8: (index-join G15 pqr,cols=(2-4))
  │    └── []
  │         ├── best: (index-join G15 pqr,cols=(2-4))
- │         └── cost: 727.62
+ │         └── cost: 727.02
  ├── G9: (zigzag-join G3 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 22.94
+ │         └── cost: 11.94
  ├── G10: (filters)
  ├── G11: (eq G16 G17)
  ├── G12: (eq G18 G19)
  ├── G13: (scan pqr@q,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 24.72
+ │         └── cost: 24.32
  ├── G14: (scan pqr@r,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 118.41
+ │         └── cost: 118.01
  ├── G15: (scan pqr@rs,cols=(1,3,4),constrained)
  │    └── []
  │         ├── best: (scan pqr@rs,cols=(1,3,4),constrained)
- │         └── cost: 120.61
+ │         └── cost: 120.01
  ├── G16: (variable q)
  ├── G17: (const 1)
  ├── G18: (variable r)
@@ -4500,32 +4500,32 @@ memo (optimized, ~11KB, required=[presentation: q:2,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (zigzag-join G3 pqr@q pqr@s)
  │    └── [presentation: q:2,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 23.13
+ │         └── cost: 12.13
  ├── G2: (scan pqr,cols=(2,4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,4))
- │         └── cost: 10725.41
+ │         └── cost: 10724.71
  ├── G3: (filters G8 G9)
  ├── G4: (index-join G10 pqr,cols=(2,4))
  │    └── []
  │         ├── best: (index-join G10 pqr,cols=(2,4))
- │         └── cost: 84.88
+ │         └── cost: 84.48
  ├── G5: (filters G9)
  ├── G6: (index-join G11 pqr,cols=(2,4))
  │    └── []
  │         ├── best: (index-join G11 pqr,cols=(2,4))
- │         └── cost: 7134.52
+ │         └── cost: 7134.02
  ├── G7: (filters G8)
  ├── G8: (eq G12 G13)
  ├── G9: (eq G14 G15)
  ├── G10: (scan pqr@q,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 24.72
+ │         └── cost: 24.32
  ├── G11: (scan pqr@s,cols=(1,4),constrained)
  │    └── []
  │         ├── best: (scan pqr@s,cols=(1,4),constrained)
- │         └── cost: 1064.51
+ │         └── cost: 1064.01
  ├── G12: (variable q)
  ├── G13: (const 1)
  ├── G14: (variable s)
@@ -4554,40 +4554,40 @@ memo (optimized, ~13KB, required=[presentation: r:3,t:5])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G5) (select G7 G8) (zigzag-join G3 pqr@rs pqr@ts)
  │    └── [presentation: r:3,t:5]
  │         ├── best: (zigzag-join G3 pqr@rs pqr@ts)
- │         └── cost: 23.05
+ │         └── cost: 11.95
  ├── G2: (scan pqr,cols=(3,5))
  │    └── []
  │         ├── best: (scan pqr,cols=(3,5))
- │         └── cost: 10725.41
+ │         └── cost: 10724.71
  ├── G3: (filters G9 G10)
  ├── G4: (index-join G11 pqr,cols=(3,5))
  │    └── []
  │         ├── best: (index-join G11 pqr,cols=(3,5))
- │         └── cost: 725.42
+ │         └── cost: 725.02
  ├── G5: (filters G10)
  ├── G6: (index-join G12 pqr,cols=(3,5))
  │    └── []
  │         ├── best: (index-join G12 pqr,cols=(3,5))
- │         └── cost: 726.52
+ │         └── cost: 726.02
  ├── G7: (index-join G13 pqr,cols=(3,5))
  │    └── []
  │         ├── best: (index-join G13 pqr,cols=(3,5))
- │         └── cost: 85.08
+ │         └── cost: 84.58
  ├── G8: (filters G9)
  ├── G9: (eq G14 G15)
  ├── G10: (eq G16 G17)
  ├── G11: (scan pqr@r,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 118.41
+ │         └── cost: 118.01
  ├── G12: (scan pqr@rs,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan pqr@rs,cols=(1,3),constrained)
- │         └── cost: 119.51
+ │         └── cost: 119.01
  ├── G13: (scan pqr@ts,cols=(1,5),constrained)
  │    └── []
  │         ├── best: (scan pqr@ts,cols=(1,5),constrained)
- │         └── cost: 24.92
+ │         └── cost: 24.42
  ├── G14: (variable r)
  ├── G15: (const 1)
  ├── G16: (variable t)
@@ -4956,59 +4956,59 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 23.15
+ │         └── cost: 11.95
  ├── G2: (scan pqr,cols=(1-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(1-4))
- │         └── cost: 10925.81
+ │         └── cost: 10924.91
  ├── G3: (filters G14 G15 G16)
  ├── G4: (index-join G17 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G17 pqr,cols=(1-4))
- │         └── cost: 84.98
+ │         └── cost: 84.58
  ├── G5: (filters G15 G16)
  ├── G6: (index-join G18 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G18 pqr,cols=(1-4))
- │         └── cost: 726.42
+ │         └── cost: 726.02
  ├── G7: (filters G14 G16)
  ├── G8: (index-join G19 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G19 pqr,cols=(1-4))
- │         └── cost: 1145.34
+ │         └── cost: 1144.74
  ├── G9: (filters G14)
  ├── G10: (index-join G20 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G20 pqr,cols=(1-4))
- │         └── cost: 85.92
+ │         └── cost: 85.32
  ├── G11: (zigzag-join G21 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G21 pqr@q pqr@r)
- │         └── cost: 22.94
+ │         └── cost: 11.94
  ├── G12: (filters G16)
  ├── G13: (zigzag-join G5 pqr@r pqr@s)
  │    └── []
  │         ├── best: (zigzag-join G5 pqr@r pqr@s)
- │         └── cost: 42.23
+ │         └── cost: 31.13
  ├── G14: (eq G22 G23)
  ├── G15: (eq G24 G23)
  ├── G16: (eq G25 G26)
  ├── G17: (scan pqr@q,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 24.72
+ │         └── cost: 24.32
  ├── G18: (scan pqr@r,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 118.41
+ │         └── cost: 118.01
  ├── G19: (select G27 G28)
  │    └── []
  │         ├── best: (select G27 G28)
- │         └── cost: 1084.63
+ │         └── cost: 1084.03
  ├── G20: (scan pqr@rs,cols=(1,3,4),constrained)
  │    └── []
  │         ├── best: (scan pqr@rs,cols=(1,3,4),constrained)
- │         └── cost: 25.21
+ │         └── cost: 24.61
  ├── G21: (filters G14 G15)
  ├── G22: (variable q)
  ├── G23: (const 1)
@@ -5018,7 +5018,7 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G27: (scan pqr@s,cols=(1,3,4),constrained)
  │    └── []
  │         ├── best: (scan pqr@s,cols=(1,3,4),constrained)
- │         └── cost: 1074.61
+ │         └── cost: 1074.01
  └── G28: (filters G15)
 
 # Zigzag joins cannot be planned for indexes where equality columns do not
@@ -5048,32 +5048,32 @@ memo (optimized, ~9KB, required=[presentation: q:2,t:5])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: q:2,t:5]
  │         ├── best: (select G4 G5)
- │         └── cost: 85.00
+ │         └── cost: 84.60
  ├── G2: (scan pqr,cols=(2,5))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,5))
- │         └── cost: 10725.41
+ │         └── cost: 10724.71
  ├── G3: (filters G8 G9)
  ├── G4: (index-join G10 pqr,cols=(2,5))
  │    └── []
  │         ├── best: (index-join G10 pqr,cols=(2,5))
- │         └── cost: 84.88
+ │         └── cost: 84.48
  ├── G5: (filters G9)
  ├── G6: (index-join G11 pqr,cols=(2,5))
  │    └── []
  │         ├── best: (index-join G11 pqr,cols=(2,5))
- │         └── cost: 85.08
+ │         └── cost: 84.58
  ├── G7: (filters G8)
  ├── G8: (eq G12 G13)
  ├── G9: (eq G14 G15)
  ├── G10: (scan pqr@q,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 24.72
+ │         └── cost: 24.32
  ├── G11: (scan pqr@ts,cols=(1,5),constrained)
  │    └── []
  │         ├── best: (scan pqr@ts,cols=(1,5),constrained)
- │         └── cost: 24.92
+ │         └── cost: 24.42
  ├── G12: (variable q)
  ├── G13: (const 1)
  ├── G14: (variable t)
@@ -5087,16 +5087,16 @@ memo (optimized, ~6KB, required=[presentation: c:3])
  ├── G1: (project G2 G3 c)
  │    └── [presentation: c:3]
  │         ├── best: (project G2 G3 c)
- │         └── cost: 25.12
+ │         └── cost: 24.62
  ├── G2: (select G4 G5) (scan zz_redundant@idx_u,cols=(2,3),constrained) (scan zz_redundant@idx_v,cols=(2,3),constrained)
  │    └── []
  │         ├── best: (scan zz_redundant@idx_u,cols=(2,3),constrained)
- │         └── cost: 25.01
+ │         └── cost: 24.51
  ├── G3: (projections)
  ├── G4: (scan zz_redundant,cols=(2,3)) (scan zz_redundant@idx_u,cols=(2,3)) (scan zz_redundant@idx_v,cols=(2,3))
  │    └── []
  │         ├── best: (scan zz_redundant,cols=(2,3))
- │         └── cost: 1075.01
+ │         └── cost: 1074.51
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable b)
@@ -6488,30 +6488,30 @@ memo (optimized, ~18KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G1: (select G2 G3) (index-join G4 t58390,cols=(1-4)) (distinct-on G5 G6 cols=(1))
  │    └── [presentation: k:1,a:2,b:3,c:4]
  │         ├── best: (select G2 G3)
- │         └── cost: 1115.63
+ │         └── cost: 1114.83
  ├── G2: (scan t58390,cols=(1-4))
  │    └── []
  │         ├── best: (scan t58390,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.81
  ├── G3: (filters G7)
  ├── G4: (scan t58390@secondary,partial,cols=(1,4))
  │    └── []
  │         ├── best: (scan t58390@secondary,partial,cols=(1,4))
- │         └── cost: 361.08
+ │         └── cost: 360.68
  ├── G5: (union-all G8 G9)
  │    └── []
  │         ├── best: (union-all G8 G9)
- │         └── cost: 2237.94
+ │         └── cost: 2236.34
  ├── G6: (aggregations G10 G11 G12)
  ├── G7: (or G13 G14)
  ├── G8: (select G15 G16) (select G17 G16)
  │    └── []
  │         ├── best: (select G15 G16)
- │         └── cost: 1115.63
+ │         └── cost: 1114.83
  ├── G9: (select G18 G19) (select G20 G19)
  │    └── []
  │         ├── best: (select G18 G19)
- │         └── cost: 1115.63
+ │         └── cost: 1114.83
  ├── G10: (const-agg G21)
  ├── G11: (const-agg G22)
  ├── G12: (const-agg G23)
@@ -6520,21 +6520,21 @@ memo (optimized, ~18KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G15: (scan t58390,cols=(6-9))
  │    └── []
  │         ├── best: (scan t58390,cols=(6-9))
- │         └── cost: 1105.61
+ │         └── cost: 1104.81
  ├── G16: (filters G25)
  ├── G17: (index-join G26 t58390,cols=(6-9))
  │    └── []
  │         ├── best: (index-join G26 t58390,cols=(6-9))
- │         └── cost: 2384.42
+ │         └── cost: 2384.02
  ├── G18: (scan t58390,cols=(11-14))
  │    └── []
  │         ├── best: (scan t58390,cols=(11-14))
- │         └── cost: 1105.61
+ │         └── cost: 1104.81
  ├── G19: (filters G27)
  ├── G20: (index-join G28 t58390,cols=(11-14))
  │    └── []
  │         ├── best: (index-join G28 t58390,cols=(11-14))
- │         └── cost: 2384.42
+ │         └── cost: 2384.02
  ├── G21: (variable a)
  ├── G22: (variable b)
  ├── G23: (variable c)
@@ -6543,12 +6543,12 @@ memo (optimized, ~18KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G26: (scan t58390@secondary,partial,cols=(6,9))
  │    └── []
  │         ├── best: (scan t58390@secondary,partial,cols=(6,9))
- │         └── cost: 361.08
+ │         └── cost: 360.68
  ├── G27: (gt G30 G24)
  ├── G28: (scan t58390@secondary,partial,cols=(11,14))
  │    └── []
  │         ├── best: (scan t58390@secondary,partial,cols=(11,14))
- │         └── cost: 361.08
+ │         └── cost: 360.68
  ├── G29: (variable a)
  └── G30: (variable b)
 
@@ -6576,51 +6576,51 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G1: (project G2 G3 a b)
  │    ├── [presentation: a:1] [ordering: +2]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1095.28
+ │    │    └── cost: 1094.68
  │    └── []
  │         ├── best: (project G2 G3 a b)
- │         └── cost: 1095.25
+ │         └── cost: 1094.65
  ├── G2: (select G4 G5) (select G6 G7) (distinct-on G8 G9 cols=(1))
  │    ├── [ordering: +(2|3)]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1095.27
+ │    │    └── cost: 1094.67
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1095.24
+ │         └── cost: 1094.64
  ├── G3: (projections)
  ├── G4: (scan t61795 [as=t1],cols=(1-3))
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 1334.54
+ │    │    └── cost: 1333.94
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(1-3))
- │         └── cost: 1085.21
+ │         └── cost: 1084.61
  ├── G5: (filters G10 G11)
  ├── G6: (index-join G12 t61795,cols=(1-3))
  │    ├── [ordering: +2]
  │    │    ├── best: (index-join G12="[ordering: +2]" t61795,cols=(1-3))
- │    │    └── cost: 3050.44
+ │    │    └── cost: 3050.04
  │    └── []
  │         ├── best: (index-join G12 t61795,cols=(1-3))
- │         └── cost: 3050.44
+ │         └── cost: 3050.04
  ├── G7: (filters G10)
  ├── G8: (union-all G13 G14)
  │    ├── [ordering: +(2|3)]
  │    │    ├── best: (sort G8)
- │    │    └── cost: 1100.45
+ │    │    └── cost: 1099.85
  │    └── []
  │         ├── best: (union-all G13 G14)
- │         └── cost: 1100.36
+ │         └── cost: 1099.76
  ├── G9: (aggregations G15 G16)
  ├── G10: (eq G17 G18)
  ├── G11: (or G19 G20)
  ├── G12: (select G21 G22)
  │    ├── [ordering: +2]
  │    │    ├── best: (select G21="[ordering: +2]" G22)
- │    │    └── cost: 1053.93
+ │    │    └── cost: 1053.53
  │    └── []
  │         ├── best: (select G21 G22)
- │         └── cost: 1053.93
+ │         └── cost: 1053.53
  ├── G13: (select G23 G24) (select G25 G26) (select G27 G26)
  │    └── []
  │         ├── best: (select G25 G26)
@@ -6628,7 +6628,7 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G14: (select G28 G29) (select G30 G31)
  │    └── []
  │         ├── best: (select G28 G29)
- │         └── cost: 1095.24
+ │         └── cost: 1094.64
  ├── G15: (const-agg G18)
  ├── G16: (const-agg G17)
  ├── G17: (variable t1.c)
@@ -6638,15 +6638,15 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G21: (scan t61795@secondary [as=t1],cols=(1,2),constrained)
  │    ├── [ordering: +2]
  │    │    ├── best: (scan t61795@secondary [as=t1],cols=(1,2),constrained)
- │    │    └── cost: 1044.01
+ │    │    └── cost: 1043.61
  │    └── []
  │         ├── best: (scan t61795@secondary [as=t1],cols=(1,2),constrained)
- │         └── cost: 1044.01
+ │         └── cost: 1043.61
  ├── G22: (filters G11)
  ├── G23: (scan t61795 [as=t1],cols=(9-11))
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(9-11))
- │         └── cost: 1085.21
+ │         └── cost: 1084.61
  ├── G24: (filters G35 G36)
  ├── G25: (scan t61795 [as=t1],cols=(9-11),constrained)
  │    └── []
@@ -6656,16 +6656,16 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G27: (index-join G37 t61795,cols=(9-11))
  │    └── []
  │         ├── best: (index-join G37 t61795,cols=(9-11))
- │         └── cost: 1059.99
+ │         └── cost: 1059.59
  ├── G28: (scan t61795 [as=t1],cols=(13-15))
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(13-15))
- │         └── cost: 1085.21
+ │         └── cost: 1084.61
  ├── G29: (filters G38 G39)
  ├── G30: (index-join G40 t61795,cols=(13-15))
  │    └── []
  │         ├── best: (index-join G40 t61795,cols=(13-15))
- │         └── cost: 3050.44
+ │         └── cost: 3050.04
  ├── G31: (filters G38)
  ├── G32: (variable t1.a)
  ├── G33: (const 10)
@@ -6675,13 +6675,13 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G37: (select G45 G46)
  │    └── []
  │         ├── best: (select G45 G46)
- │         └── cost: 1053.93
+ │         └── cost: 1053.53
  ├── G38: (eq G47 G48)
  ├── G39: (ne G48 G49)
  ├── G40: (select G50 G51)
  │    └── []
  │         ├── best: (select G50 G51)
- │         └── cost: 1053.93
+ │         └── cost: 1053.53
  ├── G41: (scalar-list G18)
  ├── G42: (variable t1.c)
  ├── G43: (variable t1.b)
@@ -6689,7 +6689,7 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G45: (scan t61795@secondary [as=t1],cols=(9,10),constrained)
  │    └── []
  │         ├── best: (scan t61795@secondary [as=t1],cols=(9,10),constrained)
- │         └── cost: 1044.01
+ │         └── cost: 1043.61
  ├── G46: (filters G36)
  ├── G47: (variable t1.c)
  ├── G48: (variable t1.b)
@@ -6697,7 +6697,7 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G50: (scan t61795@secondary [as=t1],cols=(13,14),constrained)
  │    └── []
  │         ├── best: (scan t61795@secondary [as=t1],cols=(13,14),constrained)
- │         └── cost: 1044.01
+ │         └── cost: 1043.61
  ├── G51: (filters G39)
  └── G52: (scalar-list G48)
 
