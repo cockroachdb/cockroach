@@ -920,19 +920,7 @@ func backupPlanHook(
 			}
 		case tree.AllDescriptors:
 			// Cluster backups include all of the descriptors in the cluster.
-			var allDescs []catalog.Descriptor
-			var err error
-			switch mvccFilter {
-			case MVCCFilter_All:
-				// Usually, revision_history backups include all previous versions of the
-				// descriptors at exist as of end time since they have not been GC'ed yet.
-				// However, since database descriptors are deleted as soon as the database
-				// is deleted, cluster backups need to explicitly go looking for these
-				// dropped descriptors up front.
-				allDescs, err = loadAllDescsInInterval(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, startTime, endTime)
-			case MVCCFilter_Latest:
-				allDescs, err = backupresolver.LoadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
-			}
+			allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
 			if err != nil {
 				return err
 			}
