@@ -1313,6 +1313,9 @@ func (r *Registry) stepThroughStateMachine(
 }
 
 func (r *Registry) adoptionDisabled(ctx context.Context) bool {
+	if r.knobs.DisableAdoptions {
+		return true
+	}
 	if r.preventAdoptionFile != "" {
 		if _, err := os.Stat(r.preventAdoptionFile); err != nil {
 			if !oserror.IsNotExist(err) {
