@@ -991,10 +991,11 @@ func init() {
 		stringFlag(f, &proxyContext.DirectoryAddr, cliflags.DirectoryAddr)
 		boolFlag(f, &proxyContext.SkipVerify, cliflags.SkipVerify)
 		boolFlag(f, &proxyContext.Insecure, cliflags.InsecureBackend)
-		durationFlag(f, &proxyContext.RatelimitBaseDelay, cliflags.RatelimitBaseDelay)
 		durationFlag(f, &proxyContext.ValidateAccessInterval, cliflags.ValidateAccessInterval)
 		durationFlag(f, &proxyContext.PollConfigInterval, cliflags.PollConfigInterval)
 		durationFlag(f, &proxyContext.DrainTimeout, cliflags.DrainTimeout)
+		intFlag(f, &proxyContext.ThrottlePolicy.Capacity, cliflags.TokenBucketPeriod)
+		durationFlag(f, &proxyContext.ThrottlePolicy.FillPeriod, cliflags.TokenBucketSize)
 	}
 	// Multi-tenancy test directory command flags.
 	{
