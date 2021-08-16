@@ -9,13 +9,18 @@
 // Package throttler provides admission checks functionality. Rate limiting currently.
 package throttler
 
-import "time"
+type ConnectionTags struct {
+	IP       string
+	TenantID string
+}
 
 // Service provides the interface for performing throttle checks before
 // requests into the managed service system.
 type Service interface {
 	// LoginCheck determines whether a login request should be allowed to
-	// proceed. It rate limits login attempts from IP addresses and it rate
-	// limits login attempts to individual accounts.
-	LoginCheck(ipAddress string, now time.Time) error
+	// proceed. It rate limits login attempts from IP addresses.
+	LoginCheck(connection ConnectionTags) error
+
+	// Report a successful login to the throttle.
+	ReportSuccess(connection ConnectionTags)
 }
