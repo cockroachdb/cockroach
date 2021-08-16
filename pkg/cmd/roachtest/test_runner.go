@@ -813,15 +813,14 @@ func (r *testRunner) runTest(
 		// Now kill anything going on in this cluster while collecting stacks
 		// to the logs, to get the server side of the hang.
 		//
-		// TODO(tbg): send --sig=3 followed by a hard kill after we've fixed
-		// https://github.com/cockroachdb/cockroach/issues/45875.
-		// Signal 11 will dump stacks, but it might be confusing to folks
-		// who debug from the artifacts only.
-		//
 		// Don't use surrounding context, which are likely already canceled.
 		if nodes := c.All(); len(nodes) > 0 { // avoid tests
 			innerCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			_ = c.StopE(innerCtx, c.All(), option.StopArgs("--sig=11"))
+			// SIGABRT causes the go runtime to dump stacks and terminate.
+			// We also need --wait because roachprod does not think signals other than SIGKILL will terminate
+			// the process, and that is mistaken.
+			_ = c.StopE(innerCtx, c.All(), option.StopArgs("--sig=ABRT", "--wait=true"))
+			t.L().PrintfCtx(ctx, "CockroachDB nodes aborted; check the stderr log for goroutine stack traces")
 			cancel()
 		}
 
