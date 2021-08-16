@@ -230,7 +230,7 @@ func (kd *kvDescriptors) getDescriptor(
 	if err != nil {
 		if withNameLookup && errors.Is(err, catalog.ErrDescriptorNotFound) {
 			// Having done the namespace lookup, the descriptor must exist.
-			err = errors.HandleAsAssertionFailure(err)
+			err = errors.WithAssertionFailure(err)
 		}
 		return false, nil, err
 	}
