@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 type createDatabaseNode struct {
@@ -95,7 +96,18 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	}
 
 	if n.Placement != tree.DataPlacementUnspecified {
-		// TODO(pawalt): #68598 add cluster setting checking for placement.
+		if !p.EvalContext().SessionData.PlacementEnabled {
+			return nil, errors.WithHint(pgerror.New(
+				pgcode.FeatureNotSupported,
+				"PLACEMENT requires that the session setting enable_multiregion_placement_policy "+
+					"is enabled",
+			),
+				"to use PLACEMENT, enable the session setting with SET"+
+					" enable_multiregion_placement_policy = true or enable the cluster setting"+
+					" sql.defaults.multiregion_placement_policy.enabled",
+			)
+		}
+
 		if n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
 			return nil, pgerror.New(
 				pgcode.InvalidDatabaseDefinition,
