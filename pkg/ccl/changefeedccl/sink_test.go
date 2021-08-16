@@ -442,7 +442,7 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, cfg.Validate())
 	})
-	t.Run("validate returns error for bad flush configurationg", func(t *testing.T) {
+	t.Run("validate returns error for bad flush configuration", func(t *testing.T) {
 		opts := make(map[string]string)
 		opts[changefeedbase.OptKafkaSinkConfig] = `{"Flush": {"Messages": 1000}}`
 
@@ -489,6 +489,41 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		saramaCfg := &sarama.Config{}
 		err = cfg.Apply(saramaCfg)
 		require.Error(t, err)
+	})
+	t.Run("apply parses RequiredAcks", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"RequiredAcks": "ALL"}`
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg := &sarama.Config{}
+		err = cfg.Apply(saramaCfg)
+		require.NoError(t, err)
+		require.Equal(t, sarama.WaitForAll, saramaCfg.Producer.RequiredAcks)
+
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"RequiredAcks": "-1"}`
+
+		cfg, err = getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg = &sarama.Config{}
+		err = cfg.Apply(saramaCfg)
+		require.NoError(t, err)
+		require.Equal(t, sarama.WaitForAll, saramaCfg.Producer.RequiredAcks)
+
+	})
+	t.Run("apply errors if RequiredAcks is invalid", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"RequiredAcks": "LocalQuorum"}`
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg := &sarama.Config{}
+		err = cfg.Apply(saramaCfg)
+		require.Error(t, err)
+
 	})
 }
 
