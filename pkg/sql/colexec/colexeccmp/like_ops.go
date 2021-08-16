@@ -64,10 +64,19 @@ func GetLikeOperatorType(pattern string, negate bool) (LikeOpType, string, error
 		}
 		return LikeAlwaysMatch, "", nil
 	}
-	if len(pattern) > 1 && !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
-		// There are no wildcards in the middle of the string, so we only need to
-		// use a regular expression if both the first and last characters are
+	hasEscape := strings.Contains(pattern, `\`)
+	if len(pattern) > 1 && !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") && !hasEscape {
+		// There are no wildcards in the middle of the string as well as no
+		// escape characters in the whole string, so we only need to use a
+		// regular expression if both the first and last characters are
 		// wildcards.
+		//
+		// The presence of the escape characters breaks the assumptions of the
+		// optimized versions since we no longer could just use the string for a
+		// direct match - we'd need to do some preprocessing here to remove the
+		// escape characters.
+		// TODO(yuzefovich): add that preprocessing (for example, `\\` needs to
+		// be replaced with `\`).
 		firstChar := pattern[0]
 		lastChar := pattern[len(pattern)-1]
 		if !isWildcard(firstChar) && !isWildcard(lastChar) {
