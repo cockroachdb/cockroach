@@ -1181,7 +1181,7 @@ func (c *CustomFuncs) findJoinFilterRange(
 ) (filterIdx int, ok bool) {
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
-		if props.TightConstraints && !props.Constraints.IsUnconstrained() {
+		if props.TightConstraints && props.Constraints.Length() > 0 {
 			constraint := props.Constraints.Constraint(0)
 			constraintCol := constraint.Columns.Get(0).ID()
 			// See comment in findFiltersForIndexLookup for why we check filter here.
