@@ -35,9 +35,7 @@ func init() {
 	leaktest.PrintLeakedStoppers = PrintLeakedStoppers
 }
 
-const asyncTaskNamePrefix = "[async] "
-
-// ErrThrottled is returned from RunLimitedAsyncTask in the event that there
+// ErrThrottled is returned from RunAsyncTaskEx in the event that there
 // is no more capacity for async tasks, as limited by the semaphore.
 var ErrThrottled = errors.New("throttled on async limiting semaphore")
 
@@ -332,80 +330,118 @@ func (s *Stopper) RunTaskWithErr(
 
 // RunAsyncTask is like RunTask, except the callback is run in a goroutine. The
 // method doesn't block for the callback to finish execution.
+//
+// See also RunAsyncTaskEx for a version with more options.
 func (s *Stopper) RunAsyncTask(
 	ctx context.Context, taskName string, f func(context.Context),
 ) error {
-	taskName = asyncTaskNamePrefix + taskName
-	if !s.runPrelude() {
-		return ErrUnavailable
-	}
-
-	ctx, span := tracing.ForkSpan(ctx, taskName)
-
-	// Call f.
-	go func() {
-		defer s.Recover(ctx)
-		defer s.runPostlude()
-		defer span.Finish()
-
-		f(ctx)
-	}()
-	return nil
+	return s.RunAsyncTaskEx(ctx,
+		TaskOpts{
+			TaskName:   taskName,
+			ChildSpan:  false,
+			Sem:        nil,
+			WaitForSem: false,
+		},
+		f)
 }
 
-// RunLimitedAsyncTask runs function f in a goroutine, using the given
-// channel as a semaphore to limit the number of tasks that are run
-// concurrently to the channel's capacity. If wait is true, blocks
-// until the semaphore is available in order to push back on callers
-// that may be trying to create many tasks. If wait is false, returns
-// immediately with an error if the semaphore is not
-// available. It is the caller's responsibility to ensure that sem is
-// closed when the stopper is quiesced. For quotapools which live for the
-// lifetime of the stopper, it is generally best to register the sem with the
-// stopper using AddCloser.
-func (s *Stopper) RunLimitedAsyncTask(
-	ctx context.Context, taskName string, sem *quotapool.IntPool, wait bool, f func(context.Context),
-) (err error) {
-	// Wait for permission to run from the semaphore.
-	var alloc *quotapool.IntAlloc
-	if wait {
-		alloc, err = sem.Acquire(ctx, 1)
-	} else {
-		alloc, err = sem.TryAcquire(ctx, 1)
-	}
-	if errors.Is(err, quotapool.ErrNotEnoughQuota) {
-		err = ErrThrottled
-	} else if quotapool.HasErrClosed(err) {
-		err = ErrUnavailable
-	}
-	if err != nil {
-		return err
-	}
-	defer func() {
-		// If the err is non-nil then we know that we did not start the async task
-		// and thus we need to release the acquired quota. If it is nil then we
-		// did start the task and it will release the quota.
-		if err != nil {
-			alloc.Release()
-		}
-	}()
+// TaskOpts groups the task execution options for RunAsyncTaskEx.
+type TaskOpts struct {
+	// TaskName is a human-readable name for the operation. Used as the name of
+	// the tracing span.
+	TaskName string
 
-	// Check for canceled context: it's possible to get the semaphore even
-	// if the context is canceled.
-	if ctx.Err() != nil {
-		return ctx.Err()
+	// ChildSpan, if set, creates the tracing span for the task via
+	// tracing.ChildSpan() instead of tracing.ForkSpan. This makes the task's span
+	// be part of the parent span's recording (it is created with the
+	// WithParentAndAutoCollection option instead of
+	// WithParentAndManualCollection). It also leads to a ChildOf relationship
+	// instead of a FollowsFrom relationship to be used for the task's span, which
+	// typically implies a non-binding expectation that the parent span will
+	// outlive the task's span, i.e. that the parent will wait for the task to
+	// complete.
+	//
+	// Regardless of this setting, if the caller doesn't have a span, the task
+	// doesn't get a span either.
+	//
+	// Setting ChildSpan can have consequences on memory usage. The lifetime of
+	// the task's span becomes tied to the lifetime of the parent. Generally
+	// ChildSpan should be used when the parent waits for the task to complete,
+	// and the parent is not a long-running process.
+	ChildSpan bool
+
+	// If set, Sem is used as a semaphore limiting the concurrency (each task has
+	// weight 1).
+	//
+	// It is the caller's responsibility to ensure that Sem is closed when the
+	// stopper is quiesced. For quotapools which live for the lifetime of the
+	// stopper, it is generally best to register the sem with the stopper using
+	// AddCloser.
+	Sem *quotapool.IntPool
+	// If Sem is not nil, WaitForSem specifies whether the call blocks or not when
+	// the semaphore is full. If true, the call blocks until the semaphore is
+	// available in order to push back on callers that may be trying to create
+	// many tasks. If false, returns immediately with an error if the semaphore is
+	// not available.
+	WaitForSem bool
+}
+
+// RunAsyncTaskEx is like RunTask, except the callback f is run in a goroutine.
+// The call doesn't block for the callback to finish execution.
+func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(context.Context)) error {
+	var alloc *quotapool.IntAlloc
+	taskStarted := false
+	if opt.Sem != nil {
+		// Wait for permission to run from the semaphore.
+		var err error
+		if opt.WaitForSem {
+			alloc, err = opt.Sem.Acquire(ctx, 1)
+		} else {
+			alloc, err = opt.Sem.TryAcquire(ctx, 1)
+		}
+		if errors.Is(err, quotapool.ErrNotEnoughQuota) {
+			err = ErrThrottled
+		} else if quotapool.HasErrClosed(err) {
+			err = ErrUnavailable
+		}
+		if err != nil {
+			return err
+		}
+		defer func() {
+			// If the task is started, the alloc will be released async.
+			if !taskStarted {
+				alloc.Release()
+			}
+		}()
+
+		// Check for canceled context: it's possible to get the semaphore even
+		// if the context is canceled.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 	}
+
 	if !s.runPrelude() {
 		return ErrUnavailable
 	}
 
-	ctx, span := tracing.ForkSpan(ctx, taskName)
+	// If the caller has a span, the task gets a child span.
+	var span *tracing.Span
+	if opt.ChildSpan {
+		ctx, span = tracing.ChildSpan(ctx, opt.TaskName)
+	} else {
+		ctx, span = tracing.ForkSpan(ctx, opt.TaskName)
+	}
 
+	// Call f on another goroutine.
+	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
 	go func() {
 		defer s.Recover(ctx)
 		defer s.runPostlude()
-		defer alloc.Release()
 		defer span.Finish()
+		if alloc != nil {
+			defer alloc.Release()
+		}
 
 		f(ctx)
 	}()

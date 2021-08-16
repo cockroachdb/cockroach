@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1371,9 +1372,14 @@ func (ds *DistSender) sendPartialBatchAsync(
 	batchIdx int,
 	responseCh chan response,
 ) bool {
-	if err := ds.rpcContext.Stopper.RunLimitedAsyncTask(
-		ctx, "kv.DistSender: sending partial batch",
-		ds.asyncSenderSem, false, /* wait */
+	if err := ds.rpcContext.Stopper.RunAsyncTaskEx(
+		ctx,
+		stop.TaskOpts{
+			TaskName:   "kv.DistSender: sending partial batch",
+			ChildSpan:  true,
+			Sem:        ds.asyncSenderSem,
+			WaitForSem: false,
+		},
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
 			responseCh <- ds.sendPartialBatch(
