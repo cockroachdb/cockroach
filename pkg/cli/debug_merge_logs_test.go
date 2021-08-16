@@ -12,7 +12,10 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -23,6 +26,31 @@ import (
 
 const crdbV2testdataPath = "testdata/merge_logs_v2"
 const crdbV1testdataPath = "testdata/merge_logs_v1"
+
+// logFile defines the contents of a log to be stored in a file, for testing.
+type logFile struct {
+	name     string
+	contents string
+}
+
+func createTestDir(files []logFile) string {
+	dir, err := os.MkdirTemp("", "")
+	if err != nil {
+		fmt.Println(err)
+	}
+	for _, file := range files {
+		f, err := os.Create(filepath.Join(dir, file.name))
+		if err != nil {
+			fmt.Println(err)
+		}
+		defer f.Close()
+		_, err = io.WriteString(f, file.contents)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+	return dir
+}
 
 type testCase struct {
 	name   string
@@ -234,4 +262,26 @@ func TestCrdbV1DebugMergeLogs(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, c.run)
 	}
+}
+
+func Example_format_error() {
+	c := NewCLITest(TestCLIParams{NoServer: true})
+	defer c.Cleanup()
+
+	header := `
+I210801 21:05:59.364923 1 util/log/sync_buffer.go:70  [config] binary: CockroachDB CCL v20.1.17 (x86_64-apple-darwin14, built 2021/05/17 16:30:22,
+I210801 21:05:59.364923 1 util/log/sync_buffer.go:70  [config] arguments: [./cockroach start]
+I210801 21:05:59.364923 1 util/log/sync_buffer.go:70  line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=✓
+`
+
+	testDir := createTestDir([]logFile{
+		{"cockroach-data.log", header},
+	})
+	defer os.RemoveAll(testDir)
+
+	c.RunWithArgs([]string{"debug", "merge-logs", testDir})
+
+	// Output:
+	// debug merge-logs .
+	// ERROR: decoding format: failed to extract log file format from the log
 }
