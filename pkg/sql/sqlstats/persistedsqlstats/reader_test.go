@@ -117,7 +117,6 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 				&sqlstats.IteratorOptions{},
 				func(
 					ctx context.Context,
-					id roachpb.TransactionFingerprintID,
 					statistics *roachpb.CollectedTransactionStatistics,
 				) error {
 					if len(statistics.StatementFingerprintIDs) == 1 {
@@ -171,7 +170,6 @@ func verifyStoredStmtFingerprints(
 			&sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
-				id roachpb.TransactionFingerprintID,
 				statistics *roachpb.CollectedTransactionStatistics,
 			) error {
 				if len(statistics.StatementFingerprintIDs) == 1 {

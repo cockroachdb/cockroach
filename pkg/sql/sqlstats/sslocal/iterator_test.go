@@ -80,7 +80,10 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 			sqlStats.IterateTransactionStats(
 				ctx,
 				&sqlstats.IteratorOptions{},
-				func(ctx context.Context, id roachpb.TransactionFingerprintID, statistics *roachpb.CollectedTransactionStatistics) error {
+				func(
+					ctx context.Context,
+					statistics *roachpb.CollectedTransactionStatistics,
+				) error {
 					require.NotNil(t, statistics)
 
 					for _, stmtFingerprintID := range statistics.StatementFingerprintIDs {

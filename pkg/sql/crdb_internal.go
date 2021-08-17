@@ -1073,7 +1073,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
 
-		transactionVisitor := func(_ context.Context, txnFingerprintID roachpb.TransactionFingerprintID, stats *roachpb.CollectedTransactionStatistics) error {
+		transactionVisitor := func(_ context.Context, stats *roachpb.CollectedTransactionStatistics) error {
 			stmtFingerprintIDsDatum := tree.NewDArray(types.String)
 			for _, stmtFingerprintID := range stats.StatementFingerprintIDs {
 				if err := stmtFingerprintIDsDatum.Append(tree.NewDString(strconv.FormatUint(uint64(stmtFingerprintID), 10))); err != nil {
@@ -1082,9 +1082,9 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			}
 
 			err := addRow(
-				tree.NewDInt(tree.DInt(nodeID)),                                                    // node_id
-				tree.NewDString(stats.App),                                                         // application_name
-				tree.NewDString(strconv.FormatUint(uint64(txnFingerprintID), 10)),                  // key
+				tree.NewDInt(tree.DInt(nodeID)), // node_id
+				tree.NewDString(stats.App),      // application_name
+				tree.NewDString(strconv.FormatUint(uint64(stats.TransactionFingerprintID), 10)), // key
 				stmtFingerprintIDsDatum,                                                            // statement_ids
 				tree.NewDInt(tree.DInt(stats.Stats.Count)),                                         // count
 				tree.NewDInt(tree.DInt(stats.Stats.MaxRetries)),                                    // max_retries
