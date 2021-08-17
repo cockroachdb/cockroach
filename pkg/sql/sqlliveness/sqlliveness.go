@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/hex"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -35,12 +36,17 @@ type SessionID string
 type Provider interface {
 	Start(ctx context.Context)
 	Metrics() metric.Struct
-	Reader
-	Instance
+	Liveness
 
 	// CachedReader returns a reader which only consults its local cache and
 	// does not perform any RPCs in the IsAlive call.
 	CachedReader() Reader
+}
+
+// Liveness exposes Reader and Instance interfaces.
+type Liveness interface {
+	Reader
+	Instance
 }
 
 // String returns a hex-encoded version of the SessionID.
@@ -82,6 +88,16 @@ type Reader interface {
 	// Instance that is attempting to claim expired resources.
 	IsAlive(context.Context, SessionID) (alive bool, err error)
 }
+
+// TestingKnobs contains test knobs for sqlliveness system behavior.
+type TestingKnobs struct {
+	SessionOverride func(ctx context.Context) (Session, error)
+}
+
+var _ base.ModuleTestingKnobs = &TestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*TestingKnobs) ModuleTestingKnobs() {}
 
 // NotStartedError can be returned from calls to the sqlliveness subsystem
 // prior to its being started.
