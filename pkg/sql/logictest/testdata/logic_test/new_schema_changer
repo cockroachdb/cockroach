@@ -679,3 +679,34 @@ CREATE TABLE public.trewrite (
    CONSTRAINT new_primary_key PRIMARY KEY (k ASC),
    FAMILY fam_0_k_ts (k, ts, c)
 )
+
+# Sanity test that dropping table descriptors
+# with the wrong type specified is correctly blocked.
+subtest drop-type-sanity
+
+statement ok
+CREATE TABLE t1dr(name varchar(256));
+
+statement ok
+CREATE VIEW v1dr as (select name from t1dr);
+
+statement ok
+CREATE SEQUENCE s1dr;
+
+statement error pq: "t1dr" is not a view
+DROP VIEW t1dr;
+
+statement error pq: "t1dr" is not a sequence
+DROP SEQUENCE t1dr;
+
+statement error pq: "v1dr" is not a table
+DROP TABLE v1dr
+
+statement error pq: "v1dr" is not a sequence
+DROP SEQUENCE v1dr;
+
+statement error pq: "s1dr" is not a view
+DROP VIEW s1dr
+
+statement error pq: "s1dr" is not a table
+DROP TABLE s1dr;

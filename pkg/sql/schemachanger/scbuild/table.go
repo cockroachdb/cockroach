@@ -774,7 +774,12 @@ func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 	// Find the table first.
 	for _, name := range n.Names {
 		_, table, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
-			tree.ObjectLookupFlagsWithRequired())
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required: true,
+				},
+				DesiredTableDescKind: tree.ResolveRequireTableDesc,
+			})
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
 				return

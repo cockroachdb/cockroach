@@ -83,7 +83,12 @@ func (b *buildContext) dropSequence(ctx context.Context, n *tree.DropSequence) {
 	// Find the sequence first.
 	for _, name := range n.Names {
 		_, table, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
-			tree.ObjectLookupFlagsWithRequired())
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required: true,
+				},
+				DesiredTableDescKind: tree.ResolveRequireSequenceDesc,
+			})
 		if err != nil {
 			if pgerror.GetPGCode(err) == pgcode.UndefinedTable && n.IfExists {
 				continue

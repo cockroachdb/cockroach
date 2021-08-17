@@ -113,7 +113,12 @@ func (b *buildContext) dropView(ctx context.Context, n *tree.DropView) {
 	// Find the view first.
 	for _, name := range n.Names {
 		_, view, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
-			tree.ObjectLookupFlagsWithRequired())
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required: true,
+				},
+				DesiredTableDescKind: tree.ResolveRequireViewDesc,
+			})
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
 				continue
