@@ -124,6 +124,10 @@ func (bse *boundedStalenessEvents) reset() {
 	bse.events = nil
 }
 
+func (bse *boundedStalenessEvents) clearEvents() {
+	bse.events = nil
+}
+
 func (bse *boundedStalenessEvents) String() string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("events (%d found):\n", len(bse.events)))
@@ -198,7 +202,20 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 3, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
 
+		savedTraceStmt := ""
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			// Early exit non-query execution related commands.
+			switch d.Cmd {
+			// set-trace forces the next trace of events to only look for the given query
+			// instead of using d.Input. This is useful for traces of prepared statements.
+			case "set-trace":
+				savedTraceStmt = d.Input
+				return ""
+			case "reset-trace":
+				savedTraceStmt = ""
+				return ""
+			}
+
 			var showEvents bool
 			var waitUntilFollowerReads bool
 			var waitUntilMatch bool
@@ -206,10 +223,14 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 				bse.reset()
 			}()
 			dbConn := tc.ServerConn(0)
+			traceStmt := savedTraceStmt
+			if traceStmt == "" {
+				traceStmt = d.Input
+			}
 			for _, arg := range d.CmdArgs {
 				switch arg.Key {
 				case "wait-until-follower-read":
-					bse.stmt = d.Input
+					bse.stmt = traceStmt
 					waitUntilFollowerReads = true
 				case "wait-until-match":
 					// We support both wait-until-match and wait-until-follower-read,
@@ -240,7 +261,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 					return ""
 				case "query":
 					// Always show events.
-					bse.stmt = d.Input
+					bse.stmt = traceStmt
 					showEvents = true
 					rows, err := dbConn.Query(d.Input)
 					if err != nil {
@@ -274,15 +295,13 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 						}
 					}
 					if !allFollowerReads {
-						bse.reset()
-						bse.stmt = d.Input
+						bse.clearEvents()
 						return errors.AssertionFailedf("not follower reads found:\b%s", bse.String())
 					}
 				}
 				if waitUntilMatch {
 					if d.Expected != ret {
-						bse.reset()
-						bse.stmt = d.Input
+						bse.clearEvents()
 						return errors.AssertionFailedf("not yet a match, output:\n%s\n", ret)
 					}
 				}
