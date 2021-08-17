@@ -438,11 +438,23 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
 func (c *copyMachine) readBinaryData(ctx context.Context, final bool) (brk bool, err error) {
 	switch c.binaryState {
 	case binaryStateNeedSignature:
-		if err := c.readBinarySignature(); err != nil {
+		if readSoFar, err := c.readBinarySignature(); err != nil {
+			// If this isn't the last message and we saw incomplete data, then
+			// put it back in the buffer to process more next time.
+			if !final && (err == io.EOF || err == io.ErrUnexpectedEOF) {
+				c.buf.Write(readSoFar)
+				return true, nil
+			}
 			return false, err
 		}
 	case binaryStateRead:
-		if err := c.readBinaryTuple(ctx); err != nil {
+		if readSoFar, err := c.readBinaryTuple(ctx); err != nil {
+			// If this isn't the last message and we saw incomplete data, then
+			// put it back in the buffer to process more next time.
+			if !final && (err == io.EOF || err == io.ErrUnexpectedEOF) {
+				c.buf.Write(readSoFar)
+				return true, nil
+			}
 			return false, errors.Wrapf(err, "read binary tuple")
 		}
 	case binaryStateFoundTrailer:
@@ -457,36 +469,42 @@ func (c *copyMachine) readBinaryData(ctx context.Context, final bool) (brk bool,
 	return false, nil
 }
 
-func (c *copyMachine) readBinaryTuple(ctx context.Context) error {
-	// This implementation expects that if a field count exists, all of the
-	// fields in the tuple have also been sent. It will error if it expects
-	// more fields than are in the buffer.
+func (c *copyMachine) readBinaryTuple(ctx context.Context) (readSoFar []byte, err error) {
 	var fieldCount int16
-	var err error
-	if err = binary.Read(&c.buf, binary.BigEndian, &fieldCount); err != nil {
-		return err
+	var fieldCountBytes [2]byte
+	n, err := io.ReadFull(&c.buf, fieldCountBytes[:])
+	readSoFar = append(readSoFar, fieldCountBytes[:n]...)
+	if err != nil {
+		return readSoFar, err
 	}
+	fieldCount = int16(binary.BigEndian.Uint16(fieldCountBytes[:]))
 	if fieldCount == -1 {
 		c.binaryState = binaryStateFoundTrailer
-		return nil
+		return nil, nil
 	}
 	if fieldCount < 1 {
-		return pgerror.Newf(pgcode.BadCopyFileFormat,
+		return nil, pgerror.Newf(pgcode.BadCopyFileFormat,
 			"unexpected field count: %d", fieldCount)
 	}
 	exprs := make(tree.Exprs, fieldCount)
 	var byteCount int32
+	var byteCountBytes [4]byte
 	for i := range exprs {
-		if err = binary.Read(&c.buf, binary.BigEndian, &byteCount); err != nil {
-			return err
+		n, err := io.ReadFull(&c.buf, byteCountBytes[:])
+		readSoFar = append(readSoFar, byteCountBytes[:n]...)
+		if err != nil {
+			return readSoFar, err
 		}
+		byteCount = int32(binary.BigEndian.Uint32(byteCountBytes[:]))
 		if byteCount == -1 {
 			exprs[i] = tree.DNull
 			continue
 		}
-		data := c.buf.Next(int(byteCount))
-		if len(data) != int(byteCount) {
-			return errors.Newf("partial copy data row")
+		data := make([]byte, byteCount)
+		n, err = io.ReadFull(&c.buf, data)
+		readSoFar = append(readSoFar, data[:n]...)
+		if err != nil {
+			return readSoFar, err
 		}
 		d, err := pgwirebase.DecodeDatum(
 			c.parsingEvalCtx,
@@ -495,37 +513,37 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) error {
 			data,
 		)
 		if err != nil {
-			return pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
+			return nil, pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
 				"decode datum as %s: %s", c.resultColumns[i].Typ.SQLString(), data)
 		}
 		sz := d.Size()
 		if err := c.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
-			return err
+			return nil, err
 		}
 		exprs[i] = d
 	}
 	if err = c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(exprs))); err != nil {
-		return err
+		return nil, err
 	}
 	c.rows = append(c.rows, exprs)
-	return nil
+	return nil, nil
 }
 
-func (c *copyMachine) readBinarySignature() error {
+func (c *copyMachine) readBinarySignature() ([]byte, error) {
 	// This is the standard 11-byte binary signature with the flags and
 	// header 32-bit integers appended since we only support the zero value
 	// of them.
 	const binarySignature = "PGCOPY\n\377\r\n\000" + "\x00\x00\x00\x00" + "\x00\x00\x00\x00"
 	var sig [11 + 8]byte
-	if _, err := io.ReadFull(&c.buf, sig[:]); err != nil {
-		return err
+	if n, err := io.ReadFull(&c.buf, sig[:]); err != nil {
+		return sig[:n], err
 	}
 	if !bytes.Equal(sig[:], []byte(binarySignature)) {
-		return pgerror.New(pgcode.BadCopyFileFormat,
+		return sig[:], pgerror.New(pgcode.BadCopyFileFormat,
 			"unrecognized binary copy signature")
 	}
 	c.binaryState = binaryStateRead
-	return nil
+	return sig[:], nil
 }
 
 // preparePlannerForCopy resets the planner so that it can be used during
