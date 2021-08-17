@@ -118,5 +118,6 @@ func (b *buildContext) dropType(ctx context.Context, n *tree.DropType) {
 		}
 		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, typ, privilege.DROP))
 		b.dropTypeDesc(ctx, typ, n.DropBehavior, false /* ignoreAliases */)
+		b.incrementSubWorkID()
 	}
 }

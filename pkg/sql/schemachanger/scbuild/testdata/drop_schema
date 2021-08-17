@@ -1,4 +1,4 @@
-create-schema
+ create-schema
 CREATE SCHEMA SC1
 ----
 
