@@ -604,6 +604,7 @@ table_columns                          NULL
 table_indexes                          NULL
 table_row_statistics                   NULL
 tables                                 NULL
+transaction_statistics                 NULL
 zones                                  NULL
 administrable_role_authorizations      NULL
 applicable_roles                       NULL

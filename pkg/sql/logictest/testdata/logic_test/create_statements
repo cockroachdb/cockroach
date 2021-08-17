@@ -1168,6 +1168,19 @@ CREATE TABLE crdb_internal.tables (
    parent_schema_id INT8 NOT NULL,
    locality STRING NULL
 )  {}  {}
+CREATE TABLE crdb_internal.transaction_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL
+)  CREATE TABLE crdb_internal.transaction_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.zones (
    zone_id INT8 NOT NULL,
    subzone_id INT8 NOT NULL,
