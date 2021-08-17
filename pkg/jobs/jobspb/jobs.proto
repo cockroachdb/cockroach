@@ -678,6 +678,17 @@ message MigrationProgress {
 
 }
 
+message TransitionLog {
+  // Node on which the resumer is running.
+  int32 coordinator_id = 1;
+  // Job status for which resumer is running.
+  string state = 2;
+  // Time when resumer started.
+  int64 resume_start_micros = 3;
+  // Error message when resumer finished execution.
+  errorspb.EncodedError resume_exit_error = 4;
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -703,6 +714,7 @@ message Payload {
   // reverted. The error is recorded so it can be handled while reverting, if
   // needed.
   errorspb.EncodedError final_resume_error = 19;
+  repeated TransitionLog transitionLogs = 27;
   reserved 9;
   // Noncancelable is used to denote when a job cannot be canceled. This field
   // will not be respected in mixed version clusters where some nodes have
@@ -724,7 +736,7 @@ message Payload {
   }
   reserved 26;
 
-  // NEXT ID: 27.
+  // NEXT ID: 28.
 }
 
 message Progress {
