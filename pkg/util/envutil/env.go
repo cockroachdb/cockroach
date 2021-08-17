@@ -361,3 +361,26 @@ func EnvOrDefaultDuration(name string, value time.Duration) time.Duration {
 	}
 	return value
 }
+
+// TestSetEnv sets an environment variable and the cleanup function
+// resets it to the original value.
+func TestSetEnv(name string, value string) func() {
+	ClearEnvCache()
+	before, exists := os.LookupEnv(name)
+
+	if err := os.Setenv(name, value); err != nil {
+		panic(err)
+	}
+	return func() {
+		if exists {
+			if err := os.Setenv(name, before); err != nil {
+				panic(err)
+			}
+		} else {
+			if err := os.Unsetenv(name); err != nil {
+				panic(err)
+			}
+		}
+		ClearEnvCache()
+	}
+}
