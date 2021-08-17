@@ -1639,6 +1639,19 @@ func getMJTestCases() []*joinTestCase {
 			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
 			expected:        colexectestutils.Tuples{{0, 4, nil, nil}, {nil, nil, 0, 1}, {nil, 0, nil, 0}, {3, 0, nil, 0}, {nil, nil, 4, nil}},
 		},
+		{
+			description:  "RIGHT OUTER join with a single match in the middle",
+			joinType:     descpb.RightOuterJoin,
+			leftTypes:    []*types.T{types.Int, types.Int},
+			rightTypes:   []*types.T{types.Int, types.Int},
+			leftTuples:   colexectestutils.Tuples{{nil, 4}, {nil, 4}, {2, nil}, {2, nil}, {2, 4}, {3, 0}},
+			rightTuples:  colexectestutils.Tuples{{nil, 1}, {1, nil}, {1, 0}, {2, 4}, {3, nil}, {3, 2}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{0, 1},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 1},
+			expected:     colexectestutils.Tuples{{nil, nil, nil, 1}, {nil, nil, 1, nil}, {nil, nil, 1, 0}, {2, 4, 2, 4}, {nil, nil, 3, nil}, {nil, nil, 3, 2}},
+		},
 	}
 	return withMirrors(mjTestCases)
 }
