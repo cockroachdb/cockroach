@@ -589,6 +589,8 @@ var charts = []sectionDescription{
 					"kv.prober.planning_failures",
 					"kv.prober.read.attempts",
 					"kv.prober.read.failures",
+					"kv.prober.write.attempts",
+					"kv.prober.write.failures",
 				},
 				AxisLabel: "Probes",
 			},
@@ -596,6 +598,7 @@ var charts = []sectionDescription{
 				Title: "Latency",
 				Metrics: []string{
 					"kv.prober.read.latency",
+					"kv.prober.write.latency",
 				},
 			},
 		},
