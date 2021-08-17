@@ -1228,7 +1228,10 @@ func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
 	}
 
-	if *b.evalCtx.AsOfSystemTime != asOf {
+	// Allow anything with max_timestamp_bound to differ, as this
+	// is a retry and we expect AOST to differ.
+	if *b.evalCtx.AsOfSystemTime != asOf &&
+		b.evalCtx.AsOfSystemTime.MaxTimestampBound.IsEmpty() {
 		panic(unimplementedWithIssueDetailf(35712, "",
 			"cannot specify AS OF SYSTEM TIME with different timestamps"))
 	}
