@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/sql/sqlliveness",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -30,6 +31,7 @@ go_test(
         ":slinstance",
         "//pkg/clusterversion",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/util/hlc",

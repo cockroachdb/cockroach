@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
@@ -33,9 +34,10 @@ func New(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
+	testKnobs sql.LivenessKnobs,
 ) sqlliveness.Provider {
 	storage := slstorage.NewStorage(stopper, clock, db, codec, settings)
-	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings)
+	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings, testKnobs)
 	return &provider{
 		Storage:  storage,
 		Instance: instance,

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -145,16 +146,38 @@ func (ld *leasedDescriptors) getResult(
 	// timestamp, so we need to set a deadline on the transaction to prevent it
 	// from committing beyond the version's expiration time.
 	if setDeadline {
-		if err := ld.maybeUpdateDeadline(ctx, txn); err != nil {
+		if err := ld.maybeUpdateDeadline(ctx, txn, nil); err != nil {
 			return nil, false, err
 		}
 	}
 	return ldesc.Underlying(), false, nil
 }
 
-func (ld *leasedDescriptors) maybeUpdateDeadline(ctx context.Context, txn deadlineHolder) error {
+func (ld *leasedDescriptors) maybeUpdateDeadline(
+	ctx context.Context, txn deadlineHolder, session sqlliveness.Session,
+) error {
+	// Set the transaction deadline to the minimum of the leased descriptor deadline
+	// and session expiration. The sqlliveness.Session will only be set in the
+	// multi-tenant environment for controlling transactions associated with ephemeral
+	// SQL pods.
+	var expiration hlc.Timestamp
+	if session != nil {
+		expiration = session.Expiration()
+	}
 	if deadline, haveDeadline := ld.getDeadline(); haveDeadline {
-		return txn.UpdateDeadline(ctx, deadline)
+		if expiration.IsEmpty() {
+			expiration = deadline
+		} else {
+			// If we also have a session expiration value, set the transaction deadline
+			// to the minimum of the two timestamps.
+			if deadline.Less(expiration) {
+				expiration = deadline
+			}
+		}
+	}
+	// If the expiration has been set, update the transaction deadline.
+	if !expiration.IsEmpty() {
+		return txn.UpdateDeadline(ctx, expiration)
 	}
 	return nil
 }
