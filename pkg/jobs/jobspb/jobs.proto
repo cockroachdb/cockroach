@@ -426,6 +426,8 @@ message NewSchemaChangeDetails {
 // NewSchemaChangeProgress is the persisted progress for the new schema change job.
 message NewSchemaChangeProgress {
   repeated cockroach.sql.schemachanger.scpb.Status states = 1;
+  repeated cockroach.sql.schemachanger.scpb.Statement statements = 2;
+  cockroach.sql.schemachanger.scpb.Authorization authorization = 3;
 }
 
 // AutoSpanConfigReconciliationDetails is the job detail information for the

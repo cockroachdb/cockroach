@@ -10,7 +10,10 @@
 
 package scop
 
-import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+)
 
 //go:generate go run ./generate_visitor.go scop Mutation mutation.go mutation_visitor_generated.go
 
@@ -226,4 +229,13 @@ type DropForeignKeyRef struct {
 type RemoveSequenceOwnedBy struct {
 	mutationOp
 	TableID descpb.ID
+}
+
+// LogEvent logs an event for a given descriptor.
+type LogEvent struct {
+	mutationOp
+	DescID    descpb.ID
+	Metadata  *scpb.ElementMetadata
+	Element   *scpb.ElementProto
+	Direction scpb.Target_Direction
 }
