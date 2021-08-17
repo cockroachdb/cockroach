@@ -33,11 +33,12 @@ func TestReduceSQL(t *testing.T) {
 	skip.IgnoreLint(t, "unnecessary")
 	reducesql.LogUnknown = *printUnknown
 
-	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reduce.ModeInteresting, reducesql.SQLPasses)
+	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reduce.ModeInteresting,
+		nil /* chunkReducer */, reducesql.SQLPasses)
 }
 
 func isInterestingSQL(contains string) reduce.InterestingFn {
-	return func(ctx context.Context, f reduce.File) bool {
+	return func(ctx context.Context, f string) bool {
 		args := base.TestServerArgs{
 			Insecure: true,
 		}
