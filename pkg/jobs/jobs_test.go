@@ -3201,5 +3201,41 @@ func TestPauseReason(t *testing.T) {
 		tdb.CheckQueryResultsRetry(t, q, [][]string{{"paused"}})
 		checkStatusAndPauseReason(t, jobID, "paused", "second time")
 	}
+}
 
+// TestTransitionLogToJSON tests conversion of a TransitionLog to a JSON string.
+func TestTransitionLogToJSON(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	nullStr := tree.DNull.String()
+	encodedError := errors.EncodeError(context.Background(), errors.New("Encoded Error"))
+
+	for _, test := range []struct {
+		name          string
+		transitionLog jobspb.TransitionLog
+		expected      string
+	}{
+		{
+			"default values",
+			jobspb.TransitionLog{},
+			`{"coordinator_id": 0, "resume_exit_error": "` + nullStr + `", "resume_start_micros": "` + nullStr + `", "state": "` + nullStr + `"}`,
+		},
+		{
+			"with values",
+			jobspb.TransitionLog{
+				CoordinatorId:     1,
+				State:             string(jobs.StatusRunning),
+				ResumeStartMicros: timeutil.ToUnixMicros(timeutil.Unix(1, 0)),
+				ResumeExitError:   &encodedError,
+			},
+			`{"coordinator_id": 1, "resume_exit_error": "Encoded Error", "resume_start_micros": "'1970-01-01 00:00:01'", "state": "` + string(jobs.StatusRunning) + `"}`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			encoded, err := test.transitionLog.TransitionLogToJSON(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, test.expected, encoded.String())
+		})
+	}
 }

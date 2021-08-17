@@ -19,14 +19,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -807,55 +808,94 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 	})
 }
 
-func TestInternalJobsRetryColumns(t *testing.T) {
+// TestInternalJobsTableRetryColumns tests values of last_run, next_run, and
+// num_runs columns in crdb_internal.jobs table. The test creates a job in
+// system.jobs table and retrieve job information from crdb_internal.jobs
+// table for validation.
+func TestInternalJobsTableRetryColumns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	tdb := sqlutils.MakeSQLRunner(db)
-	registry := s.JobRegistry().(*jobs.Registry)
-	syncCh := make(chan struct{})
-	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-		jobspb.TypeSchemaChangeGC: func(raw jobs.Resumer) jobs.Resumer {
-			syncCh <- struct{}{}
-			<-syncCh
-			return raw
-		},
+
+	testFn := func(validateFn func(context.Context, *sqlutils.SQLRunner)) func(t *testing.T) {
+		return func(t *testing.T) {
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					JobsTestingKnobs: &jobs.TestingKnobs{
+						DisableAdoptions: true,
+					},
+				},
+			})
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+			tdb := sqlutils.MakeSQLRunner(db)
+
+			tdb.Exec(t,
+				"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, 'test'::bytes)",
+				1, jobs.StatusRunning, timeutil.Now(),
+			)
+
+			validateFn(ctx, tdb)
+		}
 	}
 
-	// Create a mock job.
-	var jobID jobspb.JobID
-	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
-	tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
-	tdb.Exec(t, "DROP TABLE foo CASCADE;")
-	tdb.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'`).Scan(&jobID)
+	t.Run("null values", testFn(func(_ context.Context, tdb *sqlutils.SQLRunner) {
+		// Values should be NULL if not populated.
+		tdb.CheckQueryResults(t, `
+SELECT last_run IS NULL,
+       next_run IS NOT NULL,
+       num_runs = 0,
+       transition_logs IS NULL
+  FROM crdb_internal.jobs WHERE job_id = 1`,
+			[][]string{{"true", "true", "true", "true"}})
+	}))
 
-	// Wait for the job to be adopted, but intercept it before the resumer starts to test NULL last_run value.
-	<-syncCh
+	t.Run("valid backoff params", testFn(func(_ context.Context, tdb *sqlutils.SQLRunner) {
+		lastRun := timeutil.Unix(1, 0)
+		tdb.Exec(t, "UPDATE system.jobs SET last_run = $1, num_runs = 1 WHERE id = 1", lastRun)
+		tdb.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.initial_delay = '1s'")
+		tdb.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.max_delay = '1s'")
 
-	var lastRunNull bool
-	var nextRunNull bool
-	var nextRun time.Time
-	var numRuns int
-	query := fmt.Sprintf("SELECT last_run IS NULL, next_run IS NULL, next_run, num_runs FROM [SHOW JOBS] WHERE job_id = %d", jobID)
-	tdb.QueryRow(t, query).Scan(&lastRunNull, &nextRunNull, &nextRun, &numRuns)
-	require.True(t, lastRunNull)
-	require.False(t, nextRunNull)
-	// nextRun value is the current time as the job has not executed yet.
-	require.True(t, timeutil.Now().After(nextRun))
-	require.Equal(t, 0, numRuns)
+		var validLastRun, validNextRun, validNumRuns bool
+		tdb.QueryRow(t,
+			"SELECT last_run = $1, next_run = $2, num_runs = 1 FROM crdb_internal.jobs WHERE job_id = 1",
+			lastRun, lastRun.Add(time.Second),
+		).Scan(&validLastRun, &validNextRun, &validNumRuns)
+		require.True(t, validLastRun)
+		require.True(t, validNextRun)
+		require.True(t, validNumRuns)
+	}))
 
-	close(syncCh)
+	t.Run("without new columns", func(t *testing.T) {
+		clusterArgs := base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						DisableAutomaticVersionUpgrade: 1,
+						BinaryVersionOverride: clusterversion.ByKey(
+							clusterversion.RetryJobsWithExponentialBackoff - 1),
+					},
+					JobsTestingKnobs: &jobs.TestingKnobs{
+						DisableAdoptions: true,
+					},
+				},
+			},
+		}
 
-	tdb.CheckQueryResults(t,
-		fmt.Sprintf("SELECT status FROM [SHOW JOB WHEN COMPLETE %d]", jobID),
-		[][]string{{string(jobs.StatusSucceeded)}},
-	)
-
-	var runTime time.Time
-	query = fmt.Sprintf("SELECT last_run, num_runs FROM [SHOW JOBS] WHERE job_id = %d", jobID)
-	tdb.QueryRow(t, query).Scan(&runTime, &numRuns)
-	require.True(t, runTime.After(nextRun))
-	require.Equal(t, 1, numRuns)
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 1, clusterArgs)
+		defer tc.Stopper().Stop(ctx)
+		sqlDB := tc.ServerConn(0)
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		tdb.Exec(t,
+			"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, 'test'::bytes)",
+			1, jobs.StatusRunning, timeutil.Now(),
+		)
+		tdb.CheckQueryResults(t, `
+SELECT last_run IS NULL,
+       next_run IS NULL,
+       num_runs IS NULL,
+       transition_logs IS NULL
+  FROM crdb_internal.jobs WHERE job_id = 1`,
+			[][]string{{"true", "true", "true", "true"}})
+	})
 }
