@@ -1063,7 +1063,9 @@ func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
 func (txn *Txn) NegotiateAndSend(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	txn.checkNegotiateAndSendPreconditions(ctx, ba)
+	if err := txn.checkNegotiateAndSendPreconditions(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	// Attempt to hit the server-side negotiation fast-path. This fast-path
 	// allows a bounded staleness read request that lands on a single range
@@ -1118,19 +1120,24 @@ func (txn *Txn) NegotiateAndSend(
 }
 
 // checks preconditions on BatchRequest and Txn for NegotiateAndSend.
-func (txn *Txn) checkNegotiateAndSendPreconditions(ctx context.Context, ba roachpb.BatchRequest) {
+func (txn *Txn) checkNegotiateAndSendPreconditions(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (err error) {
 	assert := func(b bool, s string) {
 		if !b {
-			err := errors.AssertionFailedf("%s: ba=%s, txn=%s", s, ba.String(), txn.String())
-			err = errors.WithContextTags(err, ctx)
-			panic(err)
+			err = errors.CombineErrors(err,
+				errors.WithContextTags(errors.AssertionFailedf(
+					"%s: ba=%s, txn=%s", s, ba.String(), txn.String()), ctx),
+			)
 		}
 	}
-	assert(ba.BoundedStaleness != nil, "bounded_staleness configuration must be set")
-	assert(!ba.BoundedStaleness.MinTimestampBound.IsEmpty(), "min_timestamp_bound must be set")
-	assert(ba.BoundedStaleness.MaxTimestampBound.IsEmpty() ||
-		ba.BoundedStaleness.MinTimestampBound.LessEq(ba.BoundedStaleness.MaxTimestampBound),
-		"max_timestamp_bound, if set, must be equal to or greater than min_timestamp_bound")
+	if cfg := ba.BoundedStaleness; cfg == nil {
+		assert(false, "bounded_staleness configuration must be set")
+	} else {
+		assert(!cfg.MinTimestampBound.IsEmpty(), "min_timestamp_bound must be set")
+		assert(cfg.MaxTimestampBound.IsEmpty() || cfg.MinTimestampBound.LessEq(cfg.MaxTimestampBound),
+			"max_timestamp_bound, if set, must be equal to or greater than min_timestamp_bound")
+	}
 	assert(ba.Timestamp.IsEmpty(), "timestamp must not be set")
 	assert(ba.Txn == nil, "txn must not be set")
 	assert(ba.ReadConsistency == roachpb.CONSISTENT, "read consistency must be set to CONSISTENT")
@@ -1138,6 +1145,7 @@ func (txn *Txn) checkNegotiateAndSendPreconditions(ctx context.Context, ba roach
 	assert(!ba.IsLocking(), "batch must not be locking")
 	assert(txn.typ == RootTxn, "txn must be root")
 	assert(!txn.CommitTimestampFixed(), "txn commit timestamp must not be fixed")
+	return err
 }
 
 // GetLeafTxnInputState returns the LeafTxnInputState information for this
