@@ -73,6 +73,7 @@ func (*AlterTableRenameColumn) alterTableCmd()       {}
 func (*AlterTableRenameConstraint) alterTableCmd()   {}
 func (*AlterTableSetAudit) alterTableCmd()           {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
+func (*AlterTableSetOnUpdate) alterTableCmd()        {}
 func (*AlterTableSetVisible) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionByTable) alterTableCmd()   {}
@@ -90,6 +91,7 @@ var _ AlterTableCmd = &AlterTableRenameColumn{}
 var _ AlterTableCmd = &AlterTableRenameConstraint{}
 var _ AlterTableCmd = &AlterTableSetAudit{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
+var _ AlterTableCmd = &AlterTableSetOnUpdate{}
 var _ AlterTableCmd = &AlterTableSetVisible{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionByTable{}
@@ -406,6 +408,35 @@ func (node *AlterTableSetDefault) Format(ctx *FmtCtx) {
 	} else {
 		ctx.WriteString(" SET DEFAULT ")
 		ctx.FormatNode(node.Default)
+	}
+}
+
+// AlterTableSetOnUpdate represents an ALTER COLUMN ON UPDATE SET
+// or DROP ON UPDATE command.
+type AlterTableSetOnUpdate struct {
+	Column Name
+	Expr   Expr
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableSetOnUpdate) GetColumn() Name {
+	return node.Column
+}
+
+// TelemetryCounter implements the AlterTableCmd interface.
+func (node *AlterTableSetOnUpdate) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "set_on_update")
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetOnUpdate) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER COLUMN ")
+	ctx.FormatNode(&node.Column)
+	if node.Expr == nil {
+		ctx.WriteString(" DROP ON UPDATE")
+	} else {
+		ctx.WriteString(" SET ON UPDATE ")
+		ctx.FormatNode(node.Expr)
 	}
 }
 

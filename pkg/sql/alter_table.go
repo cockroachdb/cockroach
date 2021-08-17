@@ -1160,6 +1160,9 @@ func applyColumnMutation(
 			}
 		}
 
+	case *tree.AlterTableSetOnUpdate:
+		return errors.Newf("unimplemented")
+
 	case *tree.AlterTableSetVisible:
 		column, err := tableDesc.FindActiveOrNewColumnByName(col.ColName())
 		if err != nil {
