@@ -462,7 +462,7 @@ An event of type `alter_database_placement` is recorded when the database placem
 | Field | Description | Sensitive |
 |--|--|--|
 | `DatabaseName` | The name of the database. | yes |
-| `Placement` | The new survival goal | yes |
+| `Placement` | The new placement policy. | yes |
 
 
 #### Common fields
