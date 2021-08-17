@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -289,6 +290,9 @@ type DistSender struct {
 	// the descriptor, instead of trying to reorder them by latency. The knob
 	// only applies to requests sent with the LEASEHOLDER routing policy.
 	dontReorderReplicas bool
+
+	// Currently executing range feeds.
+	activeRangeFeeds sync.Map // // map[*rangeFeedRegistry]nil
 }
 
 var _ kv.Sender = &DistSender{}

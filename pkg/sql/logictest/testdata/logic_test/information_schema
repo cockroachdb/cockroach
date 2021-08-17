@@ -396,6 +396,7 @@ test          public              NULL                        NULL      NO
 query TT rowsort
 select table_schema, table_name FROM information_schema.tables
 ----
+crdb_internal       active_range_feeds
 crdb_internal       backward_dependencies
 crdb_internal       builtin_functions
 crdb_internal       cluster_contended_indexes
@@ -705,6 +706,7 @@ xyz
 query T rowsort
 SELECT table_name FROM "".information_schema.tables WHERE table_catalog = 'other_db'
 ----
+active_range_feeds
 backward_dependencies
 builtin_functions
 cluster_contended_indexes
@@ -1049,6 +1051,7 @@ query TTTTTI colnames
 SELECT * FROM system.information_schema.tables
 ----
 table_catalog  table_schema        table_name                             table_type   is_insertable_into  version
+system         crdb_internal       active_range_feeds                     SYSTEM VIEW  NO                  1
 system         crdb_internal       backward_dependencies                  SYSTEM VIEW  NO                  1
 system         crdb_internal       builtin_functions                      SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_contended_indexes              SYSTEM VIEW  NO                  1
@@ -2575,6 +2578,7 @@ query TTTTTTTT colnames rowsort
 SELECT * FROM system.information_schema.table_privileges ORDER BY table_schema, table_name, table_schema, grantee, privilege_type
 ----
 grantor  grantee  table_catalog  table_schema        table_name                             privilege_type  is_grantable  with_hierarchy
+NULL     public   system         crdb_internal       active_range_feeds                     SELECT          NULL          YES
 NULL     public   system         crdb_internal       backward_dependencies                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       builtin_functions                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_contended_indexes              SELECT          NULL          YES
@@ -3163,6 +3167,7 @@ query TTTTTTTT colnames
 SELECT * FROM system.information_schema.role_table_grants
 ----
 grantor  grantee  table_catalog  table_schema        table_name                             privilege_type  is_grantable  with_hierarchy
+NULL     public   system         crdb_internal       active_range_feeds                     SELECT          NULL          YES
 NULL     public   system         crdb_internal       backward_dependencies                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       builtin_functions                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_contended_indexes              SELECT          NULL          YES

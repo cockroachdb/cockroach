@@ -143,6 +143,7 @@ const (
 	CrdbInternalClusterInflightTracesTable
 	CrdbInternalRegionsTable
 	CrdbInternalDefaultPrivilegesTable
+	CrdbInternalActiveRangeFeedsTable
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

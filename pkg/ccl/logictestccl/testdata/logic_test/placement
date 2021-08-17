@@ -30,4 +30,3 @@ SELECT * FROM crdb_internal.validate_multi_region_zone_configs()
 statement error a region-survivable database cannot also have a restricted placement policy
 ALTER DATABASE region_survivable_default PLACEMENT RESTRICTED
 
-
