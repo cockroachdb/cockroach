@@ -261,7 +261,7 @@ type AlterDatabasePlacement struct {
 	CommonSQLEventDetails `protobuf:"bytes,2,opt,name=sql,proto3,embedded=sql" json:""`
 	// The name of the database.
 	DatabaseName string `protobuf:"bytes,3,opt,name=database_name,json=databaseName,proto3" json:",omitempty"`
-	// The new survival goal
+	// The new placement policy.
 	Placement string `protobuf:"bytes,4,opt,name=placement,proto3" json:",omitempty"`
 }
 

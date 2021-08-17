@@ -1149,6 +1149,12 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		return err
 	}
 
+	telemetry.Inc(
+		sqltelemetry.AlterDatabasePlacementCounter(
+			n.n.Placement.TelemetryName(),
+		),
+	)
+
 	// Update the placement strategy in the database descriptor
 	newPlacement, err := TranslateDataPlacement(n.n.Placement)
 	if err != nil {
