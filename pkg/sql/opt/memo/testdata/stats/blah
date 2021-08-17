@@ -1,0 +1,36 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 00:00:00.00000+00:00",
+    "row_count": 4000,
+    "distinct_count": 4000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 00:00:00.00000+00:00",
+    "row_count": 4000,
+    "distinct_count": 400
+  }
+]'
+----
+
+norm
+SELECT * FROM a WHERE y = 1
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(2)=400, null(2)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── y:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
