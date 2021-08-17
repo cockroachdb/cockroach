@@ -748,7 +748,6 @@ message ChartCatalogResponse {
 
 // CARequest requests the CA cert anchoring this service.
 message CARequest {
-  // No information needed.
 }
 
 // CAResponse contains a PEM encoded copy of the CA cert for this service.
