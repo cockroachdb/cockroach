@@ -13,6 +13,7 @@ go_library(
         "//pkg/base",
         "//pkg/ccl/utilccl/licenseccl",
         "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/server",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",

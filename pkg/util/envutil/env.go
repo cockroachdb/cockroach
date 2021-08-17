@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -360,4 +361,27 @@ func EnvOrDefaultDuration(name string, value time.Duration) time.Duration {
 		return v
 	}
 	return value
+}
+
+// TestSetEnv sets an environment variable and the cleanup function
+// resets it to the original value.
+func TestSetEnv(t *testing.T, name string, value string) func() {
+	ClearEnvCache()
+	before, exists := os.LookupEnv(name)
+
+	if err := os.Setenv(name, value); err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		if exists {
+			if err := os.Setenv(name, before); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if err := os.Unsetenv(name); err != nil {
+				t.Fatal(err)
+			}
+		}
+		ClearEnvCache()
+	}
 }

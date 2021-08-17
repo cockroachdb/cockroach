@@ -16,12 +16,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -82,6 +85,29 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	ok := errors.As(err, &pqErr)
 	require.True(t, ok, "expected err to be a *pq.Error but is of type %T. error is: %v", err)
 	require.Equal(t, pq.ErrorCode(pgcode.InsufficientPrivilege.String()), pqErr.Code, "err %v has unexpected code", err)
+}
+
+func TestTenantCanUseEnterpriseFeatures(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	license, _ := (&licenseccl.License{
+		Type: licenseccl.License_Enterprise,
+	}).Encode()
+
+	defer utilccl.TestingDisableEnterprise()()
+	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", license)()
+
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(context.Background())
+
+	_, db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: serverutils.TestTenantID(), AllowSettingClusterSettings: false})
+	defer db.Close()
+
+	_, err := db.Exec(`BACKUP INTO 'userfile:///backup'`)
+	require.NoError(t, err)
+	_, err = db.Exec(`BACKUP INTO LATEST IN 'userfile:///backup'`)
+	require.NoError(t, err)
 }
 
 func TestTenantUnauthenticatedAccess(t *testing.T) {
