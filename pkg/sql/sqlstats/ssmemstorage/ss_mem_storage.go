@@ -207,14 +207,14 @@ func (s *Container) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStat
 	return NewTxnStatsIterator(s, options)
 }
 
-// NewTempContainerFromExistingData creates a new Container by ingesting a slice
+// NewTempContainerFromExistingStmtStats creates a new Container by ingesting a slice
 // of serverpb.StatementsResponse_CollectedStatementStatistics sorted by
 // Key.KeyData.App field.
 // It consumes the first chunk of the slice where
 // all entries in the chunk contains the identical appName. The remaining
 // slice is returned as the result.
 // It returns a nil slice once all entries in statistics are consumed.
-func NewTempContainerFromExistingData(
+func NewTempContainerFromExistingStmtStats(
 	statistics []serverpb.StatementsResponse_CollectedStatementStatistics,
 ) (
 	container *Container,
@@ -253,6 +253,52 @@ func NewTempContainerFromExistingData(
 			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
 		}
 		stmtStats.mu.data.Add(&statistics[i].Stats)
+	}
+
+	return container, nil /* remaining */, nil /* err */
+}
+
+// NewTempContainerFromExistingTxnStats creates a new Container by ingesting a slice
+// of CollectedTransactionStatistics sorted by .StatsData.App field.
+// It consumes the first chunk of the slice where all entries in the chunk
+// contains the identical appName. The remaining slice is returned as the result.
+// It returns a nil slice once all entries in statistics are consumed.
+func NewTempContainerFromExistingTxnStats(
+	statistics []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
+) (
+	container *Container,
+	remaining []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
+	err error,
+) {
+	if len(statistics) == 0 {
+		return nil, statistics, nil
+	}
+
+	appName := statistics[0].StatsData.App
+
+	container = New(
+		nil, /* st */
+		nil, /* uniqueStmtFingerprintLimit */
+		nil, /* uniqueTxnFingerprintLimit */
+		nil, /* uniqueStmtFingerprintCount */
+		nil, /* uniqueTxnFingerprintCount */
+		nil, /* mon */
+		appName,
+	)
+
+	for i := range statistics {
+		if currentAppName := statistics[i].StatsData.App; currentAppName != appName {
+			return container, statistics[i:], nil
+		}
+		txnStats, _, throttled :=
+			container.getStatsForTxnWithKeyLocked(
+				statistics[i].StatsData.TransactionFingerprintID,
+				statistics[i].StatsData.StatementFingerprintIDs,
+				true /* createIfNonexistent */)
+		if throttled {
+			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
+		}
+		txnStats.mu.data.Add(&statistics[i].StatsData.Stats)
 	}
 
 	return container, nil /* remaining */, nil /* err */
@@ -417,19 +463,32 @@ func (s *Container) getStatsForTxnWithKey(
 ) (stats *txnStats, created, throttled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	return s.getStatsForTxnWithKeyLocked(key, stmtFingerprintIDs, createIfNonexistent)
+}
+
+func (s *Container) getStatsForTxnWithKeyLocked(
+	key roachpb.TransactionFingerprintID,
+	stmtFingerprintIDs []roachpb.StmtFingerprintID,
+	createIfNonexistent bool,
+) (stats *txnStats, created, throttled bool) {
 	// Retrieve the per-transaction statistic object, and create it if it doesn't
 	// exist yet.
 	stats, ok := s.mu.txns[key]
 	if !ok && createIfNonexistent {
-		limit := s.uniqueTxnFingerprintLimit.Get(&s.st.SV)
-		incrementedFingerprintCount :=
-			atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, int64(1) /* delts */)
+		// If the uniqueTxnFingerprintCount is nil, then we don't check for
+		// fingerprint limit.
+		if s.atomic.uniqueTxnFingerprintCount != nil {
+			limit := s.uniqueTxnFingerprintLimit.Get(&s.st.SV)
+			incrementedFingerprintCount :=
+				atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, int64(1) /* delts */)
 
-		// If we have exceeded limit of fingerprint count, decrement the counter
-		// and abort.
-		if incrementedFingerprintCount > limit {
-			atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, -int64(1) /* delts */)
-			return nil /* stats */, false /* created */, true /* throttled */
+			// If we have exceeded limit of fingerprint count, decrement the counter
+			// and abort.
+			if incrementedFingerprintCount > limit {
+				atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, -int64(1) /* delts */)
+				return nil /* stats */, false /* created */, true /* throttled */
+			}
 		}
 		stats = &txnStats{}
 		stats.statementFingerprintIDs = stmtFingerprintIDs

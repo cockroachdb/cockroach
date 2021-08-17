@@ -119,6 +119,7 @@ const (
 	CrdbInternalLocalSessionsTableID
 	CrdbInternalLocalMetricsTableID
 	CrdbInternalNodeStmtStatsTableID
+	CrdbInternalNodeTxnStatsTableID
 	CrdbInternalPartitionsTableID
 	CrdbInternalPredefinedCommentsTableID
 	CrdbInternalRangesNoLeasesTableID
