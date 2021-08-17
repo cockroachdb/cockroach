@@ -580,7 +580,7 @@ func (rf *Fetcher) StartScan(
 
 	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
-		txn,
+		makeKVBatchFetcherDefaultSendFunc(txn),
 		spans,
 		rf.reverse,
 		limitBatches,
@@ -590,6 +590,8 @@ func (rf *Fetcher) StartScan(
 		rf.lockTimeout,
 		rf.mon,
 		forceProductionKVBatchSize,
+		txn.AdmissionHeader(),
+		txn.DB().SQLKVResponseAdmissionQ,
 	)
 	if err != nil {
 		return err
@@ -677,7 +679,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	// on read transactions, but perhaps one day it will release some resources.
 
 	rf.traceKV = traceKV
-	f, err := makeKVBatchFetcherWithSendFunc(
+	f, err := makeKVBatchFetcher(
 		sendFunc(sendFn),
 		spans,
 		rf.reverse,
