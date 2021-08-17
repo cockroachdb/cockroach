@@ -127,11 +127,10 @@ func _PROBE_SWITCH(_JOIN_TYPE joinTypeInfo, _SEL_PERMUTATION selPermutation) { /
 				curRIdx := rGroup.rowStartIdx
 				curLEndIdx := lGroup.rowEndIdx
 				curREndIdx := rGroup.rowEndIdx
-				areGroupsProcessed := false
 				_LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE)
 				_RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE)
 				// Expand or filter each group based on the current equality column.
-				for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+				for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 					cmp = 0
 					lNull := lNulls.NullAt(_L_SEL_IND)
 					rNull := rNulls.NullAt(_R_SEL_IND)
@@ -161,16 +160,19 @@ func _PROBE_SWITCH(_JOIN_TYPE joinTypeInfo, _SEL_PERMUTATION selPermutation) { /
 					//     so if either value is NULL, the tuples are not
 					//     matches.
 					// */}}
-					// TODO(yuzefovich): we can advance both sides if both are
-					// NULL.
+					curLIdxInc := 0
 					if lNull {
 						_NULL_FROM_LEFT_SWITCH(_JOIN_TYPE)
-						curLIdx++
-						continue
+						curLIdxInc = 1
 					}
+					curRIdxInc := 0
 					if rNull {
 						_NULL_FROM_RIGHT_SWITCH(_JOIN_TYPE)
-						curRIdx++
+						curRIdxInc = 1
+					}
+					if lNull || rNull {
+						curLIdx += curLIdxInc
+						curRIdx += curRIdxInc
 						continue
 					}
 					// {{end}}
@@ -266,7 +268,7 @@ func _PROBE_SWITCH(_JOIN_TYPE joinTypeInfo, _SEL_PERMUTATION selPermutation) { /
 						}
 
 						// Last equality column and either group is incomplete.
-						if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+						if lastEqCol && (!lComplete || !rComplete) {
 							// Store the state about the buffered group.
 							o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 							o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -277,7 +279,7 @@ func _PROBE_SWITCH(_JOIN_TYPE joinTypeInfo, _SEL_PERMUTATION selPermutation) { /
 							return
 						}
 
-						if eqColIdx < len(o.left.eqCols)-1 {
+						if !lastEqCol {
 							o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 						} else {
 							// {{if _JOIN_TYPE.IsLeftSemi}}
@@ -329,10 +331,15 @@ func _PROBE_SWITCH(_JOIN_TYPE joinTypeInfo, _SEL_PERMUTATION selPermutation) { /
 					}
 				}
 				_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE)
-				// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-				// last elements processed in their respective batches.
-				o.proberState.lIdx = curLIdx
-				o.proberState.rIdx = curRIdx
+				// Both o.proberState.lIdx and o.proberState.rIdx should point
+				// to the last tuples that have been fully processed in their
+				// respective batches. This is the case when we've just finished
+				// the last equality column or the current column is such that
+				// all tuples were filtered out.
+				if lastEqCol || !o.groups.hasGroupForNextCol() {
+					o.proberState.lIdx = curLIdx
+					o.proberState.rIdx = curRIdx
+				}
 			}
 			// {{end}}
 		}
@@ -359,14 +366,13 @@ func _LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{end}}
 	// {{if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti}}
 	if lGroup.unmatched {
-		if curLIdx+1 != curLEndIdx {
-			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-		}
 		// The row already does not have a match, so we don't need to do any
 		// additional processing.
 		o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-		curLIdx++
-		areGroupsProcessed = true
+		if lastEqCol && curLIdx >= o.proberState.lIdx {
+			o.proberState.lIdx = curLIdx + 1
+		}
+		continue
 	}
 	// {{end}}
 	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
@@ -401,14 +407,13 @@ func _RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{end}}
 	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
 	if rGroup.unmatched {
-		if curRIdx+1 != curREndIdx {
-			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
-		}
 		// The row already does not have a match, so we don't need to do any
 		// additional processing.
 		o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
-		curRIdx++
-		areGroupsProcessed = true
+		if lastEqCol && curRIdx >= o.proberState.rIdx {
+			o.proberState.rIdx = curRIdx + 1
+		}
+		continue
 	}
 	// {{end}}
 	// {{end}}
@@ -603,7 +608,7 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// */}}
 	// {{end}}
 	// {{if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti}}
-	if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+	if !o.groups.isLastGroupInCol() {
 		// The current group is not the last one within the column, so it cannot be
 		// extended into the next batch, and we need to process it right now. Any
 		// unprocessed row in the left group will not get a match, so each one of
@@ -615,7 +620,7 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	}
 	// {{end}}
 	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
-	if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+	if !o.groups.isLastGroupInCol() {
 		// The current group is not the last one within the column, so it cannot be
 		// extended into the next batch, and we need to process it right now. Any
 		// unprocessed row in the right group will not get a match, so each one of
@@ -643,6 +648,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL() {
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
 		colType := o.left.sourceTypes[leftColIdx]
+		lastEqCol := eqColIdx == len(o.left.eqCols)-1
 		_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG)
 		// Look at the groups associated with the next equality column by moving
 		// the circular buffer pointer up.
