@@ -445,7 +445,7 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
 			exprs[i] = tree.DNull
 			continue
 		}
-		d, err := rowenc.ParseDatumStringAsWithRawBytes(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
+		d, err := rowenc.ParseDatumStringAs(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
 		if err != nil {
 			return err
 		}
