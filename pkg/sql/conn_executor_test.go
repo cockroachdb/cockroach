@@ -38,6 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
@@ -45,8 +48,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -975,6 +981,192 @@ func TestShowLastQueryStatisticsUnknown(t *testing.T) {
 	require.False(t, y.Valid)
 }
 
+// TestTransactionDeadline tests that the transaction deadline is set correctly:
+// - In a single-tenant environment, the transaction deadline should use the leased
+//   descriptor expiration.
+// - In a multi-tenant environment, the transaction deadline should be set to
+//   min(sqlliveness.Session expiry, lease descriptor expiration).
+func TestTransactionDeadline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var mu struct {
+		syncutil.Mutex
+		txnDeadline hlc.Timestamp
+		txnID       string
+	}
+	// Create a closure that can execute some functionality wrapped within mu's lock.
+	// This will be used in the tests for accessing mu.
+	locked := func(f func()) { mu.Lock(); defer mu.Unlock(); f() }
+	// Set up a kvserverbase.ReplicaRequestFilter which will extract the deadline for the test transaction.
+	checkTransactionDeadlineFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		if ba.Txn == nil {
+			return nil
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		currentTxnID := ba.Txn.TxnMeta.ID.String()
+		if currentTxnID != mu.txnID {
+			return nil
+		}
+
+		if args, ok := ba.GetArg(roachpb.EndTxn); ok {
+			et := args.(*roachpb.EndTxnRequest)
+			if et.Deadline == nil {
+				return nil
+			}
+			mu.txnDeadline = *et.Deadline
+		}
+		return nil
+	}
+
+	// Set up a sqlliveness.Session override for the cluster with a small default session duration.
+	// We will use this to test that the sqlliveness.Session expiration does not override
+	// the lease duration on system tenants.
+	timeSource := timeutil.NewTestTimeSource()
+	clock := hlc.NewClock(func() int64 {
+		return timeSource.Now().UnixNano()
+	}, base.DefaultMaxClockOffset)
+	clusterSQLLiveness, clusterLivenessStopper := setupTestSQLLiveness(t, ctx, clock, time.Minute)
+	defer clusterLivenessStopper.Stop(ctx)
+
+	testClusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: checkTransactionDeadlineFilter,
+				},
+				SQLLivenessKnobs: &sqlliveness.TestingKnobs{
+					SessionOverride: clusterSQLLiveness.Session,
+				},
+			},
+		},
+	}
+	tc := serverutils.StartNewTestCluster(t, 1, testClusterArgs)
+	defer tc.Stopper().Stop(ctx)
+	s := tc.Server(0)
+
+	// Setup a dynamic session override which will be used in subsequent tests to ensure the transaction
+	// deadline is set accurately. Use clusterSQLLiveness for bootstrapping the tenant.
+	dynamicSession := newDynamicSessionOverride(clusterSQLLiveness)
+	_, sqlConn := serverutils.StartTenant(t, s,
+		base.TestTenantArgs{
+			TenantID: serverutils.TestTenantID(),
+			TestingKnobs: base.TestingKnobs{
+				SQLLivenessKnobs: &sqlliveness.TestingKnobs{SessionOverride: dynamicSession.dynamicSession},
+			},
+		})
+	defer sqlConn.Close()
+
+	t.Run("session_expiry_overrides_lease_deadline", func(t *testing.T) {
+		// Deliberately set the sessionDuration to be less than the lease duration
+		// to confirm that the sessionDuration overrides the lease duration while
+		// setting the transaction deadline.
+		sessionDuration := base.DefaultDescriptorLeaseDuration - time.Minute
+		// Override the injected SQLLiveness instance with the new session duration.
+		sqlLiveness, stopper := setupTestSQLLiveness(t, ctx, clock, sessionDuration)
+		defer stopper.Stop(ctx)
+		dynamicSession.setLiveness(sqlLiveness)
+
+		// Set up a dummy database and table to insert into for the transaction.
+		if _, err := sqlConn.Exec(`CREATE DATABASE t1;
+	CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
+	`); err != nil {
+			t.Fatal(err)
+		}
+		txn, err := sqlConn.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		txnID := getTxnID(t, txn)
+		locked(func() { mu.txnID = txnID })
+		_, err = txn.ExecContext(ctx, "INSERT INTO t1.test(k, v) VALUES (1, 'abc')")
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = txn.Commit()
+		require.NoError(t, err)
+		session, err := sqlLiveness.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		locked(func() { require.True(t, session.Expiration().EqOrdering(mu.txnDeadline)) })
+	})
+
+	t.Run("lease_deadline_overrides_session_expiry", func(t *testing.T) {
+		// Deliberately set the session duration to be more than the lease duration
+		// to confirm that the lease duration overrides the session duration while
+		// setting the transaction deadline
+		sessionDuration := base.DefaultDescriptorLeaseDuration + time.Minute
+		// Override the injected SQLLiveness instance with the updated session duration.
+		sqlLiveness, stopper := setupTestSQLLiveness(t, ctx, clock, sessionDuration)
+		defer stopper.Stop(ctx)
+		dynamicSession.setLiveness(sqlLiveness)
+
+		// Set up a dummy database and table to write into for the test.
+		if _, err := sqlConn.Exec(`CREATE DATABASE t2;
+	CREATE TABLE t2.test (k INT PRIMARY KEY, v TEXT);
+	`); err != nil {
+			t.Fatal(err)
+		}
+		txn, err := sqlConn.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		txnID := getTxnID(t, txn)
+		locked(func() { mu.txnID = txnID })
+		_, err = txn.ExecContext(ctx, "INSERT INTO t2.test(k, v) VALUES (1, 'abc')")
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = txn.Commit()
+		require.NoError(t, err)
+		session, err := sqlLiveness.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		locked(func() { require.True(t, mu.txnDeadline.Less(session.Expiration())) })
+	})
+
+	t.Run("single_tenant_ignore_session_expiry", func(t *testing.T) {
+		// In this test, we check that the session expiry is ignored in a single-tenant
+		// environment. To verify this, we deliberately set the session duration to be
+		// less than the lease duration while overriding the cluster sqlliveness.Session.
+		// On multi-tenant environments, the session expiry will override the lease duration
+		// while setting a transaction deadline. However, in a single tenant environment,
+		// the session expiry should be ignored.
+		// Open a DB connection on the server and not the tenant to test that the session
+		// expiry is ignored outside of the multi-tenant environment.
+		dbConn := serverutils.OpenDBConn(t, s.ServingSQLAddr(), "" /* useDatabase */, false /* insecure */, s.Stopper())
+		defer dbConn.Close()
+		// Set up a dummy database and table to write into for the test.
+		if _, err := dbConn.Exec(`CREATE DATABASE t3;
+	CREATE TABLE t3.test (k INT PRIMARY KEY, v TEXT);
+	`); err != nil {
+			t.Fatal(err)
+		}
+		txn, err := dbConn.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		txnID := getTxnID(t, txn)
+		locked(func() { mu.txnID = txnID })
+		_, err = txn.ExecContext(ctx, "INSERT INTO t3.test(k, v) VALUES (1, 'abc')")
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = txn.Commit()
+		require.NoError(t, err)
+		session, err := clusterSQLLiveness.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Confirm that the txnDeadline is not equal to the session expiration.
+		locked(func() { require.True(t, session.Expiration().Less(mu.txnDeadline)) })
+	})
+}
+
 func TestShowLastQueryStatistics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1128,4 +1320,52 @@ func (f *dynamicRequestFilter) filter(
 // noopRequestFilter is a kvserverbase.ReplicaRequestFilter that does nothing.
 func noopRequestFilter(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 	return nil
+}
+
+// dynamicSessionOverride exposes a thread safe dynamicSession method
+// which can be set dynamically to override the sqlliveness.Session.
+type dynamicSessionOverride struct {
+	v atomic.Value
+}
+
+func (d *dynamicSessionOverride) dynamicSession(ctx context.Context) (sqlliveness.Session, error) {
+	value := d.v.Load()
+	if value == nil {
+		return nil, errors.Newf("uninitialized sqlliveness")
+	}
+	liveness := value.(sqlliveness.Liveness)
+	return liveness.Session(ctx)
+}
+
+func (d *dynamicSessionOverride) setLiveness(liveness sqlliveness.Liveness) {
+	d.v.Store(liveness)
+}
+
+func newDynamicSessionOverride(sqlLiveness sqlliveness.Liveness) *dynamicSessionOverride {
+	d := &dynamicSessionOverride{}
+	d.v.Store(sqlLiveness)
+	return d
+}
+
+func getTxnID(t *testing.T, tx *gosql.Tx) (id string) {
+	t.Helper()
+	sqlutils.MakeSQLRunner(tx).QueryRow(t, `
+SELECT id
+  FROM crdb_internal.node_transactions
+ WHERE session_id = (SELECT * FROM [SHOW session_id])`,
+	).Scan(&id)
+	return id
+}
+
+func setupTestSQLLiveness(
+	t *testing.T, ctx context.Context, clock *hlc.Clock, sessionDuration time.Duration,
+) (sqlliveness.Liveness, *stop.Stopper) {
+	t.Helper()
+	settings := cluster.MakeTestingClusterSettings()
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, sessionDuration)
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*sessionDuration)
+	stopper := stop.NewStopper()
+	sqlLiveness := slprovider.NewTestSQLLiveness(stopper, clock, settings)
+	sqlLiveness.Start(ctx)
+	return sqlLiveness, stopper
 }
