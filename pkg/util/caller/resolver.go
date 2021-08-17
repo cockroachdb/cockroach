@@ -85,6 +85,14 @@ func findFileAndPackageRoot() (ok bool, crdbPath string, srcRoot string) {
 	// root is its immediate parent directory.
 	root := path.Dir(frame.File)
 
+	// if it is a forked repository, we need to normalize root
+	// For example:
+	//   /home/kena/src/go/src/github.com/kena/cockroach/pkg/util/caller/resolver.go
+	// should be
+	//   /home/kena/src/go/src/github.com/cockroachdb/cockroach/pkg/util/caller/resolver.gos
+	exp := regexp.MustCompile("github.com/([^/]+)/cockroach")
+	root = exp.ReplaceAllString(root, "github.com/cockroachdb/cockroach")
+
 	// Coverage tests report back as `[...]/util/caller/_test/_obj_test`;
 	// strip back to this package's directory.
 	if !strings.HasSuffix(root, "/caller") {
