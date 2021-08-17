@@ -13,6 +13,7 @@ package delegate
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,10 +32,13 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Jobs)
 
 	const (
-		selectClause = `SELECT job_id, job_type, description, statement, user_name, status,
+		jobsColumns = `job_id, job_type, description, statement, user_name, status,
 				       running_status, created, started, finished, modified,
-				       fraction_completed, error, coordinator_id, trace_id
-				FROM crdb_internal.jobs`
+				       fraction_completed, error, coordinator_id, trace_id, transition_logs`
+		from                 = `FROM crdb_internal.jobs`
+		backoffColumns       = `last_run, next_run, num_runs, transition_logs`
+		selectWithoutBackoff = `SELECT ` + jobsColumns + ` ` + from
+		selectWithBackoff    = `SELECT ` + jobsColumns + `, ` + backoffColumns + ` ` + from
 	)
 	var typePredicate, whereClause, orderbyClause string
 	if n.Jobs == nil {
@@ -59,7 +63,11 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
 	}
 
-	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
+	query := selectWithoutBackoff
+	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+		query = selectWithBackoff
+	}
+	sqlStmt := fmt.Sprintf("%s %s %s", query, whereClause, orderbyClause)
 	if n.Block {
 		sqlStmt = fmt.Sprintf(
 			`

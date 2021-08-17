@@ -668,7 +668,8 @@ CREATE TABLE crdb_internal.jobs (
   trace_id              INT,
   last_run              TIMESTAMP,
   next_run              TIMESTAMP,
-  num_runs               INT
+  num_runs              INT,
+  transition_logs       JSON
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -737,9 +738,10 @@ CREATE TABLE crdb_internal.jobs (
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
 					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, coordinatorID,
-					traceID, lastRun, nextRun, numRuns = tree.DNull, tree.DNull, tree.DNull, tree.DNull,
+					traceID, lastRun, nextRun, numRuns, transitionLogs = tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull
+					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
+					tree.DNull
 
 				// Extract data from the payload.
 				payload, err := jobs.UnmarshalPayload(payloadBytes)
@@ -838,6 +840,30 @@ CREATE TABLE crdb_internal.jobs (
 
 				if backoffIsEnabled {
 					lastRun, numRuns, nextRun = r[7], r[8], r[9]
+					if payload != nil && payload.TransitionLogs != nil {
+						// Extract transition logs.
+						ab := json.NewArrayBuilder(len(payload.TransitionLogs))
+						for i, entry := range payload.TransitionLogs {
+							b := json.NewObjectBuilder(5)
+							b.Add("log_number", json.FromInt(i+1))
+							b.Add("coordinator_id", json.FromInt(int(entry.CoordinatorId)))
+							b.Add("state", json.FromString(entry.State))
+							ts, err := tsOrNull(entry.ResumeStartMicros)
+							if err != nil {
+								return nil, err
+							}
+							b.Add("resume_start_micros", json.FromString(ts.String()))
+							var errVals string
+							if entry.ResumeExitError.Size() > 0 {
+								errVals = errors.DecodeError(ctx, *entry.ResumeExitError).Error()
+							} else {
+								errVals = tree.DNull.String()
+							}
+							b.Add("resume_exit_error", json.FromString(errVals))
+							ab.Add(b.Build())
+						}
+						transitionLogs = tree.NewDJSON(ab.Build())
+					}
 				}
 
 				container = container[:0]
@@ -862,6 +888,7 @@ CREATE TABLE crdb_internal.jobs (
 					lastRun,
 					nextRun,
 					numRuns,
+					transitionLogs,
 				)
 				return container, nil
 			}
