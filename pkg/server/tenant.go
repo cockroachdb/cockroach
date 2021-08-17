@@ -57,6 +57,7 @@ func StartTenant(
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 ) (sqlServer *SQLServer, pgAddr string, httpAddr string, _ error) {
+	EnableEnterpriseForTenant()
 	args, err := makeTenantSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, "", "", err
@@ -404,6 +405,10 @@ var NewTenantSideCostController = func(
 	// Return a no-op implementation.
 	return noopTenantSideCostController{}, nil
 }
+
+// EnableEnterpriseForTenant is a hook for CCL code which enables enterprise
+// features for the tenant process.
+var EnableEnterpriseForTenant = func() { /* no-op */ }
 
 // noopTenantSideCostController is a no-op implementation of
 // TenantSideCostController.

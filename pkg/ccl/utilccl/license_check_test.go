@@ -188,3 +188,17 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 		})
 	}
 }
+
+func TestEnableEnterpriseWithImpliedLicense(t *testing.T) {
+	settings := cluster.MakeClusterSettings()
+
+	require.Error(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	EnableEnterpriseWithImpliedLicense()
+	require.NoError(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.True(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+
+	// Clean up license setting
+	_ = TestingDisableEnterprise()
+	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+}

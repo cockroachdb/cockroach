@@ -84,6 +84,19 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	require.Equal(t, pq.ErrorCode(pgcode.InsufficientPrivilege.String()), pqErr.Code, "err %v has unexpected code", err)
 }
 
+func TestTenantCanUseEnterpriseFeatures(t *testing.T) {
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(context.Background())
+
+	_, db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: serverutils.TestTenantID(), AllowSettingClusterSettings: false})
+	defer db.Close()
+
+	_, err := db.Exec(`BACKUP INTO 'userfile:///backup'`)
+	require.NoError(t, err)
+	_, err = db.Exec(`BACKUP INTO LATEST IN 'userfile:///backup'`)
+	require.NoError(t, err)
+}
+
 func TestTenantUnauthenticatedAccess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
