@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -56,6 +57,63 @@ var (
 			"determine the range of possible values")
 )
 
+// RunBenchmarkExpectationTests runs tests to validate or rewrite the contents
+// of the benchmark expectations file.
+func RunBenchmarkExpectationTests(t *testing.T) {
+	expectations := readExpectationsFile(t)
+
+	benchmarks := getBenchmarks(t)
+	if *rewriteFlag != "" {
+		rewriteBenchmarkExpectations(t, benchmarks)
+		return
+	}
+
+	defer func() {
+		if t.Failed() {
+			t.Log("see the --rewrite flag to re-run the benchmarks and adjust the expectations")
+		}
+	}()
+
+	var g sync.WaitGroup
+	run := func(b string) {
+		tf := func(t *testing.T) {
+			flags := []string{
+				"--test.run=^$",
+				"--test.bench=" + b,
+				"--test.benchtime=1x",
+			}
+			if testing.Verbose() {
+				flags = append(flags, "--test.v")
+			}
+			results := runBenchmarks(t, flags...)
+
+			for _, r := range results {
+				exp, ok := expectations.find(r.name)
+				if !ok {
+					t.Logf("no expectation for benchmark %s, got %d", r.name, r.result)
+					continue
+				}
+				if !exp.matches(r.result) {
+					t.Errorf("fail: expected %s to perform KV lookups in [%d, %d], got %d",
+						r.name, exp.min, exp.max, r.result)
+				} else {
+					t.Logf("success: expected %s to perform KV lookups in [%d, %d], got %d",
+						r.name, exp.min, exp.max, r.result)
+				}
+			}
+		}
+		g.Add(1)
+		go func() {
+			defer g.Done()
+			t.Run(b, tf)
+		}()
+	}
+	for _, b := range benchmarks {
+		run(b)
+	}
+	g.Wait()
+}
+
 func getBenchmarks(t *testing.T) (benchmarks []string) {
 	cmd := exec.Command(os.Args[0], "--test.list", "^Benchmark")
 	var out bytes.Buffer
@@ -68,6 +126,7 @@ func getBenchmarks(t *testing.T) (benchmarks []string) {
 	require.NoError(t, sc.Err())
 	return benchmarks
 }
+
 func runBenchmarks(t *testing.T, flags ...string) []benchmarkResult {
 	cmd := exec.Command(os.Args[0], flags...)
 
@@ -120,7 +179,7 @@ func readBenchmarkResults(t *testing.T, benchmarkOutput io.Reader) []benchmarkRe
 
 // rewriteBenchmarkExpectations re-runs the specified benchmarks and throws out
 // the existing values in the results file. All other values are preserved.
-func rewriteBenchmarkExpecations(t *testing.T, benchmarks []string) {
+func rewriteBenchmarkExpectations(t *testing.T, benchmarks []string) {
 
 	// Split off the filter so as to avoid spinning off unnecessary subprocesses.
 	slashIdx := strings.Index(*rewriteFlag, "/")
