@@ -12,6 +12,7 @@ package kv_test
 
 import (
 	"context"
+	"math/rand"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,14 +20,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 // Test the behavior of a txn.Rollback() issued after txn.Commit() failing with
@@ -222,4 +230,219 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			require.Equal(t, testCase.expCommitted, committed)
 		})
 	}
+}
+
+// TestTxnNegotiateAndSendDoesNotBlock tests that bounded staleness read
+// requests performed using (*Txn).NegotiateAndSend never block on conflicting
+// intents or redirect to the leaseholder if run on follower replicas. It then
+// tests that the transaction is left in the expected state after the call to
+// NegotiateAndSend.
+//
+// The test's multiRange param dictates whether the bounded staleness read is
+// performed over multiple ranges or a single range.
+//
+// The multiRange=false variant is the client-side sibling of
+// kvserver.TestNonBlockingReadsWithServerSideBoundedStalenessNegotiation. This
+// test, unlike that one, exercises client-side transaction logic in kv.Txn and
+// routing logic in kvcoord.DistSender.
+//
+// The multiRange=true variant is currently unimplemented, as it is blocked on
+// #67554.
+//
+// The test's strict param dictates whether strict bounded staleness reads are
+// used or not. If set to true, the test is configured to never expect blocking.
+// If set to false, the test is relaxed and we allow bounded staleness reads to
+// block.
+//
+// The test's routeNearest param dictates whether bounded staleness reads are
+// issued with the LEASEHOLDER routing policy to be evaluated on leaseholders,
+// or the NEAREST routing policy to be evaluated on the nearest replicas to the
+// client.
+func TestTxnNegotiateAndSendDoesNotBlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "multiRange", func(t *testing.T, multiRange bool) {
+		testutils.RunTrueAndFalse(t, "strict", func(t *testing.T, strict bool) {
+			testutils.RunTrueAndFalse(t, "routeNearest", func(t *testing.T, routeNearest bool) {
+				testTxnNegotiateAndSendDoesNotBlock(t, multiRange, strict, routeNearest)
+			})
+		})
+	})
+}
+
+func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, routeNearest bool) {
+	if multiRange {
+		skip.IgnoreLint(t, "unimplemented, blocked on #67554.")
+	}
+
+	const testTime = 1 * time.Second
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a scratch range. Then add one voting follower and one non-voting
+	// follower to the range.
+	scratchKey := tc.ScratchRange(t)
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+	tc.AddNonVotersOrFatal(t, scratchKey, tc.Target(2))
+	lh, err := tc.FindRangeLeaseHolder(scratchRange, nil)
+	require.NoError(t, err)
+
+	// Drop the closed timestamp interval far enough so that we can create
+	// situations where an active intent is at a lower timestamp than the
+	// range's closed timestamp - thereby being the limiting factor for the
+	// range's resolved timestamp.
+	sqlRunner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1ms'")
+
+	keySet := make([]roachpb.Key, 5)
+	for i := range keySet {
+		n := len(scratchKey)
+		keySet[i] = append(scratchKey[:n:n], byte(i))
+	}
+	keySpan := roachpb.Span{Key: scratchKey, EndKey: scratchKey.PrefixEnd()}
+
+	// TODO(nvanbenschoten): if multiRange, split on each key in keySet.
+	// if multiRange { ... }
+
+	var g errgroup.Group
+	var done int32
+	sleep := func() {
+		time.Sleep(time.Duration(rand.Intn(2000)) * time.Microsecond)
+	}
+
+	// Writer goroutines: write intents and commit them.
+	for _, key := range keySet {
+		key := key // copy for goroutine
+		g.Go(func() error {
+			for ; atomic.LoadInt32(&done) == 0; sleep() {
+				if err := tc.Server(0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					if _, err := txn.Inc(ctx, key, 1); err != nil {
+						return err
+					}
+					// Let the intent stick around for a bit.
+					sleep()
+					return nil
+				}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	// Reader goroutines: perform bounded-staleness reads that hit the server-side
+	// negotiation fast-path.
+	for _, s := range tc.Servers {
+		store, err := s.Stores().GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+		g.Go(func() error {
+			// Prime range cache so that follower read attempts don't initially miss.
+			if _, err := store.DB().Scan(ctx, keySpan.Key, keySpan.EndKey, 0); err != nil {
+				return err
+			}
+
+			minTSBound := hlc.MinTimestamp
+			var lastTxnTS hlc.Timestamp
+			for ; atomic.LoadInt32(&done) == 0; sleep() {
+				if err := store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					// Issue a bounded-staleness read over the keys. If using strict
+					// bounded staleness, use an error wait policy so that we'll hear an
+					// error (WriteIntentError) under conditions that would otherwise
+					// cause us to block on an intent. Otherwise, allow the request to be
+					// redirected to the leaseholder and to block on intents.
+					var ba roachpb.BatchRequest
+					if strict {
+						ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+							MinTimestampBound:       minTSBound,
+							MinTimestampBoundStrict: true,
+						}
+						ba.WaitPolicy = lock.WaitPolicy_Error
+					} else {
+						ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+							MinTimestampBound:       store.Clock().Now(),
+							MinTimestampBoundStrict: false,
+						}
+						ba.WaitPolicy = lock.WaitPolicy_Block
+					}
+					ba.RoutingPolicy = roachpb.RoutingPolicy_LEASEHOLDER
+					if routeNearest {
+						ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+					}
+					ba.Add(&roachpb.ScanRequest{
+						RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+					})
+
+					// Trace the request so we can determine whether it was served as a
+					// follower read. If running on a store with a follower replica and
+					// with a NEAREST routing policy, we expect follower reads.
+					ctx, collect, cancel := tracing.ContextWithRecordingSpan(
+						ctx, tracing.NewTracer(), "reader")
+					defer cancel()
+
+					br, pErr := txn.NegotiateAndSend(ctx, ba)
+					if pErr != nil {
+						return pErr.GoError()
+					}
+
+					// Validate that the transaction timestamp is now fixed and set to the
+					// request timestamp.
+					if !txn.CommitTimestampFixed() {
+						return errors.Errorf("transaction timestamp not fixed")
+					}
+					txnTS := txn.CommitTimestamp()
+					if txnTS != br.Timestamp {
+						return errors.Errorf("transaction timestamp (%s) does not equal request timestamp (%s)", txnTS, br.Timestamp)
+					}
+
+					// Validate that the transaction timestamp increases monotonically
+					// across attempts, since we're issuing bounded staleness reads to the
+					// same replica.
+					if txnTS.IsEmpty() {
+						return errors.Errorf("empty bounded staleness timestamp")
+					}
+					if txnTS.Less(lastTxnTS) {
+						return errors.Errorf("bounded staleness timestamp regression: %s -> %s", lastTxnTS, txnTS)
+					}
+					lastTxnTS = txnTS
+
+					// Forward the minimum timestamp bound for the next request. Once a
+					// bounded staleness read has been served at a timestamp, future reads
+					// should be able to be served at the same timestamp (or later) as
+					// long as they are routed to the same replica.
+					minTSBound = lastTxnTS
+
+					// Determine whether the read was served by a follower replica or not
+					// and confirm that this matches expectations. There are some configs
+					// where it would be valid for the request to be served by a follower
+					// or redirected to the leaseholder due to timing, so we make no
+					// assertion.
+					rec := collect()
+					expFollowerRead := store.StoreID() != lh.StoreID && strict && routeNearest
+					wasFollowerRead := kv.OnlyFollowerReads(rec)
+					ambiguous := !strict && routeNearest
+					if expFollowerRead != wasFollowerRead && !ambiguous {
+						if expFollowerRead {
+							return errors.Errorf("expected follower read, found leaseholder read: %s", rec)
+						}
+						return errors.Errorf("expected leaseholder read, found follower read: %s", rec)
+					}
+
+					return nil
+				}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	time.Sleep(testTime)
+	atomic.StoreInt32(&done, 1)
+	require.NoError(t, g.Wait())
 }

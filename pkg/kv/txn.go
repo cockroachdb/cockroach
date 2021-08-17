@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1019,6 +1020,116 @@ func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
 	}
 	txn.resetDeadlineLocked()
 	txn.replaceRootSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
+}
+
+// NegotiateAndSend is a specialized version of Send that is capable of
+// orchestrating a bounded-staleness read through the transaction, given a
+// read-only BatchRequest with a min_timestamp_bound set in its Header.
+//
+// Bounded-staleness orchestration consists of two phases - negotiation and
+// execution. Negotiation determines the timestamp to run the query at in order
+// to ensure that the read will not block on replication or on conflicting
+// transactions. Execution then configures the transaction to use this timestamp
+// and runs the read request in the context of the transaction.
+//
+// The transaction must not have been used before. If the call returns
+// successfully, the transaction will have been given a fixed timestamp equal to
+// the timestamp that the read-only request was evaluated at.
+//
+// The method accepts requests with min_timestamp_bound_strict set to either
+// true or false, which dictates whether a bounded staleness read whose
+// min_timestamp_bound cannot be satisfied by the first replica it visits
+// (subject to routing_policy) without blocking should be rejected with a
+// MinTimestampBoundUnsatisfiableError or will be redirected to the leaseholder
+// and permitted to block on conflicting transactions. If the flag is true,
+// blocking is never permitted and callers should be prepared to handle
+// MinTimestampBoundUnsatisfiableErrors. If the flag is false, blocking is
+// permitted and MinTimestampBoundUnsatisfiableErrors will never be returned.
+//
+// The method accepts requests with either a LEASEHOLDER or a NEAREST routing
+// policy, which dictates whether the request uses the leaseholder(s) of its
+// target range(s) to negotiate a timestamp and perform the read or whether it
+// uses the nearest replica(s) of its target range(s) to negotiate a timestamp
+// and perform the read. Callers can use this flexibility to trade off increased
+// staleness for reduced latency.
+func (txn *Txn) NegotiateAndSend(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	txn.checkNegotiateAndSendPreconditions(ctx, ba)
+
+	// Attempt to hit the server-side negotiation fast-path. This fast-path
+	// allows a bounded staleness read request that lands on a single range
+	// to perform its negotiation phase and execution phase in a single RPC.
+	//
+	// The server-side negotiation fast-path provides two benefits:
+	// 1. it avoids two network hops in the common-case where a bounded
+	//    staleness read is targeting a single range. This in an important
+	//    performance optimization for single-row point lookups.
+	// 2. it provides stronger guarantees around minimizing staleness during
+	//    bounded staleness reads. Bounded staleness reads that hit the
+	//    server-side fast-path use their target replica's most up-to-date
+	//    resolved timestamp, so they are as fresh as possible. Bounded
+	//    staleness reads that miss the fast-path and perform explicit
+	//    negotiation (see below) consult a cache, so they may use an
+	//    out-of-date, suboptimal resolved timestamp, as long as it is fresh
+	//    enough to satisfy the staleness bound of the request.
+	//
+	// To achieve this, we issue the batch as a non-transactional request
+	// with a MinTimestampBound field set (enforced above). We send the
+	// request through the TxnSenderFactory's wrapped non-transactional
+	// sender, so that we not only avoid passing through our TxnCoordSender,
+	// but also through the CrossRangeTxnWrapperSender. If the request spans
+	// ranges, we want to hear about it.
+	br, pErr := txn.DB().GetFactory().NonTransactionalSender().Send(ctx, ba)
+	if pErr == nil {
+		// Fix the transaction's timestamp at the result of the server-side
+		// timestamp negotiation.
+		if err := txn.SetFixedTimestamp(ctx, br.Timestamp); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		// Note that we do not need to inform the TxnCoordSender about the
+		// non-transactional reads that we issued on behalf of it. Now that the
+		// transaction's timestamp is fixed, it won't be able to refresh anyway.
+		return br, nil
+	}
+	if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); !ok {
+		return nil, pErr
+	}
+
+	// The read spans ranges, so bounded-staleness orchestration will need to be
+	// performed in two distinct phases - negotiation and execution. First we'll
+	// use the BoundedStalenessNegotiator to determines the timestamp to perform
+	// the read at and fix the transaction's timestamp to this result. Then we'll
+	// issue the request through the transaction, which will use the negotiated
+	// read timestamp from the previous phase to execute the read.
+	//
+	// TODO(nvanbenschoten): implement this. #67554.
+
+	return nil, roachpb.NewError(unimplemented.NewWithIssue(67554,
+		"cross-range bounded staleness reads not yet implemented"))
+}
+
+// checks preconditions on BatchRequest and Txn for NegotiateAndSend.
+func (txn *Txn) checkNegotiateAndSendPreconditions(ctx context.Context, ba roachpb.BatchRequest) {
+	assert := func(b bool, s string) {
+		if !b {
+			err := errors.AssertionFailedf("%s: ba=%s, txn=%s", s, ba.String(), txn.String())
+			err = errors.WithContextTags(err, ctx)
+			panic(err)
+		}
+	}
+	assert(ba.BoundedStaleness != nil, "bounded_staleness configuration must be set")
+	assert(!ba.BoundedStaleness.MinTimestampBound.IsEmpty(), "min_timestamp_bound must be set")
+	assert(ba.BoundedStaleness.MaxTimestampBound.IsEmpty() ||
+		ba.BoundedStaleness.MinTimestampBound.LessEq(ba.BoundedStaleness.MaxTimestampBound),
+		"max_timestamp_bound, if set, must be equal to or greater than min_timestamp_bound")
+	assert(ba.Timestamp.IsEmpty(), "timestamp must not be set")
+	assert(ba.Txn == nil, "txn must not be set")
+	assert(ba.ReadConsistency == roachpb.CONSISTENT, "read consistency must be set to CONSISTENT")
+	assert(ba.IsReadOnly(), "batch must be read-only")
+	assert(!ba.IsLocking(), "batch must not be locking")
+	assert(txn.typ == RootTxn, "txn must be root")
+	assert(!txn.CommitTimestampFixed(), "txn commit timestamp must not be fixed")
 }
 
 // GetLeafTxnInputState returns the LeafTxnInputState information for this
