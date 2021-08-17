@@ -41,9 +41,9 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 
 		return nil
 	})
-	_ = s.SQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, func(ctx context.Context, key roachpb.TransactionFingerprintID, statistics *roachpb.CollectedTransactionStatistics) error {
+	_ = s.SQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *roachpb.CollectedTransactionStatistics) error {
 		s.doFlush(ctx, func() error {
-			return s.doFlushSingleTxnStats(ctx, key, statistics)
+			return s.doFlushSingleTxnStats(ctx, statistics)
 		}, "failed to flush transaction statistics" /* errMsg */)
 
 		return nil
@@ -74,16 +74,14 @@ func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, er
 }
 
 func (s *PersistedSQLStats) doFlushSingleTxnStats(
-	ctx context.Context,
-	key roachpb.TransactionFingerprintID,
-	stats *roachpb.CollectedTransactionStatistics,
+	ctx context.Context, stats *roachpb.CollectedTransactionStatistics,
 ) error {
 	return s.cfg.KvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Explicitly copy the stats variable so the txn closure is retryable.
 		scopedStats := *stats
 
 		aggregatedTs := s.computeAggregatedTs()
-		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(key))
+		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.TransactionFingerprintID))
 
 		insertFn := func(ctx context.Context, txn *kv.Txn) (alreadyExists bool, err error) {
 			rowsAffected, err := s.insertTransactionStats(ctx, txn, aggregatedTs, serializedFingerprintID, &scopedStats)
@@ -116,7 +114,7 @@ func (s *PersistedSQLStats) doFlushSingleTxnStats(
 
 		err := s.doInsertElseDoUpdate(ctx, txn, insertFn, readFn, updateFn)
 		if err != nil {
-			return errors.Wrapf(err, "flushing transaction %d's statistics", key)
+			return errors.Wrapf(err, "flushing transaction %d's statistics", stats.TransactionFingerprintID)
 		}
 		return nil
 	})

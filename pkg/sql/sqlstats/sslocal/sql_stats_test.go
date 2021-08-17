@@ -111,7 +111,7 @@ func TestSQLStatsBulkIngest(t *testing.T) {
 		}
 	}
 
-	sqlStats, err := NewTempSQLStatsFromExistingData(input)
+	sqlStats, err := NewTempSQLStatsFromExistingStmtStats(input)
 	require.NoError(t, err)
 
 	foundStats := make(map[string]int64)

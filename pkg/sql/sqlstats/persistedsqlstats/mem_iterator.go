@@ -66,11 +66,8 @@ func newMemTxnStatsIterator(
 
 // Cur calls the m.TxnStatsIterator.Cur() and populates the m.aggregatedTs
 // field.
-func (m *memTxnStatsIterator) Cur() (
-	roachpb.TransactionFingerprintID,
-	*roachpb.CollectedTransactionStatistics,
-) {
-	id, stats := m.TxnStatsIterator.Cur()
+func (m *memTxnStatsIterator) Cur() *roachpb.CollectedTransactionStatistics {
+	stats := m.TxnStatsIterator.Cur()
 	stats.AggregatedTs = m.aggregatedTs
-	return id, stats
+	return stats
 }
