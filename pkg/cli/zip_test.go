@@ -86,7 +86,8 @@ table_name NOT IN (
 	'session_trace',
 	'session_variables',
 	'tables',
-	'statement_statistics'
+	'statement_statistics',
+	'transaction_statistics'
 )
 ORDER BY name ASC`)
 	assert.NoError(t, err)
