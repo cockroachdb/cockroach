@@ -167,7 +167,12 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			// Index joins will always return exactly one output row per input row.
 			s.rf.setEstimatedRowCount(uint64(rowCount))
 			if err := s.rf.StartScan(
-				s.flowCtx.Txn, spans, false /* limitBatches */, 0 /* limitHint */, s.flowCtx.TraceKV,
+				s.flowCtx.Txn,
+				spans,
+				nil,   /* bsHeader */
+				false, /* limitBatches */
+				0,     /* limitHint */
+				s.flowCtx.TraceKV,
 				s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 			); err != nil {
 				colexecerror.InternalError(err)
