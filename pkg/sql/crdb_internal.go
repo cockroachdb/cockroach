@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -150,6 +151,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterInflightTracesTable:       crdbInternalClusterInflightTracesTable,
 		catconstants.CrdbInternalRegionsTable:                     crdbInternalRegionsTable,
 		catconstants.CrdbInternalDefaultPrivilegesTable:           crdbInternalDefaultPrivilegesTable,
+		catconstants.CrdbInternalActiveRangeFeedsTable:            crdbInternalActiveRangeFeedsTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -5040,5 +5042,38 @@ CREATE TABLE crdb_internal.statement_statistics (
 			})
 		}
 		return setupGenerator(ctx, worker, stopper)
+	},
+}
+
+var crdbInternalActiveRangeFeedsTable = virtualSchemaTable{
+	comment: `node-level table listing all currently running range feeds`,
+	schema: `
+CREATE TABLE crdb_internal.active_range_feeds (
+  tags STRING,
+  range_start STRING,
+  range_end STRING,
+  startTS STRING,
+  diff BOOL,
+	node_id INT,
+  partial_range_start STRING,
+  partial_range_end STRING,
+  last_event_utc INT
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return p.extendedEvalCtx.DistSQLPlanner.distSender.ForEachActiveRangeFeed(
+			func(rfCtx kvcoord.RangeFeedContext, rf kvcoord.ActiveRangeFeed) error {
+				return addRow(
+					tree.NewDString(rfCtx.CtxTags),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rfCtx.Span.Key)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rfCtx.Span.EndKey)),
+					tree.NewDString(rfCtx.TS.AsOfSystemTime()),
+					tree.MakeDBool(tree.DBool(rfCtx.WithDiff)),
+					tree.NewDInt(tree.DInt(rf.NodeID)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.Key)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.EndKey)),
+					tree.NewDInt(tree.DInt(rf.LastEvent.UTC().UnixNano())),
+				)
+			},
+		)
 	},
 }

@@ -4394,3 +4394,37 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
 }
+
+func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `
+SET CLUSTER SETTING kv.rangefeed.enabled='true';
+CREATE TABLE tbl (a INT, b STRING);
+INSERT INTO tbl VALUES (1, 'one'), (2, 'two'), (3, 'three');
+CREATE CHANGEFEED FOR tbl INTO 'null://';
+`)
+
+	var tableID int
+	sqlDB.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name='tbl'").Scan(&tableID)
+	numRangesQuery := fmt.Sprintf(
+		"SELECT count(*) FROM crdb_internal.active_range_feeds WHERE range_start LIKE $/Table/%d/%%",
+		tableID)
+	testutils.SucceedsSoon(t, func() error {
+		var numRanges int
+		sqlDB.QueryRow(t, numRangesQuery).Scan(&numRanges)
+		if numRanges == 0 {
+			return errors.New("still waiting for ranges to be registered")
+		}
+		return nil
+	})
+}
