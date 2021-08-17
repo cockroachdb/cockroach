@@ -26,22 +26,27 @@ import (
 
 func init() {
 	var (
-		protobufPath string
-		genDocPath   string
-		outPath      string
+		protocPath  string
+		protocFlags string
+		genDocPath  string
+		outPath     string
 	)
 
 	cmdHTTP := &cobra.Command{
 		Use:   "http",
 		Short: "Generate HTTP docs",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := runHTTP(genDocPath, protobufPath, outPath); err != nil {
+			if err := runHTTP(protocPath, genDocPath, protocFlags, outPath); err != nil {
 				fmt.Fprintln(os.Stdout, err)
 				os.Exit(1)
 			}
 		},
 	}
-	cmdHTTP.Flags().StringVar(&protobufPath, "protobuf", "", "Protobuf include paths.")
+	cmdHTTP.Flags().StringVar(&protocPath, "protoc", "", `Path to the protoc compiler.
+If given, we will call into this executable to generate the code; otherwise, we will call
+into "buf protoc".`)
+	cmdHTTP.Flags().StringVar(&protocFlags, "protoc-flags", "",
+		"Whitespace-separated list of flags to pass to {buf} protoc. This should include the list of input sources.")
 	cmdHTTP.Flags().StringVar(&genDocPath, "gendoc", "protoc-gen-doc", "Path to protoc-gen-doc binary.")
 	cmdHTTP.Flags().StringVar(&outPath, "out", "docs/generated/http", "File output path.")
 
@@ -60,7 +65,7 @@ var singleMethods = []string{
 // files. A full.md file is produced with all endpoints. The singleMethods
 // string slice is used to produce additional markdown files with a single
 // method per file.
-func runHTTP(genDocPath, protobufPath, outPath string) error {
+func runHTTP(protocPath, genDocPath, protocFlags, outPath string) error {
 	// Extract out all the data into a JSON file. We will use this JSON
 	// file to then generate full and single pages.
 	if err := os.MkdirAll(outPath, 0777); err != nil {
@@ -79,19 +84,21 @@ func runHTTP(genDocPath, protobufPath, outPath string) error {
 	defer func() {
 		_ = os.RemoveAll(tmpJSON)
 	}()
-	args := []string{"protoc",
+	var args []string
+	if protocPath == "" {
+		args = append(args, "protoc")
+	}
+	args = append(args,
 		fmt.Sprintf("--doc_out=%s", tmpJSON),
 		fmt.Sprintf("--doc_opt=%s,http.json", jsonTmpl),
-		fmt.Sprintf("--plugin=protoc-gen-doc=%s", genDocPath),
-	}
-	args = append(args, strings.Fields(protobufPath)...)
+		fmt.Sprintf("--plugin=protoc-gen-doc=%s", genDocPath))
+	args = append(args, strings.Fields(protocFlags)...)
 	// Generate the JSON file.
-	args = append(args,
-		"./pkg/server/serverpb/status.proto",
-		"./pkg/server/serverpb/admin.proto",
-		"./pkg/server/status/statuspb/status.proto",
-	)
-	cmd := exec.Command("buf", args...)
+	executable := protocPath
+	if protocPath == "" {
+		executable = "buf"
+	}
+	cmd := exec.Command(executable, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		fmt.Println(string(out))
 		return err
