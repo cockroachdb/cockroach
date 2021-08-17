@@ -15,6 +15,7 @@ package slprovider
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -33,9 +34,14 @@ func New(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
+	testKnobs base.ModuleTestingKnobs,
 ) sqlliveness.Provider {
+	var livenessTestKnobs sqlliveness.TestingKnobs
+	if testKnobs != nil {
+		livenessTestKnobs = *testKnobs.(*sqlliveness.TestingKnobs)
+	}
 	storage := slstorage.NewStorage(stopper, clock, db, codec, settings)
-	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings)
+	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings, livenessTestKnobs)
 	return &provider{
 		Storage:  storage,
 		Instance: instance,

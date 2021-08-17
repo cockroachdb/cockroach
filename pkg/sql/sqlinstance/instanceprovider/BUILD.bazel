@@ -31,6 +31,7 @@ go_test(
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/settings/cluster",
+        "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/testutils",

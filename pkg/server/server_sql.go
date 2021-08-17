@@ -347,8 +347,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Create trace service for inter-node sharing of inflight trace spans.
 	tracingService := service.New(cfg.Settings.Tracer)
 	tracingservicepb.RegisterTracingServer(cfg.grpcServer, tracingService)
+
 	cfg.sqlLivenessProvider = slprovider.New(
-		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings,
+		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, cfg.TestingKnobs.SQLLivenessKnobs,
 	)
 	cfg.sqlInstanceProvider = instanceprovider.New(
 		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.addr,
@@ -394,6 +395,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
 		lmKnobs = *leaseManagerTestingKnobs.(*lease.ManagerTestingKnobs)
 	}
+
 	leaseMgr := lease.NewLeaseManager(
 		cfg.AmbientCtx,
 		cfg.nodeIDContainer,
@@ -621,7 +623,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RegionsServer:           cfg.regionsServer,
 		SessionRegistry:         cfg.sessionRegistry,
 		ContentionRegistry:      cfg.contentionRegistry,
-		SQLLivenessReader:       cfg.sqlLivenessProvider,
+		SQLLiveness:             cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),

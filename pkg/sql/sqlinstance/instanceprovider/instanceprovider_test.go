@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -50,7 +51,7 @@ func TestInstanceProvider(t *testing.T) {
 			true /* initializeVersion */)
 		stopper := stop.NewStopper()
 		fakeStorage := slstorage.NewFakeStorage()
-		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings)
+		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, sqlliveness.TestingKnobs{})
 		return stopper, slInstance, clock
 	}
 
