@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -45,16 +46,13 @@ var enterpriseLicense = func() *settings.StringSetting {
 	return s
 }()
 
-// testingEnterprise determines whether the cluster is enabled
-// or disabled for the purposes of testing.
-// It should be loaded and stored using atomic as it can race with an
-// in progress kv reader during TestingDisableEnterprise /
-// TestingEnableEnterprise.
-var testingEnterprise int32
+// enterpriseStatus determines whether the cluster is enabled
+// for enterprise features or if enterprise status depends on the license.
+var enterpriseStatus int32 = deferToLicense
 
 const (
-	testingEnterpriseDisabled = 0
-	testingEnterpriseEnabled  = 1
+	deferToLicense    = 0
+	enterpriseEnabled = 1
 )
 
 // errEnterpriseRequired is returned by check() when the caller does
@@ -68,20 +66,29 @@ type licenseCacheKey string
 
 // TestingEnableEnterprise allows overriding the license check in tests.
 func TestingEnableEnterprise() func() {
-	before := atomic.LoadInt32(&testingEnterprise)
-	atomic.StoreInt32(&testingEnterprise, testingEnterpriseEnabled)
+	before := atomic.LoadInt32(&enterpriseStatus)
+	atomic.StoreInt32(&enterpriseStatus, enterpriseEnabled)
 	return func() {
-		atomic.StoreInt32(&testingEnterprise, before)
+		atomic.StoreInt32(&enterpriseStatus, before)
 	}
 }
 
 // TestingDisableEnterprise allows re-enabling the license check in tests.
 func TestingDisableEnterprise() func() {
-	before := atomic.LoadInt32(&testingEnterprise)
-	atomic.StoreInt32(&testingEnterprise, testingEnterpriseDisabled)
+	before := atomic.LoadInt32(&enterpriseStatus)
+	atomic.StoreInt32(&enterpriseStatus, deferToLicense)
 	return func() {
-		atomic.StoreInt32(&testingEnterprise, before)
+		atomic.StoreInt32(&enterpriseStatus, before)
 	}
+}
+
+// EnableEnterpriseWithImpliedLicense enables enterprise features without
+// setting a license. This is used by the multi tenant sql server. Multitenany
+// is an enterprise feature, so it is not necessary to install a license within
+// a the tenant cluster. The existence of the multi tenant cluster implies the
+// host cluster has an enterprise license enabled.
+func EnableEnterpriseWithImpliedLicense() {
+	atomic.StoreInt32(&enterpriseStatus, enterpriseEnabled)
 }
 
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
@@ -108,6 +115,7 @@ func init() {
 	base.CheckEnterpriseEnabled = CheckEnterpriseEnabled
 	base.LicenseType = getLicenseType
 	base.TimeToEnterpriseLicenseExpiry = TimeToEnterpriseLicenseExpiry
+	server.EnableEnterpriseForTenant = EnableEnterpriseWithImpliedLicense
 }
 
 // TimeToEnterpriseLicenseExpiry returns a Duration from `asOf` until the current
@@ -128,7 +136,7 @@ func TimeToEnterpriseLicenseExpiry(
 func checkEnterpriseEnabledAt(
 	st *cluster.Settings, at time.Time, cluster uuid.UUID, org, feature string, withDetails bool,
 ) error {
-	if atomic.LoadInt32(&testingEnterprise) == testingEnterpriseEnabled {
+	if atomic.LoadInt32(&enterpriseStatus) == enterpriseEnabled {
 		return nil
 	}
 	license, err := getLicense(st)
