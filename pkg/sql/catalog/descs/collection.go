@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -100,6 +101,11 @@ type Collection struct {
 	// droppedDescriptors that will not need to wait for new
 	// lease versions.
 	deletedDescs []catalog.Descriptor
+
+	// Session is a sqlliveness.Session which may be optionally set.
+	// It must be set in the multi-tenant environment for ephemeral
+	// SQL pods. It should not be set otherwise.
+	sqlLivenessSession sqlliveness.Session
 }
 
 var _ catalog.Accessor = (*Collection)(nil)
@@ -108,7 +114,7 @@ var _ catalog.Accessor = (*Collection)(nil)
 // based on the leased descriptors in this collection. This update is
 // only done when a deadline exists.
 func (tc *Collection) MaybeUpdateDeadline(ctx context.Context, txn *kv.Txn) (err error) {
-	return tc.leased.maybeUpdateDeadline(ctx, txn)
+	return tc.leased.maybeUpdateDeadline(ctx, txn, tc.sqlLivenessSession)
 }
 
 // SkipValidationOnWrite avoids validating uncommitted descriptors prior to
@@ -135,6 +141,8 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.kv.reset()
 	tc.synthetic.reset()
 	tc.deletedDescs = nil
+	// Clear the associated sqlliveness.session
+	tc.sqlLivenessSession = nil
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
@@ -355,4 +363,10 @@ func (tc *Collection) codec() keys.SQLCodec {
 // IMPORT or RESTORE.
 func (tc *Collection) AddDeletedDescriptor(desc catalog.Descriptor) {
 	tc.deletedDescs = append(tc.deletedDescs, desc)
+}
+
+// SetSession sets the sqlliveness.Session for the transaction. This
+// should only be called in a multi-tenant environment.
+func (tc *Collection) SetSession(session sqlliveness.Session) {
+	tc.sqlLivenessSession = session
 }

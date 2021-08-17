@@ -943,18 +943,18 @@ type ExecutorConfig struct {
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
-	SQLStatusServer   serverpb.SQLStatusServer
-	RegionsServer     serverpb.RegionsServer
-	MetricsRecorder   nodeStatusGenerator
-	SessionRegistry   *SessionRegistry
-	SQLLivenessReader sqlliveness.Reader
-	JobRegistry       *jobs.Registry
-	VirtualSchemas    *VirtualSchemaHolder
-	DistSQLPlanner    *DistSQLPlanner
-	TableStatsCache   *stats.TableStatisticsCache
-	StatsRefresher    *stats.Refresher
-	InternalExecutor  *InternalExecutor
-	QueryCache        *querycache.C
+	SQLStatusServer  serverpb.SQLStatusServer
+	RegionsServer    serverpb.RegionsServer
+	MetricsRecorder  nodeStatusGenerator
+	SessionRegistry  *SessionRegistry
+	SQLLiveness      sqlliveness.Liveness
+	JobRegistry      *jobs.Registry
+	VirtualSchemas   *VirtualSchemaHolder
+	DistSQLPlanner   *DistSQLPlanner
+	TableStatsCache  *stats.TableStatisticsCache
+	StatsRefresher   *stats.Refresher
+	InternalExecutor *InternalExecutor
+	QueryCache       *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
@@ -1091,6 +1091,9 @@ type ExecutorTestingKnobs struct {
 
 	// BeforeRestart is called before a transaction restarts.
 	BeforeRestart func(ctx context.Context, reason error)
+
+	// BeforeStart is called before a transaction starts.
+	BeforeStart func(cfg *ExecutorConfig)
 
 	// DisableAutoCommit, if set, disables the auto-commit functionality of some
 	// SQL statements. That functionality allows some statements to commit

@@ -35,12 +35,17 @@ type SessionID string
 type Provider interface {
 	Start(ctx context.Context)
 	Metrics() metric.Struct
-	Reader
-	Instance
+	Liveness
 
 	// CachedReader returns a reader which only consults its local cache and
 	// does not perform any RPCs in the IsAlive call.
 	CachedReader() Reader
+}
+
+// Liveness exposes Reader and Instance interfaces.
+type Liveness interface {
+	Reader
+	Instance
 }
 
 // String returns a hex-encoded version of the SessionID.
