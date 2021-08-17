@@ -10,7 +10,7 @@ top-k
  ├── ordering: +2
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 1151.55856
+ ├── cost: 1151.45856
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── ordering: +2

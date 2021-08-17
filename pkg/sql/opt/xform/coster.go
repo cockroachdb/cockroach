@@ -577,9 +577,8 @@ func (c *coster) computeTopKCost(topk *memo.TopKExpr, required *physical.Require
 	// compared is in the top K found so far.
 	cost += c.rowCmpCost(len(topk.Ordering.Columns)) * memo.Cost((1+math.Log2(outputRowCount))*inputRowCount)
 
-	// Add the CPU cost of emitting the K rows.
-	cost += memo.Cost(outputRowCount) * cpuCostFactor
-
+	// TODO(harding): Add the CPU cost of emitting the K output rows. This should
+	// be done in conjunction with computeSortCost.
 	return cost
 }
 
@@ -623,6 +622,8 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 		cost += memo.Cost(numSegments) * c.rowBufferCost(segmentSize)
 	}
 	cost += c.rowCmpCost(numKeyCols-numPreorderedCols) * memo.Cost(numCmpOpsPerRow*stats.RowCount)
+	// TODO(harding): Add the CPU cost of emitting the output rows. This should be
+	// done in conjunction with computeTopKCost.
 	return cost
 }
 
