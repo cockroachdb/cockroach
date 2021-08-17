@@ -571,14 +571,6 @@ func (o *mergeJoinBase) appendToRightBufferedGroup(sel []int, groupStartIdx int,
 	sourceTypes := o.right.sourceTypes
 	numBufferedTuples := o.bufferedGroup.helper.numRightTuples
 	o.bufferedGroup.helper.numRightTuples += groupLength
-	// TODO(yuzefovich): for LEFT/RIGHT ANTI joins we only need to store the
-	// first tuple (in order to find the boundaries of the groups) since all
-	// of the buffered tuples do have a match and, thus, don't contribute to
-	// the output.
-	// TODO(yuzefovich): for INTERSECT/EXCEPT ALL joins we can buffer only
-	// tuples from the left side and count the number of tuples on the right.
-	// TODO(yuzefovich): for LEFT/RIGHT SEMI joins we only need to buffer tuples
-	// from one side (left/right respectively).
 	if numBufferedTuples == 0 && groupStartIdx+groupLength == o.proberState.rLength {
 		// Set the right first tuple only if this is the first call to this
 		// method for the current right buffered group and if the group doesn't
@@ -596,6 +588,21 @@ func (o *mergeJoinBase) appendToRightBufferedGroup(sel []int, groupStartIdx int,
 				)
 			}
 		})
+	}
+
+	// TODO(yuzefovich): check whether it's worth templating this method out as
+	// well as having join-type-specific crossJoinerBase.
+	switch o.joinType {
+	case descpb.LeftSemiJoin, descpb.RightAntiJoin:
+		// For LEFT SEMI and RIGHT ANTI joins we only need to store the first
+		// tuple (in order to find the boundaries of the groups) since all of
+		// the buffered tuples don't/do have a match and, thus, do/don't
+		// contribute to the output.
+		return
+	case descpb.IntersectAllJoin, descpb.ExceptAllJoin:
+		// For INTERSECT/EXCEPT ALL joins we only need the number of tuples on
+		// the right side (which we have already updated above).
+		return
 	}
 
 	// We don't impose any memory limits on the scratch batch because we rely on
