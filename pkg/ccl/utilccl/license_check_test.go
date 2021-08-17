@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -187,4 +188,41 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 			require.Equal(t, tc.ttlHours, actual.Hours())
 		})
 	}
+}
+
+func TestApplyTenantLicenseWithLicense(t *testing.T) {
+	license, _ := (&licenseccl.License{
+		Type: licenseccl.License_Enterprise,
+	}).Encode()
+
+	defer TestingDisableEnterprise()()
+	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", license)()
+
+	settings := cluster.MakeClusterSettings()
+
+	require.Error(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.NoError(t, ApplyTenantLicense())
+	require.NoError(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.True(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+}
+
+func TestApplyTenantLicenseWithoutLicense(t *testing.T) {
+	defer TestingDisableEnterprise()()
+
+	settings := cluster.MakeClusterSettings()
+	_, ok := envutil.EnvString("COCKROACH_TENANT_LICENSE", 0)
+	envutil.ClearEnvCache()
+	require.False(t, ok)
+
+	require.Error(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.NoError(t, ApplyTenantLicense())
+	require.Error(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+}
+
+func TestApplyTenantLicenseWithInvalidLicense(t *testing.T) {
+	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", "THIS IS NOT A VALID LICENSE")()
+	require.Error(t, ApplyTenantLicense())
 }

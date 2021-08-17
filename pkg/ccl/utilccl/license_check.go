@@ -17,10 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -45,16 +47,13 @@ var enterpriseLicense = func() *settings.StringSetting {
 	return s
 }()
 
-// testingEnterprise determines whether the cluster is enabled
-// or disabled for the purposes of testing.
-// It should be loaded and stored using atomic as it can race with an
-// in progress kv reader during TestingDisableEnterprise /
-// TestingEnableEnterprise.
-var testingEnterprise int32
+// enterpriseStatus determines whether the cluster is enabled
+// for enterprise features or if enterprise status depends on the license.
+var enterpriseStatus int32 = deferToLicense
 
 const (
-	testingEnterpriseDisabled = 0
-	testingEnterpriseEnabled  = 1
+	deferToLicense    = 0
+	enterpriseEnabled = 1
 )
 
 // errEnterpriseRequired is returned by check() when the caller does
@@ -68,20 +67,36 @@ type licenseCacheKey string
 
 // TestingEnableEnterprise allows overriding the license check in tests.
 func TestingEnableEnterprise() func() {
-	before := atomic.LoadInt32(&testingEnterprise)
-	atomic.StoreInt32(&testingEnterprise, testingEnterpriseEnabled)
+	before := atomic.LoadInt32(&enterpriseStatus)
+	atomic.StoreInt32(&enterpriseStatus, enterpriseEnabled)
 	return func() {
-		atomic.StoreInt32(&testingEnterprise, before)
+		atomic.StoreInt32(&enterpriseStatus, before)
 	}
 }
 
 // TestingDisableEnterprise allows re-enabling the license check in tests.
 func TestingDisableEnterprise() func() {
-	before := atomic.LoadInt32(&testingEnterprise)
-	atomic.StoreInt32(&testingEnterprise, testingEnterpriseDisabled)
+	before := atomic.LoadInt32(&enterpriseStatus)
+	atomic.StoreInt32(&enterpriseStatus, deferToLicense)
 	return func() {
-		atomic.StoreInt32(&testingEnterprise, before)
+		atomic.StoreInt32(&enterpriseStatus, before)
 	}
+}
+
+// ApplyTenantLicense verifies the COCKROACH_TENANT_LICENSE environment variable
+// and enables enterprise features for the process. This is a bit of a hack and
+// should be replaced once it is possible to read the host cluster's
+// enterprise.license setting.
+func ApplyTenantLicense() error {
+	license, ok := envutil.EnvString("COCKROACH_TENANT_LICENSE", 0)
+	if !ok {
+		return nil
+	}
+	if _, err := decode(license); err != nil {
+		return errors.Wrap(err, "COCKROACH_TENANT_LICENSE encoding is invalid")
+	}
+	atomic.StoreInt32(&enterpriseStatus, enterpriseEnabled)
+	return nil
 }
 
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
@@ -108,6 +123,7 @@ func init() {
 	base.CheckEnterpriseEnabled = CheckEnterpriseEnabled
 	base.LicenseType = getLicenseType
 	base.TimeToEnterpriseLicenseExpiry = TimeToEnterpriseLicenseExpiry
+	server.ApplyTenantLicense = ApplyTenantLicense
 }
 
 // TimeToEnterpriseLicenseExpiry returns a Duration from `asOf` until the current
@@ -128,7 +144,7 @@ func TimeToEnterpriseLicenseExpiry(
 func checkEnterpriseEnabledAt(
 	st *cluster.Settings, at time.Time, cluster uuid.UUID, org, feature string, withDetails bool,
 ) error {
-	if atomic.LoadInt32(&testingEnterprise) == testingEnterpriseEnabled {
+	if atomic.LoadInt32(&enterpriseStatus) == enterpriseEnabled {
 		return nil
 	}
 	license, err := getLicense(st)
