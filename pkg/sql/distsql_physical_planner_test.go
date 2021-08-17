@@ -723,7 +723,8 @@ func TestPartitionSpans(t *testing.T) {
 
 		gatewayNode int
 
-		// spans to be passed to PartitionSpans
+		// spans to be passed to PartitionSpans. If the second string is empty,
+		// the span is actually a point lookup.
 		spans [][2]string
 
 		// expected result: a map of node to list of spans.
@@ -805,6 +806,32 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				2: {{"B", "C"}},
 				3: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
+			},
+		},
+
+		// Test point lookups in isolation.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A2", ""}, {"A1", ""}, {"B1", ""}},
+
+			partitions: map[int][][2]string{
+				1: {{"A2", ""}, {"A1", ""}},
+				2: {{"B1", ""}},
+			},
+		},
+
+		// Test point lookups intertwined with span scans.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 1}, {"C", 2}},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C2"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
+				2: {{"C", "C2"}},
 			},
 		},
 	}

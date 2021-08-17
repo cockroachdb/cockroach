@@ -486,7 +486,7 @@ vectorized: true
       table: child2@primary
       spans: [/1 - /1] [/11 - /11] [/21 - /21] [/31 - /31]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFvlEAQx9_9FJPx5U63gd2zfSAxQS0qDYUK16gxPKzseEdCd3F3STSX--4G0NRrrmp9IbMz85_5_Sfs0H3tMMLkw1X2Is1hcZ5W6-pdtoQqyZJXa3gCr8viEnppSXsOF0WaQ7NtOyXgukrzN7DoW8WX8P5tUiYwxjCO4Qw4ZyA4gxVfQlGeJyW8_Dg1IENtFOXyhhxGn5BjzbC3piHnjB1Tu6khVd8wChm2uh_8mK4ZNsYSRjv0re8II1zLzx2VJBXZIESGirxsu2nsT-S4t-2NtN-RYdVL7SIIeBCejJ8gv84ykFrBCozfknVY7xmawd8udF5uCCO-Z_8HxQ-h5tMdZXocnJ4F_ORXJP4NTNwLdsszaGMVWVIHLPWo_FvLEXeXZDd0YVpNNhCH7jr64hcxf7p8btvNdg6RYTH4CGLOYsHiZyw-ZfHZvX5WDzl0Sa432tFdX0cnh6MZUhuaj-PMYBu6sqaZ1szPYtJNCUXOz1UxP1I9laY_4Xcxf4BY3BWLP4pXB-JwX-8f_QgAAP__02Qrig==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFv0zAQx9_5FKfjpQWjxC7bQySkAAuQqWtGUgQI5cHERxsps4PtSKCq3x3FAY1OHVDeznf3v_v9T96h-9phgtmH6-XzfAWzi7xaV2-Xc6iyZfZyDY_gVVlcQS8tac_hsshX0GzbTgl4V-Wr1zDrW8Xn8P5NVmYwxjCO4Qw4ZyA4gwWfQ1FeZCW8-BgakKE2ilbyhhwmn5BjzbC3piHnjB1Tu9CQq2-YxAxb3Q9-TNcMG2MJkx361neECa7l545KkopsFCNDRV62XRj7EzntbXsj7XdkWPVSuwQiHsUgtYIFGL8l67DeMzSDv13jvNwQJnzP_g-FH6JMBztK8jA6O4_4k1-R-DcwcS_YLc-gjVVkSR2w1KPyby1H3F2R3dClaTXZSBy66-iLn6X88fyZbTfbKUSGxeATSDlLBUufsvSMpef3-lmccuiSXG-0o7u-jk6ORzOkNjQdx5nBNnRtTRPWTM8i6EJCkfNTVUyPXIdS-Am_i_kJYnFXLP4oXhyI4329f_AjAAD__6BrKTQ=
 
 # Parent-grandchild.
 # We add the pa1 > 0 condition so a lookup join is not considered to be a better plan.
