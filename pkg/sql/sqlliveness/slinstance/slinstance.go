@@ -92,13 +92,14 @@ func (s *session) invokeSessionExpiryCallbacks(ctx context.Context) {
 // to replace a session that has expired and deleted from the table.
 // TODO(rima): Rename Instance to avoid confusion with sqlinstance.SQLInstance.
 type Instance struct {
-	clock    *hlc.Clock
-	settings *cluster.Settings
-	stopper  *stop.Stopper
-	storage  Writer
-	ttl      func() time.Duration
-	hb       func() time.Duration
-	mu       struct {
+	clock     *hlc.Clock
+	settings  *cluster.Settings
+	stopper   *stop.Stopper
+	storage   Writer
+	ttl       func() time.Duration
+	hb        func() time.Duration
+	testKnobs sqlliveness.TestingKnobs
+	mu        struct {
 		started bool
 		syncutil.Mutex
 		blockCh chan struct{}
@@ -248,7 +249,11 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 // NewSQLInstance returns a new Instance struct and starts its heartbeating
 // loop.
 func NewSQLInstance(
-	stopper *stop.Stopper, clock *hlc.Clock, storage Writer, settings *cluster.Settings,
+	stopper *stop.Stopper,
+	clock *hlc.Clock,
+	storage Writer,
+	settings *cluster.Settings,
+	testKnobs *sqlliveness.TestingKnobs,
 ) *Instance {
 	l := &Instance{
 		clock:    clock,
@@ -261,6 +266,9 @@ func NewSQLInstance(
 		hb: func() time.Duration {
 			return DefaultHeartBeat.Get(&settings.SV)
 		},
+	}
+	if testKnobs != nil {
+		l.testKnobs = *testKnobs
 	}
 	l.mu.blockCh = make(chan struct{})
 	return l
@@ -282,6 +290,9 @@ func (l *Instance) Start(ctx context.Context) {
 // invariant is that there exists at most one live session at any point in time.
 // If the current one has expired then a new one is created.
 func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
+	if l.testKnobs.SessionOverride != nil {
+		return l.testKnobs.SessionOverride(ctx)
+	}
 	l.mu.Lock()
 	if !l.mu.started {
 		l.mu.Unlock()
