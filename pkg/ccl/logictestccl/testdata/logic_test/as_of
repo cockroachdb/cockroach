@@ -1,7 +1,14 @@
 # LogicTest: local
 
 statement ok
-CREATE TABLE t (i INT PRIMARY KEY, j INT UNIQUE, k INT, UNIQUE (k) STORING (j))
+CREATE TABLE t (
+  i INT PRIMARY KEY,
+  j INT UNIQUE,
+  k INT,
+  UNIQUE (k) STORING (j),
+  -- this is in a single family as multi-family fetches are not yet supported.
+  FAMILY (i, j, k)
+)
 
 statement ok
 INSERT INTO t VALUES (2)
