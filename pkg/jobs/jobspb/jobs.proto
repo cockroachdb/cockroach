@@ -708,6 +708,21 @@ message MigrationProgress {
 
 }
 
+// TransitionLog records state transitions of jobs from Registry. A job passes through several
+// states in its lifecycle, and its state transitions can happen due to failures. TransitionLog
+// records information about the current execution of a job and the error, if any, happened during
+// job's current execution.
+message TransitionLog {
+  // The node on which the job's Resumer is running.
+  int32 coordinator_id = 1;
+  // Job's state in which the resumer started.
+  string state = 2;
+  // Time when the resumer started.
+  int64 resume_start_micros = 3;
+  // Error message when the resumer finished execution.
+  errorspb.EncodedError resume_exit_error = 4;
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -757,7 +772,19 @@ message Payload {
   // PauseReason is used to describe the reason that the job is currently paused
   // or has been requested to be paused.
   string pause_reason = 28;
-  // NEXT ID: 29.
+  // TransitionLogs record state transitions of a job and any errors that happened
+  // during job's execution. A TransitionLog is created by Registry and appended
+  // to transitionLogs before calling Resumer's Resume() or OnFailOrCancel() functions, i.e.,
+  // when the job is executed in its running or reverting states.
+  //
+  // When the resumer completes its Resume()/OnFailOrCancel() with an error, Registry
+  // populates resume_exit_error field of the TransitionLog that was appended for the
+  // current attempt of the job.
+  //
+  // transition_logs column in crdb_internal.jobs shows these logs.
+  repeated TransitionLog transitionLogs = 29;
+
+  // NEXT ID: 30.
 }
 
 message Progress {

@@ -672,7 +672,8 @@ CREATE TABLE crdb_internal.jobs (
   trace_id              INT,
   last_run              TIMESTAMP,
   next_run              TIMESTAMP,
-  num_runs               INT
+  num_runs              INT,
+  transition_logs       JSON
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -690,13 +691,13 @@ CREATE TABLE crdb_internal.jobs (
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
 		// out results that the current user is not able to see.
 		const (
-			qSelect          = `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id`
-			qFrom            = ` FROM system.jobs`
-			jobsQuery        = qSelect + qFrom
-			backoffArgs      = `(SELECT $1::FLOAT AS initial_delay, $2::FLOAT AS max_delay) args`
-			queryWithBackoff = qSelect + `, last_run, COALESCE(num_runs, 0), ` + jobs.NextRunClause + ` as next_run` + qFrom + ", " + backoffArgs
+			qSelect             = `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id`
+			qFrom               = ` FROM system.jobs`
+			queryWithoutBackoff = qSelect + qFrom
+			backoffArgs         = `(SELECT $1::FLOAT AS initial_delay, $2::FLOAT AS max_delay) args`
+			queryWithBackoff    = qSelect + `, last_run, COALESCE(num_runs, 0), ` + jobs.NextRunClause + ` as next_run` + qFrom + ", " + backoffArgs
 		)
-		query := jobsQuery
+		query := queryWithoutBackoff
 		var args []interface{}
 		settings := p.execCfg.Settings
 		backoffIsEnabled := settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff)
@@ -741,9 +742,10 @@ CREATE TABLE crdb_internal.jobs (
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
 					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, coordinatorID,
-					traceID, lastRun, nextRun, numRuns = tree.DNull, tree.DNull, tree.DNull, tree.DNull,
+					traceID, lastRun, nextRun, numRuns, transitionLogs = tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull
+					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
+					tree.DNull
 
 				// Extract data from the payload.
 				payload, err := jobs.UnmarshalPayload(payloadBytes)
@@ -842,6 +844,18 @@ CREATE TABLE crdb_internal.jobs (
 
 				if backoffIsEnabled {
 					lastRun, numRuns, nextRun = r[7], r[8], r[9]
+					if payload != nil && payload.TransitionLogs != nil {
+						// Extract transition logs.
+						ab := json.NewArrayBuilder(len(payload.TransitionLogs))
+						for _, tl := range payload.TransitionLogs {
+							encoded, err := tl.TransitionLogToJSON(ctx)
+							if err != nil {
+								return nil, err
+							}
+							ab.Add(encoded)
+						}
+						transitionLogs = tree.NewDJSON(ab.Build())
+					}
 				}
 
 				container = container[:0]
@@ -866,6 +880,7 @@ CREATE TABLE crdb_internal.jobs (
 					lastRun,
 					nextRun,
 					numRuns,
+					transitionLogs,
 				)
 				return container, nil
 			}
