@@ -132,7 +132,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 				break
 			}
 			if everySecond.ShouldLog() {
-				log.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err.Error())
+				log.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err)
 			}
 			continue
 		}

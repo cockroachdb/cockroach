@@ -537,7 +537,7 @@ func (p *planner) removeFKForBackReference(
 	} else {
 		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
 		if err != nil {
-			return errors.Errorf("error resolving origin table ID %d: %v", ref.OriginTableID, err)
+			return errors.Wrapf(err, "error resolving origin table ID %d", ref.OriginTableID)
 		}
 		originTableDesc = lookup
 	}
@@ -595,7 +595,7 @@ func (p *planner) removeFKBackReference(
 	} else {
 		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
 		if err != nil {
-			return errors.Errorf("error resolving referenced table ID %d: %v", ref.ReferencedTableID, err)
+			return errors.Wrapf(err, "error resolving referenced table ID %d", ref.ReferencedTableID)
 		}
 		referencedTableDesc = lookup
 	}
@@ -651,7 +651,7 @@ func (p *planner) removeInterleaveBackReference(
 	} else {
 		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
 		if err != nil {
-			return errors.Errorf("error resolving referenced table ID %d: %v", ancestor.TableID, err)
+			return errors.Wrapf(err, "error resolving referenced table ID %d", ancestor.TableID)
 		}
 		t = lookup
 	}

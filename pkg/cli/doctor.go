@@ -341,12 +341,12 @@ func fromZipDir(
 		last := len(fields) - 1
 		i, err := strconv.Atoi(fields[0])
 		if err != nil {
-			return errors.Errorf("failed to parse descriptor id %s: %v", fields[0], err)
+			return errors.Wrapf(err, "failed to parse descriptor id %s", fields[0])
 		}
 
 		descBytes, err := hx.DecodeString(fields[last])
 		if err != nil {
-			return errors.Errorf("failed to decode hex descriptor %d: %v", i, err)
+			return errors.Wrapf(err, "failed to decode hex descriptor %d", i)
 		}
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		descTable = append(descTable, doctor.DescriptorTableRow{ID: int64(i), DescBytes: descBytes, ModTime: ts})
@@ -366,18 +366,18 @@ func fromZipDir(
 		fields := strings.Fields(row)
 		parID, err := strconv.Atoi(fields[0])
 		if err != nil {
-			return errors.Errorf("failed to parse parent id %s: %v", fields[0], err)
+			return errors.Wrapf(err, "failed to parse parent id %s", fields[0])
 		}
 		parSchemaID, err := strconv.Atoi(fields[1])
 		if err != nil {
-			return errors.Errorf("failed to parse parent schema id %s: %v", fields[1], err)
+			return errors.Wrapf(err, "failed to parse parent schema id %s", fields[1])
 		}
 		id, err := strconv.Atoi(fields[3])
 		if err != nil {
 			if fields[3] == "NULL" {
 				id = int(descpb.InvalidID)
 			} else {
-				return errors.Errorf("failed to parse id %s: %v", fields[3], err)
+				return errors.Wrapf(err, "failed to parse id %s", fields[3])
 			}
 		}
 
@@ -406,14 +406,14 @@ func fromZipDir(
 
 		id, err := strconv.Atoi(fields[0])
 		if err != nil {
-			return errors.Errorf("failed to parse job id %s: %v", fields[0], err)
+			return errors.Wrapf(err, "failed to parse job id %s", fields[0])
 		}
 		md.ID = jobspb.JobID(id)
 
 		last := len(fields) - 1
 		payloadBytes, err := hx.DecodeString(fields[last-1])
 		if err != nil {
-			return errors.Errorf("job %d: failed to decode hex payload: %v", id, err)
+			return errors.Wrapf(err, "job %d: failed to decode hex payload", id)
 		}
 		md.Payload = &jobspb.Payload{}
 		if err := protoutil.Unmarshal(payloadBytes, md.Payload); err != nil {
@@ -421,7 +421,7 @@ func fromZipDir(
 		}
 		progressBytes, err := hx.DecodeString(fields[last])
 		if err != nil {
-			return errors.Errorf("job %d: failed to decode hex progress: %v", id, err)
+			return errors.Wrapf(err, "job %d: failed to decode hex progress", id)
 		}
 		md.Progress = &jobspb.Progress{}
 		if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
