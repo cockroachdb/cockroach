@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -522,6 +523,54 @@ func (s *TestState) MustReadMutableDescriptor(
 	return s.mustReadMutableDescriptor(id)
 }
 
+// GetFullyQualifiedName implements scexec.Catalog
+func (s *TestState) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
+	obj, err := s.mustReadImmutableDescriptor(id)
+	if err != nil {
+		return "", err
+	}
+	dbName := ""
+	if obj.GetParentID() != descpb.InvalidID {
+		db, err := s.mustReadImmutableDescriptor(obj.GetParentID())
+		if err != nil {
+			return "", errors.Wrapf(err, "parent database for object #%d", id)
+		}
+		dbName = db.GetName()
+	}
+	scName := ""
+	if obj.GetParentSchemaID() != descpb.InvalidID {
+		scName = tree.PublicSchema
+		if obj.GetParentSchemaID() != keys.PublicSchemaID {
+			sc, err := s.mustReadImmutableDescriptor(obj.GetParentSchemaID())
+			if err != nil {
+				return "", errors.Wrapf(err, "parent schema for object #%d", id)
+			}
+			scName = sc.GetName()
+		}
+	}
+	// Sanity checks:
+	// 1) Both table and types will have both a schema and database name.
+	// 2) Schemas will only have a database name.
+	// 3) Databases should not have either set.
+	switch obj.DescriptorType() {
+	case catalog.Table:
+		fallthrough
+	case catalog.Type:
+		if scName == "" || dbName == "" {
+			return "", errors.AssertionFailedf("schema or database missing for type/relation %d", id)
+		}
+	case catalog.Schema:
+		if scName != "" || dbName == "" {
+			return "", errors.AssertionFailedf("schema or database are invalid for schema %d", id)
+		}
+	case catalog.Database:
+		if scName != "" || dbName != "" {
+			return "", errors.AssertionFailedf("schema or database are set for database %d", id)
+		}
+	}
+	return tree.NewTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(obj.GetName())).FQString(), nil
+}
+
 // NewCatalogChangeBatcher implements the scexec.Catalog interface.
 func (s *TestState) NewCatalogChangeBatcher() scexec.CatalogChangeBatcher {
 	return &testCatalogChangeBatcher{
@@ -832,5 +881,22 @@ func (s *TestState) ValidateInvertedIndexes(
 
 // IndexValidator implements the scexec.Dependencies interface.
 func (s *TestState) IndexValidator() scexec.IndexValidator {
+	return s
+}
+
+// AddDropEvent implements scexec.EventLogger
+func (s *TestState) AddDropEvent(
+	_ context.Context, descID descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload,
+) error {
+	return nil
+}
+
+// ProcessAndSubmitEvents implements scexec.EventLogger
+func (s *TestState) ProcessAndSubmitEvents(ctx context.Context) error {
+	return nil
+}
+
+// EventLogger implements scexec.Dependencies
+func (s *TestState) EventLogger() scexec.EventLogger {
 	return s
 }

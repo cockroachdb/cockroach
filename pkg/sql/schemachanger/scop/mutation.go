@@ -257,3 +257,12 @@ type AddIndexPartitionInfo struct {
 	ListPartitions  []*scpb.ListPartition
 	RangePartitions []*scpb.RangePartitions
 }
+
+// LogEvent logs an event for a given descriptor.
+type LogEvent struct {
+	mutationOp
+	DescID    descpb.ID
+	Metadata  scpb.ElementMetadata
+	Element   *scpb.ElementProto
+	Direction scpb.Target_Direction
+}

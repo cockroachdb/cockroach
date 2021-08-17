@@ -72,11 +72,6 @@ Stage 1 (non-revertible)
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 1
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
   *scop.MarkDescriptorAsDropped
     DescID: 56
   *scop.RemoveSequenceOwnedBy
@@ -87,32 +82,12 @@ Stage 1 (non-revertible)
   *scop.UpdateRelationDeps
     TableID: 55
   *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 3
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
     ColumnID: 3
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
   *scop.RemoveColumnDefaultExpression
     ColumnID: 4
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 4
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 5
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
@@ -127,26 +102,53 @@ Stage 1 (non-revertible)
 Stage 2 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 57
-  *scop.CreateGcJobForDescriptor
+  *scop.LogEvent
     DescID: 57
-  *scop.DrainDescriptorName
-    TableID: 57
+    Direction: 2
+    Element:
+      view:
+        dependedOnBy: []
+        dependsOn:
+        - 55
+        tableId: 57
+    Metadata:
+      Statement: DROP TABLE defaultdb.shipments CASCADE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 57
   *scop.DrainDescriptorName
     TableID: 56
-  *scop.CreateGcJobForDescriptor
+  *scop.LogEvent
     DescID: 56
-  *scop.DrainDescriptorName
-    TableID: 56
+    Direction: 2
+    Element:
+      sequence:
+        sequenceId: 56
+    Metadata:
+      Statement: DROP TABLE defaultdb.shipments CASCADE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 56
   *scop.DrainDescriptorName
     TableID: 55
-  *scop.CreateGcJobForDescriptor
+  *scop.LogEvent
     DescID: 55
-  *scop.DrainDescriptorName
-    TableID: 55
+    Direction: 2
+    Element:
+      table:
+        tableId: 55
+    Metadata:
+      Statement: DROP TABLE defaultdb.shipments CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 55
 

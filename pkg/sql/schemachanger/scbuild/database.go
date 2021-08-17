@@ -36,6 +36,7 @@ func (b *buildContext) dropDatabase(ctx context.Context, n *tree.DropDatabase) {
 	onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, db, privilege.DROP))
 
 	dropIDs := catalog.DescriptorIDSet{}
+	lastSourceID := b.setSourceElementID(b.newSourceElementID())
 	doSchema := func(schema catalog.SchemaDescriptor) {
 		// For public and temporary schemas the drop logic
 		// will only drop the underlying objects and return
@@ -71,8 +72,10 @@ func (b *buildContext) dropDatabase(ctx context.Context, n *tree.DropDatabase) {
 		dropIDs.Add(schemaID)
 		doSchema(schema)
 	}
+	b.setSourceElementID(lastSourceID)
 	b.addNode(scpb.Target_DROP,
 		&scpb.Database{
 			DatabaseID:       db.GetID(),
-			DependentObjects: dropIDs.Ordered()})
+			DependentObjects: dropIDs.Ordered(),
+		})
 }

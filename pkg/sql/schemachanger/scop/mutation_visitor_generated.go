@@ -50,6 +50,7 @@ type MutationVisitor interface {
 	DropForeignKeyRef(context.Context, DropForeignKeyRef) error
 	RemoveSequenceOwnedBy(context.Context, RemoveSequenceOwnedBy) error
 	AddIndexPartitionInfo(context.Context, AddIndexPartitionInfo) error
+	LogEvent(context.Context, LogEvent) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -190,4 +191,9 @@ func (op RemoveSequenceOwnedBy) Visit(ctx context.Context, v MutationVisitor) er
 // Visit is part of the MutationOp interface.
 func (op AddIndexPartitionInfo) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.AddIndexPartitionInfo(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op LogEvent) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.LogEvent(ctx, op)
 }

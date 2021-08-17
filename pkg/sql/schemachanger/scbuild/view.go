@@ -30,6 +30,8 @@ import (
 func (b *buildContext) maybeDropViewAndDependents(
 	ctx context.Context, view catalog.TableDescriptor, behavior tree.DropBehavior,
 ) {
+	// Any elements added below will be children of this view.
+	lastSourceID := b.setSourceElementID(b.newSourceElementID())
 	// Validate we have drop privileges.
 	onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, view, privilege.DROP))
 	// Create a node for the view we are going to drop.
@@ -65,8 +67,14 @@ func (b *buildContext) maybeDropViewAndDependents(
 	if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, viewNode); exists {
 		return
 	}
+	// This views element will be under the original
+	// parent ID. lastSourceID should be the new parent
+	// we just used.
+	lastSourceID = b.setSourceElementID(lastSourceID)
 	b.addNode(scpb.Target_DROP,
 		viewNode)
+	// Revert to our newly allocated ID, last now points to the parent.
+	lastSourceID = b.setSourceElementID(lastSourceID)
 	// Remove any type back refs.
 	b.removeTypeBackRefDeps(ctx, view)
 	// Drop any dependent views next.
@@ -86,6 +94,8 @@ func (b *buildContext) maybeDropViewAndDependents(
 		b.maybeDropViewAndDependents(ctx, dependentDesc, behavior)
 		return nil
 	})
+	// Go back to the original parent ID.
+	b.setSourceElementID(lastSourceID)
 }
 
 // dropView builds targets and transforms the provided schema change nodes
@@ -112,5 +122,6 @@ func (b *buildContext) dropView(ctx context.Context, n *tree.DropView) {
 		}
 		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, table, privilege.DROP))
 		b.maybeDropViewAndDependents(ctx, table, n.DropBehavior)
+		b.incrementSubWorkID()
 	}
 }
