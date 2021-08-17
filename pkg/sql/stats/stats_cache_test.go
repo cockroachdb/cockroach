@@ -115,7 +115,7 @@ func checkStatsForTable(
 
 	// Perform the lookup and refresh, and confirm the
 	// returned stats match the expected values.
-	statsList, err := sc.GetTableStats(ctx, tableID)
+	statsList, err := sc.getTableStatsFromCache(ctx, tableID)
 	if err != nil {
 		t.Fatalf("error retrieving stats: %s", err)
 	}
@@ -357,7 +357,7 @@ CREATE STATISTICS s FROM tt;
 	tbl := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
-	stats, err := sc.GetTableStats(ctx, tbl.GetID())
+	stats, err := sc.GetTableStats(ctx, tbl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +373,7 @@ CREATE STATISTICS s FROM tt;
 	sc.InvalidateTableStats(ctx, tbl.GetID())
 	// Verify that GetTableStats ignores the statistic on the now unknown type and
 	// returns the rest.
-	stats, err = sc.GetTableStats(ctx, tbl.GetID())
+	stats, err = sc.GetTableStats(ctx, tbl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +429,7 @@ func TestCacheWait(t *testing.T) {
 		for n := 0; n < 10; n++ {
 			wg.Add(1)
 			go func() {
-				stats, err := sc.GetTableStats(ctx, id)
+				stats, err := sc.getTableStatsFromCache(ctx, id)
 				if err != nil {
 					t.Error(err)
 				} else if !checkStats(stats, expectedStats[id]) {
@@ -480,10 +480,9 @@ func TestCacheAutoRefresh(t *testing.T) {
 	sr0.Exec(t, "INSERT INTO test.t VALUES (1, 1), (2, 2), (3, 3)")
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
-	tableID := tableDesc.GetID()
 
 	expectNStats := func(n int) error {
-		stats, err := sc.GetTableStats(ctx, tableID)
+		stats, err := sc.GetTableStats(ctx, tableDesc)
 		if err != nil {
 			t.Fatal(err)
 		}

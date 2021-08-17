@@ -200,7 +200,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	)
 
 	// Estimate the expected number of rows based on existing stats in the cache.
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc.GetID())
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc)
 	if err != nil {
 		return nil, err
 	}

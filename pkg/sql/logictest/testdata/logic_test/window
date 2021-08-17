@@ -4279,3 +4279,25 @@ NULL  NULL  NULL
 
 statement ok
 RESET vectorize;
+
+# Regression test for incorrect bytes results when spilling to disk when there
+# are multiple partitions and one of the earlier partitions has trailing NULL
+# values.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT, y STRING);
+INSERT INTO t VALUES (1, 'NotNull'), (1, NULL), (1, NULL),
+(2, 'NotNull'), (2, 'NotNull'), (2, 'NotNull'), (2, 'NotNull');
+
+# Loading a batch with trailing nulls onto disk and then unloading it to
+# continue processing should not corrupt the output bytes.
+query ITT rowsort
+SELECT x, y, first_value(y) OVER (PARTITION BY x ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t;
+----
+1  NotNull  NotNull
+1  NULL     NULL
+1  NULL     NULL
+2  NotNull  NotNull
+2  NotNull  NotNull
+2  NotNull  NotNull
+2  NotNull  NotNull

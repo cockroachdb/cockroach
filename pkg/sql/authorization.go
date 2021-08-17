@@ -162,7 +162,7 @@ func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {
 	if owner.Undefined() {
 		// If the descriptor is ownerless and the descriptor is part of the system db,
 		// node is the owner.
-		if desc.GetID() == keys.SystemDatabaseID || desc.GetParentID() == keys.SystemDatabaseID {
+		if catalog.IsSystemDescriptor(desc) {
 			owner = security.NodeUserName()
 		} else {
 			// This check is redundant in this case since admin already has privilege

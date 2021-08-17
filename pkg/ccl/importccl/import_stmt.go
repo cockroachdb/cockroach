@@ -2273,7 +2273,8 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 	// rows affected per table, so we use a large number because we want to make
 	// sure that stats always get created/refreshed here.
 	for i := range details.Tables {
-		execCfg.StatsRefresher.NotifyMutation(details.Tables[i].Desc.ID, math.MaxInt32 /* rowsAffected */)
+		desc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
+		execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
 	}
 
 	return nil
