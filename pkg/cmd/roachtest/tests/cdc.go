@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -91,9 +92,9 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
-	if _, err := db.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = true`); err != nil {
-		t.Fatal(err)
-	}
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	tdb.Exec(t, `SET CLUSTER SETTING jobs.registry.retry.max_delay = '1s'`)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
