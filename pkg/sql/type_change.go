@@ -218,7 +218,7 @@ func refreshTypeDescriptorLeases(
 		ids = append(ids, typeDesc.GetArrayTypeID())
 	}
 	for _, id := range ids {
-		if updateErr := WaitToUpdateLeases(ctx, leaseMgr, id); updateErr != nil {
+		if _, updateErr := WaitToUpdateLeases(ctx, leaseMgr, id); updateErr != nil {
 			// Swallow the descriptor not found error.
 			if errors.Is(updateErr, catalog.ErrDescriptorNotFound) {
 				log.Infof(ctx,

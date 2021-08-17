@@ -492,6 +492,9 @@ func (b *Bytes) Truncate(length int) {
 		// This is a no-op.
 		return
 	}
+	// Ensure that calling Truncate with a length greater than maxSetLength does
+	// not invalidate the non-decreasing invariant.
+	b.UpdateOffsetsToBeNonDecreasing(length)
 	b.data = b.data[:b.offsets[length]]
 	b.maxSetLength = length
 }

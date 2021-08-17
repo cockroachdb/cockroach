@@ -200,7 +200,7 @@
 /pkg/internal/team/          @cockroachdb/test-eng
 /pkg/jobs/                   @cockroachdb/sql-schema
 /pkg/keys/                   @cockroachdb/kv-prs
-/pkg/migration/              @cockroachdb/kv @cockroachdb/sql-schema
+/pkg/migration/              @cockroachdb/kv-prs @cockroachdb/sql-schema
 /pkg/multitenant             @cockroachdb/unowned
 /pkg/release/                @cockroachdb/dev-inf
 /pkg/roachpb/                @cockroachdb/kv-prs
