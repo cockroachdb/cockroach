@@ -1,0 +1,155 @@
+# NOTE: when running with -rewrite, you may want to run with
+# -ignore-wait-until-match as well. Check diff output carefully!
+
+# Set a lower closed timestamp target to speed up time to reach follower reads.
+exec
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
+----
+
+exec
+CREATE TABLE t(pk INT PRIMARY KEY);
+INSERT INTO t VALUES (1);
+----
+
+# If we try to read a timestamp that is impossible to satisfy with a follower
+# read, we should always be looking at the leaseholder in the nearest_only=False
+# case. We always do bounded staleness reads from node_idx 2, as node_idx 0 in a
+# TestCluster is always the leaseholder.
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1μs') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1μs') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1μs', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1μs', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+# If nearest_only=True, all small 1μs reads should fail.
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1μs', true) WHERE pk = 1
+----
+pq: bounded staleness read with minimum timestamp bound of XXX could not be satisfied by a local resolved timestamp of XXX
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1μs', true) WHERE pk = 1
+----
+pq: bounded staleness read with minimum timestamp bound of XXX could not be satisfied by a local resolved timestamp of XXX
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read
+
+# Wait until the follower has caught up. Ensure reads are local, follower reads.
+# Note we have to wait until a match here, in case a follower read reads an
+# older version of the data.
+query idx=2 wait-until-follower-read wait-until-match
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', true) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+# Set a super high closed bounded staleness target and execute a schema change.
+exec
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1hr';
+ALTER TABLE t ADD COLUMN new_col INT NOT NULL DEFAULT 2
+----
+
+# Ensure we resort to the leaseholder as the schema change requires a recent read
+# in the nearest_only=False case.
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', false) WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', false) WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+# When nearest_only=True, we should only read the state before the schema change successfully.
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', true) WHERE pk = 1
+----
+pq: bounded staleness read with minimum timestamp bound of XXX could not be satisfied by a local resolved timestamp of XXX
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 1
+----
+pq: bounded staleness read with minimum timestamp bound of XXX could not be satisfied by a local resolved timestamp of XXX
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read

@@ -208,6 +208,19 @@ func (f *txnKVFetcher) getWaitPolicy() lock.WaitPolicy {
 	}
 }
 
+func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
+	return func(
+		ctx context.Context,
+		ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		res, err := txn.Send(ctx, ba)
+		if err != nil {
+			return nil, err.GoError()
+		}
+		return res, nil
+	}
+}
+
 // makeKVBatchFetcher initializes a kvBatchFetcher for the given spans. If
 // useBatchLimit is true, the number of result keys per batch is limited; the
 // limit grows between subsequent batches, starting at firstBatchLimit (if not
@@ -215,34 +228,6 @@ func (f *txnKVFetcher) getWaitPolicy() lock.WaitPolicy {
 //
 // Batch limits can only be used if the spans are ordered.
 func makeKVBatchFetcher(
-	txn *kv.Txn,
-	spans roachpb.Spans,
-	reverse bool,
-	useBatchLimit bool,
-	firstBatchLimit int64,
-	lockStrength descpb.ScanLockingStrength,
-	lockWaitPolicy descpb.ScanLockingWaitPolicy,
-	lockTimeout time.Duration,
-	mon *mon.BytesMonitor,
-	forceProductionKVBatchSize bool,
-) (txnKVFetcher, error) {
-	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-		res, err := txn.Send(ctx, ba)
-		if err != nil {
-			return nil, err.GoError()
-		}
-		return res, nil
-	}
-	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
-		lockWaitPolicy, lockTimeout, mon, forceProductionKVBatchSize,
-		txn.AdmissionHeader(), txn.DB().SQLKVResponseAdmissionQ,
-	)
-}
-
-// makeKVBatchFetcherWithSendFunc is like makeKVBatchFetcher but uses a custom
-// send function.
-func makeKVBatchFetcherWithSendFunc(
 	sendFn sendFunc,
 	spans roachpb.Spans,
 	reverse bool,
