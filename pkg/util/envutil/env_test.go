@@ -13,6 +13,8 @@ package envutil
 import (
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestEnvOrDefault(t *testing.T) {
@@ -26,4 +28,44 @@ func TestEnvOrDefault(t *testing.T) {
 	if act := EnvOrDefaultInt("COCKROACH_X", def); act != def {
 		t.Errorf("expected %d, got %d", def, act)
 	}
+}
+
+func TestTestSetEnvExists(t *testing.T) {
+	key := "COCKROACH_ENVUTIL_TESTSETTING"
+	require.NoError(t, os.Setenv(key, "before"))
+
+	ClearEnvCache()
+	value, ok := EnvString(key, 0)
+	require.True(t, ok)
+	require.Equal(t, value, "before")
+
+	cleanup := TestSetEnv(t, key, "testvalue")
+	value, ok = EnvString(key, 0)
+	require.True(t, ok)
+	require.Equal(t, value, "testvalue")
+
+	cleanup()
+
+	value, ok = EnvString(key, 0)
+	require.True(t, ok)
+	require.Equal(t, value, "before")
+}
+
+func TestTestSetEnvDoesNotExist(t *testing.T) {
+	key := "COCKROACH_ENVUTIL_TESTSETTING"
+	require.NoError(t, os.Unsetenv(key))
+
+	ClearEnvCache()
+	_, ok := EnvString(key, 0)
+	require.False(t, ok)
+
+	cleanup := TestSetEnv(t, key, "foo")
+	value, ok := EnvString(key, 0)
+	require.True(t, ok)
+	require.Equal(t, value, "foo")
+
+	cleanup()
+
+	_, ok = EnvString(key, 0)
+	require.False(t, ok)
 }
