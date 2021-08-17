@@ -47,6 +47,7 @@ type KVFetcher struct {
 func NewKVFetcher(
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	bsHeader *roachpb.BoundedStalenessHeader,
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
@@ -56,9 +57,35 @@ func NewKVFetcher(
 	mon *mon.BytesMonitor,
 	forceProductionKVBatchSize bool,
 ) (*KVFetcher, error) {
+	var sendFn sendFunc
+	// Avoid the heap allocation by allocating sendFn specifically in the if.
+	if bsHeader == nil {
+		sendFn = makeKVBatchFetcherDefaultSendFunc(txn)
+	} else {
+		sendFn = func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+			ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+			ba.BoundedStaleness = bsHeader
+			res, err := txn.NegotiateAndSend(ctx, ba)
+			if err != nil {
+				return nil, err.GoError()
+			}
+			return res, nil
+		}
+	}
+
 	kvBatchFetcher, err := makeKVBatchFetcher(
-		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
-		lockWaitPolicy, lockTimeout, mon, forceProductionKVBatchSize,
+		sendFn,
+		spans,
+		reverse,
+		useBatchLimit,
+		firstBatchLimit,
+		lockStrength,
+		lockWaitPolicy,
+		lockTimeout,
+		mon,
+		forceProductionKVBatchSize,
+		txn.AdmissionHeader(),
+		txn.DB().SQLKVResponseAdmissionQ,
 	)
 	return newKVFetcher(&kvBatchFetcher), err
 }

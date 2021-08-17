@@ -49,6 +49,7 @@ type ColBatchScan struct {
 
 	spans       roachpb.Spans
 	flowCtx     *execinfra.FlowCtx
+	bsHeader    *roachpb.BoundedStalenessHeader
 	rf          *cFetcher
 	limitHint   int64
 	parallelize bool
@@ -89,7 +90,12 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
-		s.flowCtx.Txn, s.spans, limitBatches, s.limitHint, s.flowCtx.TraceKV,
+		s.flowCtx.Txn,
+		s.spans,
+		s.bsHeader,
+		limitBatches,
+		s.limitHint,
+		s.flowCtx.TraceKV,
 		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		colexecerror.InternalError(err)
@@ -220,6 +226,22 @@ func NewColBatchScan(
 		return nil, err
 	}
 
+	var bsHeader *roachpb.BoundedStalenessHeader
+	if aost := evalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
+		ts := aost.Timestamp
+		// If the descriptor's modification time is after the bounded staleness min bound,
+		// we have to increase the min bound.
+		// Otherwise, we would have table data which would not correspond to the correct
+		// schema.
+		if aost.Timestamp.Less(table.GetModificationTime()) {
+			ts = table.GetModificationTime()
+		}
+		bsHeader = &roachpb.BoundedStalenessHeader{
+			MinTimestampBound:       ts,
+			MinTimestampBoundStrict: aost.NearestOnly,
+		}
+	}
+
 	s := colBatchScanPool.Get().(*ColBatchScan)
 	spans := s.spans[:0]
 	specSpans := spec.Spans
@@ -230,6 +252,7 @@ func NewColBatchScan(
 	*s = ColBatchScan{
 		spans:     spans,
 		flowCtx:   flowCtx,
+		bsHeader:  bsHeader,
 		rf:        fetcher,
 		limitHint: limitHint,
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
