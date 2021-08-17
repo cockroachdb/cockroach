@@ -49,13 +49,14 @@ var (
 		}
 		return n
 	}()
-	flags    = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	binary   = flags.String("binary", "./cockroach", "path to cockroach binary")
-	file     = flags.String("file", "", "the path to a file containing a SQL query to reduce")
-	verbose  = flags.Bool("v", false, "print progress to standard output")
-	contains = flags.String("contains", "", "error regex to search for")
-	unknown  = flags.Bool("unknown", false, "print unknown types during walk")
-	workers  = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
+	flags           = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	binary          = flags.String("binary", "./cockroach", "path to cockroach binary")
+	file            = flags.String("file", "", "the path to a file containing a SQL query to reduce")
+	verbose         = flags.Bool("v", false, "print progress to standard output")
+	contains        = flags.String("contains", "", "error regex to search for")
+	unknown         = flags.Bool("unknown", false, "print unknown types during walk")
+	workers         = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
+	chunkReductions = flags.Int("chunk", 0, "number of consecutive chunk reduction failures allowed before halting chunk reduction (default 0)")
 )
 
 const description = `
@@ -85,14 +86,16 @@ func main() {
 		usage()
 	}
 	reducesql.LogUnknown = *unknown
-	out, err := reduceSQL(*binary, *contains, file, *workers, *verbose)
+	out, err := reduceSQL(*binary, *contains, file, *workers, *verbose, *chunkReductions)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(out)
 }
 
-func reduceSQL(binary, contains string, file *string, workers int, verbose bool) (string, error) {
+func reduceSQL(
+	binary, contains string, file *string, workers int, verbose bool, chunkReductions int,
+) (string, error) {
 	containsRE, err := regexp.Compile(contains)
 	if err != nil {
 		return "", err
@@ -122,7 +125,7 @@ func reduceSQL(binary, contains string, file *string, workers int, verbose bool)
 	}
 
 	// Pretty print the input so the file size comparison is useful.
-	inputSQL, err := reducesql.Pretty(input)
+	inputSQL, err := reducesql.Pretty(string(input))
 	if err != nil {
 		return "", err
 	}
@@ -133,7 +136,12 @@ func reduceSQL(binary, contains string, file *string, workers int, verbose bool)
 		fmt.Fprintf(logger, "input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
 	}
 
-	interesting := func(ctx context.Context, f reduce.File) bool {
+	var chunkReducer reduce.ChunkReducer
+	if chunkReductions > 0 {
+		chunkReducer = reducesql.NewSQLChunkReducer(chunkReductions)
+	}
+
+	interesting := func(ctx context.Context, f string) bool {
 		// Disable telemetry and license generation.
 		cmd := exec.CommandContext(ctx, binary,
 			"demo",
@@ -158,6 +166,14 @@ func reduceSQL(binary, contains string, file *string, workers int, verbose bool)
 		return containsRE.Match(out)
 	}
 
-	out, err := reduce.Reduce(logger, reduce.File(inputSQL), interesting, workers, reduce.ModeInteresting, reducesql.SQLPasses...)
-	return string(out), err
+	out, err := reduce.Reduce(
+		logger,
+		inputSQL,
+		interesting,
+		workers,
+		reduce.ModeInteresting,
+		chunkReducer,
+		reducesql.SQLPasses...,
+	)
+	return out, err
 }
