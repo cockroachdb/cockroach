@@ -919,16 +919,19 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	for i := range spans {
 
 		span := spans[i]
+		noEndKey := false
 		if len(span.EndKey) == 0 {
-			// If we see a span to partition that has no end key, it means that we're
-			// going to do a point lookup on the start key of this span.
+			// If we see a span to partition that has no end key, it means that
+			// we're going to do a point lookup on the start key of this span.
 			//
-			// The code below us doesn't really tolerate spans without an EndKey, so
-			// we manufacture a single-key span for this case.
+			// The code below us doesn't really tolerate spans without an
+			// EndKey, so we manufacture a single-key span for this case. Note
+			// that we still, however, will preserve the point lookup.
 			span = roachpb.Span{
 				Key:    span.Key,
 				EndKey: span.Key.Next(),
 			}
+			noEndKey = true
 		}
 
 		// rSpan is the span we are currently partitioning.
@@ -996,6 +999,15 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 				}
 			}
 			partition := &partitions[partitionIdx]
+
+			if noEndKey {
+				// The original span had no EndKey, and we want to preserve it
+				// so that we could use a GetRequest.
+				partition.Spans = append(partition.Spans, roachpb.Span{
+					Key: lastKey.AsRawKey(),
+				})
+				break
+			}
 
 			if lastNodeID == nodeID {
 				// Two consecutive ranges on the same node, merge the spans.
