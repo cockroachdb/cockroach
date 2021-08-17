@@ -14,9 +14,12 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"errors"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"sort"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -30,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type mtRow struct {
@@ -77,7 +81,6 @@ type mtClient struct {
 //   https://github.com/jepsen-io/jepsen/blob/master/cockroachdb/src/jepsen/cockroach/monotonic.clj
 func TestMonotonicInserts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 67802, "flaky test")
 
 	for _, distSQLMode := range []sessiondatapb.DistSQLExecMode{
 		sessiondatapb.DistSQLOff, sessiondatapb.DistSQLOn,
@@ -91,6 +94,8 @@ func TestMonotonicInserts(t *testing.T) {
 func testMonotonicInserts(t *testing.T, distSQLMode sessiondatapb.DistSQLExecMode) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	const transactionSafetyAbandonThreshold = time.Second * 2
 
 	skip.UnderShort(t)
 	ctx := context.Background()
@@ -147,6 +152,14 @@ INSERT INTO mono.mono VALUES(-1, '0', -1, -1)`); err != nil {
 			); err != nil {
 				l(err.Error())
 				return err
+			}
+			clusterTimestamp, err := parseClusterTimestamp(insRow.sts)
+			if err != nil {
+				return err
+			}
+			if timeutil.Now().UnixNano()-clusterTimestamp > transactionSafetyAbandonThreshold.Nanoseconds() {
+				l("cluster timestamp is too old, abandoning transaction to avoid lock up")
+				return nil
 			}
 
 			l("read max val")
@@ -214,6 +227,10 @@ RETURNING val, sts, node, tb`,
 			t.Errorf("'val' column is not unique: %d results, but %d distinct:\n%s",
 				len(results), numDistinct, results)
 		}
+
+		if numDistinct < 2*len(tc.Conns) {
+			t.Errorf("test didn't succeed at least one transaction per connection")
+		}
 	}
 
 	sem := make(chan struct{}, 2*len(tc.Conns))
@@ -241,4 +258,18 @@ RETURNING val, sts, node, tb`,
 			<-sem
 		}(clients[rand.Intn(len(clients))])
 	}
+}
+
+var timestampRegexp = regexp.MustCompile(`^(\d+)\.(\d+)$`)
+
+func parseClusterTimestamp(timestampString string) (int64, error) {
+	matches := timestampRegexp.FindStringSubmatch(timestampString)
+	if matches == nil {
+		return 0, errors.New("can not extract timestamp")
+	}
+	timestamp, err := strconv.ParseInt(matches[1], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return timestamp, nil
 }
