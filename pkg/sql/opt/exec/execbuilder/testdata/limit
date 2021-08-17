@@ -44,40 +44,33 @@ EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) 
 distribution: local
 vectorized: true
 ·
-• sort
+• limit
 │ columns: (w)
-│ ordering: +w
 │ estimated row count: 25 (missing stats)
-│ order: +w
+│ count: 25
 │
-└── • limit
+└── • distinct
     │ columns: (w)
-    │ estimated row count: 25 (missing stats)
-    │ count: 25
+    │ ordering: +w
+    │ estimated row count: 65 (missing stats)
+    │ distinct on: w
+    │ order key: w
     │
-    └── • sort
+    └── • limit
         │ columns: (w)
-        │ order
+        │ estimated row count: 100 (missing stats)
+        │ count: 100
         │
-        └── • distinct
+        └── • sort
             │ columns: (w)
-            │ estimated row count: 65 (missing stats)
-            │ distinct on: w
+            │ ordering: +w
+            │ order: +w
             │
-            └── • limit
-                │ columns: (w)
-                │ estimated row count: 100 (missing stats)
-                │ count: 100
-                │
-                └── • sort
-                    │ columns: (w)
-                    │ order
-                    │
-                    └── • scan
-                          columns: (w)
-                          estimated row count: 1,000 (missing stats)
-                          table: t@primary
-                          spans: FULL SCAN
+            └── • scan
+                  columns: (w)
+                  estimated row count: 1,000 (missing stats)
+                  table: t@primary
+                  spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
@@ -158,39 +151,35 @@ vectorized: true
 • project
 │ columns: (sum)
 │
-└── • sort
+└── • project
     │ columns: (any_not_null, sum)
     │ ordering: -any_not_null
     │ estimated row count: 10 (missing stats)
-    │ order: -any_not_null
     │
-    └── • project
-        │ columns: (any_not_null, sum)
+    └── • limit
+        │ columns: (k, sum, any_not_null)
         │ estimated row count: 10 (missing stats)
+        │ count: 10
         │
-        └── • limit
+        └── • sort
             │ columns: (k, sum, any_not_null)
-            │ estimated row count: 10 (missing stats)
-            │ count: 10
+            │ ordering: -any_not_null
+            │ order: -any_not_null
             │
-            └── • sort
+            └── • group
                 │ columns: (k, sum, any_not_null)
-                │ order
+                │ estimated row count: 1,000 (missing stats)
+                │ aggregate 0: sum(w)
+                │ aggregate 1: any_not_null(v)
+                │ group by: k
+                │ ordered: +k
                 │
-                └── • group
-                    │ columns: (k, sum, any_not_null)
-                    │ estimated row count: 1,000 (missing stats)
-                    │ aggregate 0: sum(w)
-                    │ aggregate 1: any_not_null(v)
-                    │ group by: k
-                    │ ordered: +k
-                    │
-                    └── • scan
-                          columns: (k, v, w)
-                          ordering: +k
-                          estimated row count: 1,000 (missing stats)
-                          table: t@primary
-                          spans: FULL SCAN
+                └── • scan
+                      columns: (k, v, w)
+                      ordering: +k
+                      estimated row count: 1,000 (missing stats)
+                      table: t@primary
+                      spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)

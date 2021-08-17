@@ -1096,7 +1096,7 @@ func (b *logicalPropsBuilder) buildLimitNodeProps(limitNode RelExpr, rel *props.
 
 	// Functional Dependencies
 	// -----------------------
-	// Inherit functional dependencies from input. If limitNode is <= 1, add a
+	// Inherit functional dependencies from input. If limit is <= 1, add a
 	// single row dependency.
 	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
 	if constLimit <= 1 {

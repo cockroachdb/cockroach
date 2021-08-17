@@ -378,33 +378,28 @@ EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY
 distribution: full
 vectorized: true
 ·
-• sort
+• limit
 │ columns: (y, str, res)
-│ ordering: +res
 │ estimated row count: 10 (missing stats)
-│ order: +res
+│ count: 10
 │
-└── • limit
+└── • sort
     │ columns: (res, y, str)
-    │ estimated row count: 10 (missing stats)
-    │ count: 10
+    │ ordering: +res
+    │ order: +res
     │
-    └── • sort
+    └── • render
         │ columns: (res, y, str)
-        │ order
+        │ estimated row count: 1,000 (missing stats)
+        │ render res: repeat('test', y)
+        │ render y: y
+        │ render str: str
         │
-        └── • render
-            │ columns: (res, y, str)
-            │ estimated row count: 1,000 (missing stats)
-            │ render res: repeat('test', y)
-            │ render y: y
-            │ render str: str
-            │
-            └── • scan
-                  columns: (y, str)
-                  estimated row count: 1,000 (missing stats)
-                  table: numtostr@primary
-                  spans: FULL SCAN
+        └── • scan
+              columns: (y, str)
+              estimated row count: 1,000 (missing stats)
+              table: numtostr@primary
+              spans: FULL SCAN
 
 # Regression test for #20481.
 query T

@@ -292,82 +292,76 @@ ORDER BY
     o_orderdate
 LIMIT 10;
 ----
-sort
+top-k
  ├── columns: l_orderkey:22!null revenue:41!null o_orderdate:15!null o_shippriority:18!null
+ ├── ordering: -41,+15
  ├── cardinality: [0 - 10]
  ├── immutable
  ├── key: (22)
  ├── fd: (22)-->(15,18,41)
  ├── ordering: -41,+15
- └── top-k
-      ├── columns: o_orderdate:15!null o_shippriority:18!null l_orderkey:22!null sum:41!null
-      ├── ordering: -41,+15
-      ├── cardinality: [0 - 10]
-      ├── immutable
-      ├── key: (22)
-      ├── fd: (22)-->(15,18,41)
-      ├── group-by
-      │    ├── columns: o_orderdate:15!null o_shippriority:18!null l_orderkey:22!null sum:41!null
-      │    ├── grouping columns: l_orderkey:22!null
-      │    ├── immutable
-      │    ├── key: (22)
-      │    ├── fd: (22)-->(15,18,41)
-      │    ├── project
-      │    │    ├── columns: column40:40!null o_orderdate:15!null o_shippriority:18!null l_orderkey:22!null
-      │    │    ├── immutable
-      │    │    ├── fd: (22)-->(15,18)
-      │    │    ├── inner-join (lookup lineitem)
-      │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null o_orderkey:11!null o_custkey:12!null o_orderdate:15!null o_shippriority:18!null l_orderkey:22!null l_extendedprice:27!null l_discount:28!null l_shipdate:32!null
-      │    │    │    ├── key columns: [22 25] = [22 25]
-      │    │    │    ├── lookup columns are key
-      │    │    │    ├── fd: ()-->(7), (11)-->(12,15,18), (11)==(22), (22)==(11), (1)==(12), (12)==(1)
-      │    │    │    ├── inner-join (hash)
-      │    │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null o_orderkey:11!null o_custkey:12!null o_orderdate:15!null o_shippriority:18!null l_orderkey:22!null l_linenumber:25!null l_shipdate:32!null
-      │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    │    │    ├── key: (22,25)
-      │    │    │    │    ├── fd: ()-->(7), (22,25)-->(32), (11)-->(12,15,18), (1)==(12), (12)==(1), (11)==(22), (22)==(11)
-      │    │    │    │    ├── scan lineitem@l_sd
-      │    │    │    │    │    ├── columns: l_orderkey:22!null l_linenumber:25!null l_shipdate:32!null
-      │    │    │    │    │    ├── constraint: /32/22/25: [/'1995-03-16' - ]
-      │    │    │    │    │    ├── key: (22,25)
-      │    │    │    │    │    └── fd: (22,25)-->(32)
-      │    │    │    │    ├── inner-join (lookup orders)
-      │    │    │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null o_orderkey:11!null o_custkey:12!null o_orderdate:15!null o_shippriority:18!null
-      │    │    │    │    │    ├── key columns: [11] = [11]
-      │    │    │    │    │    ├── lookup columns are key
-      │    │    │    │    │    ├── key: (11)
-      │    │    │    │    │    ├── fd: ()-->(7), (11)-->(12,15,18), (1)==(12), (12)==(1)
-      │    │    │    │    │    ├── inner-join (lookup orders@o_ck)
-      │    │    │    │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null o_orderkey:11!null o_custkey:12!null
-      │    │    │    │    │    │    ├── key columns: [1] = [12]
-      │    │    │    │    │    │    ├── key: (11)
-      │    │    │    │    │    │    ├── fd: ()-->(7), (11)-->(12), (1)==(12), (12)==(1)
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null
-      │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    ├── fd: ()-->(7)
-      │    │    │    │    │    │    │    ├── scan customer
-      │    │    │    │    │    │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null
-      │    │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    │    └── fd: (1)-->(7)
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── c_mktsegment:7 = 'BUILDING' [outer=(7), constraints=(/7: [/'BUILDING' - /'BUILDING']; tight), fd=()-->(7)]
-      │    │    │    │    │    │    └── filters (true)
-      │    │    │    │    │    └── filters
-      │    │    │    │    │         └── o_orderdate:15 < '1995-03-15' [outer=(15), constraints=(/15: (/NULL - /'1995-03-14']; tight)]
-      │    │    │    │    └── filters
-      │    │    │    │         └── l_orderkey:22 = o_orderkey:11 [outer=(11,22), constraints=(/11: (/NULL - ]; /22: (/NULL - ]), fd=(11)==(22), (22)==(11)]
-      │    │    │    └── filters (true)
-      │    │    └── projections
-      │    │         └── l_extendedprice:27 * (1.0 - l_discount:28) [as=column40:40, outer=(27,28), immutable]
-      │    └── aggregations
-      │         ├── sum [as=sum:41, outer=(40)]
-      │         │    └── column40:40
-      │         ├── const-agg [as=o_orderdate:15, outer=(15)]
-      │         │    └── o_orderdate:15
-      │         └── const-agg [as=o_shippriority:18, outer=(18)]
-      │              └── o_shippriority:18
-      └── 10
+ ├── group-by
+ │    ├── columns: o_orderdate:15!null o_shippriority:18!null l_orderkey:22!null sum:41!null
+ │    ├── grouping columns: l_orderkey:22!null
+ │    ├── immutable
+ │    ├── key: (22)
+ │    ├── fd: (22)-->(15,18,41)
+ │    ├── project
+ │    │    ├── columns: column40:40!null o_orderdate:15!null o_shippriority:18!null l_orderkey:22!null
+ │    │    ├── immutable
+ │    │    ├── fd: (22)-->(15,18)
+ │    │    ├── inner-join (lookup lineitem)
+ │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null o_orderkey:11!null o_custkey:12!null o_orderdate:15!null o_shippriority:18!null l_orderkey:22!null l_extendedprice:27!null l_discount:28!null l_shipdate:32!null
+ │    │    │    ├── key columns: [22 25] = [22 25]
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── fd: ()-->(7), (11)-->(12,15,18), (11)==(22), (22)==(11), (1)==(12), (12)==(1)
+ │    │    │    ├── inner-join (hash)
+ │    │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null o_orderkey:11!null o_custkey:12!null o_orderdate:15!null o_shippriority:18!null l_orderkey:22!null l_linenumber:25!null l_shipdate:32!null
+ │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    │    │    ├── key: (22,25)
+ │    │    │    │    ├── fd: ()-->(7), (22,25)-->(32), (11)-->(12,15,18), (1)==(12), (12)==(1), (11)==(22), (22)==(11)
+ │    │    │    │    ├── scan lineitem@l_sd
+ │    │    │    │    │    ├── columns: l_orderkey:22!null l_linenumber:25!null l_shipdate:32!null
+ │    │    │    │    │    ├── constraint: /32/22/25: [/'1995-03-16' - ]
+ │    │    │    │    │    ├── key: (22,25)
+ │    │    │    │    │    └── fd: (22,25)-->(32)
+ │    │    │    │    ├── inner-join (lookup orders)
+ │    │    │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null o_orderkey:11!null o_custkey:12!null o_orderdate:15!null o_shippriority:18!null
+ │    │    │    │    │    ├── key columns: [11] = [11]
+ │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    ├── key: (11)
+ │    │    │    │    │    ├── fd: ()-->(7), (11)-->(12,15,18), (1)==(12), (12)==(1)
+ │    │    │    │    │    ├── inner-join (lookup orders@o_ck)
+ │    │    │    │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null o_orderkey:11!null o_custkey:12!null
+ │    │    │    │    │    │    ├── key columns: [1] = [12]
+ │    │    │    │    │    │    ├── key: (11)
+ │    │    │    │    │    │    ├── fd: ()-->(7), (11)-->(12), (1)==(12), (12)==(1)
+ │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null
+ │    │    │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    │    │    ├── fd: ()-->(7)
+ │    │    │    │    │    │    │    ├── scan customer
+ │    │    │    │    │    │    │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null
+ │    │    │    │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    │    │    │    └── fd: (1)-->(7)
+ │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │         └── c_mktsegment:7 = 'BUILDING' [outer=(7), constraints=(/7: [/'BUILDING' - /'BUILDING']; tight), fd=()-->(7)]
+ │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── o_orderdate:15 < '1995-03-15' [outer=(15), constraints=(/15: (/NULL - /'1995-03-14']; tight)]
+ │    │    │    │    └── filters
+ │    │    │    │         └── l_orderkey:22 = o_orderkey:11 [outer=(11,22), constraints=(/11: (/NULL - ]; /22: (/NULL - ]), fd=(11)==(22), (22)==(11)]
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── l_extendedprice:27 * (1.0 - l_discount:28) [as=column40:40, outer=(27,28), immutable]
+ │    └── aggregations
+ │         ├── sum [as=sum:41, outer=(40)]
+ │         │    └── column40:40
+ │         ├── const-agg [as=o_orderdate:15, outer=(15)]
+ │         │    └── o_orderdate:15
+ │         └── const-agg [as=o_shippriority:18, outer=(18)]
+ │              └── o_shippriority:18
+ └── 10
 
 # --------------------------------------------------
 # Q4

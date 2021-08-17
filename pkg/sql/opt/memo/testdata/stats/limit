@@ -265,23 +265,17 @@ offset
 opt colstat=1
 SELECT * FROM a ORDER BY y LIMIT 500
 ----
-sort
+top-k
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── ordering: +2
  ├── cardinality: [0 - 500]
  ├── stats: [rows=500, distinct(1)=500, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── ordering: +2
- └── top-k
-      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      ├── ordering: +2
-      ├── cardinality: [0 - 500]
-      ├── stats: [rows=500, distinct(1)=500, null(1)=0]
-      ├── key: (1)
-      ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      ├── scan a
-      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      └── 500 [type=int]
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── 500 [type=int]

@@ -575,10 +575,11 @@ func (c *coster) computeTopKCost(topk *memo.TopKExpr, required *physical.Require
 	// In the worst case, there are O(N*log(K)) comparisons to compare each row in
 	// the input to the top of the max heap and sift the max heap if each row
 	// compared is in the top K found so far.
-	cost += c.rowCmpCost(len(required.Ordering.Columns)) * memo.Cost((1+math.Log2(outputRowCount))*inputRowCount)
+	cost += c.rowCmpCost(len(topk.Ordering.Columns)) * memo.Cost((1+math.Log2(outputRowCount))*inputRowCount)
 
 	// Add the CPU cost of emitting the K rows.
 	cost += memo.Cost(outputRowCount) * cpuCostFactor
+
 	return cost
 }
 

@@ -16,20 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
-func TopKCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func topKCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	// TopK orders its own input, so the ordering it can provide is its own.
-
-	// TODO(harding): In some cases it seems like the child's ordering could also
-	// be passed through if it's compatible, as limit does. I think the following
-	// line, taken from limitOrOffsetCanProvideOrdering, does this. Please confirm
-	// that this is expected behavior for topk sort.
 	return required.Intersects(expr.Private().(*props.OrderingChoice))
 }
 
-func TopKBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
-	// TODO(harding): I think this is supposed to be returning the required order
-	// for the output of topk, but I'm not certain this is what's supposed to be
-	// returned by .*BuildProvided or that it's what I actually implemented
-	// here...
+func topKBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
+	// TopK orders its own input, so the ordering it provides is its own.
 	return trimProvided(expr.(*memo.TopKExpr).Ordering.ToOrdering(), required, &expr.Relational().FuncDeps)
 }
