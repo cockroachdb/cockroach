@@ -544,6 +544,7 @@ public  t1  table  testuser  0  NULL
 query TI rowsort
 select table_name, estimated_row_count from crdb_internal.table_row_statistics;
 ----
+active_range_feeds                     NULL
 backward_dependencies                  NULL
 builtin_functions                      NULL
 cluster_contended_indexes              NULL

@@ -30,6 +30,7 @@ DROP DATABASE crdb_internal
 query TTTTIT
 SHOW TABLES FROM crdb_internal
 ----
+crdb_internal  active_range_feeds           table  NULL  NULL  NULL
 crdb_internal  backward_dependencies        table  NULL  NULL  NULL
 crdb_internal  builtin_functions            table  NULL  NULL  NULL
 crdb_internal  cluster_contended_indexes    view   NULL  NULL  NULL
