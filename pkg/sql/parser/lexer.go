@@ -80,10 +80,14 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 	*lval = l.tokens[l.lastPos]
 
 	switch lval.id {
-	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER:
+	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON:
 		nextID := int32(0)
 		if l.lastPos+1 < len(l.tokens) {
 			nextID = l.tokens[l.lastPos+1].id
+		}
+		secondID := int32(0)
+		if l.lastPos+2 < len(l.tokens) {
+			secondID = l.tokens[l.lastPos+2].id
 		}
 
 		// If you update these cases, update lex.lookaheadKeywords.
@@ -130,6 +134,16 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			switch nextID {
 			case ALL:
 				lval.id = USER_ALL
+			}
+		case ON:
+			switch nextID {
+			case DELETE:
+				lval.id = ON_LA
+			case UPDATE:
+				switch secondID {
+				case NO, RESTRICT, CASCADE, SET:
+					lval.id = ON_LA
+				}
 			}
 		}
 	}

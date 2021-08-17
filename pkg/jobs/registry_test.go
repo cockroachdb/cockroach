@@ -310,7 +310,10 @@ func TestBatchJobsCreation(t *testing.T) {
 
 				args := base.TestServerArgs{
 					Knobs: base.TestingKnobs{
-						JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
+						// Avoiding jobs to be adopted.
+						JobsTestingKnobs: &TestingKnobs{
+							DisableAdoptions: true,
+						},
 					},
 				}
 
@@ -345,13 +348,8 @@ func TestBatchJobsCreation(t *testing.T) {
 					return err
 				}))
 				require.Equal(t, len(jobIDs), test.batchSize)
-				// Wait for the jobs to complete.
-				tdb.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW JOBS]",
+				tdb.CheckQueryResults(t, "SELECT count(*) FROM [SHOW JOBS]",
 					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
-				for _, id := range jobIDs {
-					tdb.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = '%d'", id),
-						[][]string{{"succeeded"}})
-				}
 			}
 		})
 	}

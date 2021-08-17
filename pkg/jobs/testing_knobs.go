@@ -63,6 +63,9 @@ type TestingKnobs struct {
 
 	// TimeSource replaces registry's clock.
 	TimeSource *hlc.Clock
+
+	// DisableAdoptions disables job adoptions.
+	DisableAdoptions bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
