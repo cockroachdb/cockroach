@@ -41,6 +41,17 @@ type stickyInMemEngine struct {
 	fs vfs.FS
 }
 
+// StickyEngineRegistryConfigOption is a config option for a sticky engine
+// registry that can be passed to NewStickyInMemEnginesRegistry.
+type StickyEngineRegistryConfigOption func(cfg *stickyEngineRegistryConfig)
+
+// ReplaceEngines configures a sticky engine registry to return a new engine
+// with the same underlying in-memory FS instead of simply reopening it in
+// the case where it already exists.
+var ReplaceEngines StickyEngineRegistryConfigOption = func(cfg *stickyEngineRegistryConfig) {
+	cfg.replaceEngines = true
+}
+
 // StickyInMemEnginesRegistry manages the lifecycle of sticky engines.
 type StickyInMemEnginesRegistry interface {
 	// GetOrCreateStickyInMemEngine returns an engine associated with the given id.
@@ -80,12 +91,20 @@ func (e *stickyInMemEngine) Closed() bool {
 type stickyInMemEnginesRegistryImpl struct {
 	entries map[string]*stickyInMemEngine
 	mu      syncutil.Mutex
+	cfg     stickyEngineRegistryConfig
 }
 
 // NewStickyInMemEnginesRegistry creates a new StickyInMemEnginesRegistry.
-func NewStickyInMemEnginesRegistry() StickyInMemEnginesRegistry {
+func NewStickyInMemEnginesRegistry(
+	opts ...StickyEngineRegistryConfigOption,
+) StickyInMemEnginesRegistry {
+	var cfg stickyEngineRegistryConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	return &stickyInMemEnginesRegistryImpl{
 		entries: map[string]*stickyInMemEngine{},
+		cfg:     cfg,
 	}
 }
 
@@ -96,18 +115,23 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
+	var fs vfs.FS
 	if engine, ok := registry.entries[spec.StickyInMemoryEngineID]; ok {
 		if !engine.closed {
 			return nil, errors.Errorf("sticky engine %s has not been closed", spec.StickyInMemoryEngineID)
 		}
-
-		log.Infof(ctx, "re-using sticky in-mem engine %s", spec.StickyInMemoryEngineID)
-		engine.closed = false
-		return engine, nil
+		if !registry.cfg.replaceEngines {
+			log.Infof(ctx, "re-using sticky in-mem engine %s", spec.StickyInMemoryEngineID)
+			engine.closed = false
+			return engine, nil
+		}
+		fs = engine.fs
+		registry.deleteEngine(spec.StickyInMemoryEngineID)
+	} else {
+		fs = vfs.NewMem()
 	}
 
 	log.Infof(ctx, "creating new sticky in-mem engine %s", spec.StickyInMemoryEngineID)
-	fs := vfs.NewMem()
 	engine := storage.InMemFromFS(ctx, fs, "",
 		storage.Attributes(spec.Attributes),
 		storage.CacheSize(cfg.CacheSize),
@@ -146,12 +170,24 @@ func (registry *stickyInMemEnginesRegistryImpl) CloseAllStickyInMemEngines() {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
-	for _, engine := range registry.entries {
-		engine.closed = true
-		engine.Engine.Close()
-	}
-
 	for id := range registry.entries {
-		delete(registry.entries, id)
+		registry.deleteEngine(id)
 	}
+}
+
+func (registry *stickyInMemEnginesRegistryImpl) deleteEngine(id string) {
+	engine, ok := registry.entries[id]
+	if !ok {
+		return
+	}
+	engine.closed = true
+	engine.Engine.Close()
+	delete(registry.entries, id)
+}
+
+type stickyEngineRegistryConfig struct {
+	// replaceEngines is true if a sticky engine registry should return a new
+	// engine with the same underlying in-memory FS instead of simply reopening
+	// it in the case where it already exists.
+	replaceEngines bool
 }
