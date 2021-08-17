@@ -141,7 +141,7 @@ func run(
 			alter, ok := stmt.AST.(*tree.AlterTable)
 			require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
 
-			_, err = scbuild.Build(ctx, deps, nil, alter)
+			_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
 			require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
 		})
 		return ""
@@ -168,7 +168,7 @@ func indentText(input string, tab string) string {
 // marshalNodes marshals a scpb.State to YAML.
 func marshalNodes(t *testing.T, nodes scpb.State) string {
 	var sortedEntries []string
-	for _, node := range nodes {
+	for _, node := range nodes.Nodes {
 		var buf bytes.Buffer
 		require.NoError(t, (&jsonpb.Marshaler{}).Marshal(&buf, node.Target.Element()))
 		target := make(map[string]interface{})

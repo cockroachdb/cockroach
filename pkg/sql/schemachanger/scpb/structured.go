@@ -1,0 +1,16 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package scpb
+
+// SourceElementID elements ID's for identifying parent elements.
+// This ID is dynamically allocated when any parent element is
+// created and has no relation to the descriptor ID.
+type SourceElementID uint32
