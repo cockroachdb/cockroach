@@ -39,6 +39,10 @@ type buildContext struct {
 	// output contains the internal state when building targets for an individual
 	// statement.
 	output scpb.State
+
+	// statementMetaData common statement meta
+	statementMetaData scpb.TargetMetaData
+	sourceElementID   scpb.SourceElementID
 }
 
 type notImplementedError struct {
@@ -85,6 +89,10 @@ func (e *ConcurrentSchemaChangeError) DescriptorID() descpb.ID {
 	return e.descID
 }
 
+//TODO
+// State can have a slice of statements...
+// Statements can also have authorization information
+
 // Build constructs a new set state from an initial state and a statement.
 func Build(
 	ctx context.Context, dependencies Dependencies, initial scpb.State, n tree.Statement,
@@ -97,13 +105,23 @@ func Build(
 }
 
 func cloneState(state scpb.State) scpb.State {
-	clone := make(scpb.State, len(state))
-	for i, n := range state {
-		clone[i] = &scpb.Node{
+	clone := scpb.State{
+		Nodes:      make([]*scpb.Node, len(state.Nodes)),
+		Statements: make([]*scpb.Statement, len(state.Statements)),
+	}
+	for i, n := range state.Nodes {
+		clone.Nodes[i] = &scpb.Node{
 			Target: protoutil.Clone(n.Target).(*scpb.Target),
 			Status: n.Status,
 		}
 	}
+	for i, n := range state.Statements {
+		clone.Statements[i] = &scpb.Statement{
+			Statement: n.Statement,
+		}
+	}
+	clone.Authorization.Username = state.Authorization.Username
+	clone.Authorization.AppName = state.Authorization.AppName
 	return clone
 }
 
@@ -119,6 +137,10 @@ func (b *buildContext) build(ctx context.Context, n tree.Statement) (output scpb
 			}
 		}
 	}()
+	// Set up the metadata associated with the current statement,
+	// which will be used to track information about what generated
+	// the current set of elements.
+	b.statementMetaData = *b.addStatementMetaData(n)
 	switch n := n.(type) {
 	case *tree.DropTable:
 		b.dropTable(ctx, n)
@@ -135,7 +157,7 @@ func (b *buildContext) build(ctx context.Context, n tree.Statement) (output scpb
 	case *tree.AlterTable:
 		b.alterTable(ctx, n)
 	default:
-		return nil, &notImplementedError{n: n}
+		return scpb.State{}, &notImplementedError{n: n}
 	}
 	return b.output, nil
 }
@@ -147,12 +169,30 @@ func (b *buildContext) checkIfNodeExists(
 ) (exists bool, index int) {
 	// Check if any existing node matches the new node we are
 	// trying to add.
-	for idx, node := range b.output {
+	for idx, node := range b.output.Nodes {
 		if screl.EqualElements(node.Element(), elem) {
 			return true, idx
 		}
 	}
 	return false, -1
+}
+
+func (b *buildContext) addStatementMetaData(n tree.Statement) *scpb.TargetMetaData {
+	b.output.Statements = append(b.output.Statements,
+		&scpb.Statement{
+			Statement: n.String(),
+		},
+	)
+	b.output.Authorization = scpb.Authorization{
+		AppName:  b.SessionData().ApplicationName,
+		Username: b.SessionData().SessionUser().Normalized(),
+	}
+	targetMetaData := &scpb.TargetMetaData{
+		SubWorkID:       1,
+		SourceElementID: b.newSourceElementID(),
+		StatementID:     uint32(len(b.output.Statements) - 1),
+	}
+	return targetMetaData
 }
 
 func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
@@ -169,8 +209,8 @@ func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
 	if exists, _ := b.checkIfNodeExists(dir, elem); exists {
 		panic(errors.Errorf("attempted to add duplicate element %s", elem))
 	}
-	b.output = append(b.output, &scpb.Node{
-		Target: scpb.NewTarget(dir, elem),
+	b.output.Nodes = append(b.output.Nodes, &scpb.Node{
+		Target: scpb.NewTarget(dir, elem, &b.statementMetaData),
 		Status: s,
 	})
 }
@@ -183,6 +223,33 @@ func HasConcurrentSchemaChanges(table catalog.TableDescriptor) bool {
 	// statement execution, we'll have to take into account mutations that were
 	// written in this transaction.
 	return len(table.AllMutations()) > 0
+}
+
+// incrementSubWorkID increments the current subwork ID used for tracking
+// when an statement does operations on multiple objects.
+func (b *buildContext) incrementSubWorkID() {
+	b.statementMetaData.SubWorkID++
+}
+
+// incrementSourceElementID increments the source element ID,
+// which will be inherited by any new elements created after
+// the current one.
+// Note: This ID is independent of descriptors intentionally,
+// 			 since from a parent-child relationship the objects
+//		   can be anything.
+func (b *buildContext) newSourceElementID() scpb.SourceElementID {
+	b.sourceElementID++
+	return b.sourceElementID
+}
+
+// setSourceElementID indicates that all nodes added
+// after this will be child nodes of this source element ID.
+func (b *buildContext) setSourceElementID(
+	sourceElementID scpb.SourceElementID,
+) scpb.SourceElementID {
+	lastID := b.statementMetaData.SourceElementID
+	b.statementMetaData.SourceElementID = sourceElementID
+	return lastID
 }
 
 func onErrPanic(err error) {

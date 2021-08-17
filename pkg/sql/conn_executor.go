@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -2919,6 +2921,9 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		&ex.extraTxnState.descCollection,
 		ex.server.cfg.JobRegistry,
 		ex.server.cfg.IndexBackfiller,
+		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metaData scpb.ElementMetaData, event eventpb.EventPayload) error {
+			return LogEventForSchemaChanger(ctx, ex.planner.execCfg, txn, depth, descID, metaData, event)
+		},
 		ex.server.cfg.NewSchemaChangerTestingKnobs,
 		scs.stmts,
 		scop.PreCommitPhase,

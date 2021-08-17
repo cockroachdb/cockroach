@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
@@ -135,6 +136,9 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		p.Descriptors(),
 		p.ExecCfg().JobRegistry,
 		p.ExecCfg().IndexBackfiller,
+		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metaData scpb.ElementMetaData, event eventpb.EventPayload) error {
+			return LogEventForSchemaChanger(ctx, p.ExecCfg(), txn, depth, descID, metaData, event)
+		},
 		p.ExecCfg().NewSchemaChangerTestingKnobs,
 		scs.stmts,
 		scop.StatementPhase,

@@ -24,16 +24,16 @@ import (
 
 func TestQueryBasic(t *testing.T) {
 	mkType := func(id descpb.ID) *scpb.Target {
-		return scpb.NewTarget(scpb.Target_ADD, &scpb.Type{TypeID: id})
+		return scpb.NewTarget(scpb.Target_ADD, &scpb.Type{TypeID: id}, &scpb.TargetMetaData{})
 	}
 	mkTypeRef := func(typID, descID descpb.ID) *scpb.Target {
 		return scpb.NewTarget(scpb.Target_ADD, &scpb.TypeReference{
 			TypeID: typID,
 			DescID: descID,
-		})
+		}, &scpb.TargetMetaData{})
 	}
 	mkTable := func(id descpb.ID) *scpb.Target {
-		return scpb.NewTarget(scpb.Target_ADD, &scpb.Table{TableID: id})
+		return scpb.NewTarget(scpb.Target_ADD, &scpb.Table{TableID: id}, &scpb.TargetMetaData{})
 	}
 	concatNodes := func(nodes ...[]*scpb.Node) []*scpb.Node {
 		var ret []*scpb.Node
