@@ -41,7 +41,7 @@ func makeTarget(
 	})()
 	populateSpecs(initialStatus, specs)
 	return target{
-		Target:      *scpb.NewTarget(dir, e),
+		Target:      *scpb.NewTarget(dir, e, nil),
 		transitions: makeTransitions(e, specs),
 		iterateFunc: makeQuery(e, dir),
 	}

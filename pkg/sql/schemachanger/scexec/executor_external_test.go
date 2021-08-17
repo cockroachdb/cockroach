@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,8 +63,11 @@ func (ti testInfra) newExecDeps(
 		noopBackfiller{},     /* indexBackfiller */
 		noopIndexValidator{}, /* indexValidator */
 		noopCCLCallbacks{},   /* noopCCLCallbacks */
-		nil,                  /* testingKnobs */
-		nil,                  /* statements */
+		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
+			return nil
+		},
+		nil, /* testingKnobs */
+		nil, /* statements */
 		phase,
 	)
 }
@@ -257,6 +261,10 @@ func TestSchemaChanger(t *testing.T) {
 			//
 			//  ALTER TABLE foo ADD COLUMN j INT;
 			//
+			metadata := &scpb.TargetMetadata{
+				StatementID:     0,
+				SubWorkID:       1,
+				SourceElementID: 1}
 			targetSlice = []*scpb.Target{
 				scpb.NewTarget(scpb.Target_ADD, &scpb.PrimaryIndex{
 					TableID:             fooTable.GetID(),
@@ -267,7 +275,8 @@ func TestSchemaChanger(t *testing.T) {
 					StoringColumnIDs:    []descpb.ColumnID{2},
 					Unique:              true,
 					Inverted:            false,
-				}),
+				},
+					metadata),
 				scpb.NewTarget(scpb.Target_ADD, &scpb.Column{
 					TableID:    fooTable.GetID(),
 					FamilyID:   descpb.FamilyID(0),
@@ -279,7 +288,8 @@ func TestSchemaChanger(t *testing.T) {
 						Nullable:       true,
 						PGAttributeNum: 2,
 					},
-				}),
+				},
+					metadata),
 				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
 					TableID:             fooTable.GetID(),
 					IndexName:           "primary",
@@ -288,21 +298,27 @@ func TestSchemaChanger(t *testing.T) {
 					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
 					Unique:              true,
 					Inverted:            false,
-				}),
+				},
+					metadata),
 			}
 
 			nodes := scpb.State{
-				{
-					Target: targetSlice[0],
-					Status: scpb.Status_ABSENT,
+				Nodes: []*scpb.Node{
+					{
+						Target: targetSlice[0],
+						Status: scpb.Status_ABSENT,
+					},
+					{
+						Target: targetSlice[1],
+						Status: scpb.Status_ABSENT,
+					},
+					{
+						Target: targetSlice[2],
+						Status: scpb.Status_PUBLIC,
+					},
 				},
-				{
-					Target: targetSlice[1],
-					Status: scpb.Status_ABSENT,
-				},
-				{
-					Target: targetSlice[2],
-					Status: scpb.Status_PUBLIC,
+				Statements: []*scpb.Statement{
+					{},
 				},
 			}
 
@@ -339,17 +355,22 @@ func TestSchemaChanger(t *testing.T) {
 			return nil
 		}))
 		require.Equal(t, scpb.State{
-			{
-				Target: targetSlice[0],
-				Status: scpb.Status_PUBLIC,
+			Nodes: []*scpb.Node{
+				{
+					Target: targetSlice[0],
+					Status: scpb.Status_PUBLIC,
+				},
+				{
+					Target: targetSlice[1],
+					Status: scpb.Status_PUBLIC,
+				},
+				{
+					Target: targetSlice[2],
+					Status: scpb.Status_ABSENT,
+				},
 			},
-			{
-				Target: targetSlice[1],
-				Status: scpb.Status_PUBLIC,
-			},
-			{
-				Target: targetSlice[2],
-				Status: scpb.Status_ABSENT,
+			Statements: []*scpb.Statement{
+				{},
 			},
 		}, after)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
@@ -368,7 +389,7 @@ func TestSchemaChanger(t *testing.T) {
 				parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 				require.NoError(t, err)
 				require.Len(t, parsed, 1)
-				outputNodes, err := scbuild.Build(ctx, buildDeps, nil, parsed[0].AST.(*tree.AlterTable))
+				outputNodes, err := scbuild.Build(ctx, buildDeps, scpb.State{}, parsed[0].AST.(*tree.AlterTable))
 				require.NoError(t, err)
 
 				for _, phase := range []scop.Phase{

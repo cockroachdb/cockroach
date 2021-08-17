@@ -165,15 +165,19 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 				return nodeRanks[edges[i].To()] > nodeRanks[edges[j].To()]
 			})
 
-		next := append(cur[:0:0], cur...)
+		next := scpb.State{
+			Nodes:         append(cur.Nodes[0:0], cur.Nodes...),
+			Statements:    append(cur.Statements[0:0], cur.Statements...),
+			Authorization: cur.Authorization,
+		}
 		isStageRevertible := true
 		var ops []scop.Op
 		for revertible := 1; revertible >= 0; revertible-- {
 			isStageRevertible = revertible == 1
 			for _, e := range edges {
-				for i, ts := range cur {
+				for i, ts := range cur.Nodes {
 					if e.From() == ts && isStageRevertible == e.Revertible() {
-						next[i] = e.To()
+						next.Nodes[i] = e.To()
 						ops = append(ops, e.Op()...)
 						break
 					}
@@ -197,13 +201,13 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 	for {
 		// Note that the current nodes are fulfilled for the sake of dependency
 		// checking.
-		for _, ts := range cur {
+		for _, ts := range cur.Nodes {
 			fulfilled[ts] = struct{}{}
 		}
 
 		// Extract the set of op edges for the current stage.
 		var opEdges []*scgraph.OpEdge
-		for _, t := range cur {
+		for _, t := range cur.Nodes {
 			// TODO(ajwerner): improve the efficiency of this lookup.
 			// Look for an opEdge from this node. Then, for the other side
 			// of the opEdge, look for dependencies.
