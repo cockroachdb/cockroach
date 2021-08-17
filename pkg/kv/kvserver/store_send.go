@@ -16,9 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Send fetches a range based on the header's replica, assembles method, args &
@@ -57,6 +59,14 @@ func (s *Store) Send(
 		return nil, roachpb.NewError(err)
 	} else if res != nil {
 		defer res.Release()
+	}
+
+	if ba.BoundedStaleness != nil {
+		newBa, pErr := s.executeServerSideBoundedStalenessNegotiation(ctx, ba)
+		if pErr != nil {
+			return nil, pErr
+		}
+		ba = newBa
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
@@ -308,4 +318,114 @@ func (s *Store) maybeThrottleBatch(
 	default:
 		return nil, nil
 	}
+}
+
+// executeServerSideBoundedStalenessNegotiation performs the server-side
+// negotiation fast-path for bounded staleness read requests. This fast-path
+// allows a bounded staleness read request that lands on a single range to
+// perform its negotiation phase and execution phase in a single RPC.
+//
+// The server-side negotiation fast-path provides two benefits:
+// 1. it avoids two network hops in the common-case where a bounded staleness
+//    read is targeting a single range. This in an important performance
+//    optimization for single-row point lookups.
+// 2. it provides stronger guarantees around minimizing staleness during bounded
+//    staleness reads. Bounded staleness reads that hit the server-side
+//    fast-path use their target replica's most up-to-date resolved timestamp,
+//    so they are as fresh as possible. Bounded staleness reads that miss the
+//    fast-path and perform explicit negotiation (see below) consult a cache, so
+//    they may use an out-of-date, suboptimal resolved timestamp, as long as it
+//    is fresh enough to satisfy the staleness bound of the request.
+//
+// The method should be called for requests that have their MinTimestampBound
+// field set, which indicates that the request wants a dynamic timestamp equal
+// to the resolved timestamp over its key span on the local replica. Setting the
+// request timestamp to the local resolved timestamp ensures that the request
+// will not block on replication or on conflicting transactions when executed.
+// If the method returns successfully, the new request will have its
+// MinTimestampBound field unset and its Timestamp field set to the negotiated
+// timestamp.
+//
+// If the local resolved timestamp is below the request's MinTimestampBound,
+// then a MinTimestampBoundUnsatisfiableError will be returned if the request
+// has its MinTimestampBoundStrict flag set to true. Otherwise, the request's
+// timestamp will be set to the MinTimestampBound and allowed to execute.
+//
+// For more information, see the "Server-side negotiation fast-path" section of
+// docs/RFCS/20210519_bounded_staleness_reads.md.
+func (s *Store) executeServerSideBoundedStalenessNegotiation(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (roachpb.BatchRequest, *roachpb.Error) {
+	if ba.BoundedStaleness == nil {
+		log.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
+	}
+	if !ba.Timestamp.IsEmpty() {
+		return ba, roachpb.NewError(errors.AssertionFailedf(
+			"MinTimestampBound and Timestamp cannot both be set in batch"))
+	}
+	if ba.Txn != nil {
+		return ba, roachpb.NewError(errors.AssertionFailedf(
+			"MinTimestampBound and Txn cannot both be set in batch"))
+	}
+
+	// Use one or more QueryResolvedTimestampRequests to compute a resolved
+	// timestamp over the read spans on the local replica.
+	var queryResBa roachpb.BatchRequest
+	queryResBa.RangeID = ba.RangeID
+	queryResBa.Replica = ba.Replica
+	queryResBa.ClientRangeInfo = ba.ClientRangeInfo
+	queryResBa.ReadConsistency = roachpb.INCONSISTENT
+	for _, ru := range ba.Requests {
+		span := ru.GetInner().Header().Span()
+		if len(span.EndKey) == 0 {
+			// QueryResolvedTimestamp is a ranged operation.
+			span.EndKey = span.Key.Next()
+		}
+		queryResBa.Add(&roachpb.QueryResolvedTimestampRequest{
+			RequestHeader: roachpb.RequestHeaderFromSpan(span),
+		})
+	}
+
+	br, pErr := s.Send(ctx, queryResBa)
+	if pErr != nil {
+		return ba, pErr
+	}
+
+	// Merge the resolved timestamps together and verify that the bounded
+	// staleness read can be satisfied by the local replica, according to
+	// its minimum timestamp bound.
+	var resTS hlc.Timestamp
+	for _, ru := range br.Responses {
+		ts := ru.GetQueryResolvedTimestamp().ResolvedTS
+		if resTS.IsEmpty() {
+			resTS = ts
+		} else {
+			resTS.Backward(ts)
+		}
+	}
+	cfg := ba.BoundedStaleness
+	if resTS.Less(cfg.MinTimestampBound) {
+		// The local resolved timestamp was below the request's minimum timestamp
+		// bound. If the minimum timestamp bound should be strictly obeyed, reject
+		// the batch. Otherwise, consider the minimum timestamp bound to be the
+		// request timestamp and let the request proceed. On follower replicas, this
+		// may result in the request being redirected (with a NotLeaseholderError)
+		// to the current leaseholder. On the leaseholder, this may result in the
+		// request blocking on conflicting transactions.
+		if cfg.MinTimestampBoundStrict {
+			return ba, roachpb.NewError(roachpb.NewMinTimestampBoundUnsatisfiableError(
+				cfg.MinTimestampBound, resTS,
+			))
+		}
+		resTS = cfg.MinTimestampBound
+	}
+	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.Less(resTS) {
+		// The local resolved timestamp was above the request's maximum timestamp
+		// bound. Drop the request timestamp to the maximum timestamp bound.
+		resTS = cfg.MaxTimestampBound
+	}
+
+	ba.Timestamp = resTS
+	ba.BoundedStaleness = nil
+	return ba, nil
 }

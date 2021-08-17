@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -754,4 +755,232 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 	resTS, err = tc.store.DB().QueryResolvedTimestamp(ctx, "a", "c", true)
 	require.NoError(t, err)
 	require.Equal(t, ts20, resTS)
+}
+
+// TestServerSideBoundedStalenessNegotiation verifies that the server-side
+// bounded staleness negotiation fast-path behaves as expected. For details,
+// see (*Store).executeServerSideBoundedStalenessNegotiation.
+func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	ts10 := hlc.Timestamp{WallTime: 10}
+	ts20 := hlc.Timestamp{WallTime: 20}
+	ts30 := hlc.Timestamp{WallTime: 30}
+	ts40 := hlc.Timestamp{WallTime: 40}
+	emptyKey := roachpb.Key("a")
+	intentKey := roachpb.Key("b")
+	intentTS := ts20
+	closedTS := ts30
+	getEmptyKey := getArgs(emptyKey)
+	getIntentKey := getArgs(intentKey)
+
+	testutils.RunTrueAndFalse(t, "strict", func(t *testing.T, strict bool) {
+		ifStrict := func(a, b string) string {
+			if strict {
+				return a
+			}
+			return b
+		}
+
+		for _, test := range []struct {
+			name           string
+			reqs           []roachpb.Request
+			minTSBound     hlc.Timestamp
+			maxTSBound     hlc.Timestamp
+			withTS         bool // error case
+			withTxn        bool // error case
+			withWrongRange bool // error case
+
+			expRespTS hlc.Timestamp
+			expErr    string
+		}{
+			{
+				name:       "empty key, min bound below closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey},
+				minTSBound: ts20,
+				expRespTS:  ts30,
+			},
+			{
+				name:       "empty key, min bound equal to closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey},
+				minTSBound: ts30,
+				expRespTS:  ts30,
+			},
+			{
+				name:       "empty key, min bound above closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey},
+				minTSBound: ts40,
+				expRespTS:  ts40, // for !strict case
+				expErr: ifStrict(
+					"bounded staleness read .* could not be satisfied",
+					"", // no error, batch evaluated above closed timestamp on leaseholder
+				),
+			},
+			{
+				name:       "intent key, min bound below intent ts, min bound below closed ts",
+				reqs:       []roachpb.Request{&getIntentKey},
+				minTSBound: ts10,
+				expRespTS:  ts20.Prev(),
+			},
+			{
+				name:       "intent key, min bound equal to intent ts, min bound below closed ts",
+				reqs:       []roachpb.Request{&getIntentKey},
+				minTSBound: ts20,
+				expErr: ifStrict(
+					"bounded staleness read .* could not be satisfied",
+					"conflicting intents on .*",
+				),
+			},
+			{
+				name:       "intent key, min bound above intent ts, min bound equal to closed ts",
+				reqs:       []roachpb.Request{&getIntentKey},
+				minTSBound: ts30,
+				expErr: ifStrict(
+					"bounded staleness read .* could not be satisfied",
+					"conflicting intents on .*",
+				),
+			},
+			{
+				name:       "intent key, min bound above intent ts, min bound above closed ts",
+				reqs:       []roachpb.Request{&getIntentKey},
+				minTSBound: ts40,
+				expErr: ifStrict(
+					"bounded staleness read .* could not be satisfied",
+					"conflicting intents on .*",
+				),
+			},
+			{
+				name:       "empty and intent key, min bound below intent ts, min bound below closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				minTSBound: ts10,
+				expRespTS:  ts20.Prev(),
+			},
+			{
+				name:       "empty and intent key, min bound equal to intent ts, min bound below closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				minTSBound: ts20,
+				expErr: ifStrict(
+					"bounded staleness read .* could not be satisfied",
+					"conflicting intents on .*",
+				),
+			},
+			{
+				name:       "empty and intent key, min bound above intent ts, min bound equal to closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				minTSBound: ts30,
+				expErr: ifStrict(
+					"bounded staleness read .* could not be satisfied",
+					"conflicting intents on .*",
+				),
+			},
+			{
+				name:       "empty and intent key, min bound above intent ts, min bound above closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				minTSBound: ts40,
+				expErr: ifStrict(
+					"bounded staleness read .* could not be satisfied",
+					"conflicting intents on .*",
+				),
+			},
+			{
+				name:       "empty key, min and max bound below closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey},
+				minTSBound: ts10,
+				maxTSBound: ts20,
+				expRespTS:  ts20,
+			},
+			{
+				name:       "intent key, min and max bound below intent ts, min and max bound below closed ts",
+				reqs:       []roachpb.Request{&getIntentKey},
+				minTSBound: ts10,
+				maxTSBound: ts10,
+				expRespTS:  ts10,
+			},
+			{
+				name:       "empty and intent key, min and max bound below intent ts, min and max bound below closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				minTSBound: ts10,
+				maxTSBound: ts10,
+				expRespTS:  ts10,
+			},
+			{
+				name:       "req with timestamp",
+				reqs:       []roachpb.Request{&getEmptyKey},
+				minTSBound: ts20,
+				withTS:     true,
+				expErr:     "MinTimestampBound and Timestamp cannot both be set in batch",
+			},
+			{
+				name:       "req with transaction",
+				reqs:       []roachpb.Request{&getEmptyKey},
+				minTSBound: ts20,
+				withTxn:    true,
+				expErr:     "MinTimestampBound and Txn cannot both be set in batch",
+			},
+			{
+				name:           "req with wrong range",
+				reqs:           []roachpb.Request{&getEmptyKey},
+				minTSBound:     ts20,
+				withWrongRange: true,
+				expErr:         "r2 was not found on s1",
+			},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				stopper := stop.NewStopper()
+				defer stopper.Stop(ctx)
+
+				// Create a single range.
+				var tc testContext
+				tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
+				cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+				cfg.TestingKnobs.DontCloseTimestamps = true
+				tc.StartWithStoreConfig(t, stopper, cfg)
+
+				// Write an intent.
+				txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0)
+				pArgs := putArgs(intentKey, []byte("val"))
+				assignSeqNumsForReqs(&txn, &pArgs)
+				_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
+				require.Nil(t, pErr)
+
+				// Inject a closed timestamp.
+				tc.repl.mu.Lock()
+				tc.repl.mu.state.RaftClosedTimestamp = closedTS
+				tc.repl.mu.Unlock()
+
+				// Construct and issue the request.
+				var ba roachpb.BatchRequest
+				ba.RangeID = tc.rangeID
+				ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+					MinTimestampBound:       test.minTSBound,
+					MinTimestampBoundStrict: strict,
+					MaxTimestampBound:       test.maxTSBound,
+				}
+				ba.WaitPolicy = lock.WaitPolicy_Error
+				if test.withTS {
+					ba.Timestamp = ts20
+				}
+				if test.withTxn {
+					ba.Txn = &txn
+				}
+				if test.withWrongRange {
+					ba.RangeID++
+				}
+				ba.Add(test.reqs...)
+
+				br, pErr := tc.store.Send(ctx, ba)
+				if test.expErr == "" {
+					require.Nil(t, pErr)
+					require.NotNil(t, br)
+					require.Equal(t, test.expRespTS, br.Timestamp)
+					require.Equal(t, len(test.reqs), len(br.Responses))
+				} else {
+					require.Nil(t, br)
+					require.NotNil(t, pErr)
+					require.Regexp(t, test.expErr, pErr)
+				}
+			})
+		}
+	})
 }

@@ -2159,7 +2159,57 @@ message Header {
   // current batch. When set, it allows the server to handle pushes and write
   // too old conditions locally.
   bool can_forward_read_timestamp = 16;
+  // bounded_staleness is set when a read-only batch is performing a bounded
+  // staleness read and wants its timestamp to be chosen dynamically, based
+  // on a resolved timestamp from its target replica(s).
+  //
+  // Transactional requests are not allowed to set this field. As a result,
+  // the request can not span ranges and will be rejected by the DistSender
+  // with an OpRequiresTxnError if it attempts to.
+  //
+  // Requests with a non-zero timestamp are not allowed to set this field.
+  BoundedStalenessHeader bounded_staleness = 22;
   reserved 7, 10, 12, 14;
+}
+
+// BoundedStalenessHeader contains configuration values pertaining to bounded
+// staleness read requests.
+message BoundedStalenessHeader {
+  // min_timestamp_bound places a lower bound on the dynamically chosen
+  // timestamp during a bounded staleness read. During such reads, a resolved
+  // timestamp over the request's key span will initially be computed on the
+  // target replica. If the resolved timestamp is equal to or greater than the
+  // minimum timestamp bound, then the batch timestamp will be set to the
+  // resolved timestamp, the batch will be evaluated, and the negotiated
+  // timestamp will be recorded in the BatchResponse Header. If the resolved
+  // timestamp is less than the minimum timestamp bound, then the request will
+  // either be rejected with a MinTimestampBoundUnsatisfiableError or will be
+  // redirected to the leaseholder and permitted to block on conflicting
+  // transactions, depending on the value of min_timestamp_bound_strict.
+  //
+  // This field is required when a BoundedStalenessHeader is set in a Header.
+  util.hlc.Timestamp min_timestamp_bound = 1 [(gogoproto.nullable) = false];
+  // min_timestamp_bound_strict specifies whether a bounded staleness read
+  // whose min_timestamp_bound cannot be satisfied by the first replica it
+  // visits (subject to routing_policy) without blocking should be rejected
+  // with a MinTimestampBoundUnsatisfiableError or will be redirected to the
+  // leaseholder and permitted to block on conflicting transactions. If the
+  // flag is true, blocking is never permitted and users should be prepared
+  // to handle MinTimestampBoundUnsatisfiableErrors. If the flag is false,
+  // blocking is permitted and MinTimestampBoundUnsatisfiableErrors will never
+  // be returned.
+  bool min_timestamp_bound_strict = 2;
+  // max_timestamp_bound places an upper bound on the dynamically chosen
+  // timestamp during a bounded staleness read. If the field is set and a
+  // resolved timestamp over the request's key span is computed to be greater
+  // than the maximum timestamp bound, the batch timestamp will be set to the
+  // maximum timestamp bound instead, then the batch will be evaluated at this
+  // timestamp, and it will be recorded in the BatchResponse Header.
+  //
+  // This field is optional when a BoundedStalenessHeader is set in a Header.
+  // If the field is set, max_timestamp_bound must be equal to or greater than
+  // min_timestamp_bound.
+  util.hlc.Timestamp max_timestamp_bound = 3 [(gogoproto.nullable) = false];
 }
 
 // AdmissionHeader contains information utilized by admission control for the

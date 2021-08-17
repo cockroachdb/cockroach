@@ -72,6 +72,8 @@ func (ru ErrorDetail) GetInner() error {
 		return t.InvalidLeaseError
 	case *ErrorDetail_OptimisticEvalConflicts:
 		return t.OptimisticEvalConflicts
+	case *ErrorDetail_MinTimestampBoundUnsatisfiable:
+		return t.MinTimestampBoundUnsatisfiable
 	default:
 		return nil
 	}
@@ -340,6 +342,8 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 		union = &ErrorDetail_InvalidLeaseError{t}
 	case *OptimisticEvalConflictsError:
 		union = &ErrorDetail_OptimisticEvalConflicts{t}
+	case *MinTimestampBoundUnsatisfiableError:
+		union = &ErrorDetail_MinTimestampBoundUnsatisfiable{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}

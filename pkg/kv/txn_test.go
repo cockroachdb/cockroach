@@ -540,3 +540,52 @@ func TestAnchoringErrorNoTrigger(t *testing.T) {
 	require.EqualError(t, txn.SetSystemConfigTrigger(true /* forSystemTenant */), "unimplemented")
 	require.False(t, txn.systemConfigTrigger)
 }
+
+// TestTxnNegotiateAndSend tests the behavior of NegotiateAndSend, both when the
+// server-side fast path is possible (for single-range reads) and when it is not
+// (for cross-range reads).
+func TestTxnNegotiateAndSend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	testutils.RunTrueAndFalse(t, "fast-path", func(t *testing.T, fastPath bool) {
+		ts20 := hlc.Timestamp{WallTime: 20}
+		mc := hlc.NewManualClock(1)
+		clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
+			_ context.Context, ba roachpb.BatchRequest,
+		) (*roachpb.BatchResponse, *roachpb.Error) {
+			if !fastPath {
+				return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
+			}
+			br := ba.CreateReply()
+			br.Timestamp = ts20
+			return br, nil
+		})
+		db := NewDB(testutils.MakeAmbientCtx(), txnSender, clock, stopper)
+		txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
+
+		var ba roachpb.BatchRequest
+		ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+			MinTimestampBound: hlc.Timestamp{WallTime: 10},
+		}
+		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+		ba.Add(roachpb.NewGet(roachpb.Key("a"), false))
+		br, pErr := txn.NegotiateAndSend(ctx, ba)
+
+		if fastPath {
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+			require.Equal(t, ts20, br.Timestamp)
+			require.True(t, txn.CommitTimestampFixed())
+			require.Equal(t, ts20, txn.CommitTimestamp())
+		} else {
+			require.Nil(t, br)
+			require.NotNil(t, pErr)
+			require.Regexp(t, "unimplemented: cross-range bounded staleness reads not yet implemented", pErr)
+		}
+	})
+}
