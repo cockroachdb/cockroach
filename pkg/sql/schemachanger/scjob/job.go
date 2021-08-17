@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 func init() {
@@ -63,6 +65,9 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		execCfg.DB,
 		execCfg.InternalExecutor,
 		execCfg.IndexBackfiller,
+		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
+			return sql.LogEventForSchemaChanger(ctx, execCtx.ExecCfg(), txn, depth, descID, metadata, event)
+		},
 		execCfg.JobRegistry,
 		n.job,
 		execCfg.Codec,

@@ -34,25 +34,25 @@ import (
 func RunSchemaChangesInTxn(
 	ctx context.Context, deps scexec.Dependencies, state scpb.State,
 ) (scpb.State, error) {
-	if len(state) == 0 {
-		return nil, nil
+	if len(state.Nodes) == 0 {
+		return scpb.State{}, nil
 	}
 	sc, err := scplan.MakePlan(state, scplan.Params{
 		ExecutionPhase: deps.Phase(),
 		// TODO(ajwerner): Populate the set of new descriptors
 	})
 	if err != nil {
-		return nil, err
+		return scpb.State{}, err
 	}
 	after := state
 	for _, s := range sc.Stages {
 		if err := scexec.ExecuteOps(ctx, deps, s.Ops); err != nil {
-			return nil, err
+			return scpb.State{}, err
 		}
 		after = s.After
 	}
-	if len(after) == 0 {
-		return nil, nil
+	if len(after.Nodes) == 0 {
+		return scpb.State{}, nil
 	}
 	return after, nil
 }
@@ -64,12 +64,12 @@ func RunSchemaChangesInTxn(
 func CreateSchemaChangeJob(
 	ctx context.Context, deps SchemaChangeJobCreationDependencies, state scpb.State,
 ) (jobspb.JobID, error) {
-	if len(state) == 0 {
+	if len(state.Nodes) == 0 {
 		return jobspb.InvalidJobID, nil
 	}
 
-	targets := make([]*scpb.Target, len(state))
-	states := make([]scpb.Status, len(state))
+	targets := make([]*scpb.Target, len(state.Nodes))
+	states := make([]scpb.Status, len(state.Nodes))
 	// TODO(ajwerner): It may be better in the future to have the builder be
 	// responsible for determining this set of descriptors. As of the time of
 	// writing, the descriptors to be "locked," descriptors that need schema
@@ -77,12 +77,12 @@ func CreateSchemaChangeJob(
 	// there are future schema changes to be implemented in the new schema changer
 	// (e.g., RENAME TABLE) for which this may no longer be true.
 	descIDSet := catalog.MakeDescriptorIDSet()
-	for i := range state {
-		targets[i] = state[i].Target
-		states[i] = state[i].Status
+	for i := range state.Nodes {
+		targets[i] = state.Nodes[i].Target
+		states[i] = state.Nodes[i].Status
 		// Depending on the element type either a single descriptor ID
 		// will exist or multiple (i.e. foreign keys).
-		if id := screl.GetDescID(state[i].Element()); id != descpb.InvalidID {
+		if id := screl.GetDescID(state.Nodes[i].Element()); id != descpb.InvalidID {
 			descIDSet.Add(id)
 		}
 	}
@@ -93,7 +93,11 @@ func CreateSchemaChangeJob(
 		Username:      deps.User(),
 		DescriptorIDs: descIDs,
 		Details:       jobspb.NewSchemaChangeDetails{Targets: targets},
-		Progress:      jobspb.NewSchemaChangeProgress{States: states},
+		Progress: jobspb.NewSchemaChangeProgress{
+			States:        states,
+			Authorization: &state.Authorization,
+			Statements:    state.Statements,
+		},
 		RunningStatus: "",
 		NonCancelable: false,
 	})
@@ -123,7 +127,12 @@ func RunSchemaChangesInJob(
 	jobDetails jobspb.NewSchemaChangeDetails,
 	jobProgress jobspb.NewSchemaChangeProgress,
 ) error {
-	state := makeState(ctx, deps.ClusterSettings(), jobDetails.Targets, jobProgress.States)
+	state := makeState(ctx,
+		deps.ClusterSettings(),
+		jobDetails.Targets,
+		jobProgress.States,
+		jobProgress.Statements,
+		jobProgress.Authorization)
 	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: scop.PostCommitPhase})
 	if err != nil {
 		return err
@@ -170,23 +179,32 @@ func RunSchemaChangesInJob(
 }
 
 func makeStatuses(next scpb.State) []scpb.Status {
-	states := make([]scpb.Status, len(next))
-	for i := range next {
-		states[i] = next[i].Status
+	states := make([]scpb.Status, len(next.Nodes))
+	for i := range next.Nodes {
+		states[i] = next.Nodes[i].Status
 	}
 	return states
 }
 
 func makeState(
-	ctx context.Context, sv *cluster.Settings, protos []*scpb.Target, states []scpb.Status,
+	ctx context.Context,
+	sv *cluster.Settings,
+	protos []*scpb.Target,
+	states []scpb.Status,
+	statements []*scpb.Statement,
+	authorization *scpb.Authorization,
 ) scpb.State {
 	if len(protos) != len(states) {
 		logcrash.ReportOrPanic(ctx, &sv.SV, "unexpected slice size mismatch %d and %d",
 			len(protos), len(states))
 	}
-	ts := make(scpb.State, len(protos))
+	ts := scpb.State{
+		Statements:    statements,
+		Authorization: *authorization,
+	}
+	ts.Nodes = make([]*scpb.Node, len(protos))
 	for i := range protos {
-		ts[i] = &scpb.Node{
+		ts.Nodes[i] = &scpb.Node{
 			Target: protos[i],
 			Status: states[i],
 		}
