@@ -54,6 +54,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
 		colType := o.left.sourceTypes[leftColIdx]
+		lastEqCol := eqColIdx == len(o.left.eqCols)-1
 		lNulls := lVec.Nulls()
 		rNulls := rVec.Nulls()
 		switch lVec.CanonicalTypeFamily() {
@@ -76,32 +77,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -200,7 +202,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -211,7 +213,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -261,7 +263,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -271,10 +273,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.BytesFamily:
@@ -296,32 +303,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -396,7 +404,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -407,7 +415,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -449,7 +457,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -459,10 +467,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.DecimalFamily:
@@ -484,32 +497,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -584,7 +598,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -595,7 +609,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -637,7 +651,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -647,10 +661,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.IntFamily:
@@ -671,32 +690,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -804,7 +824,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -815,7 +835,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -868,7 +888,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -878,10 +898,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			case 32:
 				lKeys := lVec.Int32()
@@ -899,32 +924,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -1032,7 +1058,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -1043,7 +1069,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -1096,7 +1122,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -1106,10 +1132,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			case -1:
 			default:
@@ -1128,32 +1159,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -1261,7 +1293,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -1272,7 +1304,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -1325,7 +1357,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -1335,10 +1367,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.FloatFamily:
@@ -1360,32 +1397,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -1517,7 +1555,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -1528,7 +1566,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -1589,7 +1627,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -1599,10 +1637,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.TimestampTZFamily:
@@ -1624,32 +1667,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -1745,7 +1789,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -1756,7 +1800,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -1805,7 +1849,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -1815,10 +1859,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.IntervalFamily:
@@ -1840,32 +1889,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -1940,7 +1990,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -1951,7 +2001,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -1993,7 +2043,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -2003,10 +2053,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.JsonFamily:
@@ -2028,32 +2083,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -2146,7 +2202,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -2157,7 +2213,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -2205,7 +2261,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -2215,10 +2271,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -2240,32 +2301,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -2346,7 +2408,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -2357,7 +2419,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -2401,7 +2463,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -2411,10 +2473,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		default:
@@ -2435,6 +2502,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
 		colType := o.left.sourceTypes[leftColIdx]
+		lastEqCol := eqColIdx == len(o.left.eqCols)-1
 		lNulls := lVec.Nulls()
 		rNulls := rVec.Nulls()
 		switch lVec.CanonicalTypeFamily() {
@@ -2457,32 +2525,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -2581,7 +2650,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -2592,7 +2661,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -2642,7 +2711,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -2652,10 +2721,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.BytesFamily:
@@ -2677,32 +2751,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -2777,7 +2852,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -2788,7 +2863,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -2830,7 +2905,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -2840,10 +2915,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.DecimalFamily:
@@ -2865,32 +2945,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -2965,7 +3046,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -2976,7 +3057,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -3018,7 +3099,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -3028,10 +3109,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.IntFamily:
@@ -3052,32 +3138,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -3185,7 +3272,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -3196,7 +3283,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -3249,7 +3336,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -3259,10 +3346,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			case 32:
 				lKeys := lVec.Int32()
@@ -3280,32 +3372,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -3413,7 +3506,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -3424,7 +3517,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -3477,7 +3570,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -3487,10 +3580,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			case -1:
 			default:
@@ -3509,32 +3607,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -3642,7 +3741,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -3653,7 +3752,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -3706,7 +3805,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -3716,10 +3815,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.FloatFamily:
@@ -3741,32 +3845,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -3898,7 +4003,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -3909,7 +4014,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -3970,7 +4075,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -3980,10 +4085,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.TimestampTZFamily:
@@ -4005,32 +4115,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -4126,7 +4237,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -4137,7 +4248,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -4186,7 +4297,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -4196,10 +4307,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.IntervalFamily:
@@ -4221,32 +4337,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -4321,7 +4438,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -4332,7 +4449,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -4374,7 +4491,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -4384,10 +4501,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.JsonFamily:
@@ -4409,32 +4531,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -4527,7 +4650,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -4538,7 +4661,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -4586,7 +4709,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -4596,10 +4719,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -4621,32 +4749,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(lSel[curLIdx])
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -4727,7 +4856,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -4738,7 +4867,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -4782,7 +4911,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -4792,10 +4921,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSeltrueRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		default:
@@ -4816,6 +4950,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
 		colType := o.left.sourceTypes[leftColIdx]
+		lastEqCol := eqColIdx == len(o.left.eqCols)-1
 		lNulls := lVec.Nulls()
 		rNulls := rVec.Nulls()
 		switch lVec.CanonicalTypeFamily() {
@@ -4838,32 +4973,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -4962,7 +5098,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -4973,7 +5109,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -5023,7 +5159,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -5033,10 +5169,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.BytesFamily:
@@ -5058,32 +5199,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -5158,7 +5300,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -5169,7 +5311,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -5211,7 +5353,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -5221,10 +5363,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.DecimalFamily:
@@ -5246,32 +5393,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -5346,7 +5494,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -5357,7 +5505,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -5399,7 +5547,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -5409,10 +5557,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.IntFamily:
@@ -5433,32 +5586,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -5566,7 +5720,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -5577,7 +5731,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -5630,7 +5784,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -5640,10 +5794,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			case 32:
 				lKeys := lVec.Int32()
@@ -5661,32 +5820,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -5794,7 +5954,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -5805,7 +5965,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -5858,7 +6018,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -5868,10 +6028,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			case -1:
 			default:
@@ -5890,32 +6055,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -6023,7 +6189,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -6034,7 +6200,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -6087,7 +6253,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -6097,10 +6263,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.FloatFamily:
@@ -6122,32 +6293,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -6279,7 +6451,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -6290,7 +6462,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -6351,7 +6523,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -6361,10 +6533,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.TimestampTZFamily:
@@ -6386,32 +6563,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -6507,7 +6685,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -6518,7 +6696,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -6567,7 +6745,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -6577,10 +6755,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.IntervalFamily:
@@ -6602,32 +6785,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -6702,7 +6886,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -6713,7 +6897,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -6755,7 +6939,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -6765,10 +6949,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.JsonFamily:
@@ -6790,32 +6979,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -6908,7 +7098,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -6919,7 +7109,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -6967,7 +7157,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -6977,10 +7167,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -7002,32 +7197,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(rSel[curRIdx])
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -7108,7 +7304,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -7119,7 +7315,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -7163,7 +7359,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -7173,10 +7369,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSeltrue() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		default:
@@ -7197,6 +7398,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
 		colType := o.left.sourceTypes[leftColIdx]
+		lastEqCol := eqColIdx == len(o.left.eqCols)-1
 		lNulls := lVec.Nulls()
 		rNulls := rVec.Nulls()
 		switch lVec.CanonicalTypeFamily() {
@@ -7219,32 +7421,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -7343,7 +7546,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -7354,7 +7557,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -7404,7 +7607,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -7414,10 +7617,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.BytesFamily:
@@ -7439,32 +7647,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -7539,7 +7748,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -7550,7 +7759,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -7592,7 +7801,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -7602,10 +7811,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.DecimalFamily:
@@ -7627,32 +7841,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -7727,7 +7942,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -7738,7 +7953,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -7780,7 +7995,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -7790,10 +8005,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.IntFamily:
@@ -7814,32 +8034,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -7947,7 +8168,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -7958,7 +8179,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -8011,7 +8232,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -8021,10 +8242,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			case 32:
 				lKeys := lVec.Int32()
@@ -8042,32 +8268,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -8175,7 +8402,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -8186,7 +8413,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -8239,7 +8466,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -8249,10 +8476,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			case -1:
 			default:
@@ -8271,32 +8503,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -8404,7 +8637,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -8415,7 +8648,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -8468,7 +8701,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -8478,10 +8711,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.FloatFamily:
@@ -8503,32 +8741,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -8660,7 +8899,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -8671,7 +8910,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -8732,7 +8971,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -8742,10 +8981,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.TimestampTZFamily:
@@ -8767,32 +9011,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -8888,7 +9133,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -8899,7 +9144,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -8948,7 +9193,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -8958,10 +9203,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.IntervalFamily:
@@ -8983,32 +9233,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -9083,7 +9334,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -9094,7 +9345,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -9136,7 +9387,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -9146,10 +9397,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case types.JsonFamily:
@@ -9171,32 +9427,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -9289,7 +9546,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -9300,7 +9557,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -9348,7 +9605,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -9358,10 +9615,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -9383,32 +9645,33 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 					curRIdx := rGroup.rowStartIdx
 					curLEndIdx := lGroup.rowEndIdx
 					curREndIdx := rGroup.rowEndIdx
-					areGroupsProcessed := false
 					if lGroup.unmatched {
-						if curLIdx+1 != curLEndIdx {
-							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the left unmatched group is not 1", curLEndIdx-curLIdx))
-						}
 						// The row already does not have a match, so we don't need to do any
 						// additional processing.
 						o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-						curLIdx++
-						areGroupsProcessed = true
+						if lastEqCol && curLIdx >= o.proberState.lIdx {
+							o.proberState.lIdx = curLIdx + 1
+						}
+						continue
 					}
 					// Expand or filter each group based on the current equality column.
-					for curLIdx < curLEndIdx && curRIdx < curREndIdx && !areGroupsProcessed {
+					for curLIdx < curLEndIdx && curRIdx < curREndIdx {
 						cmp = 0
 						lNull := lNulls.NullAt(curLIdx)
 						rNull := rNulls.NullAt(curRIdx)
 
-						// TODO(yuzefovich): we can advance both sides if both are
-						// NULL.
+						curLIdxInc := 0
 						if lNull {
 							o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
-							curLIdx++
-							continue
+							curLIdxInc = 1
 						}
+						curRIdxInc := 0
 						if rNull {
-							curRIdx++
+							curRIdxInc = 1
+						}
+						if lNull || rNull {
+							curLIdx += curLIdxInc
+							curRIdx += curRIdxInc
 							continue
 						}
 
@@ -9489,7 +9752,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 
 							// Last equality column and either group is incomplete.
-							if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							if lastEqCol && (!lComplete || !rComplete) {
 								// Store the state about the buffered group.
 								o.startLeftBufferedGroup(lSel, beginLIdx, lGroupLength)
 								o.bufferedGroup.leftGroupStartIdx = beginLIdx
@@ -9500,7 +9763,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 								return
 							}
 
-							if eqColIdx < len(o.left.eqCols)-1 {
+							if !lastEqCol {
 								o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 							} else {
 								// With LEFT ANTI join, we are only interested in unmatched tuples
@@ -9544,7 +9807,7 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							}
 						}
 					}
-					if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+					if !o.groups.isLastGroupInCol() {
 						// The current group is not the last one within the column, so it cannot be
 						// extended into the next batch, and we need to process it right now. Any
 						// unprocessed row in the left group will not get a match, so each one of
@@ -9554,10 +9817,15 @@ func (o *mergeJoinLeftAntiOp) probeBodyLSelfalseRSelfalse() {
 							curLIdx++
 						}
 					}
-					// Both o.proberState.lIdx and o.proberState.rIdx should point to the
-					// last elements processed in their respective batches.
-					o.proberState.lIdx = curLIdx
-					o.proberState.rIdx = curRIdx
+					// Both o.proberState.lIdx and o.proberState.rIdx should point
+					// to the last tuples that have been fully processed in their
+					// respective batches. This is the case when we've just finished
+					// the last equality column or the current column is such that
+					// all tuples were filtered out.
+					if lastEqCol || !o.groups.hasGroupForNextCol() {
+						o.proberState.lIdx = curLIdx
+						o.proberState.rIdx = curRIdx
+					}
 				}
 			}
 		default:
