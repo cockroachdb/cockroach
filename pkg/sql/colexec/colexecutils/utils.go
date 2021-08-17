@@ -310,3 +310,14 @@ func UpdateBatchState(batch coldata.Batch, length int, usesSel bool, sel []int) 
 	// in the selection vector to maintain invariants (like for flat bytes).
 	batch.SetLength(length)
 }
+
+// DefaultSelectionVector contains all integers in [0, coldata.MaxBatchSize)
+// range.
+var DefaultSelectionVector []int
+
+func init() {
+	DefaultSelectionVector = make([]int, coldata.MaxBatchSize)
+	for i := range DefaultSelectionVector {
+		DefaultSelectionVector[i] = i
+	}
+}
