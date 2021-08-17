@@ -45,7 +45,8 @@ message Target {
   }
 
   ElementProto element_proto = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
-  Direction direction = 2;
+  TargetMetadata metadata = 2  [(gogoproto.nullable) = false];
+  Direction direction = 4;
 }
 
 enum Status {
@@ -182,10 +183,25 @@ message Type {
 
 message Schema {
   uint32 schema_id = 1 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  repeated uint32 dependentObjects = 2  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  repeated uint32 dependentObjects = 3  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
 message Database {
   uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  repeated uint32 dependentObjects = 2  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  repeated uint32 dependentObjects = 3  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+}
+
+message Authorization {
+  string username  = 1;
+  string appName = 2 [(gogoproto.customname) = "AppName"];
+}
+
+message Statement {
+  string statement = 1;
+}
+
+message TargetMetadata {
+  uint32 sub_work_id =  1[(gogoproto.customname) = "SubWorkID"];
+  uint32 source_element_id = 2 [(gogoproto.customname) = "SourceElementID", (gogoproto.casttype) = "SourceElementID"];
+  uint32 statement_id = 3 [(gogoproto.customname) = "StatementID"];
 }

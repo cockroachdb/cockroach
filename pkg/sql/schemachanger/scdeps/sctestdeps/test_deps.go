@@ -30,10 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -455,6 +457,15 @@ func (s *TestState) MustReadMutableDescriptor(
 	return s.mustReadMutableDescriptor(id)
 }
 
+// GetFullyQualifiedName implements scexec.Catalog
+func (s *TestState) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
+	name, err := s.getQualifiedObjectNameByID(id)
+	if err != nil {
+		return "", err
+	}
+	return name.FQString(), nil
+}
+
 // NewCatalogChangeBatcher implements the scexec.Catalog interface.
 func (s *TestState) NewCatalogChangeBatcher() scexec.CatalogChangeBatcher {
 	return &testCatalogChangeBatcher{
@@ -701,5 +712,22 @@ func (ju *testJobUpdater) UpdateProgress(progress *jobspb.Progress) {
 
 // ExecutorDependencies implements the scrun.SchemaChangeJobTxnDependencies interface.
 func (s *TestState) ExecutorDependencies() scexec.Dependencies {
+	return s
+}
+
+// AddDropEvent implements scexec.EventLogger
+func (s *TestState) AddDropEvent(
+	_ context.Context, descID descpb.ID, metaData *scpb.ElementMetaData, event eventpb.EventPayload,
+) error {
+	return nil
+}
+
+// ProcessAndSubmitEvents implements scexec.EventLogger
+func (s *TestState) ProcessAndSubmitEvents(ctx context.Context) error {
+	return nil
+}
+
+// EventLogger implements scexec.Dependencies
+func (s *TestState) EventLogger() scexec.EventLogger {
 	return s
 }

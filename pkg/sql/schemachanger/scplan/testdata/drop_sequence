@@ -14,6 +14,18 @@ Stage 1 (non-revertible)
 Stage 2 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 52
+  *scop.LogEvent
+    DescID: 52
+    Direction: 2
+    Element:
+      sequence:
+        sequenceId: 52
+    Metadata:
+      Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 52
 
@@ -47,6 +59,18 @@ Stage 1 (non-revertible)
 Stage 2 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 52
+  *scop.LogEvent
+    DescID: 52
+    Direction: 2
+    Element:
+      sequence:
+        sequenceId: 52
+    Metadata:
+      Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 52
 

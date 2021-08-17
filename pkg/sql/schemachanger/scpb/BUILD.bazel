@@ -6,6 +6,7 @@ go_library(
     name = "scpb",
     srcs = [
         "node.go",
+        "structured.go",
         ":gen-elements-interface",  # keep
     ],
     embed = [":scpb_go_proto"],

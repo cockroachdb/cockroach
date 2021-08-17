@@ -102,14 +102,53 @@ Stage 1 (non-revertible)
 Stage 2 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 57
+  *scop.LogEvent
+    DescID: 57
+    Direction: 2
+    Element:
+      view:
+        dependedOnBy: []
+        dependsOn:
+        - 55
+        tableId: 57
+    Metadata:
+      Statement: DROP TABLE defaultdb.shipments CASCADE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 57
   *scop.DrainDescriptorName
     TableID: 56
+  *scop.LogEvent
+    DescID: 56
+    Direction: 2
+    Element:
+      sequence:
+        sequenceId: 56
+    Metadata:
+      Statement: DROP TABLE defaultdb.shipments CASCADE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 56
   *scop.DrainDescriptorName
     TableID: 55
+  *scop.LogEvent
+    DescID: 55
+    Direction: 2
+    Element:
+      table:
+        tableId: 55
+    Metadata:
+      Statement: DROP TABLE defaultdb.shipments CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 55
 
