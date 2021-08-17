@@ -424,6 +424,17 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
 			exprs[i] = tree.DNull
 			continue
 		}
+		switch t := c.resultColumns[i].Typ; t.Family() {
+		case types.BytesFamily,
+			types.DateFamily,
+			types.IntervalFamily,
+			types.INetFamily,
+			types.StringFamily,
+			types.TimestampFamily,
+			types.TimestampTZFamily,
+			types.UuidFamily:
+			s = decodeCopy(s)
+		}
 		d, err := rowenc.ParseDatumStringAsWithRawBytes(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
 		if err != nil {
 			return err
