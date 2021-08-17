@@ -944,18 +944,18 @@ type ExecutorConfig struct {
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
-	SQLStatusServer   serverpb.SQLStatusServer
-	RegionsServer     serverpb.RegionsServer
-	MetricsRecorder   nodeStatusGenerator
-	SessionRegistry   *SessionRegistry
-	SQLLivenessReader sqlliveness.Reader
-	JobRegistry       *jobs.Registry
-	VirtualSchemas    *VirtualSchemaHolder
-	DistSQLPlanner    *DistSQLPlanner
-	TableStatsCache   *stats.TableStatisticsCache
-	StatsRefresher    *stats.Refresher
-	InternalExecutor  *InternalExecutor
-	QueryCache        *querycache.C
+	SQLStatusServer  serverpb.SQLStatusServer
+	RegionsServer    serverpb.RegionsServer
+	MetricsRecorder  nodeStatusGenerator
+	SessionRegistry  *SessionRegistry
+	SQLLiveness      sqlliveness.Liveness
+	JobRegistry      *jobs.Registry
+	VirtualSchemas   *VirtualSchemaHolder
+	DistSQLPlanner   *DistSQLPlanner
+	TableStatsCache  *stats.TableStatisticsCache
+	StatsRefresher   *stats.Refresher
+	InternalExecutor *InternalExecutor
+	QueryCache       *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
@@ -1232,6 +1232,16 @@ var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*BackupRestoreTestingKnobs) ModuleTestingKnobs() {}
+
+// LivenessKnobs contains knobs for sqlliveness system behavior.
+type LivenessKnobs struct {
+	SessionOverride func(ctx context.Context) (sqlliveness.Session, error)
+}
+
+var _ base.ModuleTestingKnobs = &LivenessKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*LivenessKnobs) ModuleTestingKnobs() {}
 
 func shouldDistributeGivenRecAndMode(
 	rec distRecommendation, mode sessiondatapb.DistSQLExecMode,

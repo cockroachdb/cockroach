@@ -41,4 +41,5 @@ type TestingKnobs struct {
 	IndexUsageStatsKnobs    ModuleTestingKnobs
 	SQLStatsKnobs           ModuleTestingKnobs
 	SpanConfig              ModuleTestingKnobs
+	SQLLivenessKnobs        ModuleTestingKnobs
 }

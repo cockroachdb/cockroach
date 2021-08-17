@@ -349,7 +349,7 @@ func (ts *TestServer) Clock() *hlc.Clock {
 // SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
 func (ts *TestServer) SQLLivenessProvider() interface{} {
 	if ts != nil {
-		return ts.sqlServer.execCfg.SQLLivenessReader
+		return ts.sqlServer.execCfg.SQLLiveness
 	}
 	return nil
 }
