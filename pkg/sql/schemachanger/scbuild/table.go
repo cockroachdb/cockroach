@@ -234,7 +234,6 @@ func (b *buildContext) alterTableAddColumn(
 			})
 		}
 	}
-
 	b.addNode(scpb.Target_ADD, &scpb.Column{
 		TableID:    table.GetID(),
 		Column:     *col,
@@ -251,6 +250,7 @@ func (b *buildContext) alterTableAddColumn(
 			b.addNode(scpb.Target_ADD, secondaryIndex)
 		}
 	}
+	b.incrementSubWorkID()
 }
 
 func (b *buildContext) validateColumnName(
@@ -266,7 +266,7 @@ func (b *buildContext) validateColumnName(
 		}
 		panic(sqlerrors.NewColumnAlreadyExistsError(string(d.Name), table.GetName()))
 	}
-	for _, n := range b.output {
+	for _, n := range b.output.Nodes {
 		switch t := n.Element().(type) {
 		case *scpb.Column:
 			if t.TableID != table.GetID() || t.Column.Name != string(d.Name) {
@@ -307,7 +307,7 @@ func (b *buildContext) findOrAddColumnFamily(
 	// TODO(ajwerner): Decide what to do if the only column in a family of this
 	// name is being dropped and then if there is or isn't a create directive.
 	nextFamilyID := table.GetNextFamilyID()
-	for _, n := range b.output {
+	for _, n := range b.output.Nodes {
 		switch col := n.Element().(type) {
 		case *scpb.Column:
 			if col.TableID != table.GetID() {
@@ -349,7 +349,7 @@ func (b *buildContext) alterTableDropColumn(
 		panic(err)
 	}
 	// Check whether the column is being dropped.
-	for _, n := range b.output {
+	for _, n := range b.output.Nodes {
 		switch col := n.Element().(type) {
 		case *scpb.Column:
 			if col.TableID != table.GetID() ||
@@ -452,9 +452,9 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 ) (idxID descpb.IndexID) {
 	// Check whether a target to add a PK already exists. If so, update its
 	// storing columns.
-	for i, n := range b.output {
+	for i, n := range b.output.Nodes {
 		if t, ok := n.Element().(*scpb.PrimaryIndex); ok &&
-			b.output[i].Target.Direction == scpb.Target_ADD &&
+			b.output.Nodes[i].Target.Direction == scpb.Target_ADD &&
 			t.TableID == table.GetID() {
 			t.StoringColumnIDs = append(t.StoringColumnIDs, colID)
 			return t.IndexId
@@ -495,7 +495,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 ) (idxID descpb.IndexID) {
 	// Check whether a target to add a PK already exists. If so, update its
 	// storing columns.
-	for _, n := range b.output {
+	for _, n := range b.output.Nodes {
 		if t, ok := n.Element().(*scpb.PrimaryIndex); ok &&
 			n.Target.Direction == scpb.Target_ADD &&
 			t.TableID == table.GetID() {
@@ -553,7 +553,7 @@ func (b *buildContext) nextColumnID(table catalog.TableDescriptor) descpb.Column
 	nextColID := table.GetNextColumnID()
 	var maxColID descpb.ColumnID
 
-	for _, n := range b.output {
+	for _, n := range b.output.Nodes {
 		if n.Target.Direction != scpb.Target_ADD || screl.GetDescID(n.Element()) != table.GetID() {
 			continue
 		}
@@ -572,7 +572,7 @@ func (b *buildContext) nextColumnID(table catalog.TableDescriptor) descpb.Column
 func (b *buildContext) nextIndexID(table catalog.TableDescriptor) descpb.IndexID {
 	nextMaxID := table.GetNextIndexID()
 	var maxIdxID descpb.IndexID
-	for _, n := range b.output {
+	for _, n := range b.output.Nodes {
 		if n.Target.Direction != scpb.Target_ADD || screl.GetDescID(n.Element()) != table.GetID() {
 			continue
 		}
@@ -726,7 +726,7 @@ func (b *buildContext) maybeCleanTableFKs(
 func (b *buildContext) dropTableDesc(
 	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
 ) {
-
+	lastSourceID := b.setSourceElementID(b.newSourceElementID())
 	// Drop dependent views
 	onErrPanic(table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 		dependentDesc := mustReadTable(ctx, b, dep.ID)
@@ -739,16 +739,14 @@ func (b *buildContext) dropTableDesc(
 		b.maybeDropViewAndDependents(ctx, dependentDesc, behavior)
 		return nil
 	}))
-
 	// Clean up foreign key references (both inbound
 	// and out bound).
 	b.maybeCleanTableFKs(ctx, table, behavior)
-
 	// Clean up sequence references and ownerships.
 	b.maybeCleanTableSequenceRefs(ctx, table, behavior)
-
 	// Clean up type back references
 	b.removeTypeBackRefDeps(ctx, table)
+	b.setSourceElementID(lastSourceID)
 	b.addNode(scpb.Target_DROP,
 		&scpb.Table{TableID: table.GetID()})
 }
@@ -767,5 +765,6 @@ func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 		}
 		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, table, privilege.DROP))
 		b.dropTableDesc(ctx, table, n.DropBehavior)
+		b.incrementSubWorkID()
 	}
 }

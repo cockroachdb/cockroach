@@ -118,7 +118,7 @@ func TestPlanAlterTable(t *testing.T) {
 					stmt := stmts[0]
 					alter, ok := stmt.AST.(*tree.AlterTable)
 					require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-					_, err = scbuild.Build(ctx, deps, nil, alter)
+					_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
 					require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				})
 				return ""

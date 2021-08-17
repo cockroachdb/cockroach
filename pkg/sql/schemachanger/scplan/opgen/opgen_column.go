@@ -29,6 +29,13 @@ func init() {
 					FamilyName: this.FamilyName,
 					Column:     this.Column,
 				}
+			}),
+			emit(func(this *scpb.Column, md *scpb.ElementMetadata) scop.Op {
+				return &scop.LogEvent{Metadata: *md,
+					DescID:    this.TableID,
+					Element:   &scpb.ElementProto{Column: this},
+					Direction: scpb.Target_ADD,
+				}
 			})),
 		to(scpb.Status_DELETE_AND_WRITE_ONLY,
 			minPhase(scop.PostCommitPhase),
@@ -57,7 +64,15 @@ func init() {
 					TableID:  this.TableID,
 					ColumnID: this.Column.ID,
 				}
-			})),
+			}),
+			emit(func(this *scpb.Column, md *scpb.ElementMetadata) scop.Op {
+				return &scop.LogEvent{Metadata: *md,
+					DescID:    this.TableID,
+					Element:   &scpb.ElementProto{Column: this},
+					Direction: scpb.Target_DROP,
+				}
+			}),
+		),
 		to(scpb.Status_DELETE_ONLY,
 			revertible(false),
 			minPhase(scop.PostCommitPhase),
