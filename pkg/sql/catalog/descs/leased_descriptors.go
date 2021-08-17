@@ -41,6 +41,24 @@ type deadlineHolder interface {
 	UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) error
 }
 
+// maxTimestampBoundDeadlineHolder is an implementation of deadlineHolder
+// which is intended for use during bounded staleness reads.
+type maxTimestampBoundDeadlineHolder struct {
+	maxTimestampBound hlc.Timestamp
+}
+
+// ReadTimestamp implements the deadlineHolder interface.
+func (m maxTimestampBoundDeadlineHolder) ReadTimestamp() hlc.Timestamp {
+	return m.maxTimestampBound
+}
+
+// UpdateDeadline implements the deadlineHolder interface.
+func (m maxTimestampBoundDeadlineHolder) UpdateDeadline(
+	ctx context.Context, deadline hlc.Timestamp,
+) error {
+	return nil
+}
+
 func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
 	return leasedDescriptors{
 		lm:    lm,
@@ -115,13 +133,16 @@ func (ld *leasedDescriptors) getResult(
 	err error,
 ) (_ catalog.Descriptor, shouldReadFromStore bool, _ error) {
 	if err != nil {
+		_, isBoundedStalenessRead := txn.(*maxTimestampBoundDeadlineHolder)
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
+		// Note we never should read from store during a bounded staleness read,
+		// as it is safe to return the schema as non-existent.
 		if shouldReadFromStore =
-			(catalog.HasInactiveDescriptorError(err) &&
+			!isBoundedStalenessRead && ((catalog.HasInactiveDescriptorError(err) &&
 				errors.Is(err, catalog.ErrDescriptorDropped)) ||
-				errors.Is(err, catalog.ErrDescriptorNotFound); shouldReadFromStore {
+				errors.Is(err, catalog.ErrDescriptorNotFound)); shouldReadFromStore {
 			return nil, true, nil
 		}
 		// Lease acquisition failed with some other error. This we don't
