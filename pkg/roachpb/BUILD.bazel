@@ -111,8 +111,8 @@ gomock(
     name = "mock_roachpb",
     out = "mocks_generated.go",
     interfaces = [
-        "Internal_RangeFeedClient",
         "InternalClient",
+        "Internal_RangeFeedClient",
     ],
     library = ":roachpb",
     package = "roachpb",
