@@ -103,6 +103,37 @@ SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE 
 events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local follower read
 
+exec idx=2
+PREPARE max_staleness_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1;
+PREPARE min_timestamp_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+----
+
+override-matching-stmt-for-tracing
+SELECT pk FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+----
+
+query idx=2
+EXECUTE max_staleness_prep
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+override-matching-stmt-for-tracing
+SELECT pk FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+----
+
+query idx=2
+EXECUTE min_timestamp_prep
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+reset-matching-stmt-for-tracing
+----
+
+
 # Set a super high closed bounded staleness target and execute a schema change.
 exec
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1hr';
