@@ -122,10 +122,11 @@ initial-keys tenant=system
 
 initial-keys tenant=5
 ----
-70 keys:
+73 keys:
  /Tenant/5/Table/3/1/1/2/1
  /Tenant/5/Table/3/1/3/2/1
  /Tenant/5/Table/3/1/4/2/1
+ /Tenant/5/Table/3/1/5/2/1
  /Tenant/5/Table/3/1/6/2/1
  /Tenant/5/Table/3/1/7/2/1
  /Tenant/5/Table/3/1/11/2/1
@@ -157,6 +158,7 @@ initial-keys tenant=5
  /Tenant/5/Table/3/1/43/2/1
  /Tenant/5/Table/3/1/44/2/1
  /Tenant/5/Table/3/1/46/2/1
+ /Tenant/5/Table/5/1/0/2/1
  /Tenant/5/Table/7/1/0/0
  /Tenant/5/NamespaceTable/30/1/0/0/"system"/4/1
  /Tenant/5/NamespaceTable/30/1/1/0/"public"/4/1
@@ -193,15 +195,17 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"ui"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"users"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"web_sessions"/4/1
+ /Tenant/5/NamespaceTable/30/1/1/29/"zones"/4/1
 1 splits:
  /Tenant/5
 
 initial-keys tenant=999
 ----
-70 keys:
+73 keys:
  /Tenant/999/Table/3/1/1/2/1
  /Tenant/999/Table/3/1/3/2/1
  /Tenant/999/Table/3/1/4/2/1
+ /Tenant/999/Table/3/1/5/2/1
  /Tenant/999/Table/3/1/6/2/1
  /Tenant/999/Table/3/1/7/2/1
  /Tenant/999/Table/3/1/11/2/1
@@ -233,6 +237,7 @@ initial-keys tenant=999
  /Tenant/999/Table/3/1/43/2/1
  /Tenant/999/Table/3/1/44/2/1
  /Tenant/999/Table/3/1/46/2/1
+ /Tenant/999/Table/5/1/0/2/1
  /Tenant/999/Table/7/1/0/0
  /Tenant/999/NamespaceTable/30/1/0/0/"system"/4/1
  /Tenant/999/NamespaceTable/30/1/1/0/"public"/4/1
@@ -269,5 +274,6 @@ initial-keys tenant=999
  /Tenant/999/NamespaceTable/30/1/1/29/"ui"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"users"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"web_sessions"/4/1
+ /Tenant/999/NamespaceTable/30/1/1/29/"zones"/4/1
 1 splits:
  /Tenant/999
