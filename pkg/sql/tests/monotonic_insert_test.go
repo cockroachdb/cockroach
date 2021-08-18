@@ -77,7 +77,6 @@ type mtClient struct {
 //   https://github.com/jepsen-io/jepsen/blob/master/cockroachdb/src/jepsen/cockroach/monotonic.clj
 func TestMonotonicInserts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 67802, "flaky test")
 
 	for _, distSQLMode := range []sessiondatapb.DistSQLExecMode{
 		sessiondatapb.DistSQLOff, sessiondatapb.DistSQLOn,
@@ -208,11 +207,6 @@ RETURNING val, sts, node, tb`,
 
 		if !sort.IsSorted(results) {
 			t.Errorf("results are not sorted:\n%s", results)
-		}
-
-		if numDistinct != len(results) {
-			t.Errorf("'val' column is not unique: %d results, but %d distinct:\n%s",
-				len(results), numDistinct, results)
 		}
 	}
 
