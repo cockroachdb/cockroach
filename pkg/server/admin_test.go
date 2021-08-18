@@ -335,7 +335,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 
 	// Grant permissions to view the tables for the given viewing user.
-	privileges := []string{"SELECT", "UPDATE"}
+	privileges := []string{"CONNECT"}
 	query = fmt.Sprintf(
 		"GRANT %s ON DATABASE %s TO %s",
 		strings.Join(privileges, ", "),
@@ -387,7 +387,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if a, e := len(details.Grants), 4; a != e {
+			if a, e := len(details.Grants), 3; a != e {
 				t.Fatalf("# of grants %d != expected %d", a, e)
 			}
 

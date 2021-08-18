@@ -1421,7 +1421,7 @@ func TestJobLifecycle(t *testing.T) {
 	t.Run("cancelable jobs can be paused until finished", func(t *testing.T) {
 		job, exp := startLeasedJob(t, defaultRecord)
 
-		if err := registry.PauseRequested(ctx, nil, job.ID()); err != nil {
+		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Paused(ctx); err != nil {
@@ -1445,7 +1445,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := registry.PauseRequested(ctx, nil, job.ID()); !testutils.IsError(err, "cannot be requested to be paused") {
+		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); !testutils.IsError(err, "cannot be requested to be paused") {
 			t.Fatalf("expected 'cannot pause succeeded job', but got '%s'", err)
 		}
 	})
@@ -1476,7 +1476,7 @@ func TestJobLifecycle(t *testing.T) {
 
 		{
 			job, exp := startLeasedJob(t, defaultRecord)
-			if err := registry.PauseRequested(ctx, nil, job.ID()); err != nil {
+			if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
 				t.Fatal(err)
 			}
 			if err := job.Paused(ctx); err != nil {
@@ -1636,7 +1636,7 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("progress on paused job fails", func(t *testing.T) {
 		job, _ := startLeasedJob(t, defaultRecord)
-		if err := registry.PauseRequested(ctx, nil, job.ID()); err != nil {
+		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(0.5)); !testutils.IsError(
@@ -2937,7 +2937,7 @@ func TestMetrics(t *testing.T) {
 			// We'll pause the job this time around and make sure it stops running.
 			<-resuming
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
-			require.NoError(t, registry.PauseRequested(ctx, nil, jobID))
+			require.NoError(t, registry.PauseRequested(ctx, nil, jobID, "for testing"))
 			int64EqSoon(t, importMetrics.ResumeRetryError.Count, 2)
 			require.Equal(t, int64(0), importMetrics.ResumeFailed.Count())
 			require.Equal(t, int64(0), importMetrics.ResumeCompleted.Count())
@@ -2948,6 +2948,15 @@ func TestMetrics(t *testing.T) {
 			tdb := sqlutils.MakeSQLRunner(db)
 			q := fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", jobID)
 			tdb.CheckQueryResultsRetry(t, q, [][]string{{"paused"}})
+
+			var payloadBytes []byte
+			var payload jobspb.Payload
+			var status string
+			tdb.QueryRow(t, fmt.Sprintf("SELECT status, payload FROM system.jobs where id = %d", jobID)).Scan(
+				&status, &payloadBytes)
+			require.Equal(t, "paused", status)
+			require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
+			require.Equal(t, "for testing", payload.PauseReason)
 		}
 		{
 			// Now resume the job and let it succeed.
@@ -3019,7 +3028,7 @@ func TestMetrics(t *testing.T) {
 			// We'll pause the job this time around and make sure it stops running.
 			<-resuming
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
-			require.NoError(t, registry.PauseRequested(ctx, nil, jobID))
+			require.NoError(t, registry.PauseRequested(ctx, nil, jobID, ""))
 			int64EqSoon(t, importMetrics.FailOrCancelRetryError.Count, 1)
 			require.Equal(t, int64(1), importMetrics.ResumeFailed.Count())
 			require.Equal(t, int64(0), importMetrics.ResumeCompleted.Count())
@@ -3112,4 +3121,85 @@ func checkBundle(t *testing.T, zipFile string, expectedFiles []string) {
 	sort.Strings(filesInZip)
 	sort.Strings(expectedFiles)
 	require.Equal(t, expectedFiles, filesInZip)
+}
+
+// TestPauseReason tests pausing a job with a user specified reason.
+func TestPauseReason(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	registry := s.JobRegistry().(*jobs.Registry)
+	defer s.Stopper().Stop(ctx)
+
+	done := make(chan struct{})
+	defer close(done)
+
+	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-done:
+					return nil
+				}
+			},
+		}
+	})
+
+	rec := jobs.Record{
+		DescriptorIDs: []descpb.ID{1},
+		Details:       jobspb.ImportDetails{},
+		Progress:      jobspb.ImportProgress{},
+	}
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	jobID := registry.MakeJobID()
+	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */)
+	require.NoError(t, err)
+
+	// First wait until the job is running
+	q := fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", jobID)
+	tdb.CheckQueryResultsRetry(t, q, [][]string{{"running"}})
+
+	getStatusAndPayload := func(t *testing.T, id jobspb.JobID) (string, jobspb.Payload) {
+		var payloadBytes []byte
+		var payload jobspb.Payload
+		var status string
+		tdb.QueryRow(t, "SELECT status, payload FROM system.jobs where id = $1", jobID).Scan(
+			&status, &payloadBytes)
+		require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
+
+		return status, payload
+	}
+
+	checkStatusAndPauseReason := func(t *testing.T, id jobspb.JobID, expStatus, expPauseReason string) {
+		status, payload := getStatusAndPayload(t, id)
+		require.Equal(t, expStatus, status, "status")
+		require.Equal(t, expPauseReason, payload.PauseReason, "pause reason")
+	}
+
+	{
+		// Next, pause the job with a reason. Wait for pause and make sure the pause reason is set.
+		require.NoError(t, registry.PauseRequested(ctx, nil, jobID, "for testing"))
+		tdb.CheckQueryResultsRetry(t, q, [][]string{{"paused"}})
+		checkStatusAndPauseReason(t, jobID, "paused", "for testing")
+	}
+
+	{
+		// Now resume the job. Verify that the job is running now, but the pause reason is still there.
+		require.NoError(t, registry.Unpause(ctx, nil, jobID))
+		tdb.CheckQueryResultsRetry(t, q, [][]string{{"running"}})
+
+		checkStatusAndPauseReason(t, jobID, "running", "for testing")
+	}
+	{
+		// Pause the job again with a different reason. Verify that the job is paused with the reason.
+		require.NoError(t, registry.PauseRequested(ctx, nil, jobID, "second time"))
+		tdb.CheckQueryResultsRetry(t, q, [][]string{{"paused"}})
+		checkStatusAndPauseReason(t, jobID, "paused", "second time")
+	}
+
 }

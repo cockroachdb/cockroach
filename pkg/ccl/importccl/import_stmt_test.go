@@ -3295,28 +3295,6 @@ func TestImportIntoCSV(t *testing.T) {
 		)
 	})
 
-	// IMPORT INTO does not currently support import into interleaved tables.
-	t.Run("import-into-rejects-interleaved-tables", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE TABLE parent (parent_id INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `CREATE TABLE child (
-				parent_id INT,
-				child_id INT,
-				PRIMARY KEY(parent_id, child_id))
-				INTERLEAVE IN PARENT parent(parent_id)`)
-		defer sqlDB.Exec(t, `DROP TABLE parent`)
-		defer sqlDB.Exec(t, `DROP TABLE child`)
-
-		// Cannot IMPORT INTO interleaved parent
-		sqlDB.ExpectErr(
-			t, "Cannot use IMPORT INTO with interleaved tables",
-			fmt.Sprintf(`IMPORT INTO parent (parent_id) CSV DATA (%s)`, testFiles.files[0]))
-
-		// Cannot IMPORT INTO interleaved child either.
-		sqlDB.ExpectErr(
-			t, "Cannot use IMPORT INTO with interleaved tables",
-			fmt.Sprintf(`IMPORT INTO child (parent_id, child_id) CSV DATA (%s)`, testFiles.files[0]))
-	})
-
 	// This tests that consecutive imports from unique data sources into an
 	// existing table without an explicit PK, do not overwrite each other. It
 	// exercises the row_id generation in IMPORT.
@@ -4371,7 +4349,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 			})
 
 			// Pause the job;
-			if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
+			if err := registry.PauseRequested(ctx, nil, jobID, ""); err != nil {
 				t.Fatal(err)
 			}
 			// Send cancellation and unblock breakpoint.

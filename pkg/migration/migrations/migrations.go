@@ -115,6 +115,12 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.RetryJobsWithExponentialBackoff),
 		NoPrecondition,
 		retryJobsWithExponentialBackoff),
+	migration.NewTenantMigration(
+		"validates no interleaved tables exist",
+		toCV(clusterversion.EnsureNoInterleavedTables),
+		interleavedTablesRemovedMigration,
+		interleavedTablesRemovedMigration,
+	),
 }
 
 func init() {

@@ -454,6 +454,30 @@ AlterDatabaseAddRegion is recorded when a region is added to a database.
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
+### `alter_database_placement`
+
+An event of type `alter_database_placement` is recorded when the database placement is modified.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `DatabaseName` | The name of the database. | yes |
+| `Placement` | The new placement policy. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
 ### `alter_database_primary_region`
 
 An event of type `alter_database_primary_region` is recorded when a primary region is added/modified.
@@ -1469,6 +1493,34 @@ An event of type `alter_database_owner` is recorded when a database's owner is c
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
+### `alter_default_privileges`
+
+An event of type `alter_default_privileges` is recorded when default privileges are changed.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `DatabaseName` | The name of the affected database. | yes |
+| `RoleName` | Either role_name should be populated or for_all_roles should be true. The role having its default privileges altered. | yes |
+| `ForAllRoles` | Identifies if FOR ALL ROLES is used. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `Grantee` | The user/role affected by the grant or revoke operation. | yes |
+| `GrantedPrivileges` | The privileges being granted to the grantee. | no |
+| `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
 
 ### `alter_schema_owner`
 

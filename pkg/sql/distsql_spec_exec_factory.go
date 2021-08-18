@@ -1001,7 +1001,7 @@ func (e *distSQLSpecExecFactory) ConstructRecursiveCTE(
 }
 
 func (e *distSQLSpecExecFactory) ConstructControlJobs(
-	command tree.JobCommand, input exec.Node,
+	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: control jobs")
 }

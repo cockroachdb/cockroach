@@ -1149,6 +1149,12 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		return err
 	}
 
+	telemetry.Inc(
+		sqltelemetry.AlterDatabasePlacementCounter(
+			n.n.Placement.TelemetryName(),
+		),
+	)
+
 	// Update the placement strategy in the database descriptor
 	newPlacement, err := TranslateDataPlacement(n.n.Placement)
 	if err != nil {
@@ -1197,8 +1203,16 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		return err
 	}
 
-	// TODO(pawalt): #68597 add telemetry/logging for PLACEMENT events.
-	return nil
+	// Log Alter Placement Goal event. This is an auditable log event and
+	// is recorded in the same transaction as the database descriptor, and zone
+	// configuration updates.
+	return params.p.logEvent(params.ctx,
+		n.desc.GetID(),
+		&eventpb.AlterDatabasePlacement{
+			DatabaseName: n.desc.GetName(),
+			Placement:    newPlacement.String(),
+		},
+	)
 }
 
 func (n *alterDatabasePlacementNode) Next(runParams) (bool, error) { return false, nil }
