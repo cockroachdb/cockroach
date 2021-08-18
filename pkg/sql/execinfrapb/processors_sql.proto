@@ -98,6 +98,11 @@ message TableReaderSpec {
   // limit hint.
   optional bool parallelize = 12 [(gogoproto.nullable) = false];
 
+  // batch_bytes_limit, if non-zero, controls the TargetBytes limits that the
+  // TableReader will use for its scans. If zero, then the server-side default
+  // is used. If parallelize is set, this cannot be set.
+  optional int64 batch_bytes_limit = 17 [(gogoproto.nullable) = false];
+
   // If non-zero, this enables inconsistent historical scanning where different
   // batches can be read with different timestamps. This is used for
   // long-running table statistics which may outlive the TTL. Using this setting
@@ -403,6 +408,13 @@ message JoinReaderSpec {
   // OutputGroupContinuationForLeftRow is true, MaintainOrdering must also
   // be true.
   optional bool output_group_continuation_for_left_row = 15 [(gogoproto.nullable) = false];
+
+  // lookup_batch_bytes_limit, if non-zero, controls the TargetBytes limits that
+  // the joiner will use for its lookups. If zero, then the server-side default
+  // is used. Note that, regardless of this setting, bytes limits are not always
+  // used for lookups - it depends on whether the joiner decides it wants
+  // DistSender-parallelism or not.
+  optional int64 lookup_batch_bytes_limit = 18 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting

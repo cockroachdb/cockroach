@@ -88,7 +88,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
-        "//pkg/sql/row",
+        "//pkg/sql/execinfra",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/tree",

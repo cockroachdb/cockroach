@@ -79,7 +79,7 @@ func newScrubTableReader(
 	}
 
 	tr.tableDesc = spec.BuildTableDescriptor()
-	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
+	tr.limitHint = row.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 
 	if err := tr.Init(
 		tr,
@@ -218,7 +218,7 @@ func (tr *scrubTableReader) Start(ctx context.Context) {
 	log.VEventf(ctx, 1, "starting")
 
 	if err := tr.fetcher.StartScan(
-		ctx, tr.FlowCtx.Txn, tr.spans, true /* limit batches */, tr.limitHint,
+		ctx, tr.FlowCtx.Txn, tr.spans, row.DefaultBatchBytesLimit, tr.limitHint,
 		tr.FlowCtx.TraceKV, tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		tr.MoveToDraining(err)
