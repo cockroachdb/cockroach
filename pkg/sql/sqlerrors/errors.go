@@ -69,6 +69,12 @@ func NewGeneratedAlwaysColumnUpdateError(columnName string) error {
 	)
 }
 
+// NewIdentityColumnTypeError creates an error for declaring an IDENTITY column
+// with a non-integer type.
+func NewIdentityColumnTypeError(columnName string) error {
+	return pgerror.Newf(pgcode.InvalidParameterValue, "identity column type must be smallint, integer, or bigint")
+}
+
 // NewInvalidSchemaDefinitionError creates an error for an invalid schema
 // definition such as a schema definition that doesn't parse.
 func NewInvalidSchemaDefinitionError(err error) error {
