@@ -127,14 +127,14 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		return tc, args, tdb, tablePrefix, unblockSplit, waitForBlockedRange
 	}
 
-	waitForZoneConfig := func(t *testing.T, tc *testcluster.TestCluster, tablePrefix roachpb.Key, exp int64) {
+	waitForSpanConfig := func(t *testing.T, tc *testcluster.TestCluster, tablePrefix roachpb.Key, exp int64) {
 		testutils.SucceedsSoon(t, func() error {
 			for i := 0; i < tc.NumServers(); i++ {
 				s := tc.Server(i)
 				_, r := getFirstStoreReplica(t, s, tablePrefix)
-				_, zone := r.DescAndZone()
-				if *zone.RangeMaxBytes != exp {
-					return fmt.Errorf("expected %d, got %d", exp, *zone.RangeMaxBytes)
+				conf := r.SpanConfig()
+				if conf.RangeMaxBytes != exp {
+					return fmt.Errorf("expected %d, got %d", exp, conf.RangeMaxBytes)
 				}
 			}
 			return nil
@@ -177,7 +177,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", dataSize/5, dataSize/10)
-		waitForZoneConfig(t, tc, tablePrefix, dataSize/5)
+		waitForSpanConfig(t, tc, tablePrefix, dataSize/5)
 
 		// Don't observe backpressure.
 		tdb.Exec(t, "UPSERT INTO foo VALUES ($1, $2)",
@@ -197,7 +197,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", dataSize/5, dataSize/10)
-		waitForZoneConfig(t, tc, tablePrefix, dataSize/5)
+		waitForSpanConfig(t, tc, tablePrefix, dataSize/5)
 
 		// Then we'll add a new server and move the table there.
 		moveTableToNewStore(t, tc, args, tablePrefix)
@@ -227,7 +227,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		newMin := newMax / 4
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", newMax, newMin)
-		waitForZoneConfig(t, tc, tablePrefix, newMax)
+		waitForSpanConfig(t, tc, tablePrefix, newMax)
 
 		// Don't observe backpressure because we remember the previous max size on
 		// this node.
@@ -263,7 +263,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		newMin := newMax / 4
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", newMax, newMin)
-		waitForZoneConfig(t, tc, tablePrefix, newMax)
+		waitForSpanConfig(t, tc, tablePrefix, newMax)
 
 		// Then we'll add a new server and move the table there.
 		moveTableToNewStore(t, tc, args, tablePrefix)

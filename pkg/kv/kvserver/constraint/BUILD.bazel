@@ -5,8 +5,5 @@ go_library(
     srcs = ["analyzer.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/config/zonepb",
-        "//pkg/roachpb:with-mocks",
-    ],
+    deps = ["//pkg/roachpb:with-mocks"],
 )

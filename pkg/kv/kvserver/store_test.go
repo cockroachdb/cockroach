@@ -216,7 +216,7 @@ func createTestStoreWithoutStart(
 		Settings:   cfg.Settings,
 	})
 	server := rpc.NewServer(rpcContext) // never started
-	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
+	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	cfg.StorePool = NewTestStorePool(*cfg)
 	// Many tests using this test harness (as opposed to higher-level
 	// ones like multiTestContext or TestServer) want to micro-manage
@@ -245,7 +245,7 @@ func createTestStoreWithoutStart(
 	}
 	var splits []roachpb.RKey
 	kvs, tableSplits := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	).GetInitialValues()
 	if opts.createSystemRanges {
 		splits = config.StaticSplits()
@@ -463,7 +463,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		// Bootstrap the system ranges.
 		var splits []roachpb.RKey
 		kvs, tableSplits := bootstrap.MakeMetadataSchema(
-			keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
+			keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 		).GetInitialValues()
 		splits = config.StaticSplits()
 		splits = append(splits, tableSplits...)
@@ -1356,22 +1356,23 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		expMaxBytes int64
 	}{
 		{store.LookupReplica(roachpb.RKeyMin),
-			*store.cfg.DefaultZoneConfig.RangeMaxBytes},
+			store.cfg.DefaultSpanConfig.RangeMaxBytes},
 		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID)), t),
 			1 << 20},
 		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+1)), t),
-			*store.cfg.DefaultZoneConfig.RangeMaxBytes},
+			store.cfg.DefaultSpanConfig.RangeMaxBytes},
 		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+2)), t),
 			2 << 20},
 	}
 
 	// Set zone configs.
-	config.TestingSetZoneConfig(
-		config.SystemTenantObjectID(baseID), zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(1 << 20)},
-	)
-	config.TestingSetZoneConfig(
-		config.SystemTenantObjectID(baseID+2), zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(2 << 20)},
-	)
+	zoneA := zonepb.DefaultZoneConfig()
+	zoneA.RangeMaxBytes = proto.Int64(1 << 20)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(baseID), zoneA)
+
+	zoneB := zonepb.DefaultZoneConfig()
+	zoneB.RangeMaxBytes = proto.Int64(2 << 20)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(baseID+2), zoneB)
 
 	// Despite faking the zone configs, we still need to have a system config
 	// entry so that the store picks up the new zone configs. This new system

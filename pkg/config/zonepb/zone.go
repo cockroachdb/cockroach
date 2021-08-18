@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -201,20 +200,6 @@ func (c *Constraint) FromString(short string) error {
 // config has been specified.
 func NewZoneConfig() *ZoneConfig {
 	return &ZoneConfig{
-		InheritedConstraints:      true,
-		InheritedLeasePreferences: true,
-	}
-}
-
-// EmptyCompleteZoneConfig is the zone configuration where
-// all fields are set but set to their respective zero values.
-func EmptyCompleteZoneConfig() *ZoneConfig {
-	return &ZoneConfig{
-		NumReplicas:               proto.Int32(0),
-		NumVoters:                 proto.Int32(0),
-		RangeMinBytes:             proto.Int64(0),
-		RangeMaxBytes:             proto.Int64(0),
-		GC:                        &GCPolicy{TTLSeconds: 0},
 		InheritedConstraints:      true,
 		InheritedLeasePreferences: true,
 	}
@@ -977,37 +962,6 @@ func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) (*Subzone, int32) {
 	return nil, -1
 }
 
-// GetNumVoters returns the number of voting replicas for the given zone config.
-//
-// This method will panic if called on a ZoneConfig with an uninitialized
-// NumReplicas attribute.
-func (z *ZoneConfig) GetNumVoters() int32 {
-	if z.NumReplicas == nil {
-		panic("NumReplicas must not be nil")
-	}
-	if z.NumVoters != nil && *z.NumVoters != 0 {
-		return *z.NumVoters
-	}
-	return *z.NumReplicas
-}
-
-// GetNumNonVoters returns the number of non-voting replicas as defined in the
-// zone config.
-//
-// This method will panic if called on a ZoneConfig with an uninitialized
-// NumReplicas attribute.
-func (z *ZoneConfig) GetNumNonVoters() int32 {
-	if z.NumReplicas == nil {
-		panic("NumReplicas must not be nil")
-	}
-	if z.NumVoters != nil && *z.NumVoters != 0 {
-		return *z.NumReplicas - *z.NumVoters
-	}
-	// `num_voters` hasn't been explicitly configured. Every replica should be a
-	// voting replica.
-	return 0
-}
-
 // SetSubzone installs subzone into the ZoneConfig, overwriting any existing
 // subzone with the same IndexID and PartitionName.
 func (z *ZoneConfig) SetSubzone(subzone Subzone) {
@@ -1150,11 +1104,6 @@ func (c *Constraint) GetValue() string {
 	return c.Value
 }
 
-// TTL returns the implies TTL as a time.Duration.
-func (m *GCPolicy) TTL() time.Duration {
-	return time.Duration(m.TTLSeconds) * time.Second
-}
-
 // EnsureFullyHydrated returns an assertion error if the zone config is not
 // fully hydrated. A fully hydrated zone configuration must have all required
 // fields set, which are RangeMaxBytes, RangeMinBytes, GC, and NumReplicas.
@@ -1201,7 +1150,7 @@ func (z *ZoneConfig) toSpanConfig() (roachpb.SpanConfig, error) {
 	// Copy over the values.
 	sc.RangeMinBytes = *z.RangeMinBytes
 	sc.RangeMaxBytes = *z.RangeMaxBytes
-	sc.GCTTL = z.GC.TTLSeconds
+	sc.GCPolicy.TTLSeconds = z.GC.TTLSeconds
 
 	// GlobalReads is false by default.
 	if z.GlobalReads != nil {

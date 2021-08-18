@@ -210,7 +210,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	var splits []roachpb.RKey
 	if !ltc.DontCreateSystemRanges {
 		schema := bootstrap.MakeMetadataSchema(
-			keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
+			keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 		)
 		var tableSplits []roachpb.RKey
 		initialValues, tableSplits = schema.GetInitialValues()

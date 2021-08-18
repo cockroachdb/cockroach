@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 )
 
 // startTestWriter creates a writer which initiates a sequence of
@@ -176,15 +174,15 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// Override default zone config.
-	cfg := zonepb.DefaultZoneConfigRef()
-	cfg.RangeMaxBytes = proto.Int64(1 << 18)
+	// Override default span config.
+	cfg := kvserver.TestingDefaultSpanConfig()
+	cfg.RangeMaxBytes = 1 << 18
 
 	// Manually create the local test cluster so that the split queue
 	// is not disabled (LocalTestCluster disables it by default).
 	s := &localtestcluster.LocalTestCluster{
 		Cfg: kvserver.StoreConfig{
-			DefaultZoneConfig: cfg,
+			DefaultSpanConfig: cfg,
 		},
 		StoreTestingKnobs: &kvserver.StoreTestingKnobs{
 			DisableScanner: true,

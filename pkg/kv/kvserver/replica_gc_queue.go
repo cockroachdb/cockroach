@@ -14,10 +14,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -85,14 +84,14 @@ type replicaGCQueue struct {
 }
 
 // newReplicaGCQueue returns a new instance of replicaGCQueue.
-func newReplicaGCQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *replicaGCQueue {
+func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 	rgcq := &replicaGCQueue{
 		metrics: makeReplicaGCQueueMetrics(),
 		db:      db,
 	}
 	store.metrics.registry.AddMetricStruct(&rgcq.metrics)
 	rgcq.baseQueue = newBaseQueue(
-		"replicaGC", rgcq, store, gossip,
+		"replicaGC", rgcq, store,
 		queueConfig{
 			maxSize:                  defaultQueueMaxSize,
 			needsLease:               false,
@@ -116,8 +115,8 @@ func newReplicaGCQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *replicaG
 // check must have occurred more than ReplicaGCQueueInactivityThreshold
 // in the past.
 func (rgcq *replicaGCQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ *config.SystemConfig,
-) (shouldQ bool, prio float64) {
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
+) (shouldQueue bool, priority float64) {
 	if _, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
 		return true, replicaGCPriorityRemoved
 	}
@@ -216,7 +215,7 @@ func replicaGCShouldQueueImpl(now, lastCheck hlc.Timestamp, isSuspect bool) (boo
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (rgcq *replicaGCQueue) process(
-	ctx context.Context, repl *Replica, _ *config.SystemConfig,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and

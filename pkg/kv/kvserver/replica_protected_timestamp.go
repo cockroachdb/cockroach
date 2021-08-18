@@ -13,8 +13,8 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -260,7 +260,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 // basis to calculate the new gc threshold (used for scoring and reporting), the
 // old gc threshold, and the new gc threshold.
 func (r *Replica) checkProtectedTimestampsForGC(
-	ctx context.Context, policy zonepb.GCPolicy,
+	ctx context.Context, gcTTL time.Duration,
 ) (canGC bool, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold hlc.Timestamp) {
 
 	// We may be reading the protected timestamp cache while we're holding
@@ -285,7 +285,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	if read.earliestRecord != nil {
 		// NB: we want to allow GC up to the timestamp preceding the earliest valid
 		// record.
-		impliedGCTimestamp := gc.TimestampForThreshold(read.earliestRecord.Timestamp.Prev(), policy)
+		impliedGCTimestamp := gc.TimestampForThreshold(read.earliestRecord.Timestamp.Prev(), gcTTL)
 		if impliedGCTimestamp.Less(gcTimestamp) {
 			gcTimestamp = impliedGCTimestamp
 		}
@@ -297,7 +297,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}
 	}
 
-	newThreshold = gc.CalculateThreshold(gcTimestamp, policy)
+	newThreshold = gc.CalculateThreshold(gcTimestamp, gcTTL)
 
 	return true, read.readAt, gcTimestamp, oldThreshold, newThreshold
 }
