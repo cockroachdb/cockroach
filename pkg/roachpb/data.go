@@ -1482,6 +1482,8 @@ func PrepareTransactionForRetry(
 		// Nothing to do. Transaction.Timestamp has already been forwarded to be
 		// ahead of any timestamp cache entries or newer versions which caused
 		// the restart.
+		now := clock.Now()
+		txn.WriteTimestamp.Forward(now)
 	case *WriteTooOldError:
 		// Increase the timestamp to the ts at which we've actually written.
 		txn.WriteTimestamp.Forward(writeTooOldRetryTimestamp(tErr))
