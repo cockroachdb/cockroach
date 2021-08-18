@@ -68,7 +68,7 @@ func (s *Container) RecordStatement(
 	// Get the statistics object.
 	stats, statementKey, stmtFingerprintID, created, throttled := s.getStatsForStmt(
 		key.Query, key.ImplicitTxn, key.Database,
-		key.Failed, createIfNonExistent,
+		key.Failed, key.PlanHash, createIfNonExistent,
 	)
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
@@ -145,7 +145,7 @@ func (s *Container) RecordStatementExecStats(
 	key roachpb.StatementStatisticsKey, stats execstats.QueryLevelStats,
 ) error {
 	stmtStats, _, _, _, _ :=
-		s.getStatsForStmt(key.Query, key.ImplicitTxn, key.Database, key.Failed, false /* createIfNotExists */)
+		s.getStatsForStmt(key.Query, key.ImplicitTxn, key.Database, key.Failed, key.PlanHash, false /* createIfNotExists */)
 	if stmtStats == nil {
 		return ErrExecStatsFingerprintFlushed
 	}
@@ -158,7 +158,7 @@ func (s *Container) ShouldSaveLogicalPlanDesc(
 	fingerprint string, implicitTxn bool, database string,
 ) bool {
 	stmtStats, _, _, _, _ :=
-		s.getStatsForStmt(fingerprint, implicitTxn, database, false /* failed */, false /* createIfNotExists */)
+		s.getStatsForStmt(fingerprint, implicitTxn, database, false /* failed */, sentinelPlanHashKey, false /* createIfNotExists */)
 	return s.shouldSaveLogicalPlanDescription(stmtStats)
 }
 

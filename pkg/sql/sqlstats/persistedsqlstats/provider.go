@@ -29,12 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// TODO(azhng): currently we do not have the ability to compute a hash for
-//  query plan. This is currently being worked on by the SQL Queries team.
-//  Once we are able get consistent hash value from a query plan, we should
-//  update this.
-const dummyPlanHash = int64(0)
-
 // Config is a configuration struct for the persisted SQL stats subsystem.
 type Config struct {
 	Settings         *cluster.Settings

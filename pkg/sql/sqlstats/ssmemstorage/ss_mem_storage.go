@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"sync/atomic"
 	"unsafe"
@@ -34,6 +35,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const sentinelPlanHashKey uint64 = math.MaxUint64
+
 // TODO(arul): The fields on stmtKey should really be immutable fields on
 // stmtStats which are set once (on first addition to the map). Instead, we
 // should use stmtFingerprintID (which is a hashed string of the fields below) as the
@@ -43,6 +46,7 @@ type stmtKey struct {
 	failed         bool
 	implicitTxn    bool
 	database       string
+	planHash       uint64
 }
 
 func (s stmtKey) String() string {
@@ -171,6 +175,7 @@ func (s *Container) IterateStatementStats(
 				Failed:      stmtKey.failed,
 				App:         appName,
 				Database:    database,
+				PlanHash:    stmtKey.planHash,
 			},
 			ID:    stmtFingerprintID,
 			Stats: data,
@@ -252,7 +257,7 @@ func (s *Container) GetStatementStats(
 	key *roachpb.StatementStatisticsKey,
 ) (*roachpb.CollectedStatementStatistics, error) {
 	statementStats, _, stmtFingerprintID, _, _ := s.getStatsForStmt(
-		key.Query, key.ImplicitTxn, key.Database, key.Failed, false /* createIfNonexistent */)
+		key.Query, key.ImplicitTxn, key.Database, key.Failed, key.PlanHash, false /* createIfNonexistent */)
 
 	if statementStats == nil {
 		return nil, errors.Errorf("no stats found for the provided key")
@@ -377,7 +382,12 @@ func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
 // stat object is returned or not, we always return the correct stmtFingerprintID
 // for the given stmt.
 func (s *Container) getStatsForStmt(
-	anonymizedStmt string, implicitTxn bool, database string, failed bool, createIfNonexistent bool,
+	anonymizedStmt string,
+	implicitTxn bool,
+	database string,
+	failed bool,
+	planHash uint64,
+	createIfNonexistent bool,
 ) (
 	stats *stmtStats,
 	key stmtKey,
@@ -392,6 +402,7 @@ func (s *Container) getStatsForStmt(
 		failed:         failed,
 		implicitTxn:    implicitTxn,
 		database:       database,
+		planHash:       planHash,
 	}
 
 	// We first try and see if we can get by without creating a new entry for this
@@ -416,6 +427,17 @@ func (s *Container) getStatsForStmtWithKey(
 	// doesn't exist yet.
 	stats, ok := s.mu.stmts[key]
 	if !ok && createIfNonexistent {
+		sentinelKey := stmtKey{
+			anonymizedStmt: key.anonymizedStmt,
+			failed:         key.failed,
+			implicitTxn:    key.implicitTxn,
+			database:       key.database,
+			planHash:       sentinelPlanHashKey,
+		}
+		if _, sentinelExists := s.mu.stmts[sentinelKey]; !sentinelExists {
+			s.mu.stmts[sentinelKey] = &stmtStats{}
+		}
+
 		// We check if we have reached the limit of unique fingerprints we can
 		// store.
 		limit := s.uniqueStmtFingerprintLimit.Get(&s.st.SV)

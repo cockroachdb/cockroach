@@ -377,7 +377,7 @@ CREATE TABLE system.join_tokens (
 CREATE TABLE system.statement_statistics (
     aggregated_ts  TIMESTAMPTZ NOT NULL,
     fingerprint_id BYTES NOT NULL,
-    plan_hash      INT8 NOT NULL,
+    plan_hash      BYTES NOT NULL,
     app_name       STRING NOT NULL,
     node_id        INT8 NOT NULL,
 
@@ -1918,7 +1918,7 @@ var (
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
 			{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
-			{Name: "plan_hash", ID: 3, Type: types.Int, Nullable: false},
+			{Name: "plan_hash", ID: 3, Type: types.Bytes, Nullable: false},
 			{Name: "app_name", ID: 4, Type: types.String, Nullable: false},
 			{Name: "node_id", ID: 5, Type: types.Int, Nullable: false},
 			{Name: "agg_interval", ID: 6, Type: types.Interval, Nullable: false},

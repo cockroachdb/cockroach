@@ -139,6 +139,7 @@ func (ex *connExecutor) recordStatementSummary(
 		FullScan:    flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 		Failed:      stmtErr != nil,
 		Database:    planner.SessionData().Database,
+		PlanHash:    planner.instrumentation.planFingerprint.Hash(),
 	}
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{

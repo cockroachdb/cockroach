@@ -865,6 +865,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   flags               STRING NOT NULL,
   statement_id        STRING NOT NULL,
   key                 STRING NOT NULL,
+  plan_hash           INT NOT NULL,
   anonymized          STRING,
   count               INT NOT NULL,
   first_attempt_count INT NOT NULL,
@@ -953,10 +954,11 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.NewDString(flags),                                    // flags
 				tree.NewDString(strconv.FormatUint(uint64(stats.ID), 10)), // statement_id
 				tree.NewDString(stats.Key.Query),                          // key
-				anonymized,                                                // anonymized
-				tree.NewDInt(tree.DInt(stats.Stats.Count)),                // count
-				tree.NewDInt(tree.DInt(stats.Stats.FirstAttemptCount)),    // first_attempt_count
-				tree.NewDInt(tree.DInt(stats.Stats.MaxRetries)),           // max_retries
+				tree.NewDInt(tree.DInt(int64(stats.Key.PlanHash))),        // plan_hash
+				anonymized, // anonymized
+				tree.NewDInt(tree.DInt(stats.Stats.Count)),             // count
+				tree.NewDInt(tree.DInt(stats.Stats.FirstAttemptCount)), // first_attempt_count
+				tree.NewDInt(tree.DInt(stats.Stats.MaxRetries)),        // max_retries
 				errString, // last_error
 				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                               // rows_avg
 				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),     // rows_var

@@ -334,6 +334,7 @@ WHERE fingerprint_id = $2
 	}
 	statistics := tree.NewDJSON(statisticsJSON)
 
+	serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(stats.Key.PlanHash)
 	rowsAffected, err := s.cfg.InternalExecutor.ExecEx(
 		ctx,
 		"update-stmt-stats",
@@ -346,7 +347,7 @@ WHERE fingerprint_id = $2
 		serializedFingerprintID,              // fingerprint_id
 		aggregatedTs,                         // aggregated_ts
 		stats.Key.App,                        // app_name
-		dummyPlanHash,                        // plan_id
+		serializedPlanHash,                   // plan_id
 		s.cfg.SQLIDContainer.SQLInstanceID(), // node_id
 	)
 
@@ -356,7 +357,7 @@ WHERE fingerprint_id = $2
 
 	if rowsAffected == 0 {
 		return errors.AssertionFailedf("failed to update statement statistics fo  fingerprint_id: %s, app: %s, aggregated_ts: %s, plan_hash: %d, node_id: %d",
-			serializedFingerprintID, stats.Key.App, aggregatedTs, dummyPlanHash,
+			serializedFingerprintID, stats.Key.App, aggregatedTs, serializedPlanHash,
 			s.cfg.SQLIDContainer.SQLInstanceID())
 	}
 
@@ -401,9 +402,9 @@ DO NOTHING
 			User: security.NodeUserName(),
 		},
 		insertStmt,
-		aggregatedTs,                         // aggregated_ts
-		serializedFingerprintID,              // fingerprint_id
-		dummyPlanHash,                        // plan_hash
+		aggregatedTs,            // aggregated_ts
+		serializedFingerprintID, // fingerprint_id
+		sqlstatsutil.EncodeUint64ToBytes(stats.Key.PlanHash), // plan_hash
 		stats.Key.App,                        // app_name
 		s.cfg.SQLIDContainer.SQLInstanceID(), // node_id
 		aggInterval,                          // agg_internal
@@ -491,6 +492,8 @@ WHERE fingerprint_id = $1
     AND node_id = $5
 FOR UPDATE
 `
+
+	serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(key.PlanHash)
 	row, err := s.cfg.InternalExecutor.QueryRowEx(
 		ctx,
 		"fetch-stmt-stats",
@@ -502,7 +505,7 @@ FOR UPDATE
 		serializedFingerprintID,              // fingerprint_id
 		key.App,                              // app_name
 		aggregatedTs,                         // aggregated_ts
-		dummyPlanHash,                        // plan_hash
+		serializedPlanHash,                   // plan_hash
 		s.cfg.SQLIDContainer.SQLInstanceID(), // node_id
 	)
 
@@ -512,13 +515,13 @@ FOR UPDATE
 
 	if row == nil {
 		return errors.AssertionFailedf(
-			"statement statistics not found fingerprint_id: %s, app: %s, aggregated_ts: %s, plan_hash: %d, node_id: %d",
-			serializedFingerprintID, key.App, aggregatedTs, dummyPlanHash, s.cfg.SQLIDContainer.SQLInstanceID())
+			"statement statistics not found fingerprint_id: %s, app: %s, aggregated_ts: %s, plan_hash: %s, node_id: %d",
+			serializedFingerprintID, key.App, aggregatedTs, serializedPlanHash, s.cfg.SQLIDContainer.SQLInstanceID())
 	}
 
 	if len(row) != 1 {
-		return errors.AssertionFailedf("unexpectedly found %d returning columns for fingerprint_id: %s, app: %s, aggregated_ts: %s, plan_hash %d, node_id: %d",
-			len(row), serializedFingerprintID, key.App, aggregatedTs, dummyPlanHash,
+		return errors.AssertionFailedf("unexpectedly found %d returning columns for fingerprint_id: %s, app: %s, aggregated_ts: %s, plan_hash %s, node_id: %d",
+			len(row), serializedFingerprintID, key.App, aggregatedTs, serializedFingerprintID,
 			s.cfg.SQLIDContainer.SQLInstanceID())
 	}
 
