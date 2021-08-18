@@ -92,14 +92,12 @@ func (b *BoolSetting) WithPublic() *BoolSetting {
 	return b
 }
 
-// WithSystemOnly marks this setting as system-only and can be chained.
-func (b *BoolSetting) WithSystemOnly() *BoolSetting {
-	b.common.systemOnly = true
+// WithTenantConfigurable marks this setting as settable by
+// non-system tenants and can be chained.
+func (b *BoolSetting) WithTenantConfigurable() *BoolSetting {
+	b.common.tenantConfigurable = true
 	return b
 }
-
-// Defeat the linter.
-var _ = (*BoolSetting).WithSystemOnly
 
 // RegisterBoolSetting defines a new setting with type bool.
 func RegisterBoolSetting(key, desc string, defaultValue bool) *BoolSetting {

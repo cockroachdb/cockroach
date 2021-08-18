@@ -94,9 +94,14 @@ func (p *planner) SetClusterSetting(
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
-	if setting.SystemOnly() && !p.execCfg.Codec.ForSystemTenant() {
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"setting %s is only settable in the system tenant", name)
+	// Only "root" can modify certain CLUSTER SETTINGs on a guest tenant.
+	if !setting.TenantConfigurable() && !p.execCfg.Codec.ForSystemTenant() &&
+		!p.SessionData().User().IsRootUser() {
+		return nil, pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"setting CLUSTER SETTING %s is disabled",
+			name,
+		)
 	}
 
 	var value tree.TypedExpr

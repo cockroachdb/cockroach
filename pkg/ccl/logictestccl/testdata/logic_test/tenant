@@ -44,3 +44,13 @@ SELECT * FROM crdb_internal.cluster_queries
 
 statement ok
 SELECT * FROM crdb_internal.cluster_contention_events
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement error pgcode 42501 setting CLUSTER SETTING cluster.organization is disabled
+SET CLUSTER SETTING cluster.organization = 'bobby'
+
+user root

@@ -39,11 +39,15 @@ func (b *ByteSizeSetting) WithPublic() *ByteSizeSetting {
 	return b
 }
 
-// WithSystemOnly marks this setting as system-only and can be chained.
-func (b *ByteSizeSetting) WithSystemOnly() *ByteSizeSetting {
-	b.common.systemOnly = true
+// WithTenantConfigurable marks this setting as settable by
+// non-system tenants and can be chained.
+func (b *ByteSizeSetting) WithTenantConfigurable() *ByteSizeSetting {
+	b.common.tenantConfigurable = true
 	return b
 }
+
+// Fool the unused linter.
+var _ = (*ByteSizeSetting).WithTenantConfigurable
 
 // RegisterByteSizeSetting defines a new setting with type bytesize and any
 // supplied validation function(s).

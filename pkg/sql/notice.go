@@ -25,7 +25,7 @@ var NoticesEnabled = settings.RegisterBoolSetting(
 	"sql.notices.enabled",
 	"enable notices in the server/client protocol being sent",
 	true,
-).WithPublic()
+).WithPublic().WithTenantConfigurable()
 
 // noticeSender is a subset of RestrictedCommandResult which allows
 // sending notices.

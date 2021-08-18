@@ -101,6 +101,13 @@ func (s *StringSetting) WithPublic() *StringSetting {
 	return s
 }
 
+// WithTenantConfigurable marks this setting as settable by
+// non-system tenants and can be chained.
+func (s *StringSetting) WithTenantConfigurable() *StringSetting {
+	s.common.tenantConfigurable = true
+	return s
+}
+
 // RegisterStringSetting defines a new setting with type string.
 func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting {
 	return RegisterValidatedStringSetting(key, desc, defaultValue, nil)

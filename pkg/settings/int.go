@@ -135,14 +135,12 @@ func (i *IntSetting) WithPublic() *IntSetting {
 	return i
 }
 
-// WithSystemOnly system-only usage and can be chained.
-func (i *IntSetting) WithSystemOnly() *IntSetting {
-	i.common.systemOnly = true
+// WithTenantConfigurable marks this setting as settable by
+// non-system tenants and can be chained.
+func (i *IntSetting) WithTenantConfigurable() *IntSetting {
+	i.common.tenantConfigurable = true
 	return i
 }
-
-// Defeat the linter.
-var _ = (*IntSetting).WithSystemOnly
 
 // PositiveInt can be passed to RegisterIntSetting
 func PositiveInt(v int64) error {
