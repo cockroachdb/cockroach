@@ -269,7 +269,7 @@ func evaluateBatch(
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
-			ctx, idKey, index, readWriter, rec, ms, baHeader, args, reply, lul)
+			ctx, readWriter, rec, ms, baHeader, args, reply, lul)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
@@ -481,8 +481,6 @@ func evaluateBatch(
 // remaining for this batch (MaxInt64 for no limit).
 func evaluateCommand(
 	ctx context.Context,
-	raftCmdID kvserverbase.CmdIDKey,
-	index int,
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,

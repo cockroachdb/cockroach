@@ -102,13 +102,33 @@ clause will not be re-evaluated. Applying the ON UPDATE to all rows is likely
 unexpected behavior, particularly when the ON UPDATE captures something unique
 about each row (region, last modified timestamp, etc.).
 
+### Same-column foreign key constraints
+
+If a foreign key column has both an ON UPDATE expression and a foreign key ON
+UPDATE reference action, it's unclear whether the ON UPDATE should apply after
+the reference action since its use would wipe any changes from the reference
+action. Because of this, we restrict ON UPDATE to be used only on columns which
+do not have a foreign key with an ON UPDATE action.
+
 ### Syntax
 
 Since this addition is a qualification on a column, it can be specified at
 create time with the following syntax:
 
 ```
-<column_name> <column_type> <other_qualifications> ON UPDATE SET <update_expr>
+<column_name> <column_type> <other_qualifications> ON UPDATE <update_expr>
+```
+
+Note: In earlier versions of this RFC, the syntax `ON UPDATE SET` was used. Upon
+further review, it was realized that it is impossible to disambiguate an ON
+UPDATE SET expression from an `ON UPDATE SET [NULL | DEFAULT]` on a foreign key
+constraint. For example, the following statement would have been ambiguous:
+
+```sql
+CREATE TABLE example(
+    p INT,
+    j INT REFERENCES other(j) ON UPDATE SET NULL
+)
 ```
 
 The ON UPDATE expression must be standalone i.e., it cannot reference other
@@ -125,7 +145,7 @@ value of 50 ON UPDATE would look like:
 CREATE TABLE inventories (
   product_id        INT,
   warehouse_id      INT,
-  quantity_on_hand  INT ON UPDATE SET 50,
+  quantity_on_hand  INT ON UPDATE 50,
   PRIMARY KEY (product_id, warehouse_id)
 );
 ```
@@ -134,7 +154,7 @@ This syntax also applies to `ALTER TABLE ALTER COLUMN`:
 
 ```sql
 -- Modifying an existing ON UPDATE expression or adding a new one
-ALTER TABLE <table_name> ALTER COLUMN <column_name> ON UPDATE SET <update_expr>
+ALTER TABLE <table_name> ALTER COLUMN <column_name> SET ON UPDATE <update_expr>
 -- Dropping an ON UPDATE expression
 ALTER TABLE <table_name> ALTER COLUMN <column_name> DROP ON UPDATE
 ```
@@ -143,7 +163,7 @@ Concretely with our inventories example, we have:
 
 ```sql
 -- Modifying the existing ON UPDATE expression to 50
-ALTER TABLE inventories ALTER COLUMN quantity_on_hand ON UPDATE SET 50
+ALTER TABLE inventories ALTER COLUMN quantity_on_hand SET ON UPDATE 50
 -- Dropping an ON UPDATE expression
 ALTER TABLE inventories ALTER COLUMN quantity_on_hand DROP ON UPDATE
 ```
@@ -163,7 +183,7 @@ SELECT quantity_on_hand FROM inventories;
 UPDATE inventories SET product_id = 2 WHERE warehouse_id = 1;
 SELECT quantity_on_hand FROM inventories;
 > 1
-ALTER TABLE inventories ALTER COLUMN quantity_on_hand ON UPDATE SET 50;
+ALTER TABLE inventories ALTER COLUMN quantity_on_hand SET ON UPDATE 50;
 UPDATE inventories SET product_id = 3 WHERE warehouse_id = 1;
 SELECT quantity_on_hand FROM inventories;
 > 50
@@ -205,7 +225,7 @@ CREATE TABLE test (
   p int,
   region crdb_internal_region
     DEFAULT default_to_database_primary_region(gateway_region())
-    ON UPDATE SET default_to_database_primary_region(gateway_region())
+    SET ON UPDATE default_to_database_primary_region(gateway_region())
 )
   LOCALITY REGIONAL BY ROW AS region;
 ```
@@ -274,7 +294,7 @@ accepts arbitrary expressions while the only MySQL usage of `ON UPDATE` is `ON
 UPDATE CURRENT_TIMESTAMP`. This proposal proposes a more general feature so that
 more workloads can be enabled. Because of the [special syntax
 form](https://dev.mysql.com/doc/refman/8.0/en/timestamp-initialization.html) for
-`current_timestamp()`, `ON UPDATE SET CURRENT_TIMESTAMP` is valid usage under
+`current_timestamp()`, `ON UPDATE CURRENT_TIMESTAMP` is valid usage under
 this proposal.
 
 This proposal is also distinct from the MySQL implementation in its interaction

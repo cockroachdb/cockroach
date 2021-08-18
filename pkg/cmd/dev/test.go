@@ -102,7 +102,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
 	if race {
-		args = append(args, "--@io_bazel_rules_go//go/config:race")
+		args = append(args, "--config=race")
 	}
 
 	for _, pkg := range pkgs {
