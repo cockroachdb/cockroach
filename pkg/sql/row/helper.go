@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -59,6 +61,28 @@ var maxRowSizeLog = settings.RegisterByteSizeSetting(
 	},
 ).WithPublic()
 
+var maxRowSizeErr = settings.RegisterByteSizeSetting(
+	"sql.mutations.max_row_size.err",
+	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
+		"write to the database, above which an error is returned",
+	// Out of an abundance of caution, default to the highest allowable size.
+	maxRowSizeCeil,
+	func(size int64) error {
+		if size < maxRowSizeFloor {
+			return fmt.Errorf(
+				"cannot set sql.mutations.max_row_size.err to %v, must be >= %v",
+				size, maxRowSizeFloor,
+			)
+		} else if size > maxRowSizeCeil {
+			return fmt.Errorf(
+				"cannot set sql.mutations.max_row_size.err to %v, must be <= %v",
+				size, maxRowSizeCeil,
+			)
+		}
+		return nil
+	},
+).WithPublic()
+
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
 	Codec keys.SQLCodec
@@ -79,8 +103,8 @@ type rowHelper struct {
 	sortedColumnFamilies  map[descpb.FamilyID][]descpb.ColumnID
 
 	// Used to check row size.
-	maxRowSizeLog uint32
-	internal      bool
+	maxRowSizeLog, maxRowSizeErr uint32
+	internal                     bool
 }
 
 func newRowHelper(
@@ -102,6 +126,7 @@ func newRowHelper(
 	}
 
 	rh.maxRowSizeLog = uint32(maxRowSizeLog.Get(sv))
+	rh.maxRowSizeErr = uint32(maxRowSizeErr.Get(sv))
 
 	return rh
 }
@@ -222,20 +247,29 @@ func (rh *rowHelper) checkRowSize(
 	ctx context.Context, key *roachpb.Key, value *roachpb.Value, family descpb.FamilyID,
 ) error {
 	size := uint32(len(*key)) + uint32(len(value.RawBytes))
-	if rh.maxRowSizeLog != 0 && size > rh.maxRowSizeLog {
+	shouldLog := rh.maxRowSizeLog != 0 && size > rh.maxRowSizeLog
+	shouldErr := rh.maxRowSizeErr != 0 && size > rh.maxRowSizeErr
+	if shouldLog || shouldErr {
 		details := eventpb.CommonLargeRowDetails{
-			RowSize:    size,
-			TableID:    uint32(rh.TableDesc.GetID()),
-			FamilyID:   uint32(family),
-			PrimaryKey: keys.PrettyPrint(rh.primIndexValDirs, *key),
+			RowSize:               size,
+			TableID:               uint32(rh.TableDesc.GetID()),
+			FamilyID:              uint32(family),
+			PrimaryKey:            keys.PrettyPrint(rh.primIndexValDirs, *key),
+			ViolatesMaxRowSizeErr: shouldErr,
 		}
-		var event eventpb.EventPayload
-		if rh.internal {
-			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
-		} else {
-			event = &eventpb.LargeRow{CommonLargeRowDetails: details}
+		// Internal work should never err and always log if violating either limit.
+		if shouldLog || (shouldErr && rh.internal) {
+			var event eventpb.EventPayload
+			if rh.internal {
+				event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
+			} else {
+				event = &eventpb.LargeRow{CommonLargeRowDetails: details}
+			}
+			log.StructuredEvent(ctx, event)
 		}
-		log.StructuredEvent(ctx, event)
+		if shouldErr && !rh.internal {
+			return pgerror.WithCandidateCode(&details, pgcode.ProgramLimitExceeded)
+		}
 	}
 	return nil
 }
