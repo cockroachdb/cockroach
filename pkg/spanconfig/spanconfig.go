@@ -46,3 +46,25 @@ type ReconciliationDependencies interface {
 	// reconciliation job will react to these updates by installing them into KV
 	// through the KVAccessor.
 }
+
+// Store is a data structure used to store span configs.
+type Store interface {
+	StoreReader
+
+	// TODO(irfansharif): We'll want to add a StoreWriter interface here once we
+	// implement a data structure to store span configs. We expect this data
+	// structure to be used in KV to eventually replace the use of the
+	// gossip-backed system config span.
+}
+
+// Silence the unused linter.
+var _ Store = nil
+
+// StoreReader is the read-only portion of the Store interface. It's an adaptor
+// interface implemented by config.SystemConfig to let us later swap out the
+// source with one backed by a view of `system.span_configurations`.
+type StoreReader interface {
+	NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool
+	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey
+	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
+}
