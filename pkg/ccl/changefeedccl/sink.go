@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -89,7 +90,7 @@ func getSink(
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts)
 		case isWebhookSink(u):
-			return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts, defaultWorkerCount(), defaultRetryConfig())
+			return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts, defaultWorkerCount(), timeutil.DefaultTimeSource{})
 		case isCloudStorageSink(u):
 			return makeCloudStorageSink(
 				ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,

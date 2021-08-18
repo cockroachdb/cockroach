@@ -2780,7 +2780,7 @@ func TestChangefeedErrors(t *testing.T) {
 		`kafka://nope`, `https://schemareg-nope/?ca_cert=Zm9v`,
 	)
 
-	// Sanity check http sink options.
+	// Sanity check webhook sink options.
 	sqlDB.ExpectErr(
 		t, `unsupported sink: https. HTTP endpoints can be used with webhook-https and experimental-https`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `https://fake-host`,
@@ -2830,6 +2830,31 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `this sink is incompatible with envelope=row`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='row'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `invalid option value webhook_sink_config, all config values must be non-negative`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Messages": -100, "Frequency": "1s"}}'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `invalid option value webhook_sink_config, all config values must be non-negative`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Messages": 100, "Frequency": "-1s"}}'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `invalid option value webhook_sink_config, flush frequency is not set, messages may never be sent`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Messages": 100}}'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `error unmarshalling json: time: invalid duration "Zm9v"`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Frequency": "Zm9v"}}'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `error unmarshalling json: invalid character`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='not json'`,
 		`webhook-https://fake-host`,
 	)
 

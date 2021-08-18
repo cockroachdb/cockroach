@@ -1352,14 +1352,19 @@ func extractTopicFromJSONValue(wrapped []byte) (topic string, value []byte, _ er
 	return topic, value, nil
 }
 
+type webhookSinkTestfeedPayload struct {
+	Payload []interface{} `json:"payload"`
+	Length  int           `json:"length"`
+}
+
 // extractValueFromJSONMessage extracts the value of the first element of
 // the payload array from an webhook sink JSON message.
 func extractValueFromJSONMessage(message []byte) ([]byte, error) {
-	parsed := make(map[string][]interface{})
+	var parsed webhookSinkTestfeedPayload
 	if err := gojson.Unmarshal(message, &parsed); err != nil {
 		return nil, err
 	}
-	keyParsed := parsed[`payload`]
+	keyParsed := parsed.Payload
 	if len(keyParsed) <= 0 {
 		return nil, fmt.Errorf("payload value in json message contains no elements")
 	}
@@ -1392,7 +1397,7 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 					if err != nil {
 						return nil, err
 					}
-					if m.Key, m.Value, err = extractKeyFromJSONValue([]byte(wrappedValue)); err != nil {
+					if m.Key, m.Value, err = extractKeyFromJSONValue(wrappedValue); err != nil {
 						return nil, err
 					}
 					if m.Topic, m.Value, err = extractTopicFromJSONValue(m.Value); err != nil {
