@@ -1068,7 +1068,12 @@ func (*SetVar) StatementReturnType() StatementReturnType { return Ack }
 func (*SetVar) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*SetVar) StatementTag() string { return "SET" }
+func (n *SetVar) StatementTag() string {
+	if n.Reset || n.ResetAll {
+		return "RESET"
+	}
+	return "SET"
+}
 
 // StatementReturnType implements the Statement interface.
 func (*SetClusterSetting) StatementReturnType() StatementReturnType { return Ack }

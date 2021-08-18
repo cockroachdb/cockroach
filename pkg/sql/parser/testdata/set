@@ -471,10 +471,10 @@ SET client_encoding = DEFAULT -- identifiers removed
 parse
 RESET a
 ----
-SET a = DEFAULT -- normalized!
-SET a = (DEFAULT) -- fully parenthesized
-SET a = DEFAULT -- literals removed
-SET a = DEFAULT -- identifiers removed
+RESET a
+RESET a -- fully parenthesized
+RESET a -- literals removed
+RESET a -- identifiers removed
 
 parse
 RESET CLUSTER SETTING a
@@ -487,7 +487,7 @@ SET CLUSTER SETTING a = DEFAULT -- identifiers removed
 parse
 RESET NAMES
 ----
-SET client_encoding = DEFAULT -- normalized!
-SET client_encoding = (DEFAULT) -- fully parenthesized
-SET client_encoding = DEFAULT -- literals removed
-SET client_encoding = DEFAULT -- identifiers removed
+RESET client_encoding -- normalized!
+RESET client_encoding -- fully parenthesized
+RESET client_encoding -- literals removed
+RESET client_encoding -- identifiers removed

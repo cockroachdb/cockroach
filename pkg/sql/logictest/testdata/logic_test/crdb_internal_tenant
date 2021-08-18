@@ -486,10 +486,10 @@ ORDER BY key, f
 ----
 CREATE SEQUENCE s                                                     0  false
 DROP SEQUENCE s                                                       0  false
+RESET application_name                                                0  false
 SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)            2  false
 SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)            1  true
 SELECT IF(nextval(_) < _, crdb_internal.force_retry(_::INTERVAL), _)  0  true
-SET application_name = DEFAULT                                        0  false
 
 query T
 SELECT crdb_internal.cluster_name()
