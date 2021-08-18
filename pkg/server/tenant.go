@@ -131,7 +131,7 @@ func StartTenant(
 	}
 	pgLAddr := pgL.Addr().String()
 	httpLAddr := httpL.Addr().String()
-	args.addr = pgLAddr
+	args.advertiseAddr = baseCfg.AdvertiseAddr
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
 		return nil, "", "", err
