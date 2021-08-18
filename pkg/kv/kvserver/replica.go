@@ -1291,9 +1291,7 @@ func (r *Replica) checkExecutionCanProceed(
 		st, shouldExtend, err = r.leaseGoodToGoRLocked(ctx, now, ba.WriteTimestamp())
 		if err != nil {
 			// If not, can we serve this request on a follower?
-			// TODO(nvanbenschoten): once we make this check cheaper
-			// than leaseGoodToGoRLocked, invert these checks.
-			if !r.canServeFollowerReadRLocked(ctx, ba, err) {
+			if !r.canServeFollowerReadRLocked(ctx, ba) {
 				return st, err
 			}
 			err = nil                     // ignore error

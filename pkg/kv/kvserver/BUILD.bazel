@@ -249,6 +249,7 @@ go_test(
         "replica_command_test.go",
         "replica_consistency_test.go",
         "replica_evaluate_test.go",
+        "replica_follower_read_test.go",
         "replica_gc_queue_test.go",
         "replica_init_test.go",
         "replica_learner_test.go",
