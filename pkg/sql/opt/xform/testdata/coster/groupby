@@ -2,6 +2,10 @@ exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
 ----
 
+exec-ddl
+CREATE TABLE b (k INT PRIMARY KEY, a INT, b INT, c INT, INDEX (a, b))
+----
+
 opt
 SELECT max(k), min(k), i, s FROM a GROUP BY i, s
 ----
@@ -23,3 +27,100 @@ group-by
       │    └── k:1
       └── min [as=min:8, outer=(1)]
            └── k:1
+
+opt
+SELECT a, count(*) FROM b GROUP BY a
+----
+group-by
+ ├── columns: a:2 count:7!null
+ ├── grouping columns: a:2
+ ├── internal-ordering: +2
+ ├── stats: [rows=100, distinct(2)=100, null(2)=1]
+ ├── cost: 1085.43
+ ├── key: (2)
+ ├── fd: (2)-->(7)
+ ├── scan b@secondary
+ │    ├── columns: a:2
+ │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
+ │    ├── cost: 1064.41
+ │    └── ordering: +2
+ └── aggregations
+      └── count-rows [as=count_rows:7]
+
+opt
+SELECT a, b, count(*) FROM b GROUP BY a, b
+----
+group-by
+ ├── columns: a:2 b:3 count:7!null
+ ├── grouping columns: a:2 b:3
+ ├── internal-ordering: +2,+3
+ ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
+ ├── cost: 1114.53
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(7)
+ ├── scan b@secondary
+ │    ├── columns: a:2 b:3
+ │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
+ │    ├── cost: 1074.51
+ │    └── ordering: +2,+3
+ └── aggregations
+      └── count-rows [as=count_rows:7]
+
+# Consider a limit hint when costing streaming GroupBy expressions.
+opt
+SELECT a, count(*) FROM b GROUP BY a LIMIT 10
+----
+limit
+ ├── columns: a:2 count:7!null
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 121.14
+ ├── key: (2)
+ ├── fd: (2)-->(7)
+ ├── group-by
+ │    ├── columns: a:2 count_rows:7!null
+ │    ├── grouping columns: a:2
+ │    ├── internal-ordering: +2
+ │    ├── stats: [rows=100, distinct(2)=100, null(2)=1]
+ │    ├── cost: 121.03
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(7)
+ │    ├── limit hint: 10.00
+ │    ├── scan b@secondary
+ │    │    ├── columns: a:2
+ │    │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
+ │    │    ├── cost: 118.01
+ │    │    ├── ordering: +2
+ │    │    └── limit hint: 100.00
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:7]
+ └── 10
+
+opt
+SELECT a, b, count(*) FROM b GROUP BY a, b LIMIT 10
+----
+limit
+ ├── columns: a:2 b:3 count:7!null
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 34.94
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(7)
+ ├── group-by
+ │    ├── columns: a:2 b:3 count_rows:7!null
+ │    ├── grouping columns: a:2 b:3
+ │    ├── internal-ordering: +2,+3
+ │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
+ │    ├── cost: 34.83
+ │    ├── key: (2,3)
+ │    ├── fd: (2,3)-->(7)
+ │    ├── limit hint: 10.00
+ │    ├── scan b@secondary
+ │    │    ├── columns: a:2 b:3
+ │    │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
+ │    │    ├── cost: 24.51
+ │    │    ├── ordering: +2,+3
+ │    │    └── limit hint: 10.00
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:7]
+ └── 10
