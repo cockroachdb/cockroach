@@ -195,6 +195,11 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		ord := mb.tabID.ColumnOrdinal(targetColID)
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), sourceCol.typ)
 
+		for _, expr := range exprs {
+			// Compatability check the input expression against the corresponding table column.
+			checkUpdateExpression(mb.tab.Column(ord), expr)
+		}
+
 		// Add source column ID to the list of columns to update.
 		mb.updateColIDs[ord] = sourceCol.id
 	}
