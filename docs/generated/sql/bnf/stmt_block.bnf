@@ -545,7 +545,9 @@ on_conflict ::=
 
 pause_jobs_stmt ::=
 	'PAUSE' 'JOB' a_expr
+	| 'PAUSE' 'JOB' a_expr 'WITH' 'REASON' '=' string_or_placeholder
 	| 'PAUSE' 'JOBS' select_stmt
+	| 'PAUSE' 'JOBS' select_stmt 'WITH' 'REASON' '=' string_or_placeholder
 	| 'PAUSE' 'JOBS' for_schedules_clause
 
 pause_schedules_stmt ::=
@@ -1037,6 +1039,7 @@ unreserved_keyword ::=
 	| 'RANGE'
 	| 'RANGES'
 	| 'READ'
+	| 'REASON'
 	| 'REASSIGN'
 	| 'RECURRING'
 	| 'RECURSIVE'

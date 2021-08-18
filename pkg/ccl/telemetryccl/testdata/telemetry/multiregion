@@ -21,6 +21,34 @@ sql.multiregion.create_database
 sql.multiregion.create_database.survival_goal.survive_default
 
 feature-usage
+CREATE DATABASE create_placement PRIMARY REGION "us-east-1" PLACEMENT RESTRICTED
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.placement.restricted
+sql.multiregion.create_database.survival_goal.survive_default
+
+feature-usage
+CREATE DATABASE create_placement_default PRIMARY REGION "us-east-1" PLACEMENT DEFAULT
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.placement.default
+sql.multiregion.create_database.survival_goal.survive_default
+
+exec
+CREATE DATABASE to_be_restricted PRIMARY REGION "us-east-1"
+----
+
+feature-usage
+ALTER DATABASE to_be_restricted SET PLACEMENT RESTRICTED
+----
+sql.multiregion.alter_database.placement.restricted
+
+feature-usage
+ALTER DATABASE to_be_restricted SET PLACEMENT DEFAULT
+----
+sql.multiregion.alter_database.placement.default
+
+feature-usage
 ALTER DATABASE d DROP REGION "ca-central-1"
 ----
 sql.multiregion.drop_region

@@ -1291,57 +1291,6 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 	}
 }
 
-func TestChangefeedInterleaved(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`)
-		sqlDB.Exec(t, `CREATE TABLE grandparent (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO grandparent VALUES (0, 'grandparent-0')`)
-		grandparent := feed(t, f, `CREATE CHANGEFEED FOR grandparent`)
-		defer closeFeed(t, grandparent)
-		assertPayloads(t, grandparent, []string{
-			`grandparent: [0]->{"after": {"a": 0, "b": "grandparent-0"}}`,
-		})
-
-		sqlDB.Exec(t,
-			`CREATE TABLE parent (a INT PRIMARY KEY, b STRING) `+
-				`INTERLEAVE IN PARENT grandparent (a)`)
-		sqlDB.Exec(t, `INSERT INTO grandparent VALUES (1, 'grandparent-1')`)
-		sqlDB.Exec(t, `INSERT INTO parent VALUES (1, 'parent-1')`)
-		parent := feed(t, f, `CREATE CHANGEFEED FOR parent`)
-		defer closeFeed(t, parent)
-		assertPayloads(t, grandparent, []string{
-			`grandparent: [1]->{"after": {"a": 1, "b": "grandparent-1"}}`,
-		})
-		assertPayloads(t, parent, []string{
-			`parent: [1]->{"after": {"a": 1, "b": "parent-1"}}`,
-		})
-
-		sqlDB.Exec(t,
-			`CREATE TABLE child (a INT PRIMARY KEY, b STRING) INTERLEAVE IN PARENT parent (a)`)
-		sqlDB.Exec(t, `INSERT INTO grandparent VALUES (2, 'grandparent-2')`)
-		sqlDB.Exec(t, `INSERT INTO parent VALUES (2, 'parent-2')`)
-		sqlDB.Exec(t, `INSERT INTO child VALUES (2, 'child-2')`)
-		child := feed(t, f, `CREATE CHANGEFEED FOR child`)
-		defer closeFeed(t, child)
-		assertPayloads(t, grandparent, []string{
-			`grandparent: [2]->{"after": {"a": 2, "b": "grandparent-2"}}`,
-		})
-		assertPayloads(t, parent, []string{
-			`parent: [2]->{"after": {"a": 2, "b": "parent-2"}}`,
-		})
-		assertPayloads(t, child, []string{
-			`child: [2]->{"after": {"a": 2, "b": "child-2"}}`,
-		})
-	}
-
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
-}
-
 func TestChangefeedColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

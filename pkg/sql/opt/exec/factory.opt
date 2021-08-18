@@ -691,6 +691,7 @@ define RecursiveCTE {
 define ControlJobs {
     Command tree.JobCommand
     input exec.Node
+    Reason tree.TypedExpr
 }
 
 # ControlSchedules implements PAUSE/CANCEL/DROP SCHEDULES.

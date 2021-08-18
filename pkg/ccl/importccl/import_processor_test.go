@@ -713,7 +713,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	js := queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.ResumePos[0] > 0 })
 
 	// Pause the job;
-	if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
+	if err := registry.PauseRequested(ctx, nil, jobID, ""); err != nil {
 		t.Fatal(err)
 	}
 	// Send cancellation and unblock breakpoint.
@@ -814,7 +814,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	proceedImport := controllerBarrier.Enter()
 
 	// Pause the job;
-	if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
+	if err := registry.PauseRequested(ctx, nil, jobID, ""); err != nil {
 		t.Fatal(err)
 	}
 

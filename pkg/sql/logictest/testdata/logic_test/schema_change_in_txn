@@ -625,10 +625,7 @@ a b
 statement ok
 COMMIT
 
-subtest interleaved_in_same_txn
-
-statement ok
-BEGIN
+subtest truncate_and_insert
 
 statement ok
 CREATE TABLE customers (k CHAR PRIMARY KEY)
@@ -637,24 +634,10 @@ statement ok
 INSERT INTO customers (k) VALUES ('b')
 
 statement ok
-CREATE TABLE orders (k CHAR PRIMARY KEY, v CHAR) INTERLEAVE IN PARENT customers (k)
+CREATE TABLE orders (k CHAR PRIMARY KEY, v CHAR)
 
 statement ok
 INSERT INTO orders (k,v) VALUES ('a', 'b')
-
-# Add a column to test a column backfill over an interleaved child.
-statement ok
-ALTER TABLE orders ADD COLUMN d INT DEFAULT 23
-
-query TTI
-SELECT * FROM orders
-----
-a b 23
-
-statement ok
-COMMIT
-
-subtest truncate_and_insert
 
 statement ok
 BEGIN

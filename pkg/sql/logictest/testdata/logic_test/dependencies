@@ -9,9 +9,9 @@ CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE TABLE test_kvr1(k INT PRIMARY KEY REFERENCES test_kv(k));
   CREATE TABLE test_kvr2(k INT, v INT UNIQUE REFERENCES test_kv(k));
   CREATE TABLE test_kvr3(k INT, v INT UNIQUE REFERENCES test_kv(v));
-  CREATE TABLE test_kvi1(k INT PRIMARY KEY) INTERLEAVE IN PARENT test_kv(k);
+  CREATE TABLE test_kvi1(k INT PRIMARY KEY);
   CREATE TABLE test_kvi2(k INT PRIMARY KEY, v INT);
-  CREATE UNIQUE INDEX test_kvi2_idx ON test_kvi2(v) INTERLEAVE IN PARENT test_kv(v);
+  CREATE UNIQUE INDEX test_kvi2_idx ON test_kvi2(v);
   CREATE VIEW test_v1 AS SELECT v FROM test_kv;
   CREATE VIEW test_v2 AS SELECT v FROM test_v1;
   CREATE TABLE test_uwi_parent(a INT UNIQUE WITHOUT INDEX);
@@ -97,8 +97,6 @@ descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_typ
 54             test_kvr1        NULL      NULL       53            fk              1                   fk_k_ref_test_kv          NULL
 55             test_kvr2        NULL      NULL       53            fk              1                   fk_v_ref_test_kv          NULL
 56             test_kvr3        NULL      NULL       53            fk              2                   fk_v_ref_test_kv          NULL
-57             test_kvi1        1         NULL       53            interleave      1                   NULL                      SharedPrefixLen: 1
-58             test_kvi2        2         NULL       53            interleave      1                   NULL                      SharedPrefixLen: 1
 59             test_v1          NULL      NULL       53            view            NULL                NULL                      NULL
 60             test_v2          NULL      NULL       59            view            NULL                NULL                      NULL
 62             test_uwi_child   NULL      NULL       61            fk              0                   fk_a_ref_test_uwi_parent  NULL
@@ -111,8 +109,6 @@ descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  de
 53             test_kv          NULL      55               fk                 NULL                   NULL               NULL
 53             test_kv          NULL      56               fk                 NULL                   NULL               NULL
 53             test_kv          NULL      59               view               0                      NULL               Columns: [2]
-53             test_kv          1         57               interleave         1                      NULL               SharedPrefixLen: 0
-53             test_kv          1         58               interleave         2                      NULL               SharedPrefixLen: 0
 59             test_v1          NULL      60               view               0                      NULL               Columns: [1]
 61             test_uwi_parent  NULL      62               fk                 NULL                   NULL               NULL
 

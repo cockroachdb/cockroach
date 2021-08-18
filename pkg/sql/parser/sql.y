@@ -818,7 +818,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> QUERIES QUERY
 
-%token <str> RANGE RANGES READ REAL REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
+%token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
 %token <str> RELEASE RESET RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
@@ -6060,10 +6060,24 @@ pause_jobs_stmt:
       Command: tree.PauseJob,
     }
   }
+| PAUSE JOB a_expr WITH REASON '=' string_or_placeholder
+  {
+    $$.val = &tree.ControlJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+      },
+      Command: tree.PauseJob,
+      Reason: $7.expr(),
+    }
+  }
 | PAUSE JOB error // SHOW HELP: PAUSE JOBS
 | PAUSE JOBS select_stmt
   {
     $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.PauseJob}
+  }
+| PAUSE JOBS select_stmt WITH REASON '=' string_or_placeholder
+  {
+    $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.PauseJob, Reason: $7.expr()}
   }
 | PAUSE JOBS for_schedules_clause
   {
@@ -13195,6 +13209,7 @@ unreserved_keyword:
 | RANGE
 | RANGES
 | READ
+| REASON
 | REASSIGN
 | RECURRING
 | RECURSIVE

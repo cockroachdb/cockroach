@@ -460,26 +460,7 @@ statement ok
 CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
 
 statement ok
-CREATE TABLE p1_0 (
-  i INT,
-  s1 STRING,
-  s2 STRING,
-  d DECIMAL,
-  PRIMARY KEY (i, s1),
-  FAMILY (i, s1, s2),
-  FAMILY (d)
-) INTERLEAVE IN PARENT p2 (i)
-
-statement ok
 SET experimental_use_new_schema_changer = 'unsafe_always'
-
-# No fallback code path
-statement error \*tree.DropTable not implemented in the new schema changer: drop on interleaved table
-DROP TABLE p2
-
-# Fall back code path works
-statement error \*tree.DropTable not implemented in the new schema changer: drop on interleaved table
-DROP TABLE p1_0
 
 statement ok
 SET experimental_use_new_schema_changer = 'on'

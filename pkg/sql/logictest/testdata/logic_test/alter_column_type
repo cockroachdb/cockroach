@@ -333,35 +333,6 @@ CREATE TABLE uniq (x INT, y INT, UNIQUE WITHOUT INDEX (x, y))
 statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
 ALTER TABLE uniq ALTER COLUMN x TYPE STRING
 
-# Ensure ALTER COLUMN TYPE works correctly for interleaved tables.
-statement ok
-CREATE TABLE t13 (x INT PRIMARY KEY, y INT);
-INSERT INTO t13 VALUES (1, 1), (2, 2);
-CREATE TABLE t14 (x INT, y INT, z STRING, PRIMARY KEY(y, x)) INTERLEAVE IN PARENT t13 (y);
-INSERT INTO t14 VALUES (1, 1, '1'), (2, 2, '2')
-
-# Ensure we can change the column type of an interleaved child if the
-# column is not part of the primary key.
-statement ok
-ALTER TABLE t14 ALTER COLUMN z TYPE INT
-
-query III
-SELECT x, y, z FROM t14 ORDER BY x
-----
-1  1  1
-2  2  2
-
-# Ensure we can change the column type of an interleaved parent if the
-# column is not part of the primary key.
-statement ok
-ALTER TABLE t13 ALTER COLUMN y TYPE STRING
-
-query IT
-SELECT x, y FROM t13 ORDER BY x
-----
-1  1
-2  2
-
 # Ensure we can change the column type of a column stored in a secondary index.
 statement ok
 CREATE TABLE t15 (x INT, y INT);

@@ -100,6 +100,13 @@ func (p *planner) createDatabase(
 				database.SurvivalGoal.TelemetryName(),
 			),
 		)
+		if database.Placement != tree.DataPlacementUnspecified {
+			telemetry.Inc(
+				sqltelemetry.CreateDatabasePlacementCounter(
+					database.Placement.TelemetryName(),
+				),
+			)
+		}
 	}
 
 	regionConfig, err := p.maybeInitializeMultiRegionMetadata(

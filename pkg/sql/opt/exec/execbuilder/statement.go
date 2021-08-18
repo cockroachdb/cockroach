@@ -222,9 +222,17 @@ func (b *Builder) buildControlJobs(ctl *memo.ControlJobsExpr) (execPlan, error) 
 	if err != nil {
 		return execPlan{}, err
 	}
+
+	scalarCtx := buildScalarCtx{}
+	reason, err := b.buildScalar(&scalarCtx, ctl.Reason)
+	if err != nil {
+		return execPlan{}, err
+	}
+
 	node, err := b.factory.ConstructControlJobs(
 		ctl.Command,
 		input.root,
+		reason,
 	)
 	if err != nil {
 		return execPlan{}, err

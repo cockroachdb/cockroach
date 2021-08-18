@@ -4237,65 +4237,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	}
 }
 
-func TestTruncateInterleavedTables(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	defer gcjob.SetSmallMaxGCIntervalForTest()()
-
-	params, _ := tests.CreateTestServerParams()
-	// Decrease the adopt loop interval so that retries happen quickly.
-	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-
-	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	sqlDB := sqlutils.SQLRunner{DB: sqlDBRaw}
-
-	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with AddImmediateGCZoneConfig.
-	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDBRaw)()
-
-	sqlDB.Exec(t, `
-CREATE DATABASE t;
-CREATE TABLE t.parent (x INT PRIMARY KEY);
-CREATE TABLE t.child (x INT, y INT, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT t.parent (x);
-INSERT INTO t.parent VALUES (1), (2), (3);
-INSERT INTO t.child VALUES (1, 2), (2, 3), (3, 4);
-`)
-
-	// Get the table descriptors before truncation.
-	parent := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "parent")
-	child := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
-
-	// Add zone configs for the parent and child tables.
-	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDBRaw, parent.GetID())
-	require.NoError(t, err)
-	_, err = sqltestutils.AddImmediateGCZoneConfig(sqlDBRaw, child.GetID())
-	require.NoError(t, err)
-
-	// Truncate the parent now, which should cascade truncate the child.
-	sqlDB.Exec(t, `TRUNCATE TABLE t.parent CASCADE`)
-
-	// SQL should think that both the parent and child tables are empty.
-	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM t.parent`, [][]string{{"0"}})
-	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM t.child`, [][]string{{"0"}})
-
-	// The GC should kick in and actually delete all of the data in each table.
-	testutils.SucceedsSoon(t, func() error {
-		// We only need to scan the parent's table span to verify that
-		// the index data is deleted, since child is interleaved in it.
-		start := keys.SystemSQLCodec.TablePrefix(uint32(parent.GetID()))
-		end := start.PrefixEnd()
-		kvs, err := kvDB.Scan(ctx, start, end, 0)
-		require.NoError(t, err)
-		if len(kvs) != 0 {
-			return errors.Newf("expected 0 kvs, found %d", len(kvs))
-		}
-		return nil
-	})
-}
-
 // Test TRUNCATE during a column backfill.
 func TestTruncateWhileColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -1297,62 +1296,6 @@ func TestDecodeTableValue(t *testing.T) {
 // See CreateTestInterleavedHierarchy for the longest chain used for the short
 // format.
 var shortFormTables = [3]string{"parent1", "child1", "grandchild1"}
-
-// ShortToLongKeyFmt converts the short key format preferred in test cases
-//    /1/#/3/4
-// to its long form required by parseTestkey
-//    parent1/1/1/#/child1/1/3/4
-// The short key format can end in an interleave sentinel '#' (i.e. after
-// TightenEndKey).
-// The short key format can also be "/" or end in "#/" which will append
-// the parent's table/index info. without a trailing index column value.
-func ShortToLongKeyFmt(short string) string {
-	tableOrder := shortFormTables
-	curTableIdx := 0
-
-	var long []byte
-	tokens := strings.Split(short, "/")
-	// Verify short format starts with '/'.
-	if tokens[0] != "" {
-		panic("missing '/' token at the beginning of short format")
-	}
-	// Skip the first element since short format has starting '/'.
-	tokens = tokens[1:]
-
-	// Always append parent1.
-	long = append(long, []byte(fmt.Sprintf("/%s/1/", tableOrder[curTableIdx]))...)
-	curTableIdx++
-
-	for i, tok := range tokens {
-		// Permits ".../#/" to append table name without a value
-		if tok == "" {
-			continue
-		}
-
-		if tok == "#" {
-			long = append(long, []byte("#/")...)
-			// It's possible for the short-format to end with a #.
-			if i == len(tokens)-1 {
-				break
-			}
-
-			// New interleaved table and primary keys follow.
-			if curTableIdx >= len(tableOrder) {
-				panic("too many '#' tokens specified in short format (max 2 for child1 and 3 for grandchild1)")
-			}
-
-			long = append(long, []byte(fmt.Sprintf("%s/1/", tableOrder[curTableIdx]))...)
-			curTableIdx++
-
-			continue
-		}
-
-		long = append(long, []byte(fmt.Sprintf("%s/", tok))...)
-	}
-
-	// Remove the last '/'.
-	return string(long[:len(long)-1])
-}
 
 // ExtractIndexKey constructs the index (primary) key for a row from any index
 // key/value entry, including secondary indexes.
