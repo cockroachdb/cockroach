@@ -662,3 +662,58 @@ func TestSstExportFailureIntentBatching(t *testing.T) {
 	}
 	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxIntentsPerWriteIntentError.Default()]))
 }
+
+// TestExportSplitMidKey verifies that split mid key in exports will omit
+// resume timestamps where they are unnecessary e.g. when we split at the
+// new key. In this case we can safely use the SST as is without the need
+// to merge with the remaining versions of the key.
+func TestExportSplitMidKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	engine := createTestPebbleEngine()
+	defer engine.Close()
+
+	var testData = []testValue{
+		value(key(1), "value1", ts(1000)),
+		value(key(2), "value2", ts(1000)),
+		value(key(2), "value3", ts(2000)),
+		value(key(3), "value4", ts(2000)),
+	}
+	require.NoError(t, fillInData(ctx, engine, testData))
+
+	for _, test := range []struct {
+		exportAll    bool
+		useTBI       bool
+		stopMidKey   bool
+		resumeCount  int
+		resumeWithTs int
+	}{
+		{false, true, false, 3, 0},
+		{true, true, false, 3, 0},
+		{false, true, true, 3, 0},
+		{true, true, true, 4, 1},
+		{false, false, false, 3, 0},
+		{true, false, false, 3, 0},
+		{false, false, true, 3, 0},
+		{true, false, true, 4, 1},
+	} {
+		t.Run(fmt.Sprintf("exportAll=%t,useTBI=%t,stopMidKey=%t", test.exportAll, test.useTBI, test.stopMidKey), func(t *testing.T) {
+			firstKeyTS := hlc.Timestamp{}
+			resumeKey := key(1)
+			resumeWithTs := 0
+			resumeCount := 0
+			for !resumeKey.Equal(roachpb.Key{}) {
+				dest := &MemFile{}
+				_, resumeKey, firstKeyTS, _ = engine.ExportMVCCToSst(ctx, resumeKey, key(3).Next(), hlc.Timestamp{}, hlc.Timestamp{WallTime: 9999}, firstKeyTS, test.exportAll, 1, 0, test.stopMidKey, test.useTBI, dest)
+				if !firstKeyTS.IsEmpty() {
+					resumeWithTs++
+				}
+				resumeCount++
+			}
+			require.Equal(t, test.resumeCount, resumeCount)
+			require.Equal(t, test.resumeWithTs, resumeWithTs)
+		})
+	}
+}

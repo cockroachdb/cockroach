@@ -1863,7 +1863,7 @@ func pebbleExportToSst(
 			if paginated && (isNewKey || stopMidKey) && reachedTargetSize {
 				// Allocate the right size for resumeKey rather than using curKey.
 				resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
-				if stopMidKey {
+				if stopMidKey && !isNewKey {
 					resumeTS = unsafeKey.Timestamp
 				}
 				break
