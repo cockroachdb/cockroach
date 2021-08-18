@@ -61,7 +61,7 @@ func init() {
 	rootCmd.Flags().StringSliceVar(
 		&configs,
 		"config",
-		[]string{},
+		[]string{"ci"},
 		"list of build configs to apply to bazel calls")
 }
 

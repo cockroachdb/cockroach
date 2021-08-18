@@ -53,9 +53,7 @@ getenv PATH
 which cc
 readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev @com_github_cockroachdb_stress//:stress
-bazel info bazel-bin --color=no --config=dev
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/external/com_github_cockroachdb_stress/stress_/stress --test_filter='TestStartChild*' --test_output errors
+bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under @com_github_cockroachdb_stress//:stress  --test_filter='TestStartChild*' --test_output errors
 
 dev test --stress pkg/util/tracing --filter 'TestStartChild*' --timeout=10s -v
 ----
@@ -63,9 +61,7 @@ getenv PATH
 which cc
 readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev @com_github_cockroachdb_stress//:stress
-bazel info bazel-bin --color=no --config=dev
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/external/com_github_cockroachdb_stress/stress_/stress -maxtime=10s --test_filter='TestStartChild*' --test_output all --test_arg -test.v
+bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under @com_github_cockroachdb_stress//:stress -maxtime=10s  --test_timeout=11 --test_filter='TestStartChild*' --test_output all --test_arg -test.v
 
 dev test //pkg/testutils --timeout=10s
 ----
