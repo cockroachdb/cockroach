@@ -99,7 +99,8 @@ const (
 	DeprecatedOptFormatAvro = `experimental_avro`
 
 	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
-	OptKafkaSinkConfig = `kafka_sink_config`
+	OptKafkaSinkConfig     = `kafka_sink_config`
+	OptKafkaSinkConfigFile = `kafka_sink_config_file`
 
 	SinkParamCACert                 = `ca_cert`
 	SinkParamClientCert             = `client_cert`
@@ -119,8 +120,10 @@ const (
 	SinkSchemeExperimentalSQL       = `experimental-sql`
 	SinkSchemeHTTP                  = `http`
 	SinkSchemeHTTPS                 = `https`
+	SinkSchemeGCS                   = `gs`
 	SinkSchemeKafka                 = `kafka`
 	SinkSchemeNull                  = `null`
+	SinkSchemeS3                    = `s3`
 	SinkSchemeWebhookHTTP           = `webhook-http`
 	SinkSchemeWebhookHTTPS          = `webhook-https`
 	SinkParamSASLEnabled            = `sasl_enabled`
@@ -154,6 +157,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptNoInitialScan:            sql.KVStringOptRequireNoValue,
 	OptProtectDataFromGCOnPause: sql.KVStringOptRequireNoValue,
 	OptKafkaSinkConfig:          sql.KVStringOptRequireValue,
+	OptKafkaSinkConfigFile:      sql.KVStringOptRequireValue,
 	OptWebhookAuthHeader:        sql.KVStringOptRequireValue,
 	OptWebhookClientTimeout:     sql.KVStringOptRequireValue,
 	OptOnError:                  sql.KVStringOptRequireValue,

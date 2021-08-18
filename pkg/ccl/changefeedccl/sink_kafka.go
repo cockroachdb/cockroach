@@ -14,11 +14,16 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/Shopify/sarama"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -455,10 +460,110 @@ func parseRequiredAcks(a string) (sarama.RequiredAcks, error) {
 	}
 }
 
+func parseBucketURL(path string, scheme string) (bool, string, string, error) {
+	u, err := url.Parse(path)
+	if err != nil || u.Scheme != scheme {
+		return false, "", "", err
+	}
+	// trim the leading slash to get the object/key of the bucket
+	return true, u.Host, strings.TrimLeft(u.Path, "/"), nil
+}
+
+func getSaramaConfigFromS3(bucket string, key string, config *saramaConfig) error {
+	// load default AWS config (credentials, region) from disk
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+
+	s3Client := s3.New(sess)
+	res, err := s3Client.GetObject(&s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	})
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	configBytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(configBytes, config)
+}
+
+func getSaramaConfigFromGCS(bucket string, object string, config *saramaConfig) error {
+	ctx := context.Background()
+	gcsClient, err := storage.NewClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err := gcsClient.Close()
+		if err != nil {
+			log.Warningf(ctx, "error encountered while closing GCS client: %v", err)
+		}
+	}()
+
+	reader, err := gcsClient.Bucket(bucket).Object(object).NewReader(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err := reader.Close()
+		if err != nil {
+			log.Warningf(ctx, "error encountered while closing GCS reader: %v", err)
+		}
+	}()
+
+	configBytes, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(configBytes, config)
+}
+
+// getSaramaConfigFromFile reads a sarama config from JSON contained at path
+// and stores it in config.
+func getSaramaConfigFromFile(path string, config *saramaConfig) error {
+	var err error
+	var configBytes []byte
+	var bucket, key, object string
+	var isS3, isGCS bool
+	if configBytes, err = ioutil.ReadFile(path); err == nil {
+		err = json.Unmarshal(configBytes, config)
+	} else if isS3, bucket, key, err = parseBucketURL(path, changefeedbase.SinkSchemeS3); isS3 {
+		if err == nil {
+			err = getSaramaConfigFromS3(bucket, key, config)
+		}
+	} else if isGCS, bucket, object, err = parseBucketURL(path, changefeedbase.SinkSchemeGCS); isGCS {
+		if err == nil {
+			err = getSaramaConfigFromGCS(bucket, object, config)
+		}
+	} else {
+		err = fmt.Errorf("'%s' could not be recognized as a valid filepath, S3 path or GCS path", path)
+	}
+	return err
+}
+
 func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
 	config = defaultSaramaConfig()
-	if configStr, haveOverride := opts[changefeedbase.OptKafkaSinkConfig]; haveOverride {
+	configStr, haveOverride := opts[changefeedbase.OptKafkaSinkConfig]
+	configStrFile, haveOverrideFile := opts[changefeedbase.OptKafkaSinkConfigFile]
+	if haveOverride && haveOverrideFile {
+		err = fmt.Errorf("cannot specify both %s and %s", changefeedbase.OptKafkaSinkConfig, changefeedbase.OptKafkaSinkConfigFile)
+	} else if haveOverride {
 		err = json.Unmarshal([]byte(configStr), config)
+		if err != nil {
+			err = errors.Wrapf(err,
+				"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
+		}
+	} else if haveOverrideFile {
+		err = getSaramaConfigFromFile(configStrFile, config)
+		if err != nil {
+			err = errors.Wrapf(err,
+				"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfigFile)
+		}
 	}
 	return
 }
@@ -597,8 +702,7 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 	// Apply statement level overrides.
 	saramaCfg, err := getSaramaConfig(opts)
 	if err != nil {
-		return nil, errors.Wrapf(err,
-			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
+		return nil, err
 	}
 
 	if err := saramaCfg.Validate(); err != nil {

@@ -101,6 +101,8 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
+        "@com_github_aws_aws_sdk_go//aws/session",
+        "@com_github_aws_aws_sdk_go//service/s3",
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
@@ -108,6 +110,7 @@ go_library(
         "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_shopify_sarama//:sarama",
         "@com_github_xdg_scram//:scram",
+        "@com_google_cloud_go_storage//:storage",
     ],
 )
 
