@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -895,4 +896,54 @@ func TestTxnReturnsWriteTooOldErrorOnConflictingDeleteRange(t *testing.T) {
 	require.NotNil(t, err)
 	require.Regexp(t, "TransactionRetryWithProtoRefreshError: WriteTooOldError", err)
 	require.Len(t, b.Results[0].Keys, 0)
+}
+
+// TestRetrySerializableBumpsToNow verifies that transaction read time is forwarded to the
+// current HLC time rather than closed timestamp to give it enough time to retry.
+// To achieve that, test fixes transaction time to prevent refresh from succeeding first
+// then waits for closed timestamp to advance sufficiently and commits. Since write
+// can't succeed below closed timestamp and commit timestamp has leaked and can't be bumped
+// txn is restarted. Test then verifies that it can proceed even if closed timestamp
+// is again updated.
+func TestRetrySerializableBumpsToNow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := createTestDB(t)
+	defer s.Stop()
+	ctx := context.Background()
+
+	bumpClosedTimestamp := func(delay time.Duration) {
+		s.Manual.Increment(delay.Nanoseconds())
+		// We need to bump closed timestamp for clock increment to have effect
+		// on further kv writes. Putting anything into proposal buffer will
+		// trigger achieve this.
+		// We write a value to a non-overlapping key to ensure we are not
+		// bumping test transaction. We can't use reads because they could
+		// only bump tscache directly which we try not to do in this test case.
+		require.NoError(t, s.DB.Put(ctx, roachpb.Key("z"), []byte{0}))
+	}
+
+	attempt := 0
+	require.NoError(t, s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		require.Less(t, attempt, 2, "Transaction can't recover after initial retry error, too many retries")
+		closedTsTargetDuration := closedts.TargetDuration.Get(&s.Cfg.Settings.SV)
+		delay := closedTsTargetDuration / 2
+		if attempt == 0 {
+			delay = closedTsTargetDuration * 2
+		}
+		bumpClosedTimestamp(delay)
+		attempt++
+		// Fixing transaction commit timestamp to disallow read refresh.
+		_ = txn.CommitTimestamp()
+		// Perform a scan to populate the transaction's read spans and mandate a refresh
+		// if the transaction's write timestamp is ever bumped. Because we fixed the
+		// transaction's commit timestamp, it will be forced to retry.
+		_, err := txn.Scan(ctx, roachpb.Key("a"), roachpb.Key("p"), 1000)
+		require.NoError(t, err, "Failed Scan request")
+		// Perform a write, which will run into the closed timestamp and get pushed.
+		require.NoError(t, txn.Put(ctx, roachpb.Key("b"), []byte(fmt.Sprintf("value-%d", attempt))))
+		return nil
+	}))
+	require.Greater(t, attempt, 1, "Transaction is expected to retry once")
 }
