@@ -18,10 +18,23 @@ import "gogoproto/gogo.proto";
 // TODO(irfansharif): We could have the proto definitions in pkg/config/zonepb
 // use these messages instead of duplicating everything.
 
+// GCPolicy dictates the garbage collection policy to apply over a given span.
+// It parallels the definition found in zonepb/zone.proto.
+message GCPolicy {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // TTLSeconds is the number of seconds overwritten values will be retained
+  // before garbage collection. A value <= 0 means older versions are never
+  // GC-ed.
+  int32 ttl_seconds = 1 [(gogoproto.customname) = "TTLSeconds"];
+}
+
 // Constraint constrains the stores that a replica can be stored on. It
 // parallels the definition found in zonepb/zone.proto.
 message Constraint {
   option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
 
   enum Type {
     // REQUIRED ensures all replicas are placed on stores with locality tags
@@ -47,6 +60,7 @@ message Constraint {
 // together by replicas. It parallels the definition found in zonepb/zone.proto.
 message ConstraintsConjunction {
   option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
 
   // NumReplicas is the number of replicas that should abide by the constraints
   // below. If set to zero, the constraints will apply to all replicas of the
@@ -76,18 +90,16 @@ message LeasePreference {
 message SpanConfig {
   option (gogoproto.equal) = true;
 
-  // RangeMinBytes is the minimum size, in bytes, for a range in the given
-  // keyspan. When a range is less than this size, it'll be merged with an
-  // adjacent range.
+  // RangeMinBytes is the minimum size, in bytes, a range can have. When a range
+  // is less than this size, it'll be merged with an adjacent range.
   int64 range_min_bytes = 1;
 
-  // RangeMaxBytes is the maximum size, in bytes, for a range in the given
-  // keyspan. When a range is more than this size, it'll split into two ranges.
+  // RangeMaxBytes is the maximum size, in bytes, a range can have. When a range
+  // is more than this size, it'll split into two ranges.
   int64 range_max_bytes = 2;
 
-  // GCTTL is the number of seconds overwritten values will be retained before
-  // garbage collection. A value <= 0 means older versions are never GC-ed.
-  int32 gc_ttl = 3 [(gogoproto.customname) = "GCTTL"];
+  // GCPolicy dictates the the GC policy to apply over a range.
+  GCPolicy gc_policy = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCPolicy"];
 
   // GlobalReads specifies whether transactions operating over the range(s)
   // should be configured to provide non-blocking behavior, meaning that reads
