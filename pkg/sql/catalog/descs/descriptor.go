@@ -78,9 +78,8 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags, setTxnDeadline bool,
 ) (catalog.Descriptor, error) {
 	getDescriptorByID := func() (catalog.Descriptor, error) {
-		if vd, err := tc.virtual.getByID(
-			ctx, id, flags.RequireMutable,
-		); vd != nil || err != nil {
+		vd, err := tc.virtual.getByID(ctx, id, flags.RequireMutable)
+		if vd != nil || err != nil {
 			return vd, err
 		}
 
@@ -90,35 +89,43 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			}
 			return sd, nil
 		}
-		if ud := tc.kv.getUncommittedByID(id); ud != nil {
-			log.VEventf(ctx, 2, "found uncommitted descriptor %d", id)
-			if flags.RequireMutable {
-				return ud.mutable, nil
+
+		{
+			ud := tc.uncommitted.getByID(id)
+			if ud != nil {
+				log.VEventf(ctx, 2, "found uncommitted descriptor %d", id)
+				if flags.RequireMutable {
+					ud, err = tc.uncommitted.checkOut(id)
+					if err != nil {
+						return nil, err
+					}
+				}
+				return ud, nil
 			}
-			return ud.immutable, nil
 		}
 
-		if flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
-			return tc.kv.getByID(ctx, txn, id, flags.RequireMutable)
+		if !flags.AvoidCached && !flags.RequireMutable && !lease.TestingTableLeasesAreDisabled() {
+			// If we have already read all of the descriptors, use it as a negative
+			// cache to short-circuit a lookup we know will be doomed to fail.
+			//
+			// TODO(ajwerner): More generally leverage this set of kv descriptors on
+			// the resolution path.
+			if tc.kv.idDefinitelyDoesNotExist(id) {
+				return nil, catalog.ErrDescriptorNotFound
+			}
+
+			desc, shouldReadFromStore, err := tc.leased.getByID(ctx, tc.deadlineHolder(txn), id, setTxnDeadline)
+			if err != nil {
+				return nil, err
+			}
+			if !shouldReadFromStore {
+				return desc, nil
+			}
 		}
 
-		// If we have already read all of the descriptor, use it as a negative
-		// cache to short-circuit a lookup we know will be doomed to fail.
-		//
-		// TODO(ajwerner): More generally leverage this set of kv descriptors on
-		// the resolution path.
-		if tc.kv.idDefinitelyDoesNotExist(id) {
-			return nil, catalog.ErrDescriptorNotFound
-		}
-
-		desc, shouldReadFromStore, err := tc.leased.getByID(ctx, tc.deadlineHolder(txn), id, setTxnDeadline)
-		if err != nil {
-			return nil, err
-		}
-		if shouldReadFromStore {
-			return tc.kv.getByID(ctx, txn, id, flags.RequireMutable)
-		}
-		return desc, nil
+		return tc.withReadFromStore(flags.RequireMutable, func() (desc catalog.MutableDescriptor, err error) {
+			return tc.kv.getByID(ctx, txn, id)
+		})
 	}
 
 	desc, err := getDescriptorByID()
@@ -172,36 +179,59 @@ func (tc *Collection) getByName(
 	}
 
 	{
-		refuseFurtherLookup, ud := tc.kv.getUncommittedByName(parentID, parentSchemaID, name)
+		refuseFurtherLookup, ud := tc.uncommitted.getByName(parentID, parentSchemaID, name)
 		if ud != nil {
 			log.VEventf(ctx, 2, "found uncommitted descriptor %d", ud.GetID())
 			if mutable {
-				return true, ud.mutable, nil
+				ud, err = tc.uncommitted.checkOut(ud.GetID())
+				if err != nil {
+					return false, nil, err
+				}
 			}
-			return true, ud.immutable, nil
+			return true, ud, nil
 		}
 		if refuseFurtherLookup {
 			return false, nil, nil
 		}
 	}
 
-	if avoidCached || mutable || lease.TestingTableLeasesAreDisabled() {
-		return tc.kv.getByName(
-			ctx, txn, parentID, parentSchemaID, name, mutable,
-		)
+	if !avoidCached && !mutable && !lease.TestingTableLeasesAreDisabled() {
+		var shouldReadFromStore bool
+		desc, shouldReadFromStore, err = tc.leased.getByName(ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
+		if err != nil {
+			return false, nil, err
+		}
+		if !shouldReadFromStore {
+			return desc != nil, desc, nil
+		}
 	}
 
-	desc, shouldReadFromStore, err := tc.leased.getByName(
-		ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
+	desc, err = tc.withReadFromStore(mutable, func() (desc catalog.MutableDescriptor, err error) {
+		uncommittedDB, _ := tc.uncommitted.getByID(parentID).(catalog.DatabaseDescriptor)
+		return tc.kv.getByName(ctx, txn, uncommittedDB, parentID, parentSchemaID, name)
+	})
+	return desc != nil, desc, err
+}
+
+func (tc *Collection) withReadFromStore(
+	mutable bool, fn func() (desc catalog.MutableDescriptor, err error),
+) (desc catalog.Descriptor, err error) {
+	mut, err := fn()
+	if mut == nil || err != nil {
+		return nil, err
+	}
+	desc, err = tc.uncommitted.add(mut)
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	}
-	if shouldReadFromStore {
-		return tc.kv.getByName(
-			ctx, txn, parentID, parentSchemaID, name, mutable,
-		)
+	if mutable {
+		desc, err = tc.uncommitted.checkOut(desc.GetID())
+		if err != nil {
+			return nil, err
+		}
 	}
-	return desc != nil, desc, nil
+	tc.kv.releaseAllDescriptors()
+	return desc, nil
 }
 
 func (tc *Collection) deadlineHolder(txn *kv.Txn) deadlineHolder {

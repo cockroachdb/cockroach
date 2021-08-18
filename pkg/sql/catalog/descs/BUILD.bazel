@@ -19,6 +19,8 @@ go_library(
         "temporary_descriptors.go",
         "txn.go",
         "type.go",
+        "uncommitted_descriptors.go",
+        "validate.go",
         "virtual_descriptors.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descs",
