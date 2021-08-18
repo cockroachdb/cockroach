@@ -15,15 +15,7 @@ import (
 // A CatchupIterator is an iterator for catchup-scans.
 type CatchupIterator struct {
 	storage.SimpleMVCCIterator
-
-	// prevValIter is used to look up the previous values of keys
-	// when using the TBI optimization, since the previous value
-	// of the key is likely outside the time bounds of the TBI.
-	//
-	// TODO(ssd): It should be possible to use the underlying
-	// non-timebound iterator in IncrementalIterator for this.
-	prevValIter storage.SimpleMVCCIterator
-	close       func()
+	close func()
 }
 
 // NewCatchupIterator returns a CatchupIterator for the given Reader.
@@ -35,7 +27,7 @@ func NewCatchupIterator(
 	ret := &CatchupIterator{
 		close: closer,
 	}
-	if useTBI {
+	if useTBI && !args.WithDiff {
 		ret.SimpleMVCCIterator = storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
 			EnableTimeBoundIteratorOptimization: true,
 			EndKey:                              args.Span.EndKey,
@@ -45,11 +37,6 @@ func NewCatchupIterator(
 			IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
 			InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
 		})
-		if args.WithDiff {
-			ret.prevValIter = reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-				UpperBound: args.Span.EndKey,
-			})
-		}
 	} else {
 		ret.SimpleMVCCIterator = reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: args.Span.EndKey,
@@ -61,41 +48,9 @@ func NewCatchupIterator(
 
 func (i *CatchupIterator) Close() {
 	i.SimpleMVCCIterator.Close()
-	if i.prevValIter != nil {
-		i.prevValIter.Close()
-	}
 	if i.close != nil {
 		i.close()
 	}
-}
-
-// UnsafePrevValueForKey returns the value of the key at the previous
-// timestamp. Returns `nil, nil` if the CatchupIterator was configured
-// such that separately querying the previous value shouldn't be
-// necessary.
-func (i *CatchupIterator) UnsafePrevValueForKey(key storage.MVCCKey) ([]byte, error) {
-	if i.prevValIter == nil {
-		return nil, nil
-	}
-
-	// NOTE(ssd): I'm unsure if it is better to do this single
-	// SeekGE to the modified key vs SeekGE to key and then
-	// Next().
-	i.prevValIter.SeekGE(storage.MVCCKey{
-		Key:       key.Key,
-		Timestamp: key.Timestamp.Prev(),
-	})
-	if ok, err := i.prevValIter.Valid(); err != nil {
-		return nil, err
-	} else if !ok {
-		return nil, nil
-	}
-
-	unsafeKey := i.prevValIter.UnsafeKey()
-	if !bytes.Equal(unsafeKey.Key, key.Key) {
-		return nil, nil
-	}
-	return i.prevValIter.UnsafeValue(), nil
 }
 
 type outputEventFn func(e *roachpb.RangeFeedEvent) error
@@ -124,19 +79,6 @@ func (i *CatchupIterator) CatchupScan(
 	}
 
 	outputEvents := func() error {
-		// Our last entry will be erroneously missing a
-		// previous value if it was outside the time window of
-		// the incremental iterator.
-		if l := len(reorderBuf); withDiff && l > 0 {
-			prev, err := i.UnsafePrevValueForKey(lastKey)
-			if err != nil {
-				return err
-			}
-			if len(prev) > 0 {
-				a, reorderBuf[len(reorderBuf)-1].Val.PrevValue.RawBytes = a.Copy(prev, 0)
-			}
-		}
-
 		for i := len(reorderBuf) - 1; i >= 0; i-- {
 			e := reorderBuf[i]
 			outputFn(&e)
