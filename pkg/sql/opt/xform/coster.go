@@ -1125,29 +1125,36 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 	outputRowCount := grouping.Relational().Stats.RowCount
 	cost += memo.Cost(outputRowCount) * cpuCostFactor
 
-	// GroupBy must process each input row once. Cost per row depends on the
-	// number of grouping columns and the number of aggregates.
-	inputRowCount := grouping.Child(0).(memo.RelExpr).Relational().Stats.RowCount
-	aggsCount := grouping.Child(1).ChildCount()
 	private := grouping.Private().(*memo.GroupingPrivate)
 	groupingColCount := private.GroupingCols.Len()
+	aggsCount := grouping.Child(1).ChildCount()
+
+	// Normally, a grouping expression must process each input row once.
+	inputRowCount := grouping.Child(0).(memo.RelExpr).Relational().Stats.RowCount
+
+	// If this is a streaming GroupBy with a limit hint, l, we only need to
+	// process enough input rows to output l rows.
+	isStreaming := isStreamingAggregation(private, required)
+	if isStreaming && grouping.Op() == opt.GroupByOp && required.LimitHint > 0 {
+		inputRowCount = streamingGroupByInputLimitHint(inputRowCount, outputRowCount, required.LimitHint)
+	}
+
+	// Cost per row depends on the number of grouping columns and the number of
+	// aggregates.
 	cost += memo.Cost(inputRowCount) * memo.Cost(aggsCount+groupingColCount) * cpuCostFactor
 
-	if groupingColCount > 0 {
-		// Add a cost that reflects the use of a hash table - unless we are doing a
-		// streaming aggregation where all the grouping columns are ordered.
-		//
-		// The cost is chosen so that it's always less than the cost to sort the
-		// input.
-		n := len(ordering.StreamingGroupingColOrdering(private, &required.Ordering))
-		if groupingColCount > n {
-			// Add the cost to build the hash table.
-			cost += memo.Cost(inputRowCount) * cpuCostFactor
+	// Add a cost that reflects the use of a hash table - unless we are doing a
+	// streaming aggregation.
+	//
+	// The cost is chosen so that it's always less than the cost to sort the
+	// input.
+	if groupingColCount > 0 && !isStreaming {
+		// Add the cost to build the hash table.
+		cost += memo.Cost(inputRowCount) * cpuCostFactor
 
-			// Add a cost for buffering rows that takes into account increased memory
-			// pressure and the possibility of spilling to disk.
-			cost += c.rowBufferCost(outputRowCount)
-		}
+		// Add a cost for buffering rows that takes into account increased memory
+		// pressure and the possibility of spilling to disk.
+		cost += c.rowBufferCost(outputRowCount)
 	}
 
 	return cost
@@ -1462,6 +1469,31 @@ func localityMatchScore(zone cat.Zone, locality roachpb.Locality) float64 {
 
 	// Weight the constraintScore twice as much as the lease score.
 	return (constraintScore*2 + leaseScore) / 3
+}
+
+// isStreamingAggregation returns true if the GroupingPrivate indicates that
+// streaming aggregation will be performed during execution with the required
+// physical properties. Currently, streaming aggregation is performed when all
+// the grouping columns are ordered. The execution engine does not support
+// streaming aggregation with partially ordered grouping columns.
+func isStreamingAggregation(g *memo.GroupingPrivate, required *physical.Required) bool {
+	groupingColCount := g.GroupingCols.Len()
+	return groupingColCount > 0 &&
+		groupingColCount == len(ordering.StreamingGroupingColOrdering(g, &required.Ordering))
+}
+
+// streamingGroupByLimitHint calculates an appropriate limit hint for the input
+// to a streaming GroupBy expression.
+func streamingGroupByInputLimitHint(
+	inputRowCount, outputRowCount, outputLimitHint float64,
+) float64 {
+	if outputRowCount == 0 {
+		return 0
+	}
+
+	// Estimate the number of input rows needed to output LimitHint rows.
+	inputLimitHint := outputLimitHint * inputRowCount / outputRowCount
+	return math.Min(inputRowCount, inputLimitHint)
 }
 
 // lookupJoinInputLimitHint calculates an appropriate limit hint for the input
