@@ -144,6 +144,10 @@ func (bse *boundedStalenessEvents) setStmt(s string) {
 	bse.mu.stmt = s
 }
 
+func (bse *boundedStalenessEvents) clearEvents() {
+	bse.events = nil
+}
+
 func (bse *boundedStalenessEvents) String() string {
 	bse.mu.Lock()
 	defer bse.mu.Unlock()
@@ -224,7 +228,21 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 3, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
 
+		savedTraceStmt := ""
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			// Early exit non-query execution related commands.
+			switch d.Cmd {
+			// override-matching-stmt-for-tracing forces the next trace of events to
+			// only  look for the given query instead of using d.Input. This is useful
+			//for traces of prepared statements.
+			case "override-matching-stmt-for-tracing":
+				savedTraceStmt = d.Input
+				return ""
+			case "reset-matching-stmt-for-tracing":
+				savedTraceStmt = ""
+				return ""
+			}
+
 			var showEvents bool
 			var waitUntilFollowerReads bool
 			var waitUntilMatch bool
@@ -232,10 +250,14 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 				bse.reset()
 			}()
 			dbConn := tc.ServerConn(0)
+			traceStmt := savedTraceStmt
+			if traceStmt == "" {
+				traceStmt = d.Input
+			}
 			for _, arg := range d.CmdArgs {
 				switch arg.Key {
 				case "wait-until-follower-read":
-					bse.setStmt(d.Input)
+					bse.setStmt(traceStmt)
 					waitUntilFollowerReads = true
 				case "wait-until-match":
 					// We support both wait-until-match and wait-until-follower-read,
@@ -266,7 +288,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 					return ""
 				case "query":
 					// Always show events.
-					bse.setStmt(d.Input)
+					bse.setStmt(traceStmt)
 					showEvents = true
 					rows, err := dbConn.Query(d.Input)
 					if err != nil {
