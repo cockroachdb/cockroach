@@ -17,10 +17,11 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v4"
 	"golang.org/x/exp/rand"
 )
 
@@ -71,7 +72,7 @@ func createDelivery(
 		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`,
 	)
 
-	if err := del.sr.Init(ctx, "delivery", mcp, config.connFlags); err != nil {
+	if err := del.sr.Init(ctx, mcp); err != nil {
 		return nil, err
 	}
 
@@ -86,13 +87,9 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 	oCarrierID := rng.Intn(10) + 1
 	olDeliveryD := timeutil.Now()
 
-	tx, err := del.mcp.Get().BeginEx(ctx, del.config.txOpts)
-	if err != nil {
-		return nil, err
-	}
-	err = crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
-		func() error {
+	err := crdbpgx.ExecuteTx(
+		ctx, del.mcp.Get(), del.config.txOpts,
+		func(tx pgx.Tx) error {
 			// 2.7.4.2. For each district:
 			dIDoIDPairs := make(map[int]int)
 			dIDolTotalPairs := make(map[int]float64)
@@ -118,7 +115,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 			}
 			dIDoIDPairsStr := makeInTuples(dIDoIDPairs)
 
-			rows, err := tx.QueryEx(
+			rows, err := tx.Query(
 				ctx,
 				fmt.Sprintf(`
 					UPDATE "order"
@@ -127,7 +124,6 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 					RETURNING o_d_id, o_c_id`,
 					oCarrierID, wID, dIDoIDPairsStr,
 				),
-				nil, /* options */
 			)
 			if err != nil {
 				return err
@@ -152,7 +148,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 			dIDcIDPairsStr := makeInTuples(dIDcIDPairs)
 			dIDToOlTotalStr := makeWhereCases(dIDolTotalPairs)
 
-			if _, err := tx.ExecEx(
+			if _, err := tx.Exec(
 				ctx,
 				fmt.Sprintf(`
 					UPDATE customer
@@ -161,23 +157,21 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 					WHERE c_w_id = %d AND (c_d_id, c_id) IN (%s)`,
 					dIDToOlTotalStr, wID, dIDcIDPairsStr,
 				),
-				nil, /* options */
 			); err != nil {
 				return err
 			}
-			if _, err := tx.ExecEx(
+			if _, err := tx.Exec(
 				ctx,
 				fmt.Sprintf(`
 					DELETE FROM new_order
 					WHERE no_w_id = %d AND (no_d_id, no_o_id) IN (%s)`,
 					wID, dIDoIDPairsStr,
 				),
-				nil, /* options */
 			); err != nil {
 				return err
 			}
 
-			_, err = tx.ExecEx(
+			_, err = tx.Exec(
 				ctx,
 				fmt.Sprintf(`
 					UPDATE order_line
@@ -185,7 +179,6 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 					WHERE ol_w_id = %d AND (ol_d_id, ol_o_id) IN (%s)`,
 					olDeliveryD.Format("2006-01-02 15:04:05"), wID, dIDoIDPairsStr,
 				),
-				nil, /* options */
 			)
 			return err
 		})

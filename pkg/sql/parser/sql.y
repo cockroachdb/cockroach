@@ -4640,6 +4640,11 @@ set_rest:
     /* SKIP DOC */
     $$.val = &tree.SetVar{Name: "search_path", Values: tree.Exprs{$2.expr()}}
   }
+| ROLE var_value
+	{
+		/* SKIP DOC */
+    $$.val = &tree.SetVar{Name: "role", Values: tree.Exprs{$2.expr()}}
+	}
 
 set_rest_more:
 // SET syntaxes supported as a clause of other statements:
@@ -4896,6 +4901,7 @@ session_var:
 // SET NAMES is standard SQL for SET client_encoding.
 // See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
 | NAMES { $$ = "client_encoding" }
+| ROLE
 | SESSION_USER
 // TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
 | TIME ZONE { $$ = "timezone" }
@@ -11700,6 +11706,11 @@ special_function:
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_USER '(' error { return helpWithFunctionByName(sqllex, $1) }
+| SESSION_USER '(' ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| SESSION_USER '(' error { return helpWithFunctionByName(sqllex, $1) }
 | EXTRACT '(' extract_list ')'
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}

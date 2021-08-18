@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
@@ -83,7 +83,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/gogo/protobuf/proto"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
@@ -7343,13 +7343,13 @@ func TestClientDisconnect(t *testing.T) {
 			defer cancel()
 			go func() {
 				defer close(done)
-				connCfg, err := pgx.ParseConnectionString(pgURL.String())
+				connCfg, err := pgx.ParseConfig(pgURL.String())
 				assert.NoError(t, err)
-				db, err := pgx.Connect(connCfg)
+				db, err := pgx.ConnectConfig(ctx, connCfg)
 				assert.NoError(t, err)
-				defer func() { _ = db.Close() }()
-				_, err = db.ExecEx(ctxToCancel, testCase.jobCommand, nil /* options */)
-				assert.Equal(t, context.Canceled, err)
+				defer func() { assert.NoError(t, db.Close(ctx)) }()
+				_, err = db.Exec(ctxToCancel, testCase.jobCommand)
+				assert.Equal(t, context.Canceled, errors.Unwrap(err))
 			}()
 
 			// Wait for the job to start.

@@ -11,7 +11,6 @@ go_library(
         "schemachange.go",
         "type_resolver.go",
         ":gen-optype-stringer",  # keep
-        ":gen-txstatus-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/schemachange",
     visibility = ["//visibility:public"],
@@ -32,7 +31,8 @@ go_library(
         "//pkg/workload",
         "//pkg/workload/histogram",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_jackc_pgx//:pgx",
+        "@com_github_jackc_pgconn//:pgconn",
+        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_lib_pq//oid",
         "@com_github_spf13_pflag//:pflag",
     ],
@@ -42,10 +42,4 @@ stringer(
     name = "gen-optype-stringer",
     src = "operation_generator.go",
     typ = "opType",
-)
-
-stringer(
-    name = "gen-txstatus-stringer",
-    src = "schemachange.go",
-    typ = "TxStatus",
 )

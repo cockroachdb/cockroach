@@ -377,11 +377,13 @@ func (c *conn) serveImpl(
 			timeReceived := timeutil.Now()
 			log.VEventf(ctx, 2, "pgwire: processing %s", typ)
 
-			if ignoreUntilSync && typ != pgwirebase.ClientMsgSync {
-				log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
-				return false, nil
+			if ignoreUntilSync {
+				if typ != pgwirebase.ClientMsgSync {
+					log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
+					return false, nil
+				}
+				ignoreUntilSync = false
 			}
-			ignoreUntilSync = false
 
 			if !authDone {
 				if typ == pgwirebase.ClientMsgPassword {
@@ -888,6 +890,9 @@ func (c *conn) handleParse(
 		// We don't support COPY in extended protocol because it'd be complicated:
 		// it wouldn't be the preparing, but the execution that would need to
 		// execute the copyMachine.
+		// Be aware that the copyMachine assumes it always runs in the simple
+		// protocol, so if we ever support this, many parts of the copyMachine
+		// would need to be changed.
 		// Also note that COPY FROM in extended mode seems to be quite broken in
 		// Postgres too:
 		// https://www.postgresql.org/message-id/flat/CAMsr%2BYGvp2wRx9pPSxaKFdaObxX8DzWse%2BOkWk2xpXSvT0rq-g%40mail.gmail.com#CAMsr+YGvp2wRx9pPSxaKFdaObxX8DzWse+OkWk2xpXSvT0rq-g@mail.gmail.com

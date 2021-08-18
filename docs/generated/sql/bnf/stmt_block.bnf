@@ -1520,6 +1520,7 @@ session_var ::=
 	| 'ALL'
 	| 'DATABASE'
 	| 'NAMES'
+	| 'ROLE'
 	| 'SESSION_USER'
 	| 'TIME' 'ZONE'
 
@@ -3151,6 +3152,7 @@ special_function ::=
 	| 'LOCALTIME' '(' ')'
 	| 'LOCALTIME' '(' a_expr ')'
 	| 'CURRENT_USER' '(' ')'
+	| 'SESSION_USER' '(' ')'
 	| 'EXTRACT' '(' extract_list ')'
 	| 'EXTRACT_DURATION' '(' extract_list ')'
 	| 'OVERLAY' '(' overlay_list ')'
