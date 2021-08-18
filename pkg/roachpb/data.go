@@ -1457,9 +1457,24 @@ func PrepareTransactionForRetry(
 		txn.WriteTimestamp.Forward(tErr.PusheeTxn.WriteTimestamp)
 		txn.UpgradePriority(tErr.PusheeTxn.Priority - 1)
 	case *TransactionRetryError:
-		// Nothing to do. Transaction.Timestamp has already been forwarded to be
-		// ahead of any timestamp cache entries or newer versions which caused
-		// the restart.
+		// Transaction.Timestamp has already been forwarded to be ahead of any
+		// timestamp cache entries or newer versions which caused the restart.
+		if tErr.Reason == RETRY_SERIALIZABLE {
+			// For RETRY_SERIALIZABLE case, we want to bump timestamp further than
+			// timestamp cache.
+			// This helps transactions that had their commit timestamp fixed (See
+			// roachpb.Transaction.CommitTimestampFixed for details on when it happens).
+			// Upon retry, we want to prevent those transactions from fixing their
+			// timestamp to closed timestamp since that prevents those transactions
+			// from succeeding.
+			// The tradeoff here is that transactions that failed because they were
+			// waiting on locks would have a chance to retry and succeed, but
+			// transactions that are just slow would still retry indefinitely and
+			// delay transactions that try to write to the keys this transaction
+			// reads because reads are not in the past anymore.
+			now := clock.Now()
+			txn.WriteTimestamp.Forward(now)
+		}
 	case *WriteTooOldError:
 		// Increase the timestamp to the ts at which we've actually written.
 		txn.WriteTimestamp.Forward(writeTooOldRetryTimestamp(tErr))
