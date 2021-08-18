@@ -11,7 +11,6 @@
 package reducesql
 
 import (
-	"bytes"
 	"fmt"
 	"go/constant"
 	"regexp"
@@ -123,10 +122,7 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 		return "", false, err
 	}
 
-	asts := make([]tree.NodeFormatter, len(stmts))
-	for si, stmt := range stmts {
-		asts[si] = stmt.AST
-	}
+	asts := collectASTs(stmts)
 
 	var replacement tree.NodeFormatter
 	// nodeCount is incremented on each visited node per statement. It is
@@ -384,34 +380,38 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 		// Didn't find enough matches, so we're done.
 		return s, false, nil
 	}
-	var sb strings.Builder
-	for i, ast := range asts {
-		if i > 0 {
-			sb.WriteString("\n\n")
-		}
-		sb.WriteString(tree.Pretty(ast))
-		sb.WriteString(";")
-	}
-	return sb.String(), true, nil
+	return joinASTs(asts), true, nil
 }
 
 // Pretty formats input SQL into a standard format. Input SQL should be run
 // through this before reducing so file size comparisons are useful.
-func Pretty(s []byte) ([]byte, error) {
-	stmts, err := parser.Parse(string(s))
+func Pretty(s string) (string, error) {
+	stmts, err := parser.Parse(s)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	var sb bytes.Buffer
+	return joinASTs(collectASTs(stmts)), nil
+}
+
+func collectASTs(stmts parser.Statements) []tree.NodeFormatter {
+	asts := make([]tree.NodeFormatter, len(stmts))
+	for i, stmt := range stmts {
+		asts[i] = stmt.AST
+	}
+	return asts
+}
+
+func joinASTs(stmts []tree.NodeFormatter) string {
+	var sb strings.Builder
 	for i, stmt := range stmts {
 		if i > 0 {
 			sb.WriteString("\n\n")
 		}
-		sb.WriteString(tree.Pretty(stmt.AST))
+		sb.WriteString(tree.Pretty(stmt))
 		sb.WriteString(";")
 	}
-	return sb.Bytes(), nil
+	return sb.String()
 }
 
 var (
@@ -1083,3 +1083,45 @@ func removeValuesCol(values *tree.ValuesClause, col int) {
 type emptyStatement struct{}
 
 func (e emptyStatement) Format(*tree.FmtCtx) {}
+
+// SQLChunkReducer implements the reduce.ChunkReducer interface. Each SQL
+// statement in the string passed to Init is treated as a segment that can
+// completely removed from the original SQL string.
+type SQLChunkReducer struct {
+	maxConsecutiveFailures int
+	asts                   []tree.NodeFormatter
+}
+
+// NewSQLChunkReducer returns a SQLChunkReducer with the given maximum number of
+// consecutive failures allowed.
+func NewSQLChunkReducer(maxConsecutiveFailures int) *SQLChunkReducer {
+	return &SQLChunkReducer{
+		maxConsecutiveFailures: maxConsecutiveFailures,
+	}
+}
+
+// HaltAfter implements the reduce.ChunkReducer interface.
+func (smr *SQLChunkReducer) HaltAfter() int {
+	return smr.maxConsecutiveFailures
+}
+
+// Init implements the reduce.ChunkReducer interface.
+func (smr *SQLChunkReducer) Init(s string) error {
+	stmts, err := parser.Parse(s)
+	if err != nil {
+		return err
+	}
+	smr.asts = collectASTs(stmts)
+	return nil
+}
+
+// NumSegments implements the reduce.ChunkReducer interface.
+func (smr SQLChunkReducer) NumSegments() int {
+	return len(smr.asts)
+}
+
+// DeleteSegments implements the reduce.ChunkReducer interface.
+func (smr SQLChunkReducer) DeleteSegments(start, end int) string {
+	asts := append(smr.asts[:start], smr.asts[end:]...)
+	return joinASTs(asts)
+}

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/datadriven"
@@ -115,19 +116,41 @@ func (ev *boundedStalenessTraceEvent) EventOutput() string {
 
 // boundedStalenessEvents tracks bounded staleness datadriven related events.
 type boundedStalenessEvents struct {
-	stmt   string
-	events []boundedStalenessDataDrivenEvent
+	// A mutex is needed as the event handlers (onStmtTrace) can race.
+	mu struct {
+		syncutil.Mutex
+		stmt   string
+		events []boundedStalenessDataDrivenEvent
+	}
 }
 
 func (bse *boundedStalenessEvents) reset() {
-	bse.stmt = ""
-	bse.events = nil
+	bse.mu.Lock()
+	defer bse.mu.Unlock()
+
+	bse.mu.stmt = ""
+	bse.mu.events = nil
+}
+
+func (bse *boundedStalenessEvents) clearEvents() {
+	bse.mu.Lock()
+	defer bse.mu.Unlock()
+	bse.mu.events = nil
+}
+
+func (bse *boundedStalenessEvents) setStmt(s string) {
+	bse.mu.Lock()
+	defer bse.mu.Unlock()
+	bse.mu.stmt = s
 }
 
 func (bse *boundedStalenessEvents) String() string {
+	bse.mu.Lock()
+	defer bse.mu.Unlock()
+
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("events (%d found):\n", len(bse.events)))
-	for idx, event := range bse.events {
+	sb.WriteString(fmt.Sprintf("events (%d found):\n", len(bse.mu.events)))
+	for idx, event := range bse.mu.events {
 		sb.WriteString(
 			fmt.Sprintf(
 				" * event %d: %s\n",
@@ -140,12 +163,15 @@ func (bse *boundedStalenessEvents) String() string {
 }
 
 func (bse *boundedStalenessEvents) onStmtTrace(nodeIdx int, rec tracing.Recording, stmt string) {
-	if bse.stmt != "" && bse.stmt == stmt {
+	bse.mu.Lock()
+	defer bse.mu.Unlock()
+
+	if bse.mu.stmt != "" && bse.mu.stmt == stmt {
 		spans := make(map[uint64]tracingpb.RecordedSpan)
 		for _, sp := range rec {
 			spans[sp.SpanID] = sp
 			if sp.Operation == "dist sender send" && spans[sp.ParentSpanID].Operation == "colbatchscan" {
-				bse.events = append(bse.events, &boundedStalenessTraceEvent{
+				bse.mu.events = append(bse.mu.events, &boundedStalenessTraceEvent{
 					operation:    spans[sp.ParentSpanID].Operation,
 					nodeIdx:      nodeIdx,
 					localRead:    tracing.LogsContainMsg(sp, kvbase.RoutingRequestLocallyMsg),
@@ -209,7 +235,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 			for _, arg := range d.CmdArgs {
 				switch arg.Key {
 				case "wait-until-follower-read":
-					bse.stmt = d.Input
+					bse.setStmt(d.Input)
 					waitUntilFollowerReads = true
 				case "wait-until-match":
 					// We support both wait-until-match and wait-until-follower-read,
@@ -240,7 +266,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 					return ""
 				case "query":
 					// Always show events.
-					bse.stmt = d.Input
+					bse.setStmt(d.Input)
 					showEvents = true
 					rows, err := dbConn.Query(d.Input)
 					if err != nil {
@@ -267,22 +293,24 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 				// reading follower reads.
 				if waitUntilFollowerReads {
 					allFollowerReads := true
-					for _, ev := range bse.events {
-						switch ev := ev.(type) {
-						case *boundedStalenessTraceEvent:
-							allFollowerReads = allFollowerReads && ev.followerRead
+					func() {
+						bse.mu.Lock()
+						defer bse.mu.Unlock()
+						for _, ev := range bse.mu.events {
+							switch ev := ev.(type) {
+							case *boundedStalenessTraceEvent:
+								allFollowerReads = allFollowerReads && ev.followerRead
+							}
 						}
-					}
+					}()
 					if !allFollowerReads {
-						bse.reset()
-						bse.stmt = d.Input
+						bse.clearEvents()
 						return errors.AssertionFailedf("not follower reads found:\b%s", bse.String())
 					}
 				}
 				if waitUntilMatch {
 					if d.Expected != ret {
-						bse.reset()
-						bse.stmt = d.Input
+						bse.clearEvents()
 						return errors.AssertionFailedf("not yet a match, output:\n%s\n", ret)
 					}
 				}

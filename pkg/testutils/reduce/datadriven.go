@@ -22,13 +22,14 @@ import (
 func Walk(
 	t *testing.T,
 	path string,
-	filter func([]byte) ([]byte, error),
+	filter func(string) (string, error),
 	interesting func(contains string) InterestingFn,
 	mode Mode,
+	cr ChunkReducer,
 	passes []Pass,
 ) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
-		RunTest(t, path, filter, interesting, mode, passes)
+		RunTest(t, path, filter, interesting, mode, cr, passes)
 	})
 }
 
@@ -45,9 +46,10 @@ func Walk(
 func RunTest(
 	t *testing.T,
 	path string,
-	filter func([]byte) ([]byte, error),
+	filter func(string) (string, error),
 	interesting func(contains string) InterestingFn,
 	mode Mode,
+	cr ChunkReducer,
 	passes []Pass,
 ) {
 	var contains string
@@ -61,7 +63,7 @@ func RunTest(
 			contains = d.Input
 			return ""
 		case "reduce":
-			input := []byte(d.Input)
+			input := d.Input
 			if filter != nil {
 				var err error
 				input, err = filter(input)
@@ -69,11 +71,11 @@ func RunTest(
 					t.Fatal(err)
 				}
 			}
-			output, err := Reduce(log, File(input), interesting(contains), 0, mode, passes...)
+			output, err := Reduce(log, input, interesting(contains), 0, mode, cr, passes...)
 			if err != nil {
 				t.Fatal(err)
 			}
-			return string(output) + "\n"
+			return output + "\n"
 		default:
 			t.Fatalf("unknown command: %s", d.Cmd)
 			return ""

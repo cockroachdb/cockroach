@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -27,16 +28,16 @@ import (
 
 // Pass defines a reduce pass.
 type Pass interface {
-	// New creates a new opaque state object for the input File.
-	New(File) State
-	// Transform applies this transformation pass to the input File using
+	// New creates a new opaque state object for the input string.
+	New(string) State
+	// Transform applies this transformation pass to the input string using
 	// State to determine which occurrence to transform. It returns the
-	// transformed File, a Result indicating whether to proceed or not, and
+	// transformed string, a Result indicating whether to proceed or not, and
 	// an error if the transformation could not be performed.
-	Transform(File, State) (File, Result, error)
+	Transform(string, State) (string, Result, error)
 	// Advance moves State to the next occurrence of a transformation in
-	// the given input File and returns the new State.
-	Advance(File, State) State
+	// the given input string and returns the new State.
+	Advance(string, State) State
 	// Name returns the name of the Pass.
 	Name() string
 }
@@ -54,17 +55,9 @@ const (
 // State is opaque state for a Pass.
 type State interface{}
 
-// File contains the contents of a file.
-type File string
-
-// Size returns the size of the file in bytes.
-func (f File) Size() int {
-	return len(f)
-}
-
-// InterestingFn returns true if File triggers the target test failure. It
+// InterestingFn returns true if the string triggers the target test failure. It
 // should be context-aware and stop work if the context is canceled.
-type InterestingFn func(context.Context, File) bool
+type InterestingFn func(context.Context, string) bool
 
 // Mode is an enum specifying how to determine if forward progress was made.
 type Mode int
@@ -84,18 +77,13 @@ const (
 // for GOMAXPROCS.
 func Reduce(
 	logger io.Writer,
-	originalTestCase File,
+	originalTestCase string,
 	isInteresting InterestingFn,
 	numGoroutines int,
 	mode Mode,
+	chunkReducer ChunkReducer,
 	passList ...Pass,
-) (File, error) {
-	log := func(format string, args ...interface{}) {
-		if logger == nil {
-			return
-		}
-		fmt.Fprintf(logger, format, args...)
-	}
+) (string, error) {
 	if numGoroutines < 1 {
 		numGoroutines = runtime.GOMAXPROCS(0)
 	}
@@ -103,6 +91,11 @@ func Reduce(
 	defer cancel()
 	if !isInteresting(ctx, originalTestCase) {
 		return "", errors.New("original test case not interesting")
+	}
+
+	chunkReducedTestCase, err := attemptChunkReduction(logger, originalTestCase, isInteresting, chunkReducer)
+	if err != nil {
+		return "", err
 	}
 
 	// findNextInteresting finds the next interesting result. It does this
@@ -117,15 +110,14 @@ func Reduce(
 		g := ctxgroup.WithContext(ctx)
 		variants := make(chan varState)
 		g.GoCtx(func(ctx context.Context) error {
-			// This goroutine generates all variants from passes
-			// and sends them on a chan for testing. It closes
-			// the variants chan when there are no more. Since
-			// numGoroutines are working at one time, this
-			// goroutine will block until one is available. If an
-			// interesting variant is found, ctx will close and
-			// this goroutine will shut down.
+			// This goroutine generates all variants from passList and sends
+			// them on a chan for testing. It closes the variants chan when
+			// there are no more. Since numGoroutines are working at one time,
+			// this goroutine will block until one is available. If an
+			// interesting variant is found, ctx will close and this goroutine
+			// will shut down.
 			defer close(variants)
-			current := vs.f
+			current := vs.file
 			state := vs.s
 			var done, prev chan struct{}
 			// Pre-populate the first prev.
@@ -145,16 +137,14 @@ func Reduce(
 						state = nil
 						break
 					}
-					// Done must be buffered because it
-					// will only be received from if the
-					// following variant was interesting,
-					// and in other cases the send must
-					// not block.
+					// Done must be buffered because it will only be received
+					// from if the following variant was interesting, and in
+					// other cases the send must not block.
 					done = make(chan struct{}, 1)
 					select {
 					case variants <- varState{
 						pi:   pi,
-						f:    variant,
+						file: variant,
 						s:    state,
 						done: done,
 						prev: prev,
@@ -172,7 +162,7 @@ func Reduce(
 		for i := 0; i < numGoroutines; i++ {
 			g.GoCtx(func(ctx context.Context) error {
 				for vs := range variants {
-					if isInteresting(ctx, vs.f) {
+					if isInteresting(ctx, vs.file) {
 						// Wait for the previous test to finish.
 						select {
 						case <-ctx.Done():
@@ -203,7 +193,8 @@ func Reduce(
 			var ierr errInteresting
 			if errors.As(err, &ierr) {
 				vs := varState(ierr)
-				log("\tpass %d of %d (%s): %d bytes\n", vs.pi+1, len(passList), passList[vs.pi].Name(), vs.f.Size())
+				log(logger, "\tpass %d of %d (%s): %d bytes\n", vs.pi+1, len(passList),
+					passList[vs.pi].Name(), len(vs.file))
 				return &vs, nil
 			}
 			return nil, err
@@ -213,11 +204,11 @@ func Reduce(
 
 	start := timeutil.Now()
 	vs := varState{
-		f: originalTestCase,
+		file: chunkReducedTestCase,
 	}
-	log("size: %d\n", vs.f.Size())
+	log(logger, "size: %d\n", len(vs.file))
 	for {
-		sizeAtStart := vs.f.Size()
+		sizeAtStart := len(vs.file)
 		foundInteresting := false
 		for {
 			next, err := findNextInteresting(vs)
@@ -234,7 +225,7 @@ func Reduce(
 		done := false
 		switch mode {
 		case ModeSize:
-			if vs.f.Size() >= sizeAtStart {
+			if len(vs.file) >= sizeAtStart {
 				done = true
 			}
 		case ModeInteresting:
@@ -247,14 +238,24 @@ func Reduce(
 		}
 		// Need to do another round. Clear pi and state.
 		vs = varState{
-			f: vs.f,
+			file: vs.file,
 		}
 	}
-	log("total time: %v\n", timeutil.Since(start))
-	log("original size: %v\n", originalTestCase.Size())
-	log("final size: %v\n", vs.f.Size())
-	log("reduction: %v%%\n", 100-int(100*float64(vs.f.Size())/float64(originalTestCase.Size())))
-	return vs.f, nil
+	log(logger, "total time: %v\n", timeutil.Since(start))
+	log(logger, "original size: %v\n", len(originalTestCase))
+	if chunkReducer != nil {
+		log(logger, "chunk-reduced size: %v\n", len(chunkReducedTestCase))
+	}
+	log(logger, "final size: %v\n", len(vs.file))
+	log(logger, "reduction: %v%%\n", 100-int(100*float64(len(vs.file))/float64(len(originalTestCase))))
+	return vs.file, nil
+}
+
+func log(logger io.Writer, format string, args ...interface{}) {
+	if logger == nil {
+		return
+	}
+	fmt.Fprintf(logger, format, args...)
 }
 
 // errInteresting is an error version of varState that is a special sentinel
@@ -269,13 +270,71 @@ func (e errInteresting) Error() string {
 // varState tracks the current variant state, which is a tuple of the current
 // pass, file, and state.
 type varState struct {
-	pi int
-	f  File
-	s  State
+	pi   int
+	file string
+	s    State
 
 	// done and prev are used to synchronize work between variant
 	// testing. A variant sends on done when it has verified its test is
 	// uninteresting. If its test was interesting, it receives on prev,
 	// which thus guarantees that it was the first interesting variant.
 	done, prev chan struct{}
+}
+
+// A ChunkReducer can eliminate large chunks of a test case before performing
+// the more granular and expensive reduction algorithm. It breaks a test case
+// into segments. Segments can be grouped into chunks than can be removed
+// entirely from the test case if they aren't required to produce an interesting
+// result.
+type ChunkReducer interface {
+	// HaltAfter returns the number of consecutive failed reduction attempts
+	// allowed before chunk reduction is halted.
+	HaltAfter() int
+	// Init the ChunkReducer with the given string.
+	Init(string) error
+	// NumSegments returns the total number of segments that are eligible to be
+	// reduced en masse.
+	NumSegments() int
+	// DeleteSegments returns a string with segments [start, end) removed from
+	// the original string.
+	DeleteSegments(start, end int) string
+}
+
+// attemptChunkReduction attempts to reduce chunks of originalTestCase en masse
+// using the provided ChunkReducer. It randomly deletes a range of segments and
+// tests if the remaining segments satisfy isInteresting. It will continually
+// reduce segments until it fails to reduce chunkReducer.HaltAfter() times in a
+// row.
+func attemptChunkReduction(
+	logger io.Writer, originalTestCase string, isInteresting InterestingFn, chunkReducer ChunkReducer,
+) (string, error) {
+	if chunkReducer == nil {
+		return originalTestCase, nil
+	}
+
+	ctx := context.Background()
+	reduced := originalTestCase
+
+	failedAttempts := 0
+	for failedAttempts < chunkReducer.HaltAfter() {
+		err := chunkReducer.Init(reduced)
+		if err != nil {
+			return "", err
+		}
+
+		// Pick two random indexes and remove all statements between them.
+		start := rand.Intn(chunkReducer.NumSegments())
+		end := rand.Intn(chunkReducer.NumSegments()-start) + start + 1
+
+		localReduced := chunkReducer.DeleteSegments(start, end)
+		if isInteresting(ctx, localReduced) {
+			reduced = localReduced
+			log(logger, "\tchunk reduction: %d bytes\n", len(reduced))
+			failedAttempts = 0
+		} else {
+			failedAttempts++
+		}
+	}
+
+	return reduced, nil
 }
