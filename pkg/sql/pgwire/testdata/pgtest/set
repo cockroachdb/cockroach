@@ -1,0 +1,10 @@
+send
+Query {"String": "RESET intervalstyle"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"postgres"}
+{"Type":"CommandComplete","CommandTag":"RESET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
