@@ -1479,9 +1479,15 @@ func PrepareTransactionForRetry(
 		txn.WriteTimestamp.Forward(tErr.PusheeTxn.WriteTimestamp)
 		txn.UpgradePriority(tErr.PusheeTxn.Priority - 1)
 	case *TransactionRetryError:
-		// Nothing to do. Transaction.Timestamp has already been forwarded to be
-		// ahead of any timestamp cache entries or newer versions which caused
-		// the restart.
+		// Transaction.Timestamp has already been forwarded to be ahead of any
+		// timestamp cache entries or newer versions which caused the restart.
+		if tErr.Reason == RETRY_SERIALIZABLE {
+			// For RETRY_SERIALIZABLE case, we want to bump timestamp further than
+			// timestamp cache to increase chances of retry succeeding. The tradeoff
+			// here is that impact of this transaction on conflicting ones is increased.
+			now := clock.Now()
+			txn.WriteTimestamp.Forward(now)
+		}
 	case *WriteTooOldError:
 		// Increase the timestamp to the ts at which we've actually written.
 		txn.WriteTimestamp.Forward(writeTooOldRetryTimestamp(tErr))
