@@ -2641,6 +2641,198 @@ DROP TABLE regional_by_row;
 DROP TABLE regional_by_row_as;
 ALTER DATABASE drop_regions DROP REGION "ca-central-1";
 
+subtest virtual_columns
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+CREATE TABLE regional_by_row_table_virt (
+  pk int PRIMARY KEY,
+  a int NOT NULL,
+  b int NOT NULL,
+  v INT AS (a + b) VIRTUAL,
+  v2 INT AS (a + 10) VIRTUAL,
+  UNIQUE (v),
+  UNIQUE INDEX (v2),
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW
+
+# Uniqueness checks for virtual columns should be efficient.
+query T
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • insert
+│   │ into: regional_by_row_table_virt(pk, a, b, v, v2, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 7 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table_virt@primary
+│           │ equality: (lookup_join_const_col_@21, column1) = (crdb_region,pk)
+│           │ equality cols are key
+│           │ pred: column12 != crdb_region
+│           │
+│           └── • cross join
+│               │ estimated row count: 3
+│               │
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • lookup join
+│               │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
+│               │ equality: (lookup_join_const_col_@35, column13) = (crdb_region,v)
+│               │ equality cols are key
+│               │ pred: (column1 != pk) OR (column12 != crdb_region)
+│               │
+│               └── • cross join
+│                   │ estimated row count: 3
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • lookup join
+                │ table: regional_by_row_table_virt@regional_by_row_table_virt_v2_key
+                │ equality: (lookup_join_const_col_@49, column14) = (crdb_region,v2)
+                │ equality cols are key
+                │ pred: (column1 != pk) OR (column12 != crdb_region)
+                │
+                └── • cross join
+                    │ estimated row count: 3
+                    │
+                    ├── • values
+                    │     size: 1 column, 3 rows
+                    │
+                    └── • scan buffer
+                          label: buffer 1
+
+query T
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • upsert
+│   │ into: regional_by_row_table_virt(pk, a, b, v, v2, crdb_region)
+│   │ arbiter constraints: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • render
+│               │
+│               └── • cross join (left outer)
+│                   │
+│                   ├── • values
+│                   │     size: 6 columns, 1 row
+│                   │
+│                   └── • render
+│                       │
+│                       └── • union all
+│                           │ limit: 1
+│                           │
+│                           ├── • scan
+│                           │     missing stats
+│                           │     table: regional_by_row_table_virt@primary
+│                           │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│                           │
+│                           └── • scan
+│                                 missing stats
+│                                 table: regional_by_row_table_virt@primary
+│                                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • lookup join
+│               │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
+│               │ equality: (lookup_join_const_col_@31, column13) = (crdb_region,v)
+│               │ equality cols are key
+│               │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+│               │
+│               └── • cross join
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • lookup join
+                │ table: regional_by_row_table_virt@regional_by_row_table_virt_v2_key
+                │ equality: (lookup_join_const_col_@45, column14) = (crdb_region,v2)
+                │ equality cols are key
+                │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+                │
+                └── • cross join
+                    │
+                    ├── • values
+                    │     size: 1 column, 3 rows
+                    │
+                    └── • scan buffer
+                          label: buffer 1
+
+statement ok
+INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_v_key"\nDETAIL: Key \(v\)=\(2\) already exists\.
+INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 2, 0)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_v_key"\nDETAIL: Key \(v\)=\(2\) already exists\.
+UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 2, 0)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_v2_key"\nDETAIL: Key \(v2\)=\(11\) already exists\.
+INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 1, 3)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_v2_key"\nDETAIL: Key \(v2\)=\(11\) already exists\.
+UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 1, 3)
+
+subtest regressions
+
 # Regression test for #63109. UPSERT should not cause the error
 # ERROR: missing "crdb_region" primary key column.
 statement ok
