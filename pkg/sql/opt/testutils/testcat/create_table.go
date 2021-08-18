@@ -123,8 +123,9 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			types.Int,
 			false, /* nullable */
 			cat.Hidden,
-			&uniqueRowIDString, /* defaultExpr */
-			nil,                /* computedExpr */
+			&uniqueRowIDString,         /* defaultExpr */
+			nil,                        /* computedExpr */
+			cat.NotGeneratedAsIdentity, /* generatedAsIDType */
 		)
 		tab.Columns = append(tab.Columns, rowid)
 	}
@@ -150,8 +151,9 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		colinfo.MVCCTimestampColumnType,
 		true, /* nullable */
 		cat.Hidden,
-		nil, /* defaultExpr */
-		nil, /* computedExpr */
+		nil,                        /* defaultExpr */
+		nil,                        /* computedExpr */
+		cat.NotGeneratedAsIdentity, /* generatedAsIDType */
 	)
 	tab.Columns = append(tab.Columns, mvcc)
 
@@ -166,8 +168,9 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		types.Oid,
 		true, /* nullable */
 		cat.Hidden,
-		nil, /* defaultExpr */
-		nil, /* computedExpr */
+		nil,                        /* defaultExpr */
+		nil,                        /* computedExpr */
+		cat.NotGeneratedAsIdentity, /* generatedAsIDType */
 	)
 	tab.Columns = append(tab.Columns, tableoid)
 
@@ -298,8 +301,9 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 		types.Int,
 		false, /* nullable */
 		cat.Hidden,
-		nil, /* defaultExpr */
-		nil, /* computedExpr */
+		nil,                        /* defaultExpr */
+		nil,                        /* computedExpr */
+		cat.NotGeneratedAsIdentity, /* generatedAsIDType */
 	)
 
 	tab.Columns = []cat.Column{pk}
@@ -354,8 +358,9 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 		types.Int,
 		false, /* nullable */
 		cat.Hidden,
-		&uniqueRowIDString, /* defaultExpr */
-		nil,                /* computedExpr */
+		&uniqueRowIDString,         /* defaultExpr */
+		nil,                        /* computedExpr */
+		cat.NotGeneratedAsIdentity, /* generatedAsIDType */
 	)
 
 	tab.Columns = append(tab.Columns, rowid)
@@ -596,6 +601,18 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		computedExpr = &s
 	}
 
+	var generatedAsIDType cat.GeneratedAsIdentityType
+	if def.GeneratedIdentity.IsGeneratedAsIdentity {
+		switch def.GeneratedIdentity.GeneratedAsIdentityType {
+		case tree.GeneratedAlways:
+			generatedAsIDType = cat.GeneratedAlwaysAsIdentity
+		case tree.GeneratedByDefault:
+			generatedAsIDType = cat.GeneratedByDefaultAsIdentity
+		}
+	} else {
+		generatedAsIDType = cat.NotGeneratedAsIdentity
+	}
+
 	var col cat.Column
 	if def.Computed.Virtual {
 		col.InitVirtualComputed(
@@ -618,6 +635,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			visibility,
 			defaultExpr,
 			computedExpr,
+			generatedAsIDType,
 		)
 	}
 	tt.Columns = append(tt.Columns, col)
