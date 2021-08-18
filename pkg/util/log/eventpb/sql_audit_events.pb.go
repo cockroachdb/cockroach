@@ -317,7 +317,8 @@ func (m *SlowQueryInternal) XXX_DiscardUnknown() {
 var xxx_messageInfo_SlowQueryInternal proto.InternalMessageInfo
 
 // LargeRowInternal is recorded when an internal query tries to write a row
-// larger than cluster setting `sql.mutations.max_row_size.log` to the database.
+// larger than cluster settings `sql.mutations.max_row_size.log` or
+// `sql.mutations.max_row_size.err` to the database.
 type LargeRowInternal struct {
 	CommonEventDetails    `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
 	CommonLargeRowDetails `protobuf:"bytes,2,opt,name=row,proto3,embedded=row" json:""`
