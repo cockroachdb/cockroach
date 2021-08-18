@@ -89,6 +89,12 @@ type AsOfSystemTime struct {
 	// If this is a bounded staleness read, ensures we only read from the nearest
 	// replica. The query will error if this constraint could not be satisfied.
 	NearestOnly bool
+	// If this is a bounded staleness read with nearest_only=True, this is set when
+	// we failed to satisfy a bounded staleness read with a nearby replica as we
+	// have no followers with an up-to-date schema.
+	// This is be zero if there is no maximum bound.
+	// In non-zero, we want a read t where Timestamp <= t <= MaxTimestampBound.
+	MaxTimestampBound hlc.Timestamp
 }
 
 type evalAsOfTimestampOptions struct {

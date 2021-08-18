@@ -582,17 +582,28 @@ func (ex *connExecutor) execStmtInOpenState(
 	// don't return any event unless an error happens.
 
 	if os.ImplicitTxn.Get() {
-		asOf, err := p.isAsOf(ctx, ast)
-		if err != nil {
-			return makeErrEvent(err)
-		}
-		if asOf != nil {
-			p.extendedEvalCtx.AsOfSystemTime = asOf
-			if !asOf.BoundedStaleness {
-				p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
-				if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
-					return makeErrEvent(err)
+		// If AS OF SYSTEM TIME is already set, this has to be a bounded staleness
+		// read with nearest_only=True during a retry.
+		if p.extendedEvalCtx.AsOfSystemTime == nil {
+			asOf, err := p.isAsOf(ctx, ast)
+			if err != nil {
+				return makeErrEvent(err)
+			}
+			if asOf != nil {
+				p.extendedEvalCtx.AsOfSystemTime = asOf
+				if !asOf.BoundedStaleness {
+					p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
+					if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
+						return makeErrEvent(err)
+					}
 				}
+			}
+		} else {
+			if !p.extendedEvalCtx.AsOfSystemTime.BoundedStaleness ||
+				p.extendedEvalCtx.AsOfSystemTime.MaxTimestampBound.IsEmpty() {
+				return makeErrEvent(errors.AssertionFailedf(
+					"expected bounded_staleness set with a max_timestamp_bound",
+				))
 			}
 		}
 	} else {
@@ -997,6 +1008,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	ex.sessionTracing.TraceRetryInformation(ctx, ex.extraTxnState.autoRetryCounter, ex.extraTxnState.autoRetryReason)
+	if ex.server.cfg.TestingKnobs.OnTxnRetry != nil && ex.extraTxnState.autoRetryReason != nil {
+		ex.server.cfg.TestingKnobs.OnTxnRetry(ex.extraTxnState.autoRetryReason, planner.EvalContext())
+	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
