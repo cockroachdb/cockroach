@@ -214,7 +214,7 @@ $ git tag [tag name] [SHA] # SHA can be omitted if desired commit is HEAD
 $ git push [remote] [tag name]
 ```
 
-### Build Cluster UI prerequisites (protobufs, etc)
+### 3. Build Cluster UI prerequisites (protobufs, etc)
 To build the prerequisites for cluster-ui run the following commands from the root
 directory of CockroachDB.
 
@@ -229,6 +229,8 @@ If you have not done so already, request publishing permissions from the Cluster
 UI team at Cockroach Labs. You will be required to create an account on [npm](https://www.npmjs.com/)
 and configure two factor authentication. You will then be added to the `@cockroachlabs`
 npm organization and given permission to publish the `clutser-ui` package.
+
+#### Setup your npm registry login details
 
 Before publishing, ensure that you have authenticated with the npm registry by
 running the following command,
@@ -255,7 +257,19 @@ info npm email: xxxxxxxx@xxxxx.zzz
 ✨  Done in 0.05s.
 ```
 
-Once you have authenticated, you will run the publish command like so
+Once you have authenticated, you are ready to publish to npm.
+
+#### Publish package to npm
+
+Go into the `pkg/ui/cluster-ui` subfolder, as you'll be publishing the package
+as specified by that `package.json`.
+  
+Note: If you've already updated `version` in `package.json` to reflect the new version,
+you'll need to temporarily change this back to the older version (i.e. the version
+that's currently listed on npm). After running the command below, the script will then 
+automatically reverted back to the newer version.
+
+To publish the package, run the publish command,
 
 ```shell
 $ yarn publish --access public
@@ -272,14 +286,15 @@ the most recent published version will be tagged as `latest`. Depending on the
 version you are publishing, you will most likely need to add distribution tags to
 the version you published. Our current distribution tags are,
 
+
 dist tag name| example version | purpose
--------------|--------
+-------------|--------|----
 latest       | 21.1.2 | latest version of major stable version of CRDB
 release-21.1 | 21.1.2 | latest version from version 21.1 of CRDB
 release-20.2 | 20.2.3 | latest version from version 20.2 of CRDB
 next         | 21.2.0-prerelease-1 | latest version of development version of CRDB
 
-At the time of writing, CockroachDB v21.1 is the latest stable version so cluster
+At the time of writing, June 2021, CockroachDB v21.1 is the latest stable version so cluster
 ui versions from this release branch should be tagged as both `latest` and `release-20.1`.
 CockroachDB v21.2 is currently under development and so versions published from
 master should be tagged as `next` and are expected to have a [prerelease identifiers](https://semver.org/#backusnaur-form-grammar-for-valid-semver-versions)
