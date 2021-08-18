@@ -288,7 +288,6 @@ const (
 	// AutoSpanConfigReconciliationJob adds the AutoSpanConfigReconciliationJob
 	// type.
 	AutoSpanConfigReconciliationJob
-
 	// PreventNewInterleavedTables interleaved table creation is completely
 	// blocked on this version.
 	PreventNewInterleavedTables
@@ -297,6 +296,8 @@ const (
 	EnsureNoInterleavedTables
 	// DefaultPrivileges default privileges are supported in this version.
 	DefaultPrivileges
+	// ZonesTableForSecondaryTenants adds system.zones for all secondary tenants.
+	ZonesTableForSecondaryTenants
 	// Step (1): Add new versions here.
 )
 
@@ -499,6 +500,9 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DefaultPrivileges,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 142},
+	}, {
+		Key:     ZonesTableForSecondaryTenants,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 144},
 	},
 	// Step (2): Add new versions here.
 }
