@@ -1849,8 +1849,9 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 			colMeta.Type,
 			!relProps.NotNullCols.Contains(col),
 			cat.Visible,
-			nil, /* defaultExpr */
-			nil, /* computedExpr */
+			nil,                        /* defaultExpr */
+			nil,                        /* computedExpr */
+			cat.NotGeneratedAsIdentity, /* generatedAsIDType */
 		)
 
 		// Make sure we have estimated stats for this column.
