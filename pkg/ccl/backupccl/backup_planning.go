@@ -674,7 +674,16 @@ func checkPrivilegesForBackup(
 	}
 	for _, desc := range targetDescs {
 		switch desc := desc.(type) {
-		case catalog.DatabaseDescriptor, catalog.TableDescriptor:
+		case catalog.DatabaseDescriptor:
+			// SELECT is being deprecated as privilege on Databases in 22.1.
+			// In the meanwhile, we still allow backup if the user has SELECT.
+			// TODO(richardjcai): Remove this check for SELECT in 22.1.
+			selectErr := p.CheckPrivilege(ctx, desc, privilege.SELECT)
+			connectErr := p.CheckPrivilege(ctx, desc, privilege.CONNECT)
+			if connectErr != nil && selectErr != nil {
+				return connectErr
+			}
+		case catalog.TableDescriptor:
 			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 				return err
 			}
