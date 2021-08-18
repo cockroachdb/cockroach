@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -573,6 +574,17 @@ func readPostgresStmt(
 		}
 		schemaObjects.createSchema[name] = stmt
 	case *tree.CreateTable:
+		// If the target table columns have data type INT or INTEGER, they need to
+		// be updated to conform to the session variable `default_int_size`.
+		for _, def := range stmt.Defs {
+			if d, ok := def.(*tree.ColumnTableDef); ok {
+				if dType, ok := d.Type.(*types.T); ok {
+					if dType.Equivalent(types.Int) {
+						d.Type = parser.NakedIntTypeFromDefaultIntSize(p.SessionData().DefaultIntSize)
+					}
+				}
+			}
+		}
 		schemaQualifiedName, err := getSchemaAndTableName(&stmt.Table)
 		if err != nil {
 			return err

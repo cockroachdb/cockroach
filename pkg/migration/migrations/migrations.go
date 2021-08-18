@@ -49,6 +49,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.PostTruncatedAndRangeAppliedStateMigration),
 		postTruncatedStateMigration,
 	),
+	migration.NewSystemMigration(
+		"stop using monolithic encryption-at-rest registry for all stores",
+		toCV(clusterversion.RecordsBasedRegistry),
+		recordsBasedRegistryMigration,
+	),
 	migration.NewTenantMigration(
 		"add the systems.join_tokens table",
 		toCV(clusterversion.JoinTokensTable),

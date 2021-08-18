@@ -469,6 +469,12 @@ test           pg_catalog          regprocedure                           root  
 test           pg_catalog          regprocedure[]                         admin    ALL
 test           pg_catalog          regprocedure[]                         public   USAGE
 test           pg_catalog          regprocedure[]                         root     ALL
+test           pg_catalog          regrole                                admin    ALL
+test           pg_catalog          regrole                                public   USAGE
+test           pg_catalog          regrole                                root     ALL
+test           pg_catalog          regrole[]                              admin    ALL
+test           pg_catalog          regrole[]                              public   USAGE
+test           pg_catalog          regrole[]                              root     ALL
 test           pg_catalog          regtype                                admin    ALL
 test           pg_catalog          regtype                                public   USAGE
 test           pg_catalog          regtype                                root     ALL
@@ -598,6 +604,8 @@ test           pg_catalog          regproc         root     ALL
 test           pg_catalog          regproc[]       root     ALL
 test           pg_catalog          regprocedure    root     ALL
 test           pg_catalog          regprocedure[]  root     ALL
+test           pg_catalog          regrole         root     ALL
+test           pg_catalog          regrole[]       root     ALL
 test           pg_catalog          regtype         root     ALL
 test           pg_catalog          regtype[]       root     ALL
 test           pg_catalog          string          root     ALL
@@ -1044,6 +1052,8 @@ a              pg_catalog          regproc                          root     ALL
 a              pg_catalog          regproc[]                        root     ALL
 a              pg_catalog          regprocedure                     root     ALL
 a              pg_catalog          regprocedure[]                   root     ALL
+a              pg_catalog          regrole                          root     ALL
+a              pg_catalog          regrole[]                        root     ALL
 a              pg_catalog          regtype                          root     ALL
 a              pg_catalog          regtype[]                        root     ALL
 a              pg_catalog          string                           root     ALL
@@ -1125,6 +1135,8 @@ defaultdb      pg_catalog          regproc                          root     ALL
 defaultdb      pg_catalog          regproc[]                        root     ALL
 defaultdb      pg_catalog          regprocedure                     root     ALL
 defaultdb      pg_catalog          regprocedure[]                   root     ALL
+defaultdb      pg_catalog          regrole                          root     ALL
+defaultdb      pg_catalog          regrole[]                        root     ALL
 defaultdb      pg_catalog          regtype                          root     ALL
 defaultdb      pg_catalog          regtype[]                        root     ALL
 defaultdb      pg_catalog          string                           root     ALL
@@ -1206,6 +1218,8 @@ postgres       pg_catalog          regproc                          root     ALL
 postgres       pg_catalog          regproc[]                        root     ALL
 postgres       pg_catalog          regprocedure                     root     ALL
 postgres       pg_catalog          regprocedure[]                   root     ALL
+postgres       pg_catalog          regrole                          root     ALL
+postgres       pg_catalog          regrole[]                        root     ALL
 postgres       pg_catalog          regtype                          root     ALL
 postgres       pg_catalog          regtype[]                        root     ALL
 postgres       pg_catalog          string                           root     ALL
@@ -1291,6 +1305,8 @@ system         pg_catalog          regproc                          root     ALL
 system         pg_catalog          regproc[]                        root     ALL
 system         pg_catalog          regprocedure                     root     ALL
 system         pg_catalog          regprocedure[]                   root     ALL
+system         pg_catalog          regrole                          root     ALL
+system         pg_catalog          regrole[]                        root     ALL
 system         pg_catalog          regtype                          root     ALL
 system         pg_catalog          regtype[]                        root     ALL
 system         pg_catalog          string                           root     ALL
@@ -1528,6 +1544,8 @@ test           pg_catalog          regproc                          root     ALL
 test           pg_catalog          regproc[]                        root     ALL
 test           pg_catalog          regprocedure                     root     ALL
 test           pg_catalog          regprocedure[]                   root     ALL
+test           pg_catalog          regrole                          root     ALL
+test           pg_catalog          regrole[]                        root     ALL
 test           pg_catalog          regtype                          root     ALL
 test           pg_catalog          regtype[]                        root     ALL
 test           pg_catalog          string                           root     ALL

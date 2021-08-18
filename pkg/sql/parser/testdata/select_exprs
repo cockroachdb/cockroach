@@ -1233,6 +1233,14 @@ SELECT _:::REGNAMESPACE -- literals removed
 SELECT 1:::REGNAMESPACE -- identifiers removed
 
 parse
+SELECT 1:::REGROLE
+----
+SELECT 1:::REGROLE
+SELECT ((1):::REGROLE) -- fully parenthesized
+SELECT _:::REGROLE -- literals removed
+SELECT 1:::REGROLE -- identifiers removed
+
+parse
 SELECT 'a' AS "12345"
 ----
 SELECT 'a' AS "12345"

@@ -282,6 +282,9 @@ const (
 	PostSeparatedIntentsMigration
 	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
 	RetryJobsWithExponentialBackoff
+	// RecordsBasedRegistry replaces the existing monolithic protobuf-based
+	// encryption-at-rest file registry with the new incremental records-based registry.
+	RecordsBasedRegistry
 
 	// Step (1): Add new versions here.
 )
@@ -466,6 +469,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     RetryJobsWithExponentialBackoff,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 132},
+	},
+	{
+		Key:     RecordsBasedRegistry,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 134},
 	},
 
 	// Step (2): Add new versions here.

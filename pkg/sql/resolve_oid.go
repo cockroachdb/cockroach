@@ -99,8 +99,9 @@ type regTypeInfo struct {
 // table that contains the entities of the type of the key.
 var regTypeInfos = map[oid.Oid]regTypeInfo{
 	oid.T_regclass:     {"pg_class", "relname", "relation", pgcode.UndefinedTable},
-	oid.T_regtype:      {"pg_type", "typname", "type", pgcode.UndefinedObject},
+	oid.T_regnamespace: {"pg_namespace", "nspname", "namespace", pgcode.UndefinedObject},
 	oid.T_regproc:      {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
 	oid.T_regprocedure: {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
-	oid.T_regnamespace: {"pg_namespace", "nspname", "namespace", pgcode.UndefinedObject},
+	oid.T_regrole:      {"pg_authid", "rolname", "role", pgcode.UndefinedObject},
+	oid.T_regtype:      {"pg_type", "typname", "type", pgcode.UndefinedObject},
 }
