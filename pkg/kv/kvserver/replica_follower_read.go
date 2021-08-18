@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // FollowerReadsEnabled controls whether replicas attempt to serve follower
@@ -61,14 +60,8 @@ func BatchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
 // non-locking, read-only requests can be served as follower reads. The batch
 // must be transactional and composed exclusively of this kind of request to be
 // accepted as a follower read.
-func (r *Replica) canServeFollowerReadRLocked(
-	ctx context.Context, ba *roachpb.BatchRequest, err error,
-) bool {
-	var lErr *roachpb.NotLeaseHolderError
-	eligible := errors.As(err, &lErr) &&
-		BatchCanBeEvaluatedOnFollower(*ba) &&
-		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
-
+func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *roachpb.BatchRequest) bool {
+	eligible := BatchCanBeEvaluatedOnFollower(*ba) && FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
 	if !eligible {
 		// We couldn't do anything with the error, propagate it.
 		return false
