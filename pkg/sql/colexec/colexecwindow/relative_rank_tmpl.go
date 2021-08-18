@@ -309,7 +309,6 @@ func (r *_RELATIVE_RANK_STRINGOp) Init(ctx context.Context) {
 			DiskAcc:            r.diskAcc,
 		},
 	)
-	r.scratch = r.allocator.NewMemBatchWithFixedCapacity(r.inputTypes, coldata.BatchSize())
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 	// {{if .IsPercentRank}}
 	// All rank functions start counting from 1. Before we assign the rank to a
@@ -394,22 +393,12 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			// the input before we can proceed.
 			// {{end}}
 
-			sel := batch.Selection()
 			// First, we buffer up all of the tuples.
-			r.scratch.ResetInternalBatch()
-			r.allocator.PerformOperation(r.scratch.ColVecs(), func() {
-				for colIdx, vec := range r.scratch.ColVecs() {
-					vec.Copy(
-						coldata.SliceArgs{
-							Src:       batch.ColVec(colIdx),
-							Sel:       sel,
-							SrcEndIdx: n,
-						},
-					)
-				}
-				r.scratch.SetLength(n)
-			})
-			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, batch)
+
+			// {{if or (.HasPartition) (.IsCumeDist)}}
+			sel := batch.Selection()
+			// {{end}}
 
 			// Then, we need to update the sizes of the partitions.
 			// {{if .HasPartition}}
