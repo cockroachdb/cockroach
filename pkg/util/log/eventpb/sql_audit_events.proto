@@ -108,6 +108,7 @@ message CommonLargeRowDetails {
   uint32 table_id = 2 [(gogoproto.customname) = "TableID", (gogoproto.jsontag) = ",omitempty"];
   uint32 family_id = 3 [(gogoproto.customname) = "FamilyID", (gogoproto.jsontag) = ",omitempty"];
   string primary_key = 4 [(gogoproto.jsontag) = ",omitempty"];
+  bool violates_max_row_size_err = 5 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // LargeRow is recorded when a statement tries to write a row larger than
@@ -143,7 +144,8 @@ message SlowQueryInternal {
 }
 
 // LargeRowInternal is recorded when an internal query tries to write a row
-// larger than cluster setting `sql.mutations.max_row_size.log` to the database.
+// larger than cluster settings `sql.mutations.max_row_size.log` or
+// `sql.mutations.max_row_size.err` to the database.
 message LargeRowInternal {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonLargeRowDetails row = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
