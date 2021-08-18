@@ -1880,7 +1880,7 @@ SELECT count(usage_count)
 subtest generated_as_identity
 statement ok
 DROP TABLE IF EXISTS t;
-CREATE TABLE t (a INT UNIQUE)
+CREATE TABLE t (a INT UNIQUE);
 
 statement ok
 ALTER TABLE t ADD COLUMN b INT GENERATED ALWAYS AS IDENTITY;
