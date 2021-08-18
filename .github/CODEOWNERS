@@ -173,6 +173,12 @@
 /pkg/cmd/roachprod/          @cockroachdb/dev-inf
 /pkg/cmd/roachprod-stress/   @cockroachdb/test-eng
 /pkg/cmd/roachtest/          @cockroachdb/test-eng
+# This isn't quite right, each file should ideally be owned
+# by a team (or at least most of them), namely the team that
+# is the Owner for the roachtest, but until we unify these
+# two concepts of ownership we don't want to ping test-eng
+# on each test change.
+/pkg/cmd/roachtest/tests     @cockroachdb/test-eng-noreview
 /pkg/cmd/roachvet/           @cockroachdb/dev-inf
 /pkg/cmd/skip-test/          @cockroachdb/test-eng
 /pkg/cmd/skiperrs/           @cockroachdb/sql-experience
@@ -201,6 +207,8 @@
 /pkg/internal/team/          @cockroachdb/test-eng
 /pkg/jobs/                   @cockroachdb/sql-schema
 /pkg/keys/                   @cockroachdb/kv-prs
+# Don't ping KV on updates to reserved descriptor IDs and such.
+/pkg/keys/constants.go       @cockroachdb/kv-prs-noreview
 /pkg/migration/              @cockroachdb/kv-prs @cockroachdb/sql-schema
 /pkg/multitenant             @cockroachdb/unowned
 /pkg/release/                @cockroachdb/dev-inf
@@ -212,6 +220,8 @@
 /pkg/startupmigrations/      @cockroachdb/server-prs @cockroachdb/sql-schema
 /pkg/streaming/              @cockroachdb/bulk-prs
 /pkg/testutils/              @cockroachdb/test-eng
+/pkg/testutils/reduce/       @cockroachdb/sql-queries
+/pkg/testutils/sqlutils/     @cockroachdb/sql-queries
 /pkg/ts/                     @cockroachdb/kv-prs
 /pkg/ts/catalog/             @cockroachdb/obs-inf-prs
 /pkg/util/                   @cockroachdb/unowned
@@ -220,3 +230,12 @@
 /pkg/util/stop               @cockroachdb/server-prs
 /pkg/util/tracing            @cockroachdb/obs-inf-prs
 /pkg/workload/               @cockroachdb/sql-experience
+
+# Own all bazel files to dev-inf.
+**/BUILD.bazel               @cockroachdb/dev-inf
+# Avoid mass pings when updating proto tooling.
+# For some reason, **/*.pb.go does not work (in the
+# sense that ./pkg/cmd/whoownsit will not match this
+# pattern to any files).
+**.pb.go                     @cockroachdb/unowned
+**.pb.gw.go                  @cockroachdb/unowned
