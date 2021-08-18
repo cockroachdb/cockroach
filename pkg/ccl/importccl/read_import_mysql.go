@@ -480,6 +480,13 @@ func mysqlTableToCockroach(
 			}
 			def.DefaultExpr.Expr = expr
 		}
+		// If the target table columns have data type INT or INTEGER, they need to
+		// be updated to conform to the session variable `default_int_size`.
+		if dType, ok := def.Type.(*types.T); ok {
+			if dType.Equivalent(types.Int) && p != nil {
+				def.Type = parser.NakedIntTypeFromDefaultIntSize(p.SessionData().DefaultIntSize)
+			}
+		}
 		stmt.Defs = append(stmt.Defs, def)
 	}
 

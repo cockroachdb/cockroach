@@ -24,19 +24,30 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+// RegistryVersion defines the version of a registry. Newly added versions
+// should be larger than all currently and previously existing versions.
 type RegistryVersion int32
 
 const (
-	// The only version so far.
+	// The initial version of the file registry that wrote a marshaled
+	// FileRegistry proto to the COCKROACHDB_REGISTRY file on disk every time
+	// it was updated.
+	// TODO(ayang): replace with "reserved 0;" when we deprecate the old registry
 	RegistryVersion_Base RegistryVersion = 0
+	// The current version of the file registry that writes incremental
+	// updates to the COCKROACHDB_ENCRYPTION_REGISTRY file on disk using
+	// pebble's record writer.
+	RegistryVersion_Records RegistryVersion = 1
 )
 
 var RegistryVersion_name = map[int32]string{
 	0: "Base",
+	1: "Records",
 }
 
 var RegistryVersion_value = map[string]int32{
-	"Base": 0,
+	"Base":    0,
+	"Records": 1,
 }
 
 func (x RegistryVersion) String() string {
@@ -85,7 +96,7 @@ func (EnvType) EnumDescriptor() ([]byte, []int) {
 // Registry describes how a files are handled. This includes the
 // rockdb::Env responsible for each file as well as opaque env details.
 type FileRegistry struct {
-	// version is currently always Base.
+	// The version of the file registry.
 	Version RegistryVersion `protobuf:"varint,1,opt,name=version,proto3,enum=cockroach.storage.enginepb.RegistryVersion" json:"version,omitempty"`
 	// Map of filename -> FileEntry.
 	// Filename is relative to the rocksdb dir if the file is inside it.
@@ -161,12 +172,119 @@ func (m *FileEntry) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_FileEntry proto.InternalMessageInfo
 
+type RegistryHeader struct {
+	// The version of the file registry.
+	Version RegistryVersion `protobuf:"varint,1,opt,name=version,proto3,enum=cockroach.storage.enginepb.RegistryVersion" json:"version,omitempty"`
+}
+
+func (m *RegistryHeader) Reset()         { *m = RegistryHeader{} }
+func (m *RegistryHeader) String() string { return proto.CompactTextString(m) }
+func (*RegistryHeader) ProtoMessage()    {}
+func (*RegistryHeader) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1c23ce5e71079250, []int{2}
+}
+func (m *RegistryHeader) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RegistryHeader) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *RegistryHeader) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RegistryHeader.Merge(m, src)
+}
+func (m *RegistryHeader) XXX_Size() int {
+	return m.Size()
+}
+func (m *RegistryHeader) XXX_DiscardUnknown() {
+	xxx_messageInfo_RegistryHeader.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RegistryHeader proto.InternalMessageInfo
+
+type RegistryUpdateBatch struct {
+	// An ordered list of updates to the registry.
+	Updates []*RegistryUpdate `protobuf:"bytes,1,rep,name=updates,proto3" json:"updates,omitempty"`
+}
+
+func (m *RegistryUpdateBatch) Reset()         { *m = RegistryUpdateBatch{} }
+func (m *RegistryUpdateBatch) String() string { return proto.CompactTextString(m) }
+func (*RegistryUpdateBatch) ProtoMessage()    {}
+func (*RegistryUpdateBatch) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1c23ce5e71079250, []int{3}
+}
+func (m *RegistryUpdateBatch) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RegistryUpdateBatch) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *RegistryUpdateBatch) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RegistryUpdateBatch.Merge(m, src)
+}
+func (m *RegistryUpdateBatch) XXX_Size() int {
+	return m.Size()
+}
+func (m *RegistryUpdateBatch) XXX_DiscardUnknown() {
+	xxx_messageInfo_RegistryUpdateBatch.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RegistryUpdateBatch proto.InternalMessageInfo
+
+type RegistryUpdate struct {
+	// Name of the file.
+	Filename string `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	// Corresponding file entry. A nil entry indicates a file was deleted.
+	Entry *FileEntry `protobuf:"bytes,2,opt,name=entry,proto3" json:"entry,omitempty"`
+}
+
+func (m *RegistryUpdate) Reset()         { *m = RegistryUpdate{} }
+func (m *RegistryUpdate) String() string { return proto.CompactTextString(m) }
+func (*RegistryUpdate) ProtoMessage()    {}
+func (*RegistryUpdate) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1c23ce5e71079250, []int{4}
+}
+func (m *RegistryUpdate) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RegistryUpdate) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *RegistryUpdate) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RegistryUpdate.Merge(m, src)
+}
+func (m *RegistryUpdate) XXX_Size() int {
+	return m.Size()
+}
+func (m *RegistryUpdate) XXX_DiscardUnknown() {
+	xxx_messageInfo_RegistryUpdate.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RegistryUpdate proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterEnum("cockroach.storage.enginepb.RegistryVersion", RegistryVersion_name, RegistryVersion_value)
 	proto.RegisterEnum("cockroach.storage.enginepb.EnvType", EnvType_name, EnvType_value)
 	proto.RegisterType((*FileRegistry)(nil), "cockroach.storage.enginepb.FileRegistry")
 	proto.RegisterMapType((map[string]*FileEntry)(nil), "cockroach.storage.enginepb.FileRegistry.FilesEntry")
 	proto.RegisterType((*FileEntry)(nil), "cockroach.storage.enginepb.FileEntry")
+	proto.RegisterType((*RegistryHeader)(nil), "cockroach.storage.enginepb.RegistryHeader")
+	proto.RegisterType((*RegistryUpdateBatch)(nil), "cockroach.storage.enginepb.RegistryUpdateBatch")
+	proto.RegisterType((*RegistryUpdate)(nil), "cockroach.storage.enginepb.RegistryUpdate")
 }
 
 func init() {
@@ -174,31 +292,36 @@ func init() {
 }
 
 var fileDescriptor_1c23ce5e71079250 = []byte{
-	// 372 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x92, 0x4f, 0xcb, 0xd3, 0x40,
-	0x10, 0xc6, 0xb3, 0x79, 0xad, 0x6d, 0xe6, 0xad, 0x1a, 0x56, 0x0f, 0xa5, 0xc2, 0x52, 0xaa, 0x42,
-	0xa9, 0x98, 0x40, 0x7b, 0x11, 0x05, 0x0f, 0xc5, 0x0a, 0xde, 0x24, 0x15, 0x0f, 0x5e, 0x42, 0x1a,
-	0xc6, 0xb8, 0x34, 0xec, 0x86, 0xdd, 0x35, 0x18, 0xf0, 0xe2, 0x37, 0xf0, 0x63, 0xf5, 0xd8, 0x63,
-	0x8f, 0x9a, 0x7e, 0x11, 0xc9, 0x3f, 0x2b, 0x82, 0x7d, 0x6f, 0xb3, 0x33, 0xcf, 0xf3, 0x9b, 0x87,
-	0x61, 0xe1, 0xb1, 0x36, 0x52, 0x45, 0x09, 0xfa, 0x28, 0x12, 0x2e, 0x30, 0xdb, 0xfa, 0x9f, 0x78,
-	0x8a, 0xa1, 0xc2, 0x84, 0x6b, 0xa3, 0x0a, 0x2f, 0x53, 0xd2, 0x48, 0x3a, 0x8e, 0x65, 0xbc, 0x53,
-	0x32, 0x8a, 0x3f, 0x7b, 0xad, 0xde, 0xeb, 0xf4, 0xe3, 0x07, 0x89, 0x4c, 0x64, 0x2d, 0xf3, 0xab,
-	0xaa, 0x71, 0x4c, 0xbf, 0xdb, 0x30, 0x7c, 0xc3, 0x53, 0x0c, 0x5a, 0x10, 0x5d, 0x43, 0x3f, 0x47,
-	0xa5, 0xb9, 0x14, 0x23, 0x32, 0x21, 0xb3, 0xbb, 0x8b, 0xa7, 0xde, 0xff, 0xa1, 0x5e, 0x67, 0xfb,
-	0xd0, 0x58, 0x82, 0xce, 0x4b, 0xdf, 0x42, 0xaf, 0x0a, 0xa8, 0x47, 0xf6, 0xe4, 0x6a, 0x76, 0xbd,
-	0x58, 0x5e, 0x82, 0xfc, 0xbd, 0xbf, 0x7e, 0xe8, 0xb5, 0x30, 0xaa, 0x08, 0x1a, 0xc2, 0x38, 0x04,
-	0x38, 0x37, 0xa9, 0x0b, 0x57, 0x3b, 0x2c, 0xea, 0x6c, 0x4e, 0x50, 0x95, 0xf4, 0x25, 0xf4, 0xf2,
-	0x28, 0xfd, 0x82, 0x23, 0x7b, 0x42, 0x66, 0xd7, 0x8b, 0x27, 0x37, 0xad, 0x6a, 0xe1, 0xb5, 0xe7,
-	0x85, 0xfd, 0x9c, 0x4c, 0xbf, 0x81, 0xf3, 0xa7, 0x4f, 0x5f, 0xc1, 0x00, 0x45, 0x1e, 0x9a, 0x22,
-	0xc3, 0xf6, 0x00, 0x8f, 0x2e, 0x01, 0xd7, 0x22, 0x7f, 0x5f, 0x64, 0x18, 0xf4, 0xb1, 0x29, 0xa8,
-	0x0f, 0xf7, 0x51, 0xc4, 0xaa, 0xc8, 0x0c, 0x97, 0x22, 0xd4, 0x68, 0x0c, 0x17, 0x89, 0xae, 0xb3,
-	0x0d, 0x03, 0x7a, 0x1e, 0x6d, 0xda, 0xc9, 0xfc, 0x21, 0xdc, 0xfb, 0xe7, 0x8a, 0x74, 0x00, 0xb7,
-	0x56, 0x91, 0x46, 0xd7, 0x9a, 0x3f, 0x83, 0x7e, 0xbb, 0x81, 0xde, 0x01, 0xe7, 0x5d, 0x1a, 0x71,
-	0x61, 0xf0, 0xab, 0x71, 0x2d, 0xea, 0x40, 0x6f, 0x63, 0xa4, 0x42, 0x97, 0x54, 0xf2, 0xd7, 0x91,
-	0x89, 0x5c, 0x7b, 0x35, 0xdf, 0xff, 0x62, 0xd6, 0xbe, 0x64, 0xe4, 0x50, 0x32, 0x72, 0x2c, 0x19,
-	0xf9, 0x59, 0x32, 0xf2, 0xe3, 0xc4, 0xac, 0xc3, 0x89, 0x59, 0xc7, 0x13, 0xb3, 0x3e, 0x0e, 0xba,
-	0xe4, 0xdb, 0xdb, 0xf5, 0x07, 0x58, 0xfe, 0x0e, 0x00, 0x00, 0xff, 0xff, 0x5a, 0x44, 0x39, 0x24,
-	0x5a, 0x02, 0x00, 0x00,
+	// 457 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x53, 0xcf, 0x6b, 0x13, 0x41,
+	0x14, 0xde, 0xd9, 0x1a, 0x37, 0x79, 0xa9, 0x75, 0x99, 0x7a, 0x08, 0x39, 0x2c, 0x61, 0x55, 0x08,
+	0x11, 0x37, 0x90, 0x5e, 0x44, 0xc1, 0x43, 0x68, 0x44, 0x6f, 0x32, 0xf5, 0x07, 0xe8, 0x21, 0x4c,
+	0x37, 0xcf, 0xed, 0xd0, 0x38, 0xb3, 0xcc, 0x4c, 0x83, 0x0b, 0x5e, 0xfc, 0x0f, 0xfc, 0xb3, 0x7a,
+	0xec, 0xb1, 0x47, 0x4d, 0xfe, 0x11, 0xd9, 0xd9, 0xdd, 0x46, 0x04, 0xab, 0x82, 0xb7, 0xf7, 0xe6,
+	0x7b, 0xdf, 0x37, 0xdf, 0xbc, 0x8f, 0x81, 0x7b, 0xc6, 0x2a, 0xcd, 0x33, 0x1c, 0xa3, 0xcc, 0x84,
+	0xc4, 0xfc, 0x78, 0xfc, 0x41, 0x2c, 0x71, 0xae, 0x31, 0x13, 0xc6, 0xea, 0x22, 0xc9, 0xb5, 0xb2,
+	0x8a, 0xf6, 0x53, 0x95, 0x9e, 0x6a, 0xc5, 0xd3, 0x93, 0xa4, 0x9e, 0x4f, 0x9a, 0xf9, 0xfe, 0x9d,
+	0x4c, 0x65, 0xca, 0x8d, 0x8d, 0xcb, 0xaa, 0x62, 0xc4, 0x5f, 0x7c, 0xd8, 0x7d, 0x26, 0x96, 0xc8,
+	0x6a, 0x21, 0x3a, 0x83, 0x60, 0x85, 0xda, 0x08, 0x25, 0x7b, 0x64, 0x40, 0x86, 0x7b, 0x93, 0x07,
+	0xc9, 0xef, 0x45, 0x93, 0x86, 0xf6, 0xa6, 0xa2, 0xb0, 0x86, 0x4b, 0x5f, 0x40, 0xab, 0x34, 0x68,
+	0x7a, 0xfe, 0x60, 0x67, 0xd8, 0x9d, 0x1c, 0x5c, 0x27, 0xf2, 0xf3, 0xfd, 0xae, 0x31, 0x33, 0x69,
+	0x75, 0xc1, 0x2a, 0x85, 0xfe, 0x1c, 0x60, 0x7b, 0x48, 0x43, 0xd8, 0x39, 0xc5, 0xc2, 0x79, 0xeb,
+	0xb0, 0xb2, 0xa4, 0x4f, 0xa0, 0xb5, 0xe2, 0xcb, 0x33, 0xec, 0xf9, 0x03, 0x32, 0xec, 0x4e, 0xee,
+	0xff, 0xe9, 0xaa, 0x5a, 0xdc, 0x71, 0x1e, 0xfb, 0x8f, 0x48, 0xfc, 0x19, 0x3a, 0x57, 0xe7, 0xf4,
+	0x29, 0xb4, 0x51, 0xae, 0xe6, 0xb6, 0xc8, 0xb1, 0x5e, 0xc0, 0xdd, 0xeb, 0x04, 0x67, 0x72, 0xf5,
+	0xaa, 0xc8, 0x91, 0x05, 0x58, 0x15, 0x74, 0x0c, 0xfb, 0x28, 0x53, 0x5d, 0xe4, 0x56, 0x28, 0x39,
+	0x37, 0x68, 0xad, 0x90, 0x99, 0x71, 0xde, 0x76, 0x19, 0xdd, 0x42, 0x47, 0x35, 0x12, 0xbf, 0x85,
+	0xbd, 0xe6, 0xf1, 0xcf, 0x91, 0x2f, 0x50, 0xff, 0xa7, 0x08, 0xe2, 0xf7, 0xb0, 0xdf, 0x60, 0xaf,
+	0xf3, 0x05, 0xb7, 0x38, 0xe5, 0x36, 0x3d, 0xa1, 0x87, 0x10, 0x9c, 0xb9, 0xd6, 0xf4, 0x88, 0xcb,
+	0x66, 0xf4, 0x37, 0xea, 0x95, 0x02, 0x6b, 0xa8, 0xb1, 0xd8, 0xba, 0xae, 0x20, 0xda, 0x87, 0x76,
+	0x99, 0x97, 0xe4, 0x1f, 0xb1, 0x4e, 0xe7, 0xaa, 0x2f, 0x23, 0xc2, 0x72, 0xbb, 0xff, 0x18, 0x91,
+	0xe3, 0x8c, 0x86, 0x70, 0xfb, 0x97, 0x37, 0xd2, 0x36, 0xdc, 0x98, 0x72, 0x83, 0xa1, 0x47, 0xbb,
+	0x10, 0x30, 0x4c, 0x95, 0x5e, 0x98, 0x90, 0x8c, 0x1e, 0x42, 0x50, 0xe7, 0x41, 0x6f, 0x41, 0xe7,
+	0xe5, 0x92, 0x0b, 0x69, 0xf1, 0x93, 0x0d, 0x3d, 0xda, 0x81, 0xd6, 0x91, 0x55, 0x1a, 0x43, 0x52,
+	0x72, 0x0f, 0xb9, 0xe5, 0xa1, 0x3f, 0x1d, 0x9d, 0x7f, 0x8f, 0xbc, 0xf3, 0x75, 0x44, 0x2e, 0xd6,
+	0x11, 0xb9, 0x5c, 0x47, 0xe4, 0xdb, 0x3a, 0x22, 0x5f, 0x37, 0x91, 0x77, 0xb1, 0x89, 0xbc, 0xcb,
+	0x4d, 0xe4, 0xbd, 0x6b, 0x37, 0xae, 0x8e, 0x6f, 0xba, 0xef, 0x72, 0xf0, 0x23, 0x00, 0x00, 0xff,
+	0xff, 0x1e, 0xaa, 0xdd, 0xa2, 0x88, 0x03, 0x00, 0x00,
 }
 
 func (m *FileRegistry) Marshal() (dAtA []byte, err error) {
@@ -295,6 +418,113 @@ func (m *FileEntry) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *RegistryHeader) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RegistryHeader) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryHeader) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Version != 0 {
+		i = encodeVarintFileRegistry(dAtA, i, uint64(m.Version))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RegistryUpdateBatch) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RegistryUpdateBatch) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryUpdateBatch) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Updates) > 0 {
+		for iNdEx := len(m.Updates) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Updates[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintFileRegistry(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RegistryUpdate) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RegistryUpdate) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryUpdate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Entry != nil {
+		{
+			size, err := m.Entry.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintFileRegistry(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Filename) > 0 {
+		i -= len(m.Filename)
+		copy(dAtA[i:], m.Filename)
+		i = encodeVarintFileRegistry(dAtA, i, uint64(len(m.Filename)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintFileRegistry(dAtA []byte, offset int, v uint64) int {
 	offset -= sovFileRegistry(v)
 	base := offset
@@ -342,6 +572,50 @@ func (m *FileEntry) Size() (n int) {
 	}
 	l = len(m.EncryptionSettings)
 	if l > 0 {
+		n += 1 + l + sovFileRegistry(uint64(l))
+	}
+	return n
+}
+
+func (m *RegistryHeader) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Version != 0 {
+		n += 1 + sovFileRegistry(uint64(m.Version))
+	}
+	return n
+}
+
+func (m *RegistryUpdateBatch) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Updates) > 0 {
+		for _, e := range m.Updates {
+			l = e.Size()
+			n += 1 + l + sovFileRegistry(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *RegistryUpdate) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Filename)
+	if l > 0 {
+		n += 1 + l + sovFileRegistry(uint64(l))
+	}
+	if m.Entry != nil {
+		l = m.Entry.Size()
 		n += 1 + l + sovFileRegistry(uint64(l))
 	}
 	return n
@@ -631,6 +905,277 @@ func (m *FileEntry) Unmarshal(dAtA []byte) error {
 			m.EncryptionSettings = append(m.EncryptionSettings[:0], dAtA[iNdEx:postIndex]...)
 			if m.EncryptionSettings == nil {
 				m.EncryptionSettings = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipFileRegistry(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RegistryHeader) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowFileRegistry
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RegistryHeader: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RegistryHeader: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
+			}
+			m.Version = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Version |= RegistryVersion(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipFileRegistry(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RegistryUpdateBatch) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowFileRegistry
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RegistryUpdateBatch: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RegistryUpdateBatch: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Updates", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Updates = append(m.Updates, &RegistryUpdate{})
+			if err := m.Updates[len(m.Updates)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipFileRegistry(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RegistryUpdate) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowFileRegistry
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RegistryUpdate: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RegistryUpdate: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Filename", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Filename = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Entry", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Entry == nil {
+				m.Entry = &FileEntry{}
+			}
+			if err := m.Entry.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		default:

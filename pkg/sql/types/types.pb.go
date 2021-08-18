@@ -171,7 +171,7 @@ const (
 	//
 	//   Canonical: types.Oid
 	//   Oid      : T_oid, T_regclass, T_regproc, T_regprocedure, T_regtype,
-	//              T_regnamespace
+	//              T_regnamespace, T_regrole
 	//
 	// Examples:
 	//   OID

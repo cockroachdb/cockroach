@@ -1514,6 +1514,8 @@ oid         typname                                typnamespace  typowner    typ
 3807        _jsonb                                 1307062959    NULL        -1      false     b
 4089        regnamespace                           1307062959    NULL        8       true      b
 4090        _regnamespace                          1307062959    NULL        -1      false     b
+4096        regrole                                1307062959    NULL        8       true      b
+4097        _regrole                               1307062959    NULL        -1      false     b
 90000       geometry                               1307062959    NULL        -1      false     b
 90001       _geometry                              1307062959    NULL        -1      false     b
 90002       geography                              1307062959    NULL        -1      false     b
@@ -1885,6 +1887,8 @@ oid         typname                                typcategory  typispreferred  
 3807        _jsonb                                 A            false           true          ,         0           3802     0
 4089        regnamespace                           N            false           true          ,         0           0        4090
 4090        _regnamespace                          A            false           true          ,         0           4089     0
+4096        regrole                                N            false           true          ,         0           0        4097
+4097        _regrole                               A            false           true          ,         0           4096     0
 90000       geometry                               U            false           true          ,         0           0        90001
 90001       _geometry                              A            false           true          ,         0           90000    0
 90002       geography                              U            false           true          ,         0           0        90003
@@ -2256,6 +2260,8 @@ oid         typname                                typinput        typoutput    
 3807        _jsonb                                 array_in        array_out        array_recv        array_send        0         0          0
 4089        regnamespace                           regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
 4090        _regnamespace                          array_in        array_out        array_recv        array_send        0         0          0
+4096        regrole                                regrolein       regroleout       regrolerecv       regrolesend       0         0          0
+4097        _regrole                               array_in        array_out        array_recv        array_send        0         0          0
 90000       geometry                               geometry_in     geometry_out     geometry_recv     geometry_send     0         0          0
 90001       _geometry                              array_in        array_out        array_recv        array_send        0         0          0
 90002       geography                              geography_in    geography_out    geography_recv    geography_send    0         0          0
@@ -2627,6 +2633,8 @@ oid         typname                                typalign  typstorage  typnotn
 3807        _jsonb                                 NULL      NULL        false       0            -1
 4089        regnamespace                           NULL      NULL        false       0            -1
 4090        _regnamespace                          NULL      NULL        false       0            -1
+4096        regrole                                NULL      NULL        false       0            -1
+4097        _regrole                               NULL      NULL        false       0            -1
 90000       geometry                               NULL      NULL        false       0            -1
 90001       _geometry                              NULL      NULL        false       0            -1
 90002       geography                              NULL      NULL        false       0            -1
@@ -2998,6 +3006,8 @@ oid         typname                                typndims  typcollation  typde
 3807        _jsonb                                 0         0             NULL           NULL        NULL
 4089        regnamespace                           0         0             NULL           NULL        NULL
 4090        _regnamespace                          0         0             NULL           NULL        NULL
+4096        regrole                                0         0             NULL           NULL        NULL
+4097        _regrole                               0         0             NULL           NULL        NULL
 90000       geometry                               0         0             NULL           NULL        NULL
 90001       _geometry                              0         0             NULL           NULL        NULL
 90002       geography                              0         0             NULL           NULL        NULL

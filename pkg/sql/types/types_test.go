@@ -359,6 +359,8 @@ func TestTypes(t *testing.T) {
 			Family: OidFamily, Oid: oid.T_regproc, Locale: &emptyLocale}}},
 		{RegProcedure, &T{InternalType: InternalType{
 			Family: OidFamily, Oid: oid.T_regprocedure, Locale: &emptyLocale}}},
+		{RegRole, &T{InternalType: InternalType{
+			Family: OidFamily, Oid: oid.T_regrole, Locale: &emptyLocale}}},
 		{RegType, &T{InternalType: InternalType{
 			Family: OidFamily, Oid: oid.T_regtype, Locale: &emptyLocale}}},
 		{Oid, MakeScalar(OidFamily, oid.T_oid, 0, 0, emptyLocale)},

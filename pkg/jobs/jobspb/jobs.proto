@@ -287,7 +287,12 @@ message ImportDetails {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
 
-  // next val: 25
+  // DefaultIntSize is the integer type that a "naked" int will be resolved
+  // to during the import. This is set based on the session variable DefaultIntSize
+  // when the import is planned.
+  int32 default_int_size = 25;
+
+  // next val: 26
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated

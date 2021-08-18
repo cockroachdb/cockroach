@@ -7020,3 +7020,91 @@ func TestImportJobEventLogging(t *testing.T) {
 		string(jobs.StatusRunning)}
 	backupccl.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT")
 }
+
+func TestImportDefautIntSizeSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	intSizes := []int32{4, 8}
+
+	data := `
+CREATE TABLE default_int (
+    a INTEGER PRIMARY KEY,
+    b INT
+);
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	tests := []struct {
+		name             string
+		query            string
+		nonBundledFormat bool
+	}{
+		{
+			name:  "import pgdump",
+			query: `IMPORT PGDUMP ($1)`,
+		},
+		{
+			name:  "import table from pgdump",
+			query: `IMPORT TABLE default_int FROM PGDUMP ($1)`,
+		},
+		{
+			name:  "import mysqldump",
+			query: `IMPORT MYSQLDUMP ($1)`,
+		},
+		{
+			name:  "import table from mysqldump",
+			query: `IMPORT TABLE default_int FROM MYSQLDUMP ($1)`,
+		},
+		{
+			name: "non-bundled csv format",
+			query: `
+IMPORT TABLE default_int (
+    a INTEGER PRIMARY KEY,
+    b INT
+)
+CSV DATA ($1)
+`,
+			nonBundledFormat: true,
+		},
+	}
+
+	for _, test := range tests {
+		for _, defaultIntSize := range intSizes {
+			t.Run(fmt.Sprintf("%s_intsize=%d", test.name, defaultIntSize), func(t *testing.T) {
+				// Drop previously imported table, if it exists.
+				sqlDB.Exec(t, `DROP TABLE IF EXISTS default_int`)
+
+				// Set default int size
+				sqlDB.Exec(t, fmt.Sprintf("set cluster setting sql.defaults.default_int_size = %d;", defaultIntSize))
+				sqlDB.Exec(t, fmt.Sprintf("set default_int_size = %d;", defaultIntSize))
+
+				if test.nonBundledFormat {
+					// Initialize empty data for non-bundled import format
+					data = ""
+				}
+
+				sqlDB.Exec(t, test.query, srv.URL)
+
+				// Verify that the columns have the expected data type
+				colDataTypes := sqlDB.QueryStr(t, "SELECT data_type FROM [SHOW COLUMNS FROM default_int] WHERE column_name != 'rowid'")
+				for _, d := range colDataTypes {
+					require.Equal(t, fmt.Sprintf("INT%d", defaultIntSize), d[0])
+				}
+			})
+		}
+	}
+}
