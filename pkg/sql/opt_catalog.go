@@ -2295,10 +2295,10 @@ func collectTypes(col catalog.Column) (descpb.IDs, error) {
 // cat.GeneratedAsIdentityType. This is a helper function for the read access to
 // the GeneratedAsIdentityType attribute for descpb.ColumnDescriptor.
 func mapGeneratedAsIdentityType(inType descpb.GeneratedAsIdentityType) cat.GeneratedAsIdentityType {
-	mapGenAsIdType := map[descpb.GeneratedAsIdentityType]cat.GeneratedAsIdentityType{
+	mapGeneratedAsIdentityType := map[descpb.GeneratedAsIdentityType]cat.GeneratedAsIdentityType{
 		descpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN:  cat.NotGeneratedAsIdentity,
 		descpb.GeneratedAsIdentityType_GENERATED_ALWAYS:     cat.GeneratedAlwaysAsIdentity,
 		descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT: cat.GeneratedByDefaultAsIdentity,
 	}
-	return mapGenAsIdType[inType]
+	return mapGeneratedAsIdentityType[inType]
 }
