@@ -918,7 +918,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	// If the range is now less than its RangeMaxBytes, clear the history of its
 	// largest previous max bytes.
-	if r.mu.largestPreviousMaxRangeSizeBytes > 0 && b.state.Stats.Total() < *r.mu.zone.RangeMaxBytes {
+	if r.mu.largestPreviousMaxRangeSizeBytes > 0 && b.state.Stats.Total() < r.mu.conf.RangeMaxBytes {
 		r.mu.largestPreviousMaxRangeSizeBytes = 0
 	}
 

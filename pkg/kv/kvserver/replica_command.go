@@ -2854,11 +2854,11 @@ func (s *Store) relocateOne(
 			`range %s was either in a joint configuration or had learner replicas: %v`, desc, desc.Replicas())
 	}
 
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
-	if sysCfg == nil {
-		return nil, nil, fmt.Errorf("no system config available, unable to perform RelocateRange")
+	confReader, err := s.GetConfReader()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "can't relocate range")
 	}
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
+	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2905,7 +2905,7 @@ func (s *Store) relocateOne(
 		targetStore, _ := s.allocator.allocateTargetFromList(
 			ctx,
 			candidateStoreList,
-			zone,
+			conf,
 			existingVoters,
 			existingNonVoters,
 			s.allocator.scorerOptions(),
@@ -2976,7 +2976,7 @@ func (s *Store) relocateOne(
 		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
 		// may not want to do that due to constraints.
 		targetStore, _, err := s.allocator.removeTarget(
-			ctx, zone, args.targetsToRemove(), existingVoters,
+			ctx, conf, args.targetsToRemove(), existingVoters,
 			existingNonVoters, args.targetType,
 		)
 		if err != nil {
