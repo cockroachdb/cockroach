@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -250,7 +251,14 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				case parallelUnorderedSynchronizerStateRunning:
 					if err := colexecerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
 						if s.Ctx.Err() == nil && s.cancelLocalInput[inputIdx] != nil {
-							if errors.Is(err, context.Canceled) || errors.Is(err, cancelchecker.QueryCanceledError) {
+							// Note that we cannot use errors.Is with
+							// context.Canceled error because some components
+							// (like DistSender) can transform the context
+							// cancellation error into another one that returns
+							// false for errors.Is check, so we fallback to the
+							// string matching.
+							if strings.Contains(err.Error(), context.Canceled.Error()) ||
+								errors.Is(err, cancelchecker.QueryCanceledError) {
 								// The input context has been canceled, yet the
 								// main context of the synchronizer has not.
 								// This indicates that the synchronizer has
