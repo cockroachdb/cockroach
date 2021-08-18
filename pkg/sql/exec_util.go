@@ -1160,6 +1160,9 @@ type ExecutorTestingKnobs struct {
 	// return, possibly nil, a callback that will be called every time
 	// DistSQLReceiver.Push is called.
 	DistSQLReceiverPushCallbackFactory func(query string) func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
+
+	// OnTxnRetry, if set, will be called if there is a transaction retry.
+	OnTxnRetry func(autoRetryReason error, evalCtx *tree.EvalContext)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

@@ -243,6 +243,9 @@ func NewColBatchScan(
 			MinTimestampBound:       ts,
 			MinTimestampBoundStrict: aost.NearestOnly,
 		}
+		if !evalCtx.AsOfSystemTime.MaxTimestampBound.IsEmpty() {
+			bsHeader.MaxTimestampBound = evalCtx.AsOfSystemTime.MaxTimestampBound
+		}
 	}
 
 	s := colBatchScanPool.Get().(*ColBatchScan)
