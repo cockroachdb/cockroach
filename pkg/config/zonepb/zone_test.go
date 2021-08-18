@@ -1183,9 +1183,11 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				},
 			},
 			expectSpanConfig: roachpb.SpanConfig{
-				RangeMinBytes:    100000,
-				RangeMaxBytes:    200000,
-				GCTTL:            2400,
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
 				GlobalReads:      false,
 				NumVoters:        0,
 				NumReplicas:      3,
@@ -1206,9 +1208,11 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				},
 			},
 			expectSpanConfig: roachpb.SpanConfig{
-				RangeMinBytes:    100000,
-				RangeMaxBytes:    200000,
-				GCTTL:            2400,
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
 				GlobalReads:      true,
 				NumVoters:        0,
 				NumReplicas:      3,
@@ -1229,9 +1233,11 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				},
 			},
 			expectSpanConfig: roachpb.SpanConfig{
-				RangeMinBytes:    100000,
-				RangeMaxBytes:    200000,
-				GCTTL:            2400,
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
 				GlobalReads:      false,
 				NumVoters:        0,
 				NumReplicas:      3,
@@ -1287,10 +1293,12 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 			expectSpanConfig: roachpb.SpanConfig{
 				RangeMinBytes: 100000,
 				RangeMaxBytes: 200000,
-				GCTTL:         2400,
-				GlobalReads:   false,
-				NumVoters:     0,
-				NumReplicas:   3,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
+				GlobalReads: false,
+				NumVoters:   0,
+				NumReplicas: 3,
 				Constraints: []roachpb.ConstraintsConjunction{
 					{
 						NumReplicas: 1,
@@ -1333,11 +1341,13 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 			expectSpanConfig: roachpb.SpanConfig{
 				RangeMinBytes: 100000,
 				RangeMaxBytes: 200000,
-				GCTTL:         2400,
-				GlobalReads:   false,
-				NumVoters:     0,
-				NumReplicas:   3,
-				Constraints:   []roachpb.ConstraintsConjunction{},
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
+				GlobalReads: false,
+				NumVoters:   0,
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{
 					{
 						Constraints: []roachpb.Constraint{
@@ -1381,9 +1391,11 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				},
 			},
 			expectSpanConfig: roachpb.SpanConfig{
-				RangeMinBytes:    100000,
-				RangeMaxBytes:    200000,
-				GCTTL:            2400,
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
 				GlobalReads:      false,
 				NumVoters:        0,
 				NumReplicas:      3,
