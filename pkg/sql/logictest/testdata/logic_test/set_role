@@ -1,0 +1,231 @@
+statement ok
+CREATE TABLE priv_t (pk INT PRIMARY KEY);
+CREATE TABLE no_priv_t (pk INT PRIMARY KEY)
+
+statement ok
+GRANT SELECT ON priv_t TO testuser
+
+# Check root can reset and become itself.
+query TT
+SELECT current_user, session_user()
+----
+root  root
+
+query T
+SHOW ROLE
+----
+none
+
+statement ok
+RESET ROLE
+
+statement error role non_existent_user does not exist
+SET ROLE non_existent_user
+
+query TT
+SELECT current_user, session_user()
+----
+root  root
+
+query T
+SHOW ROLE
+----
+none
+
+statement ok
+SET ROLE = root
+
+query TT
+SELECT current_user, session_user()
+----
+root  root
+
+query T
+SHOW ROLE
+----
+root
+
+statement ok
+SET ROLE = 'testuser'
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  root
+
+statement ok
+SELECT * FROM priv_t
+
+statement error user testuser does not have SELECT privilege on relation no_priv_t
+SELECT * FROM no_priv_t
+
+statement ok
+RESET ROLE
+
+# Check root can transition between testuser and testuser2.
+statement ok
+CREATE USER testuser2
+
+statement ok
+SET ROLE testuser2
+
+query TT
+SELECT current_user, session_user()
+----
+testuser2  root
+
+statement ok
+SET ROLE = 'none'
+
+query TT
+SELECT current_user, session_user()
+----
+root  root
+
+# Check testuser cannot transition to other users as it has no privileges.
+user testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser
+
+query T
+SHOW ROLE
+----
+none
+
+statement ok
+SET ROLE testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser
+
+query T
+SHOW ROLE
+----
+testuser
+
+statement error only root can become root
+SET ROLE root
+
+statement error permission denied to set role "testuser2"
+SET ROLE testuser2
+
+# Grant admin to testuser.
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+# testuser can now transition to testuser2, but not root.
+
+user testuser
+
+statement error only root can become root
+SET ROLE root
+
+statement ok
+SET ROLE testuser2
+
+query TT
+SELECT current_user, session_user()
+----
+testuser2  testuser
+
+statement error user testuser2 does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_t
+
+statement error user testuser2 does not have SELECT privilege on relation no_priv_t
+SELECT * FROM no_priv_t
+
+statement ok
+RESET ROLE
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser
+
+# testuser2 cannot become anyone.
+
+user testuser2
+
+statement error only root can become root
+SET ROLE root
+
+statement error permission denied to set role "testuser"
+SET ROLE testuser
+
+statement ok
+SET ROLE testuser2
+
+query TT
+SELECT current_user, session_user()
+----
+testuser2  testuser2
+
+statement ok
+RESET ROLE
+
+query TT
+SELECT current_user, session_user()
+----
+testuser2  testuser2
+
+# Set testuser2 as admin, check testuser2 can become testuser
+user root
+
+statement ok
+GRANT admin TO testuser2
+
+user testuser2
+
+statement ok
+SET ROLE testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser2
+
+statement ok
+RESET ROLE
+
+# Revoke admin but give testuser privileges for testuser2.
+# Make a testrole role.
+# Check testuser2 can become testuser and testrole as they are still
+# "admin" when impersonating testuser.
+user root
+
+statement ok
+CREATE ROLE testrole;
+REVOKE admin FROM testuser2;
+GRANT testuser TO testuser2
+
+statement ok
+RESET ROLE
+
+user testuser2
+
+statement ok
+SET ROLE testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser2
+
+statement ok
+SET ROLE testrole
+
+query TT
+SELECT current_user, session_user()
+----
+testrole  testuser2
+
+statement ok
+RESET ROLE

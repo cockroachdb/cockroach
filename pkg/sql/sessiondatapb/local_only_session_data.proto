@@ -166,6 +166,12 @@ message LocalOnlySessionData {
   // NewSchemaChangerMode indicates whether to use the new schema changer.
   int64 new_schema_changer_mode = 43 [(gogoproto.casttype)="NewSchemaChangerMode"];
 
+  // SessionUserProto is the name of the user which has performed a SET ROLE
+  // command.
+  // This is only populated when SET ROLE is used, otherwise the session_user
+  // is the same as the user in SessionData.
+  string session_user_proto = 45 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

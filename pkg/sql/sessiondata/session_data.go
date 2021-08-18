@@ -14,6 +14,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -123,6 +124,14 @@ func (s *SessionData) GetDateStyle() pgdate.DateStyle {
 		return pgdate.DefaultDateStyle()
 	}
 	return s.DataConversionConfig.DateStyle
+}
+
+// SessionUser retrieves the session user.
+func (s *SessionData) SessionUser() security.SQLUsername {
+	if s.SessionUserProto == "" {
+		return s.User()
+	}
+	return s.SessionUserProto.Decode()
 }
 
 // LocalUnmigratableSessionData contains session parameters that cannot
