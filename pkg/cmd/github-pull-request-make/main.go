@@ -257,7 +257,7 @@ func main() {
 				// NB: stress and bazci are expected to be put in `PATH` by the caller.
 				args = append(args, "--run_under", fmt.Sprintf("stress -stderr -maxfails 1 -maxtime %s -p %d", duration, parallelism))
 				if target == "stressrace" {
-					args = append(args, "--@io_bazel_rules_go//go/config:race")
+					args = append(args, "--config=race")
 				}
 				cmd := exec.Command("bazci", args...)
 				cmd.Stdout = os.Stdout
