@@ -293,8 +293,26 @@ ROLLBACK
 # Tests for bounded staleness with prepared statements.
 #
 
-statement error bounded staleness queries do not yet work with prepared statements
-PREPARE prep_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '10s'::interval)
+statement ok
+PREPARE with_min_timestamp_prep AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '10s'::interval) WHERE i = 2
 
-statement error bounded staleness queries do not yet work with prepared statements
-PREPARE prep_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
+statement ok
+EXECUTE with_min_timestamp_prep
+
+statement ok
+PREPARE with_max_staleness_prep AS SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE i = 2
+
+statement ok
+EXECUTE with_max_staleness_prep
+
+statement ok
+PREPARE bad_max_staleness_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
+
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+EXECUTE bad_max_staleness_stmt
+
+statement ok
+PREPARE bad_min_timestamp_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms')
+
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+EXECUTE bad_min_timestamp_stmt

@@ -163,7 +163,9 @@ message ScheduledBackupExecutionArgs {
   // the schedule ID of the other "dependent" schedule.
   // i.e. the full schedule will have the inc schedules ID and vice versa.
   // A value of 0 indicates that there is no dependent schedule.
-  int64 dependent_schedule_id = 5 [(gogoproto.customname) = "DependentScheduleID"];
+  int64 dependent_schedule_id = 6 [(gogoproto.customname) = "DependentScheduleID"];
+
+  reserved 5;
 }
 
 // RestoreProgress is the information that the RestoreData processor sends back
