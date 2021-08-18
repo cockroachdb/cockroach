@@ -32,10 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -408,8 +408,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	// We are also careful to override these defaults before starting
 	// the server, so as to not risk updating them concurrently with
 	// some background SQL activity.
-	const smallerKvBatchSize = 10
-	defer row.TestingSetKVBatchSize(smallerKvBatchSize)()
+	const smallerKvBatchSize = 5 // This is an approximation based on the TableReaderBatchBytesLimit below.
 	const smallerInsertBatchSize = 5
 	mutations.SetMaxBatchSizeForTests(smallerInsertBatchSize)
 	defer mutations.ResetMaxBatchSizeForTests()
@@ -417,6 +416,10 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
+	params.Knobs.DistSQL = &execinfra.TestingKnobs{
+		TableReaderBatchBytesLimit: 10,
+	}
+
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -508,13 +511,12 @@ func TestQueryProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const rows, kvBatchSize = 1000, 50
-
+	const rows = 1000
 	defer rowexec.TestingSetScannedRowProgressFrequency(rows / 60)()
-	defer row.TestingSetKVBatchSize(kvBatchSize)()
 
-	const expectedScans = (rows / 2) /* WHERE restricts scan to 1/2 */ / kvBatchSize
-	const stallAfterScans = expectedScans/2 + 1
+	// We'll do more than 6 scans because we set a low TableReaderBatchBytesLimit
+	// below.
+	const stallAfterScans = 6
 
 	var queryRunningAtomic, scannedBatchesAtomic int64
 	stalled, unblock := make(chan struct{}), make(chan struct{})
@@ -531,6 +533,11 @@ func TestQueryProgress(t *testing.T) {
 	// then close once it has checked the progress).
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				// A low limit, to force many small scans such that we get progress
+				// reports.
+				TableReaderBatchBytesLimit: 1500,
+			},
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(_ context.Context, req roachpb.BatchRequest) *roachpb.Error {
 					if req.IsSingleRequest() {
@@ -605,11 +612,7 @@ func TestQueryProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Although we know we've scanned ~50% of what we'll scan, exactly when the
-	// meta makes its way back to the receiver vs when the progress is checked is
-	// non-deterministic so we could see 47% done or 53% done, etc. To avoid being
-	// flaky, we just make sure we see one of 4x% or 5x%
-	require.Regexp(t, `executing \([45]\d\.`, progress)
+	require.Regexp(t, `executing \(51\.20%\)`, progress)
 }
 
 // This test ensures that when in an explicit transaction, statement preparation

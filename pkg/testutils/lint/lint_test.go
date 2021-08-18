@@ -1630,6 +1630,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot("pkg/sql/types/types.go.* var Uuid should be UUID"),
 				stream.GrepNot("pkg/sql/oidext/oidext.go.*don't use underscores in Go names; const T_"),
 				stream.GrepNot("server/api_v2.go.*package comment should be of the form"),
+				stream.GrepNot("type name will be used as row.RowLimit by other packages, and that stutters; consider calling this Limit"),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {

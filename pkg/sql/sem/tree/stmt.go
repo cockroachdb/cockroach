@@ -480,6 +480,15 @@ func (*CommentOnDatabase) StatementType() StatementType { return TypeDDL }
 func (*CommentOnDatabase) StatementTag() string { return "COMMENT ON DATABASE" }
 
 // StatementReturnType implements the Statement interface.
+func (*CommentOnSchema) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CommentOnSchema) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnSchema) StatementTag() string { return "COMMENT ON SCHEMA" }
+
+// StatementReturnType implements the Statement interface.
 func (*CommentOnIndex) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1622,6 +1631,7 @@ func (n *CancelSessions) String() string                 { return AsString(n) }
 func (n *CannedOptPlan) String() string                  { return AsString(n) }
 func (n *CommentOnColumn) String() string                { return AsString(n) }
 func (n *CommentOnDatabase) String() string              { return AsString(n) }
+func (n *CommentOnSchema) String() string                { return AsString(n) }
 func (n *CommentOnIndex) String() string                 { return AsString(n) }
 func (n *CommentOnTable) String() string                 { return AsString(n) }
 func (n *CommitTransaction) String() string              { return AsString(n) }

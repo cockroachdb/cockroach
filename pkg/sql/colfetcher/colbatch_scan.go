@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -47,12 +48,13 @@ type ColBatchScan struct {
 	colexecop.ZeroInputNode
 	colexecop.InitHelper
 
-	spans       roachpb.Spans
-	flowCtx     *execinfra.FlowCtx
-	bsHeader    *roachpb.BoundedStalenessHeader
-	rf          *cFetcher
-	limitHint   int64
-	parallelize bool
+	spans           roachpb.Spans
+	flowCtx         *execinfra.FlowCtx
+	bsHeader        *roachpb.BoundedStalenessHeader
+	rf              *cFetcher
+	limitHint       row.RowLimit
+	batchBytesLimit row.BytesLimit
+	parallelize     bool
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
 	tracingSpan *tracing.Span
@@ -94,6 +96,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 		s.spans,
 		s.bsHeader,
 		limitBatches,
+		s.batchBytesLimit,
 		s.limitHint,
 		s.flowCtx.TraceKV,
 		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
@@ -191,7 +194,7 @@ func NewColBatchScan(
 		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 
-	limitHint := execinfra.LimitHint(spec.LimitHint, post)
+	limitHint := row.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 	// TODO(ajwerner): The need to construct an immutable here
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just setting the ID and Version in the spec or something like that and
@@ -249,16 +252,29 @@ func NewColBatchScan(
 		//gcassert:bce
 		spans = append(spans, specSpans[i].Span)
 	}
-	*s = ColBatchScan{
-		spans:     spans,
-		flowCtx:   flowCtx,
-		bsHeader:  bsHeader,
-		rf:        fetcher,
-		limitHint: limitHint,
+
+	if spec.LimitHint > 0 || spec.BatchBytesLimit > 0 {
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
 		// just in case.
-		parallelize: spec.Parallelize && limitHint == 0,
-		ResultTypes: typs,
+		spec.Parallelize = false
+	}
+	var batchBytesLimit row.BytesLimit
+	if !spec.Parallelize {
+		batchBytesLimit = row.BytesLimit(spec.BatchBytesLimit)
+		if batchBytesLimit == 0 {
+			batchBytesLimit = row.DefaultBatchBytesLimit
+		}
+	}
+
+	*s = ColBatchScan{
+		spans:           spans,
+		flowCtx:         flowCtx,
+		bsHeader:        bsHeader,
+		rf:              fetcher,
+		limitHint:       limitHint,
+		batchBytesLimit: batchBytesLimit,
+		parallelize:     spec.Parallelize,
+		ResultTypes:     typs,
 	}
 	return s, nil
 }

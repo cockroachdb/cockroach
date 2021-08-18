@@ -32,6 +32,7 @@ go_library(
         "comment_on_column.go",
         "comment_on_database.go",
         "comment_on_index.go",
+        "comment_on_schema.go",
         "comment_on_table.go",
         "conn_executor.go",
         "conn_executor_exec.go",

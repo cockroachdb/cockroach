@@ -416,6 +416,7 @@ const (
 	TableCommentType    = 1
 	ColumnCommentType   = 2
 	IndexCommentType    = 3
+	SchemaCommentType   = 4
 )
 
 const (

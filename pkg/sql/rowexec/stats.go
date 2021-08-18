@@ -108,13 +108,13 @@ func (c *rowFetcherStatCollector) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
-	limitBatches bool,
-	limitHint int64,
+	batchBytesLimit row.BytesLimit,
+	limitHint row.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
 	start := timeutil.Now()
-	err := c.Fetcher.StartScan(ctx, txn, spans, limitBatches, limitHint, traceKV, forceProductionKVBatchSize)
+	err := c.Fetcher.StartScan(ctx, txn, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
@@ -126,14 +126,14 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	initialTimestamp hlc.Timestamp,
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,
-	limitBatches bool,
-	limitHint int64,
+	batchBytesLimit row.BytesLimit,
+	limitHint row.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
 	start := timeutil.Now()
 	err := c.Fetcher.StartInconsistentScan(
-		ctx, db, initialTimestamp, maxTimestampAge, spans, limitBatches, limitHint, traceKV, forceProductionKVBatchSize,
+		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize,
 	)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
