@@ -93,10 +93,10 @@ user3     ·        {}
 statement error no username specified
 CREATE USER ""
 
-query TTT
-SELECT current_user, session_user, user
+query TTTTT
+SELECT current_user, current_user(), session_user, session_user(), user
 ----
-root  root  root
+root  root  root  root  root
 
 user testuser
 
@@ -109,10 +109,10 @@ UPSERT INTO system.users VALUES (user1, 'newpassword', false)
 statement error pq: user testuser does not have SELECT privilege on relation user
 SHOW USERS
 
-query TTT
-SELECT current_user, session_user, user
+query TTTTT
+SELECT current_user, current_user(), session_user, session_user(), user
 ----
-testuser  testuser  testuser
+testuser  testuser  testuser  testuser  testuser
 
 statement ok
 SET SESSION AUTHORIZATION DEFAULT
@@ -184,3 +184,14 @@ ALTER USER userlongpassword WITH PASSWORD '987654321021'
 
 statement ok
 DROP USER userlongpassword
+
+subtest set_role
+
+statement error unimplemented
+SET ROLE = 'testuser'
+
+statement error unimplemented
+SET ROLE testuser
+
+statement error unimplemented
+RESET ROLE

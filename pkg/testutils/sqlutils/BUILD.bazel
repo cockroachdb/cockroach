@@ -27,7 +27,7 @@ go_library(
         "//pkg/testutils",
         "//pkg/util/fileutil",
         "//pkg/util/protoutil",
-        "@com_github_cockroachdb_cockroach_go//crdb",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -1793,13 +1793,12 @@ func TestSessionParameters(t *testing.T) {
 	host, ports, _ := net.SplitHostPort(s.ServingSQLAddr())
 	port, _ := strconv.Atoi(ports)
 
-	connCfg := pgx.ConnConfig{
-		Host:      host,
-		Port:      uint16(port),
-		User:      security.RootUser,
-		TLSConfig: nil, // insecure
-		Logger:    pgxTestLogger{},
-	}
+	connCfg, err := pgx.ParseConfig(
+		fmt.Sprintf("postgresql://%s@%s:%d/defaultdb?sslmode=disable", security.RootUser, host, port),
+	)
+	require.NoError(t, err)
+	connCfg.TLSConfig = nil
+	connCfg.Logger = pgxTestLogger{}
 
 	testData := []struct {
 		varName        string
@@ -1833,7 +1832,7 @@ func TestSessionParameters(t *testing.T) {
 		t.Run(test.varName+"="+test.val, func(t *testing.T) {
 			cfg := connCfg
 			cfg.RuntimeParams = map[string]string{test.varName: test.val}
-			db, err := pgx.Connect(cfg)
+			db, err := pgx.ConnectConfig(ctx, cfg)
 			t.Logf("conn error: %v", err)
 			if !testutils.IsError(err, test.expectedErr) {
 				t.Fatalf("expected %q, got %v", test.expectedErr, err)
@@ -1841,16 +1840,12 @@ func TestSessionParameters(t *testing.T) {
 			if err != nil {
 				return
 			}
-			defer func() { _ = db.Close() }()
-
-			for k, v := range db.RuntimeParams {
-				t.Logf("received runtime param %s = %q", k, v)
-			}
+			defer func() { _ = db.Close(ctx) }()
 
 			// If the session var is also a valid status param, then check
 			// the requested value was processed.
 			if test.expectedStatus {
-				serverVal := db.RuntimeParams[test.varName]
+				serverVal := db.PgConn().ParameterStatus(test.varName)
 				if serverVal != test.val {
 					t.Fatalf("initial server status %v: got %q, expected %q",
 						test.varName, serverVal, test.val)
@@ -1858,7 +1853,7 @@ func TestSessionParameters(t *testing.T) {
 			}
 
 			// Check the value also inside the session.
-			rows, err := db.Query("SHOW " + test.varName)
+			rows, err := db.Query(ctx, "SHOW "+test.varName)
 			if err != nil {
 				// Check that the value was not expected to be settable.
 				// (The set was ignored).
@@ -1892,8 +1887,10 @@ func TestSessionParameters(t *testing.T) {
 
 type pgxTestLogger struct{}
 
-func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]interface{}) {
-	log.Infof(context.Background(), "pgx log [%s] %s - %s", level, msg, data)
+func (l pgxTestLogger) Log(
+	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
+) {
+	log.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.

@@ -112,11 +112,6 @@ func (r *StmtBufReader) AdvanceOne() {
 	r.buf.AdvanceOne()
 }
 
-// SeekToNextBatch skips to the beginning of the next batch of commands.
-func (r *StmtBufReader) SeekToNextBatch() error {
-	return r.buf.seekToNextBatch()
-}
-
 // Exec is a test utility function that takes a localPlanner (of type
 // interface{} so that external packages can call NewInternalPlanner and pass
 // the result) and executes a sql statement through the DistSQLPlanner.

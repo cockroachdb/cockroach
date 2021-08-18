@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +33,7 @@ import (
 type pgConnReplicationFeedSource struct {
 	t      *testing.T
 	conn   *pgx.Conn
-	rows   *pgx.Rows
+	rows   pgx.Rows
 	cancel func()
 }
 
@@ -41,10 +41,10 @@ var _ streamingtest.FeedSource = (*pgConnReplicationFeedSource)(nil)
 
 // Close implements the streamingtest.FeedSource interface. It closes underlying
 // sql connection.
-func (f *pgConnReplicationFeedSource) Close() {
+func (f *pgConnReplicationFeedSource) Close(ctx context.Context) {
 	f.cancel()
 	f.rows.Close()
-	require.NoError(f.t, f.conn.Close())
+	require.NoError(f.t, f.conn.Close(ctx))
 }
 
 // Next implements the streamingtest.FeedSource interface.
@@ -82,17 +82,17 @@ func startReplication(
 
 	// Use pgx directly instead of database/sql so we can close the conn
 	// (instead of returning it to the pool).
-	pgxConfig, err := pgx.ParseConnectionString(sink.String())
-	require.NoError(t, err)
-
-	conn, err := pgx.Connect(pgxConfig)
+	pgxConfig, err := pgx.ParseConfig(sink.String())
 	require.NoError(t, err)
 
 	queryCtx, cancel := context.WithCancel(context.Background())
-	rows, err := conn.QueryEx(queryCtx, `SET enable_experimental_stream_replication = true`, nil, args...)
+	conn, err := pgx.ConnectConfig(queryCtx, pgxConfig)
+	require.NoError(t, err)
+
+	rows, err := conn.Query(queryCtx, `SET enable_experimental_stream_replication = true`, args...)
 	require.NoError(t, err)
 	rows.Close()
-	rows, err = conn.QueryEx(queryCtx, create, nil, args...)
+	rows, err = conn.Query(queryCtx, create, args...)
 	require.NoError(t, err)
 	feedSource := &pgConnReplicationFeedSource{
 		t:      t,
@@ -117,14 +117,15 @@ INSERT INTO d.t1 (i) VALUES (42);
 INSERT INTO d.t2 VALUES (2);
 `)
 
+	ctx := context.Background()
 	streamTenantQuery := fmt.Sprintf(
 		`CREATE REPLICATION STREAM FOR TENANT %d`, h.Tenant.ID.ToUint64())
 
 	t.Run("cannot-stream-tenant-from-tenant", func(t *testing.T) {
-		_, err := h.Tenant.SQL.DB.ExecContext(context.Background(), `SET enable_experimental_stream_replication = true`)
+		_, err := h.Tenant.SQL.DB.ExecContext(ctx, `SET enable_experimental_stream_replication = true`)
 		require.NoError(t, err)
 		// Cannot replicate stream from inside the tenant
-		_, err = h.Tenant.SQL.DB.ExecContext(context.Background(), streamTenantQuery)
+		_, err = h.Tenant.SQL.DB.ExecContext(ctx, streamTenantQuery)
 		require.True(t, testutils.IsError(err, "only the system tenant can backup other tenants"), err)
 	})
 
@@ -132,23 +133,23 @@ INSERT INTO d.t2 VALUES (2);
 
 	t.Run("stream-tenant", func(t *testing.T) {
 		feed := startReplication(t, h, streamTenantQuery)
-		defer feed.Close()
+		defer feed.Close(ctx)
 
 		expected := streamingtest.EncodeKV(t, h.Tenant.Codec, descr, 42)
-		firstObserved := feed.ObserveKey(expected.Key)
+		firstObserved := feed.ObserveKey(ctx, expected.Key)
 
 		require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
 
 		// Periodically, resolved timestamps should be published.
 		// Observe resolved timestamp that's higher than the previous value timestamp.
-		feed.ObserveResolved(firstObserved.Value.Timestamp)
+		feed.ObserveResolved(ctx, firstObserved.Value.Timestamp)
 
 		// Update our row.
 		h.Tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)
 		expected = streamingtest.EncodeKV(t, h.Tenant.Codec, descr, 42, nil, "world")
 
 		// Observe its changes.
-		secondObserved := feed.ObserveKey(expected.Key)
+		secondObserved := feed.ObserveKey(ctx, expected.Key)
 		require.Equal(t, expected.Value.RawBytes, secondObserved.Value.RawBytes)
 		require.True(t, firstObserved.Value.Timestamp.Less(secondObserved.Value.Timestamp))
 	})
@@ -161,16 +162,16 @@ INSERT INTO d.t2 VALUES (2);
 
 		feed := startReplication(t, h, fmt.Sprintf(
 			"%s WITH cursor='%s'", streamTenantQuery, beforeUpdateTS.AsOfSystemTime()))
-		defer feed.Close()
+		defer feed.Close(ctx)
 
 		// We should observe 2 versions of this key: one with ("привет", "world"), and a later
 		// version ("привет", "мир")
 		expected := streamingtest.EncodeKV(t, h.Tenant.Codec, descr, 42, "привет", "world")
-		firstObserved := feed.ObserveKey(expected.Key)
+		firstObserved := feed.ObserveKey(ctx, expected.Key)
 		require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
 
 		expected = streamingtest.EncodeKV(t, h.Tenant.Codec, descr, 42, "привет", "мир")
-		secondObserved := feed.ObserveKey(expected.Key)
+		secondObserved := feed.ObserveKey(ctx, expected.Key)
 		require.Equal(t, expected.Value.RawBytes, secondObserved.Value.RawBytes)
 	})
 }

@@ -159,7 +159,7 @@ func (w *indexes) Ops(
 	cfg := workload.MultiConnPoolCfg{
 		MaxTotalConnections: w.connFlags.Concurrency + 1,
 	}
-	mcp, err := workload.NewMultiConnPool(cfg, urls...)
+	mcp, err := workload.NewMultiConnPool(ctx, cfg, w.connFlags, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -174,7 +174,7 @@ func (w *indexes) Ops(
 			buf:    make([]byte, w.payload),
 		}
 		op.stmt = op.sr.Define(stmt)
-		if err := op.sr.Init(ctx, "indexes", mcp, w.connFlags); err != nil {
+		if err := op.sr.Init(ctx, mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)

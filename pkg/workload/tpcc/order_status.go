@@ -15,12 +15,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/pgtype"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 	"golang.org/x/exp/rand"
 )
 
@@ -108,7 +109,7 @@ func createOrderStatus(
 		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`,
 	)
 
-	if err := o.sr.Init(ctx, "order-status", mcp, config.connFlags); err != nil {
+	if err := o.sr.Init(ctx, mcp); err != nil {
 		return nil, err
 	}
 
@@ -133,13 +134,9 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 		d.cID = o.config.randCustomerID(rng)
 	}
 
-	tx, err := o.mcp.Get().BeginEx(ctx, o.config.txOpts)
-	if err != nil {
-		return nil, err
-	}
-	if err := crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
-		func() error {
+	if err := crdbpgx.ExecuteTx(
+		ctx, o.mcp.Get(), o.config.txOpts,
+		func(tx pgx.Tx) error {
 			// 2.6.2.2 explains this entire transaction.
 
 			// Select the customer

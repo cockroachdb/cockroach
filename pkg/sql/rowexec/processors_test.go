@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -415,15 +415,17 @@ func TestProcessorBaseContext(t *testing.T) {
 	})
 }
 
-func getPGXConnAndCleanupFunc(t *testing.T, servingSQLAddr string) (*pgx.Conn, func()) {
+func getPGXConnAndCleanupFunc(
+	ctx context.Context, t *testing.T, servingSQLAddr string,
+) (*pgx.Conn, func()) {
 	t.Helper()
 	pgURL, cleanup := sqlutils.PGUrl(t, servingSQLAddr, t.Name(), url.User(security.RootUser))
 	pgURL.Path = "test"
-	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
-	defaultConn, err := pgx.Connect(pgxConfig)
+	defaultConn, err := pgx.ConnectConfig(ctx, pgxConfig)
 	require.NoError(t, err)
-	_, err = defaultConn.Exec("set distsql='always'")
+	_, err = defaultConn.Exec(ctx, "set distsql='always'")
 	require.NoError(t, err)
 	return defaultConn, cleanup
 }
@@ -514,7 +516,8 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				},
 			},
 		})
-	defer tc.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
 
 	origDB0 := tc.ServerConn(0)
 	sqlutils.CreateTable(t, origDB0, "t",
@@ -536,7 +539,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	}
 
 	populateRangeCacheAndDisableBuffering(t, origDB0, "t")
-	defaultConn, cleanup := getPGXConnAndCleanupFunc(t, tc.Server(0).ServingSQLAddr())
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
 	defer cleanup()
 
 	atomic.StoreInt64(&trapRead, 1)
@@ -554,7 +557,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			blockedRead.Unlock()
 			// Force DistSQL to distribute the query. Otherwise, as of Nov 2018, it's hard
 			// to convince it to distribute a query that uses an index.
-			if _, err := defaultConn.Exec("set distsql='always'"); err != nil {
+			if _, err := defaultConn.Exec(ctx, "set distsql='always'"); err != nil {
 				t.Fatal(err)
 			}
 			vectorizeMode := "off"
@@ -562,7 +565,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				vectorizeMode = "on"
 			}
 
-			if _, err := defaultConn.Exec(fmt.Sprintf("set vectorize='%s'", vectorizeMode)); err != nil {
+			if _, err := defaultConn.Exec(ctx, fmt.Sprintf("set vectorize='%s'", vectorizeMode)); err != nil {
 				t.Fatal(err)
 			}
 
@@ -573,7 +576,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			query := fmt.Sprintf(
 				"select x from t where x <= 5 union all select x from t where x > 5 limit %d",
 				limit)
-			rows, err := defaultConn.Query(query)
+			rows, err := defaultConn.Query(ctx, query)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -699,8 +702,9 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		}(nodeIdx)
 	}
 
+	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, numNodes, testClusterArgs)
-	defer tc.Stopper().Stop(context.Background())
+	defer tc.Stopper().Stop(ctx)
 
 	// Create a 30-row table, split and scatter evenly across the numNodes nodes.
 	dbConn := tc.ServerConn(0)
@@ -719,7 +723,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	))
 	require.NoError(t, err)
 	populateRangeCacheAndDisableBuffering(t, dbConn, "t")
-	defaultConn, cleanup := getPGXConnAndCleanupFunc(t, tc.Server(0).ServingSQLAddr())
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
 	defer cleanup()
 
 	// errorOriginSpec is a way for test cases to enable a request filter on the
@@ -764,8 +768,8 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 
 	// runQueryAndExhaust is a helper function to get an error that happens during
 	// the execution of a query.
-	runQueryAndExhaust := func(tx *pgx.Tx, query string) error {
-		res, err := tx.Query(query)
+	runQueryAndExhaust := func(tx pgx.Tx, query string) error {
+		res, err := tx.Query(ctx, query)
 		if err != nil {
 			return err
 		}
@@ -786,11 +790,14 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 					skip.IgnoreLint(t, testCase.skip)
 				}
 				func() {
-					_, err := defaultConn.Exec(fmt.Sprintf("set vectorize=%s", vectorizeOpt))
+					_, err := defaultConn.Exec(ctx, fmt.Sprintf("set vectorize=%s", vectorizeOpt))
 					require.NoError(t, err)
 					func() {
 						// Check distsql plan.
-						rows, err := defaultConn.Query(fmt.Sprintf("SELECT info FROM [EXPLAIN (DISTSQL) %s] WHERE info LIKE 'Diagram:%%'", testCase.query))
+						rows, err := defaultConn.Query(
+							ctx,
+							fmt.Sprintf("SELECT info FROM [EXPLAIN (DISTSQL) %s] WHERE info LIKE 'Diagram:%%'", testCase.query),
+						)
 						require.NoError(t, err)
 						defer rows.Close()
 						rows.Next()
@@ -827,9 +834,9 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 					// Begin a transaction to issue multiple statements. The first dummy
 					// statement is issued so that some results are returned and auto
 					// retries are therefore disabled for the rest of the transaction.
-					tx, err := defaultConn.Begin()
+					tx, err := defaultConn.Begin(ctx)
 					defer func() {
-						require.Error(t, tx.Commit())
+						require.Error(t, tx.Commit(ctx))
 					}()
 					require.NoError(t, err)
 					require.NoError(t, runQueryAndExhaust(tx, "SELECT count(*) FROM t"))

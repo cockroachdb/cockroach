@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
@@ -81,7 +81,7 @@ type tpcc struct {
 
 	usePostgres  bool
 	serializable bool
-	txOpts       *pgx.TxOptions
+	txOpts       pgx.TxOptions
 
 	expensiveChecks bool
 
@@ -310,7 +310,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 
 			if w.serializable {
-				w.txOpts = &pgx.TxOptions{IsoLevel: pgx.Serializable}
+				w.txOpts = pgx.TxOptions{IsoLevel: pgx.Serializable}
 			}
 
 			w.auditor = newAuditor(w.activeWarehouses)
@@ -764,7 +764,7 @@ func (w *tpcc) Ops(
 		i := i
 		g.Go(func() error {
 			var err error
-			dbs[i], err = workload.NewMultiConnPool(cfg, urls[i])
+			dbs[i], err = workload.NewMultiConnPool(ctx, cfg, w.connFlags, urls[i])
 			return err
 		})
 	}
@@ -812,11 +812,11 @@ func (w *tpcc) Ops(
 	var conns []*pgx.Conn
 	for i := 0; i < w.idleConns; i++ {
 		for _, url := range urls {
-			connConfig, err := pgx.ParseURI(url)
+			connConfig, err := pgx.ParseConfig(url)
 			if err != nil {
 				return workload.QueryLoad{}, err
 			}
-			conn, err := pgx.Connect(connConfig)
+			conn, err := pgx.ConnectConfig(ctx, connConfig)
 			if err != nil {
 				return workload.QueryLoad{}, err
 			}
@@ -878,7 +878,7 @@ func (w *tpcc) Ops(
 	// Close idle connections.
 	ql.Close = func(context context.Context) {
 		for _, conn := range conns {
-			if err := conn.Close(); err != nil {
+			if err := conn.Close(ctx); err != nil {
 				log.Warningf(ctx, "%v", err)
 			}
 		}

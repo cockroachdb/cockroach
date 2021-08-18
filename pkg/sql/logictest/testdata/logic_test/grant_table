@@ -80,6 +80,7 @@ test           crdb_internal       regions                                public
 test           crdb_internal       schema_changes                         public   SELECT
 test           crdb_internal       session_trace                          public   SELECT
 test           crdb_internal       session_variables                      public   SELECT
+test           crdb_internal       statement_statistics                   public   SELECT
 test           crdb_internal       table_columns                          public   SELECT
 test           crdb_internal       table_indexes                          public   SELECT
 test           crdb_internal       table_row_statistics                   public   SELECT
