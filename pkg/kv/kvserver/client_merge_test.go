@@ -4159,13 +4159,12 @@ func TestMergeQueue(t *testing.T) {
 
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
-	zoneConfig := zonepb.DefaultZoneConfig()
-	rangeMinBytes := int64(1 << 10) // 1KB
-	zoneConfig.RangeMinBytes = &rangeMinBytes
 	settings := cluster.MakeTestingClusterSettings()
 	sv := &settings.SV
 	kvserver.MergeQueueInterval.Override(ctx, sv, 0) // process greedily
 
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.RangeMinBytes = proto.Int64(1 << 10) // 1KB
 	tc := testcluster.StartTestCluster(t, 2,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -4183,6 +4182,8 @@ func TestMergeQueue(t *testing.T) {
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
+
+	conf := zoneConfig.AsSpanConfig()
 	store := tc.GetFirstStoreFromServer(t, 0)
 	// The cluster with manual replication disables the merge queue,
 	// so we need to re-enable.
@@ -4207,7 +4208,7 @@ func TestMergeQueue(t *testing.T) {
 		}
 	}
 	rng, _ := randutil.NewPseudoRand()
-	randBytes := randutil.RandBytes(rng, int(*zoneConfig.RangeMinBytes))
+	randBytes := randutil.RandBytes(rng, int(conf.RangeMinBytes))
 
 	lhsStartKey := roachpb.RKey(tc.ScratchRange(t))
 	rhsStartKey := lhsStartKey.Next().Next()
@@ -4221,17 +4222,17 @@ func TestMergeQueue(t *testing.T) {
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
-	setZones := func(t *testing.T, zone zonepb.ZoneConfig) {
+	setSpanConfigs := func(t *testing.T, conf roachpb.SpanConfig) {
 		t.Helper()
 		if l := lhs(); l == nil {
 			t.Fatal("left-hand side range not found")
 		} else {
-			l.SetZoneConfig(&zone)
+			l.SetSpanConfig(conf)
 		}
 		if r := rhs(); r == nil {
 			t.Fatal("right-hand side range not found")
 		} else {
-			r.SetZoneConfig(&zone)
+			r.SetSpanConfig(conf)
 		}
 	}
 
@@ -4243,7 +4244,7 @@ func TestMergeQueue(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		setZones(t, zoneConfig)
+		setSpanConfigs(t, conf)
 		// Disable load-based splitting, so that the absence of sufficient QPS
 		// measurements do not prevent ranges from merging. Certain subtests
 		// re-enable the functionality.
@@ -4271,9 +4272,9 @@ func TestMergeQueue(t *testing.T) {
 
 	t.Run("lhs-undersize", func(t *testing.T) {
 		reset(t)
-		zone := protoutil.Clone(&zoneConfig).(*zonepb.ZoneConfig)
-		*zone.RangeMinBytes *= 2
-		lhs().SetZoneConfig(zone)
+		conf := conf
+		conf.RangeMinBytes *= 2
+		lhs().SetSpanConfig(conf)
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t, store, lhsStartKey, rhsStartKey)
 	})
@@ -4283,16 +4284,16 @@ func TestMergeQueue(t *testing.T) {
 
 		// The ranges are individually beneath the minimum size threshold, but
 		// together they'll exceed the maximum size threshold.
-		zone := protoutil.Clone(&zoneConfig).(*zonepb.ZoneConfig)
-		zone.RangeMinBytes = proto.Int64(rhs().GetMVCCStats().Total() + 1)
-		zone.RangeMaxBytes = proto.Int64(lhs().GetMVCCStats().Total() + rhs().GetMVCCStats().Total() - 1)
-		setZones(t, *zone)
+		conf := conf
+		conf.RangeMinBytes = rhs().GetMVCCStats().Total() + 1
+		conf.RangeMaxBytes = lhs().GetMVCCStats().Total() + rhs().GetMVCCStats().Total() - 1
+		setSpanConfigs(t, conf)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 
 		// Once the maximum size threshold is increased, the merge can occur.
-		zone.RangeMaxBytes = proto.Int64(*zone.RangeMaxBytes + 1)
-		setZones(t, *zone)
+		conf.RangeMaxBytes += 1
+		setSpanConfigs(t, conf)
 		l := lhs().RangeID
 		r := rhs().RangeID
 		log.Infof(ctx, "Left=%s, Right=%s", l, r)

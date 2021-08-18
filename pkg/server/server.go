@@ -576,7 +576,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}))
 
 	storeCfg := kvserver.StoreConfig{
-		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
+		DefaultSpanConfig:       cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                st,
 		AmbientCtx:              cfg.AmbientCtx,
 		RaftConfig:              cfg.RaftConfig,

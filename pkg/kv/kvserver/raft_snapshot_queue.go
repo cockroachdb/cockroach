@@ -14,9 +14,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,10 +38,10 @@ type raftSnapshotQueue struct {
 }
 
 // newRaftSnapshotQueue returns a new instance of raftSnapshotQueue.
-func newRaftSnapshotQueue(store *Store, g *gossip.Gossip) *raftSnapshotQueue {
+func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 	rq := &raftSnapshotQueue{}
 	rq.baseQueue = newBaseQueue(
-		"raftsnapshot", rq, store, g,
+		"raftsnapshot", rq, store,
 		queueConfig{
 			maxSize: defaultQueueMaxSize,
 			// The Raft leader (which sends Raft snapshots) may not be the
@@ -62,8 +61,8 @@ func newRaftSnapshotQueue(store *Store, g *gossip.Gossip) *raftSnapshotQueue {
 }
 
 func (rq *raftSnapshotQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ *config.SystemConfig,
-) (shouldQ bool, priority float64) {
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
+) (shouldQueue bool, priority float64) {
 	// If a follower needs a snapshot, enqueue at the highest priority.
 	if status := repl.RaftStatus(); status != nil {
 		// raft.Status.Progress is only populated on the Raft group leader.
@@ -80,7 +79,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 }
 
 func (rq *raftSnapshotQueue) process(
-	ctx context.Context, repl *Replica, _ *config.SystemConfig,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
 	// If a follower requires a Raft snapshot, perform it.
 	if status := repl.RaftStatus(); status != nil {

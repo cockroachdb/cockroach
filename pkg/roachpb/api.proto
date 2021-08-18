@@ -2515,6 +2515,7 @@ message JoinNodeResponse {
 // parallels the definition found in zonepb/zone.proto.
 message Constraint {
   option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
 
   enum Type {
     // REQUIRED ensures all replicas are placed on stores with locality tags
@@ -2540,6 +2541,7 @@ message Constraint {
 // together by replicas. It parallels the definition found in zonepb/zone.proto.
 message ConstraintsConjunction {
   option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
 
   // NumReplicas is the number of replicas that should abide by the constraints
   // below. If set to zero, the constraints will apply to all replicas of the

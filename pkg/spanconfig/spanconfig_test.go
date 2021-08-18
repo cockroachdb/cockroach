@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -45,7 +45,7 @@ func TestKVAccessor(t *testing.T) {
 		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
 	}
 	conf := func(maxBytes int64) roachpb.SpanConfig {
-		c := zonepb.DefaultZoneConfigRef().AsSpanConfig()
+		c := kvserver.TestingDefaultSpanConfig()
 		c.RangeMaxBytes = maxBytes
 		return c
 	}

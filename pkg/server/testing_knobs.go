@@ -27,9 +27,11 @@ type TestingKnobs struct {
 	// DisableAutomaticVersionUpgrade, if set, temporarily disables the server's
 	// automatic version upgrade mechanism.
 	DisableAutomaticVersionUpgrade int32 // accessed atomically
-	// DefaultZoneConfigOverride, if set, overrides the default zone config defined in `pkg/config/zone.go`
+	// DefaultZoneConfigOverride, if set, overrides the default zone config
+	// defined in `pkg/config/zone.go`.
 	DefaultZoneConfigOverride *zonepb.ZoneConfig
-	// DefaultSystemZoneConfigOverride, if set, overrides the default system zone config defined in `pkg/config/zone.go`
+	// DefaultSystemZoneConfigOverride, if set, overrides the default system
+	// zone config defined in `pkg/config/zone.go`
 	DefaultSystemZoneConfigOverride *zonepb.ZoneConfig
 	// SignalAfterGettingRPCAddress, if non-nil, is closed after the server gets
 	// an RPC server address, and prior to waiting on PauseAfterGettingRPCAddress below.

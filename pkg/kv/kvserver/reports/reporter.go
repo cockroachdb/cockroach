@@ -53,6 +53,13 @@ var ReporterInterval = settings.RegisterDurationSetting(
 // Reporter periodically produces a couple of reports on the cluster's data
 // distribution: the system tables: replication_constraint_stats,
 // replication_stats_report and replication_critical_localities.
+//
+// TODO(irfansharif): After #67679 these replication reports will be the last
+// remaining use of the system config span in KV. We'll want to rip it all out
+// in favor of maintaining reports that speak in terms of keyspans and their
+// corresponding span configurations. We'll also want provide a view into hat a
+// given schema object's keyspans are, and join these two tables to replace our
+// current replication reports.
 type Reporter struct {
 	// Contains the list of the stores of the current node
 	localStores *kvserver.Stores

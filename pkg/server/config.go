@@ -138,7 +138,8 @@ type BaseConfig struct {
 
 	// DefaultZoneConfig is used to set the default zone config inside the server.
 	// It can be overridden during tests by setting the DefaultZoneConfigOverride
-	// server testing knob.
+	// server testing knob. Whatever is installed here is in turn used to
+	// initialize stores, which need a default span config.
 	DefaultZoneConfig zonepb.ZoneConfig
 
 	// Locality is a description of the topography of the server.
