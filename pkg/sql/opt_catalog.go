@@ -693,6 +693,7 @@ func newOptTable(
 				visibility,
 				col.ColumnDesc().DefaultExpr,
 				col.ColumnDesc().ComputeExpr,
+				mapGeneratedAsIdentityType(col.ColumnDesc().GeneratedAsIdType),
 			)
 		} else {
 			// Note: a WriteOnly or DeleteOnly mutation column doesn't require any
@@ -734,6 +735,7 @@ func newOptTable(
 				cat.MaybeHidden(sysCol.IsHidden()),
 				sysCol.ColumnDesc().DefaultExpr,
 				sysCol.ColumnDesc().ComputeExpr,
+				mapGeneratedAsIdentityType(sysCol.ColumnDesc().GeneratedAsIdType),
 			)
 		}
 	}
@@ -1805,10 +1807,11 @@ func newOptVirtualTable(
 		"crdb_internal_vtable_pk",
 		cat.Ordinary,
 		types.Int,
-		false,      /* nullable */
-		cat.Hidden, /* hidden */
-		nil,        /* defaultExpr */
-		nil,        /* computedExpr */
+		false,                      /* nullable */
+		cat.Hidden,                 /* hidden */
+		nil,                        /* defaultExpr */
+		nil,                        /* computedExpr */
+		cat.NotGeneratedAsIdentity, /* generatedAsIDType */
 	)
 	for i, d := range desc.PublicColumns() {
 		ot.columns[i+1].Init(
@@ -1821,6 +1824,7 @@ func newOptVirtualTable(
 			cat.MaybeHidden(d.IsHidden()),
 			d.ColumnDesc().DefaultExpr,
 			d.ColumnDesc().ComputeExpr,
+			mapGeneratedAsIdentityType(d.ColumnDesc().GeneratedAsIdType),
 		)
 	}
 
@@ -2285,4 +2289,16 @@ func collectTypes(col catalog.Column) (descpb.IDs, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+// mapGeneratedAsIdentityType maps a descpb.GeneratedAsIdentityType into corresponding
+// cat.GeneratedAsIdentityType. This is a helper function for the read access to
+// the GeneratedAsIdType attribute for descpb.ColumnDescriptor.
+func mapGeneratedAsIdentityType(inType descpb.GeneratedAsIdentityType) cat.GeneratedAsIdentityType {
+	mapGenAsIdType := map[descpb.GeneratedAsIdentityType]cat.GeneratedAsIdentityType{
+		descpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN:  cat.NotGeneratedAsIdentity,
+		descpb.GeneratedAsIdentityType_GENERATED_ALWAYS:     cat.GeneratedAlwaysAsIdentity,
+		descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT: cat.GeneratedByDefaultAsIdentity,
+	}
+	return mapGenAsIdType[inType]
 }
