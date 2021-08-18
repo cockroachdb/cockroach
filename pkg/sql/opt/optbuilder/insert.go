@@ -614,6 +614,11 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		// Type check the input column against the corresponding table column.
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
 
+		// Check if the input column is created with `GENERATED ALWAYS AS IDENTITY`
+		// token. If yes, and users does not specify the `OVERRIDING SYSTEM VALUE` token
+		// in the `INSERT` statement, checkColumnIsGeneratedAlwaysAsIdentity will return error.
+		checkColumnIsGeneratedAlwaysAsIdentity(mb.tab.Column(ord))
+
 		// Assign name of input column.
 		inCol.name = scopeColName(tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias))
 

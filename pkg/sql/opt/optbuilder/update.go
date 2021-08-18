@@ -195,6 +195,10 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		ord := mb.tabID.ColumnOrdinal(targetColID)
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), sourceCol.typ)
 
+		// Check if current column is created with GENERATED ALWAYS token,
+		// which only allows this column to be updated to DEFAULT.
+		checkColumnIsGeneratedAlways(mb.tab.Column(ord), exprs)
+
 		// Add source column ID to the list of columns to update.
 		mb.updateColIDs[ord] = sourceCol.id
 	}

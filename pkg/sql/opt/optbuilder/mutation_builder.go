@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1322,6 +1323,47 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 		typ, col.DatumType(), tree.ErrNameString(colName))
 	err = errors.WithHint(err, "you will need to rewrite or cast the expression")
 	panic(err)
+}
+
+// checkColumnIsGeneratedAlwaysAsIdentity verifies that if current column
+// was created with the `GENERATED ALWAYS AS IDENTITY` token, which
+// restricts this column from being explicitly written to.
+//
+// If a column is not allowed to be written explicitly, users need to specify
+// the INSERT/UPSERT/UPDATE statement with the OVERRIDING SYSTEM VALUE token.
+//
+// TODO(janexing): to implement the OVERRIDING SYSTEM VALUE syntax
+// under `INSERT/UPSERT/UPDATE` statement.
+// check also https://github.com/cockroachdb/cockroach/issues/68201
+//
+// This is used by the UPDATE, INSERT and UPSERT code.
+func checkColumnIsGeneratedAlwaysAsIdentity(col *cat.Column) {
+	if !col.IsGeneratedAlwaysAsIdentity() {
+		return
+	}
+	colName := string(col.ColName())
+	err := sqlerrors.NewGeneratedAlwaysAsIdentityColumnOverrideError(colName)
+	panic(err)
+}
+
+// checkColumnIsGeneratedAlways verifies that if current column
+// was created with the `GENERATED ALWAYS` token, which restricts
+// this column to only be updated to DEFAULT in the update statement.
+func checkColumnIsGeneratedAlways(col *cat.Column, updateExprs tree.UpdateExprs) {
+	// Check if this column is created with GENERATED ALWAYS token.
+	if col.IsGeneratedAlwaysAsIdentity() || col.IsComputed() {
+		for _, updateExpr := range updateExprs {
+			switch updateExpr.Expr.(type) {
+			case tree.DefaultVal:
+				continue
+			// Unless the update expression is "DEFAULT", return error.
+			default:
+				colName := string(col.ColName())
+				err := sqlerrors.NewGeneratedAlwaysColumnUpdateError(colName)
+				panic(err)
+			}
+		}
+	}
 }
 
 // partialIndexCount returns the number of public, write-only, and delete-only
