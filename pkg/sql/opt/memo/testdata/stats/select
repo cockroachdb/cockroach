@@ -2621,3 +2621,60 @@ select
  └── filters
       ├── a:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
       └── b:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+# Check that we have a sane row count estimate when there are a lot of null
+# values.
+exec-ddl
+DROP TABLE nulls
+----
+
+exec-ddl
+CREATE TABLE nulls (x INT, y INT)
+----
+
+exec-ddl
+ALTER TABLE nulls INJECT STATISTICS '[
+    {
+        "columns": [
+            "x"
+        ],
+        "created_at": "2021-06-15 02:06:48.036389",
+        "distinct_count": 3000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 5000,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 5000,
+                "num_range": 0,
+                "upper_bound": "1"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 11100000,
+        "row_count": 11110000
+    }
+]'
+----
+
+norm
+SELECT * FROM nulls WHERE x IS NULL
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=11100000, distinct(1)=1, null(1)=11100000]
+ │   histogram(1)=  0 1.11e+07
+ │                <---- NULL -
+ ├── fd: ()-->(1)
+ ├── scan nulls
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── stats: [rows=11110000, distinct(1)=3000, null(1)=11100000]
+ │        histogram(1)=  0 1.11e+07 0 5000 0 5000
+ │                     <---- NULL ---- 0 ---- 1 -
+ └── filters
+      └── x:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]

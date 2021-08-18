@@ -3797,7 +3797,7 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 			continue
 		}
 
-		inputColStat, inputStats := sb.colStatFromInput(colStat.Cols, e)
+		inputColStat, _ := sb.colStatFromInput(colStat.Cols, e)
 		newHist := colStat.Histogram
 		oldHist := inputColStat.Histogram
 		if newHist == nil || oldHist == nil {
@@ -3807,12 +3807,9 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 		newCount := newHist.ValuesCount()
 		oldCount := oldHist.ValuesCount()
 
-		// Calculate the selectivity of the predicate.
-		nonNullSelectivity := props.MakeSelectivityFromFraction(newCount, oldCount)
-		nullSelectivity := props.MakeSelectivityFromFraction(colStat.NullCount, inputColStat.NullCount)
-		predicateSelectivity := sb.predicateSelectivity(
-			nonNullSelectivity, nullSelectivity, inputColStat.NullCount, inputStats.RowCount,
-		)
+		// Calculate the selectivity of the predicate. Nulls are already included
+		// in the histogram, so we do not need to account for them separately.
+		predicateSelectivity := props.MakeSelectivityFromFraction(newCount, oldCount)
 
 		// The maximum possible selectivity of the entire expression is the minimum
 		// selectivity of all individual predicates.
