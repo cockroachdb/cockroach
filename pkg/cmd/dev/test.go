@@ -12,10 +12,9 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
+	"time"
 
-	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -28,6 +27,7 @@ const (
 	timeoutFlag     = "timeout"
 	vFlag           = "verbose"
 	stressFlag      = "stress"
+	stressArgsFlag  = "stress-args"
 	raceFlag        = "race"
 	ignoreCacheFlag = "ignore-cache"
 
@@ -56,6 +56,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	addCommonTestFlags(testCmd)
 	testCmd.Flags().BoolP(vFlag, "v", false, "enable logging during test runs")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
+	testCmd.Flags().String(stressArgsFlag, "", "Additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 
@@ -81,6 +82,7 @@ func (d *dev) test(cmd *cobra.Command, pkgs []string) error {
 func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 	ctx := cmd.Context()
 	stress := mustGetFlagBool(cmd, stressFlag)
+	stressArgs := mustGetFlagString(cmd, stressArgsFlag)
 	race := mustGetFlagBool(cmd, raceFlag)
 	filter := mustGetFlagString(cmd, filterFlag)
 	timeout := mustGetFlagDuration(cmd, timeoutFlag)
@@ -89,24 +91,6 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 
 	d.log.Printf("unit test args: stress=%t  race=%t  filter=%s  timeout=%s  ignore-cache=%t  pkgs=%s",
 		stress, race, filter, timeout, ignoreCache, pkgs)
-
-	// If we're running `stress`, we need to build it first.
-	var stressBin string
-	if stress {
-		var args []string
-		args = append(args, "build", "--color=yes", "--experimental_convenience_symlinks=ignore")
-		args = append(args, getConfigFlags()...)
-		args = append(args, stressTarget)
-		_, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
-		if err != nil {
-			return err
-		}
-		bazelBin, err := d.getBazelBin(ctx)
-		if err != nil {
-			return err
-		}
-		stressBin = filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(stressTarget))
-	}
 
 	var args []string
 	args = append(args, "test")
@@ -118,7 +102,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
 	if race {
-		args = append(args, "--features", "race")
+		args = append(args, "--@io_bazel_rules_go//go/config:race")
 	}
 
 	for _, pkg := range pkgs {
@@ -173,11 +157,13 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 		args = append(args, "--nocache_test_results")
 	}
 	if stress && timeout > 0 {
-		// TODO(irfansharif): Should this be pulled into a top-level flag?
-		// Should we just re-purpose timeout here?
-		args = append(args, "--run_under", fmt.Sprintf("%s -maxtime=%s", stressBin, timeout))
+		args = append(args, "--run_under", fmt.Sprintf("%s -maxtime=%s %s", stressTarget, timeout, stressArgs))
+		// The timeout should be a bit higher than the stress duration.
+		// Bazel will probably think the timeout for this test isn't so
+		// long.
+		args = append(args, fmt.Sprintf("--test_timeout=%d", int((timeout+1*time.Second).Seconds())))
 	} else if stress {
-		args = append(args, "--run_under", stressBin)
+		args = append(args, "--run_under", fmt.Sprintf("%s %s", stressTarget, stressArgs))
 	} else if timeout > 0 {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}
