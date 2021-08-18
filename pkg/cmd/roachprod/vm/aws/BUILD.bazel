@@ -40,6 +40,12 @@ bindata(
         "config.json",
         "old.json",
     ],
-    extra_args = ["."],
+    extra_args = [
+        "-mode",
+        "0600",
+        "-modtime",
+        "1400000000",
+    ],
+    metadata = True,
     package = "aws",
 )
