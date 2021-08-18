@@ -59,6 +59,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/physicalplan/replicaoracle",
+        "//pkg/sql/sem/tree",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

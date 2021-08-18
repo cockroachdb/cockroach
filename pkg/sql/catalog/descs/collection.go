@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -100,6 +101,12 @@ type Collection struct {
 	// droppedDescriptors that will not need to wait for new
 	// lease versions.
 	deletedDescs []catalog.Descriptor
+
+	// maxTimestampBoundDeadlineHolder contains the maximum timestamp to read
+	// schemas at. This is only set during the retries of bounded_staleness when
+	// nearest_only=True, in which we want a schema read that should be no older
+	// than MaxTimestampBound.
+	maxTimestampBoundDeadlineHolder maxTimestampBoundDeadlineHolder
 }
 
 var _ catalog.Accessor = (*Collection)(nil)
@@ -109,6 +116,16 @@ var _ catalog.Accessor = (*Collection)(nil)
 // only done when a deadline exists.
 func (tc *Collection) MaybeUpdateDeadline(ctx context.Context, txn *kv.Txn) (err error) {
 	return tc.leased.maybeUpdateDeadline(ctx, txn)
+}
+
+// SetMaxTimestampBound sets the maximum timestamp to read schemas at.
+func (tc *Collection) SetMaxTimestampBound(maxTimestampBound hlc.Timestamp) {
+	tc.maxTimestampBoundDeadlineHolder.maxTimestampBound = maxTimestampBound
+}
+
+// ResetMaxTimestampBound resets the maximum timestamp to read schemas at.
+func (tc *Collection) ResetMaxTimestampBound() {
+	tc.maxTimestampBoundDeadlineHolder.maxTimestampBound = hlc.Timestamp{}
 }
 
 // SkipValidationOnWrite avoids validating uncommitted descriptors prior to
