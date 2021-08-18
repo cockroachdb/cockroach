@@ -3045,6 +3045,8 @@ col_qualification_elem ::=
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| generated_as '(' a_expr ')' 'STORED'
 	| generated_as '(' a_expr ')' 'VIRTUAL'
+	| generated_always_as 'IDENTITY' '(' opt_sequence_option_list ')'
+	| generated_by_default_as 'IDENTITY' '(' opt_sequence_option_list ')'
 	| generated_always_as 'IDENTITY'
 	| generated_by_default_as 'IDENTITY'
 
