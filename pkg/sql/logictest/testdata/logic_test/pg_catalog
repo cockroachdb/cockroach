@@ -3723,7 +3723,7 @@ objoid      classoid    objsubid  description
 4294967082  4294967134  0         pg_sequences is very similar as pg_sequence.
 4294967081  4294967134  0         session variables (incomplete)
 4294967080  4294967134  0         pg_shadow was created for compatibility and is currently unimplemented
-4294967077  4294967134  0         shared dependencies (empty - not implemented)
+4294967077  4294967134  0         Shared Dependencies (Roles depending on objects).
 4294967079  4294967134  0         shared object comments
 4294967076  4294967134  0         pg_shmem_allocations was created for compatibility and is currently unimplemented
 4294967078  4294967134  0         shared security labels (empty - feature not supported)
@@ -5110,3 +5110,96 @@ SELECT obj_description(objoid)
 ----
 obj_description
 testing schema
+
+# Testing pg_shdepend pinned elements
+query T colnames
+SELECT rolname
+FROM pg_authid WHERE oid IN (
+  SELECT refobjid FROM pg_shdepend WHERE deptype = 'p'
+) ORDER BY rolname
+----
+rolname
+admin
+root
+
+statement ok
+CREATE DATABASE sh_db;
+CREATE DATABASE sh_db_root;
+CREATE TABLE sh_db.sh_table_a(id INT);
+CREATE TABLE sh_db_root.sh_table_b(id INT);
+CREATE USER sh_user;
+CREATE USER sh_owner;
+GRANT CREATE ON DATABASE sh_db TO sh_owner;
+GRANT SELECT ON sh_db.sh_table_a TO sh_owner;
+ALTER TABLE sh_db.sh_table_a OWNER TO sh_owner;
+ALTER DATABASE sh_db OWNER TO sh_owner;
+ALTER TABLE sh_db_root.sh_table_b OWNER TO root;
+ALTER DATABASE sh_db_root OWNER TO root;
+GRANT SELECT ON sh_db.sh_table_a TO sh_user;
+GRANT SELECT ON sh_db_root.sh_table_b TO sh_user;
+CREATE ROLE sh_role;
+GRANT SELECT ON sh_db.sh_table_a TO sh_role;
+GRANT SELECT ON sh_db_root.sh_table_b TO sh_role;
+GRANT CONNECT ON DATABASE sh_db TO sh_role;
+GRANT CONNECT ON DATABASE sh_db_root TO sh_role;
+USE sh_db;
+
+# Testing shared dependencies on sh_table_a
+query TTTT colnames
+SELECT
+  pg_class.relname,
+  pg_authid.rolname,
+  pg_shdepend.deptype,
+  pg_database.datname
+FROM pg_authid
+JOIN pg_shdepend ON pg_authid.oid = pg_shdepend.refobjid
+JOIN pg_class ON pg_shdepend.objid = pg_class.oid
+JOIN pg_database ON pg_database.oid = pg_shdepend.dbid
+WHERE pg_class.relname IN ('sh_table_a')
+ORDER BY pg_class.relname, pg_authid.rolname
+----
+relname     rolname   deptype  datname
+sh_table_a  sh_owner  o        sh_db
+sh_table_a  sh_role   a        sh_db
+sh_table_a  sh_user   a        sh_db
+
+statement ok
+USE sh_db_root;
+
+# Testing shared dependencies on sh_table_a
+query TTTT colnames
+SELECT
+  pg_class.relname,
+  pg_authid.rolname,
+  pg_shdepend.deptype,
+  pg_database.datname
+FROM pg_authid
+JOIN pg_shdepend ON pg_authid.oid = pg_shdepend.refobjid
+JOIN pg_class ON pg_shdepend.objid = pg_class.oid
+JOIN pg_database ON pg_database.oid = pg_shdepend.dbid
+WHERE pg_class.relname IN ('sh_table_b')
+ORDER BY pg_class.relname, pg_authid.rolname
+----
+relname     rolname  deptype  datname
+sh_table_b  sh_role  a        sh_db_root
+sh_table_b  sh_user  a        sh_db_root
+
+statement ok
+USE test;
+
+# Testing shared dependencies on sh_db
+query TTT colnames
+SELECT
+  pg_database.datname,
+  pg_authid.rolname,
+  pg_shdepend.deptype
+FROM pg_authid
+JOIN pg_shdepend ON pg_authid.oid = pg_shdepend.refobjid
+JOIN pg_database ON pg_shdepend.objid = pg_database.oid
+WHERE pg_database.datname IN ('sh_db', 'sh_db_root')
+ORDER BY pg_database.datname, pg_authid.rolname
+----
+datname     rolname   deptype
+sh_db       sh_owner  o
+sh_db       sh_role   a
+sh_db_root  sh_role   a
