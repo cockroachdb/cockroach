@@ -534,7 +534,7 @@ func NewColumnTableDef(
 				d.Type = collatedTyp
 			}
 		case *ColumnDefault:
-			if d.HasDefaultExpr() {
+			if d.HasDefaultExpr() || d.GeneratedIdentity.IsGeneratedAsIdentity {
 				return nil, pgerror.Newf(pgcode.Syntax,
 					"multiple default values specified for column %q", name)
 			}
@@ -548,9 +548,16 @@ func NewColumnTableDef(
 			d.OnUpdateExpr.Expr = t.Expr
 			d.OnUpdateExpr.ConstraintName = c.Name
 		case *GeneratedAlwaysAsIdentity, *GeneratedByDefAsIdentity:
+			if typRef.(*types.T).InternalType.Family != types.IntFamily {
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue, "identity column type must be INT, INT2, or INT4")
+			}
 			if d.GeneratedIdentity.IsGeneratedAsIdentity {
 				return nil, pgerror.Newf(pgcode.Syntax,
 					"multiple identity specifications for column %q", name)
+			}
+			if d.HasDefaultExpr() {
+				return nil, pgerror.Newf(pgcode.Syntax,
+					"multiple default values specified for column %q", name)
 			}
 			if d.Computed.Computed {
 				return nil, pgerror.Newf(pgcode.Syntax,
