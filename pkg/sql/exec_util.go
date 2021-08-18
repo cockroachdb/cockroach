@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -1033,6 +1034,10 @@ type ExecutorConfig struct {
 
 	// CollectionFactory is used to construct a descs.Collection.
 	CollectionFactory *descs.CollectionFactory
+
+	// SpanConfigReconciliationJobDeps are used to drive the span config
+	// reconciliation job.
+	SpanConfigReconciliationJobDeps spanconfig.ReconciliationDependencies
 }
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.

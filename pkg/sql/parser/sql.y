@@ -5510,7 +5510,7 @@ show_savepoint_stmt:
 // %Help: SHOW TRANSACTION - display current transaction properties
 // %Category: Cfg
 // %Text: SHOW TRANSACTION {ISOLATION LEVEL | PRIORITY | STATUS}
-// %SeeAlso: WEBDOCS/show-transaction.html
+// %SeeAlso: WEBDOCS/show-vars.html
 show_transaction_stmt:
   SHOW TRANSACTION ISOLATION LEVEL
   {
@@ -5534,7 +5534,7 @@ show_transaction_stmt:
 // %Text:
 // SHOW CREATE [ TABLE | SEQUENCE | VIEW | DATABASE ] <object_name>
 // SHOW CREATE ALL TABLES
-// %SeeAlso: WEBDOCS/show-create-table.html
+// %SeeAlso: WEBDOCS/show-create.html
 show_create_stmt:
   SHOW CREATE table_name
   {

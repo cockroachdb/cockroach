@@ -201,7 +201,7 @@ func (r *Replica) evalAndPropose(
 			CmdID: idKey,
 			Req:   *ba,
 		}
-		if pErr := filter(filterArgs); pErr != nil {
+		if pErr = filter(filterArgs); pErr != nil {
 			return nil, nil, 0, pErr
 		}
 	}
