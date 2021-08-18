@@ -448,6 +448,14 @@ func (p *planner) resolveMemberOfWithAdminOption(
 
 // HasRoleOption implements the AuthorizationAccessor interface.
 func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error) {
+	user := p.SessionData().User()
+	return p.UserHasRoleOption(ctx, user, roleOption)
+}
+
+// UserHasRoleOption returns whether the given user has the given roleOption.
+func (p *planner) UserHasRoleOption(
+	ctx context.Context, user security.SQLUsername, roleOption roleoption.Option,
+) (bool, error) {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
@@ -455,7 +463,6 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return false, errors.AssertionFailedf("cannot use HasRoleOption without a txn")
 	}
 
-	user := p.SessionData().User()
 	if user.IsRootUser() || user.IsNodeUser() {
 		return true, nil
 	}

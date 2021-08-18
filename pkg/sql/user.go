@@ -353,6 +353,11 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[security.SQLUsername]boo
 }
 
 // RoleExists returns true if the role exists.
+func (p *planner) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+	return RoleExists(ctx, p.ExecCfg(), p.Txn(), role)
+}
+
+// RoleExists returns true if the role exists.
 func RoleExists(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, role security.SQLUsername,
 ) (bool, error) {
