@@ -1955,7 +1955,8 @@ Events in this category are logged to the `SQL_INTERNAL_PERF` channel.
 ### `large_row_internal`
 
 An event of type `large_row_internal` is recorded when an internal query tries to write a row
-larger than cluster setting `sql.mutations.max_row_size.log` to the database.
+larger than cluster settings `sql.mutations.max_row_size.log` or
+`sql.mutations.max_row_size.err` to the database.
 
 
 
