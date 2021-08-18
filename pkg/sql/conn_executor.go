@@ -2171,14 +2171,46 @@ func isCommit(stmt tree.Statement) bool {
 	return ok
 }
 
+var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
+	"retriable MinTimestampBoundUnsatisfiableError",
+)
+
 func errIsRetriable(err error) bool {
 	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) ||
-		errors.HasType(err, (*scbuild.ConcurrentSchemaChangeError)(nil))
+		errors.HasType(err, (*scbuild.ConcurrentSchemaChangeError)(nil)) ||
+		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError)
 }
 
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
 // eventNonRetriableErr, depending on the error type.
 func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event, fsm.EventPayload) {
+	// Check for MinTimestampBoundUnsatisfiableError errors.
+	// If this is detected, it means we are potentially able to retry with a lower
+	// MaxTimestampBound set if our MinTimestampBound was bumped up from the
+	// original AS OF SYSTEM TIME timestamp set due to a schema bumping the
+	// timestamp to a higher value.
+	if minTSErr := (*roachpb.MinTimestampBoundUnsatisfiableError)(nil); errors.As(err, &minTSErr) {
+		aost := ex.planner.EvalContext().AsOfSystemTime
+		if aost != nil && aost.BoundedStaleness {
+			if !aost.MaxTimestampBound.IsEmpty() && aost.MaxTimestampBound.Less(minTSErr.MinTimestampBound) {
+				// If this occurs, we have a strange logic bug where we resolved
+				// a minimum timestamp during a bounded staleness read to be greater
+				// than the maximum staleness bound we put up.
+				err = errors.CombineErrors(
+					errors.AssertionFailedf(
+						"unexpected MaxTimestampBound > txn MinTimestampBound: %s > %s",
+						aost.MaxTimestampBound,
+						minTSErr.MinTimestampBound,
+					),
+					err,
+				)
+			}
+			if aost.Timestamp.Less(minTSErr.MinTimestampBound) {
+				err = errors.Mark(err, retriableMinTimestampBoundUnsatisfiableError)
+			}
+		}
+	}
+
 	retriable := errIsRetriable(err)
 	if retriable {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
@@ -2362,7 +2394,6 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.TxnImplicit = ex.implicitTxn()
 	evalCtx.StmtTimestamp = stmtTS
 	evalCtx.TxnTimestamp = ex.state.sqlTimestamp
-	evalCtx.AsOfSystemTime = nil
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil
@@ -2372,6 +2403,22 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = &ex.extraTxnState.schemaChangerState
+
+	// If we are retrying due to an unsatisfiable timestamp bound which is
+	// retriable, it means we were unable to serve the previous minimum timestamp
+	// as there was a schema update in between. When retrying, we want to keep the
+	// same minimum timestamp for the AOST read, but set the maximum timestamp
+	// to the point just before our failed read to ensure we don't try to read
+	// data which may be after the schema change when we retry.
+	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
+	if err := ex.extraTxnState.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
+		bound := minTSErr.MinTimestampBound.Prev()
+		ex.extraTxnState.descCollection.SetMaxTimestampBound(bound)
+		evalCtx.AsOfSystemTime.MaxTimestampBound = bound
+	} else {
+		ex.extraTxnState.descCollection.ResetMaxTimestampBound()
+		evalCtx.AsOfSystemTime = nil
+	}
 }
 
 // getTransactionState retrieves a text representation of the given state.
