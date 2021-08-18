@@ -34,6 +34,7 @@ import (
 // serverutils package (which would create import cycle with colexec).
 func TestExternalHashAggregatorReusesBuckets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 69074, "flaky test")
 	defer log.Scope(t).Close(t)
 	skip.UnderStress(t, "takes too long")
 	skip.UnderRace(t, "takes too long")
