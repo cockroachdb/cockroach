@@ -1321,7 +1321,6 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 // TODO(solon): The type for role_spec needs to be updated to fix
 // https://github.com/cockroachdb/cockroach/issues/54696
 %type <security.SQLUsername> role_spec
-%type <[]security.SQLUsername> role_spec_list
 %type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
@@ -2464,16 +2463,6 @@ opt_add_val_placement:
 | /* EMPTY */
   {
     $$.val = (*tree.AlterTypeAddValuePlacement)(nil)
-  }
-
-role_spec_list:
-  role_spec
-  {
-    $$.val = []security.SQLUsername{$1.user()}
-  }
-| role_spec_list ',' role_spec
-  {
-    $$.val = append($1.users(), $3.user())
   }
 
 role_spec:
@@ -8900,10 +8889,10 @@ multiple_set_clause:
 // TO {<name> | CURRENT_USER | SESSION_USER}
 // %SeeAlso: DROP OWNED BY
 reassign_owned_by_stmt:
-  REASSIGN OWNED BY role_spec_list TO role_spec
+  REASSIGN OWNED BY name_list TO role_spec
   {
     $$.val = &tree.ReassignOwnedBy{
-      OldRoles: $4.users(),
+      OldRoles: $4.nameList(),
       NewRole: $6.user(),
     }
   }
@@ -8915,10 +8904,10 @@ reassign_owned_by_stmt:
 // [RESTRICT | CASCADE]
 // %SeeAlso: REASSIGN OWNED BY
 drop_owned_by_stmt:
-  DROP OWNED BY role_spec_list opt_drop_behavior
+  DROP OWNED BY name_list opt_drop_behavior
   {
     $$.val = &tree.DropOwnedBy{
-      Roles: $4.users(),
+      Roles: $4.nameList(),
       DropBehavior: $5.dropBehavior(),
     }
   }

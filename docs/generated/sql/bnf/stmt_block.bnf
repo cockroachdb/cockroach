@@ -95,10 +95,10 @@ savepoint_stmt ::=
 	'SAVEPOINT' name
 
 reassign_owned_by_stmt ::=
-	'REASSIGN' 'OWNED' 'BY' role_spec_list 'TO' role_spec
+	'REASSIGN' 'OWNED' 'BY' name_list 'TO' role_spec
 
 drop_owned_by_stmt ::=
-	'DROP' 'OWNED' 'BY' role_spec_list opt_drop_behavior
+	'DROP' 'OWNED' 'BY' name_list opt_drop_behavior
 
 release_stmt ::=
 	'RELEASE' savepoint_name
@@ -325,9 +325,6 @@ schema_name_list ::=
 prep_type_clause ::=
 	'(' type_list ')'
 	| 
-
-role_spec_list ::=
-	( role_spec ) ( ( ',' role_spec ) )*
 
 role_spec ::=
 	username_or_sconst
