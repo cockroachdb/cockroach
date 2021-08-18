@@ -9,6 +9,7 @@ go_library(
         "eventlog_channels_generated.go",
         "events.go",
         "json_encode_generated.go",
+        "sql_audit_events.go",
     ],
     embed = [":eventpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb",
@@ -16,6 +17,7 @@ go_library(
     deps = [
         "//pkg/util/jsonbytes",
         "//pkg/util/log/logpb",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
 )

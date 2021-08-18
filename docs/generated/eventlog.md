@@ -1807,6 +1807,7 @@ of transaction abort there will not be a corresponding row in the database.
 | `TableID` |  | no |
 | `FamilyID` |  | no |
 | `PrimaryKey` |  | yes |
+| `ViolatesMaxRowSizeErr` |  | no |
 
 ### `slow_query`
 
@@ -1861,7 +1862,8 @@ Events in this category are logged to the `SQL_INTERNAL_PERF` channel.
 ### `large_row_internal`
 
 An event of type `large_row_internal` is recorded when an internal query tries to write a row
-larger than cluster setting `sql.mutations.max_row_size.log` to the database.
+larger than cluster settings `sql.mutations.max_row_size.log` or
+`sql.mutations.max_row_size.err` to the database.
 
 
 
@@ -1876,6 +1878,7 @@ larger than cluster setting `sql.mutations.max_row_size.log` to the database.
 | `TableID` |  | no |
 | `FamilyID` |  | no |
 | `PrimaryKey` |  | yes |
+| `ViolatesMaxRowSizeErr` |  | no |
 
 ### `slow_query_internal`
 
