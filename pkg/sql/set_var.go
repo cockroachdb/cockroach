@@ -137,7 +137,7 @@ func (n *setVarNode) startExec(params runParams) error {
 	if n.v.SetWithPlanner != nil {
 		return n.v.SetWithPlanner(params.ctx, params.p, strVal)
 	}
-	return n.v.Set(params.ctx, params.p.sessionDataMutator, strVal)
+	return n.v.Set(params.ctx, params.p, params.p.sessionDataMutator, strVal)
 }
 
 // getSessionVarDefaultString retrieves a string suitable to pass to a
@@ -232,7 +232,9 @@ func timeZoneVarGetStringVal(
 	return loc.String(), nil
 }
 
-func timeZoneVarSet(_ context.Context, m *sessionDataMutator, s string) error {
+func timeZoneVarSet(
+	_ context.Context, _ permissionsChecker, m *sessionDataMutator, s string,
+) error {
 	loc, err := timeutil.TimeZoneStringToLocation(
 		s,
 		timeutil.TimeZoneStringToLocationISO8601Standard,
@@ -304,7 +306,9 @@ func validateTimeoutVar(
 	return timeout, nil
 }
 
-func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+func stmtTimeoutVarSet(
+	ctx context.Context, _ permissionsChecker, m *sessionDataMutator, s string,
+) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
 		s,
@@ -318,7 +322,9 @@ func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) err
 	return nil
 }
 
-func lockTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+func lockTimeoutVarSet(
+	ctx context.Context, _ permissionsChecker, m *sessionDataMutator, s string,
+) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
 		s,
@@ -332,7 +338,9 @@ func lockTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) err
 	return nil
 }
 
-func idleInSessionTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+func idleInSessionTimeoutVarSet(
+	ctx context.Context, _ permissionsChecker, m *sessionDataMutator, s string,
+) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
 		s,
@@ -347,7 +355,7 @@ func idleInSessionTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s st
 }
 
 func idleInTransactionSessionTimeoutVarSet(
-	ctx context.Context, m *sessionDataMutator, s string,
+	ctx context.Context, _ permissionsChecker, m *sessionDataMutator, s string,
 ) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
