@@ -1410,9 +1410,14 @@ func TestHealthAPI(t *testing.T) {
 	}
 }
 
-// getSystemJobIDs queries the jobs table for all jobs IDs. Sorted by decreasing creation time.
-func getSystemJobIDs(t testing.TB, db *sqlutils.SQLRunner) []int64 {
-	rows := db.Query(t, `SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC;`)
+// getSystemJobIDs queries the jobs table for all job IDs that have
+// the given status. Sorted by decreasing creation time.
+func getSystemJobIDs(t testing.TB, db *sqlutils.SQLRunner, status jobs.Status) []int64 {
+	rows := db.Query(
+		t,
+		`SELECT job_id FROM crdb_internal.jobs WHERE status=$1 ORDER BY created DESC`,
+		status,
+	)
 	defer rows.Close()
 
 	res := []int64{}
@@ -1443,8 +1448,9 @@ func TestAdminAPIJobs(t *testing.T) {
 		}
 	})
 
-	// Get list of existing jobs (migrations). Assumed to all have succeeded.
-	existingIDs := getSystemJobIDs(t, sqlDB)
+	existingSucceededIDs := getSystemJobIDs(t, sqlDB, jobs.StatusSucceeded)
+	existingRunningIDs := getSystemJobIDs(t, sqlDB, jobs.StatusRunning)
+	existingIDs := append(existingSucceededIDs, existingRunningIDs...)
 
 	testJobs := []struct {
 		id       int64
@@ -1496,16 +1502,56 @@ func TestAdminAPIJobs(t *testing.T) {
 		expectedIDsViaAdmin    []int64
 		expectedIDsViaNonAdmin []int64
 	}{
-		{"jobs", append([]int64{5, 4, 3, 2, 1}, existingIDs...), []int64{5}},
-		{"jobs?limit=1", []int64{5}, []int64{5}},
-		{"jobs?status=running", []int64{4, 2, 1}, []int64{}},
-		{"jobs?status=succeeded", append([]int64{5, 3}, existingIDs...), []int64{5}},
-		{"jobs?status=pending", []int64{}, []int64{}},
-		{"jobs?status=garbage", []int64{}, []int64{}},
-		{fmt.Sprintf("jobs?type=%d", jobspb.TypeBackup), []int64{5, 3, 2}, []int64{5}},
-		{fmt.Sprintf("jobs?type=%d", jobspb.TypeRestore), []int64{1}, []int64{}},
-		{fmt.Sprintf("jobs?type=%d", invalidJobType), []int64{}, []int64{}},
-		{fmt.Sprintf("jobs?status=running&type=%d", jobspb.TypeBackup), []int64{2}, []int64{}},
+		{
+			"jobs",
+			append([]int64{5, 4, 3, 2, 1}, existingIDs...),
+			[]int64{5},
+		},
+		{
+			"jobs?limit=1",
+			[]int64{5},
+			[]int64{5},
+		},
+		{
+			"jobs?status=running",
+			append([]int64{4, 2, 1}, existingRunningIDs...),
+			[]int64{},
+		},
+		{
+			"jobs?status=succeeded",
+			append([]int64{5, 3}, existingSucceededIDs...),
+			[]int64{5},
+		},
+		{
+			"jobs?status=pending",
+			[]int64{},
+			[]int64{},
+		},
+		{
+			"jobs?status=garbage",
+			[]int64{},
+			[]int64{},
+		},
+		{
+			fmt.Sprintf("jobs?type=%d", jobspb.TypeBackup),
+			[]int64{5, 3, 2},
+			[]int64{5},
+		},
+		{
+			fmt.Sprintf("jobs?type=%d", jobspb.TypeRestore),
+			[]int64{1},
+			[]int64{},
+		},
+		{
+			fmt.Sprintf("jobs?type=%d", invalidJobType),
+			[]int64{},
+			[]int64{},
+		},
+		{
+			fmt.Sprintf("jobs?status=running&type=%d", jobspb.TypeBackup),
+			[]int64{2},
+			[]int64{},
+		},
 	}
 
 	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {

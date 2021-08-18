@@ -2525,6 +2525,7 @@ var charts = []sectionDescription{
 					"jobs.typedesc_schema_change.currently_running",
 					"jobs.stream_ingestion.currently_running",
 					"jobs.migration.currently_running",
+					"jobs.auto_span_config_reconciliation.currently_running",
 				},
 			},
 			{
@@ -2668,6 +2669,16 @@ var charts = []sectionDescription{
 					"jobs.migration.resume_failed",
 					"jobs.migration.resume_retry_error",
 				},
+			},
+			{
+				Title: "Auto Span Config Reconciliation",
+				Metrics: []string{
+					"jobs.auto_span_config_reconciliation.fail_or_cancel_completed",
+					"jobs.auto_span_config_reconciliation.fail_or_cancel_failed",
+					"jobs.auto_span_config_reconciliation.fail_or_cancel_retry_error",
+					"jobs.auto_span_config_reconciliation.resume_completed",
+					"jobs.auto_span_config_reconciliation.resume_failed",
+					"jobs.auto_span_config_reconciliation.resume_retry_error"},
 			},
 		},
 	},

@@ -51,6 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -133,6 +135,7 @@ type SQLServer struct {
 	sqlInstanceProvider     sqlinstance.Provider
 	metricsRegistry         *metric.Registry
 	diagnosticsReporter     *diagnostics.Reporter
+	spanconfigMgr           *spanconfigmanager.Manager
 
 	// settingsWatcher is utilized by secondary tenants to watch for settings
 	// changes. It is nil on the system tenant.
@@ -811,6 +814,20 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.MigrationTestingKnobs = knobs
 	}
 
+	// Instantiate a span config manager; it exposes a hook to idempotently
+	// create the span config reconciliation job and captures all relevant job
+	// dependencies.
+	knobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+	spanconfigMgr := spanconfigmanager.New(
+		cfg.db,
+		jobRegistry,
+		cfg.circularInternalExecutor,
+		cfg.stopper,
+		cfg.Settings,
+		knobs,
+	)
+	execCfg.SpanConfigReconciliationJobDeps = spanconfigMgr
+
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
@@ -871,6 +888,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlInstanceProvider:     cfg.sqlInstanceProvider,
 		metricsRegistry:         cfg.registry,
 		diagnosticsReporter:     reporter,
+		spanconfigMgr:           spanconfigMgr,
 		settingsWatcher:         settingsWatcher,
 	}, nil
 }
@@ -1006,6 +1024,10 @@ func (s *SQLServer) preStart(
 	s.startupMigrationsMgr = startupMigrationsMgr // only for testing via TestServer
 
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
+		return err
+	}
+
+	if err := s.spanconfigMgr.Start(ctx); err != nil {
 		return err
 	}
 
