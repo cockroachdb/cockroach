@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1128,6 +1129,11 @@ func applyColumnMutation(
 			if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, col); err != nil {
 				return err
 			}
+		}
+		// If this column is an IDENTITY column,
+		// it cannot be set a new default.
+		if col.IsGeneratedAsIdentity() {
+			return sqlerrors.NewSyntaxErrorf("column %q is an identity column", col.GetName())
 		}
 		if t.Default == nil {
 			col.ColumnDesc().DefaultExpr = nil
