@@ -607,6 +607,25 @@ func BenchmarkVDepthWithVModule(b *testing.B) {
 	})
 }
 
+func BenchmarkOutputLogEntry(b *testing.B) {
+	b.ReportAllocs()
+
+	entry := makeEntry(context.Background(), severity.INFO, logpb.Channel_DEV, 1)
+
+	var infos []*sinkInfo
+	for _, ptr := range debugLog.sinkInfos {
+		cpy := *ptr
+		cpy.sink = &mockSink{}
+		cpy.formatter = &mockLogFormatter{}
+		infos = append(infos, &cpy)
+	}
+	l := loggerT{sinkInfos: infos}
+
+	for i := 0; i < b.N; i++ {
+		l.outputLogEntry(entry)
+	}
+}
+
 // TestLogEntryPropagation ensures that a log entry is written
 // to file even when stderr is not available.
 func TestLogEntryPropagation(t *testing.T) {

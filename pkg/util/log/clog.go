@@ -39,8 +39,6 @@ type loggingT struct {
 
 	// allocation pool for entry formatting buffers.
 	bufPool sync.Pool
-	// allocation pool for slices of buffer pointers.
-	bufSlicePool sync.Pool
 
 	// interceptor contains the configured InterceptorFn callbacks, if any.
 	interceptor interceptorSink
@@ -122,7 +120,6 @@ type idPayload struct {
 
 func init() {
 	logging.bufPool.New = newBuffer
-	logging.bufSlicePool.New = newBufferSlice
 	logging.mu.fatalCh = make(chan struct{})
 	logging.stderrSinkInfoTemplate.sink = &logging.stderrSink
 	si := logging.stderrSinkInfoTemplate
@@ -320,19 +317,14 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 		}()
 	}
 
-	// The following buffers contain the formatted entry before it enters the sink.
-	// We need different buffers because the different sinks use different formats.
-	// For example, the fluent sink needs JSON, and the file sink does not use
-	// the terminal escape codes that the stderr sink uses.
-	bufs := getBufferSlice(len(l.sinkInfos))
-	defer putBufferSlice(bufs)
-
 	// The following code constructs / populates the formatted entries
 	// for each sink.
 	// We only do the work if the sink is active and the filtering does
 	// not eliminate the event.
 	someSinkActive := false
-	for i, s := range l.sinkInfos {
+	var outputErr error
+	var outputErrExitCode exit.Code
+	for _, s := range l.sinkInfos {
 		// Note: we need to use the .Get() method instead of reading the
 		// severity threshold directly, because some tests are unruly and
 		// let goroutines live and perform log calls beyond their
@@ -340,67 +332,59 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 		// goroutine). These asynchronous log calls are concurrent with
 		// the stderrSinkInfo update in (*TestLogScope).Close().
 		if entry.sev < s.threshold.Get() || !s.sink.active() {
+			// The sink was not accepting entries at this level. Nothing to do.
 			continue
 		}
-		editedEntry := entry
 
+		// If this is the first active sink, lock the mutex.
+		// If no sinks are active, no need to contest it.
+		if !someSinkActive {
+			someSinkActive = true
+			// The critical section here exists so that the output
+			// side effects from the same event (above) are emitted
+			// atomically. This ensures that the order of logging
+			// events is preserved across all sinks.
+			l.outputMu.Lock()
+			defer l.outputMu.Unlock()
+		}
+
+		editedEntry := entry
 		// Add a counter. This is important for e.g. the SQL audit logs.
 		// Note: whether the counter is displayed or not depends on
 		// the formatter.
 		editedEntry.counter = atomic.AddUint64(&s.msgCount, 1)
-
-		// Process the redation spec.
+		// Process the redaction spec.
 		editedEntry.payload = maybeRedactEntry(editedEntry.payload, s.editor)
 
 		// Format the entry for this sink.
-		bufs.b[i] = s.formatter.formatEntry(editedEntry)
-		someSinkActive = true
-	}
-
-	// If any of the sinks is active, it is now time to send it out.
-
-	if someSinkActive {
-		// The critical section here exists so that the output
-		// side effects from the same event (above) are emitted
-		// atomically. This ensures that the order of logging
-		// events is preserved across all sinks.
-		l.outputMu.Lock()
-		defer l.outputMu.Unlock()
-
-		var outputErr error
-		var outputErrExitCode exit.Code
-		for i, s := range l.sinkInfos {
-			if bufs.b[i] == nil {
-				// The sink was not accepting entries at this level. Nothing to do.
-				continue
-			}
-			if err := s.sink.output(extraFlush, bufs.b[i].Bytes()); err != nil {
-				if !s.criticality {
-					// An error on this sink is not critical. Just report
-					// the error and move on.
-					l.reportErrorEverywhereLocked(context.Background(), err)
-				} else {
-					// This error is critical. We'll have to terminate the
-					// process below.
-					if outputErr == nil {
-						outputErrExitCode = s.sink.exitCode()
-					}
-					outputErr = errors.CombineErrors(outputErr, err)
+		buf := s.formatter.formatEntry(editedEntry)
+		if err := s.sink.output(extraFlush, buf.Bytes()); err != nil {
+			if !s.criticality {
+				// An error on this sink is not critical. Just report
+				// the error and move on.
+				l.reportErrorEverywhereLocked(context.Background(), err)
+			} else {
+				// This error is critical. We'll have to terminate the
+				// process below.
+				if outputErr == nil {
+					outputErrExitCode = s.sink.exitCode()
 				}
+				outputErr = errors.CombineErrors(outputErr, err)
 			}
 		}
-		if outputErr != nil {
-			// Some sink was unavailable. However, the sink was active as
-			// per the threshold, so abandoning the write would be a
-			// contract violation.
-			//
-			// We definitely do not like to lose log entries, so we stop
-			// here. Note that exitLocked() shouts the error to all sinks,
-			// so even though this sink is not available any more, we'll
-			// keep a trace of the error in another sink.
-			l.exitLocked(outputErr, outputErrExitCode)
-			return // unreachable except in tests
-		}
+		putBuffer(buf)
+	}
+	if outputErr != nil {
+		// Some sink was unavailable. However, the sink was active as
+		// per the threshold, so abandoning the write would be a
+		// contract violation.
+		//
+		// We definitely do not like to lose log entries, so we stop
+		// here. Note that exitLocked() shouts the error to all sinks,
+		// so even though this sink is not available any more, we'll
+		// keep a trace of the error in another sink.
+		l.exitLocked(outputErr, outputErrExitCode)
+		return // unreachable except in tests
 	}
 
 	// Flush and exit on fatal logging.
