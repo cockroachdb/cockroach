@@ -6761,6 +6761,14 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+2 > 1 spans")
 }
 
+type exportResumePoint struct {
+	key, endKey roachpb.Key
+	timestamp   hlc.Timestamp
+}
+
+var withTS = hlc.Timestamp{1, 0, false}
+var withoutTS = hlc.Timestamp{}
+
 func TestPaginatedBackupTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6771,14 +6779,24 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	var numExportRequests int
 	exportRequestSpans := make([]string, 0)
 
+	requestSpanStr := func(span roachpb.Span, timestamp hlc.Timestamp) string {
+		spanStr := ""
+		if !timestamp.IsEmpty() {
+			spanStr = ":with_ts"
+		}
+		return fmt.Sprintf("%v%s", span.String(), spanStr)
+	}
+
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 			for _, ru := range request.Requests {
 				switch ru.GetInner().(type) {
 				case *roachpb.ExportRequest:
 					exportRequest := ru.GetInner().(*roachpb.ExportRequest)
-					span := roachpb.Span{Key: exportRequest.Key, EndKey: exportRequest.EndKey}
-					exportRequestSpans = append(exportRequestSpans, span.String())
+					exportRequestSpans = append(
+						exportRequestSpans,
+						requestSpanStr(roachpb.Span{Key: exportRequest.Key, EndKey: exportRequest.EndKey}, exportRequest.ResumeKeyTS),
+					)
 					numExportRequests++
 				}
 			}
@@ -6842,18 +6860,44 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='10b'`)
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test3'`)
 	require.Equal(t, 5, numExportRequests)
-	startingSpan = roachpb.Span{Key: []byte("/Tenant/10/Table/53/1"),
-		EndKey: []byte("/Tenant/10/Table/53/2")}
-	resumeSpan1 := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/210/0"),
-		EndKey: []byte("/Tenant/10/Table/53/2")}
-	resumeSpan2 := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/310/0"),
-		EndKey: []byte("/Tenant/10/Table/53/2")}
-	resumeSpan3 := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/410/0"),
-		EndKey: []byte("/Tenant/10/Table/53/2")}
-	resumeSpan4 := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/510/0"),
-		EndKey: []byte("/Tenant/10/Table/53/2")}
-	require.Equal(t, exportRequestSpans, []string{startingSpan.String(), resumeSpan1.String(),
-		resumeSpan2.String(), resumeSpan3.String(), resumeSpan4.String()})
+	var expected []string
+	for _, resume := range []exportResumePoint{
+		{[]byte("/Tenant/10/Table/53/1"), []byte("/Tenant/10/Table/53/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/53/1/210/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/53/1/310/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/53/1/410/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/53/1/510/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
+	} {
+		expected = append(expected, requestSpanStr(roachpb.Span{resume.key, resume.endKey}, resume.timestamp))
+	}
+	require.Equal(t, expected, exportRequestSpans)
+	resetStateVars()
+
+	tenant10.Exec(t, `CREATE DATABASE baz; CREATE TABLE baz.bar(i int primary key, v string); INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510, 'e')`)
+	// The total size in bytes of the data to be backed up is 63b.
+
+	// Single ExportRequest with no resume span.
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='10b'`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage='0b'`)
+
+	// Allow mid key breaks for the tennant to verify timestamps on resume.
+	tenant10.Exec(t, `SET CLUSTER SETTING bulkio.backup.split_keys_on_timestamps = true`)
+	tenant10.Exec(t, `UPDATE baz.bar SET v = 'z' WHERE i = 210`)
+	tenant10.Exec(t, `BACKUP DATABASE baz TO 'userfile://defaultdb.myfililes/test4' with revision_history`)
+	expected = nil
+	for _, resume := range []exportResumePoint{
+		{[]byte("/Tenant/10/Table/3"), []byte("/Tenant/10/Table/4"), withoutTS},
+		{[]byte("/Tenant/10/Table/57/1"), []byte("/Tenant/10/Table/57/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/57/1/210/0"), []byte("/Tenant/10/Table/57/2"), withTS},
+		// We have two entries for 210 because of history and super small table size
+		{[]byte("/Tenant/10/Table/57/1/210/0"), []byte("/Tenant/10/Table/57/2"), withTS},
+		{[]byte("/Tenant/10/Table/57/1/310/0"), []byte("/Tenant/10/Table/57/2"), withTS},
+		{[]byte("/Tenant/10/Table/57/1/410/0"), []byte("/Tenant/10/Table/57/2"), withTS},
+		{[]byte("/Tenant/10/Table/57/1/510/0"), []byte("/Tenant/10/Table/57/2"), withTS},
+	} {
+		expected = append(expected, requestSpanStr(roachpb.Span{resume.key, resume.endKey}, resume.timestamp))
+	}
+	require.Equal(t, expected, exportRequestSpans)
 	resetStateVars()
 
 	// TODO(adityamaru): Add a RESTORE inside tenant once it is supported.
