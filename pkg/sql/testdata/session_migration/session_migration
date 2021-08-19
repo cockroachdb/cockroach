@@ -44,6 +44,10 @@ old_state
 new_state
 ----
 
+reset
+----
+
+# We cannot deserialize a different session_user.
 exec
 SELECT crdb_internal.deserialize_session(
   decode(
@@ -53,3 +57,16 @@ SELECT crdb_internal.deserialize_session(
 )
 ----
 pq: crdb_internal.deserialize_session(): can only serialize matching session users
+
+reset
+----
+
+# We cannot serialized prepared statements
+exec
+PREPARE stmt AS SELECT 1
+----
+
+exec
+SELECT crdb_internal.serialize_session()
+----
+pq: crdb_internal.serialize_session(): cannot serialize a session which has portals or prepared statements

@@ -433,3 +433,14 @@ func (c *DummyTenantOperator) UpdateTenantResourceLimits(
 ) error {
 	return errors.WithStack(errEvalTenant)
 }
+
+// DummyPreparedStatementState implements the tree.PreparedStatementState
+// interface.
+type DummyPreparedStatementState struct{}
+
+var _ tree.PreparedStatementState = (*DummyPreparedStatementState)(nil)
+
+// HasPrepared is part of the tree.PreparedStatementState interface.
+func (ps *DummyPreparedStatementState) HasPrepared() bool {
+	return false
+}

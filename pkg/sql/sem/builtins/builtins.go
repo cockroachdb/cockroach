@@ -5879,6 +5879,13 @@ table's zone configuration this will return NULL.`,
 					)
 				}
 
+				if evalCtx.PreparedStatementState.HasPrepared() {
+					return nil, pgerror.Newf(
+						pgcode.InvalidTransactionState,
+						"cannot serialize a session which has portals or prepared statements",
+					)
+				}
+
 				sd := evalCtx.SessionData
 				if sd == nil {
 					return nil, pgerror.Newf(
