@@ -545,13 +545,16 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			}
 		}()
 
+		// Make a copy of the EvalContext because the flow setup mutates it
+		// (namely, it updates .Mon field).
+		evalCtx.EvalContext = *p.ExtendedEvalContext().EvalContext.Copy()
 		// Set the transaction on the EvalContext to this txn. This allows for
 		// use of the txn during processor setup during the execution of the flow.
 		evalCtx.Txn = txn
 
 		if details.AsOf != nil {
-			p.ExtendedEvalContext().AsOfSystemTime = &tree.AsOfSystemTime{Timestamp: *details.AsOf}
-			p.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
+			evalCtx.AsOfSystemTime = &tree.AsOfSystemTime{Timestamp: *details.AsOf}
+			evalCtx.SetTxnTimestamp(details.AsOf.GoTime())
 			if err := txn.SetFixedTimestamp(ctx, *details.AsOf); err != nil {
 				return err
 			}
