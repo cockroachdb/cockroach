@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -733,4 +734,51 @@ func TestExportSplitMidKey(t *testing.T) {
 				require.Equal(t, test.resumeWithTs, resumeWithTs)
 			})
 	}
+}
+
+// nonFatalLogger implements pebble.Logger by recording that a fatal log event
+// was encountered at least once. Fatal log events are downgraded to Info level.
+type nonFatalLogger struct {
+	pebble.Logger
+	t      *testing.T
+	caught atomic.Value
+}
+
+func (l *nonFatalLogger) Fatalf(format string, args ...interface{}) {
+	l.caught.Store(true)
+	l.t.Logf(format, args...)
+}
+
+func TestPebbleKeyValidationFunc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Capture fatal errors by swapping out the logger.
+	l := &nonFatalLogger{t: t}
+	opt := func(cfg *engineConfig) error {
+		cfg.Opts.Logger = l
+		return nil
+	}
+	engine := createTestPebbleEngine(opt).(*Pebble)
+	defer engine.Close()
+
+	// Write a key with an invalid version length (=1) to simulate
+	// programmer-error.
+	ek := EngineKey{
+		Key:     roachpb.Key("foo"),
+		Version: make([]byte, 1),
+	}
+
+	// Sanity check: the key should fail validation.
+	err := ek.Validate()
+	require.Error(t, err)
+
+	err = engine.PutEngineKey(ek, []byte("bar"))
+	require.NoError(t, err)
+
+	// Force a flush to trigger the compaction error.
+	err = engine.Flush()
+	require.NoError(t, err)
+
+	// A fatal error was captured by the logger.
+	require.True(t, l.caught.Load().(bool))
 }
