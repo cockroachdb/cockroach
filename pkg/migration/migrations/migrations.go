@@ -127,6 +127,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		zonesTableForSecondaryTenants,
 	),
+	migration.NewTenantMigration(
+		"create indexes on revokedAt and lastUsedAt columns from system.web_sessions",
+		toCV(clusterversion.AlterSystemWebSessionsCreateIndexes),
+		NoPrecondition,
+		alterSystemWebSessionsCreateIndexes,
+	),
 }
 
 func init() {
