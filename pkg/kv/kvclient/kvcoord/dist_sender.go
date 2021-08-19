@@ -290,6 +290,11 @@ type DistSender struct {
 	// the descriptor, instead of trying to reorder them by latency. The knob
 	// only applies to requests sent with the LEASEHOLDER routing policy.
 	dontReorderReplicas bool
+	// dontConsiderConnHealth, if set, makes the GRPCTransport not take into
+	// consideration the connection health when deciding the ordering for
+	// replicas. When not set, replicas on nodes with unhealthy connections are
+	// deprioritized.
+	dontConsiderConnHealth bool
 
 	// Currently executing range feeds.
 	activeRangeFeeds sync.Map // // map[*rangeFeedRegistry]nil
@@ -383,6 +388,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.transportFactory = GRPCTransportFactory
 	}
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
+	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	if cfg.RPCRetryOptions != nil {
 		ds.rpcRetryOptions = *cfg.RPCRetryOptions
@@ -1855,8 +1861,9 @@ func (ds *DistSender) sendToReplicas(
 	}
 
 	opts := SendOptions{
-		class:   rpc.ConnectionClassForKey(desc.RSpan().Key),
-		metrics: &ds.metrics,
+		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key),
+		metrics:                &ds.metrics,
+		dontConsiderConnHealth: ds.dontConsiderConnHealth,
 	}
 	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
 	if err != nil {
