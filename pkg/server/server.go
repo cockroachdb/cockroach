@@ -816,8 +816,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
-	if err = startPurgeOldSessions(ctx, sAuth); err != nil {
-		return nil, err
+	if lateBoundServer.cfg.Settings.Version.IsActive(ctx, clusterversion.AlterSystemWebSessionsCreateIndexes) {
+		if err = startPurgeOldSessions(ctx, sAuth); err != nil {
+			return nil, err
+		}
 	}
 
 	return lateBoundServer, err

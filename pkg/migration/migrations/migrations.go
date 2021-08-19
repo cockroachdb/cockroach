@@ -121,6 +121,12 @@ var migrations = []migration.Migration{
 		interleavedTablesRemovedMigration,
 		interleavedTablesRemovedMigration,
 	),
+	migration.NewTenantMigration(
+		"create indexes on revokedAt and lastUsedAt columns from system.web_sessions",
+		toCV(clusterversion.AlterSystemWebSessionsCreateIndexes),
+		NoPrecondition,
+		alterSystemWebSessionsCreateIndexes,
+	),
 }
 
 func init() {
