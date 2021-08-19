@@ -1,0 +1,38 @@
+exec
+SET serial_normalization = sql_sequence_cached;
+CREATE TABLE serial (
+  cached SERIAL
+);
+INSERT INTO serial (cached) VALUES (DEFAULT)
+----
+
+query
+SELECT pg_get_serial_sequence('serial', 'cached')
+----
+public.serial_cached_seq
+
+query
+SELECT * FROM serial ORDER BY cached
+----
+1
+
+let $x
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+----
+
+reset
+----
+
+exec
+SELECT crdb_internal.deserialize_session(decode('$x', 'hex'))
+----
+
+exec
+INSERT INTO serial (cached) VALUES (DEFAULT)
+----
+
+query
+SELECT * FROM serial ORDER BY cached
+----
+1
+2
