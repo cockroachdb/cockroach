@@ -57,8 +57,6 @@ var startBackground bool
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
 func initPreFlagsDefaults() {
-	initPreFlagsCertDefaults()
-
 	serverListenPort = base.DefaultPort
 	serverSocketDir = ""
 	serverAdvertiseAddr = ""
@@ -545,57 +543,38 @@ func init() {
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// All certs commands need the certificate directory.
-		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
-		// All certs commands get the certificate principal map.
-		stringSliceFlag(f, &cliCtx.certPrincipalMap, cliflags.CertPrincipalMap)
-	}
+		stringFlag(f, &certCtx.certsDir, cliflags.CertsDir)
 
-	for _, cmd := range []*cobra.Command{
-		createCACertCmd,
-		createClientCACertCmd,
-		mtCreateTenantClientCACertCmd,
-	} {
-		f := cmd.Flags()
-		// CA certificates have a longer expiration time.
-		durationFlag(f, &caCertificateLifetime, cliflags.CertificateLifetime)
-		// The CA key can be re-used if it exists.
-		boolFlag(f, &allowCAKeyReuse, cliflags.AllowCAKeyReuse)
-	}
+		// All certs command want to map CNs to SQL principals.
+		stringSliceFlag(f, &certCtx.certPrincipalMap, cliflags.CertPrincipalMap)
 
-	for _, cmd := range []*cobra.Command{
-		createNodeCertCmd,
-		createClientCertCmd,
-		mtCreateTenantClientCertCmd,
-	} {
-		f := cmd.Flags()
-		durationFlag(f, &certificateLifetime, cliflags.CertificateLifetime)
-	}
+		if cmd == listCertsCmd {
+			// The 'list' subcommand does not write to files and thus does
+			// not need the arguments below.
+			continue
+		}
 
-	// The remaining flags are shared between all cert-generating functions.
-	for _, cmd := range []*cobra.Command{
-		createCACertCmd,
-		createClientCACertCmd,
-		createNodeCertCmd,
-		createClientCertCmd,
-		mtCreateTenantClientCACertCmd,
-		mtCreateTenantClientCertCmd,
-	} {
-		f := cmd.Flags()
-		stringFlag(f, &baseCfg.SSLCAKey, cliflags.CAKey)
-		intFlag(f, &keySize, cliflags.KeySize)
-		boolFlag(f, &overwriteFiles, cliflags.OverwriteFiles)
-	}
-	// PKCS8 key format is only available for the client cert command.
-	boolFlag(createClientCertCmd.Flags(), &generatePKCS8Key, cliflags.GeneratePKCS8Key)
+		stringFlag(f, &certCtx.caKey, cliflags.CAKey)
+		intFlag(f, &certCtx.keySize, cliflags.KeySize)
+		boolFlag(f, &certCtx.overwriteFiles, cliflags.OverwriteFiles)
 
-	// The certs dir is given to all clientCmds below, but the following are not clientCmds.
-	for _, cmd := range []*cobra.Command{
-		mtCreateTenantClientCACertCmd,
-		mtCreateTenantClientCertCmd,
-	} {
-		f := cmd.Flags()
-		// Certificate flags.
-		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
+		if strings.HasSuffix(cmd.Name(), "-ca") {
+			// CA-only commands.
+
+			// CA certificates have a longer expiration time.
+			durationFlag(f, &certCtx.caCertificateLifetime, cliflags.CertificateLifetime)
+			// The CA key can be re-used if it exists.
+			boolFlag(f, &certCtx.allowCAKeyReuse, cliflags.AllowCAKeyReuse)
+		} else {
+			// Non-CA commands.
+
+			durationFlag(f, &certCtx.certificateLifetime, cliflags.CertificateLifetime)
+		}
+
+		// PKCS8 key format is only available for the client cert command.
+		if cmd == createClientCertCmd {
+			boolFlag(f, &certCtx.generatePKCS8Key, cliflags.GeneratePKCS8Key)
+		}
 	}
 
 	clientCmds := []*cobra.Command{
@@ -1204,7 +1183,14 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 }
 
 func extraClientFlagInit() error {
-	if err := security.SetCertPrincipalMap(cliCtx.certPrincipalMap); err != nil {
+	// A command can be either a 'cert' command or an actual client command.
+	// TODO(knz): Clean this up to not use a global variable for the
+	// principal map.
+	principalMap := certCtx.certPrincipalMap
+	if principalMap == nil {
+		principalMap = cliCtx.certPrincipalMap
+	}
+	if err := security.SetCertPrincipalMap(principalMap); err != nil {
 		return err
 	}
 	serverCfg.Addr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
