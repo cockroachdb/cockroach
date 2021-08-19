@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -3245,9 +3244,9 @@ CREATE TABLE crdb_internal.zones (
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if !p.ExecCfg().Codec.ForSystemTenant() {
-			// Don't try to populate crdb_internal.zones if running in a multitenant
-			// configuration.
+		if !ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings) {
+			// Don't try to populate crdb_internal.zones if `system.zones` doesn't
+			// exist.
 			return nil
 		}
 
@@ -3306,7 +3305,9 @@ CREATE TABLE crdb_internal.zones (
 
 			// Inherit full information about this zone.
 			fullZone := configProto
-			if err := completeZoneConfig(&fullZone, config.SystemTenantObjectID(tree.MustBeDInt(r[0])), getKey); err != nil {
+			if err := completeZoneConfig(
+				&fullZone, p.ExecCfg().Codec, descpb.ID(tree.MustBeDInt(r[0])), getKey,
+			); err != nil {
 				return err
 			}
 
@@ -3833,11 +3834,9 @@ func addPartitioningRows(
 	colOffset int,
 	addRow func(...tree.Datum) error,
 ) error {
-	// Secondary tenants cannot set zone configs on individual objects, so they
-	// have no ability to partition tables/indexes.
-	// NOTE: we assume the system tenant below by casting object IDs directly to
-	// config.SystemTenantObjectID.
-	if !p.ExecCfg().Codec.ForSystemTenant() {
+	if !ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings) {
+		// Zone configs can only be set on individual objects if `system.zones`
+		// exists.
 		return nil
 	}
 
@@ -3884,7 +3883,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, config.SystemTenantObjectID(table.GetID()), index, name, false /* getInheritedDefault */)
+			ctx, p.txn, p.ExecCfg().Codec, table.GetID(), index, name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}
@@ -3940,7 +3939,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, config.SystemTenantObjectID(table.GetID()), index, name, false /* getInheritedDefault */)
+			ctx, p.txn, p.ExecCfg().Codec, table.GetID(), index, name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}

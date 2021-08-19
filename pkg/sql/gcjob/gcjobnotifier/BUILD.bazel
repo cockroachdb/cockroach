@@ -28,6 +28,7 @@ go_test(
         "//pkg/keys",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/stop",
