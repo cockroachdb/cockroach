@@ -510,6 +510,9 @@ type StorageConfig struct {
 	// MaxSize is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size.
 	MaxSize int64
+	// BallastSize is the amount reserved by a ballast file for manual
+	// out-of-disk recovery.
+	BallastSize int64
 	// Settings instance for cluster-wide knobs.
 	Settings *cluster.Settings
 	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
