@@ -102,35 +102,39 @@ func (r *DescriptorResolver) LookupSchema(
 func (r *DescriptorResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (bool, catalog.ResolvedObjectPrefix, catalog.Descriptor, error) {
+	// LookupObject guarantees that the ResolvedObjectPrefix is always
+	// populated, even if the object itself cannot be found. This information
+	// is used to generate the appropriate error at higher level layers.
+	resolvedPrefix := catalog.ResolvedObjectPrefix{}
 	if flags.RequireMutable {
 		panic("did not expect request for mutable descriptor")
 	}
 	dbID, ok := r.DbsByName[dbName]
 	if !ok {
-		return false, catalog.ResolvedObjectPrefix{}, nil, nil
+		return false, resolvedPrefix, nil, nil
+	}
+	resolvedPrefix.Database, ok = r.DescByID[dbID].(catalog.DatabaseDescriptor)
+	if !ok {
+		return false, resolvedPrefix, nil, nil
 	}
 	scID, ok := r.SchemasByName[dbID][scName]
 	if !ok {
-		return false, catalog.ResolvedObjectPrefix{}, nil, nil
+		return false, resolvedPrefix, nil, nil
 	}
 	if scMap, ok := r.ObjsByName[dbID]; ok {
 		if objMap, ok := scMap[scName]; ok {
 			if objID, ok := objMap[obName]; ok {
-				var sc catalog.SchemaDescriptor
 				if scID == keys.PublicSchemaID {
-					sc = schemadesc.GetPublicSchema()
+					resolvedPrefix.Schema = schemadesc.GetPublicSchema()
 				} else {
-					sc, ok = r.DescByID[scID].(catalog.SchemaDescriptor)
+					resolvedPrefix.Schema, ok = r.DescByID[scID].(catalog.SchemaDescriptor)
 					if !ok {
-						return false, catalog.ResolvedObjectPrefix{}, nil, errors.AssertionFailedf(
+						return false, resolvedPrefix, nil, errors.AssertionFailedf(
 							"expected schema for ID %d, got %T", scID, r.DescByID[scID])
 					}
 				}
 
-				return true, catalog.ResolvedObjectPrefix{
-					Database: r.DescByID[dbID].(catalog.DatabaseDescriptor),
-					Schema:   sc,
-				}, r.DescByID[objID], nil
+				return true, resolvedPrefix, r.DescByID[objID], nil
 			}
 		}
 	}
