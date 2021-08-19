@@ -275,7 +275,8 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 	}
 
 	node := &tree.ScheduledBackup{
-		ScheduleLabel:   tree.NewDString(sj.ScheduleLabel()),
+		ScheduleLabelSpec: tree.ScheduleLabelSpec{
+			IfNotExists: false, Label: tree.NewDString(sj.ScheduleLabel())},
 		Recurrence:      tree.NewDString(recurrence),
 		FullBackup:      fullBackup,
 		Targets:         backupNode.Targets,
