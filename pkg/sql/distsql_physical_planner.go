@@ -679,7 +679,8 @@ type PlanningCtx struct {
 	// parallelizeScansIfLocal indicates whether we might want to create
 	// multiple table readers if the physical plan ends up being fully local.
 	// This value is determined based on whether there are any mutations in the
-	// plan (which prohibit all concurrency).
+	// plan (which prohibit all concurrency) and whether all parts of the plan
+	// are supported natively by the vectorized engine.
 	parallelizeScansIfLocal bool
 
 	// onFlowCleanup contains non-nil functions that will be called after the
@@ -3890,6 +3891,68 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 	return plan, nil
 }
 
+// canParallelizeScansIfLocal returns whether the plan contains scanNodes that
+// can be parallelized and is such that it is safe to do so.
+//
+// This method performs a walk over the plan to make sure that only planNodes
+// that allow for the scan parallelization are present (this is a limitation
+// of the vectorized engine). Namely, the plan is allowed to contain only those
+// things that are natively supported by the vectorized engine; if there is a
+// planNode that will be handled by wrapping a row-by-row processor into the
+// vectorized flow, we might get an error during the query execution because the
+// processors eagerly move into the draining state which will cancel the context
+// of parallel TableReaders which might "poison" the transaction.
+func checkScanParallelizationIfLocal(
+	ctx context.Context, plan *planComponents,
+) (prohibitParallelization, hasScanNodeToParallelize bool) {
+	if plan.main.planNode == nil || len(plan.cascades) != 0 || len(plan.checkPlans) != 0 {
+		// We either used the experimental DistSQL spec factory or have
+		// cascades/checks; both of these conditions - for now - prohibit
+		// the scan parallelization.
+		return true, false
+	}
+	var o planObserver
+	o = planObserver{
+		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
+			if prohibitParallelization {
+				return false, nil
+			}
+			switch n := plan.(type) {
+			case *explainPlanNode:
+				// walkPlan doesn't recurse into explainPlanNode, so we have to
+				// manually walk over the wrapped plan.
+				plan := n.plan.WrappedPlan.(*planComponents)
+				prohibit, has := checkScanParallelizationIfLocal(ctx, plan)
+				prohibitParallelization = prohibitParallelization || prohibit
+				hasScanNodeToParallelize = hasScanNodeToParallelize || has
+				return false, nil
+			case *explainVecNode:
+				return true, nil
+			case *limitNode:
+				return true, nil
+			case *renderNode:
+				return true, nil
+			case *scanNode:
+				prohibitParallelization = n.isCheck
+				if len(n.reqOrdering) == 0 && n.parallelize {
+					hasScanNodeToParallelize = true
+				}
+				return true, nil
+			case *unionNode:
+				return true, nil
+			default:
+				prohibitParallelization = true
+				return false, nil
+			}
+		},
+	}
+	_ = walkPlan(ctx, plan.main.planNode, o)
+	for _, s := range plan.subqueryPlans {
+		_ = walkPlan(ctx, s.plan.planNode, o)
+	}
+	return prohibitParallelization, hasScanNodeToParallelize
+}
+
 // NewPlanningCtx returns a new PlanningCtx. When distribute is false, a
 // lightweight version PlanningCtx is returned that can be used when the caller
 // knows plans will only be run on one node. It is coerced to false on SQL
@@ -3901,12 +3964,11 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	// Tenants can not distribute plans.
 	distribute = distribute && evalCtx.Codec.ForSystemTenant()
 	planCtx := &PlanningCtx{
-		ctx:                     ctx,
-		ExtendedEvalCtx:         evalCtx,
-		infra:                   physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewayNodeID),
-		isLocal:                 !distribute,
-		planner:                 planner,
-		parallelizeScansIfLocal: !distribute,
+		ctx:             ctx,
+		ExtendedEvalCtx: evalCtx,
+		infra:           physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewayNodeID),
+		isLocal:         !distribute,
+		planner:         planner,
 	}
 	if !distribute {
 		if planner == nil || dsp.spanResolver == nil || planner.curPlan.flags.IsSet(planFlagContainsMutation) {
@@ -3916,16 +3978,15 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 			// - we don't have a span resolver (this can happen only in tests);
 			// - the plan contains a mutation operation - we currently don't
 			// support any parallelism when mutations are present.
-			planCtx.parallelizeScansIfLocal = false
+			return planCtx
+		}
+		prohibitParallelization, hasScanNodeToParallelize := checkScanParallelizationIfLocal(ctx, &planner.curPlan.planComponents)
+		if prohibitParallelization || !hasScanNodeToParallelize {
 			return planCtx
 		}
 		// We might decide to parallelize scans, and although the plan is local,
 		// we still need to instantiate a full planning context.
-		// TODO(yuzefovich): instead, we could walk over the plan tree and see
-		// whether there are any scanNodes that will be parallelized. On a quick
-		// glance it seems like the tree traversal might be more expensive then
-		// several map creations in the code below (but probably not when the
-		// plan is simple when this would actually matter).
+		planCtx.parallelizeScansIfLocal = true
 	}
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
 	planCtx.NodeStatuses = make(map[roachpb.NodeID]NodeStatus)
