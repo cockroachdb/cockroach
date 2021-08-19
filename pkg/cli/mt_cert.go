@@ -35,12 +35,12 @@ If the CA certificate exists and --overwrite is true, the new CA certificate is 
 	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		return errors.Wrap(
 			security.CreateTenantClientCAPair(
-				baseCfg.SSLCertsDir,
-				baseCfg.SSLCAKey,
-				keySize,
-				caCertificateLifetime,
-				allowCAKeyReuse,
-				overwriteFiles),
+				certCtx.certsDir,
+				certCtx.caKey,
+				certCtx.keySize,
+				certCtx.caCertificateLifetime,
+				certCtx.allowCAKeyReuse,
+				certCtx.overwriteFiles),
 			"failed to generate tenant client CA cert and key")
 	}),
 }
@@ -68,10 +68,10 @@ Creation fails if the CA expiration time is before the desired certificate expir
 				return errors.Wrapf(err, "%s is invalid uint64", args[0])
 			}
 			cp, err := security.CreateTenantClientPair(
-				baseCfg.SSLCertsDir,
-				baseCfg.SSLCAKey,
-				keySize,
-				certificateLifetime,
+				certCtx.certsDir,
+				certCtx.caKey,
+				certCtx.keySize,
+				certCtx.certificateLifetime,
 				tenantID,
 			)
 			if err != nil {
@@ -80,7 +80,7 @@ Creation fails if the CA expiration time is before the desired certificate expir
 					"failed to generate tenant client certificate and key")
 			}
 			return errors.Wrap(
-				security.WriteTenantClientPair(baseCfg.SSLCertsDir, cp, overwriteFiles),
+				security.WriteTenantClientPair(certCtx.certsDir, cp, certCtx.overwriteFiles),
 				"failed to write tenant client certificate and key")
 		}),
 }
