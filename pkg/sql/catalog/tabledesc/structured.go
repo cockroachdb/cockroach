@@ -690,7 +690,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	var compositeColIDs catalog.TableColSet
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
-		if colinfo.HasCompositeKeyEncoding(col.Type) {
+		if colinfo.CanHaveCompositeKeyEncoding(col.Type) {
 			compositeColIDs.Add(col.ID)
 		}
 	}

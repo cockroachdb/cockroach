@@ -38,7 +38,7 @@ func CheckDatumTypeFitsColumnType(col catalog.Column, typ *types.T) error {
 	return nil
 }
 
-// HasCompositeKeyEncoding returns true if key columns of the given kind can
+// CanHaveCompositeKeyEncoding returns true if key columns of the given kind can
 // have a composite encoding. For such types, it can be decided on a
 // case-by-base basis whether a given Datum requires the composite encoding.
 //
@@ -47,14 +47,45 @@ func CheckDatumTypeFitsColumnType(col catalog.Column, typ *types.T) error {
 // key, so that different strings that collate equal cannot both be used as
 // keys. The value part is the usual UTF-8 encoding of the string, stored so
 // that it can be recovered later for inspection/display.
-func HasCompositeKeyEncoding(typ *types.T) bool {
+func CanHaveCompositeKeyEncoding(typ *types.T) bool {
 	switch typ.Family() {
-	case types.CollatedStringFamily,
-		types.FloatFamily,
-		types.DecimalFamily:
+	case types.FloatFamily,
+		types.DecimalFamily,
+		types.CollatedStringFamily:
 		return true
 	case types.ArrayFamily:
-		return HasCompositeKeyEncoding(typ.ArrayContents())
+		return CanHaveCompositeKeyEncoding(typ.ArrayContents())
+	case types.TupleFamily:
+		for _, t := range typ.TupleContents() {
+			if CanHaveCompositeKeyEncoding(t) {
+				return true
+			}
+		}
+		return false
+	case types.BoolFamily,
+		types.IntFamily,
+		types.DateFamily,
+		types.TimestampFamily,
+		types.IntervalFamily,
+		types.StringFamily,
+		types.BytesFamily,
+		types.TimestampTZFamily,
+		types.OidFamily,
+		types.UuidFamily,
+		types.INetFamily,
+		types.TimeFamily,
+		types.JsonFamily,
+		types.TimeTZFamily,
+		types.BitFamily,
+		types.GeometryFamily,
+		types.GeographyFamily,
+		types.EnumFamily,
+		types.Box2DFamily:
+		return false
+	case types.UnknownFamily,
+		types.AnyFamily:
+		fallthrough
+	default:
+		return true
 	}
-	return false
 }

@@ -2637,7 +2637,7 @@ func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 			// Outer column references are our base case. They are always
 			// composite-insensitive. If they are not of composite type, they are also
 			// composite-identical.
-			return true, !colinfo.HasCompositeKeyEncoding(v.Typ)
+			return true, !colinfo.CanHaveCompositeKeyEncoding(v.Typ)
 		}
 
 		allChildrenCompositeIdentical := true
@@ -2659,7 +2659,7 @@ func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 		if opt.IsCompositeInsensitiveOp(e) {
 			// The operator is known to be composite-insensitive. If its result is a
 			// non-composite type, it is also composite-identical.
-			return true, !colinfo.HasCompositeKeyEncoding(e.(opt.ScalarExpr).DataType())
+			return true, !colinfo.CanHaveCompositeKeyEncoding(e.(opt.ScalarExpr).DataType())
 		}
 
 		return false, false

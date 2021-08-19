@@ -252,7 +252,7 @@ func TestEncDatumCompare(t *testing.T) {
 
 		// These cases require decoding. Data with a composite key encoding cannot
 		// be decoded from their key part alone.
-		if !colinfo.HasCompositeKeyEncoding(typ) {
+		if !colinfo.CanHaveCompositeKeyEncoding(typ) {
 			checkEncDatumCmp(t, a, typ, &v1, &v2, noncmp, noncmp, -1, true)
 			checkEncDatumCmp(t, a, typ, &v2, &v1, desc, noncmp, +1, true)
 			checkEncDatumCmp(t, a, typ, &v1, &v1, asc, desc, 0, true)
@@ -281,7 +281,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		var buf []byte
 		enc := make([]descpb.DatumEncoding, len(ed))
 		for i := range ed {
-			if colinfo.HasCompositeKeyEncoding(typs[i]) {
+			if colinfo.CanHaveCompositeKeyEncoding(typs[i]) {
 				// There's no way to reconstruct data from the key part of a composite
 				// encoding.
 				enc[i] = descpb.DatumEncoding_VALUE

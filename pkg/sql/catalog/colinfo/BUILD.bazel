@@ -34,6 +34,7 @@ go_test(
     size = "small",
     srcs = [
         "column_item_resolver_test.go",
+        "column_type_properties_test.go",
         "result_columns_test.go",
     ],
     embed = [":colinfo"],
@@ -43,5 +44,6 @@ go_test(
         "//pkg/sql/types",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )
