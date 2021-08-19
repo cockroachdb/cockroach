@@ -374,6 +374,10 @@ func ResolveExisting(
 				prefix.ExplicitDatabase = false
 				prefix.ExplicitSchema = true
 				return found, prefix, result, err
+			} else if isVirtualSchema && !found && lookupFlags.Required {
+				// Object is inside a virtual schema if we aren't able to
+				// find it then the database does not exist.
+				return found, prefix, result, sqlerrors.NewUndefinedDatabaseError(curDb)
 			}
 		}
 
