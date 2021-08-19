@@ -121,6 +121,8 @@ ORDER BY name ASC`)
 func TestZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	skip.UnderRace(t, "test too slow under race")
+
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
