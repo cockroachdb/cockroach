@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -491,4 +492,49 @@ func createStatsRequestFilter(allowProgressIota *chan struct{}) kvserverbase.Rep
 		}
 		return nil
 	}
+}
+
+// TestStatsJobTxnAutoRetry checks that the stats collection job succeeds in
+// case when it encounters a retryable txn error.
+func TestStatsJobTxnAutoRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Inject a retryable error after the first iteration of the body of the
+	// stats job.
+	alreadyInjected := false
+	serverArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					AfterDBTxn: func(txn *kv.Txn) error {
+						if alreadyInjected {
+							return nil
+						}
+						alreadyInjected = true
+						clock := txn.DB().Clock()
+						return roachpb.NewTransactionRetryWithProtoRefreshError(
+							"after injected retryable error",
+							txn.ID(),
+							roachpb.MakeTransaction(
+								txn.DebugName(),
+								nil, // baseKey
+								txn.UserPriority(),
+								clock.NowAsClockTimestamp().ToTimestamp(),
+								clock.MaxOffset().Nanoseconds(),
+							))
+					},
+				},
+			},
+		}}
+	tc := testcluster.StartTestCluster(t, 1, serverArgs)
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	sqlDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO t SELECT generate_series(1,1000)`)
+	sqlDB.Exec(t, `ANALYZE t`)
 }

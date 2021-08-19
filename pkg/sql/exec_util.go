@@ -1182,6 +1182,10 @@ type ExecutorTestingKnobs struct {
 
 	// OnTxnRetry, if set, will be called if there is a transaction retry.
 	OnTxnRetry func(autoRetryReason error, evalCtx *tree.EvalContext)
+
+	// AfterDBTxn, if set, might be called upon returning from kv.DB.Txn
+	// retryable function argument.
+	AfterDBTxn func(txn *kv.Txn) error
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
