@@ -39,7 +39,7 @@ import (
 
 var engineImpls = []struct {
 	name   string
-	create func() storage.Engine
+	create func(...storage.ConfigOption) storage.Engine
 }{
 	{"pebble", storage.NewDefaultInMemForTesting},
 }

@@ -45,8 +45,11 @@ func InMemFromFS(ctx context.Context, fs vfs.FS, dir string, opts ...ConfigOptio
 // NewDefaultInMemForTesting allocates and returns a new, opened in-memory engine with
 // the default configuration. The caller must call the engine's Close method
 // when the engine is no longer needed.
-func NewDefaultInMemForTesting() Engine {
-	eng, err := Open(context.Background(), InMemory(), ForTesting, MaxSize(1<<20))
+func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
+	pebbleOpts := []ConfigOption{ForTesting, MaxSize(1 << 20)}
+	pebbleOpts = append(pebbleOpts, opts...)
+
+	eng, err := Open(context.Background(), InMemory(), pebbleOpts...)
 	if err != nil {
 		panic(err)
 	}
