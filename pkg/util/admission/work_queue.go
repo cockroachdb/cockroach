@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -353,6 +354,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.metrics.WaitDurations.RecordValue(waitDur.Nanoseconds())
 		q.metrics.WaitQueueLength.Dec(1)
 		deadline, _ := ctx.Deadline()
+		log.Eventf(ctx, "deadline expired, waited in %s queue for %v",
+			workKindString(q.workKind), waitDur)
 		return true,
 			errors.Newf("work %s deadline expired while waiting: deadline: %v, start: %v, dur: %v",
 				workKindString(q.workKind), deadline, startTime, waitDur)
@@ -369,6 +372,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if work.heapIndex != -1 {
 			panic(errors.AssertionFailedf("grantee should be removed from heap"))
 		}
+		log.Eventf(ctx, "admitted, waited in %s queue for %v", workKindString(q.workKind), waitDur)
 		q.granter.continueGrantChain(chainID)
 		return true, nil
 	}
