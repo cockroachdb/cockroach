@@ -297,12 +297,12 @@ var certCmds = []*cobra.Command{
 	listCertsCmd,
 }
 
-var certCmd = &cobra.Command{
-	Use:   "cert",
-	Short: "create ca, node, and client certs",
-	RunE:  usageAndErr,
-}
-
-func init() {
-	certCmd.AddCommand(certCmds...)
-}
+var certCmd = func() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cert",
+		Short: "create ca, node, and client certs",
+		RunE:  usageAndErr,
+	}
+	cmd.AddCommand(certCmds...)
+	return cmd
+}()
