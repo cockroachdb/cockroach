@@ -43,19 +43,6 @@ SELECT * FROM crdb_internal.kv_store_status
 statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.kv_node_status
 
-# Cannot manipulate zone configurations
-
-# Selecting from crdb_internal.zones is allowed but no data is returned.
-query IITTTTTTTTTTTT
-SELECT * FROM crdb_internal.zones
-----
-
-statement error operation is unsupported in multi-tenancy mode
-SHOW ZONE CONFIGURATION FOR TABLE kv
-
-statement error operation is unsupported in multi-tenancy mode
-ALTER TABLE kv CONFIGURE ZONE USING num_replicas = 123
-
 # Cannot perform operations that issue Admin requests.
 
 statement error operation is unsupported in multi-tenancy mode

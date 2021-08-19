@@ -82,9 +82,9 @@ func tenant(tenID uint64) roachpb.KeyValue {
 	return kv(k, nil)
 }
 
-func zoneConfig(descID config.SystemTenantObjectID, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
+func zoneConfig(descID descpb.ID, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
 	kv := roachpb.KeyValue{
-		Key: config.MakeZoneKey(descID),
+		Key: config.MakeZoneKey(keys.SystemSQLCodec, descID),
 	}
 	if err := kv.Value.SetProto(&zonepb.ZoneConfig{SubzoneSpans: spans}); err != nil {
 		panic(err)
@@ -373,8 +373,8 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	var subzoneSQL = make([]roachpb.KeyValue, len(userSQL))
 	copy(subzoneSQL, userSQL)
 	subzoneSQL = append(subzoneSQL,
-		zoneConfig(config.SystemTenantObjectID(start+1), subzone("a", ""), subzone("c", "e")),
-		zoneConfig(config.SystemTenantObjectID(start+5), subzone("b", ""), subzone("c", "d"), subzone("d", "")))
+		zoneConfig(descpb.ID(start+1), subzone("a", ""), subzone("c", "e")),
+		zoneConfig(descpb.ID(start+5), subzone("b", ""), subzone("c", "d"), subzone("d", "")))
 
 	sort.Sort(roachpb.KeyValueByKey(userSQL))
 	sort.Sort(roachpb.KeyValueByKey(subzoneSQL))
