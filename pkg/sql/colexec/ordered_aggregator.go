@@ -287,7 +287,8 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				// capacity, so we choose to instantiate the batch with fixed
 				// maximal capacity that can be needed by the aggregator.
 				a.allocator.ReleaseMemory(colmem.GetBatchMemSize(a.scratch.Batch))
-				a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, 2*coldata.BatchSize())
+				newMinCapacity = 2 * coldata.BatchSize()
+				a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, newMinCapacity)
 			} else {
 				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocate(
 					a.outputTypes, a.scratch.Batch, newMinCapacity, maxBatchMemSize,
