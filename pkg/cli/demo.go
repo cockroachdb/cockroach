@@ -51,7 +51,7 @@ environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING" to true.
 }
 
 func init() {
-	demoCmd.RunE = MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
+	demoCmd.RunE = MaybeDecorateError(func(cmd *cobra.Command, _ []string) error {
 		return runDemo(cmd, nil /* gen */)
 	})
 }
@@ -88,7 +88,7 @@ func init() {
 			Use:   meta.Name,
 			Short: meta.Description,
 			Args:  cobra.ArbitraryArgs,
-			RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
+			RunE: MaybeDecorateError(func(cmd *cobra.Command, _ []string) error {
 				return runDemo(cmd, gen)
 			}),
 		}

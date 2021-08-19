@@ -36,7 +36,7 @@ Data on any surviving replicas will not be used to restore quorum.
 Instead, these replicas will be removed irrevocably.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugResetQuorum),
+	RunE: MaybeDecorateError(runDebugResetQuorum),
 }
 
 func runDebugResetQuorum(cmd *cobra.Command, args []string) error {

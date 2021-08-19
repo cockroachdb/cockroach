@@ -55,7 +55,7 @@ well unless it can be verified using a trusted root certificate store. That is,
 - ca-client-tenant.crt needs to be present on the KV server.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runStartSQL),
+	RunE: MaybeDecorateError(runStartSQL),
 }
 
 func runStartSQL(cmd *cobra.Command, args []string) error {

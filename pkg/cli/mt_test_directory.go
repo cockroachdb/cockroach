@@ -28,7 +28,7 @@ Run a test directory service that starts and manages tenant SQL instances as
 processes on the local machine.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runDirectorySvr),
+	RunE: MaybeDecorateError(runDirectorySvr),
 }
 
 func runDirectorySvr(cmd *cobra.Command, args []string) (returnErr error) {

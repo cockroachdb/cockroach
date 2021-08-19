@@ -35,7 +35,7 @@ command on one node (passing the same --host and certificate flags
 you would use for the sql command).
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runInit),
+	RunE: MaybeDecorateError(runInit),
 }
 
 func runInit(cmd *cobra.Command, args []string) error {

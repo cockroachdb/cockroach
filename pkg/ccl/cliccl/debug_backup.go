@@ -149,7 +149,7 @@ func init() {
 		Short: "show backup summary",
 		Long:  "Shows summary of meta information about a SQL backup.",
 		Args:  cobra.ExactArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runShowCmd),
+		RunE:  cli.MaybeDecorateError(runShowCmd),
 	}
 
 	listBackupsCmd := &cobra.Command{
@@ -157,7 +157,7 @@ func init() {
 		Short: "show backups in collection",
 		Long:  "Shows full backup paths in a backup collection.",
 		Args:  cobra.ExactArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runListBackupsCmd),
+		RunE:  cli.MaybeDecorateError(runListBackupsCmd),
 	}
 
 	listIncrementalCmd := &cobra.Command{
@@ -165,7 +165,7 @@ func init() {
 		Short: "show incremental backups",
 		Long:  "Shows incremental chain of a SQL backup.",
 		Args:  cobra.ExactArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runListIncrementalCmd),
+		RunE:  cli.MaybeDecorateError(runListIncrementalCmd),
 	}
 
 	exportDataCmd := &cobra.Command{
@@ -173,7 +173,7 @@ func init() {
 		Short: "export table data from a backup",
 		Long:  "export table data from a backup, requires specifying --table to export data from",
 		Args:  cobra.MinimumNArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runExportDataCmd),
+		RunE:  cli.MaybeDecorateError(runExportDataCmd),
 	}
 
 	backupCmds := &cobra.Command{

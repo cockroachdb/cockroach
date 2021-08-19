@@ -30,7 +30,7 @@ var convertURLCmd = &cobra.Command{
 
 	Short: "convert a SQL connection string for use with various client drivers",
 	Args:  cobra.NoArgs,
-	RunE:  MaybeDecorateGRPCError(runConvertURL),
+	RunE:  MaybeDecorateError(runConvertURL),
 }
 
 func runConvertURL(cmd *cobra.Command, _ []string) error {

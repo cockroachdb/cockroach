@@ -28,7 +28,7 @@ var debugJobTraceFromClusterCmd = &cobra.Command{
 	Use:   "job-trace <job_id> --url=<cluster connection string>",
 	Short: "get the trace payloads for the executing job",
 	Args:  cobra.MinimumNArgs(1),
-	RunE:  MaybeDecorateGRPCError(runDebugJobTrace),
+	RunE:  MaybeDecorateError(runDebugJobTrace),
 }
 
 const jobTraceZipSuffix = "job-trace.zip"

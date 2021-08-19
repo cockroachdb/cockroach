@@ -59,7 +59,7 @@ Specifying --active-store-key-id-only prints the key ID of the active store key
 and exits.
 `,
 		Args: cobra.ExactArgs(1),
-		RunE: cli.MaybeDecorateGRPCError(runEncryptionStatus),
+		RunE: cli.MaybeDecorateError(runEncryptionStatus),
 	}
 
 	encryptionActiveKeyCmd := &cobra.Command{
@@ -74,7 +74,7 @@ Plaintext:            # encryption not enabled
 AES128_CTR:be235...   # AES-128 encryption with store key ID
 `,
 		Args: cobra.ExactArgs(1),
-		RunE: cli.MaybeDecorateGRPCError(runEncryptionActiveKey),
+		RunE: cli.MaybeDecorateError(runEncryptionActiveKey),
 	}
 
 	// Add commands to the root debug command.

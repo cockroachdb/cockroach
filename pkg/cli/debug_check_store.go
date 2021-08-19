@@ -45,7 +45,7 @@ Capable of detecting the following errors:
 * MVCC stats that are inconsistent with the data within the range
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugCheckStoreCmd),
+	RunE: MaybeDecorateError(runDebugCheckStoreCmd),
 }
 
 var errCheckFoundProblem = errors.New("check-store found problems")

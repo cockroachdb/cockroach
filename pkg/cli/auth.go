@@ -42,7 +42,7 @@ The user invoking the 'login' CLI command must be an admin on the cluster.
 The user for which the HTTP session is opened can be arbitrary.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runLogin),
+	RunE: MaybeDecorateError(runLogin),
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
@@ -156,7 +156,7 @@ The user invoking the 'login' CLI command must be an admin on the cluster.
 The user for which the HTTP sessions are revoked can be arbitrary.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runLogout),
+	RunE: MaybeDecorateError(runLogout),
 }
 
 func runLogout(cmd *cobra.Command, args []string) (resErr error) {
@@ -187,7 +187,7 @@ Prints out the currently active HTTP sessions.
 The user invoking the 'list' CLI command must be an admin on the cluster.
 `,
 	Args: cobra.ExactArgs(0),
-	RunE: MaybeDecorateGRPCError(runAuthList),
+	RunE: MaybeDecorateError(runAuthList),
 }
 
 func runAuthList(cmd *cobra.Command, args []string) (resErr error) {

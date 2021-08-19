@@ -58,9 +58,9 @@ var reGRPCAuthFailure = regexp.MustCompile(`authentication handshake failed: x50
 // as the same error could be raised for other reasons.
 var reGRPCConnFailed = regexp.MustCompile(`desc = (transport is closing|all SubConns are in TransientFailure)`)
 
-// MaybeDecorateGRPCError catches grpc errors and provides a more helpful error
+// MaybeDecorateError catches gRPC and SQL errors and provides a more helpful error
 // message to the user.
-func MaybeDecorateGRPCError(
+func MaybeDecorateError(
 	wrapped func(*cobra.Command, []string) error,
 ) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) (err error) {

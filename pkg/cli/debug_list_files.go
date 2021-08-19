@@ -33,7 +33,7 @@ import (
 var debugListFilesCmd = &cobra.Command{
 	Use:   "list-files",
 	Short: "list files available for retrieval via 'debug zip'",
-	RunE:  MaybeDecorateGRPCError(runDebugListFiles),
+	RunE:  MaybeDecorateError(runDebugListFiles),
 }
 
 func runDebugListFiles(cmd *cobra.Command, _ []string) error {
