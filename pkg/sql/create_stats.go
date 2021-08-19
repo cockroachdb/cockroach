@@ -533,9 +533,18 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 
 	r.tableID = details.Table.ID
 	evalCtx := p.ExtendedEvalContext()
+	testingKnobs := p.ExecCfg().TestingKnobs
 
 	dsp := p.DistSQLPlanner()
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (retErr error) {
+		defer func() {
+			if retErr == nil && testingKnobs.AfterDBTxn != nil {
+				if err := testingKnobs.AfterDBTxn(txn); err != nil {
+					retErr = err
+				}
+			}
+		}()
+
 		// Set the transaction on the EvalContext to this txn. This allows for
 		// use of the txn during processor setup during the execution of the flow.
 		evalCtx.Txn = txn
