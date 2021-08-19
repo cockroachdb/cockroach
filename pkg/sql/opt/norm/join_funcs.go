@@ -417,7 +417,7 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 
 	// Don't bother looking for equivalent columns if colType has a composite
 	// key encoding.
-	if !allowCompositeEncoding && colinfo.HasCompositeKeyEncoding(colType) {
+	if !allowCompositeEncoding && colinfo.CanHaveCompositeKeyEncoding(colType) {
 		res.Add(col)
 		return res
 	}
