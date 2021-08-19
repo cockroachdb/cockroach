@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -92,12 +91,6 @@ func NewServer(
 	// right away, so the RPCs might start coming in pretty much right after the
 	// current method returns. See #66330.
 	ds.flowScheduler.Init(ds.Metrics)
-
-	colexec.HashAggregationDiskSpillingEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		if !colexec.HashAggregationDiskSpillingEnabled.Get(&cfg.Settings.SV) {
-			telemetry.Inc(sqltelemetry.HashAggregationDiskSpillingDisabled)
-		}
-	})
 
 	return ds
 }
