@@ -20,6 +20,7 @@ proto_library(
     srcs = [
         "local_only_session_data.proto",
         "session_data.proto",
+        "session_migration.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
