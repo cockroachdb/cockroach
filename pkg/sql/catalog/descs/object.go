@@ -43,7 +43,7 @@ func (tc *Collection) getObjectByName(
 	flags tree.ObjectLookupFlags,
 ) (prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
 	defer func() {
-		if err != nil || desc != nil || !flags.Required {
+		if err != nil || desc != nil && !flags.Required {
 			return
 		}
 		if catalogName != "" && prefix.Database == nil {

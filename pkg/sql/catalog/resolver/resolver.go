@@ -370,7 +370,11 @@ func ResolveExisting(
 		// schema name is for a virtual schema.
 		_, isVirtualSchema := catconstants.VirtualSchemaNames[u.Schema()]
 		if isVirtualSchema || curDb != "" {
-			if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, u.Schema(), u.Object()); found || err != nil {
+			// If a virtual schema is not found, we should let the higher level layers know it's not
+			// found. There is no explicit database specified only a schema in this case, so it should
+			// be a database error.
+			if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, u.Schema(), u.Object()); found ||
+				err != nil || isVirtualSchema {
 				prefix.ExplicitDatabase = false
 				prefix.ExplicitSchema = true
 				return found, prefix, result, err

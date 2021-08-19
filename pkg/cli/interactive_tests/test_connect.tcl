@@ -97,6 +97,11 @@ system "$argv sql --certs-dir=certs/n1 --host=`cat hostname.txt`:26257 -e 'selec
 system "$argv sql --certs-dir=certs/n2 --host=`cat hostname.txt`:26258 -e 'select 1'"
 end_test
 
+start_test "Check connecting to the wrong database generates the correct error"
+system "$argv sql  --certs-dir=certs/n1  --url postgresql://root@`cat hostname.txt`:26257/mydb  -e 'select * from crdb_internal.database'"
+eexpect "database \"mydb\" does not exist"
+end_test
+
 # Stop the servers. We do not care about graceful shutdown here since we are not
 # using the server files again beyond this point.
 system "kill -9 `cat server_pid1 server_pid2`"
