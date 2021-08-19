@@ -109,7 +109,7 @@ func (se *StreamEncoder) AddRow(row rowenc.EncDatumRow) error {
 			}
 			sType := se.infos[i].Type
 			if enc != descpb.DatumEncoding_VALUE &&
-				(colinfo.HasCompositeKeyEncoding(sType) || colinfo.MustBeValueEncoded(sType)) {
+				(colinfo.CanHaveCompositeKeyEncoding(sType) || colinfo.MustBeValueEncoded(sType)) {
 				// Force VALUE encoding for composite types (key encodings may lose data).
 				enc = descpb.DatumEncoding_VALUE
 			}
