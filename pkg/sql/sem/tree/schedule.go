@@ -19,6 +19,7 @@ type FullBackupClause struct {
 // ScheduledBackup represents scheduled backup job.
 type ScheduledBackup struct {
 	ScheduleLabel   Expr
+	IfNotExists     bool
 	Recurrence      Expr
 	FullBackup      *FullBackupClause /* nil implies choose default */
 	Targets         *TargetList       /* nil implies tree.AllDescriptors coverage */
@@ -36,6 +37,11 @@ func (node *ScheduledBackup) Format(ctx *FmtCtx) {
 	if node.ScheduleLabel != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(node.ScheduleLabel)
+	}
+
+	if node.IfNotExists ==true{
+		ctx.WriteString("IF NOT EXISTS")
+		//ctx.FormatNode(node.IfNotExists) ??
 	}
 
 	ctx.WriteString(" FOR BACKUP")

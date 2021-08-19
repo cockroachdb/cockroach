@@ -2689,6 +2689,7 @@ backup_options:
 // %Category: CCL
 // %Text:
 // CREATE SCHEDULE [<description>]
+// [IF NOT EXISTS]
 // FOR BACKUP [<targets>] INTO <location...>
 // [WITH <backup_option>[=<value>] [, ...]]
 // RECURRING [crontab|NEVER] [FULL BACKUP <crontab|ALWAYS>]
@@ -2764,6 +2765,7 @@ create_schedule_for_backup_stmt:
   {
     $$.val = &tree.ScheduledBackup{
       ScheduleLabel:    $3.expr(),
+      IfNotExists:      false,
       Recurrence:       $10.expr(),
       FullBackup:       $11.fullBackupClause(),
       To:               $8.stringOrPlaceholderOptList(),
@@ -2772,6 +2774,24 @@ create_schedule_for_backup_stmt:
       ScheduleOptions:  $12.kvOptions(),
     }
   }
+
+|
+CREATE SCHEDULE /*$3=*/opt_description IF NOT EXISTS FOR BACKUP /*$6=*/opt_backup_targets INTO
+  /*$8=*/string_or_placeholder_opt_list /*$9=*/opt_with_backup_options
+  /*$10=*/cron_expr /*$11=*/opt_full_backup_clause /*$12=*/opt_with_schedule_options
+  {
+    $$.val = &tree.ScheduledBackup{
+      ScheduleLabel:    $3.expr(),
+      IfNotExists:      true,
+      Recurrence:       $10.expr(),
+      FullBackup:       $11.fullBackupClause(),
+      To:               $8.stringOrPlaceholderOptList(),
+      Targets:          $6.targetListPtr(),
+      BackupOptions:    *($9.backupOptions()),
+      ScheduleOptions:  $12.kvOptions(),
+    }
+  }
+
 | CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE FOR BACKUP
 
 opt_description:
