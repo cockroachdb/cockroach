@@ -370,9 +370,16 @@ func ResolveExisting(
 		// schema name is for a virtual schema.
 		_, isVirtualSchema := catconstants.VirtualSchemaNames[u.Schema()]
 		if isVirtualSchema || curDb != "" {
-			if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, u.Schema(), u.Object()); found || err != nil {
+			if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, u.Schema(), u.Object()); found ||
+				err != nil || isVirtualSchema {
 				prefix.ExplicitDatabase = false
 				prefix.ExplicitSchema = true
+				if !found && isVirtualSchema {
+					// Only case a virtual schema cannot be found is if the database does not exist.
+					// Unfortunately, the only way to flag errors is through the prefix flags,
+					// and it's possible that no explicit database name is set above.
+					err = sqlerrors.NewUndefinedDatabaseError(curDb)
+				}
 				return found, prefix, result, err
 			}
 		}
