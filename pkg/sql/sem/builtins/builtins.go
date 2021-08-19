@@ -4203,10 +4203,11 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if ctx.SessionData.User().Undefined() {
+				u := ctx.SessionData.SessionUser()
+				if u.Undefined() {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.SessionData.User().Normalized()), nil
+				return tree.NewDString(u.Normalized()), nil
 			},
 			Info: "Returns the session user. This function is provided for " +
 				"compatibility with PostgreSQL.",

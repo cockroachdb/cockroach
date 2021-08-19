@@ -997,6 +997,26 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// See https://www.postgresql.org/docs/current/sql-set-role.html.
+	`role`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			if evalCtx.SessionData.SessionUserProto == "" {
+				return security.NoneRole
+			}
+			return evalCtx.SessionData.User().Normalized()
+		},
+		Set: func(ctx context.Context, pc permissionsChecker, m *sessionDataMutator, s string) error {
+			u, err := security.MakeSQLUsernameFromUserInput(s, security.UsernameValidation)
+			if err != nil {
+				return err
+			}
+			return m.SetRole(ctx, pc, u)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return security.NoneRole
+		},
+	},
+
 	// See https://www.postgresql.org/docs/10/static/ddl-schemas.html#DDL-SCHEMAS-PATH
 	// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	`search_path`: {

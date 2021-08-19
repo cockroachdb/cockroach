@@ -414,9 +414,12 @@ func (p *planner) processSetOrResetClause(
 		return resetSingleVar, varName, sessionVar{}, nil, nil
 	}
 
+	switch varName {
 	// The "database" setting can't be configured here, since the
 	// default settings are stored per-database.
-	if varName == "database" {
+	// The "role" setting can't be configured here, since we are already
+	// that role.
+	case "database", "role":
 		return unknown, "", sessionVar{}, nil, newCannotChangeParameterError(varName)
 	}
 	_, sVar, err = getSessionVar(varName, false /* missingOk */)
