@@ -583,6 +583,11 @@ func (s *webhookSink) EmitRow(
 	select {
 	// check the webhook sink context in case workers have been terminated
 	case <-s.workerCtx.Done():
+		// check again for error in case it triggered since last check
+		// will return more verbose error instead of "context canceled"
+		if err = s.inflight.hasError(); err != nil {
+			return err
+		}
 		return s.workerCtx.Err()
 	case <-ctx.Done():
 		return ctx.Err()
