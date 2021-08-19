@@ -44,6 +44,7 @@ go_library(
         "node.go",
         "nodelocal.go",
         "quit.go",
+        "shout.go",
         "sql_client.go",
         "sql_shell_cmd.go",
         "sqlfmt.go",
