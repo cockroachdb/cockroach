@@ -42,6 +42,7 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 	ctx := cmd.Context()
 	filter := mustGetFlagString(cmd, filterFlag)
 	timeout := mustGetFlagDuration(cmd, timeoutFlag)
+	short := mustGetFlagBool(cmd, shortFlag)
 
 	// Enumerate all benches to run.
 	if len(pkgs) == 0 {
@@ -109,6 +110,9 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 		}
 		if timeout > 0 {
 			args = append(args, fmt.Sprintf("-test.timeout=%s", timeout.String()))
+		}
+		if short {
+			args = append(args, "-test.short", "-test.benchtime=1ns")
 		}
 		err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 		if err != nil {
