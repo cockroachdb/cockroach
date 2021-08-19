@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -63,7 +64,7 @@ func TestValidSetShowZones(t *testing.T) {
 		Config: zoneOverride,
 	}
 	jobsRow := sqlutils.ZoneRow{
-		ID:     keys.JobsTableID,
+		ID:     uint32(systemschema.JobsTable.GetID()),
 		Config: zoneOverride,
 	}
 
@@ -89,7 +90,7 @@ func TestValidSetShowZones(t *testing.T) {
 		Config: partialZoneOverride,
 	}
 	partialJobsRow := sqlutils.ZoneRow{
-		ID:     keys.JobsTableID,
+		ID:     uint32(systemschema.JobsTable.GetID()),
 		Config: partialZoneOverride,
 	}
 	partialDbRow := sqlutils.ZoneRow{

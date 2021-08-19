@@ -188,8 +188,9 @@ type sqlServerOptionalKVArgs struct {
 type sqlServerOptionalTenantArgs struct {
 	tenantConnect kvtenant.Connector
 
-	// addr stores the SQL address binding for the pod.
-	addr string
+	// advertiseAddr stores the SQL address that is advertised to other servers
+	// of the same tenant.
+	advertiseAddr string
 }
 
 type sqlServerArgs struct {
@@ -351,7 +352,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings,
 	)
 	cfg.sqlInstanceProvider = instanceprovider.New(
-		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.addr,
+		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr,
 	)
 
 	jobRegistry := cfg.circularJobRegistry

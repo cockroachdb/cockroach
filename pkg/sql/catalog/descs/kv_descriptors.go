@@ -16,59 +16,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
-// uncommittedDescriptor is a descriptor that has been modified in the current
-// transaction.
-type uncommittedDescriptor struct {
-	mutable   catalog.MutableDescriptor
-	immutable catalog.Descriptor
-}
-
-func (u *uncommittedDescriptor) GetName() string {
-	return u.immutable.GetName()
-}
-
-func (u *uncommittedDescriptor) GetParentID() descpb.ID {
-	return u.immutable.GetParentID()
-}
-
-func (u uncommittedDescriptor) GetParentSchemaID() descpb.ID {
-	return u.immutable.GetParentSchemaID()
-}
-
-func (u uncommittedDescriptor) GetID() descpb.ID {
-	return u.immutable.GetID()
-}
-
-var _ catalog.NameEntry = (*uncommittedDescriptor)(nil)
-
 type kvDescriptors struct {
 	codec keys.SQLCodec
-
-	// Descriptors modified by the uncommitted transaction affiliated with this
-	// Collection. This allows a transaction to see its own modifications while
-	// bypassing the descriptor lease mechanism. The lease mechanism will have its
-	// own transaction to read the descriptor and will hang waiting for the
-	// uncommitted changes to the descriptor. These descriptors are local to this
-	// Collection and invisible to other transactions.
-	uncommittedDescriptors nstree.Map
-	// uncommittedDescriptorNames is the set of names which a read or written
-	// descriptor took on at some point in its lifetime. Everything added to
-	// uncommittedDescriptors is added to uncommittedDescriptorNames as well
-	// as all of the known draining names. The idea is that if we find that
-	// a name is not in the above map but is in the set, then we can avoid
-	// doing a lookup.
-	uncommittedDescriptorNames nstree.Set
 
 	// allDescriptors is a slice of all available descriptors. The descriptors
 	// are cached to avoid repeated lookups by users like virtual tables. The
@@ -128,16 +86,12 @@ func (d *allDescriptors) contains(id descpb.ID) bool {
 
 func makeKVDescriptors(codec keys.SQLCodec) kvDescriptors {
 	return kvDescriptors{
-		codec:                      codec,
-		uncommittedDescriptors:     nstree.MakeMap(),
-		uncommittedDescriptorNames: nstree.MakeSet(),
+		codec: codec,
 	}
 }
 
 func (kd *kvDescriptors) reset() {
 	kd.releaseAllDescriptors()
-	kd.uncommittedDescriptors.Clear()
-	kd.uncommittedDescriptorNames.Clear()
 }
 
 // releaseAllDescriptors releases the cached slice of all descriptors
@@ -151,41 +105,53 @@ func (kd *kvDescriptors) releaseAllDescriptors() {
 	kd.allSchemasForDatabase = nil
 }
 
-func (kd *kvDescriptors) getByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID, mutable bool,
-) (catalog.Descriptor, error) {
-	// Always pick up a mutable copy so it can be cached.
-	// TODO (lucy): If the descriptor doesn't exist, should we generate our
-	// own error here instead of using the one from catalogkv?
-	desc, err := catalogkv.MustGetMutableDescriptorByID(ctx, txn, kd.codec, id)
-	if err != nil {
-		return nil, err
-	}
-	ud, err := kd.addUncommittedDescriptor(desc)
-	if err != nil {
-		return nil, err
-	}
-	if mutable {
-		return desc, nil
-	}
-	return ud.immutable, nil
-}
-
+// lookupName is used when reading a descriptor from the storage layer by name.
+// Descriptors are physically keyed by ID, so we need to resolve their ID by
+// querying the system.namespace table first, which is what this method does.
+// We can avoid having to do this in some special cases:
+// - When the descriptor name and ID are hard-coded. This is the case for the
+//   system database and for the tables in it.
+// - When we're looking up a schema for which we already have the descriptor
+//   of the parent database. The schema ID can be looked up in it.
+//
+// TODO(postamar): add namespace caching to the Collection
+// By having the Collection mediate all namespace queries for a transaction
+// (i.e. what it's already doing for descriptors) we could prevent more
+// unnecessary roundtrips to the storage layer.
 func (kd *kvDescriptors) lookupName(
-	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
+	ctx context.Context,
+	txn *kv.Txn,
+	maybeDB catalog.DatabaseDescriptor,
+	parentID descpb.ID,
+	parentSchemaID descpb.ID,
+	name string,
 ) (found bool, _ descpb.ID, _ error) {
-	// Bypass the namespace lookup from the store for system tables.
-	if id := bootstrap.LookupSystemTableDescriptorID(
-		kd.codec, parentID, name,
-	); id != descpb.InvalidID {
-		return true, id, nil
-	}
-	if isSchemaPrefix(parentID, parentSchemaID) {
-		if ud := kd.getUncommittedByID(parentID); ud != nil {
-			id := ud.immutable.(catalog.DatabaseDescriptor).GetSchemaID(name)
-			return id != descpb.InvalidID, id, nil
+	// Handle special cases which might avoid a namespace table query.
+	switch parentID {
+	case descpb.InvalidID:
+		if name == systemschema.SystemDatabaseName {
+			// Special case: looking up the system database.
+			// The system database's descriptor ID is hard-coded.
+			return true, keys.SystemDatabaseID, nil
+		}
+	case keys.SystemDatabaseID:
+		// Special case: looking up something in the system database.
+		// Those namespace table entries are cached.
+		id, err := lookupSystemDatabaseNamespaceCache(ctx, kd.codec, parentSchemaID, name)
+		return id != descpb.InvalidID, id, err
+	default:
+		if parentSchemaID == descpb.InvalidID {
+			// At this point we know that parentID is not zero, so a zero
+			// parentSchemaID means we're looking up a schema.
+			if maybeDB != nil {
+				// Special case: looking up a schema, but in a database which we already
+				// have the descriptor for. We find the schema ID in there.
+				id := maybeDB.GetSchemaID(name)
+				return id != descpb.InvalidID, id, nil
+			}
 		}
 	}
+	// Fall back to querying the namespace table.
 	found, id, err := catalogkv.LookupObjectID(
 		ctx, txn, kd.codec, parentID, parentSchemaID, name,
 	)
@@ -195,67 +161,61 @@ func (kd *kvDescriptors) lookupName(
 	return true, id, nil
 }
 
+// getByName reads a descriptor from the storage layer by name.
+//
+// This is a three-step process:
+// 1. resolve the descriptor's ID using the name information,
+// 2. actually read the descriptor from storage,
+// 3. check that the name in the descriptor is the one we expect; meaning that
+//    there is no RENAME underway for instance.
+//
 func (kd *kvDescriptors) getByName(
 	ctx context.Context,
 	txn *kv.Txn,
+	maybeDB catalog.DatabaseDescriptor,
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
-	mutable bool,
-) (found bool, desc catalog.Descriptor, err error) {
-	found, descID, err := kd.lookupName(ctx, txn, parentID, parentSchemaID, name)
+) (desc catalog.MutableDescriptor, err error) {
+	found, descID, err := kd.lookupName(ctx, txn, maybeDB, parentID, parentSchemaID, name)
 	if !found || err != nil {
-		return found, nil, err
+		return nil, err
 	}
-	// Always pick up a mutable copy so it can be cached.
-	desc, err = catalogkv.GetMutableDescriptorByID(ctx, txn, kd.codec, descID)
+	desc, err = kd.getByID(ctx, txn, descID)
 	if err != nil {
-		return false, nil, err
-	} else if desc == nil && descID <= keys.MaxReservedDescID {
-		// This can happen during startup because we're not actually looking up the
-		// system descriptor IDs in KV.
-		return false, nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "descriptor %d not found", descID)
-	} else if desc == nil {
-		// Having done the namespace lookup, the descriptor must exist.
-		return false, nil, errors.AssertionFailedf("descriptor %d not found", descID)
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			// Having done the namespace lookup, the descriptor must exist.
+			return nil, errors.WithAssertionFailure(err)
+		}
+		return nil, err
 	}
-	// Immediately after a RENAME an old name still points to the descriptor
-	// during the drain phase for the name. Do not return a descriptor during
-	// draining.
 	if desc.GetName() != name {
-		return false, nil, nil
+		// Immediately after a RENAME an old name still points to the descriptor
+		// during the drain phase for the name. Do not return a descriptor during
+		// draining.
+		return nil, nil
 	}
-	ud, err := kd.addUncommittedDescriptor(desc.(catalog.MutableDescriptor))
-	if err != nil {
-		return false, nil, err
-	}
-	if !mutable {
-		desc = ud.immutable
-	}
-	return true, desc, nil
+	return desc, nil
 }
 
-// getUncommittedByName returns a descriptor for the requested name
-// if the requested name is for a descriptor modified within the transaction
-// affiliated with the Collection.
-//
-// The first return value "refuseFurtherLookup" is true when there is a known
-// rename of that descriptor, so it would be invalid to miss the cache and go to
-// KV (where the descriptor prior to the rename may still exist).
-func (kd *kvDescriptors) getUncommittedByName(
-	dbID descpb.ID, schemaID descpb.ID, name string,
-) (refuseFurtherLookup bool, desc *uncommittedDescriptor) {
-
-	// Walk latest to earliest so that a DROP followed by a CREATE with the same
-	// name will result in the CREATE being seen.
-	if got := kd.uncommittedDescriptors.GetByName(dbID, schemaID, name); got != nil {
-		return false, got.(*uncommittedDescriptor)
+// getByID actually reads a descriptor from the storage layer.
+func (kd *kvDescriptors) getByID(
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
+) (_ catalog.MutableDescriptor, _ error) {
+	if id == keys.SystemDatabaseID {
+		// Special handling for the system database descriptor.
+		//
+		// This is done for performance reasons, to save ourselves an unnecessary
+		// round trip to storage which otherwise quickly compounds.
+		//
+		// The system database descriptor should never actually be mutated, which is
+		// why we return the same hard-coded descriptor every time. It's assumed
+		// that callers of this method will check the privileges on the descriptor
+		// (like any other database) and return an error.
+		return dbdesc.NewBuilder(systemschema.SystemDB.DatabaseDesc()).BuildExistingMutable(), nil
 	}
-	return kd.uncommittedDescriptorNames.Contains(descpb.NameInfo{
-		ParentID:       dbID,
-		ParentSchemaID: schemaID,
-		Name:           name,
-	}), nil
+
+	return catalogkv.MustGetMutableDescriptorByID(ctx, txn, kd.codec, id)
 }
 
 func (kd *kvDescriptors) getAllDescriptors(
@@ -313,103 +273,6 @@ func (kd *kvDescriptors) getSchemasForDatabase(
 		}
 	}
 	return kd.allSchemasForDatabase[dbID], nil
-}
-
-func (kd *kvDescriptors) getUncommittedByID(id descpb.ID) *uncommittedDescriptor {
-	ud, _ := kd.uncommittedDescriptors.GetByID(id).(*uncommittedDescriptor)
-	return ud
-}
-
-func (kd *kvDescriptors) getDescriptorsWithNewVersion() []lease.IDVersion {
-	var descs []lease.IDVersion
-	_ = kd.uncommittedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
-		desc := entry.(*uncommittedDescriptor)
-		if mut := desc.mutable; !mut.IsNew() && mut.IsUncommittedVersion() {
-			descs = append(descs, lease.NewIDVersionPrev(mut.OriginalName(), mut.OriginalID(), mut.OriginalVersion()))
-		}
-		return nil
-	})
-	return descs
-}
-
-func (kd *kvDescriptors) getUncommittedTables() (tables []catalog.TableDescriptor) {
-	_ = kd.uncommittedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
-		desc := entry.(*uncommittedDescriptor)
-		table, ok := desc.immutable.(catalog.TableDescriptor)
-		if ok && desc.immutable.IsUncommittedVersion() {
-			tables = append(tables, table)
-		}
-		return nil
-	})
-	return tables
-}
-
-func (kd *kvDescriptors) validateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) error {
-	descs := make([]catalog.Descriptor, 0, kd.uncommittedDescriptors.Len())
-	_ = kd.uncommittedDescriptors.IterateByID(func(descriptor catalog.NameEntry) error {
-		descs = append(descs, descriptor.(*uncommittedDescriptor).immutable)
-		return nil
-	})
-	if len(descs) == 0 {
-		return nil
-	}
-	// TODO(ajwerner): Leverage this cache as the DescGetter.
-	bdg := catalogkv.NewOneLevelUncachedDescGetter(txn, kd.codec)
-	return catalog.Validate(
-		ctx,
-		bdg,
-		catalog.ValidationWriteTelemetry,
-		catalog.ValidationLevelAllPreTxnCommit,
-		descs...,
-	).CombinedError()
-}
-
-func (kd *kvDescriptors) hasUncommittedTables() (has bool) {
-	_ = kd.uncommittedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
-		if _, has = entry.(*uncommittedDescriptor).immutable.(catalog.TableDescriptor); has {
-			return iterutil.StopIteration()
-		}
-		return nil
-	})
-	return has
-}
-
-func (kd *kvDescriptors) hasUncommittedTypes() (has bool) {
-	_ = kd.uncommittedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
-		if _, has = entry.(*uncommittedDescriptor).immutable.(catalog.TypeDescriptor); has {
-			return iterutil.StopIteration()
-		}
-		return nil
-	})
-	return has
-}
-
-func (kd *kvDescriptors) addUncommittedDescriptor(
-	desc catalog.MutableDescriptor,
-) (*uncommittedDescriptor, error) {
-	version := desc.GetVersion()
-	origVersion := desc.OriginalVersion()
-	if version != origVersion && version != origVersion+1 {
-		return nil, errors.AssertionFailedf(
-			"descriptor %d version %d not compatible with cluster version %d",
-			desc.GetID(), version, origVersion)
-	}
-
-	mutable, err := maybeRefreshCachedFieldsOnTypeDescriptor(desc)
-	if err != nil {
-		return nil, err
-	}
-
-	ud := &uncommittedDescriptor{
-		mutable:   mutable,
-		immutable: desc.ImmutableCopy(),
-	}
-	for _, n := range desc.GetDrainingNames() {
-		kd.uncommittedDescriptorNames.Add(n)
-	}
-	kd.uncommittedDescriptors.Upsert(ud)
-	kd.releaseAllDescriptors()
-	return ud, nil
 }
 
 func (kd *kvDescriptors) idDefinitelyDoesNotExist(id descpb.ID) bool {

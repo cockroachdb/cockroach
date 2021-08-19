@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/defaultprivilegedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -213,8 +213,7 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	}
 
 	// Validate the privilege descriptor.
-	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Database))
-
+	vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Database))
 	// The DefaultPrivilegeDescriptor may be nil.
 	if desc.GetDefaultPrivileges() != nil {
 		// Validate the default privilege descriptor.
@@ -424,16 +423,16 @@ func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeD
 	if defaultPrivilegeDescriptor == nil {
 		defaultPrivilegeDescriptor = descpb.InitDefaultPrivilegeDescriptor()
 	}
-	return defaultprivilegedesc.MakeDefaultPrivileges(defaultPrivilegeDescriptor)
+	return catprivilege.MakeDefaultPrivileges(defaultPrivilegeDescriptor)
 }
 
-// GetMutableDefaultPrivilegeDescriptor returns a defaultprivilegedesc.Mutable.
-func (desc *Mutable) GetMutableDefaultPrivilegeDescriptor() *defaultprivilegedesc.Mutable {
+// GetMutableDefaultPrivilegeDescriptor returns a catprivilege.Mutable.
+func (desc *Mutable) GetMutableDefaultPrivilegeDescriptor() *catprivilege.Mutable {
 	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
 	if defaultPrivilegeDescriptor == nil {
 		defaultPrivilegeDescriptor = descpb.InitDefaultPrivilegeDescriptor()
 	}
-	return defaultprivilegedesc.NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
+	return catprivilege.NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 }
 
 // SetDefaultPrivilegeDescriptor sets the default privilege descriptor

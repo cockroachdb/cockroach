@@ -323,7 +323,9 @@ func (n *createTableNode) startExec(params runParams) error {
 			}
 			var foundExternalReference bool
 			for id := range refs {
-				if t := params.p.Descriptors().GetUncommittedTableByID(id); t == nil || !t.IsNew() {
+				if t, err := params.p.Descriptors().GetUncommittedMutableTableByID(id); err != nil {
+					return err
+				} else if t == nil || !t.IsNew() {
 					foundExternalReference = true
 					break
 				}

@@ -58,14 +58,22 @@ func (tc *Collection) getTableByName(
 	return true, desc.(catalog.TableDescriptor), nil
 }
 
-// GetUncommittedTableByID returns an uncommitted table by its ID.
-func (tc *Collection) GetUncommittedTableByID(id descpb.ID) *tabledesc.Mutable {
-	if ud := tc.kv.getUncommittedByID(id); ud != nil {
-		if table, ok := ud.mutable.(*tabledesc.Mutable); ok {
-			return table
-		}
+// GetUncommittedMutableTableByID returns an uncommitted mutable table by its
+// ID.
+func (tc *Collection) GetUncommittedMutableTableByID(id descpb.ID) (*tabledesc.Mutable, error) {
+	ud := tc.uncommitted.getByID(id)
+	if ud == nil {
+		return nil, nil
 	}
-	return nil
+	mut, err := tc.uncommitted.checkOut(ud.GetID())
+	if err != nil {
+		return nil, err
+	}
+	if table, ok := mut.(*tabledesc.Mutable); ok {
+		return table, nil
+	}
+	// Check non-table descriptors back in.
+	return nil, tc.uncommitted.checkIn(mut)
 }
 
 // GetMutableTableByID returns a mutable table descriptor with

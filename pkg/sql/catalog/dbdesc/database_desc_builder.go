@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -58,8 +59,13 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
-	privsChanged := descpb.MaybeFixPrivileges(ddb.maybeModified.ID, ddb.maybeModified.ID,
-		&ddb.maybeModified.Privileges, privilege.Database)
+
+	privsChanged := catprivilege.MaybeFixPrivileges(
+		&ddb.maybeModified.Privileges,
+		descpb.InvalidID,
+		descpb.InvalidID,
+		privilege.Database,
+		ddb.maybeModified.GetName())
 	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
 	ddb.changed = privsChanged || removedSelfEntryInSchemas
 	return nil

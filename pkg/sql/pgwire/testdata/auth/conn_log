@@ -69,7 +69,7 @@ authlog 6
 
 connect user=root password=badpass sslmode=require sslcert= sslkey=
 ----
-ERROR: password authentication failed for user root
+ERROR: password authentication failed for user root (SQLSTATE 28000)
 
 authlog 6
 .*client_connection_end
@@ -119,7 +119,7 @@ authlog 6
 
 connect user=userpw password=badpass
 ----
-ERROR: password authentication failed for user userpw
+ERROR: password authentication failed for user userpw (SQLSTATE 28000)
 
 authlog 6
 .*client_connection_end
@@ -137,7 +137,7 @@ subtest conn_tls/no_password
 
 connect user=usernopw
 ----
-ERROR: password authentication failed for user usernopw
+ERROR: password authentication failed for user usernopw (SQLSTATE 28000)
 
 authlog 7
 .*client_connection_end
@@ -175,7 +175,7 @@ authlog 5
 
 connect_unix user=root password=badpass
 ----
-ERROR: password authentication failed for user root
+ERROR: password authentication failed for user root (SQLSTATE 28000)
 
 authlog 5
 .*client_connection_end
@@ -193,7 +193,7 @@ subtest conn_unix/trusted_user
 
 connect_unix user=trusted
 ----
-ERROR: authentication rejected by configuration
+ERROR: authentication rejected by configuration (SQLSTATE 28000)
 
 authlog 5
 .*client_connection_end
@@ -223,7 +223,7 @@ authlog 5
 
 connect_unix user=userpw password=badpass
 ----
-ERROR: password authentication failed for user userpw
+ERROR: password authentication failed for user userpw (SQLSTATE 28000)
 
 authlog 5
 .*client_connection_end
@@ -240,7 +240,7 @@ subtest conn_unix/nologin_expired_password
 
 connect_unix user=usernologin password=123
 ----
-ERROR: usernologin does not have login privilege
+ERROR: usernologin does not have login privilege (SQLSTATE 28000)
 
 authlog 4
 .*client_connection_end
@@ -253,7 +253,7 @@ authlog 4
 
 connect_unix user=userexpired password=123
 ----
-ERROR: password is expired
+ERROR: password is expired (SQLSTATE 28000)
 
 authlog 6
 .*client_connection_end

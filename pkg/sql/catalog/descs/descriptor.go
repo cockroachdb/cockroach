@@ -12,19 +12,14 @@ package descs
 
 import (
 	"context"
-	"fmt"
-	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -83,9 +78,8 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags, setTxnDeadline bool,
 ) (catalog.Descriptor, error) {
 	getDescriptorByID := func() (catalog.Descriptor, error) {
-		if vd, err := tc.virtual.getByID(
-			ctx, id, flags.RequireMutable,
-		); vd != nil || err != nil {
+		vd, err := tc.virtual.getByID(ctx, id, flags.RequireMutable)
+		if vd != nil || err != nil {
 			return vd, err
 		}
 
@@ -95,35 +89,43 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			}
 			return sd, nil
 		}
-		if ud := tc.kv.getUncommittedByID(id); ud != nil {
-			log.VEventf(ctx, 2, "found uncommitted descriptor %d", id)
-			if flags.RequireMutable {
-				return ud.mutable, nil
+
+		{
+			ud := tc.uncommitted.getByID(id)
+			if ud != nil {
+				log.VEventf(ctx, 2, "found uncommitted descriptor %d", id)
+				if flags.RequireMutable {
+					ud, err = tc.uncommitted.checkOut(id)
+					if err != nil {
+						return nil, err
+					}
+				}
+				return ud, nil
 			}
-			return ud.immutable, nil
 		}
 
-		if flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
-			return tc.kv.getByID(ctx, txn, id, flags.RequireMutable)
+		if !flags.AvoidCached && !flags.RequireMutable && !lease.TestingTableLeasesAreDisabled() {
+			// If we have already read all of the descriptors, use it as a negative
+			// cache to short-circuit a lookup we know will be doomed to fail.
+			//
+			// TODO(ajwerner): More generally leverage this set of kv descriptors on
+			// the resolution path.
+			if tc.kv.idDefinitelyDoesNotExist(id) {
+				return nil, catalog.ErrDescriptorNotFound
+			}
+
+			desc, shouldReadFromStore, err := tc.leased.getByID(ctx, tc.deadlineHolder(txn), id, setTxnDeadline)
+			if err != nil {
+				return nil, err
+			}
+			if !shouldReadFromStore {
+				return desc, nil
+			}
 		}
 
-		// If we have already read all of the descriptor, use it as a negative
-		// cache to short-circuit a lookup we know will be doomed to fail.
-		//
-		// TODO(ajwerner): More generally leverage this set of kv descriptors on
-		// the resolution path.
-		if tc.kv.idDefinitelyDoesNotExist(id) {
-			return nil, catalog.ErrDescriptorNotFound
-		}
-
-		desc, shouldReadFromStore, err := tc.leased.getByID(ctx, tc.deadlineHolder(txn), id, setTxnDeadline)
-		if err != nil {
-			return nil, err
-		}
-		if shouldReadFromStore {
-			return tc.kv.getByID(ctx, txn, id, flags.RequireMutable)
-		}
-		return desc, nil
+		return tc.withReadFromStore(flags.RequireMutable, func() (catalog.MutableDescriptor, error) {
+			return tc.kv.getByID(ctx, txn, id)
+		})
 	}
 
 	desc, err := getDescriptorByID()
@@ -150,10 +152,6 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 	return desc, nil
 }
 
-func isSchemaPrefix(parentID, parentSchemaID descpb.ID) bool {
-	return parentID != descpb.InvalidID && parentSchemaID == descpb.InvalidID
-}
-
 func (tc *Collection) getByName(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -163,20 +161,14 @@ func (tc *Collection) getByName(
 	avoidCached, mutable bool,
 ) (found bool, desc catalog.Descriptor, err error) {
 
-	// Handle special specific behaviors for the implied type.
 	var parentID, parentSchemaID descpb.ID
-	switch {
-	case db == nil && sc == nil: // database
-		if db := maybeGetSystemDatabase(name, mutable); db != nil {
-			return true, db, nil
+	if db != nil {
+		if sc == nil {
+			// Schema descriptors are handled in a special way, see getSchemaByName
+			// function declaration for details.
+			return getSchemaByName(ctx, tc, txn, db, name, avoidCached, mutable)
 		}
-	case sc == nil: // schema
-		return getSchemaByName(ctx, tc, txn, db, name, avoidCached, mutable)
-	default: // object
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
-		// Note that we do not attempt to resolve virtual objects here.
-		// We resolve virtual objects by name at a higher level.
-		avoidCached = avoidCached || !canUseLeasingForObject(parentID, name)
 	}
 
 	if found, sd := tc.synthetic.getByName(parentID, parentSchemaID, name); found {
@@ -187,36 +179,63 @@ func (tc *Collection) getByName(
 	}
 
 	{
-		refuseFurtherLookup, ud := tc.kv.getUncommittedByName(parentID, parentSchemaID, name)
+		refuseFurtherLookup, ud := tc.uncommitted.getByName(parentID, parentSchemaID, name)
 		if ud != nil {
 			log.VEventf(ctx, 2, "found uncommitted descriptor %d", ud.GetID())
 			if mutable {
-				return true, ud.mutable, nil
+				ud, err = tc.uncommitted.checkOut(ud.GetID())
+				if err != nil {
+					return false, nil, err
+				}
 			}
-			return true, ud.immutable, nil
+			return true, ud, nil
 		}
 		if refuseFurtherLookup {
 			return false, nil, nil
 		}
 	}
 
-	if avoidCached || mutable || lease.TestingTableLeasesAreDisabled() {
-		return tc.kv.getByName(
-			ctx, txn, parentID, parentSchemaID, name, mutable,
-		)
+	if !avoidCached && !mutable && !lease.TestingTableLeasesAreDisabled() {
+		var shouldReadFromStore bool
+		desc, shouldReadFromStore, err = tc.leased.getByName(ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
+		if err != nil {
+			return false, nil, err
+		}
+		if !shouldReadFromStore {
+			return desc != nil, desc, nil
+		}
 	}
 
-	desc, shouldReadFromStore, err := tc.leased.getByName(
-		ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
+	desc, err = tc.withReadFromStore(mutable, func() (desc catalog.MutableDescriptor, err error) {
+		uncommittedDB, _ := tc.uncommitted.getByID(parentID).(catalog.DatabaseDescriptor)
+		return tc.kv.getByName(ctx, txn, uncommittedDB, parentID, parentSchemaID, name)
+	})
+	return desc != nil, desc, err
+}
+
+// withReadFromStore updates the state of the Collection, especially its
+// uncommitted descriptors layer, after reading a descriptor from the storage
+// layer. The logic is the same regardless of whether the descriptor was read
+// by name or by ID.
+func (tc *Collection) withReadFromStore(
+	requireMutable bool, readFn func() (catalog.MutableDescriptor, error),
+) (desc catalog.Descriptor, _ error) {
+	mut, err := readFn()
+	if mut == nil || err != nil {
+		return nil, err
+	}
+	desc, err = tc.uncommitted.add(mut)
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	}
-	if shouldReadFromStore {
-		return tc.kv.getByName(
-			ctx, txn, parentID, parentSchemaID, name, mutable,
-		)
+	if requireMutable {
+		desc, err = tc.uncommitted.checkOut(desc.GetID())
+		if err != nil {
+			return nil, err
+		}
 	}
-	return desc != nil, desc, nil
+	tc.kv.releaseAllDescriptors()
+	return desc, nil
 }
 
 func (tc *Collection) deadlineHolder(txn *kv.Txn) deadlineHolder {
@@ -272,50 +291,6 @@ func getSchemaByName(
 
 func isTemporarySchema(name string) bool {
 	return strings.HasPrefix(name, catconstants.PgTempSchemaName)
-}
-
-// TODO(vivek): Ideally we'd avoid caching for only the
-// system.descriptor and system.lease tables, because they are
-// used for acquiring leases, creating a chicken&egg problem.
-// But doing so turned problematic and the tests pass only by also
-// disabling caching of system.eventlog, system.rangelog, and
-// system.users. For now we're sticking to disabling caching of
-// all system descriptors except role_members, role_options, users, and
-// database_role_settings (i.e., the ones used during authn/authz flows).
-// TODO (lucy): Reevaluate the above. We have many more system tables now and
-// should be able to lease most of them.
-var (
-	allowedCachedSystemTables = []string{
-		systemschema.RoleMembersTable.GetName(),
-		systemschema.RoleOptionsTable.GetName(),
-		systemschema.UsersTable.GetName(),
-		systemschema.JobsTable.GetName(),
-		systemschema.EventLogTable.GetName(),
-		systemschema.DatabaseRoleSettingsTable.GetName(),
-	}
-	allowedCachedSystemTableNameRE = regexp.MustCompile(fmt.Sprintf(
-		"^%s$", strings.Join(allowedCachedSystemTables, "|"),
-	))
-)
-
-func canUseLeasingForObject(parentID descpb.ID, name string) bool {
-	return parentID != keys.SystemDatabaseID ||
-		allowedCachedSystemTableNameRE.MatchString(name)
-}
-
-func maybeGetSystemDatabase(name string, mutable bool) catalog.Descriptor {
-	if name != systemschema.SystemDatabaseName {
-		return nil
-	}
-	// The system database descriptor should never actually be mutated, which is
-	// why we return the same hard-coded descriptor every time. It's assumed
-	// that callers of this method will check the privileges on the descriptor
-	// (like any other database) and return an error.
-	if mutable {
-		proto := systemschema.MakeSystemDatabaseDesc().DatabaseDesc()
-		return dbdesc.NewBuilder(proto).BuildExistingMutableDatabase()
-	}
-	return systemschema.MakeSystemDatabaseDesc()
 }
 
 // filterDescriptorState wraps the more general catalog function to swallow
