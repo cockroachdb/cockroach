@@ -83,7 +83,12 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 	var argsBase []string
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
-	argsBase = append(argsBase, "run", "--color=yes", "--experimental_convenience_symlinks=ignore", "--config=test")
+	argsBase = append(argsBase,
+		"run",
+		"--color=yes",
+		"--experimental_convenience_symlinks=ignore",
+		"--config=test",
+		"--test_sharding_strategy=disabled")
 	argsBase = append(argsBase, getConfigFlags()...)
 	argsBase = append(argsBase, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
