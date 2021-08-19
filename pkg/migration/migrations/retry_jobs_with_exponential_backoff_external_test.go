@@ -12,7 +12,6 @@ package migrations_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -29,13 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -46,6 +41,19 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+// Target schema changes in the system.jobs table of the RetryJobsWithExponentialBackoff migration.
+const (
+	addColsQuery = `
+ALTER TABLE system.jobs
+  ADD COLUMN num_runs INT8 FAMILY claim, 
+  ADD COLUMN last_run TIMESTAMP FAMILY claim`
+	addIndexQuery = `
+CREATE INDEX jobs_run_stats_idx
+		ON system.jobs (claim_session_id, status, created)
+		STORING (last_run, num_runs, claim_instance_id)
+		WHERE ` + systemschema.JobsRunStatsIdxPredicate
 )
 
 // TestExponentialBackoffMigration tests modification of system.jobs table
@@ -75,13 +83,48 @@ func TestExponentialBackoffMigration(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Inject the old copy of the descriptor.
-	injectLegacyTable(t, ctx, s)
-	// Validate that the jobs table has old schema.
-	validateSchemaExists(t, ctx, s, sqlDB, false)
+	injectLegacyTable(t, ctx, s, systemschema.JobsTable, getDeprecatedJobsDescriptor)
+	// Validate that the jobs-table has old schema.
+	validationStmts := []string{
+		"SELECT last_run, num_runs FROM system.jobs LIMIT 0",
+		"SELECT num_runs, last_run, claim_instance_id from  system.jobs@jobs_run_stats_idx LIMIT 0",
+	}
+	validationSchemas := []Schema{
+		{name: "num_runs", validationFn: migrations.HasColumn},
+		{name: "last_run", validationFn: migrations.HasColumn},
+		{name: "jobs_run_stats_idx", validationFn: migrations.HasIndex},
+	}
+	validateSchemaExists(
+		t,
+		ctx,
+		s,
+		sqlDB,
+		keys.JobsTableID,
+		systemschema.JobsTable,
+		validationStmts,
+		validationSchemas,
+		false, /* expectExists */
+	)
 	// Run the migration.
-	migrate(t, sqlDB, false, nil)
+	migrate(
+		t,
+		sqlDB,
+		clusterversion.RetryJobsWithExponentialBackoff,
+		nil,   /* done */
+		false, /* expectError */
+	)
 	// Validate that the jobs table has new schema.
-	validateSchemaExists(t, ctx, s, sqlDB, true)
+	validateSchemaExists(
+		t,
+		ctx,
+		s,
+		sqlDB,
+		keys.JobsTableID,
+		systemschema.JobsTable,
+		validationStmts,
+		validationSchemas,
+		true, /* expectExists */
+	)
 	// Make sure that jobs work by running a job.
 	runGcJob(t, tdb)
 }
@@ -148,49 +191,49 @@ func TestMigrationWithFailures(t *testing.T) {
 	}{
 		{
 			name:                    "adding columns",
-			query:                   migrations.AddColsQuery,
+			query:                   addColsQuery,
 			waitForMigrationRestart: false, // Does not matter.
 			cancelSchemaJob:         false, // Does not matter.
 			expectedSkipped:         0,     // Will be ignored.
 		},
 		{
 			name:                    "adding index",
-			query:                   migrations.AddIndexQuery,
+			query:                   addIndexQuery,
 			waitForMigrationRestart: false, // Does not matter.
 			cancelSchemaJob:         false, // Does not matter.
 			expectedSkipped:         0,     // Will be ignored.
 		},
 		{
 			name:                    "fail adding columns",
-			query:                   migrations.AddColsQuery,
+			query:                   addColsQuery,
 			waitForMigrationRestart: true, // Need to wait to observe failing schema change.
 			cancelSchemaJob:         true, // To fail adding columns.
 			expectedSkipped:         0,
 		},
 		{
 			name:                    "fail adding index",
-			query:                   migrations.AddIndexQuery,
+			query:                   addIndexQuery,
 			waitForMigrationRestart: true, // Need to wait to observe failing schema change.
 			cancelSchemaJob:         true, // To fail adding index.
 			expectedSkipped:         1,    // Columns must not be added again.
 		},
 		{
 			name:                    "skip none",
-			query:                   migrations.AddColsQuery,
+			query:                   addColsQuery,
 			waitForMigrationRestart: true, // Need to wait to observe schema change and have correct expectedSkipped count.
 			cancelSchemaJob:         true, // To fail adding index and skip adding column.
 			expectedSkipped:         0,    // Both columns and index must be added.
 		},
 		{
 			name:                    "skip adding columns",
-			query:                   migrations.AddIndexQuery,
+			query:                   addIndexQuery,
 			waitForMigrationRestart: true, // Need to wait to observe schema change and have correct expectedSkipped count.
 			cancelSchemaJob:         true, // To fail adding index and skip adding column.
 			expectedSkipped:         1,    // Columns must not be added again.
 		},
 		{
 			name:                    "skip adding columns and index",
-			query:                   migrations.AddIndexQuery,
+			query:                   addIndexQuery,
 			waitForMigrationRestart: true,  // Need to wait to observe schema change and have correct expectedSkipped count.
 			cancelSchemaJob:         false, // To fail adding index and skip adding column.
 			expectedSkipped:         2,     // Both columns and index must not be added again.
@@ -256,14 +299,35 @@ func TestMigrationWithFailures(t *testing.T) {
 
 			tdb.Exec(t, "SET CLUSTER SETTING jobs.registry.interval.gc = '2ms'")
 			// Inject the old copy of the descriptor.
-			injectLegacyTable(t, ctx, s)
+			injectLegacyTable(t, ctx, s, systemschema.JobsTable, getDeprecatedJobsDescriptor)
 			// Validate that the jobs-table has old schema.
-			validateSchemaExists(t, ctx, s, sqlDB, false)
+			var (
+				validationStmts = []string{
+					"SELECT last_run, num_runs FROM system.jobs LIMIT 0",
+					"SELECT num_runs, last_run, claim_instance_id from  system.jobs@jobs_run_stats_idx LIMIT 0",
+				}
+				validationSchemas = []Schema{
+					{name: "num_runs", validationFn: migrations.HasColumn},
+					{name: "last_run", validationFn: migrations.HasColumn},
+					{name: "jobs_run_stats_idx", validationFn: migrations.HasIndex},
+				}
+			)
+			validateSchemaExists(
+				t,
+				ctx,
+				s,
+				sqlDB,
+				keys.JobsTableID,
+				systemschema.JobsTable,
+				validationStmts,
+				validationSchemas,
+				false, /* expectExists */
+			)
 			// Run the migration, expecting failure.
 			t.Log("trying migration, expecting to fail")
 			// Channel to wait for the migration job to complete.
 			finishChan := make(chan struct{})
-			go migrate(t, sqlDB, true, finishChan)
+			go migrate(t, sqlDB, clusterversion.RetryJobsWithExponentialBackoff, finishChan, true /* expectError */)
 
 			var migJobID jobspb.JobID
 			// Intercept the target schema-change job and get migration-job's ID.
@@ -326,7 +390,7 @@ func TestMigrationWithFailures(t *testing.T) {
 
 			// Restart the migration job.
 			t.Log("retrying migration, expecting to succeed")
-			go migrate(t, sqlDB, false, finishChan)
+			go migrate(t, sqlDB, clusterversion.RetryJobsWithExponentialBackoff, finishChan, false /* expectError */)
 
 			// Wait until the new migration job observes an existing mutation job.
 			if test.waitForMigrationRestart {
@@ -364,7 +428,17 @@ func TestMigrationWithFailures(t *testing.T) {
 			}
 
 			// Validate that the jobs table has new schema.
-			validateSchemaExists(t, ctx, s, sqlDB, true)
+			validateSchemaExists(
+				t,
+				ctx,
+				s,
+				sqlDB,
+				keys.JobsTableID,
+				systemschema.JobsTable,
+				validationStmts,
+				validationSchemas,
+				true, /* expectExists */
+			)
 			done <- struct{}{}
 			validateJobRetries(t, tdb, updateEventChan)
 		})
@@ -405,115 +479,6 @@ func waitUntilState(
 			"waiting for job %v to reach status %v, current status is %v",
 			jobID, expectedStatus, status)
 	})
-}
-
-// migrate runs cluster migration by changing the 'version' cluster setting.
-func migrate(t *testing.T, sqlDB *gosql.DB, expectError bool, done chan struct{}) {
-	defer func() {
-		if done != nil {
-			done <- struct{}{}
-		}
-	}()
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.RetryJobsWithExponentialBackoff).String())
-	if expectError {
-		assert.Error(t, err)
-		return
-	}
-	assert.NoError(t, err)
-}
-
-// injectLegacyTable overwrites the existing table descriptor with the previous
-// table descriptor.
-func injectLegacyTable(t *testing.T, ctx context.Context, s serverutils.TestServerInterface) {
-	err := s.CollectionFactory().(*descs.CollectionFactory).Txn(
-		ctx,
-		s.InternalExecutor().(sqlutil.InternalExecutor),
-		s.DB(),
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			id := systemschema.JobsTable.GetID()
-			tab, err := descriptors.GetMutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
-			if err != nil {
-				return err
-			}
-			builder := tabledesc.NewBuilder(deprecatedDescriptor())
-			require.NoError(t, builder.RunPostDeserializationChanges(ctx, nil))
-			tab.TableDescriptor = builder.BuildCreatedMutableTable().TableDescriptor
-			tab.Version = tab.ClusterVersion.Version + 1
-			return descriptors.WriteDesc(ctx, false, tab, txn)
-		})
-	require.NoError(t, err)
-}
-
-// validateSchemaExists validates whether the schema-changes of the system.jobs
-// table exist or not.
-func validateSchemaExists(
-	t *testing.T,
-	ctx context.Context,
-	s serverutils.TestServerInterface,
-	sqlDB *gosql.DB,
-	expectExists bool,
-) {
-	// First validate by reading the columns and the index.
-	for _, stmt := range []string{
-		"SELECT last_run, num_runs FROM system.jobs LIMIT 0",
-		"SELECT num_runs, last_run, claim_instance_id from system.jobs@jobs_run_stats_idx LIMIT 0",
-	} {
-		_, err := sqlDB.Exec(stmt)
-		if expectExists {
-			require.NoError(
-				t, err, "expected schema to exist, but unable to query it, using statement: %s", stmt,
-			)
-		} else {
-			require.Error(
-				t, err, "expected schema to not exist, but queried it successfully, using statement: %s", stmt,
-			)
-		}
-	}
-
-	// Manually verify the table descriptor.
-	storedTable := getJobsTable(t, ctx, s)
-	jTable := systemschema.JobsTable
-	str := "not have"
-	if expectExists {
-		str = "have"
-	}
-	for _, schema := range [...]struct {
-		name         string
-		validationFn func(catalog.TableDescriptor, catalog.TableDescriptor, string) (bool, error)
-	}{
-		{"num_runs", migrations.HasBackoffCols},
-		{"last_run", migrations.HasBackoffCols},
-		{"jobs_run_stats_idx", migrations.HasBackoffIndex},
-	} {
-		updated, err := schema.validationFn(storedTable, jTable, schema.name)
-		require.NoError(t, err)
-		require.Equal(t, expectExists, updated,
-			"expected jobs table to %s %s", str, schema)
-	}
-}
-
-// getJobsTable returns system.jobs table descriptor, reading it from storage.
-func getJobsTable(
-	t *testing.T, ctx context.Context, s serverutils.TestServerInterface,
-) catalog.TableDescriptor {
-	var table catalog.TableDescriptor
-	// Retrieve the jobs table.
-	err := s.CollectionFactory().(*descs.CollectionFactory).Txn(
-		ctx,
-		s.InternalExecutor().(sqlutil.InternalExecutor),
-		s.DB(),
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
-			table, err = descriptors.GetImmutableTableByID(ctx, txn, keys.JobsTableID, tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					AvoidCached: true,
-					Required:    true,
-				},
-			})
-			return err
-		})
-	require.NoError(t, err)
-	return table
 }
 
 // runGcJob creates and alters a dummy table to trigger jobs machinery,
@@ -581,9 +546,9 @@ func removeSpaces(stmt string) string {
 	return stmt
 }
 
-// deprecatedDescriptor returns the system.jobs table descriptor that was being used
+// getDeprecatedJobsDescriptor returns the system.jobs table descriptor that was being used
 // before adding two new columns and an index in the current version.
-func deprecatedDescriptor() *descpb.TableDescriptor {
+func getDeprecatedJobsDescriptor() *descpb.TableDescriptor {
 	uniqueRowIDString := "unique_rowid()"
 	nowString := "now():::TIMESTAMP"
 	pk := func(name string) descpb.IndexDescriptor {
