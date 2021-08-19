@@ -370,9 +370,17 @@ func ResolveExisting(
 		// schema name is for a virtual schema.
 		_, isVirtualSchema := catconstants.VirtualSchemaNames[u.Schema()]
 		if isVirtualSchema || curDb != "" {
-			if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, u.Schema(), u.Object()); found || err != nil {
+			if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, u.Schema(), u.Object()); found ||
+				err != nil || isVirtualSchema {
 				prefix.ExplicitDatabase = false
 				prefix.ExplicitSchema = true
+				if !found && err == nil && isVirtualSchema && prefix.Database == nil {
+					// If the database was not found during the lookup for a virtual schema
+					// we should return a database not found error. While normally we generate
+					// errors above this layer, we have no way of flagging if the looked up object
+					// was virtual schema.
+					err = sqlerrors.NewUndefinedDatabaseError(curDb)
+				}
 				return found, prefix, result, err
 			}
 		}
