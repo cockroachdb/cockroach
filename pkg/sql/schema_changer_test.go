@@ -6612,7 +6612,16 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 		defer jobCancellationsToFail.Unlock()
 		f(jobCancellationsToFail.jobs)
 	}
-	jobInterval := 100 * time.Millisecond
+	jobKnobs := jobs.NewTestingKnobsWithShortIntervals()
+	jobKnobs.BeforeUpdate = func(orig, updated jobs.JobMetadata) (err error) {
+		withJobsToFail(func(m map[jobspb.JobID]struct{}) {
+			if _, ok := m[orig.ID]; ok && updated.Status == jobs.StatusCanceled {
+				delete(m, orig.ID)
+				err = errors.Errorf("boom")
+			}
+		})
+		return err
+	}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
@@ -6620,22 +6629,7 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 				return nil
 			},
 		},
-		JobsTestingKnobs: &jobs.TestingKnobs{
-			BeforeUpdate: func(orig, updated jobs.JobMetadata) (err error) {
-				withJobsToFail(func(m map[jobspb.JobID]struct{}) {
-					if _, ok := m[orig.ID]; ok && updated.Status == jobs.StatusCanceled {
-						delete(m, orig.ID)
-						err = errors.Errorf("boom")
-					}
-				})
-				return err
-			},
-			// Decrease the adopt loop interval so that retries happen quickly.
-			IntervalOverrides: jobs.TestingIntervalOverrides{
-				Adopt:  &jobInterval,
-				Cancel: &jobInterval,
-			},
-		},
+		JobsTestingKnobs: jobKnobs,
 	}
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
