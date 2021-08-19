@@ -1312,18 +1312,6 @@ func backupPlanHook(
 			CreatedBy: backupStmt.CreatedByInfo,
 		}
 
-		spansToProtect := spans
-		// If this is a full cluster backup from the system tenant then we write a
-		// single protected timestamp record spanning the entire keyspace.
-		if backupStmt.Coverage() == tree.AllDescriptors {
-			if p.ExecCfg().Codec.ForSystemTenant() {
-				spansToProtect = []roachpb.Span{{
-					Key:    keys.TableDataMin,
-					EndKey: keys.TableDataMax,
-				}}
-			}
-		}
-
 		if backupStmt.Options.Detached {
 			// When running inside an explicit transaction, we simply create the job
 			// record. We do not wait for the job to finish.
@@ -1341,7 +1329,7 @@ func backupPlanHook(
 			// The protect timestamp logic for a DETACHED BACKUP can be run within the
 			// same txn as the BACKUP is being planned in, because we do not wait for
 			// the BACKUP job to complete.
-			err = protectTimestampForBackup(ctx, p, p.ExtendedEvalContext().Txn, jobID, spansToProtect,
+			err = protectTimestampForBackup(ctx, p, p.ExtendedEvalContext().Txn, jobID, spans,
 				startTime, endTime, backupDetails)
 			if err != nil {
 				return err
@@ -1375,8 +1363,7 @@ func backupPlanHook(
 			if err := doWriteBackupManifestCheckpoint(ctx, jobID); err != nil {
 				return err
 			}
-			if err := protectTimestampForBackup(ctx, p, plannerTxn, jobID, spansToProtect, startTime,
-				endTime, backupDetails); err != nil {
+			if err := protectTimestampForBackup(ctx, p, plannerTxn, jobID, spans, startTime, endTime, backupDetails); err != nil {
 				return err
 			}
 

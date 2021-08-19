@@ -102,6 +102,12 @@ function run_json_test() {
     rm -f "${fullfile}"
   fi
   rm -f "${tmpfile}" artifacts/stripped.txt
+
+  # Some unit tests test automatic ballast creation. These ballasts can be
+  # larger than the maximum artifact size. Remove any artifacts with the
+  # EMERGENCY_BALLAST filename.
+  find artifacts -name "EMERGENCY_BALLAST" -delete
+
   tc_end_block "artifacts"
 
   # Make it easier to figure out whether we're exiting because of a test failure

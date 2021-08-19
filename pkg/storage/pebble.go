@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -389,6 +390,10 @@ func DefaultPebbleOptions() *pebble.Options {
 	if diskHealthCheckInterval.Seconds() > maxSyncDurationDefault.Seconds() {
 		diskHealthCheckInterval = maxSyncDurationDefault
 	}
+	// If we encounter ENOSPC, exit with an informative exit code.
+	opts.FS = vfs.OnDiskFull(opts.FS, func() {
+		exit.WithCode(exit.DiskFull())
+	})
 	// Instantiate a file system with disk health checking enabled. This FS wraps
 	// vfs.Default, and can be wrapped for encryption-at-rest.
 	opts.FS = vfs.WithDiskHealthChecks(vfs.Default, diskHealthCheckInterval,
@@ -443,11 +448,14 @@ type EncryptionStatsHandler interface {
 type Pebble struct {
 	db *pebble.DB
 
-	closed  bool
-	path    string
-	auxDir  string
-	maxSize int64
-	attrs   roachpb.Attributes
+	closed      bool
+	readOnly    bool
+	path        string
+	auxDir      string
+	ballastPath string
+	ballastSize int64
+	maxSize     int64
+	attrs       roachpb.Attributes
 	// settings must be non-nil if this Pebble instance will be used to write
 	// intents.
 	settings     *cluster.Settings
@@ -558,6 +566,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
 		return nil, err
 	}
+	ballastPath := base.EmergencyBallastFile(cfg.Opts.FS.PathJoin, cfg.Dir)
 
 	fileRegistry, statsHandler, err := ResolveEncryptedEnvOptions(&cfg)
 	if err != nil {
@@ -577,9 +586,34 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		ctx:   logCtx,
 		depth: 1,
 	}
+
+	// Establish the emergency ballast if we can. If there's not sufficient
+	// disk space, the ballast will be reestablished from Capacity when the
+	// store's capacity is queried periodically.
+	if !cfg.Opts.ReadOnly {
+		du, err := cfg.Opts.FS.GetDiskUsage(cfg.Dir)
+		// If the FS is an in-memory FS, GetDiskUsage returns
+		// vfs.ErrUnsupported and we skip ballast creation.
+		if err != nil && !errors.Is(err, vfs.ErrUnsupported) {
+			return nil, errors.Wrap(err, "retrieving disk usage")
+		} else if err == nil {
+			resized, err := maybeEstablishBallast(cfg.Opts.FS, ballastPath, cfg.BallastSize, du)
+			if err != nil {
+				return nil, errors.Wrap(err, "resizing ballast")
+			}
+			if resized {
+				cfg.Opts.Logger.Infof("resized ballast %s to size %s",
+					ballastPath, humanizeutil.IBytes(cfg.BallastSize))
+			}
+		}
+	}
+
 	p := &Pebble{
+		readOnly:                cfg.Opts.ReadOnly,
 		path:                    cfg.Dir,
 		auxDir:                  auxDir,
+		ballastPath:             ballastPath,
+		ballastSize:             cfg.BallastSize,
 		maxSize:                 cfg.MaxSize,
 		attrs:                   cfg.Attrs,
 		settings:                cfg.Settings,
@@ -951,7 +985,15 @@ func (p *Pebble) Attrs() roachpb.Attributes {
 // Capacity implements the Engine interface.
 func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	dir := p.path
-	if dir == "" {
+	if dir != "" {
+		var err error
+		// Eval directory if it is a symbolic links.
+		if dir, err = filepath.EvalSymlinks(dir); err != nil {
+			return roachpb.StoreCapacity{}, err
+		}
+	}
+	du, err := p.fs.GetDiskUsage(dir)
+	if errors.Is(err, vfs.ErrUnsupported) {
 		// This is an in-memory instance. Pretend we're empty since we
 		// don't know better and only use this for testing. Using any
 		// part of the actual file system here can throw off allocator
@@ -960,14 +1002,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 			Capacity:  p.maxSize,
 			Available: p.maxSize,
 		}, nil
-	}
-	var err error
-	// Eval directory if it is a symbolic links.
-	if dir, err = filepath.EvalSymlinks(dir); err != nil {
-		return roachpb.StoreCapacity{}, err
-	}
-	du, err := p.fs.GetDiskUsage(dir)
-	if err != nil {
+	} else if err != nil {
 		return roachpb.StoreCapacity{}, err
 	}
 
@@ -981,6 +1016,25 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	}
 	fsuTotal := int64(du.TotalBytes)
 	fsuAvail := int64(du.AvailBytes)
+
+	// If the emergency ballast isn't appropriately sized, try to resize it.
+	// This is a no-op if the ballast is already sized or if there's not
+	// enough available capacity to resize it. Capacity is called periodically
+	// by the kvserver, and that drives the automatic resizing of the ballast.
+	if !p.readOnly {
+		resized, err := maybeEstablishBallast(p.fs, p.ballastPath, p.ballastSize, du)
+		if err != nil {
+			return roachpb.StoreCapacity{}, errors.Wrap(err, "resizing ballast")
+		}
+		if resized {
+			p.logger.Infof("resized ballast %s to size %s",
+				p.ballastPath, humanizeutil.IBytes(p.ballastSize))
+			du, err = p.fs.GetDiskUsage(dir)
+			if err != nil {
+				return roachpb.StoreCapacity{}, err
+			}
+		}
+	}
 
 	// Pebble has detailed accounting of its own disk space usage, and it's
 	// incrementally updated which helps avoid O(# files) work here.
@@ -1004,6 +1058,12 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 				return nil
 			}
 			return err
+		}
+		if path == p.ballastPath {
+			// Skip the ballast. Counting it as used is likely to confuse
+			// users, and it's more akin to space that is just unavailable
+			// like disk space often restricted to a root user.
+			return nil
 		}
 		if info.Mode().IsRegular() {
 			totalUsedBytes += info.Size()
