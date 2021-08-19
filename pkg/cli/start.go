@@ -93,7 +93,7 @@ To initialize the cluster, use 'cockroach init'.
 `,
 	Example: `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 --join=host:port,[host:port]`,
 	Args:    cobra.NoArgs,
-	RunE:    maybeShoutError(MaybeDecorateGRPCError(runStartJoin)),
+	RunE:    MaybeShoutError(MaybeDecorateGRPCError(runStartJoin)),
 }
 
 // startSingleNodeCmd starts a node by initializing the stores.
@@ -108,7 +108,7 @@ replication disabled (replication factor = 1).
 `,
 	Example: `  cockroach start-single-node --insecure --store=attrs=ssd,path=/mnt/ssd1`,
 	Args:    cobra.NoArgs,
-	RunE:    maybeShoutError(MaybeDecorateGRPCError(runStartSingleNode)),
+	RunE:    MaybeShoutError(MaybeDecorateGRPCError(runStartSingleNode)),
 }
 
 // StartCmds lists the commands that start KV nodes as a server.

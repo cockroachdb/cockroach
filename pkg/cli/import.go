@@ -30,7 +30,7 @@ var importDumpFileCmd = &cobra.Command{
 Uploads and imports a local dump file into the cockroach cluster via userfile storage.
 `,
 	Args: cobra.MinimumNArgs(2),
-	RunE: maybeShoutError(runDumpFileImport),
+	RunE: MaybeShoutError(runDumpFileImport),
 }
 
 var importDumpTableCmd = &cobra.Command{
@@ -40,7 +40,7 @@ var importDumpTableCmd = &cobra.Command{
 Uploads and imports a table from the local dump file into the cockroach cluster via userfile storage.
 `,
 	Args: cobra.MinimumNArgs(3),
-	RunE: maybeShoutError(runDumpTableImport),
+	RunE: MaybeShoutError(runDumpTableImport),
 }
 
 // importCLITestingKnobs are set when the CLI import command is run from a unit

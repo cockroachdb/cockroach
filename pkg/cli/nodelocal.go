@@ -37,7 +37,7 @@ var nodeLocalUploadCmd = &cobra.Command{
 Uploads a file to a gateway node's local file system using a SQL connection.
 `,
 	Args: cobra.MinimumNArgs(2),
-	RunE: maybeShoutError(runUpload),
+	RunE: MaybeShoutError(runUpload),
 }
 
 func runUpload(cmd *cobra.Command, args []string) (resErr error) {
