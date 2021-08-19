@@ -42,7 +42,7 @@ example, to install man pages globally on many Unix-like systems,
 use "--path=/usr/local/share/man/man1".
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runGenManCmd),
+	RunE: MaybeDecorateError(runGenManCmd),
 }
 
 func runGenManCmd(cmd *cobra.Command, args []string) error {
@@ -97,7 +97,7 @@ instructions.
 `,
 	Args:      cobra.OnlyValidArgs,
 	ValidArgs: []string{"bash", "zsh", "fish"},
-	RunE:      MaybeDecorateGRPCError(runGenAutocompleteCmd),
+	RunE:      MaybeDecorateError(runGenAutocompleteCmd),
 }
 
 func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {

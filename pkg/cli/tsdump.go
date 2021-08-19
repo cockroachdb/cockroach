@@ -39,7 +39,7 @@ var debugTimeSeriesDumpCmd = &cobra.Command{
 	Long: `
 Dumps all of the raw timeseries values in a cluster.
 `,
-	RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, args []string) error {
+	RunE: MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 

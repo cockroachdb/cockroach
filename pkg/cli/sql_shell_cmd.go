@@ -29,7 +29,7 @@ var sqlShellCmd = &cobra.Command{
 Open a sql shell running against a cockroach database.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runTerm),
+	RunE: MaybeDecorateError(runTerm),
 }
 
 func runTerm(cmd *cobra.Command, args []string) (resErr error) {

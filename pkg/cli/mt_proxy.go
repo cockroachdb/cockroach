@@ -33,7 +33,7 @@ var mtStartSQLProxyCmd = &cobra.Command{
 This proxy accepts incoming connections and relays them to a backend server
 determined by the arguments used.
 `,
-	RunE: MaybeDecorateGRPCError(runStartSQLProxy),
+	RunE: MaybeDecorateError(runStartSQLProxy),
 	Args: cobra.NoArgs,
 }
 

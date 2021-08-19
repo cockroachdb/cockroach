@@ -63,7 +63,7 @@ var placeholderPairs []string
 var explainPrefix string
 
 func init() {
-	statementBundleRecreateCmd.RunE = MaybeDecorateGRPCError(func(cmd *cobra.Command, args []string) error {
+	statementBundleRecreateCmd.RunE = MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		return runBundleRecreate(cmd, args)
 	})
 

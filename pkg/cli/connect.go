@@ -52,7 +52,7 @@ Connects to other nodes and negotiates an initialization bundle for use with
 secure inter-node connections.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runConnectInit),
+	RunE: MaybeDecorateError(runConnectInit),
 }
 
 // runConnectInit connects to other nodes and negotiates an initialization bundle

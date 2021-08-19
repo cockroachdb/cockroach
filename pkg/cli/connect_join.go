@@ -37,7 +37,7 @@ var connectJoinCmd = &cobra.Command{
 	Use:   "join <join-token>",
 	Short: "request the TLS certs for a new node from an existing node",
 	Args:  cobra.MinimumNArgs(1),
-	RunE:  MaybeDecorateGRPCError(runConnectJoin),
+	RunE:  MaybeDecorateError(runConnectJoin),
 }
 
 func requestPeerCA(
