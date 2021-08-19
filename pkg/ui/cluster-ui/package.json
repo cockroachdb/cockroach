@@ -41,7 +41,7 @@
     "@cockroachlabs/crdb-protobuf-client": "file:../src/js",
     "@cockroachlabs/eslint-config": "^0.1.3",
     "@cockroachlabs/icons": "0.3.0",
-    "@cockroachlabs/ui-components": "0.2.19-alpha.2",
+    "@cockroachlabs/ui-components": "0.2.19-alpha.11",
     "@popperjs/core": "^2.4.0",
     "@reduxjs/toolkit": "^1.5.0",
     "@storybook/addon-actions": "^6.1.21",
