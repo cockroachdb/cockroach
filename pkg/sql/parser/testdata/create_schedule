@@ -60,3 +60,7 @@ CREATE SCHEDULE FOR BACKUP INTO ('bar') WITH revision_history RECURRING ('@daily
 CREATE SCHEDULE FOR BACKUP INTO _ WITH revision_history RECURRING _ FULL BACKUP _ WITH SCHEDULE OPTIONS foo = _ -- literals removed
 REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
 CREATE SCHEDULE FOR BACKUP INTO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly' WITH SCHEDULE OPTIONS _ = 'bar' -- identifiers removed
+
+parse
+CREATE SCHEDULE IF NOT EXISTS FOR BACKUP INTO 'bar' WITH revision_history
+----

@@ -275,7 +275,11 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 	}
 
 	node := &tree.ScheduledBackup{
-		ScheduleLabel:   tree.NewDString(sj.ScheduleLabel()),
+		// ScheduleLabelSpec.IfNotExists is always set to false here as this attribute is only relevant
+		// during the createBackupScheduleHook function which has already been called and will not
+		// get called again.
+		ScheduleLabelSpec: &tree.ScheduleLabelSpec{false,
+			tree.NewDString(sj.ScheduleLabel())},
 		Recurrence:      tree.NewDString(recurrence),
 		FullBackup:      fullBackup,
 		Targets:         backupNode.Targets,
