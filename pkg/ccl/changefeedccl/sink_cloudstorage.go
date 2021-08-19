@@ -312,6 +312,12 @@ func makeCloudStorageSink(
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user security.SQLUsername,
 ) (Sink, error) {
+	// cloud storage sink has no sink-specific options
+	err := validateSinkOptions(opts, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
 		var err error
@@ -373,7 +379,6 @@ func makeCloudStorageSink(
 		}
 	}
 
-	var err error
 	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user); err != nil {
 		return nil, err
 	}

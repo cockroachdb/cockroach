@@ -162,7 +162,8 @@ func testingSetMaxLogIgnoredImportStatements(maxLogSize int) (cleanup func()) {
 	}
 }
 
-func makeStringSet(opts ...string) map[string]struct{} {
+// MakeStringSet returns a set of strings
+func MakeStringSet(opts ...string) map[string]struct{} {
 	res := make(map[string]struct{}, len(opts))
 	for _, opt := range opts {
 		res[opt] = struct{}{}
@@ -171,25 +172,25 @@ func makeStringSet(opts ...string) map[string]struct{} {
 }
 
 // Options common to all formats.
-var allowedCommonOptions = makeStringSet(
+var allowedCommonOptions = MakeStringSet(
 	importOptionSSTSize, importOptionDecompress, importOptionOversample,
 	importOptionSaveRejected, importOptionDisableGlobMatch, importOptionDetached)
 
 // Format specific allowed options.
-var avroAllowedOptions = makeStringSet(
+var avroAllowedOptions = MakeStringSet(
 	avroStrict, avroBinRecords, avroJSONRecords,
 	avroRecordsSeparatedBy, avroSchema, avroSchemaURI, optMaxRowSize, csvRowLimit,
 )
-var csvAllowedOptions = makeStringSet(
+var csvAllowedOptions = MakeStringSet(
 	csvDelimiter, csvComment, csvNullIf, csvSkip, csvStrictQuotes, csvRowLimit,
 )
-var mysqlOutAllowedOptions = makeStringSet(
+var mysqlOutAllowedOptions = MakeStringSet(
 	mysqlOutfileRowSep, mysqlOutfileFieldSep, mysqlOutfileEnclose,
 	mysqlOutfileEscape, csvNullIf, csvSkip, csvRowLimit,
 )
-var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
-var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
-var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit,
+var mysqlDumpAllowedOptions = MakeStringSet(importOptionSkipFKs, csvRowLimit)
+var pgCopyAllowedOptions = MakeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
+var pgDumpAllowedOptions = MakeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit,
 	pgDumpIgnoreAllUnsupported, pgDumpIgnoreShuntFileDest)
 
 // DROP is required because the target table needs to be take offline during

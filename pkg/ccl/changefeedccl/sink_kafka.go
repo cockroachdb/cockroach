@@ -614,6 +614,11 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 func makeKafkaSink(
 	ctx context.Context, u sinkURL, targets jobspb.ChangefeedTargets, opts map[string]string,
 ) (Sink, error) {
+	err := validateSinkOptions(opts, changefeedbase.ChangefeedOptionsKafkaSink)
+	if err != nil {
+		return nil, err
+	}
+
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
 	if schemaTopic := u.consumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {

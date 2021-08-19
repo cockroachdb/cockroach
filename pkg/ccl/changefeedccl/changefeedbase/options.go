@@ -8,7 +8,10 @@
 
 package changefeedbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql"
+import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+)
 
 // EnvelopeType configures the information in the changefeed events for a row.
 type EnvelopeType string
@@ -160,3 +163,19 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptWebhookClientTimeout:     sql.KVStringOptRequireValue,
 	OptOnError:                  sql.KVStringOptRequireValue,
 }
+
+// ChangefeedOptionsAllSinks is options common to all sinks
+var ChangefeedOptionsAllSinks = importccl.MakeStringSet(OptCursor, OptEnvelope,
+	OptFormat, OptFullTableName,
+	OptKeyInValue, OptTopicInValue,
+	OptResolvedTimestamps, OptUpdatedTimestamps,
+	OptMVCCTimestamps, OptDiff,
+	OptSchemaChangeEvents, OptSchemaChangePolicy,
+	OptProtectDataFromGCOnPause, OptOnError,
+	OptInitialScan, OptNoInitialScan)
+
+// ChangefeedOptionsKafkaSink is options exclusive to Kafka sink
+var ChangefeedOptionsKafkaSink = importccl.MakeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig)
+
+// ChangefeedOptionsWebhookSink is options exclusive to webhook sink
+var ChangefeedOptionsWebhookSink = importccl.MakeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig)

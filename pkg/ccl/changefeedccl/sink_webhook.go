@@ -180,6 +180,11 @@ func makeWebhookSink(
 	parallelism int,
 	source timeutil.TimeSource,
 ) (Sink, error) {
+	err := validateSinkOptions(opts, changefeedbase.ChangefeedOptionsWebhookSink)
+	if err != nil {
+		return nil, err
+	}
+
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
 	}
@@ -231,7 +236,6 @@ func makeWebhookSink(
 		ts:          source,
 	}
 
-	var err error
 	sink.batchCfg, sink.retryCfg, err = sink.getWebhookSinkConfig(opts)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error processing option %s", changefeedbase.OptWebhookSinkConfig)

@@ -124,6 +124,21 @@ func getSink(
 	return sink, nil
 }
 
+func validateSinkOptions(opts map[string]string, sinkSpecificOpts map[string]struct{}) error {
+	for opt := range opts {
+		if _, ok := changefeedbase.ChangefeedOptionsAllSinks[opt]; ok {
+			continue
+		}
+		if sinkSpecificOpts != nil {
+			if _, ok := sinkSpecificOpts[opt]; ok {
+				continue
+			}
+		}
+		return errors.Errorf("this sink is incompatible with option %s", opt)
+	}
+	return nil
+}
+
 // sinkURL is a helper struct which for "consuming" URL query
 // parameters from the underlying URL.
 type sinkURL struct {
