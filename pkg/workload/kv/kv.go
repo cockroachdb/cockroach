@@ -441,7 +441,10 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 			return err
 		}
 		defer func() {
-			retErr = errors.CombineErrors(retErr, tx.Rollback(ctx))
+			rollbackErr := tx.Rollback(ctx)
+			if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				retErr = errors.CombineErrors(retErr, rollbackErr)
+			}
 		}()
 		rows, err := o.sfuStmt.QueryTx(ctx, tx, sfuArgs...)
 		if err != nil {
