@@ -268,18 +268,7 @@ func Example_format_error() {
 	c := NewCLITest(TestCLIParams{NoServer: true})
 	defer c.Cleanup()
 
-	header := `
-I210801 21:05:59.364923 1 util/log/sync_buffer.go:70  [config] binary: CockroachDB CCL v20.1.17 (x86_64-apple-darwin14, built 2021/05/17 16:30:22,
-I210801 21:05:59.364923 1 util/log/sync_buffer.go:70  [config] arguments: [./cockroach start]
-I210801 21:05:59.364923 1 util/log/sync_buffer.go:70  line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=✓
-`
-
-	testDir := createTestDir([]logFile{
-		{"cockroach-data.log", header},
-	})
-	defer os.RemoveAll(testDir)
-
-	c.RunWithArgs([]string{"debug", "merge-logs", testDir})
+	c.RunWithArgs([]string{"debug", "merge-logs", "testdata/merge_logs_v1/missing_format"})
 
 	// Output:
 	// debug merge-logs .
