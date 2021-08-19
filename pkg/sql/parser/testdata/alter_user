@@ -301,3 +301,43 @@ ALTER ROLE ALL RESET ALL
 ALTER ROLE ALL RESET ALL -- fully parenthesized
 ALTER ROLE ALL RESET ALL -- literals removed
 ALTER ROLE ALL RESET ALL -- identifiers removed
+
+parse
+ALTER DATABASE d SET application_name = 'app'
+----
+ALTER ROLE ALL IN DATABASE d SET application_name = 'app' -- normalized!
+ALTER ROLE ALL IN DATABASE d SET application_name = ('app') -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d SET application_name = _ -- literals removed
+ALTER ROLE ALL IN DATABASE _ SET application_name = 'app' -- identifiers removed
+
+parse
+ALTER DATABASE d RESET application_name
+----
+ALTER ROLE ALL IN DATABASE d SET application_name = DEFAULT -- normalized!
+ALTER ROLE ALL IN DATABASE d SET application_name = (DEFAULT) -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d SET application_name = DEFAULT -- literals removed
+ALTER ROLE ALL IN DATABASE _ SET application_name = DEFAULT -- identifiers removed
+
+parse
+ALTER DATABASE d RESET ALL
+----
+ALTER ROLE ALL IN DATABASE d RESET ALL -- normalized!
+ALTER ROLE ALL IN DATABASE d RESET ALL -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d RESET ALL -- literals removed
+ALTER ROLE ALL IN DATABASE _ RESET ALL -- identifiers removed
+
+parse
+ALTER DATABASE d SET application_name TO DEFAULT
+----
+ALTER ROLE ALL IN DATABASE d SET application_name = DEFAULT -- normalized!
+ALTER ROLE ALL IN DATABASE d SET application_name = (DEFAULT) -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d SET application_name = DEFAULT -- literals removed
+ALTER ROLE ALL IN DATABASE _ SET application_name = DEFAULT -- identifiers removed
+
+parse
+ALTER DATABASE d SET application_name TO 'app'
+----
+ALTER ROLE ALL IN DATABASE d SET application_name = 'app' -- normalized!
+ALTER ROLE ALL IN DATABASE d SET application_name = ('app') -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d SET application_name = _ -- literals removed
+ALTER ROLE ALL IN DATABASE _ SET application_name = 'app' -- identifiers removed

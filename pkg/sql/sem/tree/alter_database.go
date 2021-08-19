@@ -112,6 +112,6 @@ var _ Statement = &AlterDatabasePlacement{}
 func (node *AlterDatabasePlacement) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
-	ctx.WriteString(" SET ")
+	ctx.WriteString(" ")
 	node.Placement.Format(ctx)
 }
