@@ -4361,3 +4361,24 @@ CREATE TABLE b (b INT, FOREIGN KEY (b) REFERENCES a (a) ON DELETE CASCADE);
 
 statement ok
 DELETE FROM a WHERE EXISTS (SELECT a FROM a)
+
+# Regression test for #68746.
+statement ok
+CREATE TABLE users (
+  user_id INT PRIMARY KEY,
+  region UUID NOT NULL,
+  UNIQUE (region, user_id),
+  CHECK (region IN ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'))
+);
+CREATE TABLE posts (
+  user_id INT NOT NULL,
+  region UUID NOT NULL,
+  post_id INT NOT NULL,
+  PRIMARY KEY (region, user_id, post_id),
+  FOREIGN KEY (region, user_id) REFERENCES users (region, user_id) ON UPDATE CASCADE
+);
+INSERT INTO users (user_id, region) VALUES (1, '00000000-0000-0000-0000-000000000001');
+INSERT INTO posts (user_id, region, post_id) VALUES (1, '00000000-0000-0000-0000-000000000001', 1);
+
+statement ok
+UPDATE users SET region = '00000000-0000-0000-0000-000000000002' WHERE user_id = 1;
