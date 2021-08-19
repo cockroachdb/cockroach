@@ -50,7 +50,6 @@ go_library(
         "import.go",
         "inconsistency.go",
         "indexes.go",
-        "interleavedpartitioned.go",
         "inverted_index.go",
         "java_helpers.go",
         "jepsen.go",
