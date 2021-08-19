@@ -51,7 +51,7 @@ module.exports = (env, argv) => {
     entry: ["./src/index.tsx"],
     output: {
       filename: "bundle.js",
-      path: path.resolve(__dirname, "../..", `dist${env.dist}`),
+      path: path.resolve(__dirname, "../..", `dist${env.dist}`, "assets"),
     },
 
     mode: argv.mode || "production",
@@ -164,7 +164,7 @@ module.exports = (env, argv) => {
         manifest: require("./vendor.oss.manifest.json"),
       }),
       new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),
-      new VisualizerPlugin({ filename: `../dist/stats.${env.dist}.html` }),
+      new VisualizerPlugin({ filename: `../../dist/stats.${env.dist}.html` }),
       // use WebpackBar instead of webpack dashboard to fit multiple webpack dev server outputs (db-console and cluster-ui)
       new WebpackBar({
         name: "db-console",
