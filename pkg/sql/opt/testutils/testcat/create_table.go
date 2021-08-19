@@ -528,7 +528,10 @@ func (tt *Table) addUniqueConstraint(
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	ordinal := len(tt.Columns)
 	nullable := !def.PrimaryKey.IsPrimaryKey && def.Nullable.Nullability != tree.NotNull
-	typ := tree.MustBeStaticallyKnownType(def.Type)
+	typ, err := tree.ResolveType(context.Background(), def.Type, tt.Catalog)
+	if err != nil {
+		panic(err)
+	}
 
 	name := def.Name
 	kind := cat.Ordinary
