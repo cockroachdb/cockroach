@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -980,14 +979,10 @@ func TestServeIndexHTML(t *testing.T) {
 `
 
 	linkInFakeUI := func() {
-		ui.Asset = func(string) (_ []byte, _ error) { return }
-		ui.AssetDir = func(name string) (_ []string, _ error) { return }
-		ui.AssetInfo = func(name string) (_ os.FileInfo, _ error) { return }
+		ui.HaveUI = true
 	}
 	unlinkFakeUI := func() {
-		ui.Asset = nil
-		ui.AssetDir = nil
-		ui.AssetInfo = nil
+		ui.HaveUI = false
 	}
 
 	t.Run("Insecure mode", func(t *testing.T) {

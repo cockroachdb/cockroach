@@ -10,6 +10,5 @@ go_library(
         "//pkg/build",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_elazarl_go_bindata_assetfs//:go-bindata-assetfs",
     ],
 )
