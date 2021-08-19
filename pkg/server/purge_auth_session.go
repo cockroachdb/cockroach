@@ -15,6 +15,7 @@ import (
 	math_rand "math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -65,7 +66,11 @@ func startPurgeOldSessions(ctx context.Context, s *authenticationServer) error {
 			select {
 			case <-timer.C:
 				timer.Read = true
-				s.purgeOldSessions(ctx)
+				// TODO(cameron): Make the call to purgeOldSessions unconditional
+				// once the web sessions migration code is removed.
+				if s.server.cfg.Settings.Version.IsActive(ctx, clusterversion.AlterSystemWebSessionsCreateIndexes) {
+					s.purgeOldSessions(ctx)
+				}
 			case <-s.server.stopper.ShouldQuiesce():
 				return
 			case <-ctx.Done():
