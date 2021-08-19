@@ -30,23 +30,6 @@ const defaultKeySize = 2048
 const defaultCALifetime = 10 * 366 * 24 * time.Hour  // ten years
 const defaultCertLifetime = 5 * 366 * 24 * time.Hour // five years
 
-// Options settable via command-line flags. See below for defaults.
-var keySize int
-var caCertificateLifetime time.Duration
-var certificateLifetime time.Duration
-var allowCAKeyReuse bool
-var overwriteFiles bool
-var generatePKCS8Key bool
-
-func initPreFlagsCertDefaults() {
-	keySize = defaultKeySize
-	caCertificateLifetime = defaultCALifetime
-	certificateLifetime = defaultCertLifetime
-	allowCAKeyReuse = false
-	overwriteFiles = false
-	generatePKCS8Key = false
-}
-
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
 var createCACertCmd = &cobra.Command{
@@ -68,12 +51,12 @@ If the CA certificate exists and --overwrite is true, the new CA certificate is 
 func runCreateCACert(cmd *cobra.Command, args []string) error {
 	return errors.Wrap(
 		security.CreateCAPair(
-			baseCfg.SSLCertsDir,
-			baseCfg.SSLCAKey,
-			keySize,
-			caCertificateLifetime,
-			allowCAKeyReuse,
-			overwriteFiles),
+			certCtx.certsDir,
+			certCtx.caKey,
+			certCtx.keySize,
+			certCtx.caCertificateLifetime,
+			certCtx.allowCAKeyReuse,
+			certCtx.overwriteFiles),
 		"failed to generate CA cert and key")
 }
 
@@ -106,12 +89,12 @@ Once the client.node.crt exists, all client certificates will be verified using 
 func runCreateClientCACert(cmd *cobra.Command, args []string) error {
 	return errors.Wrap(
 		security.CreateClientCAPair(
-			baseCfg.SSLCertsDir,
-			baseCfg.SSLCAKey,
-			keySize,
-			caCertificateLifetime,
-			allowCAKeyReuse,
-			overwriteFiles),
+			certCtx.certsDir,
+			certCtx.caKey,
+			certCtx.keySize,
+			certCtx.caCertificateLifetime,
+			certCtx.allowCAKeyReuse,
+			certCtx.overwriteFiles),
 		"failed to generate client CA cert and key")
 }
 
@@ -148,11 +131,11 @@ Creation fails if the CA expiration time is before the desired certificate expir
 func runCreateNodeCert(cmd *cobra.Command, args []string) error {
 	return errors.Wrap(
 		security.CreateNodePair(
-			baseCfg.SSLCertsDir,
-			baseCfg.SSLCAKey,
-			keySize,
-			certificateLifetime,
-			overwriteFiles,
+			certCtx.certsDir,
+			certCtx.caKey,
+			certCtx.keySize,
+			certCtx.certificateLifetime,
+			certCtx.overwriteFiles,
 			args),
 		"failed to generate node certificate and key")
 }
@@ -188,13 +171,13 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 
 	return errors.Wrap(
 		security.CreateClientPair(
-			baseCfg.SSLCertsDir,
-			baseCfg.SSLCAKey,
-			keySize,
-			certificateLifetime,
-			overwriteFiles,
+			certCtx.certsDir,
+			certCtx.caKey,
+			certCtx.keySize,
+			certCtx.certificateLifetime,
+			certCtx.overwriteFiles,
 			username,
-			generatePKCS8Key),
+			certCtx.generatePKCS8Key),
 		"failed to generate client certificate and key")
 }
 
@@ -307,8 +290,10 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 var certCmds = []*cobra.Command{
 	createCACertCmd,
 	createClientCACertCmd,
+	mtCreateTenantClientCACertCmd,
 	createNodeCertCmd,
 	createClientCertCmd,
+	mtCreateTenantClientCertCmd,
 	listCertsCmd,
 }
 
