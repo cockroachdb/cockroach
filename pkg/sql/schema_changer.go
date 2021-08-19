@@ -1401,11 +1401,12 @@ func maybeUpdateZoneConfigsForPKChange(
 	table *tabledesc.Mutable,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
-	if !execCfg.Codec.ForSystemTenant() {
-		// Tenants are agnostic to zone configs.
+	if !ZonesTableExists(ctx, execCfg.Codec, execCfg.Settings.Version) {
+		// Tenants are agnostic to zone configs if they don't have a zones table.
 		return nil
 	}
-	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, table.ID)
+
+	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, table.ID)
 	if err != nil {
 		return err
 	}
@@ -2201,8 +2202,12 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 				return err
 			}
 			// If there are no tables to GC, the zone config needs to be deleted now.
-			if p.ExecCfg().Codec.ForSystemTenant() && len(details.DroppedTables) == 0 {
-				zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(dbID))
+			//
+			// NB: Secondary tenants prior to the introduction of system.zones could
+			// not set zone configurations, so there's nothing to do for them.
+			if ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings.Version) &&
+				len(details.DroppedTables) == 0 {
+				zoneKeyPrefix := config.MakeZoneKeyPrefix(p.ExecCfg().Codec, dbID)
 				if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 					log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 				}
@@ -2514,7 +2519,7 @@ func DeleteTableDescAndZoneConfig(
 		b.Del(descKey)
 		// Delete the zone config entry for this table, if necessary.
 		if codec.ForSystemTenant() {
-			zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(tableDesc.GetID()))
+			zoneKeyPrefix := config.MakeZoneKeyPrefix(codec, tableDesc.GetID())
 			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		}
 		return txn.Run(ctx, b)
