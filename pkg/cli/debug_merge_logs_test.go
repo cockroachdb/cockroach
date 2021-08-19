@@ -219,7 +219,12 @@ func (c testCase) run(t *testing.T) {
 			t.Fatalf("Failed to set flag to default: %v", err)
 		}
 	})
+
 	debugMergeLogsCmd.SetOut(&outBuf)
+	// Ensure that the original writer is restored when the test
+	// completes. Otherwise, subsequent tests may not see their output.
+	defer debugMergeLogsCmd.SetOut(nil)
+
 	if err := debugMergeLogsCmd.ParseFlags(c.flags); err != nil {
 		t.Fatalf("Failed to set flags: %v", err)
 	}
@@ -268,9 +273,9 @@ func Example_format_error() {
 	c := NewCLITest(TestCLIParams{NoServer: true})
 	defer c.Cleanup()
 
-	c.RunWithArgs([]string{"debug", "merge-logs", "testdata/merge_logs_v1/missing_format"})
+	c.RunWithArgs([]string{"debug", "merge-logs", "testdata/merge_logs_v1/missing_format/*"})
 
 	// Output:
-	// debug merge-logs .
+	// debug merge-logs testdata/merge_logs_v1/missing_format/*
 	// ERROR: decoding format: failed to extract log file format from the log
 }
