@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -73,7 +72,14 @@ tables are queried either from a live cluster or from an unzipped debug.zip.
 `,
 }
 
-func makeZipDirCommand() *cobra.Command {
+type doctorFn = func(
+	descTable doctor.DescriptorTable,
+	namespaceTable doctor.NamespaceTable,
+	jobsTable doctor.JobsTable,
+	out io.Writer,
+) (err error)
+
+func makeZipDirCommand(fn doctorFn) *cobra.Command {
 	return &cobra.Command{
 		Use:   "zipdir <debug_zip_dir>",
 		Short: "run doctor tool on data from an unzipped debug.zip",
@@ -87,12 +93,12 @@ requires the path of the unzipped 'debug' directory as its argument.
 			if err != nil {
 				return err
 			}
-			return runDoctor(cmd.Parent().Name(), descs, ns, jobs, os.Stdout)
+			return fn(descs, ns, jobs, os.Stdout)
 		},
 	}
 }
 
-func makeClusterCommand() *cobra.Command {
+func makeClusterCommand(fn doctorFn) *cobra.Command {
 	return &cobra.Command{
 		Use:   "cluster --url=<cluster connection string>",
 		Short: "run doctor tool on live cockroach cluster",
@@ -111,7 +117,7 @@ Run the doctor tool system data from a live cluster specified by --url.
 				if err != nil {
 					return err
 				}
-				return runDoctor(cmd.Parent().Name(), descs, ns, jobs, os.Stdout)
+				return fn(descs, ns, jobs, os.Stdout)
 			}),
 	}
 }
@@ -122,48 +128,40 @@ func deprecateCommand(cmd *cobra.Command) *cobra.Command {
 	return cmd
 }
 
-var doctorExamineClusterCmd = makeClusterCommand()
-var doctorExamineZipDirCmd = makeZipDirCommand()
-var doctorExamineFallbackClusterCmd = deprecateCommand(makeClusterCommand())
-var doctorExamineFallbackZipDirCmd = deprecateCommand(makeZipDirCommand())
-var doctorRecreateClusterCmd = makeClusterCommand()
-var doctorRecreateZipDirCmd = makeZipDirCommand()
+var doctorExamineClusterCmd = makeClusterCommand(runDoctorExamine)
+var doctorExamineZipDirCmd = makeZipDirCommand(runDoctorExamine)
+var doctorExamineFallbackClusterCmd = deprecateCommand(makeClusterCommand(runDoctorExamine))
+var doctorExamineFallbackZipDirCmd = deprecateCommand(makeZipDirCommand(runDoctorExamine))
+var doctorRecreateClusterCmd = makeClusterCommand(runDoctorRecreate)
+var doctorRecreateZipDirCmd = makeZipDirCommand(runDoctorRecreate)
 
-func runDoctor(
-	commandName string,
+func runDoctorRecreate(
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
 	out io.Writer,
 ) (err error) {
-	switch commandName {
-	case "recreate":
-		err = doctor.DumpSQL(out, descTable, namespaceTable)
-	case "doctor":
-		fallthrough // Default to "examine".
-	case "examine":
-		var valid bool
-		valid, err = doctor.Examine(
-			context.Background(), descTable, namespaceTable, jobsTable, debugCtx.verbose, out)
-		if err == nil {
-			if !valid {
-				return clierror.NewError(errors.New("validation failed"),
-					exit.DoctorValidationFailed())
-			}
-			fmt.Fprintln(out, "No problems found!")
-		}
-	default:
-		log.Fatalf(context.Background(), "Unexpected doctor command %q.", commandName)
+	return doctor.DumpSQL(out, descTable, namespaceTable)
+}
+
+func runDoctorExamine(
+	descTable doctor.DescriptorTable,
+	namespaceTable doctor.NamespaceTable,
+	jobsTable doctor.JobsTable,
+	out io.Writer,
+) (err error) {
+	var valid bool
+	valid, err = doctor.Examine(
+		context.Background(), descTable, namespaceTable, jobsTable, debugCtx.verbose, out)
+	if err != nil {
+		return err
 	}
-	if err == nil {
-		return nil
+	if !valid {
+		return clierror.NewError(errors.New("validation failed"),
+			exit.DoctorValidationFailed())
 	}
-	return clierror.NewError(
-		errors.Wrapf(err, "doctor command %q failed", commandName),
-		// Note: we are using "unspecified" here because the error
-		// return does not distinguish errors like connection errors
-		// etc, from errors during extraction.
-		exit.UnspecifiedError())
+	fmt.Fprintln(out, "No problems found!")
+	return nil
 }
 
 // fromCluster collects system table data from a live cluster.
