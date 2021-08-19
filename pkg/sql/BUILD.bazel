@@ -296,6 +296,7 @@ go_library(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/colexec",
         "//pkg/sql/colflow",
         "//pkg/sql/contention",
         "//pkg/sql/covering",

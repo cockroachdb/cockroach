@@ -2025,38 +2025,21 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	res := execPlan{root: node}
+	res := execPlan{root: node, outputCols: e.outputCols}
 
-	if maxVal, _ := e.outputCols.MaxValue(); len(withScan.InCols) == maxVal+1 {
-		// We are outputting all columns. Just set up the map.
-
-		// The ColumnIDs from the With expression need to get remapped according to
-		// the mapping in the withScan to get the actual colMap for this expression.
-		for i := range withScan.InCols {
-			idx, _ := e.outputCols.Get(int(withScan.InCols[i]))
-			res.outputCols.Set(int(withScan.OutCols[i]), idx)
-		}
-	} else {
-		// We need a projection.
-		cols := make([]exec.NodeColumnOrdinal, len(withScan.InCols))
-		for i := range withScan.InCols {
-			col, ok := e.outputCols.Get(int(withScan.InCols[i]))
-			if !ok {
-				panic(errors.AssertionFailedf("column %d not in input", log.Safe(withScan.InCols[i])))
-			}
-			cols[i] = exec.NodeColumnOrdinal(col)
-			res.outputCols.Set(int(withScan.OutCols[i]), i)
-		}
-		res.root, err = b.factory.ConstructSimpleProject(
-			res.root, cols,
-			exec.OutputOrdering(res.sqlOrdering(withScan.ProvidedPhysical().Ordering)),
-		)
-		if err != nil {
-			return execPlan{}, err
-		}
+	// Apply any necessary projection to produce the InCols in the given order.
+	res, err = b.ensureColumns(res, withScan.InCols, withScan.ProvidedPhysical().Ordering)
+	if err != nil {
+		return execPlan{}, err
 	}
-	return res, nil
 
+	// Renumber the columns.
+	res.outputCols = opt.ColMap{}
+	for i, col := range withScan.OutCols {
+		res.outputCols.Set(int(col), i)
+	}
+
+	return res, nil
 }
 
 func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, error) {

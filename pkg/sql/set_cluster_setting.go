@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -343,6 +344,10 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				break
 			}
 			telemetry.Inc(sqltelemetry.VecModeCounter(validatedExecMode.String()))
+		case colexec.HashAggregationDiskSpillingEnabledSettingName:
+			if expectedEncodedValue == "false" {
+				telemetry.Inc(sqltelemetry.HashAggregationDiskSpillingDisabled)
+			}
 		}
 
 		return params.p.logEvent(ctx,

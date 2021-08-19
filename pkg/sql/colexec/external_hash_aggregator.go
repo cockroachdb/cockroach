@@ -106,10 +106,14 @@ func NewExternalHashAggregator(
 	return createDiskBackedSorter(eha, newAggArgs.OutputTypes, outputOrdering.Columns, maxNumberActivePartitions)
 }
 
+// HashAggregationDiskSpillingEnabledSettingName is the cluster setting name for
+// HashAggregationDiskSpillingEnabled.
+const HashAggregationDiskSpillingEnabledSettingName = "sql.distsql.temp_storage.hash_agg.enabled"
+
 // HashAggregationDiskSpillingEnabled is a cluster setting that allows to
 // disable hash aggregator disk spilling.
 var HashAggregationDiskSpillingEnabled = settings.RegisterBoolSetting(
-	"sql.distsql.temp_storage.hash_agg.enabled",
+	HashAggregationDiskSpillingEnabledSettingName,
 	"set to false to disable hash aggregator disk spilling "+
 		"(this will improve performance, but the query might hit the memory limit)",
 	true,
