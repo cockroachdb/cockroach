@@ -247,7 +247,6 @@ func (c *copyMachine) run(ctx context.Context) error {
 	case tree.CopyFormatCSV:
 		c.csvInput.Reset()
 		c.csvReader = csv.NewReader(&c.csvInput)
-		//c.csvReader = csv.NewReader(&c.buf)
 		c.csvReader.Comma = rune(c.delimiter)
 		c.csvReader.ReuseRecord = true
 		c.csvReader.FieldsPerRecord = len(c.resultColumns)
