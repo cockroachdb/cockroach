@@ -3917,6 +3917,8 @@ func checkScanParallelizationIfLocal(
 				return false, nil
 			}
 			switch n := plan.(type) {
+			case *distinctNode:
+				return true, nil
 			case *explainPlanNode:
 				// walkPlan doesn't recurse into explainPlanNode, so we have to
 				// manually walk over the wrapped plan.
@@ -3927,7 +3929,27 @@ func checkScanParallelizationIfLocal(
 				return false, nil
 			case *explainVecNode:
 				return true, nil
+			case *filterNode:
+				// Some filter expressions might be handled by falling back to
+				// the wrapped processors, so we choose to be safe.
+				prohibitParallelization = true
+				return false, nil
+			case *groupNode:
+				for _, f := range n.funcs {
+					prohibitParallelization = f.hasFilter()
+				}
+				return true, nil
+			case *indexJoinNode:
+				// Vectorized index join is only supported for non-interleaved
+				// tables.
+				prohibitParallelization = n.table.desc.TableDesc().Indexes[0].IsInterleaved()
+				return true, nil
+			case *joinNode:
+				prohibitParallelization = n.pred.onCond != nil
+				return true, nil
 			case *limitNode:
+				return true, nil
+			case *ordinalityNode:
 				return true, nil
 			case *renderNode:
 				// Only support projections since render expressions might be
@@ -3944,7 +3966,11 @@ func checkScanParallelizationIfLocal(
 					hasScanNodeToParallelize = true
 				}
 				return true, nil
+			case *sortNode:
+				return true, nil
 			case *unionNode:
+				return true, nil
+			case *valuesNode:
 				return true, nil
 			default:
 				prohibitParallelization = true
