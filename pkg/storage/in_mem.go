@@ -45,8 +45,8 @@ func InMemFromFS(ctx context.Context, fs vfs.FS, dir string, opts ...ConfigOptio
 // NewDefaultInMemForTesting allocates and returns a new, opened in-memory engine with
 // the default configuration. The caller must call the engine's Close method
 // when the engine is no longer needed.
-func NewDefaultInMemForTesting() Engine {
-	eng, err := Open(context.Background(), InMemory(), ForTesting, MaxSize(1<<20))
+func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
+	eng, err := Open(context.Background(), InMemory(), ForTesting, MaxSize(1<<20), CombineOptions(opts...))
 	if err != nil {
 		panic(err)
 	}
