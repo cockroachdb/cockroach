@@ -12,8 +12,6 @@ package main
 
 import "github.com/spf13/cobra"
 
-const shortFlag = "short"
-
 // makeLintCmd constructs the subcommand used to run the specified linters.
 func makeLintCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	lintCmd := &cobra.Command{
@@ -26,7 +24,6 @@ func makeLintCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 		RunE: runE,
 	}
 	addCommonTestFlags(lintCmd)
-	lintCmd.Flags().Bool(shortFlag, false, "run only short lints")
 	return lintCmd
 }
 
