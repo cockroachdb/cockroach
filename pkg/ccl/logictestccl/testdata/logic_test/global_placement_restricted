@@ -25,7 +25,7 @@ TABLE test  ALTER TABLE test CONFIGURE ZONE USING
 
 # Alter to RESTRICTED and see that our non-voter constraints remain.
 statement ok
-ALTER DATABASE testdb SET PLACEMENT RESTRICTED
+ALTER DATABASE testdb PLACEMENT RESTRICTED
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE test
@@ -99,7 +99,7 @@ TABLE test  ALTER TABLE test CONFIGURE ZONE USING
 
 # Alter to DEFAULT and see that our zone config is unchanged.
 statement ok
-ALTER DATABASE testdb SET PLACEMENT DEFAULT
+ALTER DATABASE testdb PLACEMENT DEFAULT
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE test

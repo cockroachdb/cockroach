@@ -7,7 +7,7 @@ statement ok
 CREATE DATABASE no_region_placement
 
 statement error database must have associated regions before a placement policy can be set
-ALTER DATABASE no_region_placement SET PLACEMENT RESTRICTED
+ALTER DATABASE no_region_placement PLACEMENT RESTRICTED
 
 statement ok
 CREATE DATABASE to_be_altered PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
@@ -28,6 +28,6 @@ statement ok
 SELECT * FROM crdb_internal.validate_multi_region_zone_configs()
 
 statement error a region-survivable database cannot also have a restricted placement policy
-ALTER DATABASE region_survivable_default SET PLACEMENT RESTRICTED
+ALTER DATABASE region_survivable_default PLACEMENT RESTRICTED
 
 

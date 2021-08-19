@@ -6597,6 +6597,7 @@ func TestAddingTableResolution(t *testing.T) {
 // descriptor.
 func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	canProceed := make(chan struct{})
@@ -6699,6 +6700,7 @@ SELECT job_id FROM crdb_internal.jobs
 // multiple queued schema changes works as expected.
 func TestCancelMultipleQueued(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	canProceed := make(chan struct{})
@@ -6795,6 +6797,7 @@ SELECT job_id FROM crdb_internal.jobs
 // works correctly (#57596).
 func TestRollbackForeignKeyAddition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	// Track whether we've attempted the backfill already, since there's a second
@@ -6864,6 +6867,7 @@ AND descriptor_ids[1] = 'db.t2'::regclass::int`,
 // tests that such jobs are not cancelable. Regression test for #59415.
 func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		name       string
@@ -7045,6 +7049,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 // after an existing a mutation on the column
 func TestDropColumnAfterMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	var jobControlMu syncutil.Mutex
 	var delayJobList []string
@@ -7317,6 +7322,7 @@ COMMIT;
 // if they weren't fully validated.
 func TestCheckConstraintDropAndColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	var jobControlMu syncutil.Mutex
 	var delayJobList []string
@@ -7418,6 +7424,7 @@ COMMIT;
 // treated as permanent failures.
 func TestClockSyncErrorsAreNotPermanent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()

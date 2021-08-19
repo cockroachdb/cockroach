@@ -339,14 +339,22 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			defer cleanup()
 			initialTenantRunner = sqlutils.MakeSQLRunner(tca)
 		}
-		// Just resume the upgrade this time.
+		// Keep trying to resume the stopper channel until the channel is closed,
+		// since we may repeatedly wait on it due to transaction retries. In
+		// the other case the stopper is used, so no such risk exists.
 		go func() {
-			<-tenantStopperChannel
+			for {
+				_, ok := <-tenantStopperChannel
+				if !ok {
+					return
+				}
+			}
 		}()
 		// Upgrade the tenant cluster.
 		initialTenantRunner.Exec(t,
 			"SET CLUSTER SETTING version = $1",
 			clusterversion.TestingBinaryVersion.String())
+		close(tenantStopperChannel)
 		// Validate the target version has been reached.
 		initialTenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
 		initialTenantRunner.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
