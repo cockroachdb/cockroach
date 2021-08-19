@@ -74,15 +74,6 @@ func MaybeDecorateError(
 			err = clierror.NewFormattedError(err, true /* showSeverity */, false /* verbose */)
 		}()
 
-		extraInsecureHint := func() string {
-			extra := ""
-			if baseCfg.Insecure {
-				extra = "\nIf the node is configured to require secure connections,\n" +
-					"remove --insecure and configure secure credentials instead.\n"
-			}
-			return extra
-		}
-
 		connFailed := func() error {
 			const format = "cannot dial server.\n" +
 				"Is the server running?\n" +
@@ -91,8 +82,8 @@ func MaybeDecorateError(
 		}
 
 		connSecurityHint := func() error {
-			const format = "SSL authentication error while connecting.\n%s\n%v"
-			return errors.Errorf(format, extraInsecureHint(), err)
+			const format = "SSL authentication error while connecting.\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		connInsecureHint := func() error {
@@ -101,9 +92,8 @@ func MaybeDecorateError(
 		}
 
 		connRefused := func() error {
-			extra := extraInsecureHint()
 			return errors.Errorf("server closed the connection.\n"+
-				"Is this a CockroachDB node?\n%s\n%v", extra, err)
+				"Is this a CockroachDB node?\n%v", err)
 		}
 
 		// Is this an "unable to connect" type of error?
