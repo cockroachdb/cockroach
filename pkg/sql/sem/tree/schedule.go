@@ -25,6 +25,7 @@ type ScheduledBackup struct {
 	To              StringOrPlaceholderOptList
 	BackupOptions   BackupOptions
 	ScheduleOptions KVOptions
+	IfNotExists     bool
 }
 
 var _ Statement = &ScheduledBackup{}

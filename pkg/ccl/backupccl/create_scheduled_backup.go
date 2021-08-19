@@ -705,9 +705,19 @@ func createBackupScheduleHook(
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
+
 	eval, err := makeScheduledBackupEval(ctx, p, schedule)
 	if err != nil {
 		return nil, nil, nil, false, err
+	}
+	destinations, errDest := eval.destination()
+	if errDest != nil{
+		return nil, nil, nil, false, errDest
+	}
+	errExist := checkForExistingBackupsInCollection(
+		ctx, p, destinations,)
+	if schedule.IfNotExists && errExist != nil {
+		return nil, nil, nil, false, errExist
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {

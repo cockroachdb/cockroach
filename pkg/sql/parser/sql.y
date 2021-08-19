@@ -2676,6 +2676,7 @@ backup_options:
 // [WITH <backup_option>[=<value>] [, ...]]
 // RECURRING [crontab|NEVER] [FULL BACKUP <crontab|ALWAYS>]
 // [WITH EXPERIMENTAL SCHEDULE OPTIONS <schedule_option>[= <value>] [, ...] ]
+// [IF NOT EXISTS]
 //
 // All backups run in UTC timezone.
 //
@@ -2753,8 +2754,27 @@ create_schedule_for_backup_stmt:
       Targets:          $6.targetListPtr(),
       BackupOptions:    *($9.backupOptions()),
       ScheduleOptions:  $12.kvOptions(),
+      IfNotExists: false,
     }
   }
+
+|
+CREATE SCHEDULE /*$3=*/opt_description FOR BACKUP /*$6=*/opt_backup_targets INTO
+  /*$8=*/string_or_placeholder_opt_list /*$9=*/opt_with_backup_options
+  /*$10=*/cron_expr /*$11=*/opt_full_backup_clause /*$12=*/opt_with_schedule_options IF NOT EXISTS
+  {
+    $$.val = &tree.ScheduledBackup{
+      ScheduleLabel:    $3.expr(),
+      Recurrence:       $10.expr(),
+      FullBackup:       $11.fullBackupClause(),
+      To:               $8.stringOrPlaceholderOptList(),
+      Targets:          $6.targetListPtr(),
+      BackupOptions:    *($9.backupOptions()),
+      ScheduleOptions:  $12.kvOptions(),
+      IfNotExists: true,
+    }
+  }
+
 | CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE FOR BACKUP
 
 opt_description:
