@@ -283,6 +283,7 @@ go_library(
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/catformat",
+        "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",

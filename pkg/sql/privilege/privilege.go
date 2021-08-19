@@ -90,6 +90,11 @@ func (k Kind) Mask() uint32 {
 	return 1 << k
 }
 
+// IsSetIn returns true if this privilege kind is set in the supplied bitfield.
+func (k Kind) IsSetIn(bits uint32) bool {
+	return bits&k.Mask() != 0
+}
+
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
 	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT,

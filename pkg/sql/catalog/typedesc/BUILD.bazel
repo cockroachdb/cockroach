@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/enum",
         "//pkg/sql/oidext",

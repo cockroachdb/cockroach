@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -446,8 +447,8 @@ func protect(
 }
 
 var (
-	metaTableSpan    = tableSpan(keys.ProtectedTimestampsMetaTableID)
-	recordsTableSpan = tableSpan(keys.ProtectedTimestampsRecordsTableID)
+	metaTableSpan    = tableSpan(uint32(systemschema.ProtectedTimestampsMetaTable.GetID()))
+	recordsTableSpan = tableSpan(uint32(systemschema.ProtectedTimestampsRecordsTable.GetID()))
 )
 
 type scanTracker struct {

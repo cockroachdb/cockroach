@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
@@ -57,7 +58,7 @@ var validTableDesc = &descpb.Descriptor{
 			},
 			NextIndexID: 2,
 			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-				descpb.SystemAllowedPrivileges[keys.SqllivenessID], security.NodeUserName()),
+				privilege.ReadWriteData, security.NodeUserName()),
 			FormatVersion:  descpb.InterleavedFormatVersion,
 			NextMutationID: 1,
 		},
@@ -67,27 +68,43 @@ var validTableDesc = &descpb.Descriptor{
 func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
 	table, database, typ, schema := descpb.FromDescriptor(desc)
 	if table != nil {
-		descpb.MaybeFixPrivileges(
-			table.GetID(), table.GetParentID(),
-			&table.Privileges, privilege.Table,
+		parentSchemaID := table.GetUnexposedParentSchemaID()
+		if parentSchemaID == descpb.InvalidID {
+			parentSchemaID = keys.PublicSchemaID
+		}
+		catprivilege.MaybeFixPrivileges(
+			&table.Privileges,
+			table.GetParentID(),
+			parentSchemaID,
+			privilege.Table,
+			table.GetName(),
 		)
 		if table.FormatVersion == 0 {
 			table.FormatVersion = descpb.InterleavedFormatVersion
 		}
 	} else if database != nil {
-		descpb.MaybeFixPrivileges(
-			database.GetID(), database.GetID(),
-			&database.Privileges, privilege.Database,
+		catprivilege.MaybeFixPrivileges(
+			&database.Privileges,
+			descpb.InvalidID,
+			descpb.InvalidID,
+			privilege.Database,
+			database.GetName(),
 		)
 	} else if typ != nil {
-		descpb.MaybeFixPrivileges(
-			typ.GetID(), typ.GetParentID(),
-			&typ.Privileges, privilege.Type,
+		catprivilege.MaybeFixPrivileges(
+			&typ.Privileges,
+			typ.GetParentID(),
+			typ.GetParentSchemaID(),
+			privilege.Type,
+			typ.GetName(),
 		)
 	} else if schema != nil {
-		descpb.MaybeFixPrivileges(
-			schema.GetID(), schema.GetParentID(),
-			&schema.Privileges, privilege.Schema,
+		catprivilege.MaybeFixPrivileges(
+			&schema.Privileges,
+			schema.GetParentID(),
+			descpb.InvalidID,
+			privilege.Schema,
+			schema.GetName(),
 		)
 	}
 	res, err := protoutil.Marshal(desc)

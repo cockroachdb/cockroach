@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -328,7 +329,7 @@ func WriteDescriptors(
 				}
 			}
 			privilegeDesc := desc.GetPrivileges()
-			descpb.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
+			catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
 			wroteDBs[desc.GetID()] = desc
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, desc.(catalog.MutableDescriptor), b,
@@ -376,7 +377,7 @@ func WriteDescriptors(
 				}
 			}
 			privilegeDesc := table.GetPrivileges()
-			descpb.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
+			catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
 			// If the table descriptor is being written to a multi-region database and
 			// the table does not have a locality config setup, set one up here. The
 			// table's locality config will be set to the default locality - REGIONAL

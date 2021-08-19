@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -662,9 +663,8 @@ func deprecatedDescriptor() *descpb.TableDescriptor {
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		},
-		NextIndexID: 4,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.JobsTableID], security.NodeUserName()),
+		NextIndexID:    4,
+		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}

@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -99,25 +101,32 @@ func (c *conn) handleAuthentication(
 	if err != nil {
 		log.Warningf(ctx, "user retrieval failed for user=%q: %+v", c.sessionArgs.User, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
-		return nil, sendError(err)
+		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
 	if !exists {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, nil)
-		return nil, sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
+		return nil, sendError(pgerror.Newf(
+			pgcode.InvalidAuthorizationSpecification,
+			security.ErrPasswordUserAuthFailed,
+			c.sessionArgs.User,
+		))
 	}
 
 	if !canLogin {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_LOGIN_DISABLED, nil)
-		return nil, sendError(errors.Errorf(
-			"%s does not have login privilege", c.sessionArgs.User))
+		return nil, sendError(pgerror.Newf(
+			pgcode.InvalidAuthorizationSpecification,
+			"%s does not have login privilege",
+			c.sessionArgs.User,
+		))
 	}
 
 	// Retrieve the authentication method.
 	tlsState, hbaEntry, methodFn, err := c.findAuthenticationMethod(authOpt)
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
-		return nil, sendError(err)
+		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
 	ac.SetAuthMethod(hbaEntry.Method.String())
@@ -129,12 +138,12 @@ func (c *conn) handleAuthentication(
 
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
-		return nil, sendError(err)
+		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
 	if connClose, err = authenticationHook(ctx, c.sessionArgs.User, true /* public */); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
-		return connClose, sendError(err)
+		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
 	// Add all the defaults to this session's defaults. If there is an
