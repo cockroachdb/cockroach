@@ -593,6 +593,13 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 					UseDatabase: "t",
 					Knobs: base.TestingKnobs{
 						KVClient: &kvcoord.ClientTestingKnobs{
+							// Inhibit the checking of connection health done by the
+							// GRPCTransport. This test wants to control what replica (which
+							// follower) a request is sent to and, depending on timing, the
+							// connection from n4 to the respective follower might not be
+							// heartbeated by the time the test wants to use it. Without this
+							// knob, that would cause the transport to reorder replicas.
+							DontConsiderConnHealth: true,
 							LatencyFunc: func(addr string) (time.Duration, bool) {
 								if (addr == n2Addr.Get()) || (addr == n3Addr.Get()) {
 									return time.Millisecond, true
