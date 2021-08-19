@@ -207,6 +207,16 @@ func (ba *BatchRequest) IsSingleAbortTxnRequest() bool {
 	return false
 }
 
+func (ba *BatchRequest) isSingleRequestWithMethod(m Method) bool {
+	return ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == m
+}
+
+// IsSingleLeaseInfoRequest returns true iff the batch contains a single
+// request, and that request is a LeaseInfoRequest.
+func (ba *BatchRequest) IsSingleLeaseInfoRequest() bool {
+	return ba.isSingleRequestWithMethod(LeaseInfo)
+}
+
 // IsSingleSubsumeRequest returns true iff the batch contains a single request,
 // and that request is an SubsumeRequest.
 func (ba *BatchRequest) IsSingleSubsumeRequest() bool {

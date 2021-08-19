@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -654,29 +656,40 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 // forces a valid lease to exist on the range and so can be reasonably expensive
 // if there is not already a valid lease.
 func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Error {
-	// Make sure there's a leaseholder. If there's no leaseholder, there's no
+	// Make sure there's a valid lease. If there's no lease, nobody's sending
 	// closed timestamp updates.
-	var leaseholderNodeID roachpb.NodeID
-	_, err := r.redirectOnOrAcquireLease(ctx)
-	if err == nil {
+	lease := r.CurrentLeaseStatus(ctx)
+
+	if lease.State != kvserverpb.LeaseState_VALID {
+		// Send a cheap request that needs a leaseholder, in order to ensure a
+		// lease. We don't care about the request's result, only its routing. We're
+		// employing higher-level machinery here (the DistSender); there's no better
+		// way to ensure that someone (potentially another replica) takes a lease.
+		// In particular, r.redirectOnOrAcquireLease() doesn't work because, if the
+		// current lease is invalid and the current replica is not a leader, the
+		// current replica will not take a lease.
+		log.VEventf(ctx, 2, "ensuring lease for rangefeed range. current lease invalid: %s", lease.Lease)
+		err := contextutil.RunWithTimeout(ctx, "read forcing lease acquisition", 5*time.Second,
+			func(ctx context.Context) error {
+				var b kv.Batch
+				liReq := &roachpb.LeaseInfoRequest{}
+				liReq.Key = r.Desc().StartKey.AsRawKey()
+				b.AddRawRequest(liReq)
+				return r.store.DB().Run(ctx, &b)
+			})
+		if err != nil {
+			return roachpb.NewError(err)
+		}
+	}
+
+	lease = r.CurrentLeaseStatus(ctx)
+	if lease.Lease.OwnedBy(r.StoreID()) {
 		// We have the lease. Request is essentially a wrapper for calling EmitMLAI
 		// on a remote node, so cut out the middleman.
 		r.EmitMLAI()
 		return nil
-	} else if lErr, ok := err.GetDetail().(*roachpb.NotLeaseHolderError); ok {
-		if lErr.LeaseHolder == nil {
-			// It's possible for redirectOnOrAcquireLease to return
-			// NotLeaseHolderErrors with LeaseHolder unset, but these should be
-			// transient conditions. If this method is being called by RangeFeed to
-			// nudge a stuck closedts, then essentially all we can do here is nothing
-			// and assume that redirectOnOrAcquireLease will do something different
-			// the next time it's called.
-			return nil
-		}
-		leaseholderNodeID = lErr.LeaseHolder.NodeID
-	} else {
-		return err
 	}
+	leaseholderNodeID := lease.Lease.Replica.NodeID
 	// Request fixes any issues where we've missed a closed timestamp update or
 	// where we're not connected to receive them from this node in the first
 	// place.
