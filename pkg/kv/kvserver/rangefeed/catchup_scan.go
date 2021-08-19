@@ -25,7 +25,9 @@ import (
 // A CatchupIterator is an iterator for catchup-scans.
 type CatchupIterator struct {
 	storage.SimpleMVCCIterator
-	close func()
+
+	useTBI bool
+	close  func()
 }
 
 // NewCatchupIterator returns a CatchupIterator for the given Reader.
@@ -35,14 +37,10 @@ func NewCatchupIterator(
 	reader storage.Reader, args *roachpb.RangeFeedRequest, useTBI bool, closer func(),
 ) *CatchupIterator {
 	ret := &CatchupIterator{
-		close: closer,
+		close:  closer,
+		useTBI: useTBI,
 	}
-	// TODO(ssd): The withDiff option requires us to iterate over
-	// values arbitrarily in the past so that we can populate the
-	// previous value of a key. This is possible since the
-	// IncrementalIterator has a non-timebound iterator
-	// internally, but it is not yet implemented.
-	if useTBI && !args.WithDiff {
+	if useTBI {
 		ret.SimpleMVCCIterator = storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
 			EnableTimeBoundIteratorOptimization: true,
 			EndKey:                              args.Span.EndKey,
@@ -88,6 +86,9 @@ func (i *CatchupIterator) CatchupScan(
 	// the encountered values in reverse. This also allows us to buffer events
 	// as we fill in previous values.
 	var lastKey storage.MVCCKey
+
+	var valueBuf []byte
+
 	reorderBuf := make([]roachpb.RangeFeedEvent, 0, 5)
 	addPrevToLastEvent := func(val []byte) {
 		if l := len(reorderBuf); l > 0 {
@@ -99,6 +100,14 @@ func (i *CatchupIterator) CatchupScan(
 	}
 
 	outputEvents := func() error {
+		if i.useTBI && withDiff {
+			// Our last entry will be erroneously missing a
+			// previous value if it was outside the time window of
+			// the incremental iterator.
+			if len(valueBuf) > 0 && len(reorderBuf) > 0 {
+				reorderBuf[len(reorderBuf)-1].Val.PrevValue.RawBytes = valueBuf
+			}
+		}
 		for i := len(reorderBuf) - 1; i >= 0; i-- {
 			e := reorderBuf[i]
 			if err := outputFn(&e); err != nil {
@@ -185,7 +194,12 @@ func (i *CatchupIterator) CatchupScan(
 			i.NextKey()
 		} else {
 			// Move to the next version of this key.
-			i.Next()
+			if i.useTBI && withDiff {
+				// If we are using TBI and withDiff, we potentially need to capture the "PrevValue" for the key we just added.
+				valueBuf = i.SimpleMVCCIterator.(*storage.MVCCIncrementalIterator).NextReturningNextWithoutTimeboundValueOnKeyChange(key)
+			} else {
+				i.Next()
+			}
 
 			var event roachpb.RangeFeedEvent
 			event.MustSetValue(&roachpb.RangeFeedValue{

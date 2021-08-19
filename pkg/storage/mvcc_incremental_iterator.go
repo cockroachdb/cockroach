@@ -13,6 +13,7 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -87,6 +88,10 @@ type MVCCIncrementalIterator struct {
 	// For allocation avoidance, meta is used to store the timestamp of keys
 	// regardless if they are metakeys.
 	meta enginepb.MVCCMetadata
+
+	// For allocation amortization, nextValBuf is used for saving
+	// Values that we might need to return to the user.
+	nextValBuf bufalloc.ByteAllocator
 
 	// Configuration passed in MVCCIncrementalIterOptions.
 	intentPolicy MVCCIncrementalIterIntentPolicy
@@ -239,6 +244,44 @@ func (i *MVCCIncrementalIterator) Next() {
 		return
 	}
 	i.advance()
+}
+
+// NextReturningNextWithoutTimeboundValueOnKeyChange advances the
+// iterator to the next/key/value in the iteration. Valid() will be
+// true if the iterator was not positioned at the last key.  If an
+// un-timebound Next() would have left the iterator at the next
+// version of the same key passed by the user, but the time-bound
+// advances us past it, the value of that skipped version will will be
+// returned from this function
+//
+// This is used by rangefeed catchup scans.
+func (i *MVCCIncrementalIterator) NextReturningNextWithoutTimeboundValueOnKeyChange(
+	key roachpb.Key,
+) []byte {
+	var value []byte
+	i.nextValBuf = i.nextValBuf.Truncate()
+	i.iter.Next()
+	if !i.checkValidAndSaveErr() {
+		return nil
+	}
+
+	nextWasSameKey := key.Equal(i.UnsafeKey().Key)
+	if nextWasSameKey {
+		// The un-timebound next is a version of the passed
+		// key.
+		i.nextValBuf, value = i.nextValBuf.Copy(i.UnsafeValue(), 0)
+		// value = i.Value()
+	}
+	i.advance()
+	if nextWasSameKey && (!key.Equal(i.UnsafeKey().Key) || !i.valid) {
+		// We've advanced to a new key even though Next
+		// wouldn't have, return a copy of the value we saved.
+		valueCopy := make([]byte, len(value))
+		copy(valueCopy, value)
+		return valueCopy
+
+	}
+	return nil
 }
 
 // checkValidAndSaveErr checks if the underlying iter is valid after the operation
