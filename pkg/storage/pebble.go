@@ -357,6 +357,23 @@ func DefaultPebbleOptions() *pebble.Options {
 	//
 	// TODO(bilal): Remove this line when the above issue is addressed.
 	opts.Experimental.ReadSamplingMultiplier = -1
+	// Validate min/max keys in each SSTable when performing a compaction. This
+	// serves as a simple protection against corruption or programmer-error in
+	// Pebble.
+	opts.Experimental.KeyValidationFunc = func(userKey []byte) error {
+		// Validate that the user key is a valid EngineKey.
+		engineKey, ok := DecodeEngineKey(userKey)
+		if !ok {
+			return errors.Newf("key %s could not be decoded as an EngineKey", string(userKey))
+		}
+
+		// Validate that the version length matches one of the expected values.
+		if !engineKey.IsMVCCKey() {
+			return errors.Newf("key %s is not an MVCC key", engineKey)
+		}
+
+		return nil
+	}
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
