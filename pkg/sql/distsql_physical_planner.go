@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -2194,6 +2195,9 @@ func (dsp *DistSQLPlanner) planAggregators(
 	return nil
 }
 
+var enableDistributedJoinReader = settings.RegisterBoolSetting("sql.distsql.distributed_join_reader.enabled",
+	"enables an experimental distribution model for joinreaders", false)
+
 func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	planCtx *PlanningCtx, n *indexJoinNode,
 ) (*PhysicalPlan, error) {
@@ -2250,6 +2254,11 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	if err != nil {
 		return nil, err
 	}
+
+	if enableDistributedJoinReader.Get(&dsp.st.SV) {
+		return dsp.createPlanForDistributedJoinReader(planCtx, n.table, n.keyCols, n.reqOrdering, plan, joinReaderSpec, post, types)
+	}
+
 	if len(plan.ResultRouters) > 1 {
 		// Instantiate one join reader for every stream.
 		plan.AddNoGroupingStage(
@@ -2350,6 +2359,17 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 			numInputNodeCols, planToStreamColMap, post.OutputColumns, types)
 	}
 
+	plan.PlanToStreamColMap = planToStreamColMap
+
+	if enableDistributedJoinReader.Get(&dsp.st.SV) && n.lookupExpr == nil {
+		// We can't distribute our joinReaders to remote nodes if we don't have a
+		// static set of equality columns, since the range router is not configurable
+		// to do its work with a dynamic expression.
+		// We could conceivably enhance the range router to handle this case if we
+		// wanted to.
+		return dsp.createPlanForDistributedJoinReader(planCtx, n.table, n.eqCols, n.reqOrdering, plan, joinReaderSpec, post, types)
+	}
+
 	// Instantiate one join reader for every stream. This is also necessary for
 	// correctness of paired-joins where this join is the second join -- it is
 	// necessary to have a one-to-one relationship between the first and second
@@ -2360,7 +2380,77 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		types,
 		dsp.convertOrdering(planReqOrdering(n), planToStreamColMap),
 	)
-	plan.PlanToStreamColMap = planToStreamColMap
+	return plan, nil
+}
+
+// createPlanForDistributedJoinReader plans a stage of joinReader processors by
+// placing them on all possible nodes that own ranges of the right-hand-side of
+// the join, and distributing data from the stage before to the joinReader stage
+// by using a by-range routing policy that picks the node based on the value
+// of the lookupCols in the input data rows.
+func (dsp *DistSQLPlanner) createPlanForDistributedJoinReader(
+	planCtx *PlanningCtx,
+	scan *scanNode,
+	lookupCols []int,
+	reqOrdering ReqOrdering,
+	plan *PhysicalPlan,
+	joinReaderSpec execinfrapb.JoinReaderSpec,
+	post execinfrapb.PostProcessSpec,
+	types []*types.T,
+) (*PhysicalPlan, error) {
+	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(planCtx.ExtendedEvalCtx.Codec, scan.desc, scan.index.GetID()))
+	allIndexSpan := scan.desc.IndexSpan(planCtx.ExtendedEvalCtx.Codec, scan.index.GetID())
+
+	// Partition the span into a mapping of nodes to the list of spans that
+	// have leaseholders on that particular node.
+	partitions, err := dsp.PartitionSpans(planCtx, roachpb.Spans{allIndexSpan})
+	if err != nil {
+		return nil, err
+	}
+
+	outputSpans := make([]execinfrapb.OutputRouterSpec_RangeRouterSpec_Span, 0, len(partitions))
+	remoteNodes := make([]roachpb.NodeID, len(partitions))
+	for i, partition := range partitions {
+		remoteNodes[i] = partition.Node
+		for _, span := range partition.Spans {
+			endKey := span.EndKey[len(prefix):]
+			if len(endKey) == 0 {
+				endKey = roachpb.KeyMax
+			}
+			outputSpans = append(outputSpans, execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
+				Start:  span.Key[len(prefix):],
+				End:    endKey,
+				Stream: int32(i),
+			})
+		}
+	}
+	sort.Slice(outputSpans, func(i, j int) bool {
+		return bytes.Compare(outputSpans[i].Start, outputSpans[j].Start) == -1
+	})
+
+	encodings := make([]execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding, len(lookupCols))
+	for i := range lookupCols {
+		encodings[i].Column = uint32(lookupCols[i])
+		dir := scan.index.GetKeyColumnDirection(i)
+		if dir == descpb.IndexDescriptor_ASC {
+			encodings[i].Encoding = descpb.DatumEncoding_ASCENDING_KEY
+		} else {
+			encodings[i].Encoding = descpb.DatumEncoding_DESCENDING_KEY
+		}
+	}
+
+	spec := execinfrapb.OutputRouterSpec{
+		Type: execinfrapb.OutputRouterSpec_BY_RANGE,
+		RangeRouterSpec: execinfrapb.OutputRouterSpec_RangeRouterSpec{
+			Spans:     outputSpans,
+			Encodings: encodings,
+		},
+	}
+
+	plan.AddStageOnNodes(remoteNodes, execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
+		post, spec, plan.GetResultTypes(), types, dsp.convertOrdering(reqOrdering, plan.PlanToStreamColMap),
+		plan.ResultRouters,
+	)
 	return plan, nil
 }
 
@@ -3314,7 +3404,7 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 	}
 
 	nodes := getNodesOfRouters(plan.ResultRouters, plan.Processors)
-	plan.AddStageOnNodes(
+	plan.AddHashRoutedStageOnNodes(
 		nodes, distinctSpec, execinfrapb.PostProcessSpec{},
 		distinctSpec.Distinct.DistinctColumns, plan.GetResultTypes(),
 		plan.GetResultTypes(), plan.MergeOrdering, plan.ResultRouters,
