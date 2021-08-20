@@ -106,9 +106,9 @@ type Builder struct {
 // catalog is only needed if the statement contains an EXPLAIN (OPT, CATALOG).
 //
 // If allowAutoCommit is true, mutation operators can pass the auto commit flag
-// to the factory (when the optimizer determines it is correct to do so). It
-// should be false if the statement is executed as part of an explicit
-// transaction.
+// to the factory (when the optimizer determines it is correct to do so and the
+// txn row count limits are disabled.). It should be false if the statement is
+// executed as part of an explicit transaction.
 func New(
 	factory exec.Factory,
 	optimizer *xform.Optimizer,
@@ -129,10 +129,15 @@ func New(
 		initialAllowAutoCommit: allowAutoCommit,
 	}
 	if evalCtx != nil {
-		if evalCtx.SessionData.SaveTablesPrefix != "" {
-			b.nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
+		sd := evalCtx.SessionData
+		if sd.SaveTablesPrefix != "" {
+			b.nameGen = memo.NewExprNameGenerator(sd.SaveTablesPrefix)
 		}
-		b.allowInsertFastPath = evalCtx.SessionData.InsertFastPath
+		// If we have the limits on the number of rows written/read by a single
+		// txn, we cannot auto commit.
+		b.allowAutoCommit = b.allowAutoCommit && sd.TxnRowsWrittenErr == 0 && sd.TxnRowsReadErr == 0
+		b.initialAllowAutoCommit = b.allowAutoCommit
+		b.allowInsertFastPath = sd.InsertFastPath
 	}
 	return b
 }

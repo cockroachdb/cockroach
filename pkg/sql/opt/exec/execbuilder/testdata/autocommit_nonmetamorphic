@@ -777,3 +777,19 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
 dist sender send  r42: sending batch 2 CPut to (n1,s1):1
 dist sender send  r42: sending batch 2 CPut to (n1,s1):1
 dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+
+# Check that the statement that can usually be auto-committed isn't when the txn
+# row count guardrails are enabled.
+statement ok
+CREATE TABLE guardrails (i INT PRIMARY KEY);
+SET transaction_rows_written_err = 1
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO guardrails VALUES (1)
+] WHERE info LIKE '%auto commit%'
+----
+false
+
+statement ok
+RESET transaction_rows_written_err
