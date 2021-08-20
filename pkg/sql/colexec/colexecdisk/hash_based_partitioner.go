@@ -139,7 +139,7 @@ type hashBasedPartitioner struct {
 
 	partitioners      []*colcontainer.PartitionedDiskQueue
 	partitionedInputs []*partitionerToOperator
-	tupleDistributor  *colexechash.TupleHashDistributor
+	tupleDistributors []*colexechash.TupleHashDistributor
 	// maxNumberActivePartitions determines the maximum number of active
 	// partitions that the operator is allowed to have. This number is computed
 	// semi-dynamically and will influence the choice of numBuckets value.
@@ -360,10 +360,12 @@ func (op *hashBasedPartitioner) Init(ctx context.Context) {
 	// In the processing phase, the in-memory operator will use the default init
 	// hash value, so in order to use a "different" hash function in the
 	// partitioning phase we use a different init hash value.
-	op.tupleDistributor = colexechash.NewTupleHashDistributor(
-		colexechash.DefaultInitHashValue+1, op.numBuckets,
-	)
-	op.tupleDistributor.Init(op.Ctx)
+	for i := range op.hashCols {
+		op.tupleDistributors[i] = colexechash.NewTupleHashDistributor(
+			colexechash.DefaultInitHashValue+1, op.numBuckets, op.hashCols[i],
+		)
+		op.tupleDistributors[i].Init(op.Ctx)
+	}
 	op.state = hbpInitialPartitioning
 }
 
@@ -375,7 +377,7 @@ func (op *hashBasedPartitioner) partitionBatch(
 		return
 	}
 	scratchBatch := op.scratch.batches[inputIdx]
-	selections := op.tupleDistributor.Distribute(batch, op.hashCols[inputIdx])
+	selections := op.tupleDistributors[inputIdx].Distribute(batch)
 	for idx, sel := range selections {
 		partitionIdx := op.partitionIdxOffset + idx
 		if len(sel) > 0 {
@@ -470,17 +472,19 @@ StateChanged:
 					"%s is performing %d'th repartition", op.name, op.numRepartitions,
 				)
 			}
-			// In order to use a different hash function when repartitioning, we
-			// need to increase the seed value of the tuple distributor.
-			op.tupleDistributor.InitHashValue++
-			// We're actively will be using op.numBuckets + 1 partitions
+			// We will actively be using op.numBuckets + 1 partitions
 			// (because we're repartitioning one side at a time), so we can set
 			// op.numBuckets higher than in the initial partitioning step.
 			// TODO(yuzefovich): figure out whether we should care about
 			// op.numBuckets being a power of two (finalizeHash step is faster
 			// if so).
 			op.numBuckets = op.maxNumberActivePartitions - 1
-			op.tupleDistributor.ResetNumOutputs(op.numBuckets)
+			for i := range op.tupleDistributors {
+				// In order to use a different hash function when repartitioning, we
+				// need to increase the seed value of the tuple distributor.
+				op.tupleDistributors[i].InitHashValue++
+				op.tupleDistributors[i].ResetNumOutputs(op.numBuckets)
+			}
 			for parentPartitionIdx, parentPartitionInfo := range op.partitionsToProcessUsingMain {
 				for i := range op.inputs {
 					batch := op.recursiveScratch.batches[i]

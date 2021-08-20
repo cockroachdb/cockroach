@@ -6,6 +6,7 @@ load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "colexecspan",
     srcs = [
+        "range_distributor.go",
         "span_assembler.go",
         ":gen-exec",  # keep
     ],
@@ -21,9 +22,12 @@ go_library(
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/catalog/fetchpb",
+        "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colmem",  # keep
+        "//pkg/sql/execinfra",  # keep
         "//pkg/sql/execinfra/execreleasable",
+        "//pkg/sql/execinfrapb",
         "//pkg/sql/rowenc",  # keep
         "//pkg/sql/rowenc/keyside",  # keep
         "//pkg/sql/sem/tree",  # keep

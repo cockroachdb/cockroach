@@ -38,6 +38,53 @@ func NewColSpanAssembler(
 	splitFamilyIDs []descpb.FamilyID,
 	inputTypes []*types.T,
 ) ColSpanAssembler {
+	sa := newColSpanAssemblerBase(
+		allocator, fetchSpec, splitFamilyIDs, inputTypes, nil /* keyEncDirections */, nil, /* keyOrdinals */
+	)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, fetchSpec.TableID, fetchSpec.IndexID)
+	sa.scratchKey = append(sa.scratchKey[:0], keyPrefix...)
+	sa.prefixLength = len(keyPrefix)
+	return sa
+}
+
+// NewColSpanAssemblerWithoutTablePrefix returns a ColSpanAssembler operator
+// that is able to generate lookup spans from input batches. It generates key
+// spans *without* the table/index prefix that make them actually valid for
+// lookups.
+func NewColSpanAssemblerWithoutTablePrefix(
+	allocator *colmem.Allocator,
+	fetchSpec *fetchpb.IndexFetchSpec,
+	splitFamilyIDs []descpb.FamilyID,
+	inputTypes []*types.T,
+	keyEncDirections []catenumpb.IndexColumn_Direction,
+	// keyOrdinals, if non-nil, is a slice that represents the ordinals within
+	// the input batches to encode. The ith element of keyOrdinals is the column
+	// ordinal at which to find the ith element of each key to construct.
+	keyOrdinals []int,
+) ColSpanAssembler {
+	return newColSpanAssemblerBase(
+		allocator,
+		nil, /* fetchSpec */
+		splitFamilyIDs,
+		inputTypes,
+		keyEncDirections,
+		keyOrdinals,
+	)
+}
+
+// If fetchSpec is non-nil, it will be used for checking key encoding
+// directions, otherwise, keyEncDirections is used for this purpose.
+func newColSpanAssemblerBase(
+	allocator *colmem.Allocator,
+	fetchSpec *fetchpb.IndexFetchSpec,
+	splitFamilyIDs []descpb.FamilyID,
+	inputTypes []*types.T,
+	keyEncDirections []catenumpb.IndexColumn_Direction,
+	// keyOrdinals, if non-nil, is a slice that represents the ordinals within
+	// the input batches to encode. The ith element of keyOrdinals is the column
+	// ordinal at which to find the ith element of each key to construct.
+	keyOrdinals []int,
+) *spanAssembler {
 	sa := spanAssemblerPool.Get().(*spanAssembler)
 	if len(splitFamilyIDs) > 0 {
 		sa.colFamStartKeys, sa.colFamEndKeys = getColFamilyEncodings(splitFamilyIDs)
@@ -51,17 +98,29 @@ func NewColSpanAssembler(
 			}
 		}
 	}
-	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, fetchSpec.TableID, fetchSpec.IndexID)
-	sa.scratchKey = append(sa.scratchKey[:0], keyPrefix...)
-	sa.prefixLength = len(keyPrefix)
 	sa.allocator = allocator
 
 	// Add span encoders to encode each primary key column as bytes. The
 	// ColSpanAssembler will later append these together to form valid spans.
-	keyColumns := fetchSpec.KeyColumns()
-	for i := range keyColumns {
-		asc := keyColumns[i].Direction == catenumpb.IndexColumn_ASC
-		sa.spanEncoders = append(sa.spanEncoders, newSpanEncoder(allocator, inputTypes[i], asc, i))
+	if fetchSpec != nil {
+		keyColumns := fetchSpec.KeyColumns()
+		for i := range keyColumns {
+			asc := keyColumns[i].Direction == catenumpb.IndexColumn_ASC
+			idx := i
+			if keyOrdinals != nil {
+				idx = keyOrdinals[i]
+			}
+			sa.spanEncoders = append(sa.spanEncoders, newSpanEncoder(allocator, inputTypes[i], asc, idx))
+		}
+	} else {
+		for i, dir := range keyEncDirections {
+			asc := dir == catenumpb.IndexColumn_ASC
+			idx := i
+			if keyOrdinals != nil {
+				idx = keyOrdinals[i]
+			}
+			sa.spanEncoders = append(sa.spanEncoders, newSpanEncoder(allocator, inputTypes[i], asc, idx))
+		}
 	}
 	if cap(sa.spanCols) < len(sa.spanEncoders) {
 		sa.spanCols = make([]*coldata.Bytes, len(sa.spanEncoders))

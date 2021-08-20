@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -39,9 +38,9 @@ import (
 // easier test mocking of outputs.
 type routerOutput interface {
 	execopnode.OpNode
-	// initWithHashRouter passes a reference to the HashRouter that will be
+	// initWithRouter passes a reference to the router that will be
 	// pushing batches to this output.
-	initWithHashRouter(*HashRouter)
+	initWithRouter(coordinator drainCoordinator)
 	// addBatch adds the elements specified by the selection vector from batch
 	// to the output. It returns whether or not the output changed its state to
 	// blocked (see implementations).
@@ -56,6 +55,20 @@ type routerOutput interface {
 	forwardErr(error)
 	// resetForTests resets the routerOutput for a benchmark or test run.
 	resetForTests(context.Context)
+}
+
+// TupleDistributor distributes tuples from batches according to a policy based
+// on the values in the routingCols of each tuple in the batch. The
+// "distribution" occurs by populating selection vectors which the caller needs
+// to use accordingly.
+type TupleDistributor interface {
+	// Init initializes the TupleDistributor. Calls past the first are no-ops.
+	Init(ctx context.Context)
+	// Distribute populates selection vectors to route each of the tuples in b to
+	// one of the numOutputs outputs according to a policy.
+	// NOTE: b is assumed to be non-zero batch.
+	// NOTE: the distributor *must* be initialized before the first use.
+	Distribute(b coldata.Batch) [][]int
 }
 
 // getDefaultRouterOutputBlockedThreshold returns the number of unread values
@@ -85,13 +98,14 @@ const (
 	routerOutputOpDraining
 )
 
-// drainCoordinator is an interface that the HashRouter implements to coordinate
+// drainCoordinator is an interface that the Router implements to coordinate
 // cancellation of all of its outputs in the case of an error and draining in
 // the case of graceful termination.
 // WARNING: No locks should be held when calling these methods, as the
-// HashRouter might call routerOutput methods (e.g. cancel) that attempt to
+// Router might call routerOutput methods (e.g. cancel) that attempt to
 // reacquire locks.
 type drainCoordinator interface {
+	execopnode.OpNode
 	// encounteredError should be called when a routerOutput encounters an error.
 	// This terminates execution. No locks should be held when calling this
 	// method, since cancellation could occur.
@@ -105,7 +119,7 @@ type routerOutputOp struct {
 	colexecop.InitHelper
 	// input is a reference to our router.
 	input execopnode.OpNode
-	// drainCoordinator is a reference to the HashRouter to be able to notify it
+	// drainCoordinator is a reference to the Router to be able to notify it
 	// if the output encounters an error or transitions to a draining state.
 	drainCoordinator drainCoordinator
 
@@ -118,7 +132,7 @@ type routerOutputOp struct {
 	mu struct {
 		syncutil.Mutex
 		state routerOutputOpState
-		// forwardedErr is an error that was forwarded by the HashRouter. If set,
+		// forwardedErr is an error that was forwarded by the Router. If set,
 		// any subsequent calls to Next will return this error.
 		forwardedErr error
 		cond         *sync.Cond
@@ -225,7 +239,7 @@ func (o *routerOutputOp) Init(ctx context.Context) {
 func (o *routerOutputOp) nextErrorLocked(err error) {
 	o.mu.state = routerOutputOpDraining
 	o.maybeUnblockLocked()
-	// Unlock the mutex, since the HashRouter will cancel all outputs.
+	// Unlock the mutex, since the Router will cancel all outputs.
 	o.mu.Unlock()
 	o.drainCoordinator.encounteredError(o.Ctx)
 	o.mu.Lock()
@@ -291,7 +305,7 @@ func (o *routerOutputOp) Close(ctx context.Context) error {
 	return nil
 }
 
-func (o *routerOutputOp) initWithHashRouter(r *HashRouter) {
+func (o *routerOutputOp) initWithRouter(r drainCoordinator) {
 	o.input = r
 	o.drainCoordinator = r
 }
@@ -419,21 +433,18 @@ const (
 	hashRouterDrainStateCompleted
 )
 
-// HashRouter hashes values according to provided hash columns and computes a
-// destination for each row. These destinations are exposed as Operators
-// returned by the constructor.
-type HashRouter struct {
+// Router computes a destination for each row. These destinations are exposed as
+// Operators returned by the constructor.
+type Router struct {
 	colexecop.OneInputNode
 	// inputMetaInfo contains all of the meta components that the hash router
 	// is responsible for. Root field is exactly the same as OneInputNode.Input.
 	inputMetaInfo colexecargs.OpWithMetaInfo
-	// hashCols is a slice of indices of the columns used for hashing.
-	hashCols []uint32
 
 	// One output for each stream.
 	outputs []routerOutput
 
-	// unblockedEventsChan is a channel shared between the HashRouter and its
+	// unblockedEventsChan is a channel shared between the Router and its
 	// outputs. outputs send events on this channel when they are unblocked by a
 	// read.
 	unblockedEventsChan <-chan struct{}
@@ -454,12 +465,13 @@ type HashRouter struct {
 
 	// tupleDistributor is used to decide to which output a particular tuple
 	// should be routed.
-	tupleDistributor *colexechash.TupleHashDistributor
+	tupleDistributor TupleDistributor
 }
 
-// NewHashRouter creates a new hash router that consumes coldata.Batches from
-// input and hashes each row according to hashCols to one of the outputs
-// returned as Operators.
+// NewRouter creates a new router that consumes coldata.Batches from input and
+// distributes each row according to the policy in the passed-in
+// tupleDistributor to one of the outputs returned as Operators.
+//
 // The number of allocators provided will determine the number of outputs
 // returned. Note that each allocator must be unlimited, memory will be limited
 // by comparing memory use in the allocator with the memoryLimit argument. Each
@@ -468,17 +480,17 @@ type HashRouter struct {
 // be called concurrently between different outputs. Similarly, each output
 // needs to have a separate disk account and a separate converter memory
 // account.
-func NewHashRouter(
+func NewRouter(
 	unlimitedAllocators []*colmem.Allocator,
 	input colexecargs.OpWithMetaInfo,
 	types []*types.T,
-	hashCols []uint32,
+	tupleDistributor TupleDistributor,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
 	converterMemAccounts []*mon.BoundAccount,
-) (*HashRouter, []colexecop.DrainableClosableOperator) {
+) (*Router, []colexecop.DrainableClosableOperator) {
 	outputs := make([]routerOutput, len(unlimitedAllocators))
 	outputsAsOps := make([]colexecop.DrainableClosableOperator, len(unlimitedAllocators))
 	// unblockEventsChan is buffered to 2*numOutputs as we don't want the outputs
@@ -486,7 +498,7 @@ func NewHashRouter(
 	// Unblock events only happen after a corresponding block event. Since these
 	// are state changes and are done under lock (including the output sending
 	// on the channel, which is why we want the channel to be buffered in the
-	// first place), every time the HashRouter blocks an output, it *must* read
+	// first place), every time the Router blocks an output, it *must* read
 	// all unblock events preceding it since these *must* be on the channel.
 	unblockEventsChan := make(chan struct{}, 2*len(unlimitedAllocators))
 	memoryLimitPerOutput := memoryLimit / int64(len(unlimitedAllocators))
@@ -512,28 +524,27 @@ func NewHashRouter(
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
-	return newHashRouterWithOutputs(input, hashCols, unblockEventsChan, outputs), outputsAsOps
+	return newRouterWithOutputs(input, unblockEventsChan, outputs, tupleDistributor), outputsAsOps
 }
 
-func newHashRouterWithOutputs(
+func newRouterWithOutputs(
 	input colexecargs.OpWithMetaInfo,
-	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
-) *HashRouter {
-	r := &HashRouter{
+	tupleDistributor TupleDistributor,
+) *Router {
+	r := &Router{
 		OneInputNode:        colexecop.NewOneInputNode(input.Root),
 		inputMetaInfo:       input,
-		hashCols:            hashCols,
 		outputs:             outputs,
 		unblockedEventsChan: unblockEventsChan,
 		// waitForMetadata is a buffered channel to avoid blocking if nobody will
 		// read the metadata.
 		waitForMetadata:  make(chan []execinfrapb.ProducerMetadata, 1),
-		tupleDistributor: colexechash.NewTupleHashDistributor(colexechash.DefaultInitHashValue, len(outputs)),
+		tupleDistributor: tupleDistributor,
 	}
 	for i := range outputs {
-		outputs[i].initWithHashRouter(r)
+		outputs[i].initWithRouter(r)
 	}
 	return r
 }
@@ -542,7 +553,7 @@ func newHashRouterWithOutputs(
 // them if non-nil. The only case where the error is not forwarded is if no
 // output could be canceled due to an error. In this case each output will
 // forward the error returned during cancellation.
-func (r *HashRouter) cancelOutputs(ctx context.Context, errToForward error) {
+func (r *Router) cancelOutputs(ctx context.Context, errToForward error) {
 	for _, o := range r.outputs {
 		if err := colexecerror.CatchVectorizedRuntimeError(func() {
 			o.cancel(ctx, errToForward)
@@ -554,25 +565,25 @@ func (r *HashRouter) cancelOutputs(ctx context.Context, errToForward error) {
 	}
 }
 
-func (r *HashRouter) setDrainState(drainState hashRouterDrainState) {
+func (r *Router) setDrainState(drainState hashRouterDrainState) {
 	atomic.StoreInt32(&r.atomics.drainState, int32(drainState))
 }
 
-func (r *HashRouter) getDrainState() hashRouterDrainState {
+func (r *Router) getDrainState() hashRouterDrainState {
 	return hashRouterDrainState(atomic.LoadInt32(&r.atomics.drainState))
 }
 
-// Run runs the HashRouter. Batches are read from the input and pushed to an
+// Run runs the Router. Batches are read from the input and pushed to an
 // output calculated by hashing columns. Cancel the given context to terminate
 // early.
-func (r *HashRouter) Run(ctx context.Context) {
+func (r *Router) Run(ctx context.Context) {
 	var span *tracing.Span
 	ctx, span = execinfra.ProcessorSpan(ctx, "hash router")
 	if span != nil {
 		defer span.Finish()
 	}
 	var inputInitialized bool
-	// Since HashRouter runs in a separate goroutine, we want to be safe and
+	// Since Router runs in a separate goroutine, we want to be safe and
 	// make sure that we catch errors in all code paths, so we wrap the whole
 	// method with a catcher. Note that we also have "internal" catchers as
 	// well for more fine-grained control of error propagation.
@@ -656,7 +667,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 // processNextBatch reads the next batch from its input, hashes it and adds
 // each column to its corresponding output, returning whether the input is
 // done.
-func (r *HashRouter) processNextBatch(ctx context.Context) bool {
+func (r *Router) processNextBatch(ctx context.Context) bool {
 	b := r.Input.Next()
 	n := b.Length()
 	if n == 0 {
@@ -671,7 +682,7 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 	// It is ok that we call Init() on every batch since all calls except for
 	// the first one are noops.
 	r.tupleDistributor.Init(ctx)
-	selections := r.tupleDistributor.Distribute(b, r.hashCols)
+	selections := r.tupleDistributor.Distribute(b)
 	for i, o := range r.outputs {
 		if len(selections[i]) > 0 {
 			colexecutils.UpdateBatchState(b, len(selections[i]), true /* usesSel */, selections[i])
@@ -684,8 +695,8 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 	return false
 }
 
-// resetForTests resets the HashRouter for a test or benchmark run.
-func (r *HashRouter) resetForTests(ctx context.Context) {
+// resetForTests resets the Router for a test or benchmark run.
+func (r *Router) resetForTests(ctx context.Context) {
 	if i, ok := r.Input.(colexecop.Resetter); ok {
 		i.Reset(ctx)
 	}
@@ -705,16 +716,16 @@ func (r *HashRouter) resetForTests(ctx context.Context) {
 	}
 }
 
-func (r *HashRouter) encounteredError(ctx context.Context) {
+func (r *Router) encounteredError(ctx context.Context) {
 	// Once one output returns an error the hash router needs to stop running
 	// and drain its input.
 	r.setDrainState(hashRouterDrainStateRequested)
 	// cancel all outputs. The Run goroutine will eventually realize that the
-	// HashRouter is done and exit without draining.
+	// Router is done and exit without draining.
 	r.cancelOutputs(ctx, nil /* errToForward */)
 }
 
-func (r *HashRouter) drainMeta() []execinfrapb.ProducerMetadata {
+func (r *Router) drainMeta() []execinfrapb.ProducerMetadata {
 	if int(atomic.AddInt32(&r.atomics.numDrainedOutputs, 1)) != len(r.outputs) {
 		return nil
 	}
