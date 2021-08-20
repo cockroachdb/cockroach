@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "clierrorplus",
+    srcs = [
+        "decorate_error.go",
+        "doc.go",
+        "shout.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/clierrorplus",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/clierror",
+        "//pkg/cli/clisqlclient",
+        "//pkg/security",
+        "//pkg/server",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/util/grpcutil",
+        "//pkg/util/log",
+        "//pkg/util/netutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//:pq",
+        "@com_github_spf13_cobra//:cobra",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)

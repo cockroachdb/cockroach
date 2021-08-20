@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
@@ -49,7 +50,7 @@ Display the node IDs for all active (that is, running and not decommissioned) me
 To retrieve the IDs for inactive members, see 'node status --decommission'.
 	`,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runLsNodes),
+	RunE: clierrorplus.MaybeDecorateError(runLsNodes),
 }
 
 func runLsNodes(cmd *cobra.Command, args []string) (resErr error) {
@@ -123,7 +124,7 @@ If a node ID is specified, this will show the status for the corresponding node.
 is specified, this will display the status for all nodes in the cluster.
 	`,
 	Args: cobra.MaximumNArgs(1),
-	RunE: MaybeDecorateGRPCError(runStatusNode),
+	RunE: clierrorplus.MaybeDecorateError(runStatusNode),
 }
 
 func runStatusNode(cmd *cobra.Command, args []string) error {
@@ -296,7 +297,7 @@ var decommissionNodeCmd = &cobra.Command{
 Marks the nodes with the supplied IDs as decommissioning.
 This will cause leases and replicas to be removed from these nodes.`,
 	Args: cobra.MinimumNArgs(0),
-	RunE: MaybeDecorateGRPCError(runDecommissionNode),
+	RunE: clierrorplus.MaybeDecorateError(runDecommissionNode),
 }
 
 func parseNodeIDs(strNodeIDs []string) ([]roachpb.NodeID, error) {
@@ -529,7 +530,7 @@ For the nodes with the supplied IDs, resets the decommissioning states,
 signaling the affected nodes to participate in the cluster again.
 	`,
 	Args: cobra.MinimumNArgs(0),
-	RunE: MaybeDecorateGRPCError(runRecommissionNode),
+	RunE: clierrorplus.MaybeDecorateError(runRecommissionNode),
 }
 
 func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
@@ -607,7 +608,7 @@ After a successful drain, the server process is still running;
 use a service manager or orchestrator to terminate the process
 gracefully using e.g. a unix signal.`,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runDrain),
+	RunE: clierrorplus.MaybeDecorateError(runDrain),
 }
 
 // runDrain calls the Drain RPC without the flag to stop the

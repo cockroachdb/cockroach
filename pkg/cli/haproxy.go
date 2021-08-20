@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,7 +59,7 @@ The key (eg: 'region') must be fully specified, only values (eg: 'us-east1') can
 An error is returned if no nodes match the locality filter.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runGenHAProxyCmd),
+	RunE: clierrorplus.MaybeDecorateError(runGenHAProxyCmd),
 }
 
 type haProxyNodeInfo struct {

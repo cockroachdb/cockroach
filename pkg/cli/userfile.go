@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile"
@@ -51,7 +52,7 @@ Uploads a single file, or, with the -r flag, all the files in the subtree rooted
 at a directory, to the user-scoped file storage using a SQL connection.
 `,
 	Args: cobra.MinimumNArgs(1),
-	RunE: maybeShoutError(runUserFileUpload),
+	RunE: clierrorplus.MaybeShoutError(runUserFileUpload),
 }
 
 var userFileListCmd = &cobra.Command{
@@ -63,7 +64,7 @@ using a SQL connection. If no pattern is provided, all files in the specified
 (or default, if unspecified) user scoped file storage will be listed.
 `,
 	Args:    cobra.MinimumNArgs(0),
-	RunE:    maybeShoutError(runUserFileList),
+	RunE:    clierrorplus.MaybeShoutError(runUserFileList),
 	Aliases: []string{"ls"},
 }
 
@@ -75,7 +76,7 @@ Fetch the files stored in the user scoped file storage which match the provided 
 using a SQL connection, to the current directory or 'destination' if provided.
 `,
 	Args: cobra.MinimumNArgs(1),
-	RunE: maybeShoutError(runUserFileGet),
+	RunE: clierrorplus.MaybeShoutError(runUserFileGet),
 }
 
 var userFileDeleteCmd = &cobra.Command{
@@ -88,7 +89,7 @@ using a SQL connection. If passed pattern '*', all files in the specified
 atomic, and all deletions prior to the first failure will occur.
 `,
 	Args:    cobra.MinimumNArgs(1),
-	RunE:    maybeShoutError(runUserFileDelete),
+	RunE:    clierrorplus.MaybeShoutError(runUserFileDelete),
 	Aliases: []string{"rm"},
 }
 

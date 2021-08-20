@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	tracezipper "github.com/cockroachdb/cockroach/pkg/util/tracing/zipper"
 	"github.com/cockroachdb/errors"
@@ -28,7 +29,7 @@ var debugJobTraceFromClusterCmd = &cobra.Command{
 	Use:   "job-trace <job_id> --url=<cluster connection string>",
 	Short: "get the trace payloads for the executing job",
 	Args:  cobra.MinimumNArgs(1),
-	RunE:  MaybeDecorateGRPCError(runDebugJobTrace),
+	RunE:  clierrorplus.MaybeDecorateError(runDebugJobTrace),
 }
 
 const jobTraceZipSuffix = "job-trace.zip"

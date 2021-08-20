@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
@@ -30,7 +31,7 @@ var importDumpFileCmd = &cobra.Command{
 Uploads and imports a local dump file into the cockroach cluster via userfile storage.
 `,
 	Args: cobra.MinimumNArgs(2),
-	RunE: maybeShoutError(runDumpFileImport),
+	RunE: clierrorplus.MaybeShoutError(runDumpFileImport),
 }
 
 var importDumpTableCmd = &cobra.Command{
@@ -40,7 +41,7 @@ var importDumpTableCmd = &cobra.Command{
 Uploads and imports a table from the local dump file into the cockroach cluster via userfile storage.
 `,
 	Args: cobra.MinimumNArgs(3),
-	RunE: maybeShoutError(runDumpTableImport),
+	RunE: clierrorplus.MaybeShoutError(runDumpTableImport),
 }
 
 // importCLITestingKnobs are set when the CLI import command is run from a unit

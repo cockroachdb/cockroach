@@ -76,22 +76,6 @@ eexpect ":/# "
 send "$argv start-single-node --listen-addr=localhost --certs-dir=$certs_dir\r"
 eexpect "restarted pre-existing node"
 
-set spawn_id $client_spawn_id
-
-start_test "Connecting an insecure RPC client to a secure server"
-send "$argv quit --insecure\r"
-eexpect "ERROR: server closed the connection."
-eexpect "remove --insecure"
-eexpect ":/# "
-end_test
-
-start_test "Connecting an insecure SQL client to a secure server"
-send "$argv sql -e 'select 1' --insecure\r"
-eexpect "ERROR: SSL authentication error while connecting."
-eexpect "remove --insecure"
-eexpect ":/# "
-end_test
-
 # Check what happens when attempting to connect to something
 # that is not a CockroachDB server.
 set spawn_id $shell_spawn_id

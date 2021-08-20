@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -42,7 +43,7 @@ example, to install man pages globally on many Unix-like systems,
 use "--path=/usr/local/share/man/man1".
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runGenManCmd),
+	RunE: clierrorplus.MaybeDecorateError(runGenManCmd),
 }
 
 func runGenManCmd(cmd *cobra.Command, args []string) error {
@@ -97,7 +98,7 @@ instructions.
 `,
 	Args:      cobra.OnlyValidArgs,
 	ValidArgs: []string{"bash", "zsh", "fish"},
-	RunE:      MaybeDecorateGRPCError(runGenAutocompleteCmd),
+	RunE:      clierrorplus.MaybeDecorateError(runGenAutocompleteCmd),
 }
 
 func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {

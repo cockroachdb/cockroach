@@ -16,6 +16,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -38,7 +39,7 @@ cluster settings. After the first stage completes, the server process is shut
 down.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runQuit),
+	RunE: clierrorplus.MaybeDecorateError(runQuit),
 	Deprecated: `see 'cockroach node drain' instead to drain a 
 server without terminating the server process (which can in turn be done using 
 an orchestration layer or a process manager, or by sending a termination signal

@@ -16,6 +16,7 @@ import (
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/spf13/cobra"
 )
@@ -28,7 +29,7 @@ Run a test directory service that starts and manages tenant SQL instances as
 processes on the local machine.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runDirectorySvr),
+	RunE: clierrorplus.MaybeDecorateError(runDirectorySvr),
 }
 
 func runDirectorySvr(cmd *cobra.Command, args []string) (returnErr error) {

@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -63,7 +64,7 @@ var placeholderPairs []string
 var explainPrefix string
 
 func init() {
-	statementBundleRecreateCmd.RunE = MaybeDecorateGRPCError(func(cmd *cobra.Command, args []string) error {
+	statementBundleRecreateCmd.RunE = clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		return runBundleRecreate(cmd, args)
 	})
 
@@ -151,7 +152,7 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 	initGEOS(ctx)
 
 	if err := c.Start(ctx, runInitialSQL); err != nil {
-		return CheckAndMaybeShout(err)
+		return clierrorplus.CheckAndMaybeShout(err)
 	}
 	conn, err := sqlCtx.MakeConn(c.GetConnURL())
 	if err != nil {
