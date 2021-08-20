@@ -287,6 +287,10 @@ type Metrics struct {
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements.
 	ExecutedStatementCounters StatementCounters
+
+	// GuardrailMetrics contains metrics related to different guardrails in the
+	// SQL layer.
+	GuardrailMetrics GuardrailMetrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -329,6 +333,12 @@ func makeMetrics(internal bool) Metrics {
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
+		GuardrailMetrics: GuardrailMetrics{
+			TxnRowsWrittenLogCount: metric.NewCounter(getMetricMeta(MetaTxnRowsWrittenLog, internal)),
+			TxnRowsWrittenErrCount: metric.NewCounter(getMetricMeta(MetaTxnRowsWrittenErr, internal)),
+			TxnRowsReadLogCount:    metric.NewCounter(getMetricMeta(MetaTxnRowsReadLog, internal)),
+			TxnRowsReadErrCount:    metric.NewCounter(getMetricMeta(MetaTxnRowsReadErr, internal)),
+		},
 	}
 }
 
@@ -1102,6 +1112,16 @@ type connExecutor struct {
 		// QueryLevelStats which are sampled.
 		rowsRead  int64
 		bytesRead int64
+
+		// rowsWritten tracks the number of rows written (modified) by all
+		// statements in this txn so far.
+		rowsWritten int64
+
+		// rowsWrittenLogged and rowsReadLogged indicates whether we have
+		// already logged an event about reaching written/read rows setting,
+		// respectively.
+		rowsWrittenLogged bool
+		rowsReadLogged    bool
 
 		// hasAdminRole is used to cache if the user running the transaction
 		// has admin privilege. hasAdminRoleCache is set for the first statement

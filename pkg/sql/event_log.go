@@ -166,6 +166,22 @@ type eventLogOptions struct {
 	verboseTraceLevel log.Level
 }
 
+func (p *planner) getCommonSQLEventDetails() eventpb.CommonSQLEventDetails {
+	commonSQLEventDetails := eventpb.CommonSQLEventDetails{
+		Statement:       tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations),
+		Tag:             p.stmt.AST.StatementTag(),
+		User:            p.User().Normalized(),
+		ApplicationName: p.SessionData().ApplicationName,
+	}
+	if pls := p.extendedEvalCtx.EvalContext.Placeholders.Values; len(pls) > 0 {
+		commonSQLEventDetails.PlaceholderValues = make([]string, len(pls))
+		for idx, val := range pls {
+			commonSQLEventDetails.PlaceholderValues[idx] = val.String()
+		}
+	}
+	return commonSQLEventDetails
+}
+
 // logEventsWithOptions is like logEvent() but it gives control to the
 // caller as to where the event is written to.
 //
@@ -174,18 +190,11 @@ type eventLogOptions struct {
 func (p *planner) logEventsWithOptions(
 	ctx context.Context, depth int, opts eventLogOptions, entries ...eventLogEntry,
 ) error {
-	commonPayload := sqlEventCommonExecPayload{
-		user:         p.User(),
-		stmt:         tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations),
-		stmtTag:      p.stmt.AST.StatementTag(),
-		placeholders: p.extendedEvalCtx.EvalContext.Placeholders.Values,
-		appName:      p.SessionData().ApplicationName,
-	}
 	return logEventInternalForSQLStatements(ctx,
 		p.extendedEvalCtx.ExecCfg, p.txn,
 		1+depth,
 		opts,
-		commonPayload,
+		p.getCommonSQLEventDetails(),
 		entries...)
 }
 
@@ -228,16 +237,6 @@ func logEventInternalForSchemaChanges(
 	)
 }
 
-// sqlEventExecPayload contains the statement and session details
-// necessary to populate an eventpb.CommonSQLExecDetails.
-type sqlEventCommonExecPayload struct {
-	user         security.SQLUsername
-	stmt         string
-	stmtTag      string
-	placeholders tree.QueryArguments
-	appName      string
-}
-
 // logEventInternalForSQLStatements emits a cluster event on behalf of
 // a SQL statement, when the point where the event is emitted does not
 // have access to a (*planner) and the current statement metadata.
@@ -252,7 +251,7 @@ func logEventInternalForSQLStatements(
 	txn *kv.Txn,
 	depth int,
 	opts eventLogOptions,
-	commonPayload sqlEventCommonExecPayload,
+	commonSQLEventDetails eventpb.CommonSQLEventDetails,
 	entries ...eventLogEntry,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
@@ -264,17 +263,8 @@ func logEventInternalForSQLStatements(
 			return errors.AssertionFailedf("unknown event type: %T", event)
 		}
 		m := sqlCommon.CommonSQLDetails()
-		m.Statement = commonPayload.stmt
-		m.Tag = commonPayload.stmtTag
-		m.ApplicationName = commonPayload.appName
-		m.User = commonPayload.user.Normalized()
+		*m = commonSQLEventDetails
 		m.DescriptorID = uint32(entry.targetID)
-		if pls := commonPayload.placeholders; len(pls) > 0 {
-			m.PlaceholderValues = make([]string, len(pls))
-			for idx, val := range pls {
-				m.PlaceholderValues[idx] = val.String()
-			}
-		}
 		return nil
 	}
 

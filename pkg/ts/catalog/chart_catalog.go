@@ -2156,6 +2156,20 @@ var charts = []sectionDescription{
 		Organization: [][]string{{SQLLayer, "Guardrails"}},
 		Charts: []chartDescription{
 			{
+				Title: "Transaction Row Count Limit Violations",
+				Metrics: []string{
+					"sql.guardrails.transaction_rows_written_log.count",
+					"sql.guardrails.transaction_rows_written_log.count.internal",
+					"sql.guardrails.transaction_rows_written_err.count",
+					"sql.guardrails.transaction_rows_written_err.count.internal",
+					"sql.guardrails.transaction_rows_read_log.count",
+					"sql.guardrails.transaction_rows_read_log.count.internal",
+					"sql.guardrails.transaction_rows_read_err.count",
+					"sql.guardrails.transaction_rows_read_err.count.internal",
+				},
+				AxisLabel: "Transactions",
+			},
+			{
 				Title: "Maximum Row Size Violations",
 				Metrics: []string{
 					"sql.guardrails.max_row_size_log.count",
