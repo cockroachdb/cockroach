@@ -150,7 +150,6 @@ go_test(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//vfs",
-        "@com_github_gogo_protobuf//proto",
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
