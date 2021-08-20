@@ -56,8 +56,24 @@ type orderValidator struct {
 	failures []string
 }
 
+// NoOpValidator is a validator that does nothing. Useful for
+// composition.
+var NoOpValidator = &noOpValidator{}
+
 var _ Validator = &orderValidator{}
+var _ Validator = &noOpValidator{}
 var _ StreamValidator = &orderValidator{}
+
+type noOpValidator struct{}
+
+// NoteRow accepts a changed row entry.
+func (v *noOpValidator) NoteRow(string, string, string, hlc.Timestamp) error { return nil }
+
+// NoteResolved accepts a resolved timestamp entry.
+func (v *noOpValidator) NoteResolved(string, hlc.Timestamp) error { return nil }
+
+// Failures returns any violations seen so far.
+func (v *noOpValidator) Failures() []string { return nil }
 
 // NewOrderValidator returns a Validator that checks the row and resolved
 // timestamp ordering guarantees. It also asserts that keys have an affinity to

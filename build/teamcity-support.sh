@@ -4,6 +4,7 @@
 root="$(dirname $(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ))"
 
 source "$root/build/teamcity-common-support.sh"
+source "$root/build/teamcity/util.sh"
 
 remove_files_on_exit() {
   rm -f ~/.ssh/id_rsa{,.pub}
@@ -284,18 +285,11 @@ tc_release_branch() {
   [[ "$TC_BUILD_BRANCH" == master || "$TC_BUILD_BRANCH" == release-* || "$TC_BUILD_BRANCH" == provisional_* ]]
 }
 
-tc_start_block() {
-  echo "##teamcity[blockOpened name='$1']"
-}
 
 if_tc() {
   if [[ "${TC_BUILD_ID-}" ]]; then
     "$@"
   fi
-}
-
-tc_end_block() {
-  echo "##teamcity[blockClosed name='$1']"
 }
 
 tc_prepare() {

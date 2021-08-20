@@ -98,6 +98,22 @@ message StreamIngestionProgress {
   map<string, PartitionProgress> partition_progress = 2 [(gogoproto.nullable) = false];
 }
 
+
+message SchedulePTSChainingRecord {
+  enum PTSAction {
+    UPDATE = 0;
+    RELEASE = 1;
+  }
+
+
+  bytes protected_timestamp_record = 1 [
+   (gogoproto.customname) = "ProtectedTimestampRecord",
+   (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  PTSAction action = 2;
+}
+
 message BackupDetails {
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
@@ -117,7 +133,7 @@ message BackupDetails {
   // corresponding to this job. While the job ought to clean up the record
   // when it enters a terminal state, there may be cases where it cannot or
   // does not run the code to do so. To deal with this there is a background
-  // reconcilliation loop to ensure that protected timestamps are cleaned up.
+  // reconciliation loop to ensure that protected timestamps are cleaned up.
   bytes protected_timestamp_record = 7 [
     (gogoproto.customname) = "ProtectedTimestampRecord",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
@@ -127,6 +143,11 @@ message BackupDetails {
   // written, i.e. the URI the user provided before a chosen suffix was appended
   // to its path.
   string collection_URI = 8 [(gogoproto.customname) = "CollectionURI"];
+
+  // SchedulePTSChainingRecord is used by scheduled backups to chain protected
+  // timestamp records. For more details about the chaining scheme refer to
+  // ScheduledBackupExecutionArgs.ChainProtectedTimestampRecords.
+  SchedulePTSChainingRecord schedule_pts_chaining_record = 10 [(gogoproto.customname) = "SchedulePTSChainingRecord"];
 }
 
 message BackupProgress {

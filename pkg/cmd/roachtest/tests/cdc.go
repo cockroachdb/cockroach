@@ -344,10 +344,27 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
+	tc, err := kafka.consumer(ctx, "bank")
+	if err != nil {
+		t.Fatal(errors.Wrap(err, "could not create kafka consumer"))
+	}
+	defer tc.Close()
+
+	l, err := t.L().ChildLogger(`changefeed`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+
 	t.Status("running workload")
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
+	defer workloadCancel()
+
 	m := c.NewMonitor(workloadCtx, crdbNodes)
 	var doneAtomic int64
+	messageBuf := make(chan *sarama.ConsumerMessage, 4096)
+	const requestedResolved = 100
+
 	m.Go(func(ctx context.Context) error {
 		err := c.RunE(ctx, workloadNode, `./workload run bank {pgurl:1} --max-rate=10`)
 		if atomic.LoadInt64(&doneAtomic) > 0 {
@@ -355,33 +372,47 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 		return errors.Wrap(err, "workload failed")
 	})
-	m.Go(func(ctx context.Context) (_err error) {
+	m.Go(func(ctx context.Context) error {
 		defer workloadCancel()
+		defer func() { close(messageBuf) }()
+		v := cdctest.MakeCountValidator(cdctest.NoOpValidator)
+		for {
+			m := tc.Next(ctx)
+			if m == nil {
+				return fmt.Errorf("unexpected end of changefeed")
+			}
+			messageBuf <- m
+			updated, resolved, err := cdctest.ParseJSONValueTimestamps(m.Value)
+			if err != nil {
+				return err
+			}
 
-		defer func() {
-			_err = errors.Wrap(_err, "CDC failed")
-		}()
-
-		l, err := t.L().ChildLogger(`changefeed`)
-		if err != nil {
-			return err
+			partitionStr := strconv.Itoa(int(m.Partition))
+			if len(m.Key) > 0 {
+				if err := v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated); err != nil {
+					return err
+				}
+			} else {
+				if err := v.NoteResolved(partitionStr, resolved); err != nil {
+					return err
+				}
+				l.Printf("%d of %d resolved timestamps received from kafka, latest is %s behind realtime, %s beind realtime when sent to kafka",
+					v.NumResolvedWithRows, requestedResolved, timeutil.Since(resolved.GoTime()), m.Timestamp.Sub(resolved.GoTime()))
+				if v.NumResolvedWithRows >= requestedResolved {
+					atomic.StoreInt64(&doneAtomic, 1)
+					break
+				}
+			}
 		}
-		defer l.Close()
-
-		tc, err := kafka.consumer(ctx, "bank")
-		if err != nil {
-			return errors.Wrap(err, "could not create kafka consumer")
-		}
-
-		defer tc.Close()
-
+		return nil
+	})
+	m.Go(func(context.Context) error {
 		if _, err := db.Exec(
 			`CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`,
 		); err != nil {
 			return errors.Wrap(err, "CREATE TABLE failed")
 		}
 
-		const requestedResolved = 100
 		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions, 0)
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
@@ -398,11 +429,10 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 			validators = append(validators, baV)
 		}
 		v := cdctest.MakeCountValidator(validators)
-
 		for {
-			m := tc.Next(ctx)
-			if m == nil {
-				return fmt.Errorf("unexpected end of changefeed")
+			m, ok := <-messageBuf
+			if !ok {
+				break
 			}
 			updated, resolved, err := cdctest.ParseJSONValueTimestamps(m.Value)
 			if err != nil {
@@ -418,12 +448,9 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if err := v.NoteResolved(partitionStr, resolved); err != nil {
 					return err
 				}
-				l.Printf("%d of %d resolved timestamps, latest is %s behind realtime",
+				l.Printf("%d of %d resolved timestamps validated, latest is %s behind realtime",
 					v.NumResolvedWithRows, requestedResolved, timeutil.Since(resolved.GoTime()))
-				if v.NumResolvedWithRows >= requestedResolved {
-					atomic.StoreInt64(&doneAtomic, 1)
-					break
-				}
+
 			}
 		}
 		if failures := v.Failures(); len(failures) > 0 {
@@ -813,7 +840,7 @@ func registerCDC(r registry.Registry) {
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4),
 		RequiresLicense: true,
-		Skip:            "timeouts #68167",
+		Timeout:         30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCBank(ctx, t, c)
 		},
