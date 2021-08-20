@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -321,11 +320,12 @@ func (p *planner) dropIndexByName(
 		)
 	}
 
-	// Check if requires CCL binary for eventual zone config removal. Only
-	// necessary for the system tenant, because secondary tenants do not have
-	// zone configs for individual objects.
-	if p.ExecCfg().Codec.ForSystemTenant() {
-		_, zone, _, err := GetZoneConfigInTxn(ctx, p.txn, config.SystemTenantObjectID(tableDesc.ID), nil /* index */, "", false)
+	// Check if requires CCL binary for eventual zone config removal. This is only
+	// required if `system.zones` exists.
+	if ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings.Version) {
+		_, zone, _, err := GetZoneConfigInTxn(
+			ctx, p.txn, p.ExecCfg().Codec, tableDesc.ID, nil /* index */, "", false,
+		)
 		if err != nil {
 			return err
 		}

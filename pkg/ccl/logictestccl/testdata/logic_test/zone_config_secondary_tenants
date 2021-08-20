@@ -1,0 +1,20 @@
+# LogicTest: 3node-tenant
+# Zone config logic tests that are only meant to work for secondary tenants.
+
+statement ok
+CREATE TABLE t();
+
+statement error pq: unimplemented: operation is unsupported in multi-tenancy mode
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
+
+statement ok
+SET CLUSTER SETTING sql.zone_configs.experimental_allow_for_secondary_tenant.enabled = true
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
+
+query IT
+SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
+----
+0   RANGE default
+53  TABLE test.public.t

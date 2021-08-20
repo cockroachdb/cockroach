@@ -47,7 +47,7 @@ func TestInitialKeys(t *testing.T) {
 			nonDescKeys = 9
 		} else {
 			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
-			nonDescKeys = 2
+			nonDescKeys = 3
 		}
 
 		ms := bootstrap.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())

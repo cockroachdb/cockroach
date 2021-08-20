@@ -3837,7 +3837,7 @@ value if you rely on the HLC for accuracy.`,
 					},
 					ReturnType: returnType,
 					Fn: func(context *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-						const emitDefaults = true
+						const emitDefaults = false
 						return pbToJSON(
 							string(tree.MustBeDString(args[0])),
 							[]byte(tree.MustBeDBytes(args[1])),
