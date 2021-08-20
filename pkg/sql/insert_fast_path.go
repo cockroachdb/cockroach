@@ -326,6 +326,10 @@ func (n *insertFastPathNode) Close(ctx context.Context) {
 	insertFastPathNodePool.Put(n)
 }
 
+func (n *insertFastPathNode) rowsWritten() int64 {
+	return n.run.rowsInserted
+}
+
 // See planner.autoCommit.
 func (n *insertFastPathNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()

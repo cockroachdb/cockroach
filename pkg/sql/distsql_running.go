@@ -608,6 +608,10 @@ type DistSQLReceiver struct {
 	// this node's clock.
 	clockUpdater clockUpdater
 
+	// TODO(yuzefovich): I believe these stats currently only include the
+	// metrics from the main query, and not from any sub- or post-queries
+	// because we use DistSQLReceiver.clone() for those. Think through whether
+	// this is expected or not.
 	stats topLevelQueryStats
 
 	expectedRowsRead int64
@@ -874,6 +878,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 	if meta.Metrics != nil {
 		r.stats.bytesRead += meta.Metrics.BytesRead
 		r.stats.rowsRead += meta.Metrics.RowsRead
+		r.stats.rowsWritten += meta.Metrics.RowsWritten
 		if r.progressAtomic != nil && r.expectedRowsRead != 0 {
 			progress := float64(r.stats.rowsRead) / float64(r.expectedRowsRead)
 			atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
