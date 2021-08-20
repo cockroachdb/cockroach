@@ -13,7 +13,6 @@ package cockroach.util.log.eventpb;
 option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
-import "google/protobuf/timestamp.proto";
 
 // This file contains common payloads to multiple event types.
 //
