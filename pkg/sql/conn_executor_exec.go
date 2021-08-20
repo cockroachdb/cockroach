@@ -47,6 +47,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -1020,6 +1022,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.extraTxnState.rowsRead += stats.rowsRead
 	ex.extraTxnState.bytesRead += stats.bytesRead
+	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
@@ -1031,6 +1034,120 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
 	}
 
+	if limitsErr := ex.handleTxnRowsWrittenReadLimits(ctx); limitsErr != nil && res.Err() == nil {
+		res.SetError(limitsErr)
+	}
+
+	return err
+}
+
+// handleTxnRowsGuardrails handles either "written" or "read" rows guardrails.
+func (ex *connExecutor) handleTxnRowsGuardrails(
+	ctx context.Context,
+	numRows, logLimit, errLimit int64,
+	readKind bool,
+	logCounter, errCounter *metric.Counter,
+) error {
+	var err error
+	shouldLog := logLimit != 0 && numRows >= logLimit
+	shouldErr := errLimit != 0 && numRows >= errLimit
+	if shouldLog || shouldErr {
+		commonSQLEventDetails := ex.planner.getCommonSQLEventDetails()
+		info := eventpb.CommonTxnRowsLimitDetails{
+			TxnID:                   ex.state.mu.txn.ID().String(),
+			SessionID:               ex.sessionID.String(),
+			ViolatesTxnRowsLimitErr: shouldErr,
+			ReadKind:                readKind,
+		}
+		if shouldErr && ex.executorType == executorTypeInternal {
+			// Internal work should never err and always log if violating either
+			// limit.
+			shouldErr = false
+			shouldLog = true
+		}
+		if readKind {
+			if ex.extraTxnState.rowsReadLogged {
+				// We have already logged an event about this transaction.
+				shouldLog = false
+			} else {
+				ex.extraTxnState.rowsReadLogged = shouldLog
+			}
+		} else {
+			if ex.extraTxnState.rowsWrittenLogged {
+				// We have already logged an event about this transaction.
+				shouldLog = false
+			} else {
+				ex.extraTxnState.rowsWrittenLogged = shouldLog
+			}
+		}
+		if shouldLog {
+			var event eventpb.EventPayload
+			if ex.executorType == executorTypeInternal {
+				if readKind {
+					event = &eventpb.TxnRowsReadLimitInternal{
+						CommonSQLEventDetails:     *commonSQLEventDetails,
+						CommonTxnRowsLimitDetails: info,
+					}
+				} else {
+					event = &eventpb.TxnRowsWrittenLimitInternal{
+						CommonSQLEventDetails:     *commonSQLEventDetails,
+						CommonTxnRowsLimitDetails: info,
+					}
+				}
+			} else {
+				if readKind {
+					event = &eventpb.TxnRowsReadLimit{
+						CommonSQLEventDetails:     *commonSQLEventDetails,
+						CommonTxnRowsLimitDetails: info,
+					}
+				} else {
+					event = &eventpb.TxnRowsWrittenLimit{
+						CommonSQLEventDetails:     *commonSQLEventDetails,
+						CommonTxnRowsLimitDetails: info,
+					}
+				}
+			}
+			log.StructuredEvent(ctx, event)
+			logCounter.Inc(1)
+		}
+		if shouldErr {
+			err = pgerror.WithCandidateCode(&info, pgcode.ProgramLimitExceeded)
+			errCounter.Inc(1)
+		}
+	}
+	return err
+}
+
+// handleTxnRowsWrittenReadLimits checks whether the current transaction has
+// reached the limits on the number of rows written/read and logs the
+// corresponding event or returns an error. It should be called after executing
+// a single statement.
+func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) error {
+	// Note that in many cases, the internal executor doesn't have the
+	// sessionData properly set (i.e. the default values are used), so we'll
+	// never log anything then. This seems acceptable since the focus of these
+	// guardrails is on the externally initiated queries.
+	sd := ex.sessionData
+	err := ex.handleTxnRowsGuardrails(
+		ctx,
+		ex.extraTxnState.rowsWritten,
+		sd.TxnRowsWrittenLog,
+		sd.TxnRowsWrittenErr,
+		false, /* readKind */
+		ex.metrics.GuardrailMetrics.TxnRowsWrittenLogCount,
+		ex.metrics.GuardrailMetrics.TxnRowsWrittenErrCount,
+	)
+	if readErr := ex.handleTxnRowsGuardrails(
+		ctx,
+		ex.extraTxnState.rowsRead,
+		sd.TxnRowsReadLog,
+		sd.TxnRowsReadErr,
+		true, /* readKind */
+		ex.metrics.GuardrailMetrics.TxnRowsReadLogCount,
+		ex.metrics.GuardrailMetrics.TxnRowsReadErrCount,
+	); readErr != nil && err == nil {
+		err = readErr
+	}
 	return err
 }
 
@@ -1074,6 +1191,8 @@ type topLevelQueryStats struct {
 	bytesRead int64
 	// rowsRead is the number of rows read from disk.
 	rowsRead int64
+	// rowsWritten is the number of rows written.
+	rowsWritten int64
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -1652,6 +1771,9 @@ func (ex *connExecutor) recordTransactionStart() (
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 	ex.extraTxnState.rowsRead = 0
 	ex.extraTxnState.bytesRead = 0
+	ex.extraTxnState.rowsWritten = 0
+	ex.extraTxnState.rowsWrittenLogged = false
+	ex.extraTxnState.rowsReadLogged = false
 	if txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); txnExecStatsSampleRate > 0 {
 		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
 	}
@@ -1678,6 +1800,7 @@ func (ex *connExecutor) recordTransactionStart() (
 		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 		ex.extraTxnState.rowsRead = 0
 		ex.extraTxnState.bytesRead = 0
+		ex.extraTxnState.rowsWritten = 0
 
 		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
 			ex.server.cfg.TestingKnobs.BeforeRestart(ex.Ctx(), ex.extraTxnState.autoRetryReason)

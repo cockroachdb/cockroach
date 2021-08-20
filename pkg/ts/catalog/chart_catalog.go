@@ -2250,6 +2250,43 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Guardrails"}},
+		Charts: []chartDescription{
+			{
+				Title: "Rows Written Logged",
+				Metrics: []string{
+					"sql.guardrails.transaction_rows_written_log.count",
+					"sql.guardrails.transaction_rows_written_log.count.internal",
+				},
+				AxisLabel: "Transactions",
+			},
+			{
+				Title: "Rows Written Erred",
+				Metrics: []string{
+					"sql.guardrails.transaction_rows_written_err.count",
+					"sql.guardrails.transaction_rows_written_err.count.internal",
+				},
+				AxisLabel: "Transactions",
+			},
+			{
+				Title: "Rows Read Logged",
+				Metrics: []string{
+					"sql.guardrails.transaction_rows_read_log.count",
+					"sql.guardrails.transaction_rows_read_log.count.internal",
+				},
+				AxisLabel: "Transactions",
+			},
+			{
+				Title: "Rows Read Erred",
+				Metrics: []string{
+					"sql.guardrails.transaction_rows_read_err.count",
+					"sql.guardrails.transaction_rows_read_err.count.internal",
+				},
+				AxisLabel: "Transactions",
+			},
+		},
+	},
+	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Block Cache"}},
 		Charts: []chartDescription{
 			{
