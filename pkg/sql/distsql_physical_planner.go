@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -2045,6 +2047,9 @@ func (dsp *DistSQLPlanner) planAggregators(
 	return nil
 }
 
+var enableDistributedIndexJoins = settings.RegisterBoolSetting("sql.distsql.distributed_join_reader.enabled",
+	"enables an experimental distribution model for joinreaders", false)
+
 func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	planCtx *PlanningCtx, n *indexJoinNode,
 ) (*PhysicalPlan, error) {
@@ -2101,6 +2106,71 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	if err != nil {
 		return nil, err
 	}
+
+	if enableDistributedIndexJoins.Get(&dsp.st.SV) {
+		// Here is our prototype index join distribution code.
+		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(planCtx.ExtendedEvalCtx.Codec, n.table.desc, n.table.index.GetID()))
+		allIndexSpan := n.table.desc.IndexSpan(planCtx.ExtendedEvalCtx.Codec, n.table.index.GetID())
+		partitions, err := dsp.PartitionSpans(planCtx, roachpb.Spans{allIndexSpan})
+		if err != nil {
+			return nil, err
+		}
+
+		outputSpans := make([]execinfrapb.OutputRouterSpec_RangeRouterSpec_Span, 0, len(partitions))
+		remoteNodes := make([]roachpb.NodeID, len(partitions))
+		for i, partition := range partitions {
+			remoteNodes[i] = partition.Node
+			for _, span := range partition.Spans {
+				endKey := span.EndKey[len(prefix):]
+				if len(endKey) == 0 {
+					endKey = roachpb.KeyMax
+				}
+				outputSpans = append(outputSpans, execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
+					Start: span.Key[len(prefix):],
+					End:   endKey,
+					// TODO(jordan): how do we pick this stream id?
+					Stream: int32(i),
+				})
+				if outputSpans[len(outputSpans)-1].End == nil {
+
+				}
+				span := roachpb.Span{
+					Key:    span.Key[len(prefix):],
+					EndKey: endKey,
+				}
+				fmt.Println(span)
+			}
+		}
+		sort.Slice(outputSpans, func(i, j int) bool {
+			return bytes.Compare(outputSpans[i].Start, outputSpans[j].Start) == -1
+		})
+
+		encodings := make([]execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding, len(n.keyCols))
+		for i := range n.keyCols {
+			encodings[i].Column = uint32(n.keyCols[i])
+			dir := n.table.index.GetKeyColumnDirection(i)
+			if dir == descpb.IndexDescriptor_ASC {
+				encodings[i].Encoding = descpb.DatumEncoding_ASCENDING_KEY
+			} else {
+				encodings[i].Encoding = descpb.DatumEncoding_DESCENDING_KEY
+			}
+		}
+
+		spec := execinfrapb.OutputRouterSpec{
+			Type: execinfrapb.OutputRouterSpec_BY_RANGE,
+			RangeRouterSpec: execinfrapb.OutputRouterSpec_RangeRouterSpec{
+				Spans:     outputSpans,
+				Encodings: encodings,
+			},
+		}
+
+		plan.AddStageOnNodes(remoteNodes, execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
+			post, spec, plan.GetResultTypes(), types, dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap),
+			plan.ResultRouters,
+		)
+		return plan, nil
+	}
+
 	if len(plan.ResultRouters) > 1 {
 		// Instantiate one join reader for every stream.
 		plan.AddNoGroupingStage(
@@ -3160,7 +3230,7 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 	}
 
 	nodes := getNodesOfRouters(plan.ResultRouters, plan.Processors)
-	plan.AddStageOnNodes(
+	plan.AddHashRoutedStageOnNodes(
 		nodes, distinctSpec, execinfrapb.PostProcessSpec{},
 		distinctSpec.Distinct.DistinctColumns, plan.GetResultTypes(),
 		plan.GetResultTypes(), plan.MergeOrdering, plan.ResultRouters,
