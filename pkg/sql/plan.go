@@ -103,6 +103,16 @@ type planNode interface {
 	Close(ctx context.Context)
 }
 
+// mutationPlanNode is a specification of planNode for mutations operations
+// (those that insert/update/detele/etc rows).
+type mutationPlanNode interface {
+	planNode
+
+	// rowsWritten returns the number of rows modified by this planNode. It
+	// should only be called once Next returns false.
+	rowsWritten() int64
+}
+
 // PlanNode is the exported name for planNode. Useful for CCL hooks.
 type PlanNode = planNode
 

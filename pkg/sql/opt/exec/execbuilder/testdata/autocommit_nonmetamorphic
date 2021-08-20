@@ -777,3 +777,66 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
 dist sender send  r43: sending batch 2 CPut to (n1,s1):1
 dist sender send  r43: sending batch 2 CPut to (n1,s1):1
 dist sender send  r43: sending batch 1 EndTxn to (n1,s1):1
+
+# Check that the statement can still be auto-committed when the txn rows written
+# erring guardrail is enabled.
+statement ok
+CREATE TABLE guardrails (i INT PRIMARY KEY);
+SET transaction_rows_written_err = 2
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO guardrails VALUES (1)
+] WHERE info LIKE '%auto commit%'
+----
+true
+
+# Now verify that writing a single row succeeds, but writing two doesn't.
+statement ok
+INSERT INTO guardrails VALUES (1)
+
+query error pq: txn reached the number of rows written \(2\)
+INSERT INTO guardrails VALUES (2), (3)
+
+statement ok
+RESET transaction_rows_written_err
+
+# Check that the statement that can usually be auto-committed isn't when the txn
+# rows read erring guardrail is enabled.
+statement ok
+SET transaction_rows_read_err = 1
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO guardrails VALUES (1)
+] WHERE info LIKE '%auto commit%'
+----
+false
+
+statement ok
+RESET transaction_rows_read_err
+
+# Check that the auto commit is enabled when the logging guardrails are enabled
+# but the erring one is not.
+statement ok
+SET transaction_rows_written_log = 1;
+SET transaction_rows_read_log = 1;
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO guardrails VALUES (1)
+] WHERE info LIKE '%auto commit%'
+----
+true
+
+statement ok
+RESET transaction_rows_written_log;
+RESET transaction_rows_read_log
+
+# Check that the auto commit is enabled when the guardrails are disabled.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO guardrails VALUES (1)
+] WHERE info LIKE '%auto commit%'
+----
+true

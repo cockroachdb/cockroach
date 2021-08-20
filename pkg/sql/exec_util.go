@@ -583,6 +583,42 @@ var dateStyleEnabled = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var txnRowsWrittenLog = settings.RegisterIntSetting(
+	"sql.defaults.transaction_rows_written_log",
+	"the threshold for the number of rows written by a SQL transaction "+
+		"which - once reached - will trigger a logging event to SQL_PERF (or "+
+		"SQL_INTERNAL_PERF for internal transactions); use 0 to disable",
+	0,
+	settings.NonNegativeInt,
+).WithPublic()
+
+var txnRowsWrittenErr = settings.RegisterIntSetting(
+	"sql.defaults.transaction_rows_written_err",
+	"the limit for the number of rows written by a SQL transaction which - "+
+		"once reached - will fail the transaction (or will trigger a logging "+
+		"event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable",
+	0,
+	settings.NonNegativeInt,
+).WithPublic()
+
+var txnRowsReadLog = settings.RegisterIntSetting(
+	"sql.defaults.transaction_rows_read_log",
+	"the threshold for the number of rows read by a SQL transaction "+
+		"which - once reached - will trigger a logging event to SQL_PERF (or "+
+		"SQL_INTERNAL_PERF for internal transactions); use 0 to disable",
+	0,
+	settings.NonNegativeInt,
+).WithPublic()
+
+var txnRowsReadErr = settings.RegisterIntSetting(
+	"sql.defaults.transaction_rows_read_err",
+	"the limit for the number of rows read by a SQL transaction which - "+
+		"once reached - will fail the transaction (or will trigger a logging "+
+		"event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable",
+	0,
+	settings.NonNegativeInt,
+).WithPublic()
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -917,6 +953,30 @@ var (
 		Name:        "sql.stats.cleanup.rows_removed",
 		Help:        "Number of stale statistics rows that are removed",
 		Measurement: "SQL Stats Cleanup",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnRowsWrittenLog = metric.Metadata{
+		Name:        "sql.guardrails.transaction_rows_written_log.count",
+		Help:        "Number of transactions logged because of transaction_rows_written_log guardrail",
+		Measurement: "Logged transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnRowsWrittenErr = metric.Metadata{
+		Name:        "sql.guardrails.transaction_rows_written_err.count",
+		Help:        "Number of transactions errored because of transaction_rows_written_err guardrail",
+		Measurement: "Errored transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnRowsReadLog = metric.Metadata{
+		Name:        "sql.guardrails.transaction_rows_read_log.count",
+		Help:        "Number of transactions logged because of transaction_rows_read_log guardrail",
+		Measurement: "Logged transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnRowsReadErr = metric.Metadata{
+		Name:        "sql.guardrails.transaction_rows_read_err.count",
+		Help:        "Number of transactions errored because of transaction_rows_read_err guardrail",
+		Measurement: "Errored transactions",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -2788,6 +2848,22 @@ func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
 
 func (m *sessionDataMutator) SetPropagateInputOrdering(b bool) {
 	m.data.PropagateInputOrdering = b
+}
+
+func (m *sessionDataMutator) SetTxnRowsWrittenLog(val int64) {
+	m.data.TxnRowsWrittenLog = val
+}
+
+func (m *sessionDataMutator) SetTxnRowsWrittenErr(val int64) {
+	m.data.TxnRowsWrittenErr = val
+}
+
+func (m *sessionDataMutator) SetTxnRowsReadLog(val int64) {
+	m.data.TxnRowsReadLog = val
+}
+
+func (m *sessionDataMutator) SetTxnRowsReadErr(val int64) {
+	m.data.TxnRowsReadErr = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
