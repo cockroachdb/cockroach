@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var _ error = &CommonLargeRowDetails{}
@@ -53,4 +54,113 @@ func (r *CommonLargeRowDetails) SafeFormatError(p errors.Printer) (next error) {
 		)
 	}
 	return nil
+}
+
+var _ error = &CommonTxnRowsLimitDetails{}
+var _ errors.SafeDetailer = &CommonTxnRowsLimitDetails{}
+var _ fmt.Formatter = &CommonTxnRowsLimitDetails{}
+var _ errors.SafeFormatter = &CommonTxnRowsLimitDetails{}
+
+func (d *CommonTxnRowsLimitDetails) kind() string {
+	if d.ReadKind {
+		return "read"
+	}
+	return "written"
+}
+
+// Error is part of the error interface, which CommonTxnRowsLimitDetails
+// implements.
+func (d *CommonTxnRowsLimitDetails) Error() string {
+	return fmt.Sprintf(
+		"txn reached the number of rows %s: TxnID %v SessionID %v",
+		d.kind(), redact.SafeString(d.TxnID), redact.SafeString(d.SessionID),
+	)
+}
+
+// SafeDetails is part of the errors.SafeDetailer interface, which
+// CommonTxnRowsLimitDetails implements.
+func (d *CommonTxnRowsLimitDetails) SafeDetails() []string {
+	return []string{d.TxnID, d.SessionID, d.kind()}
+}
+
+// Format is part of the fmt.Formatter interface, which
+// CommonTxnRowsLimitDetails implements.
+func (d *CommonTxnRowsLimitDetails) Format(s fmt.State, verb rune) {
+	errors.FormatError(d, s, verb)
+}
+
+// SafeFormatError is part of the errors.SafeFormatter interface, which
+// CommonTxnRowsLimitDetails implements.
+func (d *CommonTxnRowsLimitDetails) SafeFormatError(p errors.Printer) (next error) {
+	if p.Detail() {
+		p.Printf(
+			"txn reached the number of rows %s: TxnID %v SessionID %v",
+			d.kind(), redact.SafeString(d.TxnID), redact.SafeString(d.SessionID),
+		)
+	}
+	return nil
+}
+
+var _ error = &TxnRowsWrittenLimit{}
+var _ errors.SafeDetailer = &TxnRowsWrittenLimit{}
+var _ fmt.Formatter = &TxnRowsWrittenLimit{}
+var _ errors.SafeFormatter = &TxnRowsWrittenLimit{}
+
+// Error is part of the error interface, which TxnRowsWrittenLimit implements.
+func (d *TxnRowsWrittenLimit) Error() string {
+	return fmt.Sprintf("%s\n%s", d.CommonTxnRowsLimitDetails.Error(), d.CommonSQLEventDetails.Error())
+}
+
+// SafeDetails is part of the errors.SafeDetailer interface, which
+// TxnRowsWrittenLimit implements.
+func (d *TxnRowsWrittenLimit) SafeDetails() []string {
+	return append(d.CommonTxnRowsLimitDetails.SafeDetails(), d.CommonSQLEventDetails.SafeDetails()...)
+}
+
+// Format is part of the fmt.Formatter interface, which TxnRowsWrittenLimit
+// implements.
+func (d *TxnRowsWrittenLimit) Format(s fmt.State, verb rune) {
+	errors.FormatError(d, s, verb)
+}
+
+// SafeFormatError is part of the errors.SafeFormatter interface, which
+// TxnRowsWrittenLimit implements.
+func (d *TxnRowsWrittenLimit) SafeFormatError(p errors.Printer) (next error) {
+	next = d.CommonTxnRowsLimitDetails.SafeFormatError(p)
+	if next == nil {
+		next = d.CommonSQLEventDetails.SafeFormatError(p)
+	}
+	return next
+}
+
+var _ error = &TxnRowsReadLimit{}
+var _ errors.SafeDetailer = &TxnRowsReadLimit{}
+var _ fmt.Formatter = &TxnRowsReadLimit{}
+var _ errors.SafeFormatter = &TxnRowsReadLimit{}
+
+// Error is part of the error interface, which TxnRowsReadLimit implements.
+func (d *TxnRowsReadLimit) Error() string {
+	return fmt.Sprintf("%s\n%s", d.CommonTxnRowsLimitDetails.Error(), d.CommonSQLEventDetails.Error())
+}
+
+// SafeDetails is part of the errors.SafeDetailer interface, which
+// TxnRowsReadLimit implements.
+func (d *TxnRowsReadLimit) SafeDetails() []string {
+	return append(d.CommonTxnRowsLimitDetails.SafeDetails(), d.CommonSQLEventDetails.SafeDetails()...)
+}
+
+// Format is part of the fmt.Formatter interface, which TxnRowsReadLimit
+// implements.
+func (d *TxnRowsReadLimit) Format(s fmt.State, verb rune) {
+	errors.FormatError(d, s, verb)
+}
+
+// SafeFormatError is part of the errors.SafeFormatter interface, which
+// TxnRowsReadLimit implements.
+func (d *TxnRowsReadLimit) SafeFormatError(p errors.Printer) (next error) {
+	next = d.CommonTxnRowsLimitDetails.SafeFormatError(p)
+	if next == nil {
+		next = d.CommonSQLEventDetails.SafeFormatError(p)
+	}
+	return next
 }
