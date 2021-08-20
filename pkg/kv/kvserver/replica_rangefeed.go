@@ -153,7 +153,12 @@ func (r *Replica) RangeFeed(
 	}
 
 	if err := r.ensureClosedTimestampStarted(ctx); err != nil {
-		return err
+		if err := stream.Send(&roachpb.RangeFeedEvent{Error: &roachpb.RangeFeedError{
+			Error: *err,
+		}}); err != nil {
+			return roachpb.NewError(err)
+		}
+		return nil
 	}
 
 	// If the RangeFeed is performing a catch-up scan then it will observe all
@@ -689,6 +694,13 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 				return r.store.DB().Run(ctx, &b)
 			})
 		if err != nil {
+			if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+				if r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.NewRetryableRangefeedErrors) {
+					err = &roachpb.RangeFeedRetryError{
+						Reason: roachpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER,
+					}
+				}
+			}
 			return roachpb.NewError(err)
 		}
 	}
