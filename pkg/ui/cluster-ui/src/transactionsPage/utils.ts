@@ -146,15 +146,16 @@ export const filterTransactions = (
         t.stats_data.statement_fingerprint_ids,
         statements,
       ).some(stmt => {
-        stmt.stats.nodes.some(node => {
-          if (foundRegion || regions.includes(nodeRegions[node.toString()])) {
-            foundRegion = true;
-          }
-          if (foundNode || nodes.includes("n" + node)) {
-            foundNode = true;
-          }
-          if (foundNode && foundRegion) return true;
-        });
+        stmt.stats.nodes &&
+          stmt.stats.nodes.some(node => {
+            if (foundRegion || regions.includes(nodeRegions[node.toString()])) {
+              foundRegion = true;
+            }
+            if (foundNode || nodes.includes("n" + node)) {
+              foundNode = true;
+            }
+            if (foundNode && foundRegion) return true;
+          });
       });
 
       return foundRegion && foundNode;
@@ -189,14 +190,15 @@ export const generateRegionNode = (
     transaction.stats_data.statement_fingerprint_ids,
     statements,
   ).forEach(stmt => {
-    stmt.stats.nodes.forEach(n => {
-      const node = n.toString();
-      if (Object.keys(regions).includes(nodeRegions[node])) {
-        regions[nodeRegions[node]].add(longToInt(n));
-      } else {
-        regions[nodeRegions[node]] = new Set([longToInt(n)]);
-      }
-    });
+    stmt.stats.nodes &&
+      stmt.stats.nodes.forEach(n => {
+        const node = n.toString();
+        if (Object.keys(regions).includes(nodeRegions[node])) {
+          regions[nodeRegions[node]].add(longToInt(n));
+        } else {
+          regions[nodeRegions[node]] = new Set([longToInt(n)]);
+        }
+      });
   });
 
   // Create a list nodes/regions where a transaction was executed on, with
