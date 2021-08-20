@@ -5896,10 +5896,10 @@ table's zone configuration this will return NULL.`,
 					)
 				}
 
-				if evalCtx.PreparedStatementState.HasPrepared() {
+				if evalCtx.PreparedStatementState.HasPreparedPortals() {
 					return nil, pgerror.Newf(
 						pgcode.InvalidTransactionState,
-						"cannot serialize a session which has portals or prepared statements",
+						"cannot serialize a session which has portals",
 					)
 				}
 
@@ -5922,6 +5922,7 @@ table's zone configuration this will return NULL.`,
 				m.SessionData = sd.SessionData
 				sessiondata.MarshalNonLocal(sd, &m.SessionData)
 				m.LocalOnlySessionData = sd.LocalOnlySessionData
+				m.PreparedStatements = evalCtx.PreparedStatementState.MigratablePreparedStatements()
 
 				b, err := protoutil.Marshal(&m)
 				if err != nil {
@@ -5968,6 +5969,21 @@ table's zone configuration this will return NULL.`,
 						pgcode.InsufficientPrivilege,
 						"can only serialize matching session users",
 					)
+				}
+				for _, prepStmt := range m.PreparedStatements {
+					var prepArgs string
+					if len(prepStmt.PlaceholderTypes) > 0 {
+						prepArgs = "(" + strings.Join(prepStmt.PlaceholderTypes, ",") + ")"
+					}
+					prepStmt := fmt.Sprintf("PREPARE %s%s AS %s", prepStmt.Name, prepArgs, prepStmt.SQL)
+					if _, err := evalCtx.InternalExecutor.QueryRow(
+						evalCtx.Ctx(),
+						"deserialize_session_prepare",
+						evalCtx.Txn,
+						prepStmt,
+					); err != nil {
+						return nil, err
+					}
 				}
 				*evalCtx.SessionData = *sd
 				return tree.MakeDBool(true), nil

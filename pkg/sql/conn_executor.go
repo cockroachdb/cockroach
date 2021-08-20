@@ -1374,8 +1374,28 @@ type prepStmtNamespace struct {
 
 // HasPrepared returns true if there are prepared statements or portals
 // in the session.
-func (ns prepStmtNamespace) HasPrepared() bool {
-	return len(ns.prepStmts) > 0 || len(ns.portals) > 0
+func (ns prepStmtNamespace) HasPreparedPortals() bool {
+	return len(ns.portals) > 0
+}
+
+// PreparedStatements returns a mapping of all prepared statements.
+func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
+	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
+	for name, stmt := range ns.prepStmts {
+		placeholderTypes := make([]string, len(stmt.Types))
+		for i, typ := range stmt.Types {
+			placeholderTypes[i] = typ.SQLString()
+		}
+		ret = append(
+			ret,
+			sessiondatapb.MigratableSession_PreparedStatement{
+				Name:             name,
+				PlaceholderTypes: placeholderTypes,
+				SQL:              stmt.SQL,
+			},
+		)
+	}
+	return ret
 }
 
 func (ns prepStmtNamespace) String() string {

@@ -26,8 +26,9 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 // MigratableSession represents a serialization of a session that can be
 // migrated between SQL sessions.
 type MigratableSession struct {
-	SessionData          SessionData          `protobuf:"bytes,1,opt,name=session_data,json=sessionData,proto3" json:"session_data"`
-	LocalOnlySessionData LocalOnlySessionData `protobuf:"bytes,2,opt,name=local_only_session_data,json=localOnlySessionData,proto3" json:"local_only_session_data"`
+	SessionData          SessionData                           `protobuf:"bytes,1,opt,name=session_data,json=sessionData,proto3" json:"session_data"`
+	LocalOnlySessionData LocalOnlySessionData                  `protobuf:"bytes,2,opt,name=local_only_session_data,json=localOnlySessionData,proto3" json:"local_only_session_data"`
+	PreparedStatements   []MigratableSession_PreparedStatement `protobuf:"bytes,3,rep,name=prepared_statements,json=preparedStatements,proto3" json:"prepared_statements"`
 }
 
 func (m *MigratableSession) Reset()         { *m = MigratableSession{} }
@@ -59,8 +60,45 @@ func (m *MigratableSession) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_MigratableSession proto.InternalMessageInfo
 
+// PreparedStatement represents a prepared statement in a migratable session.
+type MigratableSession_PreparedStatement struct {
+	Name             string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	PlaceholderTypes []string `protobuf:"bytes,2,rep,name=placeholder_types,json=placeholderTypes,proto3" json:"placeholder_types,omitempty"`
+	SQL              string   `protobuf:"bytes,3,opt,name=sql,proto3" json:"sql,omitempty"`
+}
+
+func (m *MigratableSession_PreparedStatement) Reset()         { *m = MigratableSession_PreparedStatement{} }
+func (m *MigratableSession_PreparedStatement) String() string { return proto.CompactTextString(m) }
+func (*MigratableSession_PreparedStatement) ProtoMessage()    {}
+func (*MigratableSession_PreparedStatement) Descriptor() ([]byte, []int) {
+	return fileDescriptor_e44b77d7af899ce0, []int{0, 0}
+}
+func (m *MigratableSession_PreparedStatement) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MigratableSession_PreparedStatement) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *MigratableSession_PreparedStatement) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MigratableSession_PreparedStatement.Merge(m, src)
+}
+func (m *MigratableSession_PreparedStatement) XXX_Size() int {
+	return m.Size()
+}
+func (m *MigratableSession_PreparedStatement) XXX_DiscardUnknown() {
+	xxx_messageInfo_MigratableSession_PreparedStatement.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MigratableSession_PreparedStatement proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*MigratableSession)(nil), "cockroach.sql.sessiondatapb.MigratableSession")
+	proto.RegisterType((*MigratableSession_PreparedStatement)(nil), "cockroach.sql.sessiondatapb.MigratableSession.PreparedStatement")
 }
 
 func init() {
@@ -68,22 +106,30 @@ func init() {
 }
 
 var fileDescriptor_e44b77d7af899ce0 = []byte{
-	// 239 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xd2, 0x2c, 0x2e, 0xcc, 0xd1,
-	0x2f, 0x4e, 0x2d, 0x2e, 0xce, 0xcc, 0xcf, 0x4b, 0x49, 0x2c, 0x49, 0x2c, 0x48, 0x82, 0xf1, 0xe2,
-	0x73, 0x33, 0xd3, 0x8b, 0x12, 0x4b, 0x32, 0xf3, 0xf3, 0xf4, 0x0a, 0x8a, 0xf2, 0x4b, 0xf2, 0x85,
-	0xa4, 0x93, 0xf3, 0x93, 0xb3, 0x8b, 0xf2, 0x13, 0x93, 0x33, 0xf4, 0x8a, 0x0b, 0x73, 0xf4, 0x50,
-	0x34, 0x49, 0x89, 0xa4, 0xe7, 0xa7, 0xe7, 0x83, 0xd5, 0xe9, 0x83, 0x58, 0x10, 0x2d, 0x52, 0x2a,
-	0xb8, 0x4d, 0x07, 0x71, 0xa1, 0xaa, 0xf4, 0x31, 0x55, 0xe5, 0xe4, 0x27, 0x27, 0xe6, 0xc4, 0xe7,
-	0xe7, 0xe5, 0x54, 0xc6, 0x63, 0x6a, 0x50, 0xba, 0xc6, 0xc8, 0x25, 0xe8, 0x0b, 0x76, 0x5d, 0x62,
-	0x52, 0x4e, 0x6a, 0x30, 0x44, 0x81, 0x50, 0x20, 0x17, 0x0f, 0xb2, 0x5a, 0x09, 0x46, 0x05, 0x46,
-	0x0d, 0x6e, 0x23, 0x0d, 0x3d, 0x3c, 0xce, 0xd6, 0x83, 0xea, 0x75, 0x49, 0x2c, 0x49, 0x74, 0x62,
-	0x39, 0x71, 0x4f, 0x9e, 0x21, 0x88, 0xbb, 0x18, 0x21, 0x24, 0x94, 0xc7, 0x25, 0x8e, 0xc3, 0x25,
-	0x12, 0x4c, 0x60, 0xd3, 0x0d, 0xf1, 0x9a, 0xee, 0x03, 0xd2, 0xeb, 0x9f, 0x97, 0x53, 0x89, 0x69,
-	0x8d, 0x48, 0x0e, 0x36, 0x39, 0xfd, 0x13, 0x0f, 0xe5, 0x18, 0x4e, 0x3c, 0x92, 0x63, 0xbc, 0xf0,
-	0x48, 0x8e, 0xf1, 0xc6, 0x23, 0x39, 0xc6, 0x07, 0x8f, 0xe4, 0x18, 0x27, 0x3c, 0x96, 0x63, 0xb8,
-	0xf0, 0x58, 0x8e, 0xe1, 0xc6, 0x63, 0x39, 0x86, 0x28, 0x5e, 0x14, 0x1b, 0x92, 0xd8, 0xc0, 0x01,
-	0x62, 0x0c, 0x08, 0x00, 0x00, 0xff, 0xff, 0x9a, 0xec, 0xc3, 0xcb, 0xc7, 0x01, 0x00, 0x00,
+	// 357 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x91, 0x4f, 0x4f, 0xc2, 0x30,
+	0x18, 0xc6, 0x37, 0x4a, 0x34, 0x14, 0x4d, 0xa4, 0x92, 0x38, 0x31, 0x29, 0xc4, 0x78, 0x98, 0x31,
+	0xd9, 0x22, 0x7e, 0x01, 0x43, 0x3c, 0x62, 0x94, 0xe1, 0xc9, 0xcb, 0x52, 0x46, 0x03, 0xc4, 0xd2,
+	0x96, 0xb5, 0x89, 0xe1, 0x5b, 0xf8, 0x91, 0x3c, 0x72, 0xe4, 0xc8, 0x89, 0xe8, 0xf8, 0x22, 0x66,
+	0x63, 0x44, 0x70, 0xb2, 0xdb, 0xfb, 0xe7, 0xf9, 0x3d, 0xef, 0xdb, 0xb7, 0xf0, 0x5a, 0x4d, 0x98,
+	0xab, 0xa8, 0x52, 0x23, 0xc1, 0xfb, 0x44, 0x13, 0xd9, 0xdb, 0x64, 0xfe, 0x78, 0x34, 0x08, 0x89,
+	0x1e, 0x09, 0xee, 0xc8, 0x50, 0x68, 0x81, 0x2e, 0x02, 0x11, 0xbc, 0x85, 0x82, 0x04, 0x43, 0x47,
+	0x4d, 0x98, 0xb3, 0x03, 0xd5, 0xaa, 0x03, 0x31, 0x10, 0x89, 0xce, 0x8d, 0xa3, 0x35, 0x52, 0xbb,
+	0xda, 0xef, 0x1e, 0xa7, 0xa9, 0xca, 0xcd, 0xaa, 0x98, 0x08, 0x08, 0xf3, 0x05, 0x67, 0x53, 0x3f,
+	0x0b, 0x5c, 0x7e, 0x02, 0x58, 0x79, 0x4c, 0xb6, 0x23, 0x3d, 0x46, 0xbb, 0x6b, 0x01, 0xea, 0xc0,
+	0xa3, 0x6d, 0xad, 0x65, 0x36, 0x4c, 0xbb, 0xdc, 0xb4, 0x9d, 0x9c, 0xb5, 0x9d, 0x94, 0x7d, 0x20,
+	0x9a, 0xb4, 0x8a, 0xb3, 0x65, 0xdd, 0xf0, 0xca, 0xea, 0xb7, 0x84, 0x38, 0x3c, 0xdb, 0xb3, 0x89,
+	0x55, 0x48, 0xdc, 0x6f, 0x73, 0xdd, 0xdb, 0x31, 0xfb, 0xc4, 0xd9, 0x34, 0x3b, 0xa6, 0xca, 0xfe,
+	0xe9, 0xa1, 0x77, 0x78, 0x2a, 0x43, 0x2a, 0x49, 0x48, 0xfb, 0xbe, 0xd2, 0x44, 0xd3, 0x31, 0xe5,
+	0x5a, 0x59, 0xa0, 0x01, 0xec, 0x72, 0xf3, 0x3e, 0x77, 0x56, 0xe6, 0x1e, 0xce, 0x73, 0xea, 0xd4,
+	0xdd, 0x18, 0xa5, 0xa3, 0x91, 0xfc, 0xdb, 0x50, 0x35, 0x01, 0x2b, 0x19, 0x39, 0x42, 0xb0, 0xc8,
+	0xc9, 0x98, 0x26, 0x87, 0x2c, 0x79, 0x49, 0x8c, 0x6e, 0x60, 0x45, 0x32, 0x12, 0xd0, 0xa1, 0x60,
+	0x7d, 0x1a, 0xfa, 0x7a, 0x2a, 0xa9, 0xb2, 0x0a, 0x0d, 0x60, 0x97, 0xbc, 0x93, 0xad, 0xc6, 0x4b,
+	0x5c, 0x47, 0xe7, 0x10, 0xa8, 0x09, 0xb3, 0x40, 0xcc, 0xb7, 0x0e, 0xa3, 0x65, 0x1d, 0x74, 0x3b,
+	0x6d, 0x2f, 0xae, 0xb5, 0xdc, 0xd9, 0x37, 0x36, 0x66, 0x11, 0x36, 0xe7, 0x11, 0x36, 0x17, 0x11,
+	0x36, 0xbf, 0x22, 0x6c, 0x7e, 0xac, 0xb0, 0x31, 0x5f, 0x61, 0x63, 0xb1, 0xc2, 0xc6, 0xeb, 0xf1,
+	0xce, 0xfb, 0x7a, 0x07, 0xc9, 0xd7, 0xdf, 0xfd, 0x04, 0x00, 0x00, 0xff, 0xff, 0x3c, 0x75, 0x7a,
+	0x1b, 0xb1, 0x02, 0x00, 0x00,
 }
 
 func (m *MigratableSession) Marshal() (dAtA []byte, err error) {
@@ -106,6 +152,20 @@ func (m *MigratableSession) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.PreparedStatements) > 0 {
+		for iNdEx := len(m.PreparedStatements) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.PreparedStatements[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintSessionMigration(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
 	{
 		size, err := m.LocalOnlySessionData.MarshalToSizedBuffer(dAtA[:i])
 		if err != nil {
@@ -126,6 +186,52 @@ func (m *MigratableSession) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	}
 	i--
 	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *MigratableSession_PreparedStatement) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MigratableSession_PreparedStatement) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MigratableSession_PreparedStatement) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.SQL) > 0 {
+		i -= len(m.SQL)
+		copy(dAtA[i:], m.SQL)
+		i = encodeVarintSessionMigration(dAtA, i, uint64(len(m.SQL)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.PlaceholderTypes) > 0 {
+		for iNdEx := len(m.PlaceholderTypes) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.PlaceholderTypes[iNdEx])
+			copy(dAtA[i:], m.PlaceholderTypes[iNdEx])
+			i = encodeVarintSessionMigration(dAtA, i, uint64(len(m.PlaceholderTypes[iNdEx])))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintSessionMigration(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0xa
+	}
 	return len(dAtA) - i, nil
 }
 
@@ -150,6 +256,35 @@ func (m *MigratableSession) Size() (n int) {
 	n += 1 + l + sovSessionMigration(uint64(l))
 	l = m.LocalOnlySessionData.Size()
 	n += 1 + l + sovSessionMigration(uint64(l))
+	if len(m.PreparedStatements) > 0 {
+		for _, e := range m.PreparedStatements {
+			l = e.Size()
+			n += 1 + l + sovSessionMigration(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *MigratableSession_PreparedStatement) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovSessionMigration(uint64(l))
+	}
+	if len(m.PlaceholderTypes) > 0 {
+		for _, s := range m.PlaceholderTypes {
+			l = len(s)
+			n += 1 + l + sovSessionMigration(uint64(l))
+		}
+	}
+	l = len(m.SQL)
+	if l > 0 {
+		n += 1 + l + sovSessionMigration(uint64(l))
+	}
 	return n
 }
 
@@ -253,6 +388,186 @@ func (m *MigratableSession) Unmarshal(dAtA []byte) error {
 			if err := m.LocalOnlySessionData.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PreparedStatements", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSessionMigration
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSessionMigration
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionMigration
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PreparedStatements = append(m.PreparedStatements, MigratableSession_PreparedStatement{})
+			if err := m.PreparedStatements[len(m.PreparedStatements)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSessionMigration(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthSessionMigration
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MigratableSession_PreparedStatement) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSessionMigration
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PreparedStatement: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PreparedStatement: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSessionMigration
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthSessionMigration
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionMigration
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PlaceholderTypes", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSessionMigration
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthSessionMigration
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionMigration
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PlaceholderTypes = append(m.PlaceholderTypes, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SQL", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSessionMigration
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthSessionMigration
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionMigration
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SQL = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
