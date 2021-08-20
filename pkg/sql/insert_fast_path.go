@@ -51,6 +51,8 @@ type insertFastPathNode struct {
 	run insertFastPathRun
 }
 
+var _ mutationPlanNode = &insertFastPathNode{}
+
 type insertFastPathRun struct {
 	insertRun
 
@@ -324,6 +326,10 @@ func (n *insertFastPathNode) Close(ctx context.Context) {
 	n.run.ti.close(ctx)
 	*n = insertFastPathNode{}
 	insertFastPathNodePool.Put(n)
+}
+
+func (n *insertFastPathNode) rowsWritten() int64 {
+	return n.run.rowsInserted
 }
 
 // See planner.autoCommit.

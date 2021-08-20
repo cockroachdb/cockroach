@@ -37,6 +37,8 @@ type upsertNode struct {
 	run upsertRun
 }
 
+var _ mutationPlanNode = &upsertNode{}
+
 // upsertRun contains the run-time state of upsertNode during local execution.
 type upsertRun struct {
 	tw        optTableUpserter
@@ -189,6 +191,10 @@ func (n *upsertNode) Close(ctx context.Context) {
 	n.run.tw.close(ctx)
 	*n = upsertNode{}
 	upsertNodePool.Put(n)
+}
+
+func (n *upsertNode) rowsWritten() int64 {
+	return n.run.tw.rowsUpserted
 }
 
 func (n *upsertNode) enableAutoCommit() {
