@@ -121,6 +121,45 @@ message LargeRow {
   CommonLargeRowDetails row = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
+// CommonTxnRowsLimitDetails contains the fields common to all messages related
+// to reaching the limits on the number of rows written/read by a transaction.
+message CommonTxnRowsLimitDetails {
+  // TxnID is the ID of the transaction that hit the row count limit.
+  string txn_id = 1 [(gogoproto.customname) = "TxnID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // SessionID is the ID of the session that initiated the transaction.
+  string session_id = 2 [(gogoproto.customname) = "SessionID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // Limit indicates the value of the transaction row count limit that was
+  // reached.
+  int64 limit = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // ViolatesTxnRowsLimitErr if true indicates that
+  // 'transaction_rows_{written|read}_err' limit is violated.
+  bool violates_txn_rows_limit_err = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // IsRead if true indicates that the "rows read" limit is reached and the
+  // "rows written" limit otherwise.
+  bool is_read = 5 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// TxnRowsWrittenLimit is recorded when a transaction tries to write more rows
+// than cluster setting `sql.defaults.transaction_rows_written_log`. There will
+// only be a single record for a single transaction (unless it is retried) even
+// if there are more mutation statements within the transaction that haven't
+// been executed yet.
+message TxnRowsWrittenLimit {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonTxnRowsLimitDetails info = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// TxnRowsReadLimit is recorded when a transaction tries to read more rows than
+// cluster setting `sql.defaults.transaction_rows_read_log`. There will only be
+// a single record for a single transaction (unless it is retried) even if there
+// are more statement within the transaction that haven't been executed yet.
+message TxnRowsReadLimit {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonTxnRowsLimitDetails info = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
 // Category: SQL Slow Query Log (Internal)
 // Channel: SQL_INTERNAL_PERF
 //
@@ -149,6 +188,29 @@ message SlowQueryInternal {
 message LargeRowInternal {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonLargeRowDetails row = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// TxnRowsWrittenLimitInternal is recorded when an internal transaction tries to
+// write more rows than cluster setting
+// `sql.defaults.transaction_rows_written_log` or
+// `sql.defaults.transaction_rows_written_err`. There will only be a single
+// record for a single transaction (unless it is retried) even if there are more
+// mutation statements within the transaction that haven't been executed yet.
+message TxnRowsWrittenLimitInternal {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonTxnRowsLimitDetails info = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// TxnRowsReadLimitInternal is recorded when an internal transaction tries to
+// read more rows than cluster setting `sql.defaults.transaction_rows_read_log`
+// or `sql.defaults.transaction_rows_read_err`. There will only be a single
+// record for a single transaction (unless it is retried) even if there are more
+// mutation statements within the transaction that haven't been executed yet.
+message TxnRowsReadLimitInternal {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonTxnRowsLimitDetails info = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
 // Category: SQL Execution Log
