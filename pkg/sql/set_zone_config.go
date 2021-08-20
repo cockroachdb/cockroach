@@ -183,6 +183,14 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, err
 	}
 
+	if !p.ExecCfg().Codec.ForSystemTenant() &&
+		!secondaryTenantZoneConfigsEnabled.Get(&p.ExecCfg().Settings.SV) {
+		// Return an unimplemented error here instead of referencing the cluster
+		// setting here as zone configurations for secondary tenants are intended to
+		// be hidden.
+		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
+	}
+
 	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
 		return nil, err
 	}

@@ -167,6 +167,18 @@ var allowCrossDatabaseSeqOwner = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+const secondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.experimental_allow_for_secondary_tenant.enabled"
+
+// secondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
+// to set zone configurations. It has no effect for the system tenant.
+//
+// This setting has no effect on zone configurations that have already been set.
+var secondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
+	secondaryTenantsZoneConfigsEnabledSettingName,
+	"allow secondary tenants to set zone configurations; does not affect the system tenant",
+	false,
+)
+
 // traceTxnThreshold can be used to log SQL transactions that take
 // longer than duration to complete. For example, traceTxnThreshold=1s
 // will log the trace for any transaction that takes 1s or longer. To
