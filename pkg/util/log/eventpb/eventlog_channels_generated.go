@@ -224,10 +224,26 @@ func (m *LargeRow) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_PER
 func (m *SlowQuery) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_PERF }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *TxnRowsReadLimitReached) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_PERF }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *TxnRowsWrittenLimitReached) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_PERF }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *LargeRowInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_INTERNAL_PERF }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *SlowQueryInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_INTERNAL_PERF }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *TxnRowsReadLimitReachedInternal) LoggingChannel() logpb.Channel {
+	return logpb.Channel_SQL_INTERNAL_PERF
+}
+
+// LoggingChannel implements the EventPayload interface.
+func (m *TxnRowsWrittenLimitReachedInternal) LoggingChannel() logpb.Channel {
+	return logpb.Channel_SQL_INTERNAL_PERF
+}
 
 // LoggingChannel implements the EventPayload interface.
 func (m *AlterRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }

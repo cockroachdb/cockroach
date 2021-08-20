@@ -50,7 +50,8 @@ type optTableUpserter struct {
 	ri row.Inserter
 
 	// Should we collect the rows for a RETURNING clause?
-	rowsNeeded bool
+	rowsNeeded   bool
+	rowsUpserted int64
 
 	// A mapping of column IDs to the return index used to shape the resulting
 	// rows to those required by the returning clause. Only required if
@@ -164,6 +165,7 @@ func (tu *optTableUpserter) row(
 	ctx context.Context, row tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
 ) error {
 	tu.currentBatchSize++
+	tu.rowsUpserted++
 
 	// Consult the canary column to determine whether to insert or update. For
 	// more details on how canary columns work, see the block comment on

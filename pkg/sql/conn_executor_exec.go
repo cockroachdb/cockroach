@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -1020,6 +1021,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.extraTxnState.rowsRead += stats.rowsRead
 	ex.extraTxnState.bytesRead += stats.bytesRead
+	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
@@ -1031,6 +1033,107 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
 	}
 
+	if limitsErr := ex.handleTxnRowsWrittenReadLimits(ctx); limitsErr != nil && res.Err() == nil {
+		res.SetError(limitsErr)
+	}
+
+	return err
+}
+
+// handleTxnRowsWrittenReadLimits checks whether the current transaction has
+// reached the limits on the number of rows written/read and logs the
+// corresponding event or returns an error. It should be called after executing
+// a single statement.
+func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) error {
+	sd := ex.sessionData
+	var commonSQLEventDetails *eventpb.CommonSQLEventDetails
+	var err error
+
+	shouldLogRowsWritten := sd.TxnRowsWrittenLog != 0 && ex.extraTxnState.rowsWritten >= sd.TxnRowsWrittenLog
+	shouldErrRowsWritten := sd.TxnRowsWrittenErr != 0 && ex.extraTxnState.rowsWritten >= sd.TxnRowsWrittenErr
+	if shouldLogRowsWritten || shouldErrRowsWritten {
+		commonSQLEventDetails = ex.planner.getCommonSQLEventDetails()
+		info := eventpb.CommonTxnRowsLimitReachedDetails{
+			TxnID:                   ex.state.mu.txn.ID().String(),
+			SessionID:               ex.sessionID.String(),
+			ViolatesTxnRowsLimitErr: shouldErrRowsWritten,
+			ReadKind:                false,
+		}
+		if shouldErrRowsWritten && ex.executorType == executorTypeInternal {
+			// Internal work should never err and always log if violating either
+			// limit.
+			shouldErrRowsWritten = false
+			shouldLogRowsWritten = true
+		}
+		if ex.extraTxnState.rowsWrittenLogged {
+			// We have already logged an event about this transaction.
+			shouldLogRowsWritten = false
+		} else {
+			ex.extraTxnState.rowsWrittenLogged = shouldLogRowsWritten
+		}
+		if shouldLogRowsWritten {
+			var event eventpb.EventPayload
+			if ex.executorType == executorTypeInternal {
+				event = &eventpb.TxnRowsWrittenLimitReachedInternal{
+					CommonSQLEventDetails:            *commonSQLEventDetails,
+					CommonTxnRowsLimitReachedDetails: info,
+				}
+			} else {
+				event = &eventpb.TxnRowsWrittenLimitReached{
+					CommonSQLEventDetails:            *commonSQLEventDetails,
+					CommonTxnRowsLimitReachedDetails: info,
+				}
+			}
+			log.StructuredEvent(ctx, event)
+		}
+		if shouldErrRowsWritten {
+			err = pgerror.WithCandidateCode(&info, pgcode.ProgramLimitExceeded)
+		}
+	}
+
+	shouldLogRowsRead := sd.TxnRowsReadLog != 0 && ex.extraTxnState.rowsRead >= sd.TxnRowsReadLog
+	shouldErrRowsRead := sd.TxnRowsReadErr != 0 && ex.extraTxnState.rowsRead >= sd.TxnRowsReadErr
+	if shouldLogRowsRead || shouldErrRowsRead {
+		if commonSQLEventDetails == nil {
+			commonSQLEventDetails = ex.planner.getCommonSQLEventDetails()
+		}
+		info := eventpb.CommonTxnRowsLimitReachedDetails{
+			TxnID:                   ex.state.mu.txn.ID().String(),
+			SessionID:               ex.sessionID.String(),
+			ViolatesTxnRowsLimitErr: shouldErrRowsRead,
+			ReadKind:                true,
+		}
+		if shouldErrRowsRead && ex.executorType == executorTypeInternal {
+			// Internal work should never err and always log if violating either
+			// limit.
+			shouldErrRowsRead = false
+			shouldLogRowsRead = true
+		}
+		if ex.extraTxnState.rowsReadLogged {
+			// We have already logged an event about this transaction.
+			shouldLogRowsRead = false
+		} else {
+			ex.extraTxnState.rowsReadLogged = shouldLogRowsRead
+		}
+		if shouldLogRowsRead {
+			var event eventpb.EventPayload
+			if ex.executorType == executorTypeInternal {
+				event = &eventpb.TxnRowsReadLimitReachedInternal{
+					CommonSQLEventDetails:            *commonSQLEventDetails,
+					CommonTxnRowsLimitReachedDetails: info,
+				}
+			} else {
+				event = &eventpb.TxnRowsReadLimitReached{
+					CommonSQLEventDetails:            *commonSQLEventDetails,
+					CommonTxnRowsLimitReachedDetails: info,
+				}
+			}
+			log.StructuredEvent(ctx, event)
+		}
+		if shouldErrRowsRead && err == nil {
+			err = pgerror.WithCandidateCode(&info, pgcode.ProgramLimitExceeded)
+		}
+	}
 	return err
 }
 
@@ -1074,6 +1177,8 @@ type topLevelQueryStats struct {
 	bytesRead int64
 	// rowsRead is the number of rows read from disk.
 	rowsRead int64
+	// rowsWritten is the number of rows written.
+	rowsWritten int64
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -1652,6 +1757,9 @@ func (ex *connExecutor) recordTransactionStart() (
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 	ex.extraTxnState.rowsRead = 0
 	ex.extraTxnState.bytesRead = 0
+	ex.extraTxnState.rowsWritten = 0
+	ex.extraTxnState.rowsWrittenLogged = false
+	ex.extraTxnState.rowsReadLogged = false
 	if txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); txnExecStatsSampleRate > 0 {
 		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
 	}
@@ -1678,6 +1786,7 @@ func (ex *connExecutor) recordTransactionStart() (
 		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 		ex.extraTxnState.rowsRead = 0
 		ex.extraTxnState.bytesRead = 0
+		ex.extraTxnState.rowsWritten = 0
 
 		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
 			ex.server.cfg.TestingKnobs.BeforeRestart(ex.Ctx(), ex.extraTxnState.autoRetryReason)

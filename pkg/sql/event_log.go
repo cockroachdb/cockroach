@@ -166,6 +166,23 @@ type eventLogOptions struct {
 	verboseTraceLevel log.Level
 }
 
+func (p *planner) getCommonSQLEventDetails() *eventpb.CommonSQLEventDetails {
+	redactableStmt := formatStmtKeyAsRedactableString(p.extendedEvalCtx.VirtualSchemas, p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
+	commonSQLEventDetails := &eventpb.CommonSQLEventDetails{
+		Statement:       redactableStmt,
+		Tag:             p.stmt.AST.StatementTag(),
+		User:            p.User().Normalized(),
+		ApplicationName: p.SessionData().ApplicationName,
+	}
+	if pls := p.extendedEvalCtx.EvalContext.Placeholders.Values; len(pls) > 0 {
+		commonSQLEventDetails.PlaceholderValues = make([]string, len(pls))
+		for idx, val := range pls {
+			commonSQLEventDetails.PlaceholderValues[idx] = val.String()
+		}
+	}
+	return commonSQLEventDetails
+}
+
 // logEventsWithOptions is like logEvent() but it gives control to the
 // caller as to where the event is written to.
 //
@@ -174,22 +191,11 @@ type eventLogOptions struct {
 func (p *planner) logEventsWithOptions(
 	ctx context.Context, depth int, opts eventLogOptions, entries ...eventLogEntry,
 ) error {
-
-	redactableStmt := formatStmtKeyAsRedactableString(p.extendedEvalCtx.VirtualSchemas, p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
-
-	commonPayload := sqlEventCommonExecPayload{
-		user:         p.User(),
-		stmt:         redactableStmt,
-		stmtTag:      p.stmt.AST.StatementTag(),
-		placeholders: p.extendedEvalCtx.EvalContext.Placeholders.Values,
-		appName:      p.SessionData().ApplicationName,
-	}
-
 	return logEventInternalForSQLStatements(ctx,
 		p.extendedEvalCtx.ExecCfg, p.txn,
 		1+depth,
 		opts,
-		commonPayload,
+		p.getCommonSQLEventDetails(),
 		entries...)
 }
 
@@ -256,7 +262,7 @@ func logEventInternalForSQLStatements(
 	txn *kv.Txn,
 	depth int,
 	opts eventLogOptions,
-	commonPayload sqlEventCommonExecPayload,
+	commonSQLEventDetails *eventpb.CommonSQLEventDetails,
 	entries ...eventLogEntry,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
@@ -268,17 +274,8 @@ func logEventInternalForSQLStatements(
 			return errors.AssertionFailedf("unknown event type: %T", event)
 		}
 		m := sqlCommon.CommonSQLDetails()
-		m.Statement = commonPayload.stmt
-		m.Tag = commonPayload.stmtTag
-		m.ApplicationName = commonPayload.appName
-		m.User = commonPayload.user.Normalized()
+		*m = *commonSQLEventDetails
 		m.DescriptorID = uint32(entry.targetID)
-		if pls := commonPayload.placeholders; len(pls) > 0 {
-			m.PlaceholderValues = make([]string, len(pls))
-			for idx, val := range pls {
-				m.PlaceholderValues[idx] = val.String()
-			}
-		}
 		return nil
 	}
 
