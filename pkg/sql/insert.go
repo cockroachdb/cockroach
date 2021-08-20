@@ -46,8 +46,9 @@ type insertNode struct {
 
 // insertRun contains the run-time state of insertNode during local execution.
 type insertRun struct {
-	ti         tableInserter
-	rowsNeeded bool
+	ti           tableInserter
+	rowsNeeded   bool
+	rowsInserted int64
 
 	checkOrds checkSet
 
@@ -177,6 +178,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 		}
 	}
 
+	r.rowsInserted++
 	return nil
 }
 
@@ -283,4 +285,8 @@ func (n *insertNode) Close(ctx context.Context) {
 // See planner.autoCommit.
 func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
+}
+
+func (n *insertNode) rowsWritten() int64 {
+	return n.run.rowsInserted
 }

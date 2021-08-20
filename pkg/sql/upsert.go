@@ -191,6 +191,10 @@ func (n *upsertNode) Close(ctx context.Context) {
 	upsertNodePool.Put(n)
 }
 
+func (n *upsertNode) rowsWritten() int64 {
+	return n.run.tw.rowsUpserted
+}
+
 func (n *upsertNode) enableAutoCommit() {
 	n.run.tw.enableAutoCommit()
 }
