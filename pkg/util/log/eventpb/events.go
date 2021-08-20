@@ -11,10 +11,12 @@
 package eventpb
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -92,3 +94,40 @@ func (m *CommonJobEventDetails) CommonJobDetails() *CommonJobEventDetails { retu
 
 var _ EventWithCommonJobPayload = (*Import)(nil)
 var _ EventWithCommonJobPayload = (*Restore)(nil)
+
+var _ error = &CommonSQLEventDetails{}
+var _ errors.SafeDetailer = &CommonSQLEventDetails{}
+var _ fmt.Formatter = &CommonSQLEventDetails{}
+var _ errors.SafeFormatter = &CommonSQLEventDetails{}
+
+// Error is part of the error interface, which CommonSQLEventDetails implements.
+func (d *CommonSQLEventDetails) Error() string {
+	return fmt.Sprintf(
+		"details:\nstmt: %s\ntag: %s\tuser: %s\tapp: %s\nplaceholders: %s",
+		d.Statement, d.Tag, d.User, d.ApplicationName, d.PlaceholderValues,
+	)
+}
+
+// SafeDetails is part of the errors.SafeDetailer interface, which
+// CommonSQLEventDetails implements.
+func (d *CommonSQLEventDetails) SafeDetails() []string {
+	return append([]string{fmt.Sprint(d.Statement), d.Tag, d.User, d.ApplicationName}, d.PlaceholderValues...)
+}
+
+// Format is part of the fmt.Formatter interface, which CommonSQLEventDetails
+// implements.
+func (d *CommonSQLEventDetails) Format(s fmt.State, verb rune) {
+	errors.FormatError(d, s, verb)
+}
+
+// SafeFormatError is part of the errors.SafeFormatter interface, which
+// CommonSQLEventDetails implements.
+func (d *CommonSQLEventDetails) SafeFormatError(p errors.Printer) (next error) {
+	if p.Detail() {
+		p.Printf(
+			"details:\nstmt: %s\ntag: %s\tuser: %s\tapp: %s\nplaceholders: %s",
+			d.Statement, d.Tag, d.User, d.ApplicationName, d.PlaceholderValues,
+		)
+	}
+	return nil
+}
