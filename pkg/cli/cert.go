@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/errors"
@@ -59,7 +60,7 @@ If the CA key exists and --allow-ca-key-reuse is true, the key is used.
 If the CA certificate exists and --overwrite is true, the new CA certificate is prepended to it.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runCreateCACert),
+	RunE: clierrorplus.MaybeDecorateError(runCreateCACert),
 }
 
 // runCreateCACert generates a key and CA certificate and writes them
@@ -97,7 +98,7 @@ If the client CA exists, a client.node.crt client certificate must be created us
 Once the client.node.crt exists, all client certificates will be verified using the client CA.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runCreateClientCACert),
+	RunE: clierrorplus.MaybeDecorateError(runCreateClientCACert),
 }
 
 // runCreateClientCACert generates a key and CA certificate and writes them
@@ -136,7 +137,7 @@ Creation fails if the CA expiration time is before the desired certificate expir
 		}
 		return nil
 	},
-	RunE: MaybeDecorateGRPCError(runCreateNodeCert),
+	RunE: clierrorplus.MaybeDecorateError(runCreateNodeCert),
 }
 
 // runCreateNodeCert generates key pair and CA certificate and writes them
@@ -172,7 +173,7 @@ If "ca.crt" contains more than one certificate, the first is used.
 Creation fails if the CA expiration time is before the desired certificate expiration.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runCreateClientCert),
+	RunE: clierrorplus.MaybeDecorateError(runCreateClientCert),
 }
 
 // runCreateClientCert generates key pair and CA certificate and writes them
@@ -206,7 +207,7 @@ var listCertsCmd = &cobra.Command{
 List certificates and keys found in the certificate directory.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runListCerts),
+	RunE: clierrorplus.MaybeDecorateError(runListCerts),
 }
 
 // runListCerts loads and lists all certs.

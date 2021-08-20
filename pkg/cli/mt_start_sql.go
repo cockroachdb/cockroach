@@ -16,6 +16,7 @@ import (
 	"os/signal"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -55,7 +56,7 @@ well unless it can be verified using a trusted root certificate store. That is,
 - ca-client-tenant.crt needs to be present on the KV server.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runStartSQL),
+	RunE: clierrorplus.MaybeDecorateError(runStartSQL),
 }
 
 func runStartSQL(cmd *cobra.Command, args []string) error {

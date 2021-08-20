@@ -25,6 +25,7 @@ import (
 
 	apd "github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -106,7 +107,7 @@ func makeClusterCommand(fn doctorFn) *cobra.Command {
 Run the doctor tool system data from a live cluster specified by --url.
 `,
 		Args: cobra.NoArgs,
-		RunE: MaybeDecorateGRPCError(
+		RunE: clierrorplus.MaybeDecorateError(
 			func(cmd *cobra.Command, args []string) (resErr error) {
 				sqlConn, err := makeSQLClient("cockroach doctor", useSystemDb)
 				if err != nil {

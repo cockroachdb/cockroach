@@ -18,6 +18,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,7 +40,7 @@ var debugTimeSeriesDumpCmd = &cobra.Command{
 	Long: `
 Dumps all of the raw timeseries values in a cluster.
 `,
-	RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, args []string) error {
+	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 

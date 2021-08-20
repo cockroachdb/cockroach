@@ -20,6 +20,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -40,7 +41,7 @@ var stmtDiagListCmd = &cobra.Command{
 	Long: `List statement diagnostics that are available for download and outstanding
 diagnostics activation requests.`,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runStmtDiagList),
+	RunE: clierrorplus.MaybeDecorateError(runStmtDiagList),
 }
 
 func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
@@ -142,7 +143,7 @@ var stmtDiagDownloadCmd = &cobra.Command{
 	Long: `Download statement diagnostics bundle into a zip file, using an ID returned by
 the list command.`,
 	Args: cobra.ExactArgs(2),
-	RunE: MaybeDecorateGRPCError(runStmtDiagDownload),
+	RunE: clierrorplus.MaybeDecorateError(runStmtDiagDownload),
 }
 
 func runStmtDiagDownload(cmd *cobra.Command, args []string) (resErr error) {
@@ -214,7 +215,7 @@ var stmtDiagDeleteCmd = &cobra.Command{
 	Long: `Delete a statement diagnostics bundle using an ID returned by the list
 command, or delete all bundles.`,
 	Args: cobra.MaximumNArgs(1),
-	RunE: MaybeDecorateGRPCError(runStmtDiagDelete),
+	RunE: clierrorplus.MaybeDecorateError(runStmtDiagDelete),
 }
 
 func runStmtDiagDelete(cmd *cobra.Command, args []string) (resErr error) {
@@ -306,7 +307,7 @@ var stmtDiagCancelCmd = &cobra.Command{
 	Long: `Cancel an outstanding activation request, using an ID returned by the
 list command, or cancel all outstanding requests.`,
 	Args: cobra.MaximumNArgs(1),
-	RunE: MaybeDecorateGRPCError(runStmtDiagCancel),
+	RunE: clierrorplus.MaybeDecorateError(runStmtDiagCancel),
 }
 
 func runStmtDiagCancel(cmd *cobra.Command, args []string) (resErr error) {

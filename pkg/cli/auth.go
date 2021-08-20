@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -42,7 +43,7 @@ The user invoking the 'login' CLI command must be an admin on the cluster.
 The user for which the HTTP session is opened can be arbitrary.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runLogin),
+	RunE: clierrorplus.MaybeDecorateError(runLogin),
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
@@ -156,7 +157,7 @@ The user invoking the 'login' CLI command must be an admin on the cluster.
 The user for which the HTTP sessions are revoked can be arbitrary.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runLogout),
+	RunE: clierrorplus.MaybeDecorateError(runLogout),
 }
 
 func runLogout(cmd *cobra.Command, args []string) (resErr error) {
@@ -187,7 +188,7 @@ Prints out the currently active HTTP sessions.
 The user invoking the 'list' CLI command must be an admin on the cluster.
 `,
 	Args: cobra.ExactArgs(0),
-	RunE: MaybeDecorateGRPCError(runAuthList),
+	RunE: clierrorplus.MaybeDecorateError(runAuthList),
 }
 
 func runAuthList(cmd *cobra.Command, args []string) (resErr error) {

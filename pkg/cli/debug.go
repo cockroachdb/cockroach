@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -78,7 +79,7 @@ var debugKeysCmd = &cobra.Command{
 Pretty-prints all keys in a store.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugKeys),
+	RunE: clierrorplus.MaybeDecorateError(runDebugKeys),
 }
 
 var debugBallastCmd = &cobra.Command{
@@ -400,7 +401,7 @@ state like the raft HardState. With --replicated, only includes data covered by
  the consistency checker.
 `,
 	Args: cobra.ExactArgs(2),
-	RunE: MaybeDecorateGRPCError(runDebugRangeData),
+	RunE: clierrorplus.MaybeDecorateError(runDebugRangeData),
 }
 
 func runDebugRangeData(cmd *cobra.Command, args []string) error {
@@ -447,7 +448,7 @@ var debugRangeDescriptorsCmd = &cobra.Command{
 Prints all range descriptors in a store with a history of changes.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugRangeDescriptors),
+	RunE: clierrorplus.MaybeDecorateError(runDebugRangeDescriptors),
 }
 
 func loadRangeDescriptor(
@@ -618,7 +619,7 @@ var debugRaftLogCmd = &cobra.Command{
 Prints all log entries in a store for the given range.
 `,
 	Args: cobra.ExactArgs(2),
-	RunE: MaybeDecorateGRPCError(runDebugRaftLog),
+	RunE: clierrorplus.MaybeDecorateError(runDebugRaftLog),
 }
 
 func runDebugRaftLog(cmd *cobra.Command, args []string) error {
@@ -663,7 +664,7 @@ Uses a configurable GC policy, with a default 24 hour TTL, for old versions and
 2 hour intent resolution threshold.
 `,
 	Args: cobra.RangeArgs(1, 4),
-	RunE: MaybeDecorateGRPCError(runDebugGCCmd),
+	RunE: clierrorplus.MaybeDecorateError(runDebugGCCmd),
 }
 
 func runDebugGCCmd(cmd *cobra.Command, args []string) error {
@@ -785,7 +786,7 @@ var debugCompactCmd = &cobra.Command{
 Compact the sstables in a store.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugCompact),
+	RunE: clierrorplus.MaybeDecorateError(runDebugCompact),
 }
 
 func runDebugCompact(cmd *cobra.Command, args []string) error {
@@ -847,7 +848,7 @@ Can connect to a running server to get the values or can be provided with
 a JSON file captured from a node's /_status/gossip/ debug endpoint.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runDebugGossipValues),
+	RunE: clierrorplus.MaybeDecorateError(runDebugGossipValues),
 }
 
 func runDebugGossipValues(cmd *cobra.Command, args []string) error {
@@ -971,7 +972,7 @@ var debugSyncBenchCmd = &cobra.Command{
 `,
 	Args:   cobra.MaximumNArgs(1),
 	Hidden: true,
-	RunE:   MaybeDecorateGRPCError(runDebugSyncBench),
+	RunE:   clierrorplus.MaybeDecorateError(runDebugSyncBench),
 }
 
 var syncBenchOpts = syncbench.Options{
@@ -1040,7 +1041,7 @@ early may lead to things getting stuck (if it happens, it can be fixed
 by restarting a second time).
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugUnsafeRemoveDeadReplicas),
+	RunE: clierrorplus.MaybeDecorateError(runDebugUnsafeRemoveDeadReplicas),
 }
 
 var removeDeadReplicasOpts struct {
