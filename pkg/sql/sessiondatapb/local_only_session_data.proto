@@ -165,10 +165,29 @@ message LocalOnlySessionData {
   int64 serial_normalization_mode = 42 [(gogoproto.casttype)="SerialNormalizationMode"];
   // NewSchemaChangerMode indicates whether to use the new schema changer.
   int64 new_schema_changer_mode = 43 [(gogoproto.casttype)="NewSchemaChangerMode"];
+  // SequenceCache stores sequence values which have been cached using the
+  // CACHE sequence option.
+  map<uint32, sessiondatapb.SequenceCacheEntry> sequence_cache = 44 [(gogoproto.casttype)="SequenceCache"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
   // in the SessionData message instead.                                   //
   ///////////////////////////////////////////////////////////////////////////
+}
+
+// SequenceCacheEntry is an entry in a SequenceCache.
+message SequenceCacheEntry {
+  // CachedVersion stores the descpb.DescriptorVersion that cached values are associated with.
+  // The version is checked to determine if cache needs to be invalidated. The version is stored as
+  // a uint32 to prevent an import cycle with the descpb package.
+  uint32 cached_version = 1;
+  // CurrentValue stores the present value of the sequence to be given out.
+  int64 current_value = 2;
+  // Increment stores the amount to Increment the currentVal by each time the
+  // currentVal is used. This value corresponds to descpb.TableDescriptor_SequenceOpts.Increment.
+  int64 increment = 3;
+  // NumValues represents the number of values to cache. The cache is considered
+  // to be empty when NumValues is 0.
+  int64 num_values = 4;
 }

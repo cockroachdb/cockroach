@@ -3258,6 +3258,12 @@ type EvalSessionAccessor interface {
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 }
 
+// PreparedStatementState is a limited interface that exposes metadata about
+// prepared statements.
+type PreparedStatementState interface {
+	HasPrepared() bool
+}
+
 // ClientNoticeSender is a limited interface to send notices to the
 // client.
 //
@@ -3530,6 +3536,8 @@ type EvalContext struct {
 	Tenant TenantOperator
 
 	JoinTokenCreator JoinTokenCreator
+
+	PreparedStatementState PreparedStatementState
 
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn

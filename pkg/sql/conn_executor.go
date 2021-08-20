@@ -1372,6 +1372,12 @@ type prepStmtNamespace struct {
 	portals map[string]PreparedPortal
 }
 
+// HasPrepared returns true if there are prepared statements or portals
+// in the session.
+func (ns prepStmtNamespace) HasPrepared() bool {
+	return len(ns.prepStmts) > 0 || len(ns.portals) > 0
+}
+
 func (ns prepStmtNamespace) String() string {
 	var sb strings.Builder
 	sb.WriteString("Prep stmts: ")
@@ -2341,27 +2347,28 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Planner:            p,
-			PrivilegedAccessor: p,
-			SessionAccessor:    p,
-			ClientNoticeSender: p,
-			Sequence:           p,
-			Tenant:             p,
-			JoinTokenCreator:   p,
-			SessionData:        ex.sessionData,
-			Settings:           ex.server.cfg.Settings,
-			TestingKnobs:       ex.server.cfg.EvalContextTestingKnobs,
-			ClusterID:          ex.server.cfg.ClusterID(),
-			ClusterName:        ex.server.cfg.RPCContext.ClusterName(),
-			NodeID:             ex.server.cfg.NodeID,
-			Codec:              ex.server.cfg.Codec,
-			Locality:           ex.server.cfg.Locality,
-			ReCache:            ex.server.reCache,
-			InternalExecutor:   &ie,
-			DB:                 ex.server.cfg.DB,
-			SQLLivenessReader:  ex.server.cfg.SQLLivenessReader,
-			SQLStatsController: ex.server.sqlStatsController,
-			CompactEngineSpan:  ex.server.cfg.CompactEngineSpanFunc,
+			Planner:                p,
+			PrivilegedAccessor:     p,
+			SessionAccessor:        p,
+			ClientNoticeSender:     p,
+			Sequence:               p,
+			Tenant:                 p,
+			JoinTokenCreator:       p,
+			PreparedStatementState: &ex.extraTxnState.prepStmtsNamespace,
+			SessionData:            ex.sessionData,
+			Settings:               ex.server.cfg.Settings,
+			TestingKnobs:           ex.server.cfg.EvalContextTestingKnobs,
+			ClusterID:              ex.server.cfg.ClusterID(),
+			ClusterName:            ex.server.cfg.RPCContext.ClusterName(),
+			NodeID:                 ex.server.cfg.NodeID,
+			Codec:                  ex.server.cfg.Codec,
+			Locality:               ex.server.cfg.Locality,
+			ReCache:                ex.server.reCache,
+			InternalExecutor:       &ie,
+			DB:                     ex.server.cfg.DB,
+			SQLLivenessReader:      ex.server.cfg.SQLLivenessReader,
+			SQLStatsController:     ex.server.sqlStatsController,
+			CompactEngineSpan:      ex.server.cfg.CompactEngineSpanFunc,
 		},
 		SessionMutator:         ex.dataMutator,
 		VirtualSchemas:         ex.server.cfg.VirtualSchemas,

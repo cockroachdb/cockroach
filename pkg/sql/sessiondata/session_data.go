@@ -14,6 +14,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -125,6 +126,12 @@ func (s *SessionData) GetDateStyle() pgdate.DateStyle {
 	return s.DataConversionConfig.DateStyle
 }
 
+// SessionUser retrieves the session_user.
+// This currently returns current_user, as session_user is not implemented.
+func (s *SessionData) SessionUser() security.SQLUsername {
+	return s.User()
+}
+
 // LocalUnmigratableSessionData contains session parameters that cannot
 // be propagated to remote nodes and cannot be migrated to another
 // session.
@@ -137,10 +144,6 @@ type LocalUnmigratableSessionData struct {
 	// descpb.ID -> descpb.ID, but cannot be stored as such due to package
 	// dependencies. Temporary tables are not supported in session migrations.
 	DatabaseIDToTempSchemaID map[uint32]uint32
-	// SequenceCache stores sequence values which have been cached using the
-	// CACHE sequence option.
-	// Cached sequence options are not yet supported during session migrations.
-	SequenceCache SequenceCache
 
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //

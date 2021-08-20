@@ -2639,7 +2639,7 @@ func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplayS
 
 // initSequenceCache creates an empty sequence cache instance for the session.
 func (m *sessionDataMutator) initSequenceCache() {
-	m.data.SequenceCache = sessiondata.SequenceCache{}
+	m.data.SequenceCache = sessiondatapb.SequenceCache{}
 }
 
 // SetIntervalStyle sets the IntervalStyle for the given session.
