@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -95,6 +96,12 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	}
 
 	if n.Placement != tree.DataPlacementUnspecified {
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PlacementPolicy) {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"version %v must be finalized to use PLACEMENT",
+				clusterversion.ByKey(clusterversion.PlacementPolicy))
+		}
+
 		// TODO(pawalt): #68598 add cluster setting checking for placement.
 		if n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
 			return nil, pgerror.New(

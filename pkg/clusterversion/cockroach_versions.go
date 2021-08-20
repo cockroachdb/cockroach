@@ -297,6 +297,9 @@ const (
 	EnsureNoInterleavedTables
 	// DefaultPrivileges default privileges are supported in this version.
 	DefaultPrivileges
+	// PlacementPolicy setting PLACEMENT for databases is supported in this
+	// version.
+	PlacementPolicy
 	// Step (1): Add new versions here.
 )
 
@@ -499,6 +502,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DefaultPrivileges,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 142},
+	},
+	{
+		Key:     PlacementPolicy,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 144},
 	},
 	// Step (2): Add new versions here.
 }
