@@ -71,7 +71,7 @@ func (c callbackCloser) Close() error {
 // TestVectorizedFlowShutdown tests that closing the FlowCoordinator correctly
 // closes all the infrastructure corresponding to the flow ending in that
 // FlowCoordinator. Namely:
-// - on a remote node, it creates a colflow.HashRouter with 3 outputs (with a
+// - on a remote node, it creates a colflow.Router with 3 outputs (with a
 // corresponding to each colrpc.Outbox) as well as 3 standalone Outboxes;
 // - on a local node, it creates 6 colrpc.Inboxes that feed into an unordered
 // synchronizer which then outputs all the data into a materializer.
@@ -161,7 +161,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						rng,
 						coldatatestutils.RandomDataOpArgs{
 							DeterministicTyps: typs,
-							// Set a high number of batches to ensure that the HashRouter is
+							// Set a high number of batches to ensure that the Router is
 							// very far from being finished when the flow is shut down.
 							NumBatches: math.MaxInt64,
 							Selection:  true,
@@ -196,13 +196,13 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 				// The first numHashRouterOutputs streamIDs are allocated to the
 				// outboxes that drain these outputs. The outboxes will drain the router
-				// outputs which should in turn drain the HashRouter that will return
+				// outputs which should in turn drain the Router that will return
 				// this metadata.
 				toDrain := make([]colexecop.MetadataSource, numHashRouterOutputs)
 				for i := range toDrain {
 					toDrain[i] = createMetadataSourceForID(i)
 				}
-				hashRouter, hashRouterOutputs := colflow.NewHashRouter(
+				hashRouter, hashRouterOutputs := colflow.NewRouter(
 					allocators,
 					colexecargs.OpWithMetaInfo{
 						Root:            hashRouterInput,

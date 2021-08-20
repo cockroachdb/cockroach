@@ -120,13 +120,17 @@ type TupleHashDistributor struct {
 	cancelChecker  colexecutils.CancelChecker
 	overloadHelper execgen.OverloadHelper
 	datumAlloc     rowenc.DatumAlloc
+	hashColumns    []uint32
 }
 
 // NewTupleHashDistributor returns a new TupleHashDistributor.
-func NewTupleHashDistributor(initHashValue uint64, numOutputs int) *TupleHashDistributor {
+func NewTupleHashDistributor(
+	initHashValue uint64, numOutputs int, hashColumns []uint32,
+) *TupleHashDistributor {
 	return &TupleHashDistributor{
 		InitHashValue: initHashValue,
 		selections:    make([][]int, numOutputs),
+		hashColumns:   hashColumns,
 	}
 }
 
@@ -141,7 +145,7 @@ func (d *TupleHashDistributor) Init(ctx context.Context) {
 // values.
 // NOTE: b is assumed to be non-zero batch.
 // NOTE: the distributor *must* be initialized before the first use.
-func (d *TupleHashDistributor) Distribute(b coldata.Batch, hashCols []uint32) [][]int {
+func (d *TupleHashDistributor) Distribute(b coldata.Batch) [][]int {
 	n := b.Length()
 	if cap(d.buckets) < n {
 		d.buckets = make([]uint64, n)
@@ -156,7 +160,7 @@ func (d *TupleHashDistributor) Distribute(b coldata.Batch, hashCols []uint32) []
 		d.datumAlloc.AllocSize = n
 	}
 
-	for _, i := range hashCols {
+	for _, i := range d.hashColumns {
 		rehash(d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, &d.overloadHelper, &d.datumAlloc)
 	}
 
