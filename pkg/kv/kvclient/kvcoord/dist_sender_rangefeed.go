@@ -14,6 +14,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
+	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -22,11 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 type singleRangeInfo struct {
@@ -57,6 +63,10 @@ func (ds *DistSender) RangeFeed(
 		return err
 	}
 
+	rr := newRangeFeedRegistry(ctx, span, ts, withDiff)
+	ds.activeRangeFeeds.Store(rr, nil)
+	defer ds.activeRangeFeeds.Delete(rr)
+
 	g := ctxgroup.WithContext(ctx)
 	// Goroutine that processes subdivided ranges and creates a rangefeed for
 	// each.
@@ -67,7 +77,7 @@ func (ds *DistSender) RangeFeed(
 			case sri := <-rangeCh:
 				// Spawn a child goroutine to process this feed.
 				g.GoCtx(func(ctx context.Context) error {
-					return ds.partialRangeFeed(ctx, &sri, withDiff, rangeCh, eventCh)
+					return ds.partialRangeFeed(ctx, rr, sri.rs, sri.ts, sri.token, withDiff, rangeCh, eventCh)
 				})
 			case <-ctx.Done():
 				return ctx.Err()
@@ -81,6 +91,110 @@ func (ds *DistSender) RangeFeed(
 	})
 
 	return g.Wait()
+}
+
+// RangeFeedContext is the structure containing arguments passed to
+// RangeFeed call.  It functions as a kind of key for an active range feed.
+type RangeFeedContext struct {
+	ID      int64  // unique ID identifying range feed.
+	CtxTags string // context tags
+
+	// Span, timestamp and withDiff options passed to RangeFeed call.
+	Span     roachpb.Span
+	TS       hlc.Timestamp
+	WithDiff bool
+}
+
+// PartialRangeFeed structure describes the state of currently executing partial range feed.
+type PartialRangeFeed struct {
+	Span              roachpb.Span
+	StartTS           hlc.Timestamp
+	NodeID            roachpb.NodeID
+	RangeID           roachpb.RangeID
+	LastValueReceived time.Time
+	Resolved          hlc.Timestamp
+}
+
+// ActiveRangeFeedIterFn is an iterator function which is passed PartialRangeFeed structure.
+// Iterator function may return an iterutil.StopIteration sentinel error to stop iteration
+// early; any other error is propagated.
+type ActiveRangeFeedIterFn func(rfCtx RangeFeedContext, feed PartialRangeFeed) error
+
+// ForEachActiveRangeFeed invokes provided function for each active range feed.
+func (ds *DistSender) ForEachActiveRangeFeed(fn ActiveRangeFeedIterFn) (iterErr error) {
+	const continueIter = true
+	const stopIter = false
+
+	partialRangeFeed := func(active *activeRangeFeed) PartialRangeFeed {
+		active.Lock()
+		defer active.Unlock()
+		return active.PartialRangeFeed
+	}
+
+	ds.activeRangeFeeds.Range(func(k, v interface{}) bool {
+		r := k.(*rangeFeedRegistry)
+		r.ranges.Range(func(k, v interface{}) bool {
+			active := k.(*activeRangeFeed)
+			if err := fn(r.RangeFeedContext, partialRangeFeed(active)); err != nil {
+				iterErr = err
+				return stopIter
+			}
+			return continueIter
+		})
+		return iterErr == nil
+	})
+
+	if iterutil.Done(iterErr) {
+		iterErr = nil // Early termination is fine.
+	}
+
+	return
+}
+
+// activeRangeFeed is a thread safe PartialRangeFeed.
+type activeRangeFeed struct {
+	syncutil.Mutex
+	PartialRangeFeed
+}
+
+func (a *activeRangeFeed) onRangeEvent(
+	nodeID roachpb.NodeID, rangeID roachpb.RangeID, event *roachpb.RangeFeedEvent,
+) {
+	a.Lock()
+	defer a.Unlock()
+	if event.Val != nil {
+		a.LastValueReceived = timeutil.Now()
+	} else if event.Checkpoint != nil {
+		a.Resolved = event.Checkpoint.ResolvedTS
+	}
+
+	a.NodeID = nodeID
+	a.RangeID = rangeID
+}
+
+// rangeFeedRegistry is responsible for keeping track of currently executing
+// range feeds.
+type rangeFeedRegistry struct {
+	RangeFeedContext
+	ranges sync.Map // map[*activeRangeFeed]nil
+}
+
+func newRangeFeedRegistry(
+	ctx context.Context, span roachpb.Span, ts hlc.Timestamp, withDiff bool,
+) *rangeFeedRegistry {
+	rr := &rangeFeedRegistry{
+		RangeFeedContext: RangeFeedContext{
+			Span:     span,
+			TS:       ts,
+			WithDiff: withDiff,
+		},
+	}
+	rr.ID = *(*int64)(unsafe.Pointer(&rr))
+
+	if b := logtags.FromContext(ctx); b != nil {
+		rr.CtxTags = b.String()
+	}
+	return rr
 }
 
 func (ds *DistSender) divideAndSendRangeFeedToRanges(
@@ -122,21 +236,33 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 // this rangefeed, or subdividing the range further in the event of a split.
 func (ds *DistSender) partialRangeFeed(
 	ctx context.Context,
-	rangeInfo *singleRangeInfo,
+	rr *rangeFeedRegistry,
+	rs roachpb.RSpan,
+	ts hlc.Timestamp,
+	token rangecache.EvictionToken,
 	withDiff bool,
 	rangeCh chan<- singleRangeInfo,
 	eventCh chan<- *roachpb.RangeFeedEvent,
 ) error {
 	// Bound the partial rangefeed to the partial span.
-	span := rangeInfo.rs.AsRawSpanWithNoLocals()
-	ts := rangeInfo.ts
+	span := rs.AsRawSpanWithNoLocals()
+
+	// Register partial range feed with registry.
+	active := &activeRangeFeed{
+		PartialRangeFeed: PartialRangeFeed{
+			Span:    span,
+			StartTS: ts,
+		},
+	}
+	rr.ranges.Store(active, nil)
+	defer rr.ranges.Delete(active)
 
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
 		// If we've cleared the descriptor on a send failure, re-lookup.
-		if !rangeInfo.token.Valid() {
+		if !token.Valid() {
 			var err error
-			ri, err := ds.getRoutingInfo(ctx, rangeInfo.rs.Key, rangecache.EvictionToken{}, false)
+			ri, err := ds.getRoutingInfo(ctx, rs.Key, rangecache.EvictionToken{}, false)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 				if !rangecache.IsRangeLookupErrorRetryable(err) {
@@ -144,11 +270,11 @@ func (ds *DistSender) partialRangeFeed(
 				}
 				continue
 			}
-			rangeInfo.token = ri
+			token = ri
 		}
 
 		// Establish a RangeFeed for a single Range.
-		maxTS, err := ds.singleRangeFeed(ctx, span, ts, withDiff, rangeInfo.token.Desc(), eventCh)
+		maxTS, err := ds.singleRangeFeed(ctx, span, ts, withDiff, token.Desc(), eventCh, active.onRangeEvent)
 
 		// Forward the timestamp in case we end up sending it again.
 		ts.Forward(maxTS)
@@ -166,13 +292,13 @@ func (ds *DistSender) partialRangeFeed(
 				// retry.
 			case IsSendError(err), errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)):
 				// Evict the descriptor from the cache and reload on next attempt.
-				rangeInfo.token.Evict(ctx)
-				rangeInfo.token = rangecache.EvictionToken{}
+				token.Evict(ctx)
+				token = rangecache.EvictionToken{}
 				continue
 			case errors.HasType(err, (*roachpb.RangeKeyMismatchError)(nil)):
 				// Evict the descriptor from the cache.
-				rangeInfo.token.Evict(ctx)
-				return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
+				token.Evict(ctx)
+				return ds.divideAndSendRangeFeedToRanges(ctx, rs, ts, rangeCh)
 			case errors.HasType(err, (*roachpb.RangeFeedRetryError)(nil)):
 				var t *roachpb.RangeFeedRetryError
 				if ok := errors.As(err, &t); !ok {
@@ -190,8 +316,8 @@ func (ds *DistSender) partialRangeFeed(
 					roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
 					roachpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER:
 					// Evict the descriptor from the cache.
-					rangeInfo.token.Evict(ctx)
-					return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
+					token.Evict(ctx)
+					return ds.divideAndSendRangeFeedToRanges(ctx, rs, ts, rangeCh)
 				default:
 					return errors.AssertionFailedf("unrecognized retriable error type: %T", err)
 				}
@@ -202,6 +328,10 @@ func (ds *DistSender) partialRangeFeed(
 	}
 	return ctx.Err()
 }
+
+// onRangeEventCb is invoked for each non-error range event.
+// nodeID identifies the node ID which generated the event.
+type onRangeEventCb func(nodeID roachpb.NodeID, rangeID roachpb.RangeID, event *roachpb.RangeFeedEvent)
 
 // singleRangeFeed gathers and rearranges the replicas, and makes a RangeFeed
 // RPC call. Results will be sent on the provided channel. Returns the timestamp
@@ -216,6 +346,7 @@ func (ds *DistSender) singleRangeFeed(
 	withDiff bool,
 	desc *roachpb.RangeDescriptor,
 	eventCh chan<- *roachpb.RangeFeedEvent,
+	onRangeEvent onRangeEventCb,
 ) (hlc.Timestamp, error) {
 	args := roachpb.RangeFeedRequest{
 		Span: span,
@@ -283,6 +414,8 @@ func (ds *DistSender) singleRangeFeed(
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
 				return args.Timestamp, t.Error.GoError()
 			}
+			onRangeEvent(args.Replica.NodeID, desc.RangeID, event)
+
 			select {
 			case eventCh <- event:
 			case <-ctx.Done():
