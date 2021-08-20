@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -651,6 +652,12 @@ const (
 	KVStringOptRequireValue   KVStringOptValidate = `value`
 )
 
+var (
+	KVStringCaseInsensitiveOpt = map[string]struct{}{
+		"format": struct{}{},
+	}
+)
+
 // evalStringOptions evaluates the KVOption values as strings and returns them
 // in a map. Options with no value have an empty string.
 func evalStringOptions(
@@ -732,6 +739,9 @@ func (p *planner) TypeAsStringOpts(
 				return res, errors.Errorf("failed to cast %T to string", d)
 			}
 			res[name] = string(*str)
+			if _, ok := KVStringCaseInsensitiveOpt[name]; ok {
+				res[name] = strings.ToLower(string(*str))
+			}
 		}
 		return res, nil
 	}
