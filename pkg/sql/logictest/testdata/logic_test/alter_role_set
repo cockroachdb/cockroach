@@ -109,9 +109,12 @@ ALTER ROLE test_set_role SET integer_datetimes = 'on'
 statement error parameter "transaction_isolation" cannot be changed
 ALTER ROLE test_set_role SET transaction_isolation = 'serializable'
 
-# Verify that the `database` variable cannot be set.
+# Verify that the `database` and `role` variables cannot be set.
 statement error parameter "database" cannot be changed
 ALTER ROLE test_set_role SET database = 'd'
+
+statement error parameter "role" cannot be changed
+ALTER ROLE test_set_role SET role = 'd'
 
 # Test setting with a name of "".
 statement error invalid variable name: ""

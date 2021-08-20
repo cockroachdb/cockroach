@@ -48,7 +48,7 @@ func resetSessionVars(ctx context.Context, m *sessionDataMutator) error {
 		if v.Set != nil {
 			hasDefault, defVal := getSessionVarDefaultString(varName, v, m)
 			if hasDefault {
-				if err := v.Set(ctx, nil /* pc */, m, defVal); err != nil {
+				if err := v.Set(ctx, nil /* permissionsChecker */, m, defVal); err != nil {
 					return err
 				}
 			}

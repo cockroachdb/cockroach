@@ -2441,6 +2441,123 @@ func (m *sessionDataMutator) SetDefaultIntSize(size int32) {
 	m.data.DefaultIntSize = size
 }
 
+func (m *sessionDataMutator) SetRole(
+	ctx context.Context, pc permissionsChecker, s security.SQLUsername,
+) error {
+	// Always allow RESET ROLE if there is no session user.
+	// This is needed for session initialization where this is no planner, but the
+	// session is set to the default session variable of "none".
+	// We do not have to propagate an is_superuser ParamStatusUpdate in this case.
+	if s.IsNoneRole() && m.data.SessionUserProto == "" && pc == nil {
+		return nil
+	}
+
+	if pc == nil {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"cannot SET ROLE in this context",
+		)
+	}
+
+	sessionUser := m.data.SessionUser()
+	becomeUser := sessionUser
+	// Check the role exists - if so, populate becomeUser.
+	if !s.IsNoneRole() {
+		becomeUser = s
+
+		exists, err := pc.RoleExists(ctx, becomeUser)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"role %s does not exist",
+				becomeUser.Normalized(),
+			)
+		}
+	}
+
+	if err := m.checkCanBecomeUser(ctx, pc, becomeUser); err != nil {
+		return err
+	}
+
+	// Buffer the ParamStatusUpdate.
+	updateStr := "off"
+	willBecomeAdmin, err := pc.UserHasAdminRole(ctx, becomeUser)
+	if err != nil {
+		return err
+	}
+	if willBecomeAdmin {
+		updateStr = "on"
+	}
+	m.paramStatusUpdater.BufferParamStatusUpdate("is_superuser", updateStr)
+
+	// The "none" user does a reset if we are in a SET ROLE.
+	if becomeUser.IsNoneRole() {
+		if m.data.SessionUserProto.Decode().Normalized() != "" {
+			m.data.UserProto = m.data.SessionUserProto
+			m.data.SessionUserProto = ""
+		}
+		return nil
+	}
+
+	// Only update session_user when we are transitioning from the current_user
+	// being the session_user.
+	if m.data.SessionUserProto == "" {
+		m.data.SessionUserProto = m.data.UserProto
+	}
+	m.data.UserProto = becomeUser.EncodeProto()
+	return nil
+}
+
+func (m *sessionDataMutator) checkCanBecomeUser(
+	ctx context.Context, pc permissionsChecker, becomeUser security.SQLUsername,
+) error {
+	sessionUser := m.data.SessionUser()
+
+	// Switching to None can always succeed.
+	if becomeUser.IsNoneRole() {
+		return nil
+	}
+	// Root users are able to become anyone.
+	if sessionUser.IsRootUser() {
+		return nil
+	}
+	// You can always become yourself.
+	if becomeUser.Normalized() == sessionUser.Normalized() {
+		return nil
+	}
+	// Only root can become root.
+	// This is a CockroachDB specialization of the superuser case, as we don't want
+	// to allow admins to become root in the tenant case, where only system
+	// admins can be the root user.
+	if becomeUser.IsRootUser() {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only root can become root",
+		)
+	}
+
+	memberships, err := pc.MemberOfWithAdminOption(ctx, sessionUser)
+	if err != nil {
+		return err
+	}
+	// Superusers can become anyone except root. In CRDB, admins are superusers.
+	if _, ok := memberships[security.AdminRoleName()]; ok {
+		return nil
+	}
+	// Otherwise, check the session user is a member of the user they will become.
+	if _, ok := memberships[becomeUser]; !ok {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			`permission denied to set role "%s"`,
+			becomeUser.Normalized(),
+		)
+	}
+	return nil
+}
+
 func (m *sessionDataMutator) SetDefaultTransactionPriority(val tree.UserPriority) {
 	m.data.DefaultTxnPriority = int64(val)
 }
