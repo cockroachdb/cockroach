@@ -2,6 +2,19 @@
 # Zone config logic tests that are only meant to work for the system tenant.
 
 statement ok
+CREATE TABLE t();
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
+
+# Should have no effect on the system tenant.
+statement ok
+SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = false
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 3;
+
+statement ok
 CREATE TABLE a(id INT PRIMARY KEY)
 
 # TODO(arul): move this back to `zone_config` once we validate cluster regions
@@ -23,3 +36,4 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 22  RANGE liveness
 25  TABLE system.public.replication_constraint_stats
 27  TABLE system.public.replication_stats
+53  TABLE test.public.t

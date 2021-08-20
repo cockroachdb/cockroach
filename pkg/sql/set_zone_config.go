@@ -183,6 +183,14 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, err
 	}
 
+	if !p.ExecCfg().Codec.ForSystemTenant() &&
+		!secondaryTenantZoneConfigsEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"secondary tenants cannot set zone configurations unless %s is enabled",
+			secondaryTenantsZoneConfigsEnabledSettingName,
+		)
+	}
+
 	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
 		return nil, err
 	}
