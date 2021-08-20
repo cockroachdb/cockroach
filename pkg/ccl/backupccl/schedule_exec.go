@@ -215,6 +215,16 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 			fullBackup.Recurrence = tree.NewDString(recurrence)
 			recurrence = dependentSchedule.ScheduleExpr()
 		}
+	} else {
+		// If sj does not have a dependent schedule and is an incremental backup
+		// schedule, this is only possible if the dependent full schedule has been
+		// dropped.
+		// In this case we set the recurrence to sj's ScheduleExpr() but we leave
+		// the full backup recurrence empty so that it is decided by the scheduler.
+		if backupNode.AppendToLatest {
+			fullBackup.AlwaysFull = false
+			fullBackup.Recurrence = nil
+		}
 	}
 
 	// Pick first_run to be the sooner of the scheduled run time on sj and its
@@ -242,6 +252,14 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 		return "", err
 	}
 
+	wait, err := parseOnPreviousRunningOption(sj.ScheduleDetails().Wait)
+	if err != nil {
+		return "", err
+	}
+	onError, err := parseOnErrorOption(sj.ScheduleDetails().OnError)
+	if err != nil {
+		return "", err
+	}
 	scheduleOptions := tree.KVOptions{
 		tree.KVOption{
 			Key:   optFirstRun,
@@ -249,11 +267,11 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 		},
 		tree.KVOption{
 			Key:   optOnExecFailure,
-			Value: tree.NewDString(sj.ScheduleDetails().OnError.String()),
+			Value: tree.NewDString(onError),
 		},
 		tree.KVOption{
 			Key:   optOnPreviousRunning,
-			Value: tree.NewDString(sj.ScheduleDetails().Wait.String()),
+			Value: tree.NewDString(wait),
 		},
 	}
 
