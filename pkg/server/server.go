@@ -674,7 +674,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Storage:  protectedtsProvider,
 		Cache:    protectedtsProvider,
 		StatusFuncs: ptreconcile.StatusFuncs{
-			jobsprotectedts.MetaType: jobsprotectedts.MakeStatusFunc(jobRegistry),
+			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
+				jobRegistry, internalExecutor, jobsprotectedts.Jobs),
+			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(jobRegistry,
+				internalExecutor, jobsprotectedts.Schedules),
 		},
 	})
 	registry.AddMetricStruct(protectedtsReconciler.Metrics())

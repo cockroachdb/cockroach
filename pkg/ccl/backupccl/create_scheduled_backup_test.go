@@ -103,6 +103,15 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	}
 }
 
+func (h *testHelper) loadSchedule(t *testing.T, scheduleID int64) *jobs.ScheduledJob {
+	t.Helper()
+
+	loaded, err := jobs.LoadScheduledJob(
+		context.Background(), h.env, scheduleID, h.cfg.InternalExecutor, nil)
+	require.NoError(t, err)
+	return loaded
+}
+
 func (h *testHelper) clearSchedules(t *testing.T) {
 	t.Helper()
 	h.sqlDB.Exec(t, "DELETE FROM system.scheduled_jobs WHERE true")
@@ -166,6 +175,12 @@ func getScheduledBackupStatement(t *testing.T, arg *jobspb.ExecutionArguments) s
 	return backup.BackupStatement
 }
 
+func getScheduledBackupChainProtectedTimestamp(t *testing.T, arg *jobspb.ExecutionArguments) bool {
+	var backup ScheduledBackupExecutionArgs
+	require.NoError(t, pbtypes.UnmarshalAny(arg.Args, &backup))
+	return backup.ChainProtectedTimestampRecords
+}
+
 type userType bool
 
 const freeUser userType = false
@@ -188,13 +203,16 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
+	th.sqlDB.Exec(t, `SET CLUSTER SETTING schedules.backup.gc_protection.enabled = true`)
+
 	type expectedSchedule struct {
-		nameRe     string
-		backupStmt string
-		period     time.Duration
-		runsNow    bool
-		shownStmt  string
-		paused     bool
+		nameRe                        string
+		backupStmt                    string
+		period                        time.Duration
+		runsNow                       bool
+		shownStmt                     string
+		paused                        bool
+		chainProtectedTimestampRecord bool
 	}
 
 	testCases := []struct {
@@ -295,13 +313,78 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		},
 		{
 			name:  "full-cluster-always",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly' FULL BACKUP ALWAYS",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history RECURRING '@hourly' FULL BACKUP ALWAYS",
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH revision_history, detached",
 					period:     time.Hour,
+				},
+			},
+		},
+		{
+			name: "multiple-tables-with-revision-history",
+			user: enterpriseUser,
+			query: `
+		CREATE SCHEDULE FOR BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup'
+		WITH revision_history RECURRING '@hourly'`,
+			expectedSchedules: []expectedSchedule{
+				{
+					nameRe:                        "BACKUP .*",
+					backupStmt:                    "BACKUP TABLE system.jobs, system.scheduled_jobs INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
+				},
+				{
+					nameRe:                        "BACKUP .+",
+					backupStmt:                    "BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup' WITH revision_history, detached",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
+				},
+			},
+		},
+		{
+			name: "database-with-revision-history",
+			user: enterpriseUser,
+			query: `
+		CREATE SCHEDULE FOR BACKUP DATABASE system INTO 'nodelocal://0/backup'
+		WITH revision_history RECURRING '@hourly'`,
+			expectedSchedules: []expectedSchedule{
+				{
+					nameRe:     "BACKUP .*",
+					backupStmt: "BACKUP DATABASE system INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
+					period:     time.Hour,
+					paused:     true,
+				},
+				{
+					nameRe:     "BACKUP .+",
+					backupStmt: "BACKUP DATABASE system INTO 'nodelocal://0/backup' WITH revision_history, detached",
+					period:     24 * time.Hour,
+					runsNow:    true,
+				},
+			},
+		},
+		{
+			name: "wildcard-with-revision-history",
+			user: enterpriseUser,
+			query: `
+		CREATE SCHEDULE FOR BACKUP TABLE system.* INTO 'nodelocal://0/backup'
+		WITH revision_history RECURRING '@hourly'`,
+			expectedSchedules: []expectedSchedule{
+				{
+					nameRe:     "BACKUP .*",
+					backupStmt: "BACKUP TABLE system.* INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
+					period:     time.Hour,
+					paused:     true,
+				},
+				{
+					nameRe:     "BACKUP .+",
+					backupStmt: "BACKUP TABLE system.* INTO 'nodelocal://0/backup' WITH revision_history, detached",
+					period:     24 * time.Hour,
+					runsNow:    true,
 				},
 			},
 		},
@@ -330,16 +413,18 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user:      enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "my_backup_name",
-					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
-					period:     time.Hour,
-					paused:     true,
+					nameRe:                        "my_backup_name",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
 				},
 				{
-					nameRe:     "my_backup_name",
-					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH revision_history, detached",
-					period:     24 * time.Hour,
-					runsNow:    true,
+					nameRe:                        "my_backup_name",
+					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH revision_history, detached",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
 				},
 			},
 		},
@@ -348,13 +433,15 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user: enterpriseUser,
 			query: `
 		CREATE SCHEDULE FOR BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup'
-		WITH encryption_passphrase = 'secret' RECURRING '@weekly'`,
+		WITH revision_history, encryption_passphrase = 'secret' RECURRING '@weekly'`,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "BACKUP .*",
-					backupStmt: "BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup' WITH encryption_passphrase = 'secret', detached",
-					shownStmt:  "BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup' WITH encryption_passphrase = '*****', detached",
-					period:     7 * 24 * time.Hour,
+					nameRe: "BACKUP .*",
+					backupStmt: "BACKUP TABLE system.jobs, " +
+						"system.scheduled_jobs INTO 'nodelocal://0/backup' WITH revision_history, encryption_passphrase = 'secret', detached",
+					shownStmt: "BACKUP TABLE system.jobs, " +
+						"system.scheduled_jobs INTO 'nodelocal://0/backup' WITH revision_history, encryption_passphrase = '*****', detached",
+					period: 7 * 24 * time.Hour,
 				},
 			},
 		},
@@ -448,6 +535,8 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				if expectedSchedule.runsNow {
 					require.EqualValues(t, th.env.Now().Round(time.Microsecond), s.ScheduledRunTime())
 				}
+				require.Equal(t, expectedSchedule.chainProtectedTimestampRecord,
+					getScheduledBackupChainProtectedTimestamp(t, s.ExecutionArgs()))
 			}
 		})
 	}
@@ -539,62 +628,66 @@ INSERT INTO t1 values (-1), (10), (-100);
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			destination := "nodelocal://0/backup/" + tc.name
-			schedules, err := th.createBackupSchedule(t, tc.schedule, destination)
-			require.NoError(t, err)
-			require.LessOrEqual(t, 1, len(schedules))
-
-			// Either 1 or two schedules will be created.
-			// One of them (incremental) must be paused.
-			var full, inc *jobs.ScheduledJob
-			if len(schedules) == 1 {
-				full = schedules[0]
-			} else {
-				require.Equal(t, 2, len(schedules))
-				full, inc = schedules[0], schedules[1]
-				if full.IsPaused() {
-					full, inc = inc, full // Swap: inc should be paused.
-				}
-				require.True(t, inc.IsPaused())
-				require.False(t, full.IsPaused())
-
-				// The full should list incremental as a schedule to unpause.
-				args := &ScheduledBackupExecutionArgs{}
-				require.NoError(t, pbtypes.UnmarshalAny(full.ExecutionArgs().Args, args))
-				require.EqualValues(t, inc.ScheduleID(), args.UnpauseOnSuccess)
-			}
-
-			defer func() {
-				th.sqlDB.Exec(t, "DROP SCHEDULE $1", full.ScheduleID())
-				if inc != nil {
-					th.sqlDB.Exec(t, "DROP SCHEDULE $1", inc.ScheduleID())
-				}
-			}()
-
-			// Force the schedule to execute.
-			th.env.SetTime(full.NextRun().Add(time.Second))
-			require.NoError(t, th.executeSchedules())
-
-			// Wait for the backup complete.
-			th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
-
-			if inc != nil {
-				// Once the full backup completes, the incremental one should no longer be paused.
-				loadedInc, err := jobs.LoadScheduledJob(
-					context.Background(), th.env, inc.ScheduleID(), th.cfg.InternalExecutor, nil)
+		for _, enabled := range []bool{true, false} {
+			testName := fmt.Sprintf("%s_chaining=%t", tc.name, enabled)
+			t.Run(testName, func(t *testing.T) {
+				th.sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING schedules.backup.gc_protection.enabled = %t`, enabled))
+				destination := "nodelocal://0/backup/" + testName
+				schedules, err := th.createBackupSchedule(t, tc.schedule, destination)
 				require.NoError(t, err)
-				require.False(t, loadedInc.IsPaused())
-			}
+				require.LessOrEqual(t, 1, len(schedules))
 
-			// Verify backup.
-			latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", tc.name, latestFileName))
-			require.NoError(t, err)
-			backedUp := th.sqlDB.QueryStr(t,
-				`SELECT database_name, object_name FROM [SHOW BACKUP $1] WHERE object_type='table' ORDER BY database_name, object_name`,
-				fmt.Sprintf("%s/%s", destination, string(latest)))
-			require.Equal(t, tc.verifyTables, backedUp)
-		})
+				// Either 1 or two schedules will be created.
+				// One of them (incremental) must be paused.
+				var full, inc *jobs.ScheduledJob
+				if len(schedules) == 1 {
+					full = schedules[0]
+				} else {
+					require.Equal(t, 2, len(schedules))
+					full, inc = schedules[0], schedules[1]
+					if full.IsPaused() {
+						full, inc = inc, full // Swap: inc should be paused.
+					}
+					require.True(t, inc.IsPaused())
+					require.False(t, full.IsPaused())
+
+					// The full should list incremental as a schedule to unpause.
+					args := &ScheduledBackupExecutionArgs{}
+					require.NoError(t, pbtypes.UnmarshalAny(full.ExecutionArgs().Args, args))
+					require.EqualValues(t, inc.ScheduleID(), args.UnpauseOnSuccess)
+				}
+
+				defer func() {
+					th.sqlDB.Exec(t, "DROP SCHEDULE $1", full.ScheduleID())
+					if inc != nil {
+						th.sqlDB.Exec(t, "DROP SCHEDULE $1", inc.ScheduleID())
+					}
+				}()
+
+				// Force the schedule to execute.
+				th.env.SetTime(full.NextRun().Add(time.Second))
+				require.NoError(t, th.executeSchedules())
+
+				// Wait for the backup complete.
+				th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+
+				if inc != nil {
+					// Once the full backup completes, the incremental one should no longer be paused.
+					loadedInc, err := jobs.LoadScheduledJob(
+						context.Background(), th.env, inc.ScheduleID(), th.cfg.InternalExecutor, nil)
+					require.NoError(t, err)
+					require.False(t, loadedInc.IsPaused())
+				}
+
+				// Verify backup.
+				latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", testName, latestFileName))
+				require.NoError(t, err)
+				backedUp := th.sqlDB.QueryStr(t,
+					`SELECT database_name, object_name FROM [SHOW BACKUP $1] WHERE object_type='table' ORDER BY database_name, object_name`,
+					fmt.Sprintf("%s/%s", destination, string(latest)))
+				require.Equal(t, tc.verifyTables, backedUp)
+			})
+		}
 	}
 }
 
@@ -681,16 +774,9 @@ CREATE TABLE t(a int);
 INSERT INTO t values (1), (10), (100);
 `)
 
-	loadSchedule := func(t *testing.T, id int64) *jobs.ScheduledJob {
-		loaded, err := jobs.LoadScheduledJob(
-			context.Background(), th.env, id, th.cfg.InternalExecutor, nil)
-		require.NoError(t, err)
-		return loaded
-	}
-
 	advanceNextRun := func(t *testing.T, id int64, delta time.Duration) {
 		// Adjust next run by the specified delta (which maybe negative).
-		s := loadSchedule(t, id)
+		s := th.loadSchedule(t, id)
 		s.SetNextRun(th.env.Now().Add(delta))
 		require.NoError(t, s.Update(context.Background(), th.cfg.InternalExecutor, nil))
 	}
@@ -754,7 +840,7 @@ INSERT INTO t values (1), (10), (100);
 	) {
 		for _, id := range []int64{fullID, incID} {
 			// Pretend we were down for a year.
-			s := loadSchedule(t, id)
+			s := th.loadSchedule(t, id)
 			s.SetNextRun(s.NextRun().Add(-365 * 24 * time.Hour))
 			// Set onError policy to the specified value.
 			s.SetScheduleDetails(jobspb.ScheduleDetails{
@@ -775,7 +861,7 @@ INSERT INTO t values (1), (10), (100);
 		// AOST way in the past causes backup planning to fail.  We don't need
 		// to wait for any jobs, and the schedules should now be paused.
 		for _, id := range []int64{fullID, incID} {
-			require.True(t, loadSchedule(t, id).IsPaused())
+			require.True(t, th.loadSchedule(t, id).IsPaused())
 		}
 	})
 
@@ -798,7 +884,7 @@ INSERT INTO t values (1), (10), (100);
 		// to wait for any jobs, and the schedule nextRun should be advanced
 		// a bit in the future.
 		for _, id := range []int64{fullID, incID} {
-			require.True(t, loadSchedule(t, id).NextRun().Sub(th.env.Now()) > 0)
+			require.True(t, th.loadSchedule(t, id).NextRun().Sub(th.env.Now()) > 0)
 		}
 
 		// We expect that, eventually, both backups would succeed.
@@ -829,7 +915,7 @@ INSERT INTO t values (1), (10), (100);
 		// to wait for any jobs, and the schedule nextRun should be advanced
 		// to the next scheduled recurrence.
 		for _, id := range []int64{fullID, incID} {
-			s := loadSchedule(t, id)
+			s := th.loadSchedule(t, id)
 			require.EqualValues(t,
 				cronexpr.MustParse(s.ScheduleExpr()).Next(th.env.Now()).Round(time.Microsecond),
 				s.NextRun())

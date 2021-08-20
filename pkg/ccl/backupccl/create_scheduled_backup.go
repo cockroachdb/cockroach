@@ -20,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -49,6 +51,14 @@ var scheduledBackupOptionExpectValues = map[string]sql.KVStringOptValidate{
 	optIgnoreExistingBackups:   sql.KVStringOptRequireNoValue,
 	optUpdatesLastBackupMetric: sql.KVStringOptRequireNoValue,
 }
+
+// scheduledBackupGCProtectionEnabled is used to enable and disable the chaining
+// of protected timestamps amongst scheduled backups.
+var scheduledBackupGCProtectionEnabled = settings.RegisterBoolSetting(
+	"schedules.backup.gc_protection.enabled",
+	"enable chaining of GC protection across backups run as part of a schedule; default is false",
+	false, /* defaultValue */
+).WithPublic()
 
 // scheduledBackupEval is a representation of tree.ScheduledBackup, prepared
 // for evaluation
@@ -186,6 +196,42 @@ func pickFullRecurrenceFromIncremental(inc *scheduleRecurrence) *scheduleRecurre
 }
 
 const scheduleBackupOp = "CREATE SCHEDULE FOR BACKUP"
+
+// canChainProtectedTimestampRecords returns true if the schedule is eligible to
+// participate in the chaining of protected timestamp records between backup
+// jobs running as part of the schedule.
+// Currently, full cluster backups, tenant backups and table backups with
+// revision history can enable chaining, as the spans to be protected remain
+// constant across all backups in the chain. Unlike in database backups where a
+// table could be created in between backups thereby widening the scope of what
+// is to be protected.
+func canChainProtectedTimestampRecords(p sql.PlanHookState, eval *scheduledBackupEval) bool {
+	if !scheduledBackupGCProtectionEnabled.Get(&p.ExecCfg().Settings.SV) ||
+		!eval.BackupOptions.CaptureRevisionHistory {
+		return false
+	}
+
+	// Check if this is a full cluster backup.
+	if eval.Coverage() == tree.AllDescriptors {
+		return true
+	}
+
+	// Check if there are any wildcard table selectors in the specified table
+	// targets. If we find a wildcard selector then we cannot chain PTS records
+	// because of the reason outlined in the comment above the method.
+	for _, t := range eval.Targets.Tables {
+		pattern, err := t.NormalizeTablePattern()
+		if err != nil {
+			return false
+		}
+		if _, ok := pattern.(*tree.AllTablesSelector); ok {
+			return false
+		}
+	}
+
+	// Return true if the backup has table targets or is backing up a tenant.
+	return eval.Targets.Tables != nil || eval.Targets.Tenant != roachpb.TenantID{}
+}
 
 // doCreateBackupSchedule creates requested schedule (or schedules).
 // It is a plan hook implementation responsible for the creating of scheduled backup.
@@ -331,14 +377,16 @@ func doCreateBackupSchedules(
 
 	unpauseOnSuccessID := jobs.InvalidScheduleID
 
+	var chainProtectedTimestampRecords bool
 	// If needed, create incremental.
 	var inc *jobs.ScheduledJob
 	var incScheduledBackupArgs *ScheduledBackupExecutionArgs
 	if incRecurrence != nil {
+		chainProtectedTimestampRecords = canChainProtectedTimestampRecords(p, eval)
 		backupNode.AppendToLatest = true
 		inc, incScheduledBackupArgs, err = makeBackupSchedule(
 			env, p.User(), scheduleLabel, incRecurrence, details, unpauseOnSuccessID,
-			updateMetricOnSuccess, backupNode)
+			updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords)
 		if err != nil {
 			return err
 		}
@@ -361,7 +409,7 @@ func doCreateBackupSchedules(
 	var fullScheduledBackupArgs *ScheduledBackupExecutionArgs
 	full, fullScheduledBackupArgs, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel, fullRecurrence, details, unpauseOnSuccessID,
-		updateMetricOnSuccess, backupNode)
+		updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords)
 	if err != nil {
 		return err
 	}
@@ -416,8 +464,7 @@ func setDependentSchedule(
 		return errors.Wrap(err, "marshaling args")
 	}
 	schedule.SetExecutionDetails(
-		schedule.ExecutorType(),
-		jobspb.ExecutionArguments{Args: any},
+		schedule.ExecutorType(), jobspb.ExecutionArguments{Args: any},
 	)
 	return schedule.Update(ctx, ex, txn)
 }
@@ -473,6 +520,7 @@ func makeBackupSchedule(
 	unpauseOnSuccess int64,
 	updateLastMetricOnSuccess bool,
 	backupNode *tree.Backup,
+	chainProtectedTimestampRecords bool,
 ) (*jobs.ScheduledJob, *ScheduledBackupExecutionArgs, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(label)
@@ -480,8 +528,9 @@ func makeBackupSchedule(
 
 	// Prepare arguments for scheduled backup execution.
 	args := &ScheduledBackupExecutionArgs{
-		UnpauseOnSuccess:        unpauseOnSuccess,
-		UpdatesLastBackupMetric: updateLastMetricOnSuccess,
+		UnpauseOnSuccess:               unpauseOnSuccess,
+		UpdatesLastBackupMetric:        updateLastMetricOnSuccess,
+		ChainProtectedTimestampRecords: chainProtectedTimestampRecords,
 	}
 	if backupNode.AppendToLatest {
 		args.BackupType = ScheduledBackupExecutionArgs_INCREMENTAL
@@ -506,8 +555,7 @@ func makeBackupSchedule(
 		return nil, nil, err
 	}
 	sj.SetExecutionDetails(
-		tree.ScheduledBackupExecutor.InternalName(),
-		jobspb.ExecutionArguments{Args: any},
+		tree.ScheduledBackupExecutor.InternalName(), jobspb.ExecutionArguments{Args: any},
 	)
 
 	return sj, args, nil
