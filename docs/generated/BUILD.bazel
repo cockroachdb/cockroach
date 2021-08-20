@@ -1,4 +1,8 @@
-load("//pkg/util/log/eventpb:PROTOS.bzl", _EVENTPB_PROTO_LOCATIONS = "EVENTPB_PROTO_LOCATIONS")
+load(
+    "//pkg/util/log/eventpb:PROTOS.bzl",
+    _EVENTPB_PROTO_LOCATIONS = "EVENTPB_PROTO_LOCATIONS",
+    _EVENTPB_PROTO_SRCS = "EVENTPB_PROTO_SRCS",
+)
 
 genrule(
     name = "gen-logging-md",
@@ -31,19 +35,7 @@ genrule(
 
 genrule(
     name = "gen-eventlog-md",
-    srcs = [
-        "//pkg/util/log/eventpb:cluster_events.proto",
-        "//pkg/util/log/eventpb:ddl_events.proto",
-        "//pkg/util/log/eventpb:events.proto",
-        "//pkg/util/log/eventpb:health_events.proto",
-        "//pkg/util/log/eventpb:job_events.proto",
-        "//pkg/util/log/eventpb:misc_sql_events.proto",
-        "//pkg/util/log/eventpb:privilege_events.proto",
-        "//pkg/util/log/eventpb:role_events.proto",
-        "//pkg/util/log/eventpb:session_events.proto",
-        "//pkg/util/log/eventpb:sql_audit_events.proto",
-        "//pkg/util/log/eventpb:zone_events.proto",
-    ],
+    srcs = _EVENTPB_PROTO_SRCS,
     outs = ["eventlog.md"],
     cmd = """
     $(location //pkg/util/log/eventpb:gen) eventlog.md \
