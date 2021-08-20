@@ -79,6 +79,13 @@ func TestLogic_contention_event(
 	runLogicTest(t, "contention_event")
 }
 
+func TestLogic_dist_joinreader(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "dist_joinreader")
+}
+
 func TestLogic_dist_vectorize(
 	t *testing.T,
 ) {

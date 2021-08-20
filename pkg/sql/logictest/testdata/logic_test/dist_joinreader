@@ -1,0 +1,76 @@
+# LogicTest: 5node
+
+statement ok
+SET CLUSTER SETTING sql.distsql.distributed_join_reader.enabled = true
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, INDEX(c));
+INSERT INTO t SELECT g,g+1,g+2 FROM generate_series(1,1000) g(g);
+
+# Split into ten parts.
+statement ok
+ALTER TABLE t SPLIT AT SELECT i*100 FROM generate_series(1, 9) AS g(i);
+ALTER INDEX t_c_idx SPLIT AT SELECT i*100 FROM generate_series(1, 9) AS g(i);
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i*100 FROM generate_series(0, 9) AS g(i);
+
+# Relocate the secondary index just to a couple of the nodes, to make sure
+# we can distribute to nodes that were not included in the original set of
+# TableReader placements.
+statement ok
+ALTER INDEX t_c_idx EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%3+1], i*100 FROM generate_series(0, 9) AS g(i)
+
+statement ok
+SELECT * FROM t
+
+statement ok
+SELECT * FROM t@t_c_idx
+
+query T
+EXPLAIN (DISTSQL) SELECT sum_int(b) FROM t@t_c_idx
+----
+distribution: full
+vectorized: false
+·
+• group (scalar)
+│
+└── • index join
+    │ table: t@primary
+    │
+    └── • scan
+          missing stats
+          table: t@t_c_idx
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lOGL2jAYxr_vrwjvJ4UcNkn1tJ88NgcOT2_qYDCKVBu6gjYuSeEO8X8fVZna06SjuY-1PnmePL-37w7UnzUEMPj5MnoajlHjy3A2n30fNdFsMBp8niOVbxZpphvLJvo6nTwj3deL1SKNXwFDJmI-jjZcQfALCGCggIEBBh8wtCHEsJVixZUSsvjL7iAYxq8QeBjSbJvr4ucQw0pIDsEOdKrXHAKYR8s1n_Io5rLlAYaY6yhdH2wu_WfbKFMBemgRz0NRFiOGhP7NpQIMk1wHqE8g3GMQuT55nS2Wb0hGWcKvTg_3IQalo4RDQPb4TuDzIXkmZMwlj9-fUr7SN5Fmpxux8o22Mt1E8u1falpKfQ5F74a6YfmUJJInkRay1b22nP14XgzH80afNO9aMbf3vwhD2P-n8a_SkOrjQ6zjU0zPQ4ueRoh-2AgRhyPkuxohS5MX1Hp1R4hWh0bt0GgBjX04NOoQWtsVNEuTl5-aV5cac1hAx1UBrHoBpG4BvsMCHl0V4FcvgLpc_Te8plxtRabKH9Ttk72iIB4n_NimErlc8RcpVgeb4-PkoDusppgrfXx7ehhmx1dFwOridh1xt46YeLXU1KwmZbV3qb4We2UxNYqZ2ZkZxcQ3W_t1UJvFFtRmsQW1JbYFtUVtQd02Ft4x992pg_qxDiyz2ALLLLbAssS2wLKoLbC6xr57Zli9OrDIu4Vy_WESszcxbxSbuXmlEGYxNy-Vsnm4__Q3AAD___OJ2bo=
+
+query I
+SELECT sum_int(b) FROM t@t_c_idx
+----
+501500
+
+query T
+EXPLAIN (DISTSQL) SELECT sum_int(t1.a), sum_int(t2.a) FROM
+t t1 INNER LOOKUP JOIN
+t t2 ON t1.a = t2.a
+----
+distribution: full
+vectorized: true
+·
+• group (scalar)
+│
+└── • lookup join
+    │ table: t@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │
+    └── • scan
+          missing stats
+          table: t@t_c_idx
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lV9r2zAUxd_3KcR9akBtLNnpH8MgZcvAXWp3SQqDEYIai8xbKmWSDC0l333YyZbEbaWA7UdFOTr3nt-V_AL6zxJCGHy_G15HMTr5HI0n42_DDhoPhoNPE6Tzx1kmzIkhZ6yDd0t6xjroyyi5RQZdj5EhKIrjwQgNk-Tr_R26SaJ4u0NREqNCjj6iQgYYhEx5zB65hvAHEMBAAYMPGALA0IMphpWSc661VMVfXkpBlD5B6GHIxCo3xc9TDHOpOIQvYDKz5BDChD0s-YizlKuuBxhSbli2LG1M38zmsyx9AgzjFRM6RKdd4nmIiRT5SJqfXGnAkOQmRH0C0zUGmZut187i4RkpJhb84PTpeopBG7bgEJI1fqfg3SG5kCrliqevT6m2dCMzse3Ir3a0UtkjU8-AYSjl73yFfslMICnKBv63gvu00s2uWPpusW-Ucr1YKL5gRqru5WEp4_vbWRRPTvqkU8T7b0U77xr7zaa0Vxrx69YWHNRGjh854hy5YuJOu3Q7drS1sSMNjl3Q9tg5Et5je9Xs2NHj0VI3Wlqg9VtHSxtE22sbrSPh_WvrNcvWbzCm87Zj8o-PiTQbU9BgTBdtxxQcHxNt7wP1hvOI65UUunqF3z7ZK2Lk6YJvMtcyV3N-p-S8tNksk1JXPo0p12azu11EYrNVFHi8uFdHfFlHTLxaampXk6ra21cfir2qmFrFvt3Zt4pJYLcO6qC2ix2o7WIHakfZDtQOtQN1zxr4uT3v8zqoL-rAsosdsOxiByxH2Q5YDrUD1qU17ys7rKs6sMirB-XwYhK7N7G_KC5z-5NCfIe5_VGpmk_XH_4GAAD__y2dIMk=

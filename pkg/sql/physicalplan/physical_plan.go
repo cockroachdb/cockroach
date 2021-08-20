@@ -1057,15 +1057,35 @@ func (p *PhysicalPlan) AddJoinStage(
 	}
 }
 
-// AddStageOnNodes adds a stage of processors that take in a single input
-// logical stream on the specified nodes and connects them to the previous
+// AddHashRoutedStageOnNodes adds a stage of processors that take in a single
+// input logical stream on the specified nodes and connects them to the previous
 // stage via a hash router.
-func (p *PhysicalPlan) AddStageOnNodes(
+func (p *PhysicalPlan) AddHashRoutedStageOnNodes(
 	ctx context.Context,
 	sqlInstanceIDs []base.SQLInstanceID,
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
 	hashCols []uint32,
+	inputTypes, resultTypes []*types.T,
+	mergeOrd execinfrapb.Ordering,
+	routers []ProcessorIdx,
+) {
+	p.AddStageOnNodes(ctx, sqlInstanceIDs, core, post,
+		execinfrapb.OutputRouterSpec{
+			Type:        execinfrapb.OutputRouterSpec_BY_HASH,
+			HashColumns: hashCols,
+		}, inputTypes, resultTypes, mergeOrd, routers)
+}
+
+// AddStageOnNodes adds a stage of processors that take in a single input
+// logical stream on the specified nodes and connects them to the previous
+// stage via the passed in outputRouterSpec.
+func (p *PhysicalPlan) AddStageOnNodes(
+	ctx context.Context,
+	sqlInstanceIDs []base.SQLInstanceID,
+	core execinfrapb.ProcessorCoreUnion,
+	post execinfrapb.PostProcessSpec,
+	outputRouterSpec execinfrapb.OutputRouterSpec,
 	inputTypes, resultTypes []*types.T,
 	mergeOrd execinfrapb.Ordering,
 	routers []ProcessorIdx,
@@ -1093,10 +1113,7 @@ func (p *PhysicalPlan) AddStageOnNodes(
 	if len(sqlInstanceIDs) > 1 {
 		// Set up the routers.
 		for _, resultProc := range routers {
-			p.Processors[resultProc].Spec.Output[0] = execinfrapb.OutputRouterSpec{
-				Type:        execinfrapb.OutputRouterSpec_BY_HASH,
-				HashColumns: hashCols,
-			}
+			p.Processors[resultProc].Spec.Output[0] = outputRouterSpec
 		}
 	}
 
@@ -1139,7 +1156,7 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	// would return (1),(2) instead of (2) if there was no distinct processor
 	// before the EXCEPT ALL join).
 	distinctProcs := make(map[base.SQLInstanceID][]ProcessorIdx)
-	p.AddStageOnNodes(
+	p.AddHashRoutedStageOnNodes(
 		ctx, sqlInstanceIDs, distinctCores[0], execinfrapb.PostProcessSpec{}, eqCols,
 		leftTypes, leftTypes, leftMergeOrd, leftRouters,
 	)
@@ -1147,7 +1164,7 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 		node := p.Processors[leftDistinctProcIdx].SQLInstanceID
 		distinctProcs[node] = append(distinctProcs[node], leftDistinctProcIdx)
 	}
-	p.AddStageOnNodes(
+	p.AddHashRoutedStageOnNodes(
 		ctx, sqlInstanceIDs, distinctCores[1], execinfrapb.PostProcessSpec{}, eqCols,
 		rightTypes, rightTypes, rightMergeOrd, rightRouters,
 	)
