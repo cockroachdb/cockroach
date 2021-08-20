@@ -58,6 +58,15 @@ type ScheduledJobExecutor interface {
 		schedule *ScheduledJob, ex sqlutil.InternalExecutor) (string, error)
 }
 
+// ScheduledJobController is an interface describing hooks that will execute
+// when controlling a scheduled job.
+type ScheduledJobController interface {
+	// OnDrop runs before the passed in `schedule` is dropped as part of a `DROP
+	// SCHEDULE` query.
+	OnDrop(ctx context.Context, scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
+		env scheduledjobs.JobSchedulerEnv, schedule *ScheduledJob, txn *kv.Txn) error
+}
+
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.
 type ScheduledJobExecutorFactory = func() (ScheduledJobExecutor, error)
 

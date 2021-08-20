@@ -354,6 +354,65 @@ func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, e
 	return nil, errors.Newf("unexpect node type %T", node)
 }
 
+var _ jobs.ScheduledJobController = &scheduledBackupExecutor{}
+
+func unlinkDependentSchedule(
+	ctx context.Context,
+	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	args *ScheduledBackupExecutionArgs,
+) error {
+	if args.DependentScheduleID == 0 {
+		return nil
+	}
+
+	// Load the dependent schedule.
+	dependentSj, dependentArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
+		scheduleControllerEnv.InternalExecutor().(*sql.InternalExecutor), args.DependentScheduleID)
+	if err != nil {
+		if jobs.HasScheduledJobNotFoundError(err) {
+			log.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+			return nil
+		}
+		return errors.Wrapf(err, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+	}
+
+	// Clear the DependentID field since we are dropping the record associated
+	// with it.
+	dependentArgs.DependentScheduleID = 0
+	any, err := pbtypes.MarshalAny(dependentArgs)
+	if err != nil {
+		return err
+	}
+	dependentSj.SetExecutionDetails(dependentSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
+	return dependentSj.Update(ctx, scheduleControllerEnv.InternalExecutor(), txn)
+}
+
+// OnDrop implements the ScheduledJobController interface.
+// The method is responsible for releasing the pts record stored on the schedule
+// if schedules.backup.gc_protection.enabled = true.
+// It is also responsible for unlinking the dependent schedule by clearing the
+// DependentID.
+func (e *scheduledBackupExecutor) OnDrop(
+	ctx context.Context,
+	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
+	env scheduledjobs.JobSchedulerEnv,
+	sj *jobs.ScheduledJob,
+	txn *kv.Txn,
+) error {
+	args := &ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
+		return errors.Wrap(err, "un-marshaling args")
+	}
+
+	if err := unlinkDependentSchedule(ctx, scheduleControllerEnv, env, txn, args); err != nil {
+		return errors.Wrap(err, "failed to unlink dependent schedule")
+	}
+	return releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
+		args.ProtectedTimestampRecord)
+}
+
 func init() {
 	jobs.RegisterScheduledJobExecutorFactory(
 		tree.ScheduledBackupExecutor.InternalName(),
