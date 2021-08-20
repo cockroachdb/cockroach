@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -5876,6 +5877,102 @@ table's zone configuration this will return NULL.`,
 				return tree.DBoolTrue, err
 			},
 			Info:       "This function can be used to clear the data belonging to a table, when the table cannot be dropped.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.serialize_session": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if !evalCtx.TxnImplicit {
+					return nil, pgerror.Newf(
+						pgcode.InvalidTransactionState,
+						"cannot serialize a session which is inside a transaction",
+					)
+				}
+
+				if evalCtx.PreparedStatementState.HasPrepared() {
+					return nil, pgerror.Newf(
+						pgcode.InvalidTransactionState,
+						"cannot serialize a session which has portals or prepared statements",
+					)
+				}
+
+				sd := evalCtx.SessionData
+				if sd == nil {
+					return nil, pgerror.Newf(
+						pgcode.InvalidTransactionState,
+						"no session is active",
+					)
+				}
+
+				if len(sd.DatabaseIDToTempSchemaID) > 0 {
+					return nil, pgerror.Newf(
+						pgcode.InvalidTransactionState,
+						"cannot serialize session with temporary schemas",
+					)
+				}
+
+				var m sessiondatapb.MigratableSession
+				m.SessionData = sd.SessionData
+				sessiondata.MarshalNonLocal(sd, &m.SessionData)
+				m.LocalOnlySessionData = sd.LocalOnlySessionData
+
+				b, err := protoutil.Marshal(&m)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(b)), nil
+			},
+			Info:       `This function serializes the variables in the current session.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.deserialize_session": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"session", types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if !evalCtx.TxnImplicit {
+					return nil, pgerror.Newf(
+						pgcode.InvalidTransactionState,
+						"cannot deserialize a session which is inside a transaction",
+					)
+				}
+
+				var m sessiondatapb.MigratableSession
+				if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(args[0])), &m); err != nil {
+					return nil, pgerror.WithCandidateCode(
+						errors.Wrapf(err, "error deserializing session"),
+						pgcode.InvalidParameterValue,
+					)
+				}
+				sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
+				if err != nil {
+					return nil, err
+				}
+				sd.SessionData = m.SessionData
+				sd.LocalUnmigratableSessionData = evalCtx.SessionData.LocalUnmigratableSessionData
+				sd.LocalOnlySessionData = m.LocalOnlySessionData
+				if sd.SessionUser().Normalized() != evalCtx.SessionData.SessionUser().Normalized() {
+					return nil, pgerror.Newf(
+						pgcode.InsufficientPrivilege,
+						"can only serialize matching session users",
+					)
+				}
+				*evalCtx.SessionData = *sd
+				return tree.MakeDBool(true), nil
+			},
+			Info:       `This function deserializes the serialized variables into the current session.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),

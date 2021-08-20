@@ -6,6 +6,7 @@ go_library(
     name = "sessiondatapb",
     srcs = [
         "local_only_session_data.go",
+        "sequence_cache.go",
         "session_data.go",
     ],
     embed = [":sessiondatapb_go_proto"],
@@ -19,6 +20,7 @@ proto_library(
     srcs = [
         "local_only_session_data.proto",
         "session_data.proto",
+        "session_migration.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],

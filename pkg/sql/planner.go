@@ -507,7 +507,7 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 // GetOrInitSequenceCache returns the sequence cache for the session.
 // If the sequence cache has not been used yet, it initializes the cache
 // inside the session data.
-func (p *planner) GetOrInitSequenceCache() sessiondata.SequenceCache {
+func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 	if p.SessionData().SequenceCache == nil {
 		p.sessionDataMutator.initSequenceCache()
 	}

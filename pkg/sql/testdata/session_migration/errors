@@ -1,0 +1,31 @@
+# This file contains error checks for session migration.
+
+exec
+SELECT crdb_internal.deserialize_session('invalid proto')
+----
+pq: crdb_internal.deserialize_session(): error deserializing session: unexpected EOF
+
+exec
+SET experimental_enable_temp_tables = true;
+CREATE TEMP TABLE temp_tbl()
+----
+
+query
+SELECT crdb_internal.serialize_session()
+----
+pq: crdb_internal.serialize_session(): cannot serialize session with temporary schemas
+
+reset
+----
+
+exec
+BEGIN
+----
+
+query
+SELECT crdb_internal.serialize_session()
+----
+pq: crdb_internal.serialize_session(): cannot serialize a session which is inside a transaction
+
+reset
+----
