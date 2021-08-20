@@ -2936,7 +2936,14 @@ func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 func WriteClusterVersion(
 	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
-	return storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+	err := storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+	if err != nil {
+		return err
+	}
+	// The storage engine maintains its own minimum version on disk so
+	// that it may consult it before opening the Engine. Write to this
+	// file as well.
+	return eng.SetMinVersion(cv.Version)
 }
 
 // ReadClusterVersion reads the cluster version from the store-local version

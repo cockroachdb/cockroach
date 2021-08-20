@@ -28,8 +28,8 @@ const MinVersionFilename = "STORAGE_MIN_VERSION"
 
 // WriteMinVersionFile writes the provided version to disk. The caller must
 // guarantee that the version will never be downgraded below the given version.
-func WriteMinVersionFile(fs vfs.FS, dir string, version *roachpb.Version) error {
-	if version == nil {
+func WriteMinVersionFile(fs vfs.FS, dir string, version roachpb.Version) error {
+	if version == (roachpb.Version{}) {
 		return errors.New("min version should not be nil")
 	}
 	ok, err := MinVersionIsAtLeastTargetVersion(fs, dir, version)
@@ -39,7 +39,7 @@ func WriteMinVersionFile(fs vfs.FS, dir string, version *roachpb.Version) error 
 	if ok {
 		return nil
 	}
-	b, err := protoutil.Marshal(version)
+	b, err := protoutil.Marshal(&version)
 	if err != nil {
 		return err
 	}
@@ -52,41 +52,39 @@ func WriteMinVersionFile(fs vfs.FS, dir string, version *roachpb.Version) error 
 
 // MinVersionIsAtLeastTargetVersion returns whether the min version recorded
 // on disk is at least the target version.
-func MinVersionIsAtLeastTargetVersion(
-	fs vfs.FS, dir string, target *roachpb.Version,
-) (bool, error) {
-	if target == nil {
+func MinVersionIsAtLeastTargetVersion(fs vfs.FS, dir string, target roachpb.Version) (bool, error) {
+	if target == (roachpb.Version{}) {
 		return false, errors.New("target version should not be nil")
 	}
 	minVersion, err := GetMinVersion(fs, dir)
 	if err != nil {
 		return false, err
 	}
-	if minVersion == nil {
+	if minVersion == (roachpb.Version{}) {
 		return false, nil
 	}
-	return !minVersion.Less(*target), nil
+	return !minVersion.Less(target), nil
 }
 
 // GetMinVersion returns the min version recorded on disk if the min version
 // file exists and nil otherwise.
-func GetMinVersion(fs vfs.FS, dir string) (*roachpb.Version, error) {
+func GetMinVersion(fs vfs.FS, dir string) (roachpb.Version, error) {
 	filename := fs.PathJoin(dir, MinVersionFilename)
 	f, err := fs.Open(filename)
 	if oserror.IsNotExist(err) {
-		return nil, nil
+		return roachpb.Version{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return roachpb.Version{}, err
 	}
 	defer f.Close()
 	b, err := ioutil.ReadAll(f)
 	if err != nil {
-		return nil, err
+		return roachpb.Version{}, err
 	}
-	version := &roachpb.Version{}
-	if err := protoutil.Unmarshal(b, version); err != nil {
-		return nil, err
+	version := roachpb.Version{}
+	if err := protoutil.Unmarshal(b, &version); err != nil {
+		return version, err
 	}
 	return version, nil
 }
