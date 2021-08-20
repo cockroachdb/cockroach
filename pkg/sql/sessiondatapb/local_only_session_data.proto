@@ -168,9 +168,26 @@ message LocalOnlySessionData {
   // SequenceCache stores sequence values which have been cached using the
   // CACHE sequence option.
   map<uint32, sessiondatapb.SequenceCacheEntry> sequence_cache = 44 [(gogoproto.casttype)="SequenceCache"];
-
   // PlacementEnabled indicates whether PLACEMENT can be used or not.
   bool placement_enabled = 45;
+  // TxnRowsWrittenLog is the threshold for the number of rows written by a SQL
+  // transaction which - once reached - will trigger a logging event to SQL_PERF
+  // (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
+  int64 txn_rows_written_log = 46;
+  // TxnRowsWrittenErr is the limit for the number of rows written by a SQL
+  // transaction which - once reached - will fail the transaction (or will
+  // trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
+  // means disabled.
+  int64 txn_rows_written_err = 47;
+  // TxnRowsReadLog is the threshold for the number of rows read by a SQL
+  // transaction which - once reached - will trigger a logging event to SQL_PERF
+  // (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
+  int64 txn_rows_read_log = 48;
+  // TxnRowsReadErr is the limit for the number of rows read by a SQL
+  // transaction which - once reached - will fail the transaction (or will
+  // trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
+  // means disabled.
+  int64 txn_rows_read_err = 49;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

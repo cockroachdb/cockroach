@@ -276,6 +276,127 @@ func (m *LargeRow) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LargeRow proto.InternalMessageInfo
 
+// CommonTxnRowsLimitReachedDetails contains the fields common to all messages
+// related to reaching the limits on the number of rows written/read by a
+// transaction.
+type CommonTxnRowsLimitReachedDetails struct {
+	TxnID                   string `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3" json:",omitempty" redact:"nonsensitive"`
+	SessionID               string `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:",omitempty" redact:"nonsensitive"`
+	ViolatesTxnRowsLimitErr bool   `protobuf:"varint,3,opt,name=violates_txn_rows_limit_err,json=violatesTxnRowsLimitErr,proto3" json:",omitempty"`
+	// ReadKind indicates that the "rows read" limit is reached if true and
+	// the "rows written" limit otherwise.
+	ReadKind bool `protobuf:"varint,4,opt,name=read_kind,json=readKind,proto3" json:",omitempty"`
+}
+
+func (m *CommonTxnRowsLimitReachedDetails) Reset()         { *m = CommonTxnRowsLimitReachedDetails{} }
+func (m *CommonTxnRowsLimitReachedDetails) String() string { return proto.CompactTextString(m) }
+func (*CommonTxnRowsLimitReachedDetails) ProtoMessage()    {}
+func (*CommonTxnRowsLimitReachedDetails) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b7a82d5e93041841, []int{6}
+}
+func (m *CommonTxnRowsLimitReachedDetails) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CommonTxnRowsLimitReachedDetails) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *CommonTxnRowsLimitReachedDetails) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CommonTxnRowsLimitReachedDetails.Merge(m, src)
+}
+func (m *CommonTxnRowsLimitReachedDetails) XXX_Size() int {
+	return m.Size()
+}
+func (m *CommonTxnRowsLimitReachedDetails) XXX_DiscardUnknown() {
+	xxx_messageInfo_CommonTxnRowsLimitReachedDetails.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CommonTxnRowsLimitReachedDetails proto.InternalMessageInfo
+
+// TxnRowsWrittenLimitReached is recorded when a transaction tries to write more
+// rows than cluster setting `sql.defaults.transaction_rows_written_log`. There
+// will only be a single record for a single transaction (unless it is retried)
+// even if there are more mutation statement within the transaction that haven't
+// been executed yet.
+type TxnRowsWrittenLimitReached struct {
+	CommonEventDetails               `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonSQLEventDetails            `protobuf:"bytes,2,opt,name=sql,proto3,embedded=sql" json:""`
+	CommonTxnRowsLimitReachedDetails `protobuf:"bytes,3,opt,name=info,proto3,embedded=info" json:""`
+}
+
+func (m *TxnRowsWrittenLimitReached) Reset()         { *m = TxnRowsWrittenLimitReached{} }
+func (m *TxnRowsWrittenLimitReached) String() string { return proto.CompactTextString(m) }
+func (*TxnRowsWrittenLimitReached) ProtoMessage()    {}
+func (*TxnRowsWrittenLimitReached) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b7a82d5e93041841, []int{7}
+}
+func (m *TxnRowsWrittenLimitReached) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TxnRowsWrittenLimitReached) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *TxnRowsWrittenLimitReached) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TxnRowsWrittenLimitReached.Merge(m, src)
+}
+func (m *TxnRowsWrittenLimitReached) XXX_Size() int {
+	return m.Size()
+}
+func (m *TxnRowsWrittenLimitReached) XXX_DiscardUnknown() {
+	xxx_messageInfo_TxnRowsWrittenLimitReached.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TxnRowsWrittenLimitReached proto.InternalMessageInfo
+
+// TxnRowsReadLimitReached is recorded when a transaction tries to read more
+// rows than cluster setting `sql.defaults.transaction_rows_read_log`. There
+// will only be a single record for a single transaction (unless it is retried)
+// even if there are more statement within the transaction that haven't been
+// executed yet.
+type TxnRowsReadLimitReached struct {
+	CommonEventDetails               `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonSQLEventDetails            `protobuf:"bytes,2,opt,name=sql,proto3,embedded=sql" json:""`
+	CommonTxnRowsLimitReachedDetails `protobuf:"bytes,3,opt,name=info,proto3,embedded=info" json:""`
+}
+
+func (m *TxnRowsReadLimitReached) Reset()         { *m = TxnRowsReadLimitReached{} }
+func (m *TxnRowsReadLimitReached) String() string { return proto.CompactTextString(m) }
+func (*TxnRowsReadLimitReached) ProtoMessage()    {}
+func (*TxnRowsReadLimitReached) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b7a82d5e93041841, []int{8}
+}
+func (m *TxnRowsReadLimitReached) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TxnRowsReadLimitReached) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *TxnRowsReadLimitReached) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TxnRowsReadLimitReached.Merge(m, src)
+}
+func (m *TxnRowsReadLimitReached) XXX_Size() int {
+	return m.Size()
+}
+func (m *TxnRowsReadLimitReached) XXX_DiscardUnknown() {
+	xxx_messageInfo_TxnRowsReadLimitReached.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TxnRowsReadLimitReached proto.InternalMessageInfo
+
 // SlowQueryInternal is recorded when a query triggers the "slow query" condition,
 // and the cluster setting `sql.log.slow_query.internal_queries.enabled` is
 // set.
@@ -291,7 +412,7 @@ func (m *SlowQueryInternal) Reset()         { *m = SlowQueryInternal{} }
 func (m *SlowQueryInternal) String() string { return proto.CompactTextString(m) }
 func (*SlowQueryInternal) ProtoMessage()    {}
 func (*SlowQueryInternal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b7a82d5e93041841, []int{6}
+	return fileDescriptor_b7a82d5e93041841, []int{9}
 }
 func (m *SlowQueryInternal) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -328,7 +449,7 @@ func (m *LargeRowInternal) Reset()         { *m = LargeRowInternal{} }
 func (m *LargeRowInternal) String() string { return proto.CompactTextString(m) }
 func (*LargeRowInternal) ProtoMessage()    {}
 func (*LargeRowInternal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b7a82d5e93041841, []int{7}
+	return fileDescriptor_b7a82d5e93041841, []int{10}
 }
 func (m *LargeRowInternal) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -353,6 +474,88 @@ func (m *LargeRowInternal) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LargeRowInternal proto.InternalMessageInfo
 
+// TxnRowsWrittenLimitReachedInternal is recorded when an internal transaction
+// tries to write more rows than cluster setting
+// `sql.defaults.transaction_rows_written_log` or
+// `sql.defaults.transaction_rows_written_err`. There will only be a single
+// record for a single transaction (unless it is retried) even if there are more
+// mutation statement within the transaction that haven't been executed yet.
+type TxnRowsWrittenLimitReachedInternal struct {
+	CommonEventDetails               `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonSQLEventDetails            `protobuf:"bytes,2,opt,name=sql,proto3,embedded=sql" json:""`
+	CommonTxnRowsLimitReachedDetails `protobuf:"bytes,3,opt,name=info,proto3,embedded=info" json:""`
+}
+
+func (m *TxnRowsWrittenLimitReachedInternal) Reset()         { *m = TxnRowsWrittenLimitReachedInternal{} }
+func (m *TxnRowsWrittenLimitReachedInternal) String() string { return proto.CompactTextString(m) }
+func (*TxnRowsWrittenLimitReachedInternal) ProtoMessage()    {}
+func (*TxnRowsWrittenLimitReachedInternal) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b7a82d5e93041841, []int{11}
+}
+func (m *TxnRowsWrittenLimitReachedInternal) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TxnRowsWrittenLimitReachedInternal) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *TxnRowsWrittenLimitReachedInternal) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TxnRowsWrittenLimitReachedInternal.Merge(m, src)
+}
+func (m *TxnRowsWrittenLimitReachedInternal) XXX_Size() int {
+	return m.Size()
+}
+func (m *TxnRowsWrittenLimitReachedInternal) XXX_DiscardUnknown() {
+	xxx_messageInfo_TxnRowsWrittenLimitReachedInternal.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TxnRowsWrittenLimitReachedInternal proto.InternalMessageInfo
+
+// TxnRowsReadLimitReachedInternal is recorded when an internal transaction
+// tries to read more rows than cluster setting
+// `sql.defaults.transaction_rows_read_log` or
+// `sql.defaults.transaction_rows_read_err`. There will only be a single
+// record for a single transaction (unless it is retried) even if there are more
+// mutation statement within the transaction that haven't been executed yet.
+type TxnRowsReadLimitReachedInternal struct {
+	CommonEventDetails               `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonSQLEventDetails            `protobuf:"bytes,2,opt,name=sql,proto3,embedded=sql" json:""`
+	CommonTxnRowsLimitReachedDetails `protobuf:"bytes,3,opt,name=info,proto3,embedded=info" json:""`
+}
+
+func (m *TxnRowsReadLimitReachedInternal) Reset()         { *m = TxnRowsReadLimitReachedInternal{} }
+func (m *TxnRowsReadLimitReachedInternal) String() string { return proto.CompactTextString(m) }
+func (*TxnRowsReadLimitReachedInternal) ProtoMessage()    {}
+func (*TxnRowsReadLimitReachedInternal) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b7a82d5e93041841, []int{12}
+}
+func (m *TxnRowsReadLimitReachedInternal) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TxnRowsReadLimitReachedInternal) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *TxnRowsReadLimitReachedInternal) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TxnRowsReadLimitReachedInternal.Merge(m, src)
+}
+func (m *TxnRowsReadLimitReachedInternal) XXX_Size() int {
+	return m.Size()
+}
+func (m *TxnRowsReadLimitReachedInternal) XXX_DiscardUnknown() {
+	xxx_messageInfo_TxnRowsReadLimitReachedInternal.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TxnRowsReadLimitReachedInternal proto.InternalMessageInfo
+
 // QueryExecute is recorded when a query is executed,
 // and the cluster setting `sql.trace.log_statement_execute` is set.
 type QueryExecute struct {
@@ -365,7 +568,7 @@ func (m *QueryExecute) Reset()         { *m = QueryExecute{} }
 func (m *QueryExecute) String() string { return proto.CompactTextString(m) }
 func (*QueryExecute) ProtoMessage()    {}
 func (*QueryExecute) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b7a82d5e93041841, []int{8}
+	return fileDescriptor_b7a82d5e93041841, []int{13}
 }
 func (m *QueryExecute) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -397,8 +600,13 @@ func init() {
 	proto.RegisterType((*SlowQuery)(nil), "cockroach.util.log.eventpb.SlowQuery")
 	proto.RegisterType((*CommonLargeRowDetails)(nil), "cockroach.util.log.eventpb.CommonLargeRowDetails")
 	proto.RegisterType((*LargeRow)(nil), "cockroach.util.log.eventpb.LargeRow")
+	proto.RegisterType((*CommonTxnRowsLimitReachedDetails)(nil), "cockroach.util.log.eventpb.CommonTxnRowsLimitReachedDetails")
+	proto.RegisterType((*TxnRowsWrittenLimitReached)(nil), "cockroach.util.log.eventpb.TxnRowsWrittenLimitReached")
+	proto.RegisterType((*TxnRowsReadLimitReached)(nil), "cockroach.util.log.eventpb.TxnRowsReadLimitReached")
 	proto.RegisterType((*SlowQueryInternal)(nil), "cockroach.util.log.eventpb.SlowQueryInternal")
 	proto.RegisterType((*LargeRowInternal)(nil), "cockroach.util.log.eventpb.LargeRowInternal")
+	proto.RegisterType((*TxnRowsWrittenLimitReachedInternal)(nil), "cockroach.util.log.eventpb.TxnRowsWrittenLimitReachedInternal")
+	proto.RegisterType((*TxnRowsReadLimitReachedInternal)(nil), "cockroach.util.log.eventpb.TxnRowsReadLimitReachedInternal")
 	proto.RegisterType((*QueryExecute)(nil), "cockroach.util.log.eventpb.QueryExecute")
 }
 
@@ -407,57 +615,69 @@ func init() {
 }
 
 var fileDescriptor_b7a82d5e93041841 = []byte{
-	// 792 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x96, 0xcf, 0x6f, 0xe3, 0x44,
-	0x14, 0xc7, 0xe3, 0xa4, 0xdb, 0x38, 0x2f, 0x5b, 0x7e, 0x58, 0xad, 0xe4, 0x8d, 0x84, 0x13, 0xf9,
-	0xb2, 0xa9, 0x04, 0x09, 0x74, 0x11, 0x48, 0xdc, 0x9a, 0x6d, 0xd0, 0x46, 0x74, 0x41, 0xf9, 0x71,
-	0xe2, 0x62, 0x4d, 0xed, 0xb7, 0xc1, 0x5a, 0x7b, 0x26, 0x9d, 0x19, 0xd7, 0xce, 0xfe, 0x05, 0x20,
-	0x38, 0xec, 0x1f, 0xc2, 0x8d, 0x23, 0xff, 0x40, 0x8f, 0x3d, 0xf6, 0x14, 0x41, 0x7a, 0xeb, 0x91,
-	0x2b, 0x17, 0x34, 0xe3, 0xa4, 0x40, 0x42, 0x44, 0x91, 0xe8, 0xa9, 0x7b, 0x4b, 0x9c, 0xef, 0xf7,
-	0x3b, 0x99, 0xf7, 0x3e, 0xef, 0xc9, 0xf0, 0x38, 0x91, 0x61, 0xd4, 0x8e, 0xd8, 0xb8, 0x8d, 0x67,
-	0x48, 0xe5, 0xe4, 0xa4, 0x2d, 0x4e, 0x23, 0x8f, 0x24, 0x41, 0x28, 0x3d, 0xfd, 0x44, 0xb4, 0x26,
-	0x9c, 0x49, 0x66, 0xd5, 0x7c, 0xe6, 0xbf, 0xe4, 0x8c, 0xf8, 0xdf, 0xb4, 0x94, 0xa5, 0x15, 0xb1,
-	0x71, 0x6b, 0x61, 0xa9, 0xed, 0x8e, 0xd9, 0x98, 0x69, 0x59, 0x5b, 0x7d, 0xca, 0x1d, 0xb5, 0xf7,
-	0xd6, 0xa2, 0xff, 0x1a, 0xe8, 0xfe, 0x5e, 0x82, 0xdd, 0xa7, 0x2c, 0x8e, 0x19, 0x1d, 0xf6, 0x8f,
-	0xbb, 0x19, 0xfa, 0x47, 0x28, 0x49, 0x18, 0x09, 0xeb, 0x08, 0x2a, 0x98, 0xa1, 0xef, 0xc5, 0x2c,
-	0x40, 0xdb, 0x68, 0x18, 0xcd, 0x4a, 0xe7, 0xf1, 0xf5, 0xac, 0x0e, 0xef, 0xb3, 0x38, 0x94, 0x18,
-	0x4f, 0xe4, 0xf4, 0xb7, 0x59, 0x7d, 0x8f, 0x63, 0x40, 0x7c, 0xf9, 0x99, 0x4b, 0x19, 0x15, 0x48,
-	0x45, 0x28, 0xc3, 0x33, 0x74, 0x07, 0xa6, 0x72, 0x3e, 0x67, 0x01, 0x5a, 0xfb, 0x60, 0xd2, 0x24,
-	0xf6, 0x38, 0x4b, 0x85, 0x5d, 0x6c, 0x18, 0xcd, 0xad, 0xce, 0x5b, 0x7f, 0x0f, 0x19, 0x94, 0x69,
-	0x12, 0x0f, 0x58, 0x2a, 0xac, 0xaf, 0xc0, 0x14, 0xa7, 0x91, 0x90, 0x44, 0xa2, 0x5d, 0xd2, 0xe7,
-	0x3d, 0x99, 0xcf, 0xea, 0xe6, 0xb0, 0x7f, 0x3c, 0x1c, 0x1d, 0x8e, 0xba, 0xb7, 0x3e, 0x7b, 0x19,
-	0x62, 0x7d, 0x00, 0x80, 0x9c, 0x33, 0xee, 0x49, 0xcc, 0xa4, 0xbd, 0xa5, 0x23, 0x57, 0x4f, 0xaf,
-	0x68, 0xc5, 0x08, 0x33, 0x69, 0x35, 0xa0, 0x44, 0xc6, 0x68, 0x3f, 0x68, 0x18, 0xcd, 0xe2, 0x9a,
-	0x4e, 0xfd, 0x64, 0xb5, 0xa1, 0xaa, 0x2f, 0x83, 0x92, 0x87, 0x28, 0xec, 0xed, 0x86, 0xd1, 0xdc,
-	0x59, 0x53, 0x82, 0xba, 0x4f, 0xae, 0xb0, 0x3e, 0x81, 0xb7, 0x5f, 0x24, 0x51, 0xe4, 0x49, 0x72,
-	0x12, 0xa1, 0x27, 0x7c, 0x42, 0xed, 0x72, 0xc3, 0x68, 0x9a, 0x6b, 0xa6, 0x1d, 0x25, 0x1b, 0x29,
-	0xd5, 0xd0, 0x27, 0xf4, 0xc6, 0x17, 0xd2, 0x00, 0xb3, 0xdc, 0x67, 0x6e, 0xf6, 0xf5, 0x94, 0x4a,
-	0xfb, 0xda, 0x50, 0x95, 0x19, 0xf5, 0x7c, 0x96, 0x50, 0x89, 0xdc, 0xae, 0xfc, 0xf3, 0x1f, 0x94,
-	0x19, 0x7d, 0x9a, 0x2b, 0xdc, 0x1f, 0x4a, 0xb0, 0x3b, 0x5c, 0xd6, 0x4e, 0x9f, 0x7f, 0xe8, 0xfb,
-	0x28, 0x84, 0x35, 0x82, 0x6d, 0x5f, 0x53, 0xa1, 0x5b, 0x5f, 0x3d, 0x68, 0xb5, 0x36, 0x83, 0xd7,
-	0xca, 0xf9, 0xe9, 0xaa, 0x6f, 0x0b, 0x7a, 0x3a, 0x0f, 0xcf, 0x67, 0xf5, 0xc2, 0xc5, 0xac, 0x6e,
-	0x5c, 0xcf, 0xea, 0x85, 0xc1, 0x22, 0xcb, 0xea, 0x43, 0x49, 0x9c, 0x46, 0x1a, 0x84, 0xea, 0xc1,
-	0x47, 0xff, 0x1e, 0xa9, 0x90, 0xdc, 0x9c, 0xaa, 0xb2, 0xac, 0x01, 0x6c, 0x29, 0xd8, 0x34, 0x31,
-	0xd5, 0x83, 0x0f, 0x6f, 0x97, 0xf9, 0x27, 0xe6, 0x2b, 0x91, 0x3a, 0x4b, 0x81, 0x93, 0x77, 0x8c,
-	0x92, 0x18, 0x37, 0x81, 0xa3, 0x15, 0x5f, 0x92, 0x18, 0xad, 0x67, 0x50, 0x25, 0xba, 0x6a, 0xf9,
-	0xac, 0x3c, 0xf8, 0x6f, 0xb3, 0x02, 0xb9, 0x57, 0x4d, 0x8b, 0xfb, 0x5d, 0x11, 0xe0, 0x30, 0x88,
-	0x43, 0xda, 0x4f, 0x90, 0x4f, 0xef, 0x75, 0x13, 0xdc, 0x6f, 0x8b, 0x50, 0x19, 0x46, 0x2c, 0x7d,
-	0x53, 0x0a, 0xf7, 0xc7, 0x22, 0xec, 0xe5, 0xe2, 0x63, 0xc2, 0xc7, 0x38, 0x60, 0xe9, 0x72, 0x49,
-	0xef, 0x83, 0xc9, 0x59, 0xea, 0x89, 0xf0, 0x55, 0xbe, 0xa3, 0xd7, 0xa7, 0xbd, 0xcc, 0x59, 0x3a,
-	0x0c, 0x5f, 0xa1, 0xf5, 0x31, 0x98, 0x39, 0xd4, 0x61, 0xa0, 0x2f, 0xbc, 0xd3, 0x79, 0x34, 0x9f,
-	0xd5, 0xcb, 0x7a, 0xe8, 0x7b, 0x47, 0xab, 0x2e, 0x2d, 0xed, 0x05, 0xd6, 0xa7, 0x50, 0x79, 0x41,
-	0xe2, 0x30, 0x9a, 0x2a, 0x5b, 0x49, 0xdb, 0x6a, 0x6a, 0x2b, 0x7f, 0xae, 0x1f, 0xae, 0xf9, 0xcc,
-	0x5c, 0xdc, 0x0b, 0xd4, 0x2a, 0x9a, 0xf0, 0x30, 0x26, 0x7c, 0xea, 0xbd, 0xc4, 0xe9, 0x86, 0x21,
-	0x82, 0x85, 0xe4, 0x0b, 0x9c, 0x5a, 0xcf, 0xe0, 0xd1, 0x59, 0xc8, 0x22, 0x22, 0x51, 0x78, 0x31,
-	0xc9, 0xbc, 0xe5, 0xbd, 0x3c, 0xe4, 0x5c, 0xcf, 0xd4, 0xfa, 0xf6, 0xdb, 0x5b, 0x1a, 0x9e, 0x93,
-	0x6c, 0x90, 0x5f, 0xb3, 0xcb, 0xb9, 0xfb, 0x93, 0x01, 0xe6, 0xb2, 0x50, 0x77, 0x07, 0x0e, 0x67,
-	0xe9, 0xed, 0xc1, 0x59, 0xe9, 0xdb, 0x2a, 0x38, 0x9c, 0xa5, 0xee, 0xeb, 0x22, 0xbc, 0x7b, 0xc3,
-	0x7b, 0x4f, 0x6d, 0x67, 0x4a, 0xa2, 0xfb, 0xcd, 0xfd, 0xcf, 0x06, 0xbc, 0xb3, 0xac, 0xdc, 0xdd,
-	0x57, 0xe4, 0xff, 0x6e, 0xe8, 0xf7, 0x45, 0x78, 0xa8, 0x9b, 0xa9, 0xae, 0x99, 0x48, 0xbc, 0xd7,
-	0xbd, 0xec, 0xec, 0x9f, 0xff, 0xea, 0x14, 0xce, 0xe7, 0x8e, 0x71, 0x31, 0x77, 0x8c, 0xcb, 0xb9,
-	0x63, 0xfc, 0x32, 0x77, 0x8c, 0xd7, 0x57, 0x4e, 0xe1, 0xe2, 0xca, 0x29, 0x5c, 0x5e, 0x39, 0x85,
-	0xaf, 0xcb, 0x8b, 0xcc, 0x93, 0x6d, 0xfd, 0x66, 0xfa, 0xe4, 0x8f, 0x00, 0x00, 0x00, 0xff, 0xff,
-	0x06, 0x20, 0x2f, 0x65, 0x15, 0x0b, 0x00, 0x00,
+	// 992 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x58, 0xcf, 0x6f, 0x1b, 0x45,
+	0x14, 0xf6, 0xae, 0x93, 0x78, 0xf7, 0xb9, 0xe5, 0xc7, 0x2a, 0x51, 0x5d, 0x23, 0xbc, 0xd6, 0x5e,
+	0xea, 0x08, 0xb0, 0x4b, 0x5a, 0x81, 0x84, 0xb8, 0xc4, 0x8d, 0xa1, 0x56, 0x5d, 0x50, 0x6c, 0x4b,
+	0x48, 0x1c, 0x58, 0x4d, 0x76, 0x27, 0xee, 0x28, 0xbb, 0x33, 0xc9, 0xec, 0x38, 0x5e, 0xf7, 0x2f,
+	0x00, 0xc1, 0xa1, 0x7f, 0x03, 0x12, 0x17, 0x04, 0x27, 0x8e, 0xfd, 0x07, 0x72, 0xcc, 0xb1, 0x27,
+	0x0b, 0x9c, 0x5b, 0x8f, 0x5c, 0xb9, 0xa0, 0x99, 0xdd, 0x0d, 0xc1, 0x8e, 0xd5, 0x20, 0x91, 0x43,
+	0x95, 0xdc, 0x92, 0xf5, 0xf7, 0x7d, 0xb3, 0xef, 0xbd, 0xef, 0x7d, 0x63, 0x19, 0xee, 0x0c, 0x05,
+	0x09, 0x1a, 0x01, 0x1b, 0x34, 0xf0, 0x21, 0xa6, 0x62, 0x7f, 0xa7, 0x11, 0x1d, 0x04, 0x2e, 0x1a,
+	0xfa, 0x44, 0xb8, 0xea, 0x49, 0x54, 0xdf, 0xe7, 0x4c, 0x30, 0xab, 0xec, 0x31, 0x6f, 0x8f, 0x33,
+	0xe4, 0x3d, 0xa9, 0x4b, 0x4a, 0x3d, 0x60, 0x83, 0x7a, 0x4a, 0x29, 0xaf, 0x0e, 0xd8, 0x80, 0x29,
+	0x58, 0x43, 0xfe, 0x95, 0x30, 0xca, 0xef, 0xce, 0x49, 0x9f, 0x15, 0x74, 0xfe, 0xca, 0xc3, 0xea,
+	0x03, 0x16, 0x86, 0x8c, 0xf6, 0xb6, 0x3b, 0xad, 0x18, 0x7b, 0x5b, 0x58, 0x20, 0x12, 0x44, 0xd6,
+	0x16, 0x98, 0x38, 0xc6, 0x9e, 0x1b, 0x32, 0x1f, 0x97, 0xb4, 0xaa, 0x56, 0x33, 0x9b, 0x77, 0x5e,
+	0x4e, 0x6c, 0x78, 0x9f, 0x85, 0x44, 0xe0, 0x70, 0x5f, 0x8c, 0xff, 0x9c, 0xd8, 0x6b, 0x1c, 0xfb,
+	0xc8, 0x13, 0x9f, 0x38, 0x94, 0xd1, 0x08, 0xd3, 0x88, 0x08, 0x72, 0x88, 0x9d, 0xae, 0x21, 0x99,
+	0x8f, 0x99, 0x8f, 0xad, 0x75, 0x30, 0xe8, 0x30, 0x74, 0x39, 0x1b, 0x45, 0x25, 0xbd, 0xaa, 0xd5,
+	0x96, 0x9a, 0x6f, 0xfc, 0x5b, 0xa4, 0x5b, 0xa0, 0xc3, 0xb0, 0xcb, 0x46, 0x91, 0xf5, 0x25, 0x18,
+	0xd1, 0x41, 0x10, 0x09, 0x24, 0x70, 0x29, 0xaf, 0xce, 0xbb, 0x37, 0x9d, 0xd8, 0x46, 0x6f, 0xbb,
+	0xd3, 0xeb, 0x6f, 0xf6, 0x5b, 0x17, 0x3e, 0x3b, 0x13, 0xb1, 0x3e, 0x00, 0xc0, 0x9c, 0x33, 0xee,
+	0x0a, 0x1c, 0x8b, 0xd2, 0x92, 0x92, 0x9c, 0x3d, 0xdd, 0x54, 0x88, 0x3e, 0x8e, 0x85, 0x55, 0x85,
+	0x3c, 0x1a, 0xe0, 0xd2, 0x72, 0x55, 0xab, 0xe9, 0x73, 0x38, 0xf9, 0x91, 0xd5, 0x80, 0xa2, 0x2a,
+	0x06, 0x0b, 0x4e, 0x70, 0x54, 0x5a, 0xa9, 0x6a, 0xb5, 0x9b, 0x73, 0x48, 0x90, 0xf5, 0x24, 0x08,
+	0xeb, 0x23, 0x78, 0x73, 0x77, 0x18, 0x04, 0xae, 0x40, 0x3b, 0x01, 0x76, 0x23, 0x0f, 0xd1, 0x52,
+	0xa1, 0xaa, 0xd5, 0x8c, 0x39, 0xd2, 0x4d, 0x09, 0xeb, 0x4b, 0x54, 0xcf, 0x43, 0xf4, 0x94, 0x47,
+	0xa8, 0x8f, 0xe3, 0x84, 0x67, 0x2c, 0xe6, 0xb5, 0x25, 0x4a, 0xf1, 0x1a, 0x50, 0x14, 0x31, 0x75,
+	0x3d, 0x36, 0xa4, 0x02, 0xf3, 0x92, 0x79, 0xfe, 0x0b, 0x8a, 0x98, 0x3e, 0x48, 0x10, 0xce, 0x0f,
+	0x79, 0x58, 0xed, 0x65, 0xbd, 0x53, 0xe7, 0x6f, 0x7a, 0x1e, 0x8e, 0x22, 0xab, 0x0f, 0x2b, 0x9e,
+	0x72, 0x85, 0x1a, 0x7d, 0x71, 0xa3, 0x5e, 0x5f, 0x6c, 0xbc, 0x7a, 0xe2, 0x9f, 0x96, 0xfc, 0x2f,
+	0x75, 0x4f, 0xf3, 0xc6, 0xd1, 0xc4, 0xce, 0x1d, 0x4f, 0x6c, 0xed, 0xe5, 0xc4, 0xce, 0x75, 0x53,
+	0x2d, 0x6b, 0x1b, 0xf2, 0xd1, 0x41, 0xa0, 0x8c, 0x50, 0xdc, 0xf8, 0xf0, 0xd5, 0x92, 0xd2, 0x92,
+	0x8b, 0x55, 0xa5, 0x96, 0xd5, 0x85, 0x25, 0x69, 0x36, 0xe5, 0x98, 0xe2, 0xc6, 0xdd, 0x8b, 0x69,
+	0xfe, 0x63, 0xf3, 0x19, 0x49, 0xa5, 0x25, 0x8d, 0x93, 0x4c, 0x8c, 0xa2, 0x10, 0x2f, 0x32, 0x8e,
+	0x42, 0x7c, 0x81, 0x42, 0x6c, 0x3d, 0x84, 0x22, 0x52, 0x5d, 0x4b, 0x76, 0x65, 0xf9, 0xbf, 0xed,
+	0x0a, 0x24, 0x5c, 0xb9, 0x2d, 0xce, 0x77, 0x3a, 0xc0, 0xa6, 0x1f, 0x12, 0xba, 0x3d, 0xc4, 0x7c,
+	0x7c, 0xa5, 0x87, 0xe0, 0x7c, 0xab, 0x83, 0xd9, 0x0b, 0xd8, 0xe8, 0xba, 0x15, 0xce, 0x2f, 0x3a,
+	0xac, 0x25, 0xe0, 0x0e, 0xe2, 0x03, 0xdc, 0x65, 0xa3, 0x2c, 0xa4, 0xd7, 0xc1, 0xe0, 0x6c, 0xe4,
+	0x46, 0xe4, 0x69, 0x92, 0xd1, 0xf3, 0xdb, 0x5e, 0xe0, 0x6c, 0xd4, 0x23, 0x4f, 0xb1, 0x75, 0x1f,
+	0x8c, 0xc4, 0xd4, 0xc4, 0x57, 0x05, 0xdf, 0x6c, 0xde, 0x9e, 0x4e, 0xec, 0x82, 0x5a, 0xfa, 0xf6,
+	0xd6, 0x2c, 0x4b, 0x41, 0xdb, 0xbe, 0xf5, 0x31, 0x98, 0xbb, 0x28, 0x24, 0xc1, 0x58, 0xd2, 0xf2,
+	0x8a, 0x56, 0x96, 0xa9, 0xfc, 0x99, 0x7a, 0x38, 0xc7, 0x33, 0x12, 0x70, 0xdb, 0x97, 0x51, 0xb4,
+	0xcf, 0x49, 0x88, 0xf8, 0xd8, 0xdd, 0xc3, 0xe3, 0x05, 0x4b, 0x04, 0x29, 0xe4, 0x11, 0x1e, 0x5b,
+	0x0f, 0xe1, 0xf6, 0x21, 0x61, 0x01, 0x12, 0x38, 0x72, 0x43, 0x14, 0xbb, 0x59, 0x5d, 0x2e, 0xe6,
+	0x5c, 0xed, 0xd4, 0x7c, 0xfa, 0xad, 0x65, 0x84, 0xc7, 0x28, 0xee, 0x26, 0x65, 0xb6, 0x38, 0x77,
+	0x7e, 0xd3, 0xc0, 0xc8, 0x1a, 0x75, 0x79, 0xc6, 0xe1, 0x6c, 0x74, 0x71, 0xe3, 0xcc, 0xcc, 0x6d,
+	0xd6, 0x38, 0x9c, 0x8d, 0x9c, 0xe7, 0x3a, 0x54, 0x13, 0x70, 0x3f, 0xa6, 0xf2, 0x42, 0xec, 0x90,
+	0x90, 0x88, 0x2e, 0x46, 0xde, 0x13, 0xec, 0x67, 0xf3, 0xfe, 0x1c, 0x56, 0x64, 0xc0, 0x13, 0x3f,
+	0xbd, 0x91, 0xef, 0x4e, 0x27, 0xf6, 0x72, 0x3f, 0xa6, 0xb3, 0x83, 0x58, 0x1c, 0x37, 0xcb, 0x22,
+	0xa6, 0x6d, 0xdf, 0xea, 0x01, 0x44, 0x38, 0x8a, 0x08, 0xa3, 0x99, 0x1f, 0xcc, 0xe6, 0xfd, 0xe9,
+	0xc4, 0x36, 0x7b, 0xc9, 0xd3, 0x8b, 0x0b, 0x9a, 0xa9, 0x4e, 0xdb, 0xb7, 0x3a, 0xf0, 0xce, 0xe9,
+	0x08, 0xe5, 0x6b, 0xca, 0x5b, 0xdf, 0x0d, 0x64, 0x19, 0x6a, 0x88, 0xf9, 0x73, 0x87, 0x78, 0x2b,
+	0xa3, 0x9c, 0x2d, 0xbb, 0xc5, 0xb9, 0xf5, 0x1e, 0x98, 0x1c, 0x23, 0xdf, 0xdd, 0x23, 0xd4, 0x57,
+	0xfe, 0x99, 0xe7, 0x1a, 0x12, 0xf0, 0x88, 0x50, 0xdf, 0xf9, 0x49, 0x87, 0x72, 0x2a, 0xf0, 0x15,
+	0x27, 0x42, 0x60, 0x7a, 0xb6, 0x7d, 0xaf, 0x4f, 0x7c, 0x7c, 0x03, 0x4b, 0x84, 0xee, 0xb2, 0x34,
+	0x3e, 0x3e, 0x7d, 0xb5, 0xe6, 0x62, 0xb3, 0xcc, 0x46, 0x89, 0xd4, 0x75, 0x7e, 0xd4, 0xe1, 0x56,
+	0x4a, 0xe9, 0x62, 0xe4, 0x5f, 0x37, 0xe9, 0xbc, 0x26, 0x3d, 0xd3, 0xe1, 0xed, 0xd3, 0xab, 0xa7,
+	0x2d, 0xbf, 0x28, 0x51, 0x14, 0x5c, 0xed, 0x2b, 0xe8, 0xb9, 0x06, 0x6f, 0x65, 0x21, 0x76, 0xf9,
+	0x1d, 0xf9, 0xbf, 0xb3, 0xf5, 0x57, 0x1d, 0x9c, 0xc5, 0xe9, 0xf0, 0xfa, 0x4d, 0xf8, 0xb2, 0x17,
+	0xe0, 0x67, 0x1d, 0xec, 0x05, 0x29, 0x71, 0xdd, 0xac, 0xd9, 0x66, 0x7d, 0xaf, 0xc3, 0x0d, 0x95,
+	0x14, 0x72, 0x87, 0x86, 0x02, 0x5f, 0xe9, 0xa0, 0x68, 0xae, 0x1f, 0xfd, 0x51, 0xc9, 0x1d, 0x4d,
+	0x2b, 0xda, 0xf1, 0xb4, 0xa2, 0xbd, 0x98, 0x56, 0xb4, 0xdf, 0xa7, 0x15, 0xed, 0xd9, 0x49, 0x25,
+	0x77, 0x7c, 0x52, 0xc9, 0xbd, 0x38, 0xa9, 0xe4, 0xbe, 0x2e, 0xa4, 0x9a, 0x3b, 0x2b, 0xea, 0x17,
+	0x88, 0x7b, 0x7f, 0x07, 0x00, 0x00, 0xff, 0xff, 0xc4, 0x35, 0x20, 0xfb, 0xfd, 0x10, 0x00, 0x00,
 }
 
 func (m *CommonSQLExecDetails) Marshal() (dAtA []byte, err error) {
@@ -816,6 +1036,169 @@ func (m *LargeRow) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *CommonTxnRowsLimitReachedDetails) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CommonTxnRowsLimitReachedDetails) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CommonTxnRowsLimitReachedDetails) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.ReadKind {
+		i--
+		if m.ReadKind {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.ViolatesTxnRowsLimitErr {
+		i--
+		if m.ViolatesTxnRowsLimitErr {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x18
+	}
+	if len(m.SessionID) > 0 {
+		i -= len(m.SessionID)
+		copy(dAtA[i:], m.SessionID)
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(len(m.SessionID)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.TxnID) > 0 {
+		i -= len(m.TxnID)
+		copy(dAtA[i:], m.TxnID)
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(len(m.TxnID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *TxnRowsWrittenLimitReached) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TxnRowsWrittenLimitReached) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TxnRowsWrittenLimitReached) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.CommonTxnRowsLimitReachedDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *TxnRowsReadLimitReached) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TxnRowsReadLimitReached) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TxnRowsReadLimitReached) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.CommonTxnRowsLimitReachedDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
 func (m *SlowQueryInternal) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -891,6 +1274,112 @@ func (m *LargeRowInternal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = l
 	{
 		size, err := m.CommonLargeRowDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *TxnRowsWrittenLimitReachedInternal) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TxnRowsWrittenLimitReachedInternal) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TxnRowsWrittenLimitReachedInternal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.CommonTxnRowsLimitReachedDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *TxnRowsReadLimitReachedInternal) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TxnRowsReadLimitReachedInternal) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TxnRowsReadLimitReachedInternal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.CommonTxnRowsLimitReachedDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSqlAuditEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
 		if err != nil {
 			return 0, err
 		}
@@ -1106,6 +1595,59 @@ func (m *LargeRow) Size() (n int) {
 	return n
 }
 
+func (m *CommonTxnRowsLimitReachedDetails) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.TxnID)
+	if l > 0 {
+		n += 1 + l + sovSqlAuditEvents(uint64(l))
+	}
+	l = len(m.SessionID)
+	if l > 0 {
+		n += 1 + l + sovSqlAuditEvents(uint64(l))
+	}
+	if m.ViolatesTxnRowsLimitErr {
+		n += 2
+	}
+	if m.ReadKind {
+		n += 2
+	}
+	return n
+}
+
+func (m *TxnRowsWrittenLimitReached) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	l = m.CommonSQLEventDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	l = m.CommonTxnRowsLimitReachedDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	return n
+}
+
+func (m *TxnRowsReadLimitReached) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	l = m.CommonSQLEventDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	l = m.CommonTxnRowsLimitReachedDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	return n
+}
+
 func (m *SlowQueryInternal) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1130,6 +1672,36 @@ func (m *LargeRowInternal) Size() (n int) {
 	l = m.CommonEventDetails.Size()
 	n += 1 + l + sovSqlAuditEvents(uint64(l))
 	l = m.CommonLargeRowDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	return n
+}
+
+func (m *TxnRowsWrittenLimitReachedInternal) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	l = m.CommonSQLEventDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	l = m.CommonTxnRowsLimitReachedDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	return n
+}
+
+func (m *TxnRowsReadLimitReachedInternal) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	l = m.CommonSQLEventDetails.Size()
+	n += 1 + l + sovSqlAuditEvents(uint64(l))
+	l = m.CommonTxnRowsLimitReachedDetails.Size()
 	n += 1 + l + sovSqlAuditEvents(uint64(l))
 	return n
 }
@@ -2195,6 +2767,458 @@ func (m *LargeRow) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *CommonTxnRowsLimitReachedDetails) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSqlAuditEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CommonTxnRowsLimitReachedDetails: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CommonTxnRowsLimitReachedDetails: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TxnID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TxnID = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SessionID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SessionID = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ViolatesTxnRowsLimitErr", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ViolatesTxnRowsLimitErr = bool(v != 0)
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReadKind", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ReadKind = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSqlAuditEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TxnRowsWrittenLimitReached) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSqlAuditEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TxnRowsWrittenLimitReached: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TxnRowsWrittenLimitReached: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonSQLEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonSQLEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonTxnRowsLimitReachedDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonTxnRowsLimitReachedDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSqlAuditEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TxnRowsReadLimitReached) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSqlAuditEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TxnRowsReadLimitReached: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TxnRowsReadLimitReached: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonSQLEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonSQLEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonTxnRowsLimitReachedDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonTxnRowsLimitReachedDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSqlAuditEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *SlowQueryInternal) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2436,6 +3460,304 @@ func (m *LargeRowInternal) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.CommonLargeRowDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSqlAuditEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TxnRowsWrittenLimitReachedInternal) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSqlAuditEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TxnRowsWrittenLimitReachedInternal: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TxnRowsWrittenLimitReachedInternal: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonSQLEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonSQLEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonTxnRowsLimitReachedDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonTxnRowsLimitReachedDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSqlAuditEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TxnRowsReadLimitReachedInternal) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSqlAuditEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TxnRowsReadLimitReachedInternal: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TxnRowsReadLimitReachedInternal: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonSQLEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonSQLEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonTxnRowsLimitReachedDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSqlAuditEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSqlAuditEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonTxnRowsLimitReachedDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
