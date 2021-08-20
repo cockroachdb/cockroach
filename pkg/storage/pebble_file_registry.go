@@ -166,7 +166,7 @@ func (r *PebbleFileRegistry) loadRegistryFromFile() error {
 	// If encryption-at-rest was not previously enabled, we check the storage min
 	// version to determine whether we still need to create an old base registry.
 	target := clusterversion.ByKey(clusterversion.RecordsBasedRegistry)
-	ok, err = MinVersionIsAtLeastTargetVersion(r.FS, r.DBDir, &target)
+	ok, err = MinVersionIsAtLeastTargetVersion(r.FS, r.DBDir, target)
 	if err != nil {
 		return err
 	}

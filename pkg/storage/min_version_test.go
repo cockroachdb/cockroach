@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,17 +26,17 @@ func TestMinVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	version1 := &roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 122}
-	version2 := &roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 126}
+	version1 := roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 122}
+	version2 := roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 126}
 
 	mem := vfs.NewMem()
 	dir := "/foo"
 	require.NoError(t, mem.MkdirAll(dir, os.ModeDir))
 
-	// Expect nil version when min version file doesn't exist.
+	// Expect zero value version when min version file doesn't exist.
 	v, err := getMinVersion(mem, dir)
 	require.NoError(t, err)
-	require.Nil(t, v)
+	require.Equal(t, roachpb.Version{}, v)
 
 	// Expect min version to not be at least any target version.
 	ok, err := MinVersionIsAtLeastTargetVersion(mem, dir, version1)
@@ -48,9 +47,7 @@ func TestMinVersion(t *testing.T) {
 	require.False(t, ok)
 
 	// Expect no error when updating min version if no file currently exists.
-	v = &roachpb.Version{}
-	proto.Merge(v, version1)
-	require.NoError(t, WriteMinVersionFile(mem, dir, v))
+	require.NoError(t, writeMinVersionFile(mem, dir, version1))
 
 	// Expect min version to be version1.
 	v, err = getMinVersion(mem, dir)
@@ -66,9 +63,7 @@ func TestMinVersion(t *testing.T) {
 	require.False(t, ok)
 
 	// Expect no error when updating min version to a higher version.
-	v = &roachpb.Version{}
-	proto.Merge(v, version2)
-	require.NoError(t, WriteMinVersionFile(mem, dir, v))
+	require.NoError(t, writeMinVersionFile(mem, dir, version2))
 
 	// Expect min version to be at least version1 and version2.
 	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version1)
@@ -84,9 +79,7 @@ func TestMinVersion(t *testing.T) {
 	require.True(t, version2.Equal(v))
 
 	// Expect no-op when trying to update min version to a lower version.
-	v = &roachpb.Version{}
-	proto.Merge(v, version1)
-	require.NoError(t, WriteMinVersionFile(mem, dir, v))
+	require.NoError(t, writeMinVersionFile(mem, dir, version1))
 	v, err = getMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, version2.Equal(v))
@@ -111,14 +104,14 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	require.NoError(t, err)
 	defer p.Close()
 
-	v1 := &roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 122}
-	v2 := &roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 126}
+	v1 := roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 122}
+	v2 := roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 126}
 
 	ok, err := p.MinVersionIsAtLeastTargetVersion(v1)
 	require.NoError(t, err)
 	require.False(t, ok)
 
-	require.NoError(t, p.DeprecateBaseEncryptionRegistry(v2))
+	require.NoError(t, p.SetMinVersion(v2))
 
 	ok, err = p.MinVersionIsAtLeastTargetVersion(v1)
 	require.NoError(t, err)
