@@ -344,23 +344,25 @@ export class StatementsPage extends React.Component<
         // list if the list is not empty.
         statement =>
           regions.length == 0 ||
-          containAny(
-            statement.stats.nodes.map(
-              node => nodeRegions[node.toString()],
+          (statement.stats.nodes &&
+            containAny(
+              statement.stats.nodes.map(
+                node => nodeRegions[node.toString()],
+                regions,
+              ),
               regions,
-            ),
-            regions,
-          ),
+            )),
       )
       .filter(
         // The statement must contain at least one value from the selected regions
         // list if the list is not empty.
         statement =>
           nodes.length == 0 ||
-          containAny(
-            statement.stats.nodes.map(node => "n" + node),
-            nodes,
-          ),
+          (statement.stats.nodes &&
+            containAny(
+              statement.stats.nodes.map(node => "n" + node),
+              nodes,
+            )),
       );
   };
 
