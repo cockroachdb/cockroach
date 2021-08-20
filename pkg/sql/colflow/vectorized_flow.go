@@ -12,6 +12,7 @@ package colflow
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -29,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
@@ -768,31 +771,43 @@ func (s *vectorizedFlowCreator) setupRouter(
 	output *execinfrapb.OutputRouterSpec,
 	factory coldata.ColumnFactory,
 ) error {
-	if output.Type != execinfrapb.OutputRouterSpec_BY_HASH {
-		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
-	}
-
-	// HashRouter memory monitor names are the concatenated output stream IDs.
+	// Router memory monitor names are the concatenated output stream IDs.
 	streamIDs := make([]string, len(output.Streams))
 	for i, s := range output.Streams {
 		streamIDs[i] = strconv.Itoa(int(s.StreamID))
 	}
-	mmName := "hash-router-[" + strings.Join(streamIDs, ",") + "]"
+	mmName := fmt.Sprintf("%s-router-[%s]", output.Type, strings.Join(streamIDs, ","))
+	routerMemMonitor := s.createBufferingUnlimitedMemMonitor(ctx, flowCtx, mmName)
 
-	hashRouterMemMonitor := s.createBufferingUnlimitedMemMonitor(ctx, flowCtx, mmName)
+	var distributor TupleDistributor
+	switch output.Type {
+	case execinfrapb.OutputRouterSpec_BY_RANGE:
+		acc := routerMemMonitor.MakeBoundAccount()
+		s.accounts = append(s.accounts, &acc)
+		allocator := colmem.NewAllocator(ctx, &acc, factory)
+		distributor = colexecspan.NewTupleRangeDistributor(flowCtx.Codec(), allocator,
+			outputTyps, output.RangeRouterSpec.Spans, output.RangeRouterSpec.Encodings,
+			len(output.Streams), output.RangeRouterSpec.DefaultDest)
+	case execinfrapb.OutputRouterSpec_BY_HASH:
+		distributor = colexechash.NewTupleHashDistributor(colexechash.DefaultInitHashValue, len(output.Streams),
+			output.HashColumns)
+	default:
+		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
+	}
+
 	allocators := make([]*colmem.Allocator, len(output.Streams))
 	for i := range allocators {
-		acc := hashRouterMemMonitor.MakeBoundAccount()
+		acc := routerMemMonitor.MakeBoundAccount()
 		allocators[i] = colmem.NewAllocator(ctx, &acc, factory)
 		s.accounts = append(s.accounts, &acc)
 	}
 	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
-	router, outputs := NewHashRouter(
-		allocators, input, outputTyps, output.HashColumns, execinfra.GetWorkMemLimit(flowCtx),
+	router, outputs := NewRouter(
+		allocators, input, outputTyps, distributor, execinfra.GetWorkMemLimit(flowCtx),
 		s.diskQueueCfg, s.fdSemaphore, diskAccounts,
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
-		router.Run(logtags.AddTag(ctx, "hashRouterID", strings.Join(streamIDs, ",")))
+		router.Run(logtags.AddTag(ctx, fmt.Sprintf("%sRouterID", output.Type), strings.Join(streamIDs, ",")))
 	}
 	s.accumulateAsyncComponent(runRouter)
 
@@ -825,7 +840,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				ToClose: nil,
 			}
 			if s.recordingStats {
-				mons := []*mon.BytesMonitor{hashRouterMemMonitor, diskMon}
+				mons := []*mon.BytesMonitor{routerMemMonitor, diskMon}
 				// Wrap local outputs with vectorized stats collectors when recording
 				// stats. This is mostly for compatibility but will provide some useful
 				// information (e.g. output stall time).
@@ -990,7 +1005,7 @@ func (s *vectorizedFlowCreator) setupInput(
 
 // setupOutput sets up any necessary infrastructure according to the output spec
 // of pspec. The metadataSources and toClose slices are fully consumed by either
-// passing them to an outbox or HashRouter to be drained/closed, or storing them
+// passing them to an outbox or Router to be drained/closed, or storing them
 // in streamIDToInputOp with the given op to be processed later.
 // NOTE: The caller must not reuse the metadataSources and toClose.
 func (s *vectorizedFlowCreator) setupOutput(
@@ -1407,8 +1422,9 @@ func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.FlowSpe
 			switch procOutput.Type {
 			case execinfrapb.OutputRouterSpec_PASS_THROUGH,
 				execinfrapb.OutputRouterSpec_BY_HASH:
+			case execinfrapb.OutputRouterSpec_BY_RANGE:
 			default:
-				return errors.New("only pass-through and hash routers are supported")
+				return errors.Errorf("unsupported router type %s", procOutput.Type)
 			}
 		}
 	}

@@ -34,7 +34,7 @@ query T
 EXPLAIN (DISTSQL) SELECT sum_int(b) FROM t@t_c_idx
 ----
 distribution: full
-vectorized: false
+vectorized: true
 ·
 • group (scalar)
 │
