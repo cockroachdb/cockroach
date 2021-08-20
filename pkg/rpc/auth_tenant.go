@@ -244,12 +244,12 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 		return nil
 	}
 
-	for _, entry := range args.SpanConfigsToUpdate {
+	for _, entry := range args.ToUpsert {
 		if err := validate(entry.Span); err != nil {
 			return err
 		}
 	}
-	for _, span := range args.SpansToDelete {
+	for _, span := range args.ToDelete {
 		if err := validate(span); err != nil {
 			return err
 		}

@@ -529,17 +529,15 @@ func (c *Connector) GetSpanConfigEntriesFor(
 
 // UpdateSpanConfigEntries implements the spanconfig.KVAccessor
 // interface.
-func (c *Connector) UpdateSpanConfigEntries(
-	ctx context.Context, update []roachpb.SpanConfigEntry, delete []roachpb.Span,
-) error {
+func (c *Connector) UpdateSpanConfigEntries(ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry) error {
 	for ctx.Err() == nil {
 		client, err := c.getClient(ctx)
 		if err != nil {
 			continue
 		}
 		_, err = client.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
-			SpanConfigsToUpdate: update,
-			SpansToDelete:       delete,
+			ToDelete: toDelete,
+			ToUpsert: toUpsert,
 		})
 		return err
 	}

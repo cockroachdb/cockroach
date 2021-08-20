@@ -8,20 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfig_test
+package spanconfigkvaccessor_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -30,16 +32,8 @@ func TestKVAccessor(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SpanConfig: &spanconfig.TestingKnobs{
-				// Disable the reconciliation process; this test wants sole
-				// access to the server's SpanConfigAccessor.
-				ManagerDisableJobCreation: true,
-			},
-		},
-	})
-	defer s.Stopper().Stop(context.Background())
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
 
 	span := func(start, end string) roachpb.Span {
 		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
@@ -65,10 +59,17 @@ func TestKVAccessor(t *testing.T) {
 		spans[len(spans)-1].EndKey = prevLastSpan.EndKey
 		return spans, prevLastSpan
 	}
-
-	ts := s.(*server.TestServer)
 	everythingSpan := roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}
-	accessor := ts.SpanConfigAccessor().(spanconfig.KVAccessor)
+
+	const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
+	accessor := spanconfigkvaccessor.New(
+		tc.Server(0).DB(),
+		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+		tc.Server(0).ClusterSettings(),
+		dummySpanConfigurationsFQN,
+	)
 
 	{ // With an empty slate.
 		entries, err := accessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{everythingSpan})
@@ -76,9 +77,8 @@ func TestKVAccessor(t *testing.T) {
 		require.Len(t, entries, 1)
 		require.Empty(t, entries[0])
 
-		require.True(t, testutils.IsError(
-			accessor.UpdateSpanConfigEntries(ctx, nil, []roachpb.Span{everythingSpan} /* delete */),
-			"expected to delete single row"))
+		err = accessor.UpdateSpanConfigEntries(ctx, []roachpb.Span{everythingSpan}, nil)
+		require.Truef(t, testutils.IsError(err, "expected to delete 1 row"), err.Error())
 	}
 
 	// Write and delete a batch of entries.
@@ -92,7 +92,7 @@ func TestKVAccessor(t *testing.T) {
 
 	{ // Verify that writing and reading a single entry behaves as expected.
 		entry := entries[0]
-		require.NoError(t, accessor.UpdateSpanConfigEntries(ctx, []roachpb.SpanConfigEntry{entry}, nil))
+		require.NoError(t, accessor.UpdateSpanConfigEntries(ctx, nil, []roachpb.SpanConfigEntry{entry}))
 		entriesList, err := accessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{everythingSpan})
 		require.Nil(t, err)
 		require.Len(t, entriesList, 1)
@@ -100,7 +100,7 @@ func TestKVAccessor(t *testing.T) {
 		got := entriesList[0][0]
 		require.True(t, got.Equal(entry))
 
-		require.Nil(t, accessor.UpdateSpanConfigEntries(ctx, nil, []roachpb.Span{entry.Span} /* delete */))
+		require.Nil(t, accessor.UpdateSpanConfigEntries(ctx, []roachpb.Span{entry.Span}, nil))
 		entriesList, err = accessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{everythingSpan})
 		require.Nil(t, err)
 		require.Len(t, entriesList, 1)
@@ -108,7 +108,7 @@ func TestKVAccessor(t *testing.T) {
 	}
 
 	{ // Verify that adding all entries does in fact add all entries.
-		require.NoError(t, accessor.UpdateSpanConfigEntries(ctx, entries, nil))
+		require.NoError(t, accessor.UpdateSpanConfigEntries(ctx, nil, entries))
 		entriesList, err := accessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{everythingSpan})
 		require.Nil(t, err)
 		require.Len(t, entriesList, 1)
@@ -125,7 +125,7 @@ func TestKVAccessor(t *testing.T) {
 			}
 			entries[i].Config.RangeMaxBytes += 100
 		}
-		require.NoError(t, accessor.UpdateSpanConfigEntries(ctx, entries, nil))
+		require.NoError(t, accessor.UpdateSpanConfigEntries(ctx, nil, entries))
 		entriesList, err := accessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{everythingSpan})
 		require.Nil(t, err)
 		require.Len(t, entriesList, 1)
@@ -135,9 +135,25 @@ func TestKVAccessor(t *testing.T) {
 		}
 	}
 
+	{ // Verify that fetching entries for multiple spans behaves as expected.
+		entriesList, err := accessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{everythingSpan, spans[1], spans[2]})
+		require.Nil(t, err)
+		require.Len(t, entriesList, 3)
+		require.Len(t, entriesList[0], len(spans))
+		for i, got := range entriesList[0] {
+			require.True(t, got.Equal(entries[i]))
+		}
+
+		require.Len(t, entriesList[1], 1)
+		require.True(t, entriesList[1][0].Equal(entries[1]))
+
+		require.Len(t, entriesList[2], 1)
+		require.True(t, entriesList[2][0].Equal(entries[2]))
+	}
+
 	{ // Verify that deleting entries actually removes them.
 		const toDelete = 2
-		require.Nil(t, accessor.UpdateSpanConfigEntries(ctx, nil, spans[:toDelete] /* delete */))
+		require.Nil(t, accessor.UpdateSpanConfigEntries(ctx, spans[:toDelete], nil))
 		entriesList, err := accessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{everythingSpan})
 		require.Nil(t, err)
 		require.Len(t, entriesList, 1)
@@ -147,15 +163,15 @@ func TestKVAccessor(t *testing.T) {
 		}
 
 		// Attempts to delete non existent spans should error out.
-		require.NotNil(t, accessor.UpdateSpanConfigEntries(ctx, nil, spans[:toDelete] /* delete */))
+		require.NotNil(t, accessor.UpdateSpanConfigEntries(ctx, spans[:toDelete], nil))
 		// Attempts to re-write previously deleted spans should go through.
-		require.NoError(t, accessor.UpdateSpanConfigEntries(ctx, entries[:toDelete], nil))
+		require.NoError(t, accessor.UpdateSpanConfigEntries(ctx, nil, entries[:toDelete]))
 	}
 
 	{ // Verify that we're able to re-partition span configs correctly.
 		spans, prevLast := mergeLastTwo(spans)
 		entries := toEntries(spans)
-		require.NoError(t, accessor.UpdateSpanConfigEntries(ctx, entries, []roachpb.Span{prevLast}))
+		require.NoError(t, accessor.UpdateSpanConfigEntries(ctx, []roachpb.Span{prevLast}, entries))
 		entriesList, err := accessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{everythingSpan})
 		require.Nil(t, err)
 		require.Len(t, entriesList, 1)

@@ -1159,18 +1159,22 @@ func (m *GCPolicy) TTL() time.Duration {
 // fully hydrated. A fully hydrated zone configuration must have all required
 // fields set, which are RangeMaxBytes, RangeMinBytes, GC, and NumReplicas.
 func (z *ZoneConfig) EnsureFullyHydrated() error {
-	const unhydratedZoneConfigMessage = "expected hydrated zone config: %s unset"
+	var unsetFields []string
 	if z.RangeMaxBytes == nil {
-		return errors.AssertionFailedf(unhydratedZoneConfigMessage, "RangeMaxBytes")
+		unsetFields = append(unsetFields, "RangeMaxBytes")
 	}
 	if z.RangeMinBytes == nil {
-		return errors.AssertionFailedf(unhydratedZoneConfigMessage, "RangeMinBytes")
+		unsetFields = append(unsetFields, "RangeMinBytes")
 	}
 	if z.GC == nil {
-		return errors.AssertionFailedf(unhydratedZoneConfigMessage, "GCPolicy")
+		unsetFields = append(unsetFields, "GCPolicy")
 	}
 	if z.NumReplicas == nil {
-		return errors.AssertionFailedf(unhydratedZoneConfigMessage, "NumReplicas")
+		unsetFields = append(unsetFields, "NumReplicas")
+	}
+
+	if len(unsetFields) > 0 {
+		return errors.AssertionFailedf("expected hydrated zone config: %s unset", strings.Join(unsetFields, ", "))
 	}
 	return nil
 }

@@ -1131,6 +1131,10 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 		expectSpanConfig roachpb.SpanConfig
 	}{
 		{
+			zoneConfig: ZoneConfig{},
+			errorStr:   "expected hydrated zone config: RangeMaxBytes, RangeMinBytes, GCPolicy, NumReplicas unset",
+		},
+		{
 			zoneConfig: ZoneConfig{
 				RangeMinBytes: proto.Int64(100000),
 				GC: &GCPolicy{
@@ -1408,7 +1412,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 	for _, tc := range testCases {
 		spanConfig, err := tc.zoneConfig.toSpanConfig()
 		if tc.errorStr != "" {
-			require.True(t, testutils.IsError(err, tc.errorStr))
+			require.Truef(t, testutils.IsError(err, tc.errorStr), "mismatched errors: expected %q got %q", tc.errorStr, err.Error())
 		}
 		require.Equal(t, tc.expectSpanConfig, spanConfig)
 	}

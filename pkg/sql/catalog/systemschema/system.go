@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -535,8 +536,10 @@ CREATE TABLE system.sql_instances (
 	SpanConfigurationsTableSchema = `
 CREATE TABLE system.span_configurations (
     start_key    BYTES NOT NULL PRIMARY KEY,
-    end_key      BYTES NOT NULL,
+    end_key      BYTES NOT NULL UNIQUE,
     config        BYTES NOT NULL,
+	INDEX (end_key),
+	CONSTRAINT check_bounds CHECK (start_key < end_key),
     FAMILY "primary" (start_key, end_key, config)
 )`
 )
@@ -2348,6 +2351,13 @@ var (
 			{Name: "config", ID: 3, Type: types.Bytes},
 		},
 		NextColumnID: 4,
+		Checks: []*descpb.TableDescriptor_CheckConstraint{
+			{
+				Name:      "check_bounds",
+				Expr:      "end_key > start_key",
+				ColumnIDs: []descpb.ColumnID{1, 2},
+			},
+		},
 		Families: []descpb.ColumnFamilyDescriptor{
 			{
 				Name:        "primary",
@@ -2365,6 +2375,10 @@ var (
 		NextMutationID: 1,
 	})
 )
+
+// SpanConfigurationsTableName represents system.span_configurations.
+var SpanConfigurationsTableName = tree.NewTableNameWithSchema(
+	"system", tree.PublicSchemaName, tree.Name(SpanConfigurationsTable.GetName()))
 
 // newCommentPrivilegeDescriptor returns a privilege descriptor for comment table
 func newCommentPrivilegeDescriptor(

@@ -116,7 +116,7 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		retryJobsWithExponentialBackoff),
 	migration.NewTenantMigration(
-		"add the system.span_configurations table",
+		"add the system.span_configurations table to system tenant",
 		toCV(clusterversion.SpanConfigurationsTable),
 		NoPrecondition,
 		spanConfigurationsTableMigration,

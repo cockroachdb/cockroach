@@ -29,52 +29,52 @@ func TestValidateUpdateSpanConfigsRequest(t *testing.T) {
 		},
 		{
 			req: roachpb.UpdateSpanConfigsRequest{
-				SpansToDelete: []roachpb.Span{
+				ToDelete: []roachpb.Span{
 					{Key: roachpb.Key("a")}, // empty end key in delete list
 				},
 			},
-			expErr: "invalid span",
+			expErr: "invalid span: a",
 		},
 		{
 			req: roachpb.UpdateSpanConfigsRequest{
-				SpanConfigsToUpdate: []roachpb.SpanConfigEntry{
+				ToUpsert: []roachpb.SpanConfigEntry{
 					{
 						Span: roachpb.Span{Key: roachpb.Key("a")}, // empty end key in update list
 					},
 				},
 			},
-			expErr: "invalid span",
+			expErr: "invalid span: a",
 		},
 		{
 			req: roachpb.UpdateSpanConfigsRequest{
-				SpanConfigsToUpdate: []roachpb.SpanConfigEntry{
+				ToUpsert: []roachpb.SpanConfigEntry{
 					{
 						Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
 					},
 				},
 			},
-			expErr: "invalid span",
+			expErr: "invalid span: {b-a}",
 		},
 		{
 			req: roachpb.UpdateSpanConfigsRequest{
-				SpansToDelete: []roachpb.Span{
+				ToDelete: []roachpb.Span{
 					{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
 				},
 			},
-			expErr: "invalid span",
+			expErr: "invalid span: {b-a}",
 		},
 		{
 			req: roachpb.UpdateSpanConfigsRequest{
-				SpansToDelete: []roachpb.Span{
+				ToDelete: []roachpb.Span{
 					{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}, // overlapping spans in the same list
 					{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
 				},
 			},
-			expErr: "overlapping spans",
+			expErr: "overlapping spans {a-c} and {b-c} in same list",
 		},
 		{
 			req: roachpb.UpdateSpanConfigsRequest{
-				SpanConfigsToUpdate: []roachpb.SpanConfigEntry{ // overlapping spans in the same list
+				ToUpsert: []roachpb.SpanConfigEntry{ // overlapping spans in the same list
 					{
 						Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 					},
@@ -83,9 +83,12 @@ func TestValidateUpdateSpanConfigsRequest(t *testing.T) {
 					},
 				},
 			},
-			expErr: "overlapping spans",
+			expErr: "overlapping spans {a-c} and {b-c} in same list",
 		},
 	} {
+		if err := tc.req.Validate(); err != nil {
+			t.Logf("error: %v", err)
+		}
 		require.True(t, testutils.IsError(tc.req.Validate(), tc.expErr))
 	}
 }
