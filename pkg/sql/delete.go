@@ -39,8 +39,9 @@ type deleteNode struct {
 
 // deleteRun contains the run-time state of deleteNode during local execution.
 type deleteRun struct {
-	td         tableDeleter
-	rowsNeeded bool
+	td          tableDeleter
+	rowsNeeded  bool
+	rowsDeleted int64
 
 	// done informs a new call to BatchedNext() that the previous call
 	// to BatchedNext() has completed the work already.
@@ -61,6 +62,8 @@ type deleteRun struct {
 	// index of the resultRowBuffer where the i-th column is to be returned.
 	rowIdxToRetIdx []int
 }
+
+var _ mutationPlanNode = &deleteNode{}
 
 func (d *deleteNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
@@ -193,6 +196,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		}
 	}
 
+	d.run.rowsDeleted++
 	return nil
 }
 
@@ -207,6 +211,10 @@ func (d *deleteNode) Close(ctx context.Context) {
 	d.run.td.close(ctx)
 	*d = deleteNode{}
 	deleteNodePool.Put(d)
+}
+
+func (d *deleteNode) rowsWritten() int64 {
+	return d.run.rowsDeleted
 }
 
 func (d *deleteNode) enableAutoCommit() {

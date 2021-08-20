@@ -43,8 +43,9 @@ type updateNode struct {
 
 // updateRun contains the run-time state of updateNode during local execution.
 type updateRun struct {
-	tu         tableUpdater
-	rowsNeeded bool
+	tu          tableUpdater
+	rowsNeeded  bool
+	rowsUpdated int64
 
 	checkOrds checkSet
 
@@ -352,6 +353,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		}
 	}
 
+	u.run.rowsUpdated++
 	return nil
 }
 
@@ -366,6 +368,10 @@ func (u *updateNode) Close(ctx context.Context) {
 	u.run.tu.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)
+}
+
+func (u *updateNode) rowsWritten() int64 {
+	return u.run.rowsUpdated
 }
 
 func (u *updateNode) enableAutoCommit() {
