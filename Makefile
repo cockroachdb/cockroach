@@ -1565,6 +1565,9 @@ docs/generated/redact_safe.md:
 	./build/bazelutil/generate_redact_safe.sh >$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv -f $@.tmp $@
 
+#### WARNING ####
+# You must keep this list in sync with the list in `pkg/util/log/eventpb/PROTOS.bzl`.
+# Order matters!!
 EVENTLOG_PROTOS = \
 	pkg/util/log/eventpb/events.proto \
 	pkg/util/log/eventpb/ddl_events.proto \
