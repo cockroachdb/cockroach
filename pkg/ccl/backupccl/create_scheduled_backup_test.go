@@ -968,6 +968,10 @@ func constructExpectedScheduledBackupNode(
 	require.NoError(t, err)
 	firstRun, err := tree.MakeDTimestampTZ(sj.ScheduledRunTime(), time.Microsecond)
 	require.NoError(t, err)
+	wait, err := parseOnPreviousRunningOption(sj.ScheduleDetails().Wait)
+	require.NoError(t, err)
+	onError, err := parseOnErrorOption(sj.ScheduleDetails().OnError)
+	require.NoError(t, err)
 	scheduleOptions := tree.KVOptions{
 		tree.KVOption{
 			Key:   optFirstRun,
@@ -975,11 +979,11 @@ func constructExpectedScheduledBackupNode(
 		},
 		tree.KVOption{
 			Key:   optOnExecFailure,
-			Value: tree.NewDString(sj.ScheduleDetails().OnError.String()),
+			Value: tree.NewDString(onError),
 		},
 		tree.KVOption{
 			Key:   optOnPreviousRunning,
-			Value: tree.NewDString(sj.ScheduleDetails().Wait.String()),
+			Value: tree.NewDString(wait),
 		},
 	}
 	sb := &tree.ScheduledBackup{
