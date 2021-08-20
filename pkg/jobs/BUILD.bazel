@@ -27,6 +27,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb:with-mocks",
         "//pkg/scheduledjobs",
         "//pkg/security",

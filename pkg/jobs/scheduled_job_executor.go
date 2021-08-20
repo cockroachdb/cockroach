@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -56,6 +57,15 @@ type ScheduledJobExecutor interface {
 	// the passed in `schedule`.
 	GetCreateScheduleStatement(ctx context.Context, env scheduledjobs.JobSchedulerEnv, txn *kv.Txn,
 		schedule *ScheduledJob, ex sqlutil.InternalExecutor) (string, error)
+}
+
+// ScheduledJobController is an interface describing hooks that will execute
+// when controlling a scheduled job.
+type ScheduledJobController interface {
+	// OnDrop runs before the passed in `schedule` is dropped as part of a `DROP
+	// SCHEDULE` query.
+	OnDrop(ctx context.Context, ie sqlutil.InternalExecutor, ptsProvider protectedts.Provider,
+		env scheduledjobs.JobSchedulerEnv, schedule *ScheduledJob, txn *kv.Txn) error
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.

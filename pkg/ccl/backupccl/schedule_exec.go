@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -352,6 +353,61 @@ func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, e
 	}
 
 	return nil, errors.Newf("unexpect node type %T", node)
+}
+
+var _ jobs.ScheduledJobController = &scheduledBackupExecutor{}
+
+func unlinkDependentSchedule(
+	ctx context.Context,
+	ie sqlutil.InternalExecutor,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	args *ScheduledBackupExecutionArgs,
+) error {
+	if args.DependentScheduleID == 0 {
+		return nil
+	}
+
+	// Load the dependent schedule.
+	dependentSj, dependentArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
+		ie.(*sql.InternalExecutor), args.DependentScheduleID)
+	if err != nil {
+		if jobs.HasScheduledJobNotFoundError(err) {
+			log.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+			return nil
+		}
+		return errors.Wrapf(err, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+	}
+
+	// Clear the DependentID field since we are dropping the record associated
+	// with it.
+	dependentArgs.DependentScheduleID = 0
+	any, err := pbtypes.MarshalAny(dependentArgs)
+	if err != nil {
+		return err
+	}
+	dependentSj.SetExecutionDetails(dependentSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
+	return dependentSj.Update(ctx, ie, txn)
+}
+
+// OnDrop implements the ScheduledJobController interface.
+func (e *scheduledBackupExecutor) OnDrop(
+	ctx context.Context,
+	ie sqlutil.InternalExecutor,
+	ptsProvider protectedts.Provider,
+	env scheduledjobs.JobSchedulerEnv,
+	sj *jobs.ScheduledJob,
+	txn *kv.Txn,
+) error {
+	args := &ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
+		return errors.Wrap(err, "un-marshaling args")
+	}
+
+	if err := unlinkDependentSchedule(ctx, ie, env, txn, args); err != nil {
+		return errors.Wrap(err, "failed to unlink dependent schedule")
+	}
+	return releaseProtectedTimestamp(ctx, txn, ptsProvider, args.ProtectedTimestampRecord)
 }
 
 func init() {
