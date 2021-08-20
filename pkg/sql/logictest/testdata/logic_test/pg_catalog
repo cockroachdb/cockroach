@@ -3880,6 +3880,7 @@ enable_experimental_alter_column_type_general          off                 NULL 
 enable_experimental_stream_replication                 off                 NULL      NULL        NULL        string
 enable_implicit_select_for_update                      on                  NULL      NULL        NULL        string
 enable_insert_fast_path                                on                  NULL      NULL        NULL        string
+enable_multiregion_placement_policy                    off                 NULL      NULL        NULL        string
 enable_seqscan                                         on                  NULL      NULL        NULL        string
 enable_zigzag_join                                     on                  NULL      NULL        NULL        string
 escape_string_warning                                  on                  NULL      NULL        NULL        string
@@ -3966,6 +3967,7 @@ enable_experimental_alter_column_type_general          off                 NULL 
 enable_experimental_stream_replication                 off                 NULL  user     NULL      off                 off
 enable_implicit_select_for_update                      on                  NULL  user     NULL      on                  on
 enable_insert_fast_path                                on                  NULL  user     NULL      on                  on
+enable_multiregion_placement_policy                    off                 NULL  user     NULL      off                 off
 enable_seqscan                                         on                  NULL  user     NULL      on                  on
 enable_zigzag_join                                     on                  NULL  user     NULL      on                  on
 escape_string_warning                                  on                  NULL  user     NULL      on                  on
@@ -4048,6 +4050,7 @@ enable_experimental_alter_column_type_general          NULL    NULL     NULL    
 enable_experimental_stream_replication                 NULL    NULL     NULL     NULL        NULL
 enable_implicit_select_for_update                      NULL    NULL     NULL     NULL        NULL
 enable_insert_fast_path                                NULL    NULL     NULL     NULL        NULL
+enable_multiregion_placement_policy                    NULL    NULL     NULL     NULL        NULL
 enable_seqscan                                         NULL    NULL     NULL     NULL        NULL
 enable_zigzag_join                                     NULL    NULL     NULL     NULL        NULL
 escape_string_warning                                  NULL    NULL     NULL     NULL        NULL
