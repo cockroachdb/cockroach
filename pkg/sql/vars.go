@@ -1522,6 +1522,98 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(propagateInputOrdering.Get(sv))
 		},
 	},
+
+	// CockroachDB extension.
+	`transaction_rows_written_log`: {
+		GetStringVal: makeIntGetStringValFn(`transaction_rows_written_log`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set transaction_rows_written_log to a negative value: %d", b)
+			}
+			m.SetTxnRowsWrittenLog(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return strconv.FormatInt(evalCtx.SessionData().TxnRowsWrittenLog, 10)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(txnRowsWrittenLog.Get(sv), 10)
+		},
+	},
+
+	// CockroachDB extension.
+	`transaction_rows_written_err`: {
+		GetStringVal: makeIntGetStringValFn(`transaction_rows_written_err`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set transaction_rows_written_err to a negative value: %d", b)
+			}
+			m.SetTxnRowsWrittenErr(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return strconv.FormatInt(evalCtx.SessionData().TxnRowsWrittenErr, 10)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(txnRowsWrittenErr.Get(sv), 10)
+		},
+	},
+
+	// CockroachDB extension.
+	`transaction_rows_read_log`: {
+		GetStringVal: makeIntGetStringValFn(`transaction_rows_read_log`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set transaction_rows_read_log to a negative value: %d", b)
+			}
+			m.SetTxnRowsReadLog(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return strconv.FormatInt(evalCtx.SessionData().TxnRowsReadLog, 10)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(txnRowsReadLog.Get(sv), 10)
+		},
+	},
+
+	// CockroachDB extension.
+	`transaction_rows_read_err`: {
+		GetStringVal: makeIntGetStringValFn(`transaction_rows_read_err`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set transaction_rows_read_err to a negative value: %d", b)
+			}
+			m.SetTxnRowsReadErr(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return strconv.FormatInt(evalCtx.SessionData().TxnRowsReadErr, 10)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(txnRowsReadErr.Get(sv), 10)
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
