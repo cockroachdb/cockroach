@@ -26,6 +26,7 @@ test           NULL                NULL                                   admin 
 test           NULL                NULL                                   root     ALL
 test           crdb_internal       NULL                                   admin    ALL
 test           crdb_internal       NULL                                   root     ALL
+test           crdb_internal       active_range_feeds                     public   SELECT
 test           crdb_internal       backward_dependencies                  public   SELECT
 test           crdb_internal       builtin_functions                      public   SELECT
 test           crdb_internal       cluster_contended_indexes              public   SELECT
