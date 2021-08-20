@@ -121,7 +121,7 @@ func TestRecordsBasedRegistryMigration(t *testing.T) {
 		svr := tc.Server(0)
 		for _, eng := range svr.Engines() {
 			target := clusterversion.ByKey(clusterversion.RecordsBasedRegistry)
-			ok, err := eng.MinVersionIsAtLeastTargetVersion(&target)
+			ok, err := eng.MinVersionIsAtLeastTargetVersion(target)
 			require.NoError(t, err)
 			require.True(t, ok)
 			ok, err = eng.UsingRecordsEncryptionRegistry()

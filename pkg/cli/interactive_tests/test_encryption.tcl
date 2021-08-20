@@ -21,6 +21,13 @@ proc file_has_size {filepath size} {
 	}
 }
 
+proc file_exists {filepath} {
+  if {! [ file exist $filepath]} {
+    report "MISSING EXPECTED FILE: $filepath"
+    exit 1
+  }
+}
+
 start_test "Generate encryption keys."
 send "mkdir -p $keydir\n"
 send "$argv gen encryption-key -s 128 $keydir/aes-128.key\r"
@@ -67,6 +74,7 @@ send "$argv start-single-node --insecure --store=$storedir --enterprise-encrypti
 eexpect "node starting"
 interrupt
 eexpect "shutdown completed"
+file_exists "$storedir/COCKROACHDB_ENCRYPTION_REGISTRY"
 send "$argv debug encryption-status $storedir --enterprise-encryption=path=$storedir,key=$keydir/aes-128.key,old-key=plain\r"
 eexpect "    \"Active\": true,\r\n    \"Type\": \"AES128_CTR\","
 # Try starting without the encryption flag.

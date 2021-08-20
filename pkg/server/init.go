@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -492,6 +493,16 @@ func (s *initServer) attemptJoinTo(
 }
 
 func (s *initServer) tryBootstrap(ctx context.Context) (*initState, error) {
+	// We expect all the stores to be empty at this point, except for
+	// the store cluster version key. Assert so.
+	//
+	// TODO(jackson): Eventually we should be able to avoid opening the
+	// engines altogether until here, but that requires us to move the
+	// store cluster version key outside of the storage engine.
+	if err := assertEnginesEmpty(s.inspectedDiskState.uninitializedEngines); err != nil {
+		return nil, err
+	}
+
 	// We use our binary version to bootstrap the cluster.
 	cv := clusterversion.ClusterVersion{Version: s.config.binaryVersion}
 	if err := kvserver.WriteClusterVersionToEngines(ctx, s.inspectedDiskState.uninitializedEngines, cv); err != nil {
@@ -532,6 +543,40 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 		ctx, s.inspectedDiskState.uninitializedEngines,
 		s.config.binaryVersion, s.config.binaryMinSupportedVersion,
 	)
+}
+
+func assertEnginesEmpty(engines []storage.Engine) error {
+	for _, engine := range engines {
+		err := func() error {
+			iter := engine.NewEngineIterator(storage.IterOptions{
+				UpperBound: roachpb.KeyMax,
+			})
+			defer iter.Close()
+
+			storeClusterVersionKey := keys.StoreClusterVersionKey()
+
+			valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
+			for ; valid && err == nil; valid, err = iter.NextEngineKey() {
+				k, err := iter.UnsafeEngineKey()
+				if err != nil {
+					return err
+				}
+
+				// The store cluster version key is written multiple times,
+				// including before bootstrapping or joining a cluster.
+				// Skip it if it exists.
+				if storeClusterVersionKey.Equal(k.Key) {
+					continue
+				}
+				return errors.New("engine is not empty")
+			}
+			return err
+		}()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // initServerCfg is a thin wrapper around the server Config object, exposing
