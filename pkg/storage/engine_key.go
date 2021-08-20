@@ -180,6 +180,16 @@ func (k EngineKey) ToLockTableKey() (LockTableKey, error) {
 	return key, nil
 }
 
+// Validate checks if the EngineKey is a valid MVCCKey or LockTableKey.
+func (k EngineKey) Validate() error {
+	_, errMVCC := k.ToMVCCKey()
+	_, errLock := k.ToLockTableKey()
+	if errMVCC != nil && errLock != nil {
+		return errors.Newf("key %s is neither an MVCCKey or LockTableKey", k)
+	}
+	return nil
+}
+
 // DecodeEngineKey decodes the given bytes as an EngineKey. This function is
 // similar to enginepb.SplitMVCCKey.
 // TODO(sumeer): consider removing SplitMVCCKey.
