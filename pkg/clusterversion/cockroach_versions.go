@@ -295,6 +295,8 @@ const (
 	// EnsureNoInterleavedTables interleaved tables no longer exist in
 	// this version.
 	EnsureNoInterleavedTables
+	// DefaultPrivileges default privileges are supported in this version.
+	DefaultPrivileges
 	// Step (1): Add new versions here.
 )
 
@@ -494,7 +496,10 @@ var versionsSingleton = keyedVersions{
 		Key:     EnsureNoInterleavedTables,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 140},
 	},
-
+	{
+		Key:     DefaultPrivileges,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 142},
+	},
 	// Step (2): Add new versions here.
 }
 
