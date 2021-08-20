@@ -1216,6 +1216,16 @@ type connExecutor struct {
 		rowsRead  int64
 		bytesRead int64
 
+		// rowsWritten tracks the number of rows written (modified) by all
+		// statements in this txn so far.
+		rowsWritten int64
+
+		// rowsWrittenLogged and rowsReadLoggen indicates whether we have
+		// already logged an event about reaching written/read rows setting,
+		// respectively.
+		rowsWrittenLogged bool
+		rowsReadLogged    bool
+
 		// hasAdminRole is used to cache if the user running the transaction
 		// has admin privilege. hasAdminRoleCache is set for the first statement
 		// in a transaction.

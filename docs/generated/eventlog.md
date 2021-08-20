@@ -1939,6 +1939,50 @@ set to a non-zero value, AND
 | `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
+### `txn_rows_read_limit_reached`
+
+An event of type `txn_rows_read_limit_reached` is recorded when a transaction tries to read more
+rows than cluster setting `sql.defaults.transaction_rows_read_log`. There
+will only be a single record for a single transaction (unless it is retried)
+even if there are more statement within the transaction that haven't been
+executed yet.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `TxnID` |  | yes |
+| `SessionID` |  | yes |
+| `ViolatesTxnRowsLimitErr` |  | no |
+| `ReadKind` | ReadKind indicates that the "rows read" limit is reached if true and the "rows written" limit otherwise. | no |
+
+### `txn_rows_written_limit_reached`
+
+An event of type `txn_rows_written_limit_reached` is recorded when a transaction tries to write more
+rows than cluster setting `sql.defaults.transaction_rows_written_log`. There
+will only be a single record for a single transaction (unless it is retried)
+even if there are more mutation statement within the transaction that haven't
+been executed yet.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `TxnID` |  | yes |
+| `SessionID` |  | yes |
+| `ViolatesTxnRowsLimitErr` |  | no |
+| `ReadKind` | ReadKind indicates that the "rows read" limit is reached if true and the "rows written" limit otherwise. | no |
+
 ## SQL Slow Query Log (Internal)
 
 Events in this category report slow query execution by
@@ -2005,6 +2049,52 @@ the "slow query" condition.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+
+### `txn_rows_read_limit_reached_internal`
+
+An event of type `txn_rows_read_limit_reached_internal` is recorded when an internal transaction
+tries to read more rows than cluster setting
+`sql.defaults.transaction_rows_read_log` or
+`sql.defaults.transaction_rows_read_err`. There will only be a single
+record for a single transaction (unless it is retried) even if there are more
+mutation statement within the transaction that haven't been executed yet.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `TxnID` |  | yes |
+| `SessionID` |  | yes |
+| `ViolatesTxnRowsLimitErr` |  | no |
+| `ReadKind` | ReadKind indicates that the "rows read" limit is reached if true and the "rows written" limit otherwise. | no |
+
+### `txn_rows_written_limit_reached_internal`
+
+An event of type `txn_rows_written_limit_reached_internal` is recorded when an internal transaction
+tries to write more rows than cluster setting
+`sql.defaults.transaction_rows_written_log` or
+`sql.defaults.transaction_rows_written_err`. There will only be a single
+record for a single transaction (unless it is retried) even if there are more
+mutation statement within the transaction that haven't been executed yet.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `TxnID` |  | yes |
+| `SessionID` |  | yes |
+| `ViolatesTxnRowsLimitErr` |  | no |
+| `ReadKind` | ReadKind indicates that the "rows read" limit is reached if true and the "rows written" limit otherwise. | no |
 
 ## SQL User and Role operations
 

@@ -61,6 +61,7 @@ type deleteRangeNode struct {
 var _ planNode = &deleteRangeNode{}
 var _ planNodeFastPath = &deleteRangeNode{}
 var _ batchedPlanNode = &deleteRangeNode{}
+var _ mutationPlanNode = &deleteRangeNode{}
 
 // BatchedNext implements the batchedPlanNode interface.
 func (d *deleteRangeNode) BatchedNext(params runParams) (bool, error) {
@@ -80,6 +81,10 @@ func (d *deleteRangeNode) BatchedValues(rowIdx int) tree.Datums {
 // FastPathResults implements the planNodeFastPath interface.
 func (d *deleteRangeNode) FastPathResults() (int, bool) {
 	return d.rowCount, true
+}
+
+func (d *deleteRangeNode) rowsWritten() int64 {
+	return int64(d.rowCount)
 }
 
 // startExec implements the planNode interface.

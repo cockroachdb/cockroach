@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var _ error = &CommonLargeRowDetails{}
@@ -50,6 +51,51 @@ func (r *CommonLargeRowDetails) SafeFormatError(p errors.Printer) (next error) {
 		p.Printf(
 			"row larger than max row size: table %v family %v size %v",
 			errors.Safe(r.TableID), errors.Safe(r.FamilyID), errors.Safe(r.RowSize),
+		)
+	}
+	return nil
+}
+
+var _ error = &CommonTxnRowsLimitReachedDetails{}
+var _ errors.SafeDetailer = &CommonTxnRowsLimitReachedDetails{}
+var _ fmt.Formatter = &CommonTxnRowsLimitReachedDetails{}
+var _ errors.SafeFormatter = &CommonTxnRowsLimitReachedDetails{}
+
+func (r *CommonTxnRowsLimitReachedDetails) kind() string {
+	if r.ReadKind {
+		return "read"
+	}
+	return "written"
+}
+
+// Error is part of the error interface, which
+// CommonTxnRowsReadLimitReachedDetails implements.
+func (r *CommonTxnRowsLimitReachedDetails) Error() string {
+	return fmt.Sprintf(
+		"txn reached the number of rows %s: TxnID %v SessionID %v",
+		r.kind(), redact.SafeString(r.TxnID), redact.SafeString(r.SessionID),
+	)
+}
+
+// SafeDetails is part of the errors.SafeDetailer interface, which
+// CommonTxnRowsReadLimitReachedDetails implements.
+func (r *CommonTxnRowsLimitReachedDetails) SafeDetails() []string {
+	return []string{r.TxnID, r.SessionID, r.kind()}
+}
+
+// Format is part of the fmt.Formatter interface, which
+// CommonTxnRowsReadLimitReachedDetails implements.
+func (r *CommonTxnRowsLimitReachedDetails) Format(s fmt.State, verb rune) {
+	errors.FormatError(r, s, verb)
+}
+
+// SafeFormatError is part of the errors.SafeFormatter interface, which
+// CommonLargeRowDetails implements.
+func (r *CommonTxnRowsLimitReachedDetails) SafeFormatError(p errors.Printer) (next error) {
+	if p.Detail() {
+		p.Printf(
+			"txn reached the number of rows %s: TxnID %v SessionID %v",
+			r.kind(), redact.SafeString(r.TxnID), redact.SafeString(r.SessionID),
 		)
 	}
 	return nil
