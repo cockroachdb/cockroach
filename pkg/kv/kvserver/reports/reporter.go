@@ -489,7 +489,7 @@ func visitDefaultZone(
 func getZoneByID(
 	id config.SystemTenantObjectID, cfg *config.SystemConfig,
 ) (*zonepb.ZoneConfig, error) {
-	zoneVal := cfg.GetValue(config.MakeZoneKey(id))
+	zoneVal := cfg.GetValue(config.MakeZoneKey(keys.SystemSQLCodec, descpb.ID(id)))
 	if zoneVal == nil {
 		return nil, nil
 	}

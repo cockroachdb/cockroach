@@ -121,6 +121,6 @@ func AddressResolver(c Connector) nodedialer.AddressResolver {
 var GossipSubscriptionSystemConfigMask = config.MakeSystemConfigMask(
 	// Tenant SQL processes need just enough of the zone hierarchy to understand
 	// which zone configurations apply to their keyspace.
-	config.MakeZoneKey(keys.RootNamespaceID),
-	config.MakeZoneKey(keys.TenantsRangesID),
+	config.MakeZoneKey(keys.SystemSQLCodec, keys.RootNamespaceID),
+	config.MakeZoneKey(keys.SystemSQLCodec, keys.TenantsRangesID),
 )

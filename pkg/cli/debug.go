@@ -1557,7 +1557,7 @@ func init() {
 	f = debugDecodeProtoCmd.Flags()
 	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",
 		"fully qualified name of the proto to decode")
-	f.BoolVar(&debugDecodeProtoEmitDefaults, "emit-defaults", true,
+	f.BoolVar(&debugDecodeProtoEmitDefaults, "emit-defaults", false,
 		"encode default values for every field")
 
 	f = debugCheckLogConfigCmd.Flags()

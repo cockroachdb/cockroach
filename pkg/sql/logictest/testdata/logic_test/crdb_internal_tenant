@@ -304,10 +304,10 @@ SELECT * FROM crdb_internal.ranges WHERE range_id < 0
 statement error not fully contained in tenant keyspace
 SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 
-# crdb_internal.zones is not populated for tenants.
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
+0  RANGE default
 
 query error pq: foo
 SELECT crdb_internal.force_error('', 'foo')

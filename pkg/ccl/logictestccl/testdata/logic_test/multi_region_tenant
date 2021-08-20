@@ -10,5 +10,5 @@ us-east-1       {us-az1,us-az2,us-az3}
 statement error region "bad-region" does not exist
 CREATE DATABASE db PRIMARY REGION "bad-region"
 
-statement error operation is unsupported in multi-tenancy mode
+statement ok
 CREATE DATABASE db PRIMARY REGION "us-east-1"
