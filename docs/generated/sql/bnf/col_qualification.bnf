@@ -11,6 +11,8 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| 'CONSTRAINT' constraint_name generated_as '(' a_expr ')' 'STORED'
 	| 'CONSTRAINT' constraint_name generated_as '(' a_expr ')' 'VIRTUAL'
+	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
+	| 'CONSTRAINT' constraint_name 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
 	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY'
 	| 'CONSTRAINT' constraint_name 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY'
 	| 'NOT' 'NULL'
@@ -25,6 +27,8 @@ col_qualification ::=
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| generated_as '(' a_expr ')' 'STORED'
 	| generated_as '(' a_expr ')' 'VIRTUAL'
+	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
+	| 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
 	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY'
 	| 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY'
 	| 'COLLATE' collation_name
