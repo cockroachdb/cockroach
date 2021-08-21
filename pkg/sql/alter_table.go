@@ -16,6 +16,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -173,6 +174,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"add the column first, then run ALTER TABLE ... ADD CONSTRAINT to add a "+
 						"UNIQUE WITHOUT INDEX constraint on the column",
 				)
+			}
+			if t.ColumnDef.GeneratedIdentity.IsGeneratedAsIdentity {
+				evalCtx := params.EvalContext()
+				ctx := params.ctx
+				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.GeneratedAsIdentity) {
+					return pgerror.Newf(pgcode.FeatureNotSupported,
+						"version %v must be finalized to use GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY expression",
+						clusterversion.GeneratedAsIdentity)
+				}
 			}
 			var err error
 			params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
