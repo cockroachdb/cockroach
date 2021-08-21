@@ -356,7 +356,7 @@ SHOW CREATE TABLE like_hash
 ----
 like_hash  CREATE TABLE public.like_hash (
            a INT8 NULL,
-           crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(a AS STRING), '':::STRING)), 4:::INT8)) STORED,
+           crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) STORED,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
            INDEX like_hash_base_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,

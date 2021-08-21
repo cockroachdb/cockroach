@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1573,7 +1574,9 @@ func NewTableDesc(
 					return nil, err
 				}
 				shardCol, _, err := maybeCreateAndAddShardCol(int(buckets), &desc,
-					[]string{string(d.Name)}, true /* isNewTable */)
+					[]string{string(d.Name)}, true, /* isNewTable */
+					evalCtx.Settings.Version.IsActive(ctx, clusterversion.UseKeyEncodeForHashShardedIndexes),
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -2564,25 +2567,80 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 }
 
 // makeShardColumnDesc returns a new column descriptor for a hidden computed shard column
-// based on all the `colNames`.
-func makeShardColumnDesc(colNames []string, buckets int) (*descpb.ColumnDescriptor, error) {
+// based on all the `colNames` and the bucket count. It delegates to one of
+// makeHashShardComputeExpr or makeDeprecatedHashShardComputeExpr for the
+// computed expression based on the value of useDatumsToBytes.
+func makeShardColumnDesc(
+	colNames []string, buckets int, useDatumsToBytes bool,
+) (*descpb.ColumnDescriptor, error) {
 	col := &descpb.ColumnDescriptor{
 		Hidden:   true,
 		Nullable: false,
 		Type:     types.Int4,
 	}
 	col.Name = tabledesc.GetShardColumnName(colNames, int32(buckets))
-	col.ComputeExpr = makeHashShardComputeExpr(colNames, buckets)
+	if useDatumsToBytes {
+		col.ComputeExpr = makeHashShardComputeExpr(colNames, buckets)
+	} else {
+		col.ComputeExpr = makeDeprecatedHashShardComputeExpr(colNames, buckets)
+	}
+
 	return col, nil
 }
 
-// makeHashShardComputeExpr creates the serialized computed expression for a hash shard
+// makeDeprecatedHashShardComputeExpr creates the serialized computed expression for a hash shard
+// column based on the column names and the number of buckets. The expression will be
+// of the form:
+//
+//    mod(fnv32(crdb_internal.datums_to_bytes(...)),buckets)
+//
+func makeHashShardComputeExpr(colNames []string, buckets int) *string {
+	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
+		return tree.ResolvableFunctionReference{
+			FunctionReference: &tree.UnresolvedName{
+				NumParts: 1,
+				Parts:    tree.NameParts{funcName},
+			},
+		}
+	}
+	columnItems := func() tree.Exprs {
+		exprs := make(tree.Exprs, len(colNames))
+		for i := range exprs {
+			exprs[i] = &tree.ColumnItem{ColumnName: tree.Name(colNames[i])}
+		}
+		return exprs
+	}
+	hashedColumnsExpr := func() tree.Expr {
+		return &tree.FuncExpr{
+			Func: unresolvedFunc("fnv32"),
+			Exprs: tree.Exprs{
+				&tree.FuncExpr{
+					Func:  unresolvedFunc("crdb_internal.datums_to_bytes"),
+					Exprs: columnItems(),
+				},
+			},
+		}
+	}
+	modBuckets := func(expr tree.Expr) tree.Expr {
+		return &tree.FuncExpr{
+			Func: unresolvedFunc("mod"),
+			Exprs: tree.Exprs{
+				expr,
+				tree.NewDInt(tree.DInt(buckets)),
+			},
+		}
+	}
+	res := tree.Serialize(modBuckets(hashedColumnsExpr()))
+	return &res
+}
+
+// makeDeprecatedHashShardComputeExpr creates the serialized computed expression for a hash shard
 // column based on the column names and the number of buckets. The expression will be
 // of the form:
 //
 //    mod(fnv32(colNames[0]::STRING)+fnv32(colNames[1])+...,buckets)
 //
-func makeHashShardComputeExpr(colNames []string, buckets int) *string {
+func makeDeprecatedHashShardComputeExpr(colNames []string, buckets int) *string {
 	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
 		return tree.ResolvableFunctionReference{
 			FunctionReference: &tree.UnresolvedName{

@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -3923,6 +3924,38 @@ value if you rely on the HLC for accuracy.`,
 			Info:       "Write the content passed to a file at the supplied external storage URI",
 			Volatility: tree.VolatilityVolatile,
 		}),
+
+	"crdb_internal.datums_to_bytes": makeBuiltin(
+		tree.FunctionProperties{
+			Category:             categorySystemInfo,
+			NullableArgs:         true,
+			Undocumented:         true,
+			CompositeInsensitive: true,
+		},
+		tree.Overload{
+			// Note that datums_to_bytes(a) == datums_to_bytes(b) iff (a IS NOT DISTINCT FROM b)
+			Info: "Converts datums into key-encoded bytes. " +
+				"Supports NULLs and all data types which may be used in index keys",
+			Types:      tree.VariadicType{VarType: types.Any},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				var out []byte
+				for i, arg := range args {
+					var err error
+					out, err = rowenc.EncodeTableKey(out, arg, encoding.Ascending)
+					if err != nil {
+						return nil, pgerror.Newf(
+							pgcode.DatatypeMismatch,
+							"illegal argument %d of type %s",
+							i, arg.ResolvedType(),
+						)
+					}
+				}
+				return tree.NewDBytes(tree.DBytes(out)), nil
+			},
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	// Enum functions.
 	"enum_first": makeBuiltin(

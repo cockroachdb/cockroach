@@ -630,8 +630,8 @@ var (
 	// TABLE statements for both statement and transaction tables in a SQL shell.
 	// If we are to change how we compute hash values in the future, we need to
 	// modify these two expressions as well.
-	sqlStmtHashComputeExpr = "mod(fnv32(COALESCE(CAST(aggregated_ts AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(app_name AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(fingerprint_id AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(node_id AS STRING), '':::STRING)) + fnv32(COALESCE(CAST(plan_hash AS STRING), '':::STRING))))), 8:::INT8)"
-	sqlTxnHashComputeExpr  = "mod(fnv32(COALESCE(CAST(aggregated_ts AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(app_name AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(fingerprint_id AS STRING), '':::STRING)) + fnv32(COALESCE(CAST(node_id AS STRING), '':::STRING)))), 8:::INT8)"
+	sqlStmtHashComputeExpr = `mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash)), 8:::INT8)`
+	sqlTxnHashComputeExpr  = `mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
 )
 
 // SystemDatabaseName is the name of the system database.

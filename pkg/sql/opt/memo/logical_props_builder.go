@@ -2618,15 +2618,24 @@ func deriveWithUses(r opt.Expr) props.WithUsesMap {
 func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 	// check is a recursive function which returns the following:
 	//  - isCompositeInsensitive as defined above.
-	//  - isCompositeIndependent is a stronger property, which says that for equal
+	//  - isCompositeIdentical is a stronger property, which says that for equal
 	//    outer column values, the expression results are always *identical* (not
 	//    just logically equal).
 	//
 	// A composite-insensitive expression with a non-composite result type is by
-	// definition also composite-independent.
+	// definition also composite-identical.
 	//
 	// Any purely scalar expression which depends only on non-composite outer
-	// columns is composite-independent.
+	// columns is composite-identical.
+	exprIsCompositeInsensitive := func(e opt.Expr) bool {
+		if opt.IsCompositeInsensitiveOp(e) {
+			return true
+		}
+		if funcExpr, ok := e.(*FunctionExpr); ok && funcExpr.Properties.CompositeInsensitive {
+			return true
+		}
+		return false
+	}
 	var check func(e opt.Expr) (isCompositeInsensitive, isCompositeIdentical bool)
 	check = func(e opt.Expr) (isCompositeInsensitive, isCompositeIdentical bool) {
 		if _, ok := e.(RelExpr); ok {
@@ -2637,7 +2646,7 @@ func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 			// Outer column references are our base case. They are always
 			// composite-insensitive. If they are not of composite type, they are also
 			// composite-identical.
-			return true, !colinfo.HasCompositeKeyEncoding(v.Typ)
+			return true, !colinfo.CanHaveCompositeKeyEncoding(v.Typ)
 		}
 
 		allChildrenCompositeIdentical := true
@@ -2656,10 +2665,12 @@ func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 			return true, true
 		}
 
-		if opt.IsCompositeInsensitiveOp(e) {
+		if exprIsCompositeInsensitive(e) {
 			// The operator is known to be composite-insensitive. If its result is a
 			// non-composite type, it is also composite-identical.
-			return true, !colinfo.HasCompositeKeyEncoding(e.(opt.ScalarExpr).DataType())
+			return true, !colinfo.CanHaveCompositeKeyEncoding(
+				e.(opt.ScalarExpr).DataType(),
+			)
 		}
 
 		return false, false
