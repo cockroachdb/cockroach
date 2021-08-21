@@ -304,6 +304,9 @@ const (
 	// DatabasePlacementPolicy setting PLACEMENT for databases is supported in this
 	// version.
 	DatabasePlacementPolicy
+	// GeneratedAsIdentity is the syntax support for `GENERATED {ALWAYS | BY
+	// DEFAULT} AS IDENTITY` under `CREATE TABLE` syntax.
+	GeneratedAsIdentity
 	// Step (1): Add new versions here.
 )
 
@@ -519,6 +522,11 @@ var versionsSingleton = keyedVersions{
 		Key:     DatabasePlacementPolicy,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 148},
 	},
+	{
+		Key:     GeneratedAsIdentity,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 150},
+	},
+
 	// Step (2): Add new versions here.
 }
 
