@@ -28,7 +28,7 @@ vectorized: true
     └── • render
         │ columns: (crdb_internal_a_shard_11_comp, column1)
         │ estimated row count: 2
-        │ render crdb_internal_a_shard_11_comp: mod(fnv32(COALESCE(column1::STRING, '')), 11)::INT4
+        │ render crdb_internal_a_shard_11_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 11)::INT4
         │ render column1: column1
         │
         └── • values
@@ -63,7 +63,7 @@ vectorized: true
     └── • render
         │ columns: (crdb_internal_a_shard_12_comp, rowid_default, column1)
         │ estimated row count: 2
-        │ render crdb_internal_a_shard_12_comp: mod(fnv32(COALESCE(column1::STRING, '')), 12)::INT4
+        │ render crdb_internal_a_shard_12_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 12)::INT4
         │ render rowid_default: unique_rowid()
         │ render column1: column1
         │
@@ -72,3 +72,53 @@ vectorized: true
               size: 1 column, 2 rows
               row 0, expr 0: 1
               row 1, expr 0: 2
+
+
+statement ok
+CREATE TABLE sharded_primary_with_many_column_types  (
+    i2    INT2,
+    i4    INT4,
+    i8    INT8,
+    f4    FLOAT4,
+    f8    FLOAT8,
+    s     STRING,
+    c     CHAR,
+    b     BYTES,
+    dc    DECIMAL,
+    ival  INTERVAL,
+    oid   OID,
+    tstz  TIMESTAMPTZ,
+    ts    TIMESTAMP,
+    da    DATE,
+    inet  INET,
+    vb    VARBIT,
+    FAMILY (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb),
+    PRIMARY KEY (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb) USING HASH WITH BUCKET_COUNT = 7
+);
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM sharded_primary_with_many_column_types WHERE (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb) = (1::INT2,
+                         1::INT4,
+                         1::INT8,
+                         1::FLOAT4,
+                         1::FLOAT8,
+                         1::STRING,
+                         1::CHAR,
+                         1::STRING::BYTES,
+                         1::DECIMAL,
+                         1::INTERVAL,
+                         1::OID,
+                         1::TIMESTAMPTZ,
+                         1::TIMESTAMP,
+                         1::DATE,
+                         ('127.0.0.' || 1::STRING)::INET,
+                         1::VARBIT);
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb)
+  estimated row count: 1 (missing stats)
+  table: sharded_primary_with_many_column_types@primary
+  spans: /3/1/1/1/1/1/"1"/"1"/"1"/1/00:00:01/1/1970-01-01T00:00:01Z/1970-01-01T00:00:01Z/1/"\x00 \u007f\x00\x00\x01"/B/0

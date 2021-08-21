@@ -526,7 +526,8 @@ func setupShardedIndex(
 		return nil, nil, false, err
 	}
 	shardCol, newColumn, err := maybeCreateAndAddShardCol(int(buckets), tableDesc,
-		colNames, isNewTable)
+		colNames, isNewTable,
+		evalCtx.Settings.Version.IsActive(ctx, clusterversion.UseKeyEncodeForHashShardedIndexes))
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -548,9 +549,9 @@ func setupShardedIndex(
 // `desc`, if one doesn't already exist for the given index column set and number of shard
 // buckets.
 func maybeCreateAndAddShardCol(
-	shardBuckets int, desc *tabledesc.Mutable, colNames []string, isNewTable bool,
+	shardBuckets int, desc *tabledesc.Mutable, colNames []string, isNewTable, useKeyEncodeInExpr bool,
 ) (col catalog.Column, created bool, err error) {
-	shardColDesc, err := makeShardColumnDesc(colNames, shardBuckets)
+	shardColDesc, err := makeShardColumnDesc(colNames, shardBuckets, useKeyEncodeInExpr)
 	if err != nil {
 		return nil, false, err
 	}

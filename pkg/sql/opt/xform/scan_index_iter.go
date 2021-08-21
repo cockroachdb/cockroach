@@ -343,7 +343,7 @@ func (it *scanIndexIter) extractConstNonCompositeColumns(f memo.FiltersExpr) opt
 	for col, ok := constCols.Next(0); ok; col, ok = constCols.Next(col + 1) {
 		ord := it.tabMeta.MetaID.ColumnOrdinal(col)
 		typ := it.tabMeta.Table.Column(ord).DatumType()
-		if !colinfo.HasCompositeKeyEncoding(typ) {
+		if !colinfo.CanHaveCompositeKeyEncoding(typ) {
 			constNonCompositeCols.Add(col)
 		}
 	}

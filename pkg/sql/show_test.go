@@ -266,7 +266,7 @@ func TestShowCreateTable(t *testing.T) {
 			)`,
 			Expect: `CREATE TABLE public.%s (
 	a INT8 NULL,
-	crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(a AS STRING), '':::STRING)), 8:::INT8)) STORED,
+	crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) STORED,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	INDEX t12_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 8,
