@@ -73,6 +73,18 @@ func MakeColumnDefDescs(
 		Hidden:   d.Hidden,
 	}
 
+	if d.GeneratedIdentity.IsGeneratedAsIdentity {
+		switch d.GeneratedIdentity.GeneratedAsIdentityType {
+		case tree.GeneratedAlways:
+			col.GeneratedAsIdentityType = descpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+		case tree.GeneratedByDefault:
+			col.GeneratedAsIdentityType = descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+		default:
+			return nil, nil, nil, errors.AssertionFailedf(
+				"column %s is of invalid generated as identity type (neither ALWAYS nor BY DEFAULT)", string(d.Name))
+		}
+	}
+
 	// Validate and assign column type.
 	resType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
