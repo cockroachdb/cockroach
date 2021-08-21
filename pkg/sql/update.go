@@ -418,6 +418,12 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 func enforceLocalColumnConstraints(row tree.Datums, cols []catalog.Column) error {
 	for i, col := range cols {
 		if !col.IsNullable() && row[i] == tree.DNull {
+			// If a column is created as an IDENTITY column,
+			// it is auto-incremented, and we allow insertions
+			// without explicitly assigning values.
+			if col.IsGeneratedAsIdentity() {
+				continue
+			}
 			return sqlerrors.NewNonNullViolationError(col.GetName())
 		}
 		outVal, err := tree.AdjustValueToType(col.GetType(), row[i])

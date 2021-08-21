@@ -334,3 +334,11 @@ func (c *Column) InitVirtualComputed(
 		invertedSourceColumnOrdinal: -1,
 	}
 }
+
+// IsGeneratedAlwaysAsIdentity returns true
+// if the column is created with the GENERATED ALWAYS AS IDENTITY token
+// and hence is not allowed for explicit write
+// (write without any additional tokens).
+func (c *Column) IsGeneratedAlwaysAsIdentity() bool {
+	return c.generatedAsIdentityType == GeneratedAlwaysAsIdentity
+}
