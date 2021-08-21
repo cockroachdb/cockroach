@@ -80,6 +80,10 @@ func MakeColumnDefDescs(
 		case tree.GeneratedByDefault:
 			col.GeneratedAsIdentityType = descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
 		}
+		if genSeqOpt := d.GeneratedIdentity.SeqOptions; genSeqOpt != nil {
+			s := tree.Serialize(&d.GeneratedIdentity.SeqOptions)
+			col.GeneratedAsIdentitySequenceOption = &s
+		}
 	}
 
 	// Validate and assign column type.

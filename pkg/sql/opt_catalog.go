@@ -694,6 +694,7 @@ func newOptTable(
 				col.ColumnDesc().DefaultExpr,
 				col.ColumnDesc().ComputeExpr,
 				mapGeneratedAsIdentityType(col.GetGeneratedAsIdentityType()),
+				col.ColumnDesc().GeneratedAsIdentitySequenceOption,
 			)
 		} else {
 			// Note: a WriteOnly or DeleteOnly mutation column doesn't require any
@@ -736,6 +737,7 @@ func newOptTable(
 				sysCol.ColumnDesc().DefaultExpr,
 				sysCol.ColumnDesc().ComputeExpr,
 				mapGeneratedAsIdentityType(sysCol.GetGeneratedAsIdentityType()),
+				sysCol.ColumnDesc().GeneratedAsIdentitySequenceOption,
 			)
 		}
 	}
@@ -1812,6 +1814,7 @@ func newOptVirtualTable(
 		nil,        /* defaultExpr */
 		nil,        /* computedExpr */
 		cat.NotGeneratedAsIdentity,
+		nil, /* generatedAsIdentitySequenceOption */
 	)
 	for i, d := range desc.PublicColumns() {
 		ot.columns[i+1].Init(
@@ -1825,6 +1828,7 @@ func newOptVirtualTable(
 			d.ColumnDesc().DefaultExpr,
 			d.ColumnDesc().ComputeExpr,
 			mapGeneratedAsIdentityType(d.GetGeneratedAsIdentityType()),
+			d.ColumnDesc().GeneratedAsIdentitySequenceOption,
 		)
 	}
 
@@ -2295,10 +2299,10 @@ func collectTypes(col catalog.Column) (descpb.IDs, error) {
 // cat.GeneratedAsIdentityType. This is a helper function for the read access to
 // the GeneratedAsIdentityType attribute for descpb.ColumnDescriptor.
 func mapGeneratedAsIdentityType(inType descpb.GeneratedAsIdentityType) cat.GeneratedAsIdentityType {
-	generatedAsIdentityTypeMap := [...]cat.GeneratedAsIdentityType{
+	mapGeneratedAsIdentityType := map[descpb.GeneratedAsIdentityType]cat.GeneratedAsIdentityType{
 		descpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN:  cat.NotGeneratedAsIdentity,
 		descpb.GeneratedAsIdentityType_GENERATED_ALWAYS:     cat.GeneratedAlwaysAsIdentity,
 		descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT: cat.GeneratedByDefaultAsIdentity,
 	}
-	return generatedAsIdentityTypeMap[inType]
+	return mapGeneratedAsIdentityType[inType]
 }
