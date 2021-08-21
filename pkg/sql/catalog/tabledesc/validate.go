@@ -752,6 +752,18 @@ func (desc *wrapper) validateColumns(
 		if column.IsHidden() && column.IsInaccessible() {
 			return errors.Newf("column %q cannot be hidden and inaccessible", column.GetName())
 		}
+
+		if column.IsComputed() && column.IsGeneratedAsIdentity() {
+			return errors.Newf("both generated identity and computed expression specified for column %q", column.GetName())
+		}
+
+		if column.IsNullable() && column.IsGeneratedAsIdentity() {
+			return errors.Newf("conflicting NULL/NOT NULL declarations for column %q", column.GetName())
+		}
+
+		if column.HasOnUpdate() && column.IsGeneratedAsIdentity() {
+			return errors.Newf("both generated identity and on update expression specified for column %q", column.GetName())
+		}
 	}
 	return nil
 }

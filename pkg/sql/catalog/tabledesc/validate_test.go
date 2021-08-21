@@ -176,8 +176,9 @@ var validationMap = []struct {
 			"DefaultExpr": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
-			"Hidden":       {status: iSolemnlySwearThisFieldIsValidated},
-			"Inaccessible": {status: iSolemnlySwearThisFieldIsValidated},
+			"Hidden":                  {status: iSolemnlySwearThisFieldIsValidated},
+			"Inaccessible":            {status: iSolemnlySwearThisFieldIsValidated},
+			"GeneratedAsIdentityType": {status: iSolemnlySwearThisFieldIsValidated},
 			"UsesSequenceIds": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
@@ -1128,6 +1129,96 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 				NextFamilyID: 1,
+			}},
+		{`both generated identity and on update expression specified for column "bar"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:                      1,
+						Name:                    "bar",
+						GeneratedAsIdentityType: descpb.GeneratedAsIdentityType_GENERATED_ALWAYS,
+						OnUpdateExpr:            proto.String("'blah'"),
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+			}},
+		{`both generated identity and on update expression specified for column "bar"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:                      1,
+						Name:                    "bar",
+						GeneratedAsIdentityType: descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT,
+						OnUpdateExpr:            proto.String("'blah'"),
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+			}},
+		{`conflicting NULL/NOT NULL declarations for column "bar"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar", Nullable: true,
+						GeneratedAsIdentityType: descpb.GeneratedAsIdentityType_GENERATED_ALWAYS,
+					},
+				},
+				NextColumnID: 3,
+			}},
+		{`conflicting NULL/NOT NULL declarations for column "bar"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar", Nullable: true,
+						GeneratedAsIdentityType: descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT,
+					},
+				},
+				NextColumnID: 3,
+			}},
+		{`both generated identity and computed expression specified for column "bar"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar", GeneratedAsIdentityType: descpb.GeneratedAsIdentityType_GENERATED_ALWAYS,
+						ComputeExpr: &computedExpr},
+				},
+				NextColumnID: 3,
+			}},
+		{`both generated identity and computed expression specified for column "bar"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar", GeneratedAsIdentityType: descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT,
+						ComputeExpr: &computedExpr},
+				},
+				NextColumnID: 3,
 			}},
 	}
 	for i, d := range testData {
