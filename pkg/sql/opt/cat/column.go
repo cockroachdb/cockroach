@@ -187,7 +187,7 @@ const (
 // is associated with the GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY
 // syntax.
 // The GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY generates an IDENTITY
-// column, which is based on an underlying sequence, and is auto-incremental
+// column, which is based on an underlying sequence, and is auto incremented
 // in a new row. For an Identity column, it is not allowed to use SET DEFAULT
 // syntax under ALTER TABLE ... ALTER COLUMN syntax.
 
@@ -319,4 +319,12 @@ func (c *Column) InitVirtualComputed(
 		virtualComputed:             true,
 		invertedSourceColumnOrdinal: -1,
 	}
+}
+
+// IsGeneratedAlwaysAsIdentity returns true
+// if the column is created with the GENERATED ALWAYS AS IDENTITY token
+// and hence is not allowed for explicit write
+// (write without any additional tokens).
+func (c *Column) IsGeneratedAlwaysAsIdentity() bool {
+	return c.generatedAsIdentityType == GeneratedAlwaysAsIdentity
 }
