@@ -509,7 +509,7 @@ or use multiple RootTxns for the same txn object side-by-side.
 
 Note that while the SQL code is architected to take this restriction
 into account, *it is not currently enforced on the KV side*. We
-sometimes see bugs (eg #41222 / #41992) occuring because we do not
+sometimes see bugs (eg #41222 / #41992) occurring because we do not
 have infrastructure in place to detect violations of this restriction.
 
 This restriction exists for 3 reasons, one of them actually invalid
