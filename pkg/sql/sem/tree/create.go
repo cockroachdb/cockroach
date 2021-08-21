@@ -545,11 +545,17 @@ func NewColumnTableDef(
 				return nil, pgerror.Newf(pgcode.Syntax,
 					"multiple ON UPDATE values specified for column %q", name)
 			}
+			if d.GeneratedIdentity.IsGeneratedAsIdentity {
+				return nil, pgerror.Newf(pgcode.Syntax,
+					"both generated identity and on update expression specified for column %q",
+					name)
+			}
 			d.OnUpdateExpr.Expr = t.Expr
 			d.OnUpdateExpr.ConstraintName = c.Name
 		case *GeneratedAlwaysAsIdentity, *GeneratedByDefAsIdentity:
 			if typRef.(*types.T).InternalType.Family != types.IntFamily {
-				return nil, pgerror.Newf(pgcode.InvalidParameterValue, "identity column type must be INT, INT2, or INT4")
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+					"identity column type must be INT, INT2, or INT4")
 			}
 			if d.GeneratedIdentity.IsGeneratedAsIdentity {
 				return nil, pgerror.Newf(pgcode.Syntax,
@@ -566,6 +572,11 @@ func NewColumnTableDef(
 			if d.Nullable.Nullability == Null {
 				return nil, pgerror.Newf(pgcode.Syntax,
 					"conflicting NULL/NOT NULL declarations for column %q", name)
+			}
+			if d.HasOnUpdateExpr() {
+				return nil, pgerror.Newf(pgcode.Syntax,
+					"both generated identity and on update expression specified for column %q",
+					name)
 			}
 			d.GeneratedIdentity.IsGeneratedAsIdentity = true
 			d.Nullable.Nullability = NotNull
