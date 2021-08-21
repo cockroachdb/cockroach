@@ -653,7 +653,7 @@ const (
 )
 
 var (
-	KVStringCaseInsensitiveOpt = map[string]struct{}{
+	KVStringCaseInsensitiveOpts = map[string]struct{}{
 		"format": struct{}{},
 	}
 )
@@ -739,7 +739,7 @@ func (p *planner) TypeAsStringOpts(
 				return res, errors.Errorf("failed to cast %T to string", d)
 			}
 			res[name] = string(*str)
-			if _, ok := KVStringCaseInsensitiveOpt[name]; ok {
+			if _, ok := KVStringCaseInsensitiveOpts[name]; ok {
 				res[name] = strings.ToLower(string(*str))
 			}
 		}
