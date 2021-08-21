@@ -2489,6 +2489,8 @@ func TestChangefeedErrors(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.enabled = true`)
 
+	sqlDB.Exec(t, `EXPERIMENTAL CHANGEFEED FOR foo WITH format=JSON`)
+
 	sqlDB.ExpectErr(
 		t, `unknown format: nope`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH format=nope`,
