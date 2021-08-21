@@ -1043,13 +1043,7 @@ def go_deps():
         sum = "h1:bPIzW1Qkut7n9uwvPAXbnLDVEd45TV5ZwxYZAVX/zEQ=",
         version = "v0.10.0",
     )
-    go_repository(
-        name = "com_github_elazarl_go_bindata_assetfs",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/elazarl/go-bindata-assetfs",
-        sum = "h1:G/bYguwHIzWq9ZoyUQqrjTmJbbYn3j3CKKpKinvZLFk=",
-        version = "v1.0.0",
-    )
+
     go_repository(
         name = "com_github_elazarl_goproxy",
         build_file_proto_mode = "disable_global",
