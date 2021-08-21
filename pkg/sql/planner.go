@@ -654,8 +654,8 @@ const (
 
 // KVStringCaseInsensitiveOpts options which supports case Insensitive value
 var KVStringCaseInsensitiveOpts = map[string]struct{}{
-		"format": struct{}{},
-	}
+	"format": {},
+}
 
 // evalStringOptions evaluates the KVOption values as strings and returns them
 // in a map. Options with no value have an empty string.
