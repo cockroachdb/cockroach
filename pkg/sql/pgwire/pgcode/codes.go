@@ -210,6 +210,7 @@ var (
 	CollationMismatch                  = MakeCode("42P21")
 	IndeterminateCollation             = MakeCode("42P22")
 	WrongObjectType                    = MakeCode("42809")
+	GeneratedAlways                    = MakeCode("428C9")
 	UndefinedColumn                    = MakeCode("42703")
 	UndefinedCursor                    = MakeCode("34000")
 	UndefinedDatabase                  = MakeCode("3D000")
