@@ -143,7 +143,7 @@ func TestMemoIsStale(t *testing.T) {
 
 	// Initialize context with starting values.
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	evalCtx.SessionData.Database = "t"
+	evalCtx.SessionData().Database = "t"
 
 	var o xform.Optimizer
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT a, b+1 FROM abcview WHERE c='foo'")
@@ -183,69 +183,69 @@ func TestMemoIsStale(t *testing.T) {
 	notStale()
 
 	// Stale reorder joins limit.
-	evalCtx.SessionData.ReorderJoinsLimit = 4
+	evalCtx.SessionData().ReorderJoinsLimit = 4
 	stale()
-	evalCtx.SessionData.ReorderJoinsLimit = 0
+	evalCtx.SessionData().ReorderJoinsLimit = 0
 	notStale()
 
 	// Stale zig zag join enable.
-	evalCtx.SessionData.ZigzagJoinEnabled = true
+	evalCtx.SessionData().ZigzagJoinEnabled = true
 	stale()
-	evalCtx.SessionData.ZigzagJoinEnabled = false
+	evalCtx.SessionData().ZigzagJoinEnabled = false
 	notStale()
 
 	// Stale optimizer histogram usage enable.
-	evalCtx.SessionData.OptimizerUseHistograms = true
+	evalCtx.SessionData().OptimizerUseHistograms = true
 	stale()
-	evalCtx.SessionData.OptimizerUseHistograms = false
+	evalCtx.SessionData().OptimizerUseHistograms = false
 	notStale()
 
 	// Stale optimizer multi-col stats usage enable.
-	evalCtx.SessionData.OptimizerUseMultiColStats = true
+	evalCtx.SessionData().OptimizerUseMultiColStats = true
 	stale()
-	evalCtx.SessionData.OptimizerUseMultiColStats = false
+	evalCtx.SessionData().OptimizerUseMultiColStats = false
 	notStale()
 
 	// Stale locality optimized search enable.
-	evalCtx.SessionData.LocalityOptimizedSearch = true
+	evalCtx.SessionData().LocalityOptimizedSearch = true
 	stale()
-	evalCtx.SessionData.LocalityOptimizedSearch = false
+	evalCtx.SessionData().LocalityOptimizedSearch = false
 	notStale()
 
 	// Stale safe updates.
-	evalCtx.SessionData.SafeUpdates = true
+	evalCtx.SessionData().SafeUpdates = true
 	stale()
-	evalCtx.SessionData.SafeUpdates = false
+	evalCtx.SessionData().SafeUpdates = false
 	notStale()
 
 	// Stale intervalStyleEnabled.
-	evalCtx.SessionData.IntervalStyleEnabled = true
+	evalCtx.SessionData().IntervalStyleEnabled = true
 	stale()
-	evalCtx.SessionData.IntervalStyleEnabled = false
+	evalCtx.SessionData().IntervalStyleEnabled = false
 	notStale()
 
 	// Stale dateStyleEnabled.
-	evalCtx.SessionData.DateStyleEnabled = true
+	evalCtx.SessionData().DateStyleEnabled = true
 	stale()
-	evalCtx.SessionData.DateStyleEnabled = false
+	evalCtx.SessionData().DateStyleEnabled = false
 	notStale()
 
 	// Stale DateStyle.
-	evalCtx.SessionData.DataConversionConfig.DateStyle = pgdate.DateStyle{Order: pgdate.Order_YMD}
+	evalCtx.SessionData().DataConversionConfig.DateStyle = pgdate.DateStyle{Order: pgdate.Order_YMD}
 	stale()
-	evalCtx.SessionData.DataConversionConfig.DateStyle = pgdate.DefaultDateStyle()
+	evalCtx.SessionData().DataConversionConfig.DateStyle = pgdate.DefaultDateStyle()
 	notStale()
 
 	// Stale IntervalStyle.
-	evalCtx.SessionData.DataConversionConfig.IntervalStyle = duration.IntervalStyle_ISO_8601
+	evalCtx.SessionData().DataConversionConfig.IntervalStyle = duration.IntervalStyle_ISO_8601
 	stale()
-	evalCtx.SessionData.DataConversionConfig.IntervalStyle = duration.IntervalStyle_POSTGRES
+	evalCtx.SessionData().DataConversionConfig.IntervalStyle = duration.IntervalStyle_POSTGRES
 	notStale()
 
 	// Stale prefer lookup joins for FKs.
-	evalCtx.SessionData.PreferLookupJoinsForFKs = true
+	evalCtx.SessionData().PreferLookupJoinsForFKs = true
 	stale()
-	evalCtx.SessionData.PreferLookupJoinsForFKs = false
+	evalCtx.SessionData().PreferLookupJoinsForFKs = false
 	notStale()
 
 	// Stale data sources and schema. Create new catalog so that data sources are

@@ -1508,7 +1508,7 @@ func NewTableDesc(
 			}
 		}
 		if n.PartitionByTable.All {
-			if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
+			if !evalCtx.SessionData().ImplicitColumnPartitioningEnabled {
 				return nil, errors.WithHint(
 					pgerror.New(
 						pgcode.FeatureNotSupported,
@@ -1538,7 +1538,7 @@ func NewTableDesc(
 	for i, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			if d.IsComputed() {
-				d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, evalCtx.SessionData)
+				d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, evalCtx.SessionData())
 			}
 			// NewTableDesc is called sometimes with a nil SemaCtx (for example
 			// during bootstrapping). In order to not panic, pass a nil TypeResolver
@@ -1995,7 +1995,7 @@ func NewTableDesc(
 
 	// If explicit primary keys are required, error out since a primary key was not supplied.
 	if desc.GetPrimaryIndex().NumKeyColumns() == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
-		evalCtx.SessionData != nil && evalCtx.SessionData.RequireExplicitPrimaryKeys {
+		evalCtx.SessionData() != nil && evalCtx.SessionData().RequireExplicitPrimaryKeys {
 		return nil, errors.Errorf(
 			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
 	}

@@ -76,7 +76,7 @@ func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *
 	distribute := false
 	if e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning {
 		distribute = shouldDistributeGivenRecAndMode(
-			recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode,
+			recommendation, e.planner.extendedEvalCtx.SessionData().DistSQLMode,
 		)
 	}
 	e.planCtx.isLocal = !distribute

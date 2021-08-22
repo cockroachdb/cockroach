@@ -129,10 +129,10 @@ func New(
 		initialAllowAutoCommit: allowAutoCommit,
 	}
 	if evalCtx != nil {
-		if evalCtx.SessionData.SaveTablesPrefix != "" {
-			b.nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
+		if evalCtx.SessionData().SaveTablesPrefix != "" {
+			b.nameGen = memo.NewExprNameGenerator(evalCtx.SessionData().SaveTablesPrefix)
 		}
-		b.allowInsertFastPath = evalCtx.SessionData.InsertFastPath
+		b.allowInsertFastPath = evalCtx.SessionData().InsertFastPath
 	}
 	return b
 }

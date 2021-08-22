@@ -50,7 +50,7 @@ func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, erro
 	if name.ExplicitSchema {
 		schema := lexbase.EscapeSQLString(name.Schema())
 		if name.Schema() == catconstants.PgTempSchemaName {
-			schema = lexbase.EscapeSQLString(d.evalCtx.SessionData.SearchPath.GetTemporarySchemaName())
+			schema = lexbase.EscapeSQLString(d.evalCtx.SessionData().SearchPath.GetTemporarySchemaName())
 		}
 		schemaClause = fmt.Sprintf("AND ns.nspname = %s", schema)
 	} else {

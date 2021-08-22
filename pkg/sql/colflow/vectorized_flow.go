@@ -1177,7 +1177,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return
 			}
-			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
+			if flowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
 				result.Root = newPanicInjector(result.Root)
 			}
 			if util.CrdbTestBuild {

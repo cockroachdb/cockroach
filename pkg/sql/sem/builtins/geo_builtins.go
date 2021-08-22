@@ -7343,7 +7343,7 @@ func stAsGeoJSONFromTuple(
 		}
 		tupleJSON, err := tree.AsJSON(
 			d,
-			ctx.SessionData.DataConversionConfig,
+			ctx.SessionData().DataConversionConfig,
 			ctx.GetLocation(),
 		)
 		if err != nil {

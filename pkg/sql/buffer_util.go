@@ -38,7 +38,7 @@ func (c *rowContainerHelper) init(
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
-		evalContext.Context, evalContext.Mon, distSQLCfg, evalContext.SessionData,
+		evalContext.Context, evalContext.Mon, distSQLCfg, evalContext.SessionData(),
 		fmt.Sprintf("%s-limited", opName),
 	)
 	c.diskMonitor = execinfra.NewMonitor(evalContext.Context, distSQLCfg.ParentDiskMonitor, fmt.Sprintf("%s-disk", opName))

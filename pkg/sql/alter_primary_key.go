@@ -78,7 +78,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	if alterPKNode.Sharded != nil {
-		if !p.EvalContext().SessionData.HashShardedIndexesEnabled {
+		if !p.EvalContext().SessionData().HashShardedIndexesEnabled {
 			return hashShardedIndexesDisabledError
 		}
 		if alterPKNode.Interleave != nil {

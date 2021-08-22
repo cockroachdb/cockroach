@@ -192,6 +192,6 @@ func (sds SessionDataStack) Top() *SessionData {
 }
 
 // NewSessionDataStack creates a new SessionDataStack.
-func NewSessionDataStack(sds ...*git difSessionData) SessionDataStack {
+func NewSessionDataStack(sds ...*SessionData) SessionDataStack {
 	return SessionDataStack(sds)
 }

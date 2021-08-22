@@ -254,14 +254,14 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 
 	// Set any OptTester-wide session flags here.
 
-	ot.evalCtx.SessionData.UserProto = security.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
-	ot.evalCtx.SessionData.Database = "defaultdb"
-	ot.evalCtx.SessionData.ZigzagJoinEnabled = true
-	ot.evalCtx.SessionData.OptimizerUseHistograms = true
-	ot.evalCtx.SessionData.OptimizerUseMultiColStats = true
-	ot.evalCtx.SessionData.LocalityOptimizedSearch = true
-	ot.evalCtx.SessionData.ReorderJoinsLimit = opt.DefaultJoinOrderLimit
-	ot.evalCtx.SessionData.InsertFastPath = true
+	ot.evalCtx.SessionData().UserProto = security.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
+	ot.evalCtx.SessionData().Database = "defaultdb"
+	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
+	ot.evalCtx.SessionData().OptimizerUseHistograms = true
+	ot.evalCtx.SessionData().OptimizerUseMultiColStats = true
+	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
+	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
+	ot.evalCtx.SessionData().InsertFastPath = true
 
 	return ot
 }
@@ -480,13 +480,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	ot.semaCtx.Placeholders = tree.PlaceholderInfo{}
 
-	ot.evalCtx.SessionData.ReorderJoinsLimit = int64(ot.Flags.JoinLimit)
-	ot.evalCtx.SessionData.PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
-	ot.evalCtx.SessionData.PropagateInputOrdering = ot.Flags.PropagateInputOrdering
+	ot.evalCtx.SessionData().ReorderJoinsLimit = int64(ot.Flags.JoinLimit)
+	ot.evalCtx.SessionData().PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
+	ot.evalCtx.SessionData().PropagateInputOrdering = ot.Flags.PropagateInputOrdering
 
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
-	ot.evalCtx.SessionData.SaveTablesPrefix = ot.Flags.SaveTablesPrefix
+	ot.evalCtx.SessionData().SaveTablesPrefix = ot.Flags.SaveTablesPrefix
 	ot.evalCtx.Placeholders = nil
 
 	switch d.Cmd {
