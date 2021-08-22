@@ -179,3 +179,19 @@ func (s *SessionData) GetTemporarySchemaIDForDb(dbID uint32) (uint32, bool) {
 	schemaID, found := s.DatabaseIDToTempSchemaID[dbID]
 	return schemaID, found
 }
+
+// SessionDataStack represents a stack of SessionData objects.
+type SessionDataStack []*SessionData
+
+// Top returns the top element of the stack.
+func (sds SessionDataStack) Top() *SessionData {
+	if len(sds) == 0 {
+		return nil
+	}
+	return sds[len(sds)-1]
+}
+
+// NewSessionDataStack creates a new SessionDataStack.
+func NewSessionDataStack(sds ...*SessionData) SessionDataStack {
+	return SessionDataStack(sds)
+}
