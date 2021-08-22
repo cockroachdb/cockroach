@@ -436,7 +436,7 @@ func internalExtendedEvalCtx(
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Txn:                txn,
-			SessionData:        sd,
+			SessionData:        sessiondata.NewSessionDataStack(sd).Top(),
 			TxnReadOnly:        false,
 			TxnImplicit:        true,
 			Settings:           execCfg.Settings,
