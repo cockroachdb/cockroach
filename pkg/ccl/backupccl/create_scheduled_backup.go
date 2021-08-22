@@ -114,6 +114,38 @@ func parseWaitBehavior(wait string, details *jobspb.ScheduleDetails) error {
 	return nil
 }
 
+func parseOnPreviousRunningOption(
+	onPreviousRunning jobspb.ScheduleDetails_WaitBehavior,
+) (string, error) {
+	var onPreviousRunningOption string
+	switch onPreviousRunning {
+	case jobspb.ScheduleDetails_WAIT:
+		onPreviousRunningOption = "WAIT"
+	case jobspb.ScheduleDetails_NO_WAIT:
+		onPreviousRunningOption = "START"
+	case jobspb.ScheduleDetails_SKIP:
+		onPreviousRunningOption = "SKIP"
+	default:
+		return onPreviousRunningOption, errors.Newf("%s is an invalid onPreviousRunning option", onPreviousRunning.String())
+	}
+	return onPreviousRunningOption, nil
+}
+
+func parseOnErrorOption(onError jobspb.ScheduleDetails_ErrorHandlingBehavior) (string, error) {
+	var onErrorOption string
+	switch onError {
+	case jobspb.ScheduleDetails_RETRY_SCHED:
+		onErrorOption = "RESCHEDULE"
+	case jobspb.ScheduleDetails_RETRY_SOON:
+		onErrorOption = "RETRY"
+	case jobspb.ScheduleDetails_PAUSE_SCHED:
+		onErrorOption = "PAUSE"
+	default:
+		return onErrorOption, errors.Newf("%s is an invalid onError option", onError.String())
+	}
+	return onErrorOption, nil
+}
+
 func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error) {
 	var details jobspb.ScheduleDetails
 	if v, ok := opts[optOnExecFailure]; ok {
