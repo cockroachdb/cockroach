@@ -816,6 +816,9 @@ func (ex *connExecutor) commitSQLTransaction(
 		return ex.makeErrEvent(err, ast)
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndTransactionCommit, timeutil.Now())
+	if !ex.implicitTxn() {
+		ex.sessionDataStack = ex.sessionDataStack.Pop()
+	}
 	return eventTxnFinishCommitted{}, nil
 }
 
@@ -876,6 +879,9 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, fsm.EventPayload) {
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
+	}
+	if !ex.implicitTxn() {
+		ex.sessionDataStack = ex.sessionDataStack.Pop()
 	}
 	// We're done with this txn.
 	return eventTxnFinishAborted{}, nil
@@ -1250,6 +1256,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if err != nil {
 			return ex.makeErrEvent(err, s)
 		}
+		c := *ex.sessionDataStack.Top()
+		ex.sessionDataStack = ex.sessionDataStack.Push(&c)
 		return eventTxnStart{ImplicitTxn: fsm.False},
 			makeEventTxnStartPayload(
 				ex.txnPriorityWithSessionDefault(s.Modes.UserPriority),

@@ -11,6 +11,7 @@
 package sessiondata
 
 import (
+	"fmt"
 	"net"
 	"time"
 
@@ -189,6 +190,22 @@ func (sds SessionDataStack) Top() *SessionData {
 		return nil
 	}
 	return sds[len(sds)-1]
+}
+
+// Push pushes a SessionData element to the stack.
+func (sds SessionDataStack) Push(elem *SessionData) SessionDataStack {
+	fmt.Printf("push elem\n")
+	return append(sds, elem)
+}
+
+// Pop removes the top SessionData element from the stack.
+func (sds SessionDataStack) Pop() SessionDataStack {
+	fmt.Printf("pop elem\n")
+	if len(sds) <= 1 {
+		fmt.Printf("dun goof??!?!?!\n")
+		return sds
+	}
+	return sds[:len(sds)-1]
 }
 
 // NewSessionDataStack creates a new SessionDataStack.
