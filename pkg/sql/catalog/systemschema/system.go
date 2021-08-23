@@ -547,6 +547,11 @@ CREATE TABLE system.tenant_usage (
 	-- instance 0 acting as a sentinel (always the head of the list).
 	next_instance_id INT NOT NULL,
 
+	-- Time when we last interacted with this row. For the per-tenant row, this
+	-- is the time of the last update from any instance. For instance rows, this
+	-- is the time of the last update from that particular instance.
+	last_update TIMESTAMP NOT NULL,
+
 	-- -------------------------------------------------------------------
 	--  The following fields are used only for the per-tenant state, when
 	--  instance_id = 0.
@@ -587,15 +592,12 @@ CREATE TABLE system.tenant_usage (
 	-- Current shares value for this instance.
   instance_shares FLOAT,
 
-	-- Time when we last heard from this instance.
-	instance_last_update TIMESTAMP,
-
 	FAMILY "primary" (
-	  tenant_id, instance_id, next_instance_id,
+	  tenant_id, instance_id, next_instance_id, last_update,
 	  ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
 	  total_ru_usage, total_read_requests, total_read_bytes, total_write_requests,
 	  total_write_bytes, total_sql_pod_cpu_seconds,
-	  instance_lease, instance_seq, instance_shares, instance_last_update
+	  instance_lease, instance_seq, instance_shares
 	),
 
   PRIMARY KEY (tenant_id, instance_id)
@@ -2126,31 +2128,31 @@ var (
 				{Name: "tenant_id", ID: 1, Type: types.Int, Nullable: false},
 				{Name: "instance_id", ID: 2, Type: types.Int, Nullable: false},
 				{Name: "next_instance_id", ID: 3, Type: types.Int, Nullable: false},
-				{Name: "ru_burst_limit", ID: 4, Type: types.Float, Nullable: true},
-				{Name: "ru_refill_rate", ID: 5, Type: types.Float, Nullable: true},
-				{Name: "ru_current", ID: 6, Type: types.Float, Nullable: true},
-				{Name: "current_share_sum", ID: 7, Type: types.Float, Nullable: true},
-				{Name: "total_ru_usage", ID: 8, Type: types.Float, Nullable: true},
-				{Name: "total_read_requests", ID: 9, Type: types.Int, Nullable: true},
-				{Name: "total_read_bytes", ID: 10, Type: types.Int, Nullable: true},
-				{Name: "total_write_requests", ID: 11, Type: types.Int, Nullable: true},
-				{Name: "total_write_bytes", ID: 12, Type: types.Int, Nullable: true},
-				{Name: "total_sql_pod_cpu_seconds", ID: 13, Type: types.Float, Nullable: true},
-				{Name: "instance_lease", ID: 14, Type: types.Bytes, Nullable: true},
-				{Name: "instance_seq", ID: 15, Type: types.Int, Nullable: true},
-				{Name: "instance_shares", ID: 16, Type: types.Float, Nullable: true},
-				{Name: "instance_last_update", ID: 17, Type: types.Timestamp, Nullable: true},
+				{Name: "last_update", ID: 4, Type: types.Timestamp, Nullable: false},
+				{Name: "ru_burst_limit", ID: 5, Type: types.Float, Nullable: true},
+				{Name: "ru_refill_rate", ID: 6, Type: types.Float, Nullable: true},
+				{Name: "ru_current", ID: 7, Type: types.Float, Nullable: true},
+				{Name: "current_share_sum", ID: 8, Type: types.Float, Nullable: true},
+				{Name: "total_ru_usage", ID: 9, Type: types.Float, Nullable: true},
+				{Name: "total_read_requests", ID: 10, Type: types.Int, Nullable: true},
+				{Name: "total_read_bytes", ID: 11, Type: types.Int, Nullable: true},
+				{Name: "total_write_requests", ID: 12, Type: types.Int, Nullable: true},
+				{Name: "total_write_bytes", ID: 13, Type: types.Int, Nullable: true},
+				{Name: "total_sql_pod_cpu_seconds", ID: 14, Type: types.Float, Nullable: true},
+				{Name: "instance_lease", ID: 15, Type: types.Bytes, Nullable: true},
+				{Name: "instance_seq", ID: 16, Type: types.Int, Nullable: true},
+				{Name: "instance_shares", ID: 17, Type: types.Float, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name: "primary",
 					ID:   0,
 					ColumnNames: []string{
-						"tenant_id", "instance_id", "next_instance_id",
+						"tenant_id", "instance_id", "next_instance_id", "last_update",
 						"ru_burst_limit", "ru_refill_rate", "ru_current", "current_share_sum",
 						"total_ru_usage", "total_read_requests", "total_read_bytes", "total_write_requests",
 						"total_write_bytes", "total_sql_pod_cpu_seconds",
-						"instance_lease", "instance_seq", "instance_shares", "instance_last_update",
+						"instance_lease", "instance_seq", "instance_shares",
 					},
 					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17},
 					DefaultColumnID: 0,
