@@ -36,7 +36,6 @@ func registerAcceptance(r registry.Registry) {
 			{
 				name: "gossip/restart-node-one",
 				fn:   runGossipRestartNodeOne,
-				skip: "https://github.com/cockroachdb/cockroach/issues/68107",
 			},
 			{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 			{
