@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -127,6 +128,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			nil,                /* computedExpr */
 			nil,                /* onUpdateExpr */
 			cat.NotGeneratedAsIdentity,
+			nil, /* generatedAsIdentitySequenceOption */
 		)
 		tab.Columns = append(tab.Columns, rowid)
 	}
@@ -156,6 +158,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		nil, /* computedExpr */
 		nil, /* onUpdateExpr */
 		cat.NotGeneratedAsIdentity,
+		nil, /* generatedAsIdentitySequenceOption */
 	)
 	tab.Columns = append(tab.Columns, mvcc)
 
@@ -174,6 +177,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		nil, /* computedExpr */
 		nil, /* onUpdateExpr */
 		cat.NotGeneratedAsIdentity,
+		nil, /* generatedAsIdentitySequenceOption */
 	)
 	tab.Columns = append(tab.Columns, tableoid)
 
@@ -308,6 +312,7 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 		nil, /* computedExpr */
 		nil, /* onUpdateExpr */
 		cat.NotGeneratedAsIdentity,
+		nil, /* generatedAsIdentitySequenceOption */
 	)
 
 	tab.Columns = []cat.Column{pk}
@@ -366,6 +371,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 		nil,                /* computedExpr */
 		nil,                /* onUpdateExpr */
 		cat.NotGeneratedAsIdentity,
+		nil, /* generatedAsIdentitySequenceOption */
 	)
 
 	tab.Columns = append(tab.Columns, rowid)
@@ -581,6 +587,12 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	kind := cat.Ordinary
 	visibility := cat.Visible
 
+	if def.IsSerial {
+		// Here we only take care of the case where
+		// serial_normalization == SerialUsesRowID.
+		def.DefaultExpr.Expr = generateDefExprForSerialCol(tt.TabName, name, sessiondatapb.SerialUsesRowID)
+	}
+
 	// Look for name suffixes indicating this is a special column.
 	if n, ok := extractInaccessibleColumn(def); ok {
 		name = n
@@ -595,7 +607,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		visibility = cat.Inaccessible
 	}
 
-	var defaultExpr, computedExpr, onUpdateExpr *string
+	var defaultExpr, computedExpr, onUpdateExpr, generatedAsIdentitySequenceOption *string
 	if def.DefaultExpr.Expr != nil {
 		s := serializeTableDefExpr(def.DefaultExpr.Expr)
 		defaultExpr = &s
@@ -614,16 +626,35 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	generatedAsIdentityType := cat.NotGeneratedAsIdentity
 	if def.GeneratedIdentity.IsGeneratedAsIdentity {
 		switch def.GeneratedIdentity.GeneratedAsIdentityType {
-		case tree.GeneratedAlways:
-			generatedAsIdentityType = cat.GeneratedAlwaysAsIdentity
-		case tree.GeneratedByDefault:
-			generatedAsIdentityType = cat.GeneratedByDefaultAsIdentity
+		case tree.GeneratedAlways, tree.GeneratedByDefault:
+			def.DefaultExpr.Expr = generateDefExprForGeneratedAsIdentityCol(tt.TabName, name)
+			switch def.GeneratedIdentity.GeneratedAsIdentityType {
+			case tree.GeneratedAlways:
+				generatedAsIdentityType = cat.GeneratedAlwaysAsIdentity
+			case tree.GeneratedByDefault:
+				generatedAsIdentityType = cat.GeneratedByDefaultAsIdentity
+			}
 		default:
 			panic(fmt.Errorf(
 				"column %s is of invalid generated as identity type (neither ALWAYS nor BY DEFAULT)",
 				def.Name,
 			))
 		}
+	}
+
+	if def.DefaultExpr.Expr != nil {
+		s := serializeTableDefExpr(def.DefaultExpr.Expr)
+		defaultExpr = &s
+	}
+
+	if def.Computed.Expr != nil {
+		s := serializeTableDefExpr(def.Computed.Expr)
+		computedExpr = &s
+	}
+
+	if def.GeneratedIdentity.SeqOptions != nil {
+		s := serializeGeneratedAsIdentitySequenceOption(&def.GeneratedIdentity.SeqOptions)
+		generatedAsIdentitySequenceOption = &s
 	}
 
 	var col cat.Column
@@ -650,6 +681,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			computedExpr,
 			onUpdateExpr,
 			generatedAsIdentityType,
+			generatedAsIdentitySequenceOption,
 		)
 	}
 	tt.Columns = append(tt.Columns, col)
@@ -1162,4 +1194,54 @@ func serializeTableDefExpr(expr tree.Expr) string {
 		panic(err)
 	}
 	return tree.Serialize(expr)
+}
+
+func serializeGeneratedAsIdentitySequenceOption(seqOpts *tree.SequenceOptions) string {
+	return tree.Serialize(seqOpts)
+}
+
+// generateDefExprForSequenceBasedCol provides a default expression
+// for a column created with an underlying sequence.
+func generateDefExprForSequenceBasedCol(
+	tableName tree.TableName, colName tree.Name,
+) *tree.FuncExpr {
+	seqName := tree.NewTableNameWithSchema(
+		tableName.CatalogName,
+		tableName.SchemaName,
+		tree.Name(tableName.Table()+"_"+string(colName)+"_seq"))
+	defaultExpr := &tree.FuncExpr{
+		Func:  tree.WrapFunction("nextval"),
+		Exprs: tree.Exprs{tree.NewStrVal(seqName.String())},
+	}
+	return defaultExpr
+}
+
+// generateDefExprForGeneratedAsIdentityCol provides a default expression
+// for an IDENTITY column created with `GENERATED {ALWAYS | BY DEFAULT}
+// AS IDENTITY` syntax. The default expression is to show that there is
+// an underlying sequence attached to this IDENTITY column.
+func generateDefExprForGeneratedAsIdentityCol(
+	tableName tree.TableName, colName tree.Name,
+) *tree.FuncExpr {
+	return generateDefExprForSequenceBasedCol(tableName, colName)
+}
+
+// generateDefExprForGeneratedAsIdentityCol provides a default expression
+// for an SERIAL column.
+func generateDefExprForSerialCol(
+	tableName tree.TableName,
+	colName tree.Name,
+	serialNormalizationMode sessiondatapb.SerialNormalizationMode,
+) *tree.FuncExpr {
+	switch serialNormalizationMode {
+	case sessiondatapb.SerialUsesRowID:
+		return &tree.FuncExpr{Func: tree.WrapFunction("unique_rowid")}
+	case sessiondatapb.SerialUsesVirtualSequences,
+		sessiondatapb.SerialUsesSQLSequences,
+		sessiondatapb.SerialUsesCachedSQLSequences:
+		return generateDefExprForSequenceBasedCol(tableName, colName)
+	default:
+		panic(fmt.Errorf("invalid serial normalization mode for col %s in table"+
+			" %s", colName, tableName.String()))
+	}
 }

@@ -1307,3 +1307,23 @@ INSERT INTO generated_as_id_t (a, b) VALUES (1, 10) ON CONFLICT (a) DO UPDATE SE
 
 statement ok
 INSERT INTO generated_as_id_t (a, c) VALUES (1, 10) ON CONFLICT DO NOTHING
+
+query III rowsort
+SELECT * FROM generated_as_id_t ORDER BY a
+----
+1  1  1
+2  2  2
+3  3  3
+
+# TODO(janexing): In this INSERT ... ON CONFLICT ... DO UPDATE SET ... DEFAULT
+# edge case, the output is slightly different from PostgreSQL's output.
+# See also https://github.com/cockroachdb/cockroach/issues/69208.
+statement ok
+INSERT INTO generated_as_id_t (a) VALUES (1) ON CONFLICT (a) DO UPDATE SET b=DEFAULT;
+
+query III rowsort
+SELECT * FROM generated_as_id_t ORDER BY a
+----
+1  5  1
+2  2  2
+3  3  3
