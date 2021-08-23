@@ -583,6 +583,12 @@ var dateStyleEnabled = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var largeFullScanRows = settings.RegisterFloatSetting(
+	"sql.defaults.large_full_scan_rows",
+	"default value for large_full_scan_rows session setting",
+	1024.0,
+).WithPublic()
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -2714,6 +2720,10 @@ func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
 
 func (m *sessionDataMutator) SetPropagateInputOrdering(b bool) {
 	m.data.PropagateInputOrdering = b
+}
+
+func (m *sessionDataMutator) SetLargeFullScanRows(val float64) {
+	m.data.LargeFullScanRows = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

@@ -176,6 +176,10 @@ message LocalOnlySessionData {
   // This is only populated when SET ROLE is used, otherwise the session_user
   // is the same as the UserProto in SessionData.
   string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  // LargeFullScanRows is the estimated row count at which a full scan is
+  // considered large, and worthy of logging and/or disabling depending on other
+  // settings.
+  double large_full_scan_rows = 47;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
