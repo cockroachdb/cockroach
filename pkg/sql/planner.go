@@ -651,11 +651,6 @@ const (
 	KVStringOptRequireValue   KVStringOptValidate = `value`
 )
 
-// KVStringCaseInsensitiveOpts options which supports case Insensitive value
-var KVStringCaseInsensitiveOpts = map[string]struct{}{
-	"format": {},
-}
-
 // evalStringOptions evaluates the KVOption values as strings and returns them
 // in a map. Options with no value have an empty string.
 func evalStringOptions(

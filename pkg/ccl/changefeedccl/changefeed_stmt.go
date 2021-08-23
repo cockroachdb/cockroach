@@ -156,8 +156,8 @@ func changefeedPlanHook(
 		}
 
 		for key, value := range opts {
-			// if option is case insensitive then convert it's value to lower case
-			if _, ok := sql.KVStringCaseInsensitiveOpts[key]; ok {
+			// if option is case insensitive then convert its value to lower case
+			if _, ok := changefeedbase.CaseInsensitiveOpts[key]; ok {
 				opts[key] = strings.ToLower(value)
 			}
 		}

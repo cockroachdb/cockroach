@@ -160,3 +160,13 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptWebhookClientTimeout:     sql.KVStringOptRequireValue,
 	OptOnError:                  sql.KVStringOptRequireValue,
 }
+
+// CaseInsensitiveOpts options which supports case Insensitive value
+var CaseInsensitiveOpts = map[string]struct{}{
+	OptFormat:             {},
+	OptEnvelope:           {},
+	OptCompression:        {},
+	OptSchemaChangeEvents: {},
+	OptSchemaChangePolicy: {},
+	OptOnError:            {},
+}
