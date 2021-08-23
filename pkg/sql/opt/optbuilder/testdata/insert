@@ -1359,10 +1359,6 @@ insert on_update_with_default
            ├── 3 [as=v_default:7]
            └── unique_rowid() [as=rowid_default:8]
 
-# TODO(janexing): Right now the GENERATED ... AS IDENTITY / SERIAL columns are
-# projected to be NULL, which is incorrect, and will be fixed once the default
-# expression for a GENERATED ... AS IDENTITY / SERIAL column is implemented.
-
 # With GENERATED AS IDENTITY syntax
 exec-ddl
 CREATE TABLE generated_as_identity (
@@ -1404,7 +1400,7 @@ insert generated_as_identity
       │    ├── columns: column1:7!null column2:8!null
       │    └── (1, 10)
       └── projections
-           ├── NULL::INT8 [as=b_default:9]
+           ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:9]
            └── unique_rowid() [as=rowid_default:10]
 
 build
@@ -1415,26 +1411,26 @@ insert generated_as_identity
  ├── insert-mapping:
  │    ├── column1:7 => a:1
  │    ├── b_default:8 => b:2
- │    ├── b_default:8 => c:3
- │    └── rowid_default:9 => rowid:4
+ │    ├── c_default:9 => c:3
+ │    └── rowid_default:10 => rowid:4
  └── project
-      ├── columns: b_default:8 rowid_default:9 column1:7!null
+      ├── columns: b_default:8 c_default:9 rowid_default:10 column1:7!null
       ├── values
       │    ├── columns: column1:7!null
       │    └── (2,)
       └── projections
-           ├── NULL::INT8 [as=b_default:8]
-           └── unique_rowid() [as=rowid_default:9]
+           ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:8]
+           ├── nextval('t.public.generated_as_identity_c_seq') [as=c_default:9]
+           └── unique_rowid() [as=rowid_default:10]
 
-
+# With SERIAL syntax
 exec-ddl
 CREATE TABLE serial_t (
   a SERIAL,
   b INT
-);
+)
 ----
 
-# Serial Column
 build
 INSERT INTO serial_t (b) VALUES (2)
 ----
@@ -1450,5 +1446,5 @@ insert serial_t
       │    ├── columns: column1:6!null
       │    └── (2,)
       └── projections
-           ├── NULL::INT8 [as=a_default:7]
+           ├── unique_rowid() [as=a_default:7]
            └── unique_rowid() [as=rowid_default:8]
