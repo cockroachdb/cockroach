@@ -2704,6 +2704,11 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `client has run out of available brokers`,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 	)
+	sqlDB.ExpectErr(
+		t, `this sink is incompatible with option webhook_client_timeout`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout=''`,
+		`kafka://nope/`,
+	)
 	// The avro format doesn't support key_in_value or topic_in_value yet.
 	sqlDB.ExpectErr(
 		t, `key_in_value is not supported with format=avro`,
@@ -2718,7 +2723,7 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// The cloudStorageSink is particular about the options it will work with.
 	sqlDB.ExpectErr(
-		t, `this sink is incompatible with format=avro`,
+		t, `this sink is incompatible with option confluent_schema_registry`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2`,
 		`experimental-nodelocal://0/bar`, schemaReg.URL(),
 	)
@@ -2802,7 +2807,7 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-http://fake-host`,
 	)
 	sqlDB.ExpectErr(
-		t, `this sink is incompatible with format=avro`,
+		t, `this sink is incompatible with option confluent_schema_registry`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2`,
 		`webhook-https://fake-host`, schemaReg.URL(),
 	)
@@ -2855,6 +2860,11 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `error unmarshalling json: invalid character`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='not json'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `this sink is incompatible with option compression`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='gzip'`,
 		`webhook-https://fake-host`,
 	)
 

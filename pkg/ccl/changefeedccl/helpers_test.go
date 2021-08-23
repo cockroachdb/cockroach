@@ -224,34 +224,6 @@ func avroToJSON(t testing.TB, reg *cdctest.SchemaRegistry, avroBytes []byte) []b
 	return json
 }
 
-func assertPayloadsAvro(
-	t testing.TB, reg *cdctest.SchemaRegistry, f cdctest.TestFeed, expected []string,
-) {
-	t.Helper()
-
-	var actual []string
-	for len(actual) < len(expected) {
-		m, err := f.Next()
-		if err != nil {
-			t.Fatal(err)
-		} else if m == nil {
-			t.Fatal(`expected message`)
-		} else if m.Key != nil {
-			key, value := avroToJSON(t, reg, m.Key), avroToJSON(t, reg, m.Value)
-			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, m.Topic, key, value))
-		}
-	}
-
-	// The tests that use this aren't concerned with order, just that these are
-	// the next len(expected) messages.
-	sort.Strings(expected)
-	sort.Strings(actual)
-	if !reflect.DeepEqual(expected, actual) {
-		t.Fatalf("expected\n  %s\ngot\n  %s",
-			strings.Join(expected, "\n  "), strings.Join(actual, "\n  "))
-	}
-}
-
 func assertRegisteredSubjects(t testing.TB, reg *cdctest.SchemaRegistry, expected []string) {
 	t.Helper()
 
@@ -307,9 +279,7 @@ func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Time
 	return parseTimeToHLC(t, resolvedRaw.Resolved)
 }
 
-func expectResolvedTimestampAvro(
-	t testing.TB, reg *cdctest.SchemaRegistry, f cdctest.TestFeed,
-) hlc.Timestamp {
+func expectResolvedTimestampAvro(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
 	t.Helper()
 	m, err := f.Next()
 	if err != nil {
@@ -318,13 +288,14 @@ func expectResolvedTimestampAvro(
 		t.Fatal(`expected message`)
 	}
 	if m.Key != nil {
-		key, value := avroToJSON(t, reg, m.Key), avroToJSON(t, reg, m.Value)
-		t.Fatalf(`unexpected row %s: %s -> %s`, m.Topic, key, value)
+		t.Fatalf(`unexpected row %s: %s -> %s`, m.Topic, m.Key, m.Value)
 	}
 	if m.Resolved == nil {
 		t.Fatal(`expected a resolved timestamp notification`)
 	}
-	resolvedNative, err := reg.EncodedAvroToNative(m.Resolved)
+
+	var resolvedNative interface{}
+	err = gojson.Unmarshal(m.Resolved, &resolvedNative)
 	if err != nil {
 		t.Fatal(err)
 	}
