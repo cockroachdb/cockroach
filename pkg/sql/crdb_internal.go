@@ -126,6 +126,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalLocalSessionsTableID:             crdbInternalLocalSessionsTable,
 		catconstants.CrdbInternalLocalMetricsTableID:              crdbInternalLocalMetricsTable,
 		catconstants.CrdbInternalNodeStmtStatsTableID:             crdbInternalNodeStmtStatsTable,
+		catconstants.CrdbInternalNodeTxnStatsTableID:              crdbInternalNodeTxnStatsTable,
 		catconstants.CrdbInternalPartitionsTableID:                crdbInternalPartitionsTable,
 		catconstants.CrdbInternalPredefinedCommentsTableID:        crdbInternalPredefinedCommentsTable,
 		catconstants.CrdbInternalRangesNoLeasesTableID:            crdbInternalRangesNoLeasesTable,
@@ -1074,7 +1075,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
 
-		transactionVisitor := func(_ context.Context, txnFingerprintID roachpb.TransactionFingerprintID, stats *roachpb.CollectedTransactionStatistics) error {
+		transactionVisitor := func(_ context.Context, stats *roachpb.CollectedTransactionStatistics) error {
 			stmtFingerprintIDsDatum := tree.NewDArray(types.String)
 			for _, stmtFingerprintID := range stats.StatementFingerprintIDs {
 				if err := stmtFingerprintIDsDatum.Append(tree.NewDString(strconv.FormatUint(uint64(stmtFingerprintID), 10))); err != nil {
@@ -1083,9 +1084,9 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			}
 
 			err := addRow(
-				tree.NewDInt(tree.DInt(nodeID)),                                                    // node_id
-				tree.NewDString(stats.App),                                                         // application_name
-				tree.NewDString(strconv.FormatUint(uint64(txnFingerprintID), 10)),                  // key
+				tree.NewDInt(tree.DInt(nodeID)), // node_id
+				tree.NewDString(stats.App),      // application_name
+				tree.NewDString(strconv.FormatUint(uint64(stats.TransactionFingerprintID), 10)), // key
 				stmtFingerprintIDsDatum,                                                            // statement_ids
 				tree.NewDInt(tree.DInt(stats.Stats.Count)),                                         // count
 				tree.NewDInt(tree.DInt(stats.Stats.MaxRetries)),                                    // max_retries
@@ -1123,7 +1124,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 	},
 }
 
-var crdbInternalTxnStatsTable = virtualSchemaTable{
+var crdbInternalNodeTxnStatsTable = virtualSchemaTable{
 	comment: `per-application transaction statistics (in-memory, not durable; local node only). ` +
 		`This table is wiped periodically (by default, at least every two hours)`,
 	schema: `
@@ -4983,12 +4984,24 @@ CREATE TABLE crdb_internal.statement_statistics (
     sampled_plan   JSONB NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+		// TODO(azhng): we want to eventually implement memory accounting within the
+		//  RPC handlers. See #69032.
+		acc := p.extendedEvalCtx.Mon.MakeBoundAccount()
+		defer acc.Close(ctx)
+
 		// Perform RPC fanout.
-		stats, err := p.extendedEvalCtx.SQLStatusServer.Statements(ctx, &serverpb.StatementsRequest{})
+		stats, err :=
+			p.extendedEvalCtx.SQLStatusServer.Statements(ctx, &serverpb.StatementsRequest{})
 		if err != nil {
 			return nil, nil, err
 		}
-		memSQLStats, err := sslocal.NewTempSQLStatsFromExistingData(stats.Statements)
+
+		statsMemSize := stats.Size()
+		if err = acc.Grow(ctx, int64(statsMemSize)); err != nil {
+			return nil, nil, err
+		}
+
+		memSQLStats, err := sslocal.NewTempSQLStatsFromExistingStmtStats(stats.Statements)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -5089,5 +5102,94 @@ CREATE TABLE crdb_internal.active_range_feeds (
 				)
 			},
 		)
+	},
+}
+
+var crdbInternalTxnStatsTable = virtualSchemaTable{
+	comment: `transaction statistics (cluster-wide).` +
+		`Querying this table is an expensive operation since it creates a ` +
+		`cluster-wide RPC-fanout.`,
+	schema: `
+CREATE TABLE crdb_internal.transaction_statistics (
+    aggregated_ts  TIMESTAMPTZ NOT NULL,
+    fingerprint_id BYTES NOT NULL,
+    app_name       STRING NOT NULL,
+    metadata       JSONB NOT NULL,
+    statistics     JSONB NOT NULL
+);`,
+	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+		// TODO(azhng): we want to eventually implement memory accounting within the
+		//  RPC handlers. See #69032.
+		acc := p.extendedEvalCtx.Mon.MakeBoundAccount()
+		defer acc.Close(ctx)
+
+		// Perform RPC fanout.
+		stats, err :=
+			p.extendedEvalCtx.SQLStatusServer.Statements(ctx, &serverpb.StatementsRequest{})
+
+		if err != nil {
+			return nil, nil, err
+		}
+
+		statsMemSize := stats.Size()
+		if err = acc.Grow(ctx, int64(statsMemSize)); err != nil {
+			return nil, nil, err
+		}
+
+		stats.Size()
+
+		memSQLStats, err :=
+			sslocal.NewTempSQLStatsFromExistingTxnStats(stats.Transactions)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		execCfg := p.ExecCfg()
+		sqlStats := persistedsqlstats.New(&persistedsqlstats.Config{
+			Settings:         execCfg.Settings,
+			InternalExecutor: execCfg.InternalExecutor,
+			KvDB:             execCfg.DB,
+			SQLIDContainer:   execCfg.NodeID,
+		}, memSQLStats)
+
+		row := make(tree.Datums, 5 /* number of columns for this virtual table */)
+		worker := func(pusher rowPusher) error {
+			return sqlStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{
+				SortedAppNames: true,
+				SortedKey:      true,
+			}, func(
+				ctx context.Context,
+				statistics *roachpb.CollectedTransactionStatistics) error {
+
+				aggregatedTs, err := tree.MakeDTimestampTZ(statistics.AggregatedTs, time.Microsecond)
+				if err != nil {
+					return err
+				}
+
+				fingerprintID := tree.NewDBytes(
+					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.TransactionFingerprintID))))
+
+				metadataJSON, err := sqlstatsutil.BuildTxnMetadataJSON(statistics)
+				if err != nil {
+					return err
+				}
+				statisticsJSON, err := sqlstatsutil.BuildTxnStatisticsJSON(statistics)
+				if err != nil {
+					return err
+				}
+
+				row = row[:0]
+				row = append(row,
+					aggregatedTs,                    // aggregated_ts
+					fingerprintID,                   // fingerprint_id
+					tree.NewDString(statistics.App), // app_name
+					tree.NewDJSON(metadataJSON),     // metadata
+					tree.NewDJSON(statisticsJSON),   // statistics
+				)
+
+				return pusher.pushRow(row...)
+			})
+		}
+		return setupGenerator(ctx, worker, stopper)
 	},
 }

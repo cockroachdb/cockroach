@@ -205,6 +205,7 @@ message CollectedTransactionStatistics {
   optional string app = 2 [(gogoproto.nullable) = false];
   optional TransactionStatistics stats = 3 [(gogoproto.nullable) = false];
   optional google.protobuf.Timestamp aggregated_ts = 4 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
+  optional uint64 transaction_fingerprint_id = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "TransactionFingerprintID", (gogoproto.casttype) = "TransactionFingerprintID"];
 }
 
 

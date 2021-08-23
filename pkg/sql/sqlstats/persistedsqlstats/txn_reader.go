@@ -67,8 +67,8 @@ func (s *PersistedSQLStats) IterateTransactionStats(
 			break
 		}
 
-		key, stats := combinedIter.Cur()
-		if err = visitor(ctx, key, stats); err != nil {
+		stats := combinedIter.Cur()
+		if err = visitor(ctx, stats); err != nil {
 			return err
 		}
 	}
@@ -131,10 +131,7 @@ FROM
 	return query, len(selectedColumns)
 }
 
-func rowToTxnStats(
-	row tree.Datums,
-) (roachpb.TransactionFingerprintID, *roachpb.CollectedTransactionStatistics, error) {
-	var fingerprintID roachpb.TransactionFingerprintID
+func rowToTxnStats(row tree.Datums) (*roachpb.CollectedTransactionStatistics, error) {
 	var stats roachpb.CollectedTransactionStatistics
 	var err error
 
@@ -142,21 +139,21 @@ func rowToTxnStats(
 
 	value, err := datumToUint64(row[1])
 	if err != nil {
-		return fingerprintID, nil, err
+		return nil, err
 	}
-	fingerprintID = roachpb.TransactionFingerprintID(value)
+	stats.TransactionFingerprintID = roachpb.TransactionFingerprintID(value)
 
 	stats.App = string(tree.MustBeDString(row[2]))
 
 	metadata := tree.MustBeDJSON(row[3]).JSON
 	if err = sqlstatsutil.DecodeTxnStatsMetadataJSON(metadata, &stats); err != nil {
-		return fingerprintID, nil, err
+		return nil, err
 	}
 
 	statistics := tree.MustBeDJSON(row[4]).JSON
 	if err = sqlstatsutil.DecodeTxnStatsStatisticsJSON(statistics, &stats.Stats); err != nil {
-		return fingerprintID, nil, err
+		return nil, err
 	}
 
-	return fingerprintID, &stats, nil
+	return &stats, nil
 }

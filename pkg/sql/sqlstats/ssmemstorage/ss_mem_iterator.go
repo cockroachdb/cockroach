@@ -113,7 +113,6 @@ type TxnStatsIterator struct {
 	baseIterator
 	txnKeys  txnList
 	curValue *roachpb.CollectedTransactionStatistics
-	curKey   roachpb.TransactionFingerprintID
 }
 
 // NewTxnStatsIterator returns a new instance of TxnStatsIterator.
@@ -164,11 +163,11 @@ func (t *TxnStatsIterator) Next() bool {
 	txnStats.mu.Lock()
 	defer txnStats.mu.Unlock()
 
-	t.curKey = txnKey
 	t.curValue = &roachpb.CollectedTransactionStatistics{
-		StatementFingerprintIDs: txnStats.statementFingerprintIDs,
-		App:                     t.container.appName,
-		Stats:                   txnStats.mu.data,
+		StatementFingerprintIDs:  txnStats.statementFingerprintIDs,
+		App:                      t.container.appName,
+		Stats:                    txnStats.mu.data,
+		TransactionFingerprintID: txnKey,
 	}
 
 	return true
@@ -176,9 +175,6 @@ func (t *TxnStatsIterator) Next() bool {
 
 // Cur returns the roachpb.CollectedTransactionStatistics at the current internal
 // counter.
-func (t *TxnStatsIterator) Cur() (
-	roachpb.TransactionFingerprintID,
-	*roachpb.CollectedTransactionStatistics,
-) {
-	return t.curKey, t.curValue
+func (t *TxnStatsIterator) Cur() *roachpb.CollectedTransactionStatistics {
+	return t.curValue
 }

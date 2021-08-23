@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSQLStatsBulkIngest(t *testing.T) {
+func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -111,7 +111,7 @@ func TestSQLStatsBulkIngest(t *testing.T) {
 		}
 	}
 
-	sqlStats, err := NewTempSQLStatsFromExistingData(input)
+	sqlStats, err := NewTempSQLStatsFromExistingStmtStats(input)
 	require.NoError(t, err)
 
 	foundStats := make(map[string]int64)
@@ -124,6 +124,103 @@ func TestSQLStatsBulkIngest(t *testing.T) {
 				statistics *roachpb.CollectedStatementStatistics,
 			) error {
 				foundStats[statistics.Key.App+statistics.Key.Query] = statistics.Stats.Count
+				return nil
+			}))
+
+	require.Equal(t, expectedCount, foundStats)
+}
+
+func TestSQLStatsTxnStatsBulkIngest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testData := []struct {
+		stats roachpb.CollectedTransactionStatistics
+	}{
+		{
+			stats: roachpb.CollectedTransactionStatistics{
+				TransactionFingerprintID: roachpb.TransactionFingerprintID(0),
+				App:                      "app1",
+				Stats: roachpb.TransactionStatistics{
+					Count: 7,
+				},
+			},
+		},
+		{
+			stats: roachpb.CollectedTransactionStatistics{
+				TransactionFingerprintID: roachpb.TransactionFingerprintID(0),
+				App:                      "app0",
+				Stats: roachpb.TransactionStatistics{
+					Count: 2,
+				},
+			},
+		},
+		{
+			stats: roachpb.CollectedTransactionStatistics{
+				TransactionFingerprintID: roachpb.TransactionFingerprintID(1),
+				App:                      "app100",
+				Stats: roachpb.TransactionStatistics{
+					Count: 31,
+				},
+			},
+		},
+		{
+			stats: roachpb.CollectedTransactionStatistics{
+				TransactionFingerprintID: roachpb.TransactionFingerprintID(1),
+				App:                      "app0",
+				Stats: roachpb.TransactionStatistics{
+					Count: 32,
+				},
+			},
+		},
+		{
+			stats: roachpb.CollectedTransactionStatistics{
+				TransactionFingerprintID: roachpb.TransactionFingerprintID(0),
+				App:                      "app1",
+				Stats: roachpb.TransactionStatistics{
+					Count: 33,
+				},
+			},
+		},
+		{
+			stats: roachpb.CollectedTransactionStatistics{
+				TransactionFingerprintID: roachpb.TransactionFingerprintID(1),
+				App:                      "app100",
+				Stats: roachpb.TransactionStatistics{
+					Count: 2,
+				},
+			},
+		},
+	}
+
+	expectedCount := make(map[roachpb.TransactionFingerprintID]int64)
+	input :=
+		make([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, 0, len(testData))
+
+	for i := range testData {
+		var stats serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
+		stats.StatsData.Stats = testData[i].stats.Stats
+		input = append(input, stats)
+		if count, ok := expectedCount[stats.StatsData.TransactionFingerprintID]; ok {
+			expectedCount[stats.StatsData.TransactionFingerprintID] = testData[i].stats.Stats.Count + count
+		} else {
+			expectedCount[stats.StatsData.TransactionFingerprintID] = testData[i].stats.Stats.Count
+		}
+	}
+
+	sqlStats, err := NewTempSQLStatsFromExistingTxnStats(input)
+	require.NoError(t, err)
+
+	foundStats := make(map[roachpb.TransactionFingerprintID]int64)
+	require.NoError(t,
+		sqlStats.IterateTransactionStats(
+			context.Background(),
+			&sqlstats.IteratorOptions{},
+			func(
+				ctx context.Context,
+				statistics *roachpb.CollectedTransactionStatistics,
+			) error {
+				foundStats[statistics.TransactionFingerprintID] = statistics.Stats.Count
 				return nil
 			}))
 

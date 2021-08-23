@@ -239,3 +239,20 @@ END
 
 statement ok
 DROP DATABASE d1
+
+subtest missing-db-error-issue-68060
+
+statement ok
+CREATE DATABASE db1;
+
+statement ok;
+USE db1;
+
+statement ok
+SET sql_safe_updates=false;
+
+statement ok
+DROP DATABASE db1;
+
+statement error pq: database "db1" does not exist
+SELECT * FROM crdb_internal.session_variables;

@@ -324,7 +324,7 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 
 		op, err := w.opGen.randOp(ctx, tx)
 
-		if pgErr := (pgconn.PgError{}); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			return errors.Mark(err, errRunInTxnRbkSentinel)
 		} else if err != nil {
 			return errors.Mark(
@@ -340,7 +340,7 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 
 			if _, err = tx.Exec(ctx, op); err != nil {
 				// If the error not an instance of pgconn.PgError, then it is unexpected.
-				pgErr := pgconn.PgError{}
+				pgErr := new(pgconn.PgError)
 				if !errors.As(err, &pgErr) {
 					return errors.Mark(
 						errors.Wrap(err, "***UNEXPECTED ERROR; Received a non pg error"),
@@ -425,7 +425,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	w.logger.writeLog("COMMIT")
 	if err = tx.Commit(ctx); err != nil {
 		// If the error not an instance of pgconn.PgError, then it is unexpected.
-		pgErr := pgconn.PgError{}
+		pgErr := new(pgconn.PgError)
 		if !errors.As(err, &pgErr) {
 			err = errors.Mark(
 				errors.Wrap(err, "***UNEXPECTED COMMIT ERROR; Received a non pg error"),
