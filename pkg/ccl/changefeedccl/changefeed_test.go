@@ -1478,6 +1478,109 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
 }
 
+func TestChangefeedRestartMutliNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cluster, db, cleanup := startTestCluster(t)
+	defer cleanup()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE test_tab (a INT PRIMARY KEY, b INT UNIQUE NOT NULL)`)
+	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (0, 0)`)
+
+	row := sqlDB.QueryRow(t, `SELECT range_id, lease_holder FROM [SHOW RANGES FROM TABLE test_tab] LIMIT 1`)
+	var rangeID, leaseHolder int
+	row.Scan(&rangeID, &leaseHolder)
+
+	// Start the changefeed on a node other than the leaseholder
+	// so that it is likely that the changeAggregator and
+	// changeFrontier are on different nodes.
+	feedServerID := ((leaseHolder - 1) + 1) % 3
+	t.Logf("Range %d is on lease holder %d, running rangefeed on server %d (store id: %d)", rangeID, leaseHolder, feedServerID, cluster.Server(feedServerID).GetFirstStoreID())
+	db = cluster.ServerConn(feedServerID)
+	sqlDB = sqlutils.MakeSQLRunner(db)
+
+	f := makeKafkaFeedFactoryForCluster(cluster, db)
+	feed := feed(t, f, "CREATE CHANGEFEED FOR test_tab WITH updated")
+	defer closeFeed(t, feed)
+	assertPayloadsStripTs(t, feed, []string{
+		`test_tab: [0]->{"after": {"a": 0, "b": 0}}`,
+	})
+
+	waitForSchemaChange(t, sqlDB, `ALTER TABLE test_tab ALTER PRIMARY KEY USING COLUMNS (b)`)
+	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (1, 11)`)
+	// No backfill, but we should see the newly insert value
+	assertPayloadsStripTs(t, feed, []string{
+		`test_tab: [11]->{"after": {"a": 1, "b": 11}}`,
+	})
+
+	waitForSchemaChange(t, sqlDB, `ALTER TABLE test_tab SET LOCALITY REGIONAL BY ROW`)
+	// schema-changer backfill for the ADD COLUMN
+	assertPayloadsStripTs(t, feed, []string{
+		`test_tab: [0]->{"after": {"a": 0, "b": 0}}`,
+		`test_tab: [11]->{"after": {"a": 1, "b": 11}}`,
+	})
+	// changefeed backfill for the ADD COLUMN
+	assertPayloadsStripTs(t, feed, []string{
+		`test_tab: ["us-east1", 0]->{"after": {"a": 0, "b": 0, "crdb_region": "us-east1"}}`,
+		`test_tab: ["us-east1", 11]->{"after": {"a": 1, "b": 11, "crdb_region": "us-east1"}}`,
+	})
+
+	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (2, 22)`)
+	// Newly inserted data works
+	assertPayloadsStripTs(t, feed, []string{
+		`test_tab: ["us-east1", 22]->{"after": {"a": 2, "b": 22, "crdb_region": "us-east1"}}`,
+	})
+}
+
+func TestChangefeedStopPolicyMultiNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+
+	cluster, db, cleanup := startTestCluster(t)
+	defer cleanup()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE test_tab (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (0)`)
+
+	row := sqlDB.QueryRow(t, `SELECT range_id, lease_holder FROM [SHOW RANGES FROM TABLE test_tab] LIMIT 1`)
+	var rangeID, leaseHolder int
+	row.Scan(&rangeID, &leaseHolder)
+
+	// Start the changefeed on a node other than the leaseholder
+	// so that it is likely that the changeAggregator and
+	// changeFrontier are on different nodes.
+	feedServerID := ((leaseHolder - 1) + 1) % 3
+	t.Logf("Range %d is on lease holder %d, running rangefeed on server %d (store id: %d)", rangeID, leaseHolder, feedServerID, cluster.Server(feedServerID).GetFirstStoreID())
+	db = cluster.ServerConn(feedServerID)
+	sqlDB = sqlutils.MakeSQLRunner(db)
+
+	f := makeKafkaFeedFactoryForCluster(cluster, db)
+	feed := feed(t, f, "CREATE CHANGEFEED FOR test_tab WITH schema_change_policy='stop'")
+	defer closeFeed(t, feed)
+	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (1)`)
+	assertPayloads(t, feed, []string{
+		`test_tab: [0]->{"after": {"a": 0}}`,
+		`test_tab: [1]->{"after": {"a": 1}}`,
+	})
+	sqlDB.Exec(t, `ALTER TABLE test_tab ADD COLUMN b INT NOT NULL DEFAULT 0`)
+
+	waitForSchemaChangeError := func(t *testing.T, f cdctest.TestFeed) {
+		t.Helper()
+		for {
+			if _, err := f.Next(); err != nil {
+				require.Contains(t, err.Error(), "schema change occurred at")
+				break
+			}
+		}
+	}
+	waitForSchemaChangeError(t, feed)
+}
+
 func TestChangefeedWorksOnRBRChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
