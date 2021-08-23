@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -88,6 +89,14 @@ func AlterColumnType(
 			typ = types.MakeCollatedString(typ, t.Collation)
 		} else {
 			return pgerror.New(pgcode.Syntax, "COLLATE can only be used with string types")
+		}
+	}
+
+	// Special handling for IDENTITY column to make sure it cannot be altered into
+	// a non-integer type.
+	if col.IsGeneratedAsIdentity() {
+		if typ.InternalType.Family != types.IntFamily {
+			return sqlerrors.NewIdentityColumnTypeError()
 		}
 	}
 

@@ -304,6 +304,15 @@ type Column interface {
 	// it will return descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT;
 	// otherwise, returns descpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN.
 	GetGeneratedAsIdentityType() descpb.GeneratedAsIdentityType
+
+	// HasGeneratedAsIdentitySequenceOption returns true if there is a
+	// customized sequence option when this column is created as a
+	// `GENERATED AS IDENTITY` column.
+	HasGeneratedAsIdentitySequenceOption() bool
+
+	// GetGeneratedAsIdentitySequenceOption returns the column's `GENERATED AS
+	// IDENTITY` sequence option if it exists, empty string otherwise.
+	GetGeneratedAsIdentitySequenceOption() string
 }
 
 // ConstraintToUpdate is an interface around a constraint mutation.

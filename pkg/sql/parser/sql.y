@@ -6782,6 +6782,18 @@ col_qualification_elem:
     sqllex.Error("use AS ( <expr> ) STORED or AS ( <expr> ) VIRTUAL")
     return 1
   }
+| generated_always_as IDENTITY '(' opt_sequence_option_list ')'
+  {
+    $$.val = &tree.GeneratedAlwaysAsIdentity{
+       SeqOptions: $4.seqOpts(),
+    }
+  }
+| generated_by_default_as IDENTITY '(' opt_sequence_option_list ')'
+  {
+    $$.val = &tree.GeneratedByDefAsIdentity{
+        SeqOptions: $4.seqOpts(),
+    }
+  }
 | generated_always_as IDENTITY
   {
     $$.val = &tree.GeneratedAlwaysAsIdentity{}
