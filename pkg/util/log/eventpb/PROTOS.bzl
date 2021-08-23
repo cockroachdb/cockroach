@@ -3,4 +3,24 @@
 # capture that list here so we only have one thing to update when a new proto is
 # added to this directory.
 
-EVENTPB_PROTO_LOCATIONS = """$(location //pkg/util/log/eventpb:events.proto) $(location //pkg/util/log/eventpb:ddl_events.proto) $(location //pkg/util/log/eventpb:misc_sql_events.proto) $(location //pkg/util/log/eventpb:privilege_events.proto) $(location //pkg/util/log/eventpb:role_events.proto) $(location //pkg/util/log/eventpb:zone_events.proto) $(location //pkg/util/log/eventpb:session_events.proto) $(location //pkg/util/log/eventpb:sql_audit_events.proto) $(location //pkg/util/log/eventpb:cluster_events.proto) $(location //pkg/util/log/eventpb:job_events.proto) $(location //pkg/util/log/eventpb:health_events.proto)"""
+# Add new .proto files to this list. Order matters. Keep in sync with the `Makefile`.
+EVENTPB_PROTOS = [
+    "events.proto",
+    "ddl_events.proto",
+    "misc_sql_events.proto",
+    "privilege_events.proto",
+    "role_events.proto",
+    "zone_events.proto",
+    "session_events.proto",
+    "sql_audit_events.proto",
+    "cluster_events.proto",
+    "job_events.proto",
+    "health_events.proto",
+]
+
+# The same list as above, but formatted such that outside Bazel rules can depend
+# on them as `srcs`.
+EVENTPB_PROTO_SRCS = ["//pkg/util/log/eventpb:{}".format(proto) for proto in EVENTPB_PROTOS]
+
+# The $(location) of each of these .protos in the order above.
+EVENTPB_PROTO_LOCATIONS = " ".join(["$(location {})".format(src) for src in EVENTPB_PROTO_SRCS])
