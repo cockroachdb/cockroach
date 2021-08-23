@@ -168,9 +168,14 @@ message LocalOnlySessionData {
   // SequenceCache stores sequence values which have been cached using the
   // CACHE sequence option.
   map<uint32, sessiondatapb.SequenceCacheEntry> sequence_cache = 44 [(gogoproto.casttype)="SequenceCache"];
-
   // PlacementEnabled indicates whether PLACEMENT can be used or not.
   bool placement_enabled = 45;
+  // SessionUserProto is the name of the user which has performed a SET ROLE
+  // command. In other words, it is the name of the user which originally
+  // established the connection before SET ROLE was first performed.
+  // This is only populated when SET ROLE is used, otherwise the session_user
+  // is the same as the UserProto in SessionData.
+  string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

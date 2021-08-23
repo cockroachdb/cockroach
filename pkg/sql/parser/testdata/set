@@ -491,3 +491,27 @@ RESET client_encoding -- normalized!
 RESET client_encoding -- fully parenthesized
 RESET client_encoding -- literals removed
 RESET client_encoding -- identifiers removed
+
+parse
+SET ROLE bob
+----
+SET "role" = bob -- normalized!
+SET "role" = (bob) -- fully parenthesized
+SET "role" = bob -- literals removed
+SET "role" = _ -- identifiers removed
+
+parse
+SET ROLE = bob
+----
+SET "role" = bob -- normalized!
+SET "role" = (bob) -- fully parenthesized
+SET "role" = bob -- literals removed
+SET "role" = _ -- identifiers removed
+
+parse
+SET role to 'bob'
+----
+SET "role" = 'bob' -- normalized!
+SET "role" = ('bob') -- fully parenthesized
+SET "role" = _ -- literals removed
+SET "role" = 'bob' -- identifiers removed

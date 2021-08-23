@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -978,6 +979,26 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return formatBoolAsPostgresSetting(preferLookupJoinsForFKs.Get(sv))
+		},
+	},
+
+	// See https://www.postgresql.org/docs/current/sql-set-role.html.
+	`role`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			if evalCtx.SessionData.SessionUserProto == "" {
+				return security.NoneRole
+			}
+			return evalCtx.SessionData.User().Normalized()
+		},
+		SetWithPlanner: func(ctx context.Context, p *planner, s string) error {
+			u, err := security.MakeSQLUsernameFromUserInput(s, security.UsernameValidation)
+			if err != nil {
+				return err
+			}
+			return p.setRole(ctx, u)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return security.NoneRole
 		},
 	},
 

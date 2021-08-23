@@ -127,3 +127,46 @@ ReadyForQuery
 {"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE ROLE testuser"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE ROLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET ROLE testuser"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET ROLE testuser"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "RESET ROLE"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
+{"Type":"CommandComplete","CommandTag":"RESET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
