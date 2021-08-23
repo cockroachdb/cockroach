@@ -4237,10 +4237,11 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if ctx.SessionData.User().Undefined() {
+				u := ctx.SessionData.SessionUser()
+				if u.Undefined() {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.SessionData.User().Normalized()), nil
+				return tree.NewDString(u.Normalized()), nil
 			},
 			Info: "Returns the session user. This function is provided for " +
 				"compatibility with PostgreSQL.",
@@ -5960,6 +5961,7 @@ table's zone configuration this will return NULL.`,
 				if err != nil {
 					return nil, err
 				}
+
 				return tree.NewDBytes(tree.DBytes(b)), nil
 			},
 			Info:       `This function serializes the variables in the current session.`,
@@ -5978,7 +5980,7 @@ table's zone configuration this will return NULL.`,
 				if !evalCtx.TxnImplicit {
 					return nil, pgerror.Newf(
 						pgcode.InvalidTransactionState,
-						"cannot deserialize a session which is inside a transaction",
+						"cannot deserialize a session whilst inside a transaction",
 					)
 				}
 
@@ -5999,7 +6001,7 @@ table's zone configuration this will return NULL.`,
 				if sd.SessionUser().Normalized() != evalCtx.SessionData.SessionUser().Normalized() {
 					return nil, pgerror.Newf(
 						pgcode.InsufficientPrivilege,
-						"can only serialize matching session users",
+						"can only deserialize matching session users",
 					)
 				}
 				*evalCtx.SessionData = *sd
