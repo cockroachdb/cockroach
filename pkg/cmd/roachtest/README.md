@@ -185,6 +185,8 @@ The HTTP endpoint (by default `:8080`) is useful to find the "run" numbers for
 failing tests (to find the artifacts) and to get a general overview of the
 progress of the invocation.
 
+### Stressing a roachtest
+
 A solid foundation for building the binaries and stressing a roachtest is
 provided via the [roachstress.sh] script, which can either be used outright or
 saved and adjusted. The script can be invoked without parameters from a clean
@@ -192,3 +194,13 @@ checkout of the cockroach repository at the revision to be tested. It will
 prompt for user input on which test to stress.
 
 [roachstress.sh]: https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/roachstress.sh
+
+Another option is to start a [`Cockroach_Nightlies_RoachtestStress`](https://teamcity.cockroachdb.com/buildConfiguration/Cockroach_Nightlies_RoachtestStress)
+CI job, which allows running a bunch of tests without having to keep your
+laptop online. The CI job is run as follows:
+
+1. Go to https://teamcity.cockroachdb.com/buildConfiguration/Cockroach_Nightlies_RoachtestStress
+2. Click the ellipsis (...) next to the Run button and fill in:
+  * Changes → Build branch: `<branch>`
+  * Parameters → `env.TESTS`: `^<test>$`
+  * Parameters → `env.COUNT`: `<runs>`
