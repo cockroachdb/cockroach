@@ -1341,6 +1341,9 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					DeterministicExplain: true,
+					// Bump to a larger timeout as multi-node tests in CI take a while longer
+					// to update.
+					ClusterSettingUpdateTimeout: 30 * time.Second,
 				},
 			},
 			ClusterName:   "testclustername",
