@@ -102,6 +102,7 @@ var retiredSettings = map[string]struct{}{
 	"kv.transaction.write_pipelining_max_outstanding_size":           {},
 	"sql.defaults.optimizer_improve_disjunction_selectivity.enabled": {},
 	"bulkio.backup.proxy_file_writes.enabled":                        {},
+	"sql.distsql.prefer_local_execution.enabled":                     {},
 }
 
 // register adds a setting to the registry.
