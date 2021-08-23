@@ -795,7 +795,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	require.Regexp(t,
 		`restart transaction: TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn \(RETRY_REASON_UNKNOWN - boom\)`,
 		err)
-	var pgErr = &pgconn.PgError{}
+	var pgErr = new(pgconn.PgError)
 	require.True(t, errors.As(err, &pgErr))
 	require.Equal(t, pgcode.SerializationFailure, pgcode.MakeCode(pgErr.Code))
 

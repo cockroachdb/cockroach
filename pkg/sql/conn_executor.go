@@ -484,7 +484,7 @@ func (s *Server) GetUnscrubbedTxnStats(
 	ctx context.Context,
 ) ([]roachpb.CollectedTransactionStatistics, error) {
 	var txnStats []roachpb.CollectedTransactionStatistics
-	txnStatsVisitor := func(_ context.Context, _ roachpb.TransactionFingerprintID, stat *roachpb.CollectedTransactionStatistics) error {
+	txnStatsVisitor := func(_ context.Context, stat *roachpb.CollectedTransactionStatistics) error {
 		txnStats = append(txnStats, *stat)
 		return nil
 	}

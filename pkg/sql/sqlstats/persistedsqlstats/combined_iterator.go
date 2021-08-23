@@ -201,7 +201,6 @@ func compareStmtStats(lhs, rhs *roachpb.CollectedStatementStatistics) int {
 // in-memory and persisted txn stats provided by the in-memory iterator and
 // the on-disk iterator.
 type CombinedTxnStatsIterator struct {
-	nextToReadKey  roachpb.TransactionFingerprintID
 	nextToReadVal  *roachpb.CollectedTransactionStatistics
 	expectedColCnt int
 
@@ -273,7 +272,7 @@ func (c *CombinedTxnStatsIterator) Next(ctx context.Context) (bool, error) {
 			return false, errors.AssertionFailedf("unexpectedly received %d columns", len(row))
 		}
 
-		c.nextToReadKey, c.nextToReadVal, err = rowToTxnStats(c.disk.it.Cur())
+		c.nextToReadVal, err = rowToTxnStats(c.disk.it.Cur())
 		if err != nil {
 			return false, err
 		}
@@ -287,7 +286,7 @@ func (c *CombinedTxnStatsIterator) Next(ctx context.Context) (bool, error) {
 	// If diskIter is exhausted, but mem iterator can still move forward.
 	// We promote the mem.Cur() and resume the mem iterator if it was paused.
 	if !c.disk.canBeAdvanced {
-		c.nextToReadKey, c.nextToReadVal = c.mem.it.Cur()
+		c.nextToReadVal = c.mem.it.Cur()
 
 		if c.mem.canBeAdvanced {
 			c.mem.paused = false
@@ -306,29 +305,26 @@ func (c *CombinedTxnStatsIterator) Next(ctx context.Context) (bool, error) {
 	// 3. mem.Cur() > disk.Cur():
 	//    we promote disk.Cur() to c.nextToRead. We then pause
 	//    mem iterator and resume disk iterator for next iteration.
-	memCurKey, memCurVal := c.mem.it.Cur()
-	diskCurKey, diskCurVal, err := rowToTxnStats(c.disk.it.Cur())
+	memCurVal := c.mem.it.Cur()
+	diskCurVal, err := rowToTxnStats(c.disk.it.Cur())
 	if err != nil {
 		return false, err
 	}
 
-	switch compareTxnStats(memCurKey, diskCurKey, memCurVal, diskCurVal) {
+	switch compareTxnStats(memCurVal, diskCurVal) {
 	case -1:
 		// First Case.
-		c.nextToReadKey = memCurKey
 		c.nextToReadVal = memCurVal
 		c.mem.paused = false
 		c.disk.paused = true
 	case 0:
 		// Second Case.
-		c.nextToReadKey = memCurKey
 		c.nextToReadVal = memCurVal
 		c.nextToReadVal.Stats.Add(&diskCurVal.Stats)
 		c.mem.paused = false
 		c.disk.paused = false
 	case 1:
 		// Third Case.
-		c.nextToReadKey = diskCurKey
 		c.nextToReadVal = diskCurVal
 		c.mem.paused = true
 		c.disk.paused = false
@@ -341,16 +337,11 @@ func (c *CombinedTxnStatsIterator) Next(ctx context.Context) (bool, error) {
 
 // Cur returns the roachpb.CollectedTransactionStatistics at the current internal
 // counter.
-func (c *CombinedTxnStatsIterator) Cur() (
-	roachpb.TransactionFingerprintID,
-	*roachpb.CollectedTransactionStatistics,
-) {
-	return c.nextToReadKey, c.nextToReadVal
+func (c *CombinedTxnStatsIterator) Cur() *roachpb.CollectedTransactionStatistics {
+	return c.nextToReadVal
 }
 
-func compareTxnStats(
-	lhsKey, rhsKey roachpb.TransactionFingerprintID, lhs, rhs *roachpb.CollectedTransactionStatistics,
-) int {
+func compareTxnStats(lhs, rhs *roachpb.CollectedTransactionStatistics) int {
 	// 1. we compare their aggregated_ts
 	if lhs.AggregatedTs.Before(rhs.AggregatedTs) {
 		return -1
@@ -366,10 +357,10 @@ func compareTxnStats(
 	}
 
 	// 3. we compared the transaction fingerprint ID.
-	if lhsKey < rhsKey {
+	if lhs.TransactionFingerprintID < rhs.TransactionFingerprintID {
 		return -1
 	}
-	if lhsKey > rhsKey {
+	if lhs.TransactionFingerprintID > rhs.TransactionFingerprintID {
 		return 1
 	}
 

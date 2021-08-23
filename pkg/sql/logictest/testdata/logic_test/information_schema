@@ -456,6 +456,7 @@ crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       table_row_statistics
 crdb_internal       tables
+crdb_internal       transaction_statistics
 crdb_internal       zones
 information_schema  administrable_role_authorizations
 information_schema  applicable_roles
@@ -766,6 +767,7 @@ table_columns
 table_indexes
 table_row_statistics
 tables
+transaction_statistics
 zones
 administrable_role_authorizations
 applicable_roles
@@ -1034,6 +1036,7 @@ type_privileges
 triggers
 triggered_update_columns
 transforms
+transaction_statistics
 tablespaces_extensions
 tablespaces
 tables_extensions
@@ -1111,6 +1114,7 @@ system         crdb_internal       table_columns                          SYSTEM
 system         crdb_internal       table_indexes                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_row_statistics                   SYSTEM VIEW  NO                  1
 system         crdb_internal       tables                                 SYSTEM VIEW  NO                  1
+system         crdb_internal       transaction_statistics                 SYSTEM VIEW  NO                  1
 system         crdb_internal       zones                                  SYSTEM VIEW  NO                  1
 system         information_schema  administrable_role_authorizations      SYSTEM VIEW  NO                  1
 system         information_schema  applicable_roles                       SYSTEM VIEW  NO                  1
@@ -2638,6 +2642,7 @@ NULL     public   system         crdb_internal       table_columns              
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       tables                                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       transaction_statistics                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       zones                                  SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations      SELECT          NULL          YES
 NULL     public   system         information_schema  applicable_roles                       SELECT          NULL          YES
@@ -3227,6 +3232,7 @@ NULL     public   system         crdb_internal       table_columns              
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       tables                                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       transaction_statistics                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       zones                                  SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations      SELECT          NULL          YES
 NULL     public   system         information_schema  applicable_roles                       SELECT          NULL          YES
