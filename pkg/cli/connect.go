@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -52,7 +53,7 @@ Connects to other nodes and negotiates an initialization bundle for use with
 secure inter-node connections.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runConnectInit),
+	RunE: clierrorplus.MaybeDecorateError(runConnectInit),
 }
 
 // runConnectInit connects to other nodes and negotiates an initialization bundle

@@ -46,6 +46,9 @@ database_name                                     create_statement
 multi_region_test_explicit_primary_region_db      CREATE DATABASE multi_region_test_explicit_primary_region_db PRIMARY REGION "ap-southeast-2" REGIONS = "ap-southeast-2", "ca-central-1", "us-east-1" SURVIVE REGION FAILURE
 
 statement ok
+SET enable_multiregion_placement_policy = true;
+
+statement ok
 CREATE DATABASE multi_region_test_placement_restricted_db PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "ca-central-1", "us-east-1" PLACEMENT RESTRICTED
 
 query TT colnames

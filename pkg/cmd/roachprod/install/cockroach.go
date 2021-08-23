@@ -491,7 +491,10 @@ func (h *crdbInstallHelper) generateStartArgs(
 		for i := 1; i <= StartOpts.StoreCount; i++ {
 			storeDir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx], i)
 			storeDirs = append(storeDirs, storeDir)
-			args = append(args, `--store`, `path=`+storeDir)
+			// Place a store{i} attribute on each store to allow for zone configs
+			// that use specific stores.
+			args = append(args, `--store`,
+				`path=`+storeDir+`,attrs=`+fmt.Sprintf("store%d", i))
 		}
 	} else {
 		storeDir := strings.TrimPrefix(extraArgs[idx], "--store=")

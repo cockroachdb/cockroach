@@ -1105,7 +1105,16 @@ func (p *planner) AlterDatabasePlacement(
 		return nil, err
 	}
 
-	// TODO(pawalt): #68598 add a check for placement enabled cluster setting
+	if !p.EvalContext().SessionData.PlacementEnabled {
+		return nil, errors.WithHint(pgerror.New(
+			pgcode.FeatureNotSupported,
+			"ALTER DATABASE PLACEMENT requires that the session setting "+
+				"enable_multiregion_placement_policy is enabled",
+		),
+			"to enable, enable the session setting or the cluster "+
+				"setting sql.defaults.multiregion_placement_policy.enabled",
+		)
+	}
 
 	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},

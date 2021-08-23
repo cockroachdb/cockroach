@@ -41,9 +41,7 @@ type MetadataSchema struct {
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
-// the "system" database. Default zone configurations are required to create
-// a MetadataSchema for the system tenant, but do not need to be supplied for
-// any other tenant.
+// the "system" database.
 func MakeMetadataSchema(
 	codec keys.SQLCodec,
 	defaultZoneConfig *zonepb.ZoneConfig,
@@ -216,7 +214,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.NamespaceTable)
 	target.AddDescriptor(systemschema.DescriptorTable)
 	target.AddDescriptor(systemschema.UsersTable)
-	target.AddDescriptorForSystemTenant(systemschema.ZonesTable)
+	target.AddDescriptor(systemschema.ZonesTable)
 	target.AddDescriptor(systemschema.SettingsTable)
 	// Only add the descriptor ID sequence if this is a non-system tenant.
 	// System tenants use the global descIDGenerator key. See #48513.
@@ -270,6 +268,10 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.DatabaseRoleSettingsTable)
 	target.AddDescriptorForSystemTenant(systemschema.TenantUsageTable)
 	target.AddDescriptor(systemschema.SQLInstancesTable)
+
+	// Adding a new system table? It should be added here to the metadata schema,
+	// and also created as a migration for older clusters. The includedInBootstrap
+	// field should be set on the migration.
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
@@ -278,7 +280,8 @@ func addSplitIDs(target *MetadataSchema) {
 	target.AddSplitIDs(keys.PseudoTableIDs...)
 }
 
-// Create a kv pair for the zone config for the given key and config value.
+// createZoneConfigKV creates a kv pair for the zone config for the given key
+// and config value.
 func createZoneConfigKV(
 	keyID int, codec keys.SQLCodec, zoneConfig *zonepb.ZoneConfig,
 ) roachpb.KeyValue {
@@ -292,34 +295,33 @@ func createZoneConfigKV(
 	}
 }
 
-// addZoneConfigKVsToSchema adds a kv pair for each of the statically defined
-// zone configurations that should be populated in a newly bootstrapped cluster.
-func addZoneConfigKVsToSchema(
-	target *MetadataSchema,
+// InitialZoneConfigKVs returns a list of KV pairs to seed `system.zones`. The
+// list contains extra entries for the system tenant.
+func InitialZoneConfigKVs(
+	codec keys.SQLCodec,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) {
-	// If this isn't the system tenant, don't add any zone configuration keys.
-	// Only the system tenant has a zone table.
-	if !target.codec.ForSystemTenant() {
-		return
+) (ret []roachpb.KeyValue) {
+	// Both the system tenant and secondary tenants get their own RANGE DEFAULT
+	// zone configuration.
+	ret = append(ret,
+		createZoneConfigKV(keys.RootNamespaceID, codec, defaultZoneConfig))
+
+	if !codec.ForSystemTenant() {
+		return ret
 	}
 
-	// Adding a new system table? It should be added here to the metadata schema,
-	// and also created as a migration for older cluster. The includedInBootstrap
-	// field should be set on the migration.
-
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.RootNamespaceID, target.codec, defaultZoneConfig))
-
+	// Only the system tenant has zone configs over {META, LIVENESS, SYSTEM}
+	// ranges. Additionally, some reporting tables have custom zone configs set,
+	// but only for the system tenant.
 	systemZoneConf := defaultSystemZoneConfig
 	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
 	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
 
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.MetaRangesID, target.codec, metaRangeZoneConf))
+	ret = append(ret,
+		createZoneConfigKV(keys.MetaRangesID, codec, metaRangeZoneConf))
 
 	// Some reporting tables have shorter GC times.
 	replicationConstraintStatsZoneConf := &zonepb.ZoneConfig{
@@ -331,16 +333,29 @@ func addZoneConfigKVsToSchema(
 
 	// Liveness zone config entry with a shorter GC time.
 	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.LivenessRangesID, target.codec, livenessZoneConf))
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.SystemRangesID, target.codec, systemZoneConf))
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.SystemDatabaseID, target.codec, systemZoneConf))
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.ReplicationConstraintStatsTableID, target.codec, replicationConstraintStatsZoneConf))
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.ReplicationStatsTableID, target.codec, replicationStatsZoneConf))
+	ret = append(ret,
+		createZoneConfigKV(keys.LivenessRangesID, codec, livenessZoneConf))
+	ret = append(ret,
+		createZoneConfigKV(keys.SystemRangesID, codec, systemZoneConf))
+	ret = append(ret,
+		createZoneConfigKV(keys.SystemDatabaseID, codec, systemZoneConf))
+	ret = append(ret,
+		createZoneConfigKV(keys.ReplicationConstraintStatsTableID, codec, replicationConstraintStatsZoneConf))
+	ret = append(ret,
+		createZoneConfigKV(keys.ReplicationStatsTableID, codec, replicationStatsZoneConf))
+
+	return ret
+}
+
+// addZoneConfigKVsToSchema adds a kv pair for each of the statically defined
+// zone configurations that should be populated in a newly bootstrapped cluster.
+func addZoneConfigKVsToSchema(
+	target *MetadataSchema,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+) {
+	kvs := InitialZoneConfigKVs(target.codec, defaultZoneConfig, defaultSystemZoneConfig)
+	target.otherKV = append(target.otherKV, kvs...)
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the

@@ -18,6 +18,7 @@ import (
 	"os/signal"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -33,7 +34,7 @@ var mtStartSQLProxyCmd = &cobra.Command{
 This proxy accepts incoming connections and relays them to a backend server
 determined by the arguments used.
 `,
-	RunE: MaybeDecorateGRPCError(runStartSQLProxy),
+	RunE: clierrorplus.MaybeDecorateError(runStartSQLProxy),
 	Args: cobra.NoArgs,
 }
 

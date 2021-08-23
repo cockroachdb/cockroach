@@ -32,6 +32,33 @@ query TTTT colnames
 SELECT create_statement, create_nofks, alter_statements, validate_statements FROM crdb_internal.create_statements WHERE database_name = 'test'
 ----
 create_statement  create_nofks  alter_statements  validate_statements
+CREATE TABLE crdb_internal.active_range_feeds (
+   id INT8 NULL,
+   tags STRING NULL,
+   span_start STRING NULL,
+   span_end STRING NULL,
+   startts STRING NULL,
+   diff BOOL NULL,
+   node_id INT8 NULL,
+   range_id INT8 NULL,
+   range_start STRING NULL,
+   range_end STRING NULL,
+   resolved STRING NULL,
+   last_event_utc INT8 NULL
+)  CREATE TABLE crdb_internal.active_range_feeds (
+   id INT8 NULL,
+   tags STRING NULL,
+   span_start STRING NULL,
+   span_end STRING NULL,
+   startts STRING NULL,
+   diff BOOL NULL,
+   node_id INT8 NULL,
+   range_id INT8 NULL,
+   range_start STRING NULL,
+   range_end STRING NULL,
+   resolved STRING NULL,
+   last_event_utc INT8 NULL
+)  {}  {}
 CREATE TABLE crdb_internal.backward_dependencies (
    descriptor_id INT8 NULL,
    descriptor_name STRING NOT NULL,

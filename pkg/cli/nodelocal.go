@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -37,7 +38,7 @@ var nodeLocalUploadCmd = &cobra.Command{
 Uploads a file to a gateway node's local file system using a SQL connection.
 `,
 	Args: cobra.MinimumNArgs(2),
-	RunE: maybeShoutError(runUpload),
+	RunE: clierrorplus.MaybeShoutError(runUpload),
 }
 
 func runUpload(cmd *cobra.Command, args []string) (resErr error) {

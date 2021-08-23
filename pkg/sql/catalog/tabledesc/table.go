@@ -13,6 +13,7 @@ package tabledesc
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -152,7 +153,7 @@ func MakeColumnDefDescs(
 func EvalShardBucketCount(
 	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, shardBuckets tree.Expr,
 ) (int32, error) {
-	const invalidBucketCountMsg = `BUCKET_COUNT must be an integer greater than 1`
+	const invalidBucketCountMsg = `BUCKET_COUNT must be a 32-bit integer greater than 1, got %v`
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
 		ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,
 	)
@@ -161,11 +162,14 @@ func EvalShardBucketCount(
 	}
 	d, err := typedExpr.Eval(evalCtx)
 	if err != nil {
-		return 0, pgerror.Wrap(err, pgcode.InvalidParameterValue, invalidBucketCountMsg)
+		return 0, pgerror.Wrapf(err, pgcode.InvalidParameterValue, invalidBucketCountMsg, typedExpr)
 	}
 	buckets := tree.MustBeDInt(d)
 	if buckets < 2 {
-		return 0, pgerror.New(pgcode.InvalidParameterValue, invalidBucketCountMsg)
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, invalidBucketCountMsg, buckets)
+	}
+	if buckets > math.MaxInt32 {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, invalidBucketCountMsg, buckets)
 	}
 	return int32(buckets), nil
 }

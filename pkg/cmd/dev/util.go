@@ -26,6 +26,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Common testing flags.
+const (
+	filterFlag  = "filter"
+	timeoutFlag = "timeout"
+	shortFlag   = "short"
+)
+
 // To be turned on for tests. Turns off some deeper checks for reproducibility.
 var isTesting bool
 
@@ -114,6 +121,7 @@ func getConfigFlags() []string {
 func addCommonTestFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP(filterFlag, "f", "", "run unit tests matching this regex")
 	cmd.Flags().Duration(timeoutFlag, 0*time.Minute, "timeout for test")
+	cmd.Flags().Bool(shortFlag, false, "run only short tests")
 }
 
 func (d *dev) ensureBinaryInPath(bin string) error {

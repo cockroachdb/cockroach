@@ -490,7 +490,7 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		col.table = tree.TableName{}
 		jb.outScope.cols = append(jb.outScope.cols, col)
 	} else if jb.joinType == descpb.RightOuterJoin &&
-		!colinfo.HasCompositeKeyEncoding(leftCol.typ) {
+		!colinfo.CanHaveCompositeKeyEncoding(leftCol.typ) {
 		// The merged column is the same as the corresponding column from the
 		// right side.
 		col := *rightCol

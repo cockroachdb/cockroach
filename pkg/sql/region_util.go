@@ -619,7 +619,7 @@ func prepareZoneConfigForMultiRegionTable(
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) (*zoneConfigUpdate, error) {
 	tableID := table.GetID()
-	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableID)
+	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -677,7 +677,7 @@ func prepareZoneConfigForMultiRegionTable(
 		)
 	}
 	return prepareZoneConfigWrites(
-		execCfg, tableID, table, &newZoneConfig, hasNewSubzones,
+		ctx, execCfg, tableID, table, &newZoneConfig, hasNewSubzones,
 	)
 }
 
@@ -744,7 +744,7 @@ func applyZoneConfigForMultiRegionDatabase(
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
 ) error {
-	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execConfig.Codec, dbID)
+	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execConfig.Codec, execConfig.Settings, dbID)
 	if err != nil {
 		return err
 	}
@@ -1019,6 +1019,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 		ctx,
 		p.txn,
 		p.ExecCfg().Codec,
+		p.ExecCfg().Settings,
 		ids,
 	)
 	if err != nil {
@@ -1578,7 +1579,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		telemetry.Inc(sqltelemetry.OverrideMultiRegionDatabaseZoneConfigurationSystem)
 		return nil
 	}
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID())
+	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, p.ExecCfg().Settings, dbDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -1652,7 +1653,7 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		telemetry.Inc(sqltelemetry.OverrideMultiRegionTableZoneConfigurationSystem)
 		return nil
 	}
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, desc.GetID())
+	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, p.ExecCfg().Settings, desc.GetID())
 	if err != nil {
 		return err
 	}

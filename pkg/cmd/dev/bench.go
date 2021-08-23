@@ -42,6 +42,7 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 	ctx := cmd.Context()
 	filter := mustGetFlagString(cmd, filterFlag)
 	timeout := mustGetFlagDuration(cmd, timeoutFlag)
+	short := mustGetFlagBool(cmd, shortFlag)
 
 	// Enumerate all benches to run.
 	if len(pkgs) == 0 {
@@ -51,6 +52,7 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 	benchesMap := make(map[string]bool)
 	for _, pkg := range pkgs {
 		pkg = strings.TrimPrefix(pkg, "//")
+		pkg = strings.TrimRight(pkg, "/")
 
 		if !strings.HasPrefix(pkg, "pkg/") {
 			return errors.Newf("malformed package %q, expecting %q", pkg, "pkg/{...}")
@@ -83,7 +85,12 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 	var argsBase []string
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
-	argsBase = append(argsBase, "run", "--color=yes", "--experimental_convenience_symlinks=ignore", "--config=test")
+	argsBase = append(argsBase,
+		"run",
+		"--color=yes",
+		"--experimental_convenience_symlinks=ignore",
+		"--config=test",
+		"--test_sharding_strategy=disabled")
 	argsBase = append(argsBase, getConfigFlags()...)
 	argsBase = append(argsBase, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
@@ -95,7 +102,7 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 		copy(args, argsBase)
 		base := filepath.Base(bench)
 		target := "//" + bench + ":" + base + "_test"
-		args = append(args, target, "--")
+		args = append(args, target, "--", "-test.run=-")
 		if filter == "" {
 			args = append(args, "-test.bench=.")
 		} else {
@@ -103,6 +110,9 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 		}
 		if timeout > 0 {
 			args = append(args, fmt.Sprintf("-test.timeout=%s", timeout.String()))
+		}
+		if short {
+			args = append(args, "-test.short", "-test.benchtime=1ns")
 		}
 		err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 		if err != nil {

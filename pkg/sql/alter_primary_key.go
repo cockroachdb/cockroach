@@ -607,12 +607,12 @@ func maybeCopyPartitioningWhenDeinterleaving(
 		return nil
 	}
 	newPrimaryIndexDesc.Partitioning = *rootIndex.GetPartitioning().DeepCopy().PartitioningDesc()
-	rootCfg, err := getZoneConfigRaw(ctx, p.txn, p.execCfg.Codec, root.TableID)
+	rootCfg, err := getZoneConfigRaw(ctx, p.txn, p.execCfg.Codec, p.execCfg.Settings, root.TableID)
 	if err != nil {
 		return errors.Wrapf(err, "retrieving zone config for table %s [%d]",
 			interleaveRoot.GetName(), interleaveRoot.GetID())
 	}
-	tableCfg, err := getZoneConfigRaw(ctx, p.txn, p.execCfg.Codec, tableDesc.GetID())
+	tableCfg, err := getZoneConfigRaw(ctx, p.txn, p.execCfg.Codec, p.execCfg.Settings, tableDesc.GetID())
 	if err != nil {
 		return errors.Wrapf(err, "retrieving zone config for table %s [%d]",
 			tableDesc.GetName(), tableDesc.GetID())

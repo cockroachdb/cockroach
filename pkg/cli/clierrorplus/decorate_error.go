@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clierrorplus
 
 import (
 	"context"
@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -59,9 +58,9 @@ var reGRPCAuthFailure = regexp.MustCompile(`authentication handshake failed: x50
 // as the same error could be raised for other reasons.
 var reGRPCConnFailed = regexp.MustCompile(`desc = (transport is closing|all SubConns are in TransientFailure)`)
 
-// MaybeDecorateGRPCError catches grpc errors and provides a more helpful error
+// MaybeDecorateError catches gRPC and SQL errors and provides a more helpful error
 // message to the user.
-func MaybeDecorateGRPCError(
+func MaybeDecorateError(
 	wrapped func(*cobra.Command, []string) error,
 ) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) (err error) {
@@ -75,15 +74,6 @@ func MaybeDecorateGRPCError(
 			err = clierror.NewFormattedError(err, true /* showSeverity */, false /* verbose */)
 		}()
 
-		extraInsecureHint := func() string {
-			extra := ""
-			if baseCfg.Insecure {
-				extra = "\nIf the node is configured to require secure connections,\n" +
-					"remove --insecure and configure secure credentials instead.\n"
-			}
-			return extra
-		}
-
 		connFailed := func() error {
 			const format = "cannot dial server.\n" +
 				"Is the server running?\n" +
@@ -92,8 +82,8 @@ func MaybeDecorateGRPCError(
 		}
 
 		connSecurityHint := func() error {
-			const format = "SSL authentication error while connecting.\n%s\n%v"
-			return errors.Errorf(format, extraInsecureHint(), err)
+			const format = "SSL authentication error while connecting.\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		connInsecureHint := func() error {
@@ -102,9 +92,8 @@ func MaybeDecorateGRPCError(
 		}
 
 		connRefused := func() error {
-			extra := extraInsecureHint()
 			return errors.Errorf("server closed the connection.\n"+
-				"Is this a CockroachDB node?\n%s\n%v", extra, err)
+				"Is this a CockroachDB node?\n%v", err)
 		}
 
 		// Is this an "unable to connect" type of error?
@@ -235,20 +224,4 @@ func MaybeDecorateGRPCError(
 		// Nothing we can special case, just return what we have.
 		return err
 	}
-}
-
-// maybeShoutError calls log.Shout on errors, better surfacing problems to the user.
-func maybeShoutError(
-	wrapped func(*cobra.Command, []string) error,
-) func(*cobra.Command, []string) error {
-	return func(cmd *cobra.Command, args []string) error {
-		err := wrapped(cmd, args)
-		return CheckAndMaybeShout(err)
-	}
-}
-
-// CheckAndMaybeShout shouts the error, if non-nil to the OPS logging
-// channel.
-func CheckAndMaybeShout(err error) error {
-	return clierror.CheckAndMaybeLog(err, log.Ops.Shoutf)
 }

@@ -32,7 +32,7 @@ go_library(
 
 go_test(
     name = "kvtenantccl_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "connector_test.go",
         "main_test.go",

@@ -1226,6 +1226,6 @@ define KVOptionsItem {
 #
 # TODO(andyk): Consider adding Optgen syntax like:
 #                define ScalarList []ScalarExpr
-[Scalar, List]
+[Scalar, List, CompositeInsensitive]
 define ScalarList {
 }

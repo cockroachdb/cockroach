@@ -23,8 +23,6 @@ const (
 	stressTarget = "@com_github_cockroachdb_stress//:stress"
 
 	// General testing flags.
-	filterFlag      = "filter"
-	timeoutFlag     = "timeout"
 	vFlag           = "verbose"
 	stressFlag      = "stress"
 	stressArgsFlag  = "stress-args"
@@ -86,6 +84,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 	race := mustGetFlagBool(cmd, raceFlag)
 	filter := mustGetFlagString(cmd, filterFlag)
 	timeout := mustGetFlagDuration(cmd, timeoutFlag)
+	short := mustGetFlagBool(cmd, shortFlag)
 	ignoreCache := mustGetFlagBool(cmd, ignoreCacheFlag)
 	verbose := mustGetFlagBool(cmd, vFlag)
 
@@ -169,6 +168,9 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 	}
 	if filter != "" {
 		args = append(args, fmt.Sprintf("--test_filter=%s", filter))
+	}
+	if short {
+		args = append(args, "--test_arg", "-test.short")
 	}
 	if verbose {
 		args = append(args, "--test_output", "all", "--test_arg", "-test.v")

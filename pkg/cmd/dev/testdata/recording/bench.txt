@@ -20,10 +20,10 @@ pkg/util/uuid/benchmark_fast_test.go
 pkg/util/uuid/codec_test.go
 pkg/util/uuid/generator_test.go
 
-bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/util:util_test -- -test.bench=.
+bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --test_sharding_strategy=disabled --config=dev //pkg/util:util_test -- -test.run=- -test.bench=.
 ----
 
-bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/util/uuid:uuid_test -- -test.bench=.
+bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --test_sharding_strategy=disabled --config=dev //pkg/util/uuid:uuid_test -- -test.run=- -test.bench=.
 ----
 
 getenv PATH
@@ -41,5 +41,5 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/sql/parser:parser_test -- -test.bench=BenchmarkParse
+bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --test_sharding_strategy=disabled --config=dev //pkg/sql/parser:parser_test -- -test.run=- -test.bench=BenchmarkParse
 ----

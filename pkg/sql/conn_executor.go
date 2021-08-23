@@ -2366,7 +2366,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ReCache:                ex.server.reCache,
 			InternalExecutor:       &ie,
 			DB:                     ex.server.cfg.DB,
-			SQLLivenessReader:      ex.server.cfg.SQLLivenessReader,
+			SQLLivenessReader:      ex.server.cfg.SQLLiveness,
 			SQLStatsController:     ex.server.sqlStatsController,
 			CompactEngineSpan:      ex.server.cfg.CompactEngineSpanFunc,
 		},
@@ -2549,6 +2549,19 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		ex.extraTxnState.onTxnFinish, ex.extraTxnState.onTxnRestart = ex.recordTransactionStart()
 		// Bump the txn counter for logging.
 		ex.extraTxnState.txnCounter++
+		if !ex.server.cfg.Codec.ForSystemTenant() {
+			// Update the leased descriptor collection with the current sqlliveness.Session.
+			// This is required in the multi-tenant environment to update the transaction
+			// deadline to either the session expiry or the leased descriptor deadline,
+			// whichever is sooner. We need this to ensure that transactions initiated
+			// by ephemeral SQL pods in multi-tenant environments are committed before the
+			// session expires.
+			session, err := ex.server.cfg.SQLLiveness.Session(ex.Ctx())
+			if err != nil {
+				return advanceInfo{}, err
+			}
+			ex.extraTxnState.descCollection.SetSession(session)
+		}
 	case txnCommit:
 		if res.Err() != nil {
 			err := errorutil.UnexpectedWithIssueErrorf(

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -29,7 +30,7 @@ var sqlShellCmd = &cobra.Command{
 Open a sql shell running against a cockroach database.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runTerm),
+	RunE: clierrorplus.MaybeDecorateError(runTerm),
 }
 
 func runTerm(cmd *cobra.Command, args []string) (resErr error) {

@@ -1,6 +1,9 @@
-# LogicTest: !3node-tenant(49854)
-# Check that we can alter the default zone config.
+# As these tests are run for both the system tenant and secondary tenants, we
+# turn on the setting that gates setting zone configs for system tenants.
+statement ok
+SET CLUSTER SETTING sql.zone_configs.experimental_allow_for_secondary_tenant.enabled = true
 
+# Check that we can alter the default zone config.
 statement ok
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1
 
@@ -257,9 +260,6 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 statement ok
 ALTER TABLE a CONFIGURE ZONE USING voter_constraints = '{"+region=test": 1}'
 
-statement error pq: constraint "\+region=shouldFail" matches no existing nodes within the cluster - did you enter it correctly\?
-ALTER TABLE a CONFIGURE ZONE USING voter_constraints = '{"+region=shouldFail": 1}'
-
 statement error pq: could not validate zone config: when voter_constraints are set, num_voters must be set as well
 ALTER TABLE a CONFIGURE ZONE USING num_voters = COPY FROM PARENT
 
@@ -275,10 +275,6 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
     constraints = '[]',
     voter_constraints = '{+region=test: 1}',
     lease_preferences = '[]'
-
-# Check that global_reads cannot be set without a CCL binary and enterprise license.
-statement error OSS binaries do not include enterprise features
-ALTER TABLE a CONFIGURE ZONE USING global_reads = true
 
 # Check entities for which we can set zone configs.
 subtest test_entity_validity

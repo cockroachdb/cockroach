@@ -121,6 +121,12 @@ var migrations = []migration.Migration{
 		interleavedTablesRemovedMigration,
 		interleavedTablesRemovedMigration,
 	),
+	migration.NewTenantMigration(
+		"add system.zones table for secondary tenants",
+		toCV(clusterversion.ZonesTableForSecondaryTenants),
+		NoPrecondition,
+		zonesTableForSecondaryTenants,
+	),
 }
 
 func init() {

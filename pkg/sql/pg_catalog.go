@@ -76,6 +76,30 @@ type RewriteEvTypes string
 
 const evTypeSelect RewriteEvTypes = "1"
 
+//PGShDependType is an enumeration that lists pg_shdepend deptype column values
+type PGShDependType string
+
+const (
+	// sharedDependencyOwner is a deptype used to reference an object with the
+	// owner of the dependent object.
+	sharedDependencyOwner PGShDependType = "o"
+
+	// sharedDependencyACL in postgres The referenced object is mentioned in the
+	// ACL (access control list, i.e., privileges list) of the dependent object.
+	// (A SHARED_DEPENDENCY_ACL entry is not made for the owner of the object,
+	// since the owner will have a SHARED_DEPENDENCY_OWNER entry anyway.)
+	// For cockroachDB deptype is sharedDependencyACL if the role is not the
+	// owner neither a pinned role.
+	sharedDependencyACL PGShDependType = "a"
+
+	// sharedDependencyPin in postgres for this deptype there is no dependent
+	// object; this type of entry is a signal that the system itself depends on
+	// the referenced object, and so that object must never be deleted. Entries
+	// of this type are created only by initdb.
+	// In cockroachDB the similar roles are root and admin.
+	sharedDependencyPin PGShDependType = "p"
+)
+
 var forwardIndexOid = stringOid(indexTypeForwardIndex)
 var invertedIndexOid = stringOid(indexTypeInvertedIndex)
 
@@ -1215,8 +1239,10 @@ var (
 	_ = depTypeAutoExtension
 	_ = depTypePin
 
+	pgAuthIDTableName      = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_authid"))
 	pgConstraintsTableName = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_constraint"))
 	pgClassTableName       = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_class"))
+	pgDatabaseTableName    = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_database"))
 	pgRewriteTableName     = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_rewrite"))
 )
 
@@ -2347,13 +2373,127 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 }
 
 var pgCatalogShdependTable = virtualSchemaTable{
-	comment: `shared dependencies (empty - not implemented)
+	comment: `Shared Dependencies (Roles depending on objects). 
 https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 	schema: vtable.PGCatalogShdepend,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		vt := p.getVirtualTabler()
+		h := makeOidHasher()
+
+		pgClassDesc, err := vt.getVirtualTableDesc(&pgClassTableName)
+		if err != nil {
+			return errors.New("could not find pg_catalog.pg_class")
+		}
+		pgClassOid := tableOid(pgClassDesc.GetID())
+
+		pgAuthIDDesc, err := vt.getVirtualTableDesc(&pgAuthIDTableName)
+		if err != nil {
+			return errors.New("could not find pg_catalog.pg_authid")
+		}
+		pgAuthIDOid := tableOid(pgAuthIDDesc.GetID())
+
+		pgDatabaseDesc, err := vt.getVirtualTableDesc(&pgDatabaseTableName)
+		if err != nil {
+			return errors.New("could not find pg_catalog.pg_database")
+		}
+		pgDatabaseOid := tableOid(pgDatabaseDesc.GetID())
+
+		// There is no dependent object for pinned roles; In postgres this type of
+		// entry is a signal that the system itself depends on the referenced
+		// object, and so that object must never be deleted. The columns for the
+		// dependent object contain zeroes.
+		pinnedRoles := map[string]security.SQLUsername{
+			security.RootUser:  security.RootUserName(),
+			security.AdminRole: security.AdminRoleName(),
+		}
+
+		// Function commonly used to add table and database dependencies.
+		addSharedDependency := func(
+			dbID *tree.DOid, classID *tree.DOid, objID *tree.DOid, refClassID *tree.DOid, user, owner security.SQLUsername,
+		) error {
+			// As stated above, where pinned roles is declared: pinned roles
+			// does not have dependent objects.
+			if _, ok := pinnedRoles[user.Normalized()]; ok {
+				return nil
+			}
+
+			depType := sharedDependencyACL
+			if owner.Normalized() == user.Normalized() {
+				depType = sharedDependencyOwner
+			}
+
+			return addRow(
+				dbID,                             // dbid
+				classID,                          // classid
+				objID,                            // objid
+				zeroVal,                          // objsubid
+				refClassID,                       // refclassid
+				h.UserOid(user),                  // refobjid
+				tree.NewDString(string(depType)), // deptype
+			)
+		}
+
+		// Populating table descriptor dependencies with roles
+		if err = forEachTableDesc(ctx, p, dbContext, virtualMany,
+			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+				owner := table.GetPrivileges().Owner()
+				for _, u := range table.GetPrivileges().Show(privilege.Table) {
+					if err := addSharedDependency(
+						dbOid(db.GetID()),       // dbid
+						pgClassOid,              // classid
+						tableOid(table.GetID()), // objid
+						pgAuthIDOid,             // refclassid
+						u.User,                  // refobjid
+						owner,
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		); err != nil {
+			return err
+		}
+
+		// Databases dependencies with roles
+		if err = forEachDatabaseDesc(ctx, p, nil /*all databases*/, false, /* requiresPrivileges */
+			func(db catalog.DatabaseDescriptor) error {
+				owner := db.GetPrivileges().Owner()
+				for _, u := range db.GetPrivileges().Show(privilege.Database) {
+					if err := addSharedDependency(
+						tree.NewDOid(0),   // dbid
+						pgDatabaseOid,     // classid
+						dbOid(db.GetID()), // objid
+						pgAuthIDOid,       // refclassid
+						u.User,            // refobjid
+						owner,
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		); err != nil {
+			return err
+		}
+
+		// Pinned roles, as stated above, pinned roles only have rows with zeros.
+		for _, role := range pinnedRoles {
+			if err := addRow(
+				tree.NewDOid(0), // dbid
+				tree.NewDOid(0), // classid
+				tree.NewDOid(0), // objid
+				zeroVal,         // objsubid
+				pgAuthIDOid,     // refclassid
+				h.UserOid(role), // refobjid
+				tree.NewDString(string(sharedDependencyPin)), // deptype
+			); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogTablesTable = virtualSchemaTable{

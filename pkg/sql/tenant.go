@@ -157,8 +157,8 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 	// Initialize the tenant's keyspace.
 	schema := bootstrap.MakeMetadataSchema(
 		codec,
-		nil, /* defaultZoneConfig */
-		nil, /* defaultZoneConfig */
+		p.ExtendedEvalContext().ExecCfg.DefaultZoneConfig, /* defaultZoneConfig */
+		nil, /* defaultSystemZoneConfig */
 	)
 	kvs, splits := schema.GetInitialValues()
 

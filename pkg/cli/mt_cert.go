@@ -13,6 +13,7 @@ package cli
 import (
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -31,7 +32,7 @@ If the CA key exists and --allow-ca-key-reuse is true, the key is used.
 If the CA certificate exists and --overwrite is true, the new CA certificate is prepended to it.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, args []string) error {
+	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		return errors.Wrap(
 			security.CreateTenantClientCAPair(
 				baseCfg.SSLCertsDir,
@@ -60,7 +61,7 @@ If "ca-client-tenant.crt" contains more than one certificate, the first is used.
 Creation fails if the CA expiration time is before the desired certificate expiration.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(
+	RunE: clierrorplus.MaybeDecorateError(
 		func(cmd *cobra.Command, args []string) error {
 			tenantID, err := strconv.ParseUint(args[0], 10, 64)
 			if err != nil {

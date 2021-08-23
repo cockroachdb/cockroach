@@ -1104,7 +1104,7 @@ func (b *systemConfigBuilder) setDefaultZoneConfig(cfg zonepb.ZoneConfig) error 
 }
 
 func (b *systemConfigBuilder) addZoneInner(objectName string, id int, cfg zonepb.ZoneConfig) error {
-	k := config.MakeZoneKey(config.SystemTenantObjectID(id))
+	k := config.MakeZoneKey(keys.SystemSQLCodec, descpb.ID(id))
 	var v roachpb.Value
 	if err := v.SetProto(&cfg); err != nil {
 		panic(err)
