@@ -1571,6 +1571,7 @@ system              public             primary                                  
 system              public             630200280_45_1_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
 system              public             630200280_45_2_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
 system              public             630200280_45_3_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_45_4_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
 system              public             primary                                                                              system         public        tenant_usage                     PRIMARY KEY      NO             NO
 system              public             630200280_8_1_not_null                                                               system         public        tenants                          CHECK            NO             NO
 system              public             630200280_8_2_not_null                                                               system         public        tenants                          CHECK            NO             NO
@@ -1747,6 +1748,7 @@ system              public             630200280_44_3_not_null                  
 system              public             630200280_45_1_not_null                                                              tenant_id IS NOT NULL
 system              public             630200280_45_2_not_null                                                              instance_id IS NOT NULL
 system              public             630200280_45_3_not_null                                                              next_instance_id IS NOT NULL
+system              public             630200280_45_4_not_null                                                              last_update IS NOT NULL
 system              public             630200280_46_1_not_null                                                              id IS NOT NULL
 system              public             630200280_4_1_not_null                                                               username IS NOT NULL
 system              public             630200280_4_3_not_null                                                               isRole IS NOT NULL
@@ -2046,7 +2048,7 @@ system         pg_extension  spatial_ref_sys                  auth_srid         
 system         pg_extension  spatial_ref_sys                  proj4text                                                                      5
 system         pg_extension  spatial_ref_sys                  srid                                                                           1
 system         pg_extension  spatial_ref_sys                  srtext                                                                         4
-system         public        sql_instances                    addr                                                                      2
+system         public        sql_instances                    addr                                                                           2
 system         public        sql_instances                    id                                                                             1
 system         public        sql_instances                    session_id                                                                     3
 system         public        sqlliveness                      expiration                                                                     2
@@ -2085,23 +2087,23 @@ system         public        table_statistics                 nullCount         
 system         public        table_statistics                 rowCount                                                                       6
 system         public        table_statistics                 statisticID                                                                    2
 system         public        table_statistics                 tableID                                                                        1
-system         public        tenant_usage                     current_share_sum                                                              7
+system         public        tenant_usage                     current_share_sum                                                              8
 system         public        tenant_usage                     instance_id                                                                    2
-system         public        tenant_usage                     instance_last_update                                                           17
-system         public        tenant_usage                     instance_lease                                                                 14
-system         public        tenant_usage                     instance_seq                                                                   15
-system         public        tenant_usage                     instance_shares                                                                16
+system         public        tenant_usage                     instance_lease                                                                 15
+system         public        tenant_usage                     instance_seq                                                                   16
+system         public        tenant_usage                     instance_shares                                                                17
+system         public        tenant_usage                     last_update                                                                    4
 system         public        tenant_usage                     next_instance_id                                                               3
-system         public        tenant_usage                     ru_burst_limit                                                                 4
-system         public        tenant_usage                     ru_current                                                                     6
-system         public        tenant_usage                     ru_refill_rate                                                                 5
+system         public        tenant_usage                     ru_burst_limit                                                                 5
+system         public        tenant_usage                     ru_current                                                                     7
+system         public        tenant_usage                     ru_refill_rate                                                                 6
 system         public        tenant_usage                     tenant_id                                                                      1
-system         public        tenant_usage                     total_read_bytes                                                               10
-system         public        tenant_usage                     total_read_requests                                                            9
-system         public        tenant_usage                     total_ru_usage                                                                 8
-system         public        tenant_usage                     total_sql_pod_cpu_seconds                                                      13
-system         public        tenant_usage                     total_write_bytes                                                              12
-system         public        tenant_usage                     total_write_requests                                                           11
+system         public        tenant_usage                     total_read_bytes                                                               11
+system         public        tenant_usage                     total_read_requests                                                            10
+system         public        tenant_usage                     total_ru_usage                                                                 9
+system         public        tenant_usage                     total_sql_pod_cpu_seconds                                                      14
+system         public        tenant_usage                     total_write_bytes                                                              13
+system         public        tenant_usage                     total_write_requests                                                           12
 system         public        tenants                          active                                                                         2
 system         public        tenants                          id                                                                             1
 system         public        tenants                          info                                                                           3
