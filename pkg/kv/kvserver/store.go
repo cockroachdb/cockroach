@@ -2840,7 +2840,7 @@ func (s *Store) ManuallyEnqueue(
 
 	log.Eventf(ctx, "running %s.process", queueName)
 	processed, processErr := queue.process(ctx, repl, sysCfg)
-	log.Eventf(ctx, "processed: %t", processed)
+	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return collect(), processErr, nil
 }
 
