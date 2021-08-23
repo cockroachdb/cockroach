@@ -2867,27 +2867,6 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `unknown on_error: not_valid, valid values are 'pause' and 'fail'`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
 		`kafka://nope`)
-
-	// Sanity check for case insensitive options
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		// Set up a type and table.
-		sqlDB.Exec(t, `CREATE TABLE insensitive (x INT PRIMARY KEY, y string)`)
-		sqlDB.Exec(t, `INSERT INTO insensitive VALUES (0, 'hello')`)
-
-		// Open up the changefeed.
-		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE insensitive WITH format=JSON`)
-		defer closeFeed(t, cf)
-
-		assertPayloads(t, cf, []string{
-			`insensitive: [0]->{"after": {"x": 0, "y": "hello"}}`,
-		})
-	}
-
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedDescription(t *testing.T) {
