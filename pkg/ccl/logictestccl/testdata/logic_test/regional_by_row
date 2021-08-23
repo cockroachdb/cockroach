@@ -273,8 +273,10 @@ DATABASE multi_region_test_db  ALTER DATABASE multi_region_test_db CONFIGURE ZON
                                voter_constraints = '{+region=ca-central-1: 2}',
                                lease_preferences = '[[+region=ca-central-1]]'
 
+# Do a REGEXP replace of the enums as these may not be static.
 query T
-EXPLAIN (OPT, CATALOG) SELECT * FROM regional_by_row_table
+SELECT regexp_replace(info, '@\d+', '@<enum_val>', 'g') FROM
+[EXPLAIN (OPT, CATALOG) SELECT * FROM regional_by_row_table]
 ----
 TABLE regional_by_row_table
  ├── pk int not null
@@ -282,14 +284,14 @@ TABLE regional_by_row_table
  ├── a int not null
  ├── b int not null
  ├── j jsonb
- ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden]
+ ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── j_inverted_key bytes not null [inverted]
  ├── FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
- ├── CHECK (crdb_region IN (x'40':::@100054, x'80':::@100054, x'c0':::@100054))
+ ├── CHECK (crdb_region IN (x'40':::@<enum_val>, x'80':::@<enum_val>, x'c0':::@<enum_val>))
  ├── PRIMARY INDEX primary
- │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden] (implicit)
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
  │    ├── pk int not null
  │    ├── ZONE
  │    │    ├── replica constraints
@@ -330,7 +332,7 @@ TABLE regional_by_row_table
  │                   │    └── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── INDEX regional_by_row_table_a_idx
- │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden] (implicit)
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
  │    ├── a int not null
  │    ├── pk int not null
  │    ├── ZONE
@@ -372,7 +374,7 @@ TABLE regional_by_row_table
  │                   │    └── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── UNIQUE INDEX regional_by_row_table_b_key
- │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden] (implicit)
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
  │    ├── b int not null
  │    ├── pk int not null (storing)
  │    ├── ZONE
@@ -414,7 +416,7 @@ TABLE regional_by_row_table
  │                   │    └── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── INVERTED INDEX regional_by_row_table_j_idx
- │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden] (implicit)
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
  │    ├── j_inverted_key bytes not null [inverted]
  │    ├── pk int not null
  │    ├── ZONE

@@ -90,13 +90,19 @@ SET sql_safe_updates = true;
 USE multi_region_test_db
 
 # Ensure that the region types were created for all the MR databases above.
-query IITI colnames
-SELECT * FROM system.namespace WHERE name='crdb_internal_region'
+query ITT colnames
+SELECT
+  e."parentSchemaID",
+  parent.name AS db_name,
+  e.name AS enum_name
+FROM system.namespace e
+JOIN system.namespace parent ON (e."parentID" = parent.id)
+WHERE e.name='crdb_internal_region'
 ----
-parentID  parentSchemaID  name                  id
-55        29              crdb_internal_region  56
-58        29              crdb_internal_region  59
-61        29              crdb_internal_region  62
+parentSchemaID  db_name                                       enum_name
+29              multi_region_test_db                          crdb_internal_region
+29              multi_region_test_explicit_primary_region_db  crdb_internal_region
+29              region_test_db                                crdb_internal_region
 
 query TTTT colnames
 SHOW ENUMS FROM region_test_db.public
