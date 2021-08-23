@@ -11,6 +11,8 @@
 package cat
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -24,18 +26,19 @@ type Column struct {
 	//
 	// Warning! If any fields are added here, make sure both Init methods below
 	// set all fields (even if they are the empty value).
-	ordinal                     int
-	stableID                    StableID
-	name                        tree.Name
-	datumType                   *types.T
-	kind                        ColumnKind
-	nullable                    bool
-	visibility                  ColumnVisibility
-	virtualComputed             bool
-	defaultExpr                 string
-	computedExpr                string
-	invertedSourceColumnOrdinal int
-	generatedAsIdentityType     GeneratedAsIdentityType
+	ordinal                           int
+	stableID                          StableID
+	name                              tree.Name
+	datumType                         *types.T
+	kind                              ColumnKind
+	nullable                          bool
+	visibility                        ColumnVisibility
+	virtualComputed                   bool
+	defaultExpr                       string
+	computedExpr                      string
+	invertedSourceColumnOrdinal       int
+	generatedAsIdentityType           GeneratedAsIdentityType
+	generatedAsIdentitySequenceOption string
 }
 
 // Ordinal returns the position of the column in its table. The following always
@@ -211,6 +214,20 @@ const (
 	GeneratedByDefaultAsIdentity
 )
 
+// HasGeneratedAsIdentitySequenceOption returns true if there is a sequence
+// option for a `GENERATED AS IDENTITY` column.
+func (c *Column) HasGeneratedAsIdentitySequenceOption() bool {
+	return c.generatedAsIdentitySequenceOption != ""
+}
+
+// GeneratedAsIdentitySequenceOption is set to the SQL expression string that
+// specify the sequence option for a `GENERATED AS IDENTITY` column.
+// A `GENERATED AS IDENTITY` column is an auto-incremented column based on an
+// underlying sequence, for which users can customize the options.
+func (c *Column) GeneratedAsIdentitySequenceOption() string {
+	return strings.TrimSpace(c.generatedAsIdentitySequenceOption)
+}
+
 // MaybeHidden is a helper constructor for either Visible or Hidden, depending
 // on a flag.
 func MaybeHidden(hidden bool) ColumnVisibility {
@@ -240,6 +257,7 @@ func (c *Column) Init(
 	defaultExpr *string,
 	computedExpr *string,
 	generatedAsIdentityType GeneratedAsIdentityType,
+	generatedAsIdentitySequenceOption *string,
 ) {
 	if kind == Inverted {
 		panic(errors.AssertionFailedf("incorrect init method"))
@@ -268,6 +286,11 @@ func (c *Column) Init(
 			panic(errors.AssertionFailedf("both generated identity and computed expression specified for column %q", name))
 		}
 		c.computedExpr = *computedExpr
+	}
+	if generatedAsIdentityType != NotGeneratedAsIdentity {
+		if generatedAsIdentitySequenceOption != nil {
+			c.generatedAsIdentitySequenceOption = *generatedAsIdentitySequenceOption
+		}
 	}
 }
 
@@ -318,7 +341,7 @@ func (c *Column) InitVirtualComputed(
 }
 
 // IsGeneratedAlwaysAsIdentity returns true
-// if the column is created with the GENERATED ALWAYS AS IDENTITY token
+// if the column is created with the GENERATED ALWAYS AS IDENTITY syntax
 // and hence is not allowed for explicit write
 // (write without any additional tokens).
 func (c *Column) IsGeneratedAlwaysAsIdentity() bool {
