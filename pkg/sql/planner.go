@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -738,9 +737,6 @@ func (p *planner) TypeAsStringOpts(
 				return res, errors.Errorf("failed to cast %T to string", d)
 			}
 			res[name] = string(*str)
-			if _, ok := KVStringCaseInsensitiveOpts[name]; ok {
-				res[name] = strings.ToLower(string(*str))
-			}
 		}
 		return res, nil
 	}
