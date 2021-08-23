@@ -200,6 +200,10 @@ message LocalOnlySessionData {
   // IsSuperuser returns whether the user is a "superuser", which is defined
   // to be a user with an admin role.
   bool is_superuser = 52;
+  // LargeFullScanRows is the estimated row count at which a full scan is
+  // considered large, and worthy of logging and/or disabling depending on other
+  // settings.
+  double large_full_scan_rows = 53;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
