@@ -403,3 +403,21 @@ EXPLAIN (VEC) INSERT INTO t66568 VALUES (1) ON CONFLICT DO NOTHING
     └ *colexecjoin.crossJoiner
       ├ *sql.planNodeToRowSource
       └ *colfetcher.ColBatchScan
+
+statement ok
+CREATE TABLE t_string (a STRING);
+INSERT INTO t_string VALUES (NULL)
+
+# Check that IN expression with non-constant right-hand side is handled via the
+# default comparison operator.
+query T
+EXPLAIN (VEC) SELECT 'b' IN ('b', a, 'a') FROM t_string
+----
+│
+└ Node 1
+  └ *colexecproj.defaultCmpProjOp
+    └ *colexec.tupleProjOp
+      └ *colexecbase.constBytesOp
+        └ *colexecbase.constBytesOp
+          └ *colexecbase.constBytesOp
+            └ *colfetcher.ColBatchScan
