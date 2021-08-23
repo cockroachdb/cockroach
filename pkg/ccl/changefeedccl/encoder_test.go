@@ -264,8 +264,6 @@ func TestAvroEncoder(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -274,22 +272,20 @@ func TestAvroEncoder(t *testing.T) {
 			`INSERT INTO foo VALUES (1, 'bar'), (2, NULL) RETURNING cluster_logical_timestamp()`,
 		).Scan(&ts1)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
-			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+			`WITH format=%s, diff, resolved`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, foo)
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}},"before":null}`,
 			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}},"before":null}`,
 		})
-		resolved := expectResolvedTimestampAvro(t, reg, foo)
+		resolved := expectResolvedTimestampAvro(t, foo)
 		if ts := parseTimeToHLC(t, ts1); resolved.LessEq(ts) {
 			t.Fatalf(`expected a resolved timestamp greater than %s got %s`, ts, resolved)
 		}
 
-		fooUpdated := feed(t, f, `CREATE CHANGEFEED FOR foo `+
-			`WITH format=$1, confluent_schema_registry=$2, diff, updated`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		fooUpdated := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+			`WITH format=%s, diff, updated`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, fooUpdated)
 		// Skip over the first two rows since we don't know the statement timestamp.
 		_, err := fooUpdated.Next()
@@ -303,15 +299,14 @@ func TestAvroEncoder(t *testing.T) {
 				`INSERT INTO foo VALUES (3, 'baz') RETURNING cluster_logical_timestamp()`,
 			).Scan(&ts2)
 		}))
-		assertPayloadsAvro(t, reg, fooUpdated, []string{
+		assertPayloads(t, fooUpdated, []string{
 			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"string":"baz"}}},` +
 				`"before":null,` +
 				`"updated":{"string":"` + ts2 + `"}}`,
 		})
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestAvroEncoderWithTLS(t *testing.T) {
@@ -437,9 +432,6 @@ func TestAvroArray(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
 		sqlDB.Exec(t,
@@ -452,11 +444,10 @@ func TestAvroArray(t *testing.T) {
 			(6, ARRAY[1,2,3,4,NULL,6,7,NULL,9])`,
 		)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
-			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+			`WITH format=%s, diff, resolved`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, foo)
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"array":[{"long":10},{"long":20},{"long":30}]}}},"before":null}`,
 			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}},"before":null}`,
 			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"array":[{"long":42},null,{"long":42},{"long":43}]}}},"before":null}`,
@@ -468,7 +459,7 @@ func TestAvroArray(t *testing.T) {
 		sqlDB.Exec(t, `UPDATE foo SET b = ARRAY[0,0,0] where a=1`)
 		sqlDB.Exec(t, `UPDATE foo SET b = ARRAY[0,0,0,0] where a=2`)
 
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"array":[{"long":0},{"long":0},{"long":0}]}}},` +
 				`"before":{"foo_before":{"a":{"long":1},"b":{"array":[{"long":10},{"long":20},{"long":30}]}}}}`,
 			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":{"array":[{"long":0},{"long":0},{"long":0},{"long":0}]}}},` +
@@ -477,8 +468,7 @@ func TestAvroArray(t *testing.T) {
 
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestAvroArrayCap(t *testing.T) {
@@ -486,43 +476,38 @@ func TestAvroArrayCap(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, ARRAY[])`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
-			`WITH format=$1, confluent_schema_registry=$2`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+			`WITH format=%s`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, foo)
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":0}}->{"after":{"foo":{"a":{"long":0},"b":{"array":[]}}}}`,
 		})
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (8, ARRAY[null,null,null,null,null,null,null,null])`)
 
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":8}}->{"after":{"foo":{"a":{"long":8},"b":{"array":[null,null,null,null,null,null,null,null]}}}}`,
 		})
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (4, ARRAY[null,null,null,null])`)
 
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"array":[null,null,null,null]}}}}`,
 		})
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (5, ARRAY[null,null,null,null,null])`)
 
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":5}}->{"after":{"foo":{"a":{"long":5},"b":{"array":[null,null,null,null,null]}}}}`,
 		})
 
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestAvroCollatedString(t *testing.T) {
@@ -530,24 +515,20 @@ func TestAvroCollatedString(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b string collate "fr-CA")`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'désolée' collate "fr-CA")`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
-			`WITH format=$1, confluent_schema_registry=$2`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+			`WITH format=%s`,
+			changefeedbase.OptFormatAvro))
 		defer closeFeed(t, foo)
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"désolée"}}}}`,
 		})
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestAvroEnum(t *testing.T) {
@@ -555,20 +536,16 @@ func TestAvroEnum(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b status, c int default 0)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'open')`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, null)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
-			`WITH format=$1, confluent_schema_registry=$2`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+			`WITH format=%s`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, foo)
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"open"},"c":{"long":0}}}}`,
 			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null,"c":{"long":0}}}}`,
 		})
@@ -576,7 +553,7 @@ func TestAvroEnum(t *testing.T) {
 		sqlDB.Exec(t, `ALTER TYPE status ADD value 'review'`)
 		sqlDB.Exec(t, `INSERT INTO foo values (4, 'review')`)
 
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"string":"review"},"c":{"long":0}}}}`,
 		})
 
@@ -585,7 +562,7 @@ func TestAvroEnum(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo values (3, 'active')`)
 		sqlDB.Exec(t, `UPDATE foo set c=1 where a=1`)
 
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"string":"active"},"c":{"long":0}}}}`,
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"active"},"c":{"long":1}}}}`,
 		})
@@ -594,25 +571,23 @@ func TestAvroEnum(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE soft_deletes (a INT, b status, c INT default 0, PRIMARY KEY (a,b))`)
 		sqlDB.Exec(t, `INSERT INTO soft_deletes values (0, 'active')`)
 
-		sd := feed(t, f, `CREATE CHANGEFEED FOR soft_deletes `+
-			`WITH format=$1, confluent_schema_registry=$2`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		sd := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR soft_deletes `+
+			`WITH format=%s`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, sd)
-		assertPayloadsAvro(t, reg, sd, []string{
+		assertPayloads(t, sd, []string{
 			`soft_deletes: {"a":{"long":0},"b":{"string":"active"}}->{"after":{"soft_deletes":{"a":{"long":0},"b":{"string":"active"},"c":{"long":0}}}}`,
 		})
 
 		sqlDB.Exec(t, `ALTER TYPE status RENAME value 'active' to 'open'`)
 		sqlDB.Exec(t, `UPDATE soft_deletes set c=1 where a=0`)
 
-		assertPayloadsAvro(t, reg, sd, []string{
+		assertPayloads(t, sd, []string{
 			`soft_deletes: {"a":{"long":0},"b":{"string":"open"}}->{"after":{"soft_deletes":{"a":{"long":0},"b":{"string":"open"},"c":{"long":1}}}}`,
 		})
 
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestAvroSchemaNaming(t *testing.T) {
@@ -620,9 +595,6 @@ func TestAvroSchemaNaming(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
@@ -630,80 +602,73 @@ func TestAvroSchemaNaming(t *testing.T) {
 			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
 		)
 
-		movrFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=$1, confluent_schema_registry=$2`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		movrFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=%s`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, movrFeed)
 
-		assertPayloadsAvro(t, reg, movrFeed, []string{
+		foo := movrFeed.(*kafkaFeed)
+
+		assertPayloads(t, movrFeed, []string{
 			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 		})
 
-		assertRegisteredSubjects(t, reg, []string{
+		assertRegisteredSubjects(t, foo.registry, []string{
 			`drivers-key`,
 			`drivers-value`,
 		})
 
-		fqnFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=$1, confluent_schema_registry=$2, full_table_name`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		fqnFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=%s, full_table_name`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, fqnFeed)
 
-		assertPayloadsAvro(t, reg, fqnFeed, []string{
+		foo = fqnFeed.(*kafkaFeed)
+
+		assertPayloads(t, fqnFeed, []string{
 			`movr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 		})
 
-		assertRegisteredSubjects(t, reg, []string{
-			`drivers-key`,
-			`drivers-value`,
+		assertRegisteredSubjects(t, foo.registry, []string{
 			`movr.public.drivers-key`,
 			`movr.public.drivers-value`,
 		})
 
-		prefixFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=$1, confluent_schema_registry=$2, avro_schema_prefix=super`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		prefixFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=%s, avro_schema_prefix=super`,
+			changefeedbase.OptFormatAvro))
 		defer closeFeed(t, prefixFeed)
 
-		assertPayloadsAvro(t, reg, prefixFeed, []string{
+		foo = prefixFeed.(*kafkaFeed)
+
+		assertPayloads(t, prefixFeed, []string{
 			`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 		})
 
-		assertRegisteredSubjects(t, reg, []string{
-			`drivers-key`,
-			`drivers-value`,
-			`movr.public.drivers-key`,
-			`movr.public.drivers-value`,
+		assertRegisteredSubjects(t, foo.registry, []string{
 			`superdrivers-key`,
 			`superdrivers-value`,
 		})
 
-		prefixFQNFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=$1, confluent_schema_registry=$2, avro_schema_prefix=super, full_table_name`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		prefixFQNFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=%s, avro_schema_prefix=super, full_table_name`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, prefixFQNFeed)
 
-		assertPayloadsAvro(t, reg, prefixFQNFeed, []string{
+		foo = prefixFQNFeed.(*kafkaFeed)
+
+		assertPayloads(t, prefixFQNFeed, []string{
 			`movr.public.drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 		})
 
-		assertRegisteredSubjects(t, reg, []string{
-			`drivers-key`,
-			`drivers-value`,
-			`movr.public.drivers-key`,
-			`movr.public.drivers-value`,
-			`superdrivers-key`,
-			`superdrivers-value`,
+		assertRegisteredSubjects(t, foo.registry, []string{
 			`supermovr.public.drivers-key`,
 			`supermovr.public.drivers-value`,
 		})
 
 		//Both changes to the subject are also reflected in the schema name in the posted schemas
-		require.Contains(t, reg.SchemaForSubject(`supermovr.public.drivers-key`), `supermovr`)
-		require.Contains(t, reg.SchemaForSubject(`supermovr.public.drivers-value`), `supermovr`)
+		require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-key`), `supermovr`)
+		require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-value`), `supermovr`)
 	}
 
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestAvroSchemaNamespace(t *testing.T) {
@@ -711,9 +676,6 @@ func TestAvroSchemaNamespace(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
@@ -721,31 +683,34 @@ func TestAvroSchemaNamespace(t *testing.T) {
 			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
 		)
 
-		noNamespaceFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=$1, confluent_schema_registry=$2`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		noNamespaceFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=%s`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, noNamespaceFeed)
 
-		assertPayloadsAvro(t, reg, noNamespaceFeed, []string{
+		assertPayloads(t, noNamespaceFeed, []string{
 			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 		})
 
-		namespaceFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=$1, confluent_schema_registry=$2, avro_schema_prefix=super`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		foo := noNamespaceFeed.(*kafkaFeed)
+
+		require.NotContains(t, foo.registry.SchemaForSubject(`drivers-key`), `namespace`)
+		require.NotContains(t, foo.registry.SchemaForSubject(`drivers-value`), `namespace`)
+
+		namespaceFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, namespaceFeed)
 
-		assertPayloadsAvro(t, reg, namespaceFeed, []string{
+		foo = namespaceFeed.(*kafkaFeed)
+
+		assertPayloads(t, namespaceFeed, []string{
 			`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 		})
 
-		require.NotContains(t, reg.SchemaForSubject(`drivers-key`), `namespace`)
-		require.NotContains(t, reg.SchemaForSubject(`drivers-value`), `namespace`)
-		require.Contains(t, reg.SchemaForSubject(`superdrivers-key`), `"namespace":"super"`)
-		require.Contains(t, reg.SchemaForSubject(`superdrivers-value`), `"namespace":"super"`)
+		require.Contains(t, foo.registry.SchemaForSubject(`superdrivers-key`), `"namespace":"super"`)
+		require.Contains(t, foo.registry.SchemaForSubject(`superdrivers-value`), `"namespace":"super"`)
 	}
 
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestTableNameCollision(t *testing.T) {
@@ -753,9 +718,6 @@ func TestTableNameCollision(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE DATABASE printr`)
@@ -768,32 +730,29 @@ func TestTableNameCollision(t *testing.T) {
 			`INSERT INTO printr.drivers VALUES (1, 100), (2, NULL)`,
 		)
 
-		movrFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		movrFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=%s, diff, resolved`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, movrFeed)
 
-		printrFeed := feed(t, f, `CREATE CHANGEFEED FOR printr.drivers `+
-			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		printrFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR printr.drivers `+
+			`WITH format=%s, diff, resolved`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, printrFeed)
 
-		comboFeed := feed(t, f, `CREATE CHANGEFEED FOR printr.drivers, movr.drivers `+
-			`WITH format=$1, confluent_schema_registry=$2, diff, resolved, full_table_name`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		comboFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR printr.drivers, movr.drivers `+
+			`WITH format=%s, diff, resolved, full_table_name`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, comboFeed)
 
-		assertPayloadsAvro(t, reg, movrFeed, []string{
+		assertPayloads(t, movrFeed, []string{
 			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}},"before":null}`,
 			`drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"name":null}},"before":null}`,
 		})
 
-		assertPayloadsAvro(t, reg, printrFeed, []string{
+		assertPayloads(t, printrFeed, []string{
 			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"version":{"long":100}}},"before":null}`,
 			`drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"version":null}},"before":null}`,
 		})
 
-		assertPayloadsAvro(t, reg, comboFeed, []string{
+		assertPayloads(t, comboFeed, []string{
 			`movr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}},"before":null}`,
 			`movr.public.drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"name":null}},"before":null}`,
 			`printr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"version":{"long":100}}},"before":null}`,
@@ -801,7 +760,7 @@ func TestTableNameCollision(t *testing.T) {
 		})
 	}
 
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
@@ -809,18 +768,14 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
-			`WITH format=$1, confluent_schema_registry=$2`,
-			changefeedbase.OptFormatAvro, reg.URL())
+		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+			`WITH format=%s`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, foo)
-		assertPayloadsAvro(t, reg, foo, []string{
+		assertPayloads(t, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1}}}}`,
 		})
 
@@ -831,8 +786,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 		}
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestAvroLedger(t *testing.T) {
@@ -840,21 +794,17 @@ func TestAvroLedger(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
 		ctx := context.Background()
 		gen := ledger.FromFlags(`--customers=1`)
 		var l workloadsql.InsertsDataLoader
 		_, err := workloadsql.Setup(ctx, db, gen, l)
 		require.NoError(t, err)
 
-		ledger := feed(t, f, `CREATE CHANGEFEED FOR customer, transaction, entry, session
-	                       WITH format=$1, confluent_schema_registry=$2
-	               `, changefeedbase.OptFormatAvro, reg.URL())
+		ledger := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR customer, transaction, entry, session
+	                       WITH format=%s`, changefeedbase.OptFormatAvro))
 		defer closeFeed(t, ledger)
 
-		assertPayloadsAvro(t, reg, ledger, []string{
+		assertPayloads(t, ledger, []string{
 			`customer: {"id":{"long":0}}->{"after":{"customer":{"balance":{"bytes.decimal":"0"},"created":{"long.timestamp-micros":"2114-03-27T13:14:27.287114Z"},"credit_limit":null,"currency_code":{"string":"XVL"},"id":{"long":0},"identifier":{"string":"0"},"is_active":{"boolean":true},"is_system_customer":{"boolean":true},"name":null,"sequence_number":{"long":-1}}}}`,
 			`entry: {"id":{"long":1543039099823358511}}->{"after":{"entry":{"amount":{"bytes.decimal":"0"},"created_ts":{"long.timestamp-micros":"1990-12-09T23:47:23.811124Z"},"customer_id":{"long":0},"id":{"long":1543039099823358511},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"44061/500"},"transaction_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}}}`,
 			`entry: {"id":{"long":2244708090865615074}}->{"after":{"entry":{"amount":{"bytes.decimal":"1/50"},"created_ts":{"long.timestamp-micros":"2075-11-08T22:07:12.055686Z"},"customer_id":{"long":0},"id":{"long":2244708090865615074},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"44061/500"},"transaction_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}}}`,
@@ -870,6 +820,5 @@ func TestAvroLedger(t *testing.T) {
 		})
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }

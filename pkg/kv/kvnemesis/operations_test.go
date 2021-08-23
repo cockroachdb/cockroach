@@ -28,6 +28,7 @@ func TestOperationsFormat(t *testing.T) {
 		expected string
 	}{
 		{step: step(get(`a`)), expected: `db0.Get(ctx, "a")`},
+		{step: step(del(`a`)), expected: `db0.Del(ctx, "a")`},
 		{step: step(batch(get(`b`), reverseScanForUpdate(`c`, `e`), get(`f`))), expected: `
 			{
 			  b := &Batch{}
@@ -38,16 +39,21 @@ func TestOperationsFormat(t *testing.T) {
 			}
 		`},
 		{
-			step: step(closureTxn(ClosureTxnType_Commit, batch(get(`g`), get(`h`)), put(`i`, `j`))),
+			step: step(
+				closureTxn(ClosureTxnType_Commit,
+					batch(get(`g`), get(`h`), del(`i`)),
+					put(`k`, `l`),
+				)),
 			expected: `
 			db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			  {
 			    b := &Batch{}
 			    b.Get(ctx, "g")
 			    b.Get(ctx, "h")
+			    b.Del(ctx, "i")
 			    txn.Run(ctx, b)
 			  }
-			  txn.Put(ctx, "i", j)
+			  txn.Put(ctx, "k", l)
 			  return nil
 			})
 			`,

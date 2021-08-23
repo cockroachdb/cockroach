@@ -160,3 +160,33 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptWebhookClientTimeout:     sql.KVStringOptRequireValue,
 	OptOnError:                  sql.KVStringOptRequireValue,
 }
+
+func makeStringSet(opts ...string) map[string]struct{} {
+	res := make(map[string]struct{}, len(opts))
+	for _, opt := range opts {
+		res[opt] = struct{}{}
+	}
+	return res
+}
+
+// CommonOptions is options common to all sinks
+var CommonOptions = makeStringSet(OptCursor, OptEnvelope,
+	OptFormat, OptFullTableName,
+	OptKeyInValue, OptTopicInValue,
+	OptResolvedTimestamps, OptUpdatedTimestamps,
+	OptMVCCTimestamps, OptDiff,
+	OptSchemaChangeEvents, OptSchemaChangePolicy,
+	OptProtectDataFromGCOnPause, OptOnError,
+	OptInitialScan, OptNoInitialScan)
+
+// SQLValidOptions is options exclusive to SQL sink
+var SQLValidOptions map[string]struct{} = nil
+
+// KafkaValidOptions is options exclusive to Kafka sink
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig)
+
+// CloudStorageValidOptions is options exclusive to cloud storage sink
+var CloudStorageValidOptions = makeStringSet(OptCompression)
+
+// WebhookValidOptions is options exclusive to webhook sink
+var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig)
