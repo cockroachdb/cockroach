@@ -609,10 +609,14 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
 	if !tab.IsVirtualTable() && scan.Constraint == nil && scan.InvertedConstraint == nil && !scan.HardLimit.IsSet() {
+		stats := scan.Relational().Stats
+		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData.LargeFullScanRows
 		if scan.Index == cat.PrimaryIndex {
 			b.ContainsFullTableScan = true
+			b.ContainsLargeFullTableScan = b.ContainsLargeFullTableScan || large
 		} else {
 			b.ContainsFullIndexScan = true
+			b.ContainsLargeFullIndexScan = b.ContainsLargeFullIndexScan || large
 		}
 	}
 

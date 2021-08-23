@@ -3644,6 +3644,7 @@ idle_in_session_timeout                                0
 idle_in_transaction_session_timeout                    0
 integer_datetimes                                      on
 intervalstyle                                          postgres
+large_full_scan_rows                                   0
 locality                                               region=test,dc=dc1
 locality_optimized_partitioned_index_scan              on
 lock_timeout                                           0

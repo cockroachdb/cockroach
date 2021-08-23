@@ -102,6 +102,12 @@ func (f *FloatSetting) setToDefault(sv *Values) {
 	}
 }
 
+// WithPublic sets public visibility and can be chained.
+func (f *FloatSetting) WithPublic() *FloatSetting {
+	f.SetVisibility(Public)
+	return f
+}
+
 // WithSystemOnly indicates system-usage only and can be chained.
 func (f *FloatSetting) WithSystemOnly() *FloatSetting {
 	f.common.systemOnly = true

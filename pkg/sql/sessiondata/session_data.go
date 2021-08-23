@@ -287,6 +287,10 @@ type LocalOnlySessionData struct {
 	// trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
 	// means disabled.
 	TxnRowsReadErr int64
+	// LargeFullScanRows is the estimated row count at which a full scan is
+	// considered large, and worthy of logging and/or disabling depending on other
+	// settings.
+	LargeFullScanRows float64
 
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
