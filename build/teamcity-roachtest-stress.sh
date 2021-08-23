@@ -3,19 +3,14 @@ set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
 
-google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
+google_credentials="$GOOGLE_CREDENTIALS"
 generate_ssh_key
 log_into_gcloud
 
 set -x
 
 export ROACHPROD_USER=teamcity
-
-# TODO(erikgrinaker): We should use a dedicated or more appropriate project
-# here, but use andrei-jepsen for now. We don't want to use the regular test
-# project here to avoid disturbing test runs due to e.g. quota limits. See:
-# https://cockroachlabs.atlassian.net/browse/DEVINF-140
-export GCE_PROJECT=${GCE_PROJECT-andrei-jepsen}
+export GCE_PROJECT=${GCE_PROJECT-cockroach-roachstress}
 
 mkdir -p artifacts
 
