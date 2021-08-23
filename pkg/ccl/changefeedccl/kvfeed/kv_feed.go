@@ -108,7 +108,7 @@ func Run(ctx context.Context, cfg Config) error {
 	// down the changefeed exposes synchronization challenges.
 	var scErr schemaChangeDetectedError
 	if errors.As(err, &scErr) {
-		log.Infof(ctx, "stopping changefeed due to schema change at %v", scErr.ts)
+		log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
 		<-ctx.Done()
 		err = nil
 	}
@@ -216,8 +216,13 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 				}
 			}
 		}
+
 		// Exit if the policy says we should.
 		if boundaryType == jobspb.ResolvedSpan_RESTART || boundaryType == jobspb.ResolvedSpan_EXIT {
+			// Close the sink so it knows no more writes are expected
+			if err := f.sink.Close(ctx); err != nil {
+				log.Warningf(ctx, "failed to close buffer: %s", err)
+			}
 			return schemaChangeDetectedError{highWater.Next()}
 		}
 	}

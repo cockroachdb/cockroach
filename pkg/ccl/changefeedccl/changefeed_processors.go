@@ -443,6 +443,12 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 			return ca.ProcessRowHelper(ca.resolvedSpanBuf.Pop()), nil
 		}
 		if err := ca.tick(); err != nil {
+			if errors.Is(err, kvevent.ErrBufferClosed) {
+				// ErrBufferClosed is a signal that
+				// our kvfeed has exited expectedly.
+				err = nil
+			}
+
 			select {
 			// If the poller errored first, that's the
 			// interesting one, so overwrite `err`.
