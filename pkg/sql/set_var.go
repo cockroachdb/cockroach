@@ -90,7 +90,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 		// Statement is RESET. Do we have a default available?
 		// We do not use getDefaultString here because we need to delay
 		// the computation of the default to the execute phase.
-		if _, ok := p.sessionDataMutator.defaults[name]; !ok && v.GlobalDefault == nil {
+		if _, ok := p.TopMutator().defaults[name]; !ok && v.GlobalDefault == nil {
 			return nil, newCannotChangeParameterError(name)
 		}
 	}
@@ -128,16 +128,19 @@ func (n *setVarNode) startExec(params runParams) error {
 		}
 	} else {
 		// Statement is RESET and we already know we have a default. Find it.
-		_, strVal = getSessionVarDefaultString(n.name, n.v, params.p.sessionDataMutator)
+		_, strVal = getSessionVarDefaultString(n.name, n.v, params.p.TopMutator())
 	}
 
-	if n.v.RuntimeSet != nil {
-		return n.v.RuntimeSet(params.ctx, params.extendedEvalCtx, strVal)
+	applyFunc := func(m *sessionDataMutator) error {
+		if n.v.RuntimeSet != nil {
+			return n.v.RuntimeSet(params.ctx, params.p.ExtendedEvalContext(), strVal)
+		}
+		if n.v.SetWithPlanner != nil {
+			return n.v.SetWithPlanner(params.ctx, params.p, strVal)
+		}
+		return n.v.Set(params.ctx, m, strVal)
 	}
-	if n.v.SetWithPlanner != nil {
-		return n.v.SetWithPlanner(params.ctx, params.p, strVal)
-	}
-	return n.v.Set(params.ctx, params.p.sessionDataMutator, strVal)
+	return params.p.sessionDataMutatorFactory.forEachMutatorError(applyFunc)
 }
 
 // getSessionVarDefaultString retrieves a string suitable to pass to a

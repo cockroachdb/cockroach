@@ -583,8 +583,8 @@ func (s *Server) SetupConn(
 
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
-	sdMut := s.makeSessionDataMutator(sd, args.SessionDefaults)
-	if err := resetSessionVars(ctx, &sdMut); err != nil {
+	sdMutFactory := s.makeSessionDataMutatorFactory(nil, args.SessionDefaults)
+	if err := resetSessionVars(ctx, sdMutFactory.mutator(sd)); err != nil {
 		log.Errorf(ctx, "error setting up client session: %s", err)
 		return ConnectionHandler{}, err
 	}
@@ -625,7 +625,7 @@ func (h ConnectionHandler) GetParamStatus(ctx context.Context, varName string) s
 		log.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
 		return ""
 	}
-	hasDefault, defVal := getSessionVarDefaultString(name, v, h.ex.dataMutator)
+	hasDefault, defVal := getSessionVarDefaultString(name, v, h.ex.dataMutatorFactory.TopMutator())
 	if !hasDefault {
 		log.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
 		return ""
@@ -670,14 +670,16 @@ func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 	return sd
 }
 
-func (s *Server) makeSessionDataMutator(
-	sd *sessiondata.SessionData, defaults SessionDefaults,
-) sessionDataMutator {
-	return sessionDataMutator{
-		data:               sd,
-		defaults:           defaults,
-		settings:           s.cfg.Settings,
-		paramStatusUpdater: &noopParamStatusUpdater{},
+func (s *Server) makeSessionDataMutatorFactory(
+	sds *sessiondata.SessionDataStack, defaults SessionDefaults,
+) *sessionDataMutatorFactory {
+	return &sessionDataMutatorFactory{
+		sds: sds,
+		base: sessionDataMutator{
+			defaults:           defaults,
+			settings:           s.cfg.Settings,
+			paramStatusUpdater: &noopParamStatusUpdater{},
+		},
 	}
 }
 
@@ -737,8 +739,6 @@ func (s *Server) newConnExecutor(
 	)
 
 	nodeIDOrZero, _ := s.cfg.NodeID.OptionalNodeID()
-	sdMutator := new(sessionDataMutator)
-	*sdMutator = s.makeSessionDataMutator(sd, sdDefaults)
 	ex := &connExecutor{
 		server:           s,
 		metrics:          srvMetrics,
@@ -747,7 +747,6 @@ func (s *Server) newConnExecutor(
 		mon:              sessionRootMon,
 		sessionMon:       sessionMon,
 		sessionDataStack: sessiondata.NewSessionDataStack(sd),
-		dataMutator:      sdMutator,
 		state: txnState{
 			mon:                          txnMon,
 			connCtx:                      ctx,
@@ -779,6 +778,7 @@ func (s *Server) newConnExecutor(
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
 
+	sdMutator := sessionDataMutator{}
 	// The transaction_read_only variable is special; its updates need to be
 	// hooked-up to the executor.
 	sdMutator.setCurTxnReadOnly = func(val bool) {
@@ -796,6 +796,10 @@ func (s *Server) newConnExecutor(
 		ex.applicationName.Store(newName)
 		ex.statsWriter = ex.server.sqlStats.GetWriterForApplication(newName)
 	})
+	ex.dataMutatorFactory = s.makeSessionDataMutatorFactory(
+		&ex.sessionDataStack,
+		sdDefaults,
+	)
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
@@ -850,7 +854,7 @@ func (s *Server) newConnExecutorWithTxn(
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
-		ex.dataMutator.SetReadOnly(true)
+		ex.dataMutatorFactory.TopMutator().SetReadOnly(true)
 	}
 
 	// The new transaction stuff below requires active monitors and traces, so
@@ -1224,9 +1228,10 @@ type connExecutor struct {
 
 	// sessionDataStack contains the user-configurable connection variables.
 	sessionDataStack sessiondata.SessionDataStack
-	// dataMutator is nil for session-bound internal executors; we shouldn't issue
-	// statements that manipulate session state to an internal executor.
-	dataMutator *sessionDataMutator
+	// dataMutatorFactory is nil for session-bound internal executors; we
+	// shouldn't issue statements that manipulate session state to an internal
+	// executor.
+	dataMutatorFactory *sessionDataMutatorFactory
 
 	// statsWriter is a writer interface for recording per-application SQL usage
 	// statistics. It is maintained to represent statistics for the application
@@ -2375,7 +2380,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SQLStatsController:     ex.server.sqlStatsController,
 			CompactEngineSpan:      ex.server.cfg.CompactEngineSpanFunc,
 		},
-		SessionMutator:         ex.dataMutator,
+		SessionMutatorFactory:  ex.dataMutatorFactory,
 		VirtualSchemas:         ex.server.cfg.VirtualSchemas,
 		Tracing:                &ex.sessionTracing,
 		NodesStatusServer:      ex.server.cfg.NodesStatusServer,
@@ -2457,7 +2462,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 
 	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
 
-	p.sessionDataMutator = ex.dataMutator
+	p.sessionDataMutatorFactory = ex.dataMutatorFactory
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 

@@ -2392,6 +2392,57 @@ var _ paramStatusUpdater = (*noopParamStatusUpdater)(nil)
 
 func (noopParamStatusUpdater) BufferParamStatusUpdate(string, string) {}
 
+// sessionDataMutatorFactory creates sessionMutators.
+type sessionDataMutatorFactory struct {
+	base sessionDataMutator
+	sds  *sessiondata.SessionDataStack
+}
+
+// mutator returns a mutator for the given sessionData.
+func (f *sessionDataMutatorFactory) mutator(sd *sessiondata.SessionData) *sessionDataMutator {
+	ret := f.base
+	ret.data = sd
+	return &ret
+}
+
+// TopMutator returns the mutator for the top element of the stack.
+func (f *sessionDataMutatorFactory) TopMutator() *sessionDataMutator {
+	if f.sds == nil {
+		return nil
+	}
+	top := f.sds.Top()
+	if top == nil {
+		return nil
+	}
+	return f.mutator(top)
+}
+
+// forEachMutator iterates over each mutator and applies the given function to them.
+func (f *sessionDataMutatorFactory) forEachMutator(applyFunc func(m *sessionDataMutator)) {
+	if f.sds == nil {
+		return
+	}
+	for _, sd := range *f.sds {
+		applyFunc(f.mutator(sd))
+	}
+}
+
+// forEachMutatorError iterates over each mutator and applies the given function to them.
+// This variation returns an error if applyFunc returns an error.
+func (f *sessionDataMutatorFactory) forEachMutatorError(
+	applyFunc func(m *sessionDataMutator) error,
+) error {
+	if f.sds == nil {
+		return nil
+	}
+	for _, sd := range *f.sds {
+		if err := applyFunc(f.mutator(sd)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // sessionDataMutator is the interface used by sessionVars to change the session
 // state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
 // see curTxnReadOnly).

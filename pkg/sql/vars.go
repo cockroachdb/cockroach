@@ -243,7 +243,7 @@ var varGen = map[string]sessionVar{
 		},
 		SetWithPlanner: func(
 			_ context.Context, p *planner, dbName string) error {
-			p.sessionDataMutator.SetDatabase(dbName)
+			p.TopMutator().SetDatabase(dbName)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData().Database },
@@ -1736,5 +1736,7 @@ func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string) err
 	if v.SetWithPlanner != nil {
 		return v.SetWithPlanner(ctx, p, newVal)
 	}
-	return v.Set(ctx, p.sessionDataMutator, newVal)
+	return p.sessionDataMutatorFactory.forEachMutatorError(func(m *sessionDataMutator) error {
+		return v.Set(ctx, m, newVal)
+	})
 }

@@ -31,15 +31,15 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 	switch n.Modes.UserPriority {
 	case tree.UnspecifiedUserPriority:
 	default:
-		p.sessionDataMutator.SetDefaultTransactionPriority(n.Modes.UserPriority)
+		p.TopMutator().SetDefaultTransactionPriority(n.Modes.UserPriority)
 	}
 
 	// Note: We also support SET DEFAULT_TRANSACTION_READ_ONLY TO ' .... '.
 	switch n.Modes.ReadWriteMode {
 	case tree.ReadOnly:
-		p.sessionDataMutator.SetDefaultTransactionReadOnly(true)
+		p.TopMutator().SetDefaultTransactionReadOnly(true)
 	case tree.ReadWrite:
-		p.sessionDataMutator.SetDefaultTransactionReadOnly(false)
+		p.TopMutator().SetDefaultTransactionReadOnly(false)
 	case tree.UnspecifiedReadWriteMode:
 	default:
 		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
@@ -54,7 +54,7 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 	// way to do this is SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE;
 	if n.Modes.AsOf.Expr != nil {
 		if tree.IsFollowerReadTimestampFunction(n.Modes.AsOf, p.semaCtx.SearchPath) {
-			p.sessionDataMutator.SetDefaultTransactionUseFollowerReads(true)
+			p.TopMutator().SetDefaultTransactionUseFollowerReads(true)
 		} else {
 			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 				"unsupported default as of system time expression, only %s() allowed",

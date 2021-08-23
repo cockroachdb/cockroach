@@ -1791,7 +1791,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 
 	owner := r.job.Payload().UsernameProto.Decode()
 
-	sessionMutator := p.ExtendedEvalContext().SessionMutator
+	sessionMutator := p.ExtendedEvalContext().SessionMutatorFactory.TopMutator()
 	sessionMutator.SetDefaultIntSize(details.DefaultIntSize)
 
 	if details.ParseBundleSchema {

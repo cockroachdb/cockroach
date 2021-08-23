@@ -53,7 +53,7 @@ import (
 type extendedEvalContext struct {
 	tree.EvalContext
 
-	SessionMutator *sessionDataMutator
+	SessionMutatorFactory *sessionDataMutatorFactory
 
 	// SessionID for this connection.
 	SessionID ClusterWideID
@@ -154,9 +154,9 @@ type planner struct {
 	semaCtx         tree.SemaContext
 	extendedEvalCtx extendedEvalContext
 
-	// sessionDataMutator is used to mutate the session variables. Read
+	// sessionDataMutatorFactory is used to mutate the session variables. Read
 	// access to them is provided through evalCtx.
-	sessionDataMutator *sessionDataMutator
+	sessionDataMutatorFactory *sessionDataMutatorFactory
 
 	// execCfg is used to access the server configuration for the Executor.
 	execCfg *ExecutorConfig
@@ -307,16 +307,6 @@ func newInternalPlanner(
 	}
 	sd.SessionData.Database = "system"
 	sd.SessionData.UserProto = user.EncodeProto()
-	dataMutator := &sessionDataMutator{
-		data: sd,
-		defaults: SessionDefaults(map[string]string{
-			"application_name": "crdb-internal",
-			"database":         "system",
-		}),
-		settings:           execCfg.Settings,
-		paramStatusUpdater: &noopParamStatusUpdater{},
-		setCurTxnReadOnly:  func(bool) {},
-	}
 
 	if params.collection == nil {
 		params.collection = execCfg.CollectionFactory.NewCollection(sd)
@@ -354,7 +344,15 @@ func newInternalPlanner(
 	plannerMon.Start(ctx, execCfg.RootMemoryMonitor, mon.BoundAccount{})
 
 	p.extendedEvalCtx = internalExtendedEvalCtx(
-		ctx, sd, dataMutator, params.collection, txn, ts, ts, execCfg, plannerMon,
+		ctx, sd, &sessionDataMutator{
+			defaults: SessionDefaults(map[string]string{
+				"application_name": "crdb-internal",
+				"database":         "system",
+			}),
+			settings:           execCfg.Settings,
+			paramStatusUpdater: &noopParamStatusUpdater{},
+			setCurTxnReadOnly:  func(bool) {},
+		}, params.collection, txn, ts, ts, execCfg, plannerMon,
 	)
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
@@ -368,7 +366,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.NodeID = execCfg.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
 
-	p.sessionDataMutator = dataMutator
+	p.sessionDataMutatorFactory = p.extendedEvalCtx.SessionMutatorFactory
 	p.autoCommit = false
 
 	p.extendedEvalCtx.MemMetrics = memMetrics
@@ -432,11 +430,11 @@ func internalExtendedEvalCtx(
 			sqlStatsController = &sslocal.Controller{}
 		}
 	}
-
+	sds := sessiondata.NewSessionDataStack(sd)
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Txn:                txn,
-			SessionDataStack:   sessiondata.NewSessionDataStack(sd),
+			SessionDataStack:   sds,
 			TxnReadOnly:        false,
 			TxnImplicit:        true,
 			Settings:           execCfg.Settings,
@@ -449,7 +447,9 @@ func internalExtendedEvalCtx(
 			InternalExecutor:   execCfg.InternalExecutor,
 			SQLStatsController: sqlStatsController,
 		},
-		SessionMutator:    dataMutator,
+		SessionMutatorFactory: &sessionDataMutatorFactory{
+			base: *dataMutator,
+		},
 		VirtualSchemas:    execCfg.VirtualSchemas,
 		Tracing:           &SessionTracing{},
 		NodesStatusServer: execCfg.NodesStatusServer,
@@ -504,12 +504,21 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.extendedEvalCtx.ExecCfg
 }
 
+// TopMutator returns the mutator for the top session on the stack.
+func (p *planner) TopMutator() *sessionDataMutator {
+	return p.sessionDataMutatorFactory.TopMutator()
+}
+
 // GetOrInitSequenceCache returns the sequence cache for the session.
 // If the sequence cache has not been used yet, it initializes the cache
 // inside the session data.
 func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 	if p.SessionData().SequenceCache == nil {
-		p.sessionDataMutator.initSequenceCache()
+		p.ExtendedEvalContext().SessionMutatorFactory.forEachMutator(
+			func(m *sessionDataMutator) {
+				m.initSequenceCache()
+			},
+		)
 	}
 	return p.SessionData().SequenceCache
 }
