@@ -301,6 +301,9 @@ const (
 	// UseKeyEncodeForHashShardedIndexes changes the expression used in hash
 	// sharded indexes from string casts to crdb_internal.datums_to_bytes.
 	UseKeyEncodeForHashShardedIndexes
+	// DatabasePlacementPolicy setting PLACEMENT for databases is supported in this
+	// version.
+	DatabasePlacementPolicy
 	// Step (1): Add new versions here.
 )
 
@@ -511,6 +514,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     UseKeyEncodeForHashShardedIndexes,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 146},
+	},
+	{
+		Key:     DatabasePlacementPolicy,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 148},
 	},
 	// Step (2): Add new versions here.
 }

@@ -310,3 +310,220 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"3"},{"text":"three"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 3"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that the format code is reported as binary.
+# This also verifies that the protocol checks for the correct
+# binary signature.
+send
+Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN WITH BINARY"}
+CopyData {"BinaryData": "UEdDT1BZCv8NCgAAAAAAAAAAAAACAAAACAAAAAAAAAABAAAAA2NhdAACAAAACAAAAAAAAAACAAAAA2RvZw=="}
+CopyDone
+Query {"String": "SELECT * FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[1,1]}
+{"Type":"CommandComplete","CommandTag":"COPY 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"cat"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"dog"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that COPY binary input can be split up at an arbitrary point.
+send
+Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN WITH BINARY"}
+CopyData {"BinaryData": "UEdDT1BZCv8NCgAAAAAAAAAA"}
+CopyData {"BinaryData": "AAACAAAACAAAAAAAAAABAAAAA2NhdAACAAAACAAAAAAAAAACAAAAA2RvZw=="}
+CopyDone
+Query {"String": "SELECT * FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[1,1]}
+{"Type":"CommandComplete","CommandTag":"COPY 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"cat"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"dog"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that COPY binary input can be split up at another arbitrary point.
+send
+Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN WITH BINARY"}
+CopyData {"BinaryData": "UEdDT1BZCv8NCgAAAAAAAAAAAAACAAAACAAA"}
+CopyData {"BinaryData": "AAAAAAABAAAAA2NhdAACAAAACAAAAAAAAAAC"}
+CopyData {"BinaryData": "AAAAA2RvZw=="}
+CopyDone
+Query {"String": "SELECT * FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[1,1]}
+{"Type":"CommandComplete","CommandTag":"COPY 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"cat"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"dog"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that COPY CSV input can be split up at arbitrary points.
+send
+Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN WITH CSV"}
+CopyData {"Data": "1,o"}
+CopyData {"Data": "ne\n2,"}
+CopyData {"Data": "tw"}
+CopyData {"Data": "o\n"}
+CopyData {"Data": "3,\""}
+CopyData {"Data": "three\""}
+CopyData {"Data": "\"e"}
+CopyData {"Data": "e\"\n4,\"four\n"}
+CopyData {"Data": "r\nr"}
+CopyData {"Data": "\"\n5,\"f\n\"\"ive\"\n6,\"six"}
+CopyData {"Data": "\""}
+CopyData {"Data": "\n7,seven\n8,eight\n9,\"n\nii"}
+CopyData {"Data": "ii\n"}
+CopyData {"Data": "ne\""}
+CopyDone
+Query {"String": "SELECT * FROM t ORDER BY i"}
+----
+
+until ignore=NoticeResponse ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 9"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"one"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"two"}]}
+{"Type":"DataRow","Values":[{"text":"3"},{"text":"three\"ee"}]}
+{"Type":"DataRow","Values":[{"text":"4"},{"binary":"666f75720a720a72"}]}
+{"Type":"DataRow","Values":[{"text":"5"},{"binary":"660a22697665"}]}
+{"Type":"DataRow","Values":[{"text":"6"},{"text":"six"}]}
+{"Type":"DataRow","Values":[{"text":"7"},{"text":"seven"}]}
+{"Type":"DataRow","Values":[{"text":"8"},{"text":"eight"}]}
+{"Type":"DataRow","Values":[{"text":"9"},{"binary":"6e0a696969690a6e65"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 9"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that byte-escape sequences are processed in TEXT mode.
+send
+Query {"String": "DROP TABLE IF EXISTS tb"}
+Query {"String": "CREATE TABLE tb (i INT, b BYTEA, c TEXT)"}
+Query {"String": "COPY tb FROM STDIN DELIMITER ',' NULL ''"}
+CopyData {"Data": "1,one,one\n"}
+CopyData {"Data": "2,two\\x54,two\\x54\n"}
+CopyData {"Data": "3,ab\\011\\143d,ab\\011\\143d"}
+CopyDone
+Query {"String": "SELECT i, encode(b, 'hex'), c FROM tb ORDER BY i"}
+----
+
+until ignore=RowDescription ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"6f6e65"},{"text":"one"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"74776f54"},{"text":"twoT"}]}
+{"Type":"DataRow","Values":[{"text":"3"},{"text":"6162096364"},{"binary":"6162096364"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that byte-escape sequences are NOT processed in CSV mode. Note that
+# the octal-encoded input for the bytea column is properly decoded -- that is
+# because of the way CRDB and PG process bytea literals, and *not* because of
+# CSV escaping.
+# Because of https://github.com/cockroachdb/cockroach/issues/26128 we cannot
+# test the `\xAA` escape style with a bytea column.
+send
+Query {"String": "DROP TABLE IF EXISTS tb"}
+Query {"String": "CREATE TABLE tb (i INT, b BYTEA, c TEXT)"}
+Query {"String": "COPY tb FROM STDIN WITH CSV"}
+CopyData {"Data": "1,one,one\n"}
+CopyData {"Data": "2,two,two\\x54\n"}
+CopyData {"Data": "3,ab\\011\\143d,ab\\011\\143d"}
+CopyDone
+Query {"String": "SELECT i, encode(b, 'hex'), c FROM tb ORDER BY i"}
+----
+
+until ignore=RowDescription ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"6f6e65"},{"text":"one"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"74776f"},{"text":"two\\x54"}]}
+{"Type":"DataRow","Values":[{"text":"3"},{"text":"6162096364"},{"text":"ab\\011\\143d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test error cases for COPY CSV.
+send
+Query {"String": "COPY t FROM STDIN WITH CSV"}
+CopyData {"Data": "10,\"ten\"\n\n\n11,eleven"}
+CopyDone
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"ErrorResponse","Code":"22P04"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "COPY t FROM STDIN WITH CSV"}
+CopyData {"Data": "1,\"one\n"}
+CopyDone
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"ErrorResponse","Code":"22P04"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
