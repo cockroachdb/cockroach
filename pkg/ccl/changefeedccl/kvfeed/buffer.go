@@ -27,7 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
+
+// ErrBufferClosed is returned by Readers when no more values will be
+// returned from the buffer.
+var ErrBufferClosed = errors.New("buffer closed")
 
 // EventBuffer is an interface for communicating kvfeed entries between processors.
 type EventBuffer interface {
@@ -210,7 +215,12 @@ func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
 	select {
 	case <-ctx.Done():
 		return Event{}, ctx.Err()
-	case e := <-b.entriesCh:
+	case e, ok := <-b.entriesCh:
+		if !ok {
+			// Our channel has been closed by the
+			// Writer. No more events will be returned.
+			return e, ErrBufferClosed
+		}
 		e.bufferGetTimestamp = timeutil.Now()
 		return e, nil
 	}
