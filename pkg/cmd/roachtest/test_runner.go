@@ -946,18 +946,8 @@ func (r *testRunner) maybePostGithubIssue(
 		ReproductionCommand: func(renderer *issues.Renderer) {
 			issues.ReproductionAsLink(
 				"roachtest README",
-				"https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/roachtest",
+				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
 			)(renderer)
-			issues.ReproductionAsLink(
-				"CI job to stress roachtests",
-				"https://teamcity.cockroachdb.com/buildConfiguration/Cockroach_Nightlies_RoachtestStress",
-			)(renderer)
-			renderer.P(func() {
-				renderer.Escaped("For the CI stress job, click the ellipsis (...) next to the Run button and fill in:\n")
-				renderer.Escaped(fmt.Sprintf("* Changes / Build branch: %s\n", branch))
-				renderer.Escaped(fmt.Sprintf("* Parameters / `env.TESTS`: `^%s$`\n", t.Name()))
-				renderer.Escaped("* Parameters / `env.COUNT`: <number of runs>\n")
-			})
 		},
 	}
 	if err := issues.Post(
