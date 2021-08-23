@@ -229,7 +229,7 @@ func createBenchmarkChangefeed(
 		Gossip:           gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		Spans:            spans,
 		Targets:          details.Targets,
-		Sink:             buf,
+		Writer:           buf,
 		Metrics:          &metrics.KVFeedMetrics,
 		MM:               mm,
 		InitialHighWater: initialHighWater,
