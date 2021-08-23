@@ -18,7 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
+
+// ErrBufferClosed is returned by Readers when no more values will be
+// returned from the buffer.
+var ErrBufferClosed = errors.New("buffer closed")
 
 // Buffer is an interface for communicating kvfeed entries between processors.
 type Buffer interface {
