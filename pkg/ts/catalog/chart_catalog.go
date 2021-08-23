@@ -2179,6 +2179,14 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Rows",
 			},
+			{
+				Title: "Rejected Large Full Table or Index Scans",
+				Metrics: []string{
+					"sql.guardrails.full_scan_rejected.count",
+					"sql.guardrails.full_scan_rejected.count.internal",
+				},
+				AxisLabel: "SQL Statements",
+			},
 		},
 	},
 	{

@@ -547,6 +547,16 @@ var txnRowsReadErr = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 ).WithPublic()
 
+// This is a float setting (rather than an int setting) because the optimizer
+// uses floating point for calculating row estimates.
+var largeFullScanRows = settings.RegisterFloatSetting(
+	"sql.defaults.large_full_scan_rows",
+	"default value for large_full_scan_rows session setting which determines "+
+		"the maximum table size allowed for a full scan when disallow_full_table_scans "+
+		"is set to true",
+	0,
+).WithPublic()
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -851,6 +861,12 @@ var (
 		Name:        "sql.guardrails.transaction_rows_read_err.count",
 		Help:        "Number of transactions errored because of transaction_rows_read_err guardrail",
 		Measurement: "Errored transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaFullTableOrIndexScanRejected = metric.Metadata{
+		Name:        "sql.guardrails.full_scan_rejected.count",
+		Help:        "Number of full table or index scans that have been rejected because of `disallow_full_table_scans` guardrail",
+		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -2544,6 +2560,10 @@ func (m *sessionDataMutator) SetTxnRowsReadLog(val int64) {
 
 func (m *sessionDataMutator) SetTxnRowsReadErr(val int64) {
 	m.data.TxnRowsReadErr = val
+}
+
+func (m *sessionDataMutator) SetLargeFullScanRows(val float64) {
+	m.data.LargeFullScanRows = val
 }
 
 type sqlStatsCollector struct {

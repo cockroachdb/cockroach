@@ -548,6 +548,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var isDDL bool
 	var containsFullTableScan bool
 	var containsFullIndexScan bool
+	var containsLargeFullTableScan bool
+	var containsLargeFullIndexScan bool
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
 		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
@@ -559,6 +561,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 		isDDL = bld.IsDDL
 		containsFullTableScan = bld.ContainsFullTableScan
 		containsFullIndexScan = bld.ContainsFullIndexScan
+		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
+		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
@@ -574,6 +578,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 		isDDL = bld.IsDDL
 		containsFullTableScan = bld.ContainsFullTableScan
 		containsFullIndexScan = bld.ContainsFullIndexScan
+		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
+		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
@@ -596,6 +602,12 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	if containsFullIndexScan {
 		planTop.flags.Set(planFlagContainsFullIndexScan)
+	}
+	if containsLargeFullTableScan {
+		planTop.flags.Set(planFlagContainsLargeFullTableScan)
+	}
+	if containsLargeFullIndexScan {
+		planTop.flags.Set(planFlagContainsLargeFullIndexScan)
 	}
 	if planTop.instrumentation.ShouldSaveMemo() {
 		planTop.mem = mem
