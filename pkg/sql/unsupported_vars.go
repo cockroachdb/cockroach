@@ -152,7 +152,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"quote_all_identifiers",
 	"random_page_cost",
 	"replacement_sort_tuples",
-	"role",
+	// "role",
 	// "row_security",
 	// "search_path",
 	"seed",
