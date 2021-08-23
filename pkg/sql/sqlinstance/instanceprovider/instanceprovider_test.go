@@ -50,7 +50,7 @@ func TestInstanceProvider(t *testing.T) {
 			true /* initializeVersion */)
 		stopper := stop.NewStopper()
 		fakeStorage := slstorage.NewFakeStorage()
-		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings)
+		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
 		return stopper, slInstance, clock
 	}
 
