@@ -30,10 +30,14 @@ type tenantState struct {
 	// Present indicates if the state existed in the table.
 	Present bool
 
+	// Time of last update.
+	LastUpdate tree.DTimestamp
+
 	// FirstInstance is the smallest active instance ID, or 0 if there are no
 	// known active instances.
 	FirstInstance base.SQLInstanceID
 
+	// Bucket state, as of LastUpdate.
 	Bucket tenanttokenbucket.State
 
 	// Current consumption information.
@@ -46,6 +50,9 @@ type instanceState struct {
 	// Present indicates if the instance existed in the table.
 	Present bool
 
+	// Time of last request from this instance.
+	LastUpdate tree.DTimestamp
+
 	// Next active instance ID or 0 if this is the instance with the largest ID.
 	NextInstance base.SQLInstanceID
 
@@ -56,8 +63,6 @@ type instanceState struct {
 	Seq int64
 	// Shares term for this instance; see tenanttokenbucket.State.
 	Shares float64
-	// Time of last request from this instance.
-	LastUpdate tree.DTimestamp
 }
 
 // sysTableHelper implements the interactions with the system.tenant_usage
@@ -111,20 +116,20 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 		`SELECT
 		  instance_id,               /* 0 */
 			next_instance_id,          /* 1 */
-			ru_burst_limit,            /* 2 */
-			ru_refill_rate,            /* 3 */
-			ru_current,                /* 4 */
-			current_share_sum,         /* 5 */
-			total_ru_usage,            /* 6 */
-			total_read_requests,       /* 7 */
-			total_read_bytes,          /* 8 */
-			total_write_requests,      /* 9 */
-			total_write_bytes,         /* 10 */
-			total_sql_pod_cpu_seconds, /* 11 */
-			instance_lease,            /* 12 */
-			instance_seq,              /* 13 */
-			instance_shares,           /* 14 */
-			instance_last_update       /* 15 */
+			last_update,               /* 2 */
+			ru_burst_limit,            /* 3 */
+			ru_refill_rate,            /* 4 */
+			ru_current,                /* 5 */
+			current_share_sum,         /* 6 */
+			total_ru_usage,            /* 7 */
+			total_read_requests,       /* 8 */
+			total_read_bytes,          /* 9 */
+			total_write_requests,      /* 10 */
+			total_write_bytes,         /* 11 */
+			total_sql_pod_cpu_seconds, /* 12 */
+			instance_lease,            /* 13 */
+			instance_seq,              /* 14 */
+			instance_shares            /* 15 */
 		 FROM system.tenant_usage
 		 WHERE tenant_id = $1 AND instance_id IN (0, $2)`,
 		h.tenantID.ToUint64(),
@@ -138,29 +143,30 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 		if instanceID == 0 {
 			// Tenant state.
 			tenant.Present = true
+			tenant.LastUpdate = tree.MustBeDTimestamp(r[2])
 			tenant.FirstInstance = base.SQLInstanceID(tree.MustBeDInt(r[1]))
 			tenant.Bucket = tenanttokenbucket.State{
-				RUBurstLimit:    float64(tree.MustBeDFloat(r[2])),
-				RURefillRate:    float64(tree.MustBeDFloat(r[3])),
-				RUCurrent:       float64(tree.MustBeDFloat(r[4])),
-				CurrentShareSum: float64(tree.MustBeDFloat(r[5])),
+				RUBurstLimit:    float64(tree.MustBeDFloat(r[3])),
+				RURefillRate:    float64(tree.MustBeDFloat(r[4])),
+				RUCurrent:       float64(tree.MustBeDFloat(r[5])),
+				CurrentShareSum: float64(tree.MustBeDFloat(r[6])),
 			}
 			tenant.Consumption = roachpb.TenantConsumption{
-				RU:                float64(tree.MustBeDFloat(r[6])),
-				ReadRequests:      uint64(tree.MustBeDInt(r[7])),
-				ReadBytes:         uint64(tree.MustBeDInt(r[8])),
-				WriteRequests:     uint64(tree.MustBeDInt(r[9])),
-				WriteBytes:        uint64(tree.MustBeDInt(r[10])),
-				SQLPodsCPUSeconds: float64(tree.MustBeDFloat(r[11])),
+				RU:                float64(tree.MustBeDFloat(r[7])),
+				ReadRequests:      uint64(tree.MustBeDInt(r[8])),
+				ReadBytes:         uint64(tree.MustBeDInt(r[9])),
+				WriteRequests:     uint64(tree.MustBeDInt(r[10])),
+				WriteBytes:        uint64(tree.MustBeDInt(r[11])),
+				SQLPodsCPUSeconds: float64(tree.MustBeDFloat(r[12])),
 			}
 		} else {
 			// Instance state.
 			instance.Present = true
+			instance.LastUpdate = tree.MustBeDTimestamp(r[2])
 			instance.NextInstance = base.SQLInstanceID(tree.MustBeDInt(r[1]))
-			instance.Lease = tree.MustBeDBytes(r[12])
-			instance.Seq = int64(tree.MustBeDInt(r[13]))
-			instance.Shares = float64(tree.MustBeDFloat(r[14]))
-			instance.LastUpdate = tree.MustBeDTimestamp(r[15])
+			instance.Lease = tree.MustBeDBytes(r[13])
+			instance.Seq = int64(tree.MustBeDInt(r[14]))
+			instance.Shares = float64(tree.MustBeDFloat(r[15]))
 		}
 	}
 
@@ -178,6 +184,7 @@ func (h *sysTableHelper) updateTenantState(tenant tenantState) error {
 		  tenant_id,
 		  instance_id,
 			next_instance_id,
+			last_update,
 			ru_burst_limit,
 			ru_refill_rate,
 			ru_current,
@@ -190,22 +197,22 @@ func (h *sysTableHelper) updateTenantState(tenant tenantState) error {
 			total_sql_pod_cpu_seconds,
 			instance_lease,
 			instance_seq,
-			instance_shares,
-			instance_last_update
-		 ) VALUES ($1, 0, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL, NULL, NULL, NULL)
+			instance_shares
+		 ) VALUES ($1, 0, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL, NULL, NULL)
 		 `,
-		h.tenantID.ToUint64(),
-		int64(tenant.FirstInstance),
-		tenant.Bucket.RUBurstLimit,
-		tenant.Bucket.RURefillRate,
-		tenant.Bucket.RUCurrent,
-		tenant.Bucket.CurrentShareSum,
-		tenant.Consumption.RU,
-		tenant.Consumption.ReadRequests,
-		tenant.Consumption.ReadBytes,
-		tenant.Consumption.WriteRequests,
-		tenant.Consumption.WriteBytes,
-		tenant.Consumption.SQLPodsCPUSeconds,
+		h.tenantID.ToUint64(),                // $1
+		int64(tenant.FirstInstance),          // $2
+		&tenant.LastUpdate,                   // $3
+		tenant.Bucket.RUBurstLimit,           // $4
+		tenant.Bucket.RURefillRate,           // $5
+		tenant.Bucket.RUCurrent,              // $6
+		tenant.Bucket.CurrentShareSum,        // $7
+		tenant.Consumption.RU,                // $8
+		tenant.Consumption.ReadRequests,      // $9
+		tenant.Consumption.ReadBytes,         // $10
+		tenant.Consumption.WriteRequests,     // $11
+		tenant.Consumption.WriteBytes,        // $12
+		tenant.Consumption.SQLPodsCPUSeconds, // $13
 	)
 	return err
 }
@@ -223,6 +230,7 @@ func (h *sysTableHelper) updateTenantAndInstanceState(
 		  tenant_id,
 		  instance_id,
 			next_instance_id,
+			last_update,
 			ru_burst_limit,
 			ru_refill_rate,
 			ru_current,
@@ -235,30 +243,30 @@ func (h *sysTableHelper) updateTenantAndInstanceState(
 			total_sql_pod_cpu_seconds,
 			instance_lease,
 			instance_seq,
-			instance_shares,
-			instance_last_update
+			instance_shares
 		 ) VALUES
-		   ($1, 0, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL, NULL, NULL, NULL),
-			 ($1, $13, $14, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, $15, $16, $17, $18)
+		   ($1, 0,   $2,  $3,  $4,   $5,   $6,   $7,   $8,   $9,   $10,  $11,  $12,  $13,  NULL, NULL, NULL),
+			 ($1, $14, $15, $16, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, $17,  $18,  $19)
 		 `,
 		h.tenantID.ToUint64(),                // $1
 		int64(tenant.FirstInstance),          // $2
-		tenant.Bucket.RUBurstLimit,           // $3
-		tenant.Bucket.RURefillRate,           // $4
-		tenant.Bucket.RUCurrent,              // $5
-		tenant.Bucket.CurrentShareSum,        // $6
-		tenant.Consumption.RU,                // $7
-		tenant.Consumption.ReadRequests,      // $8
-		tenant.Consumption.ReadBytes,         // $9
-		tenant.Consumption.WriteRequests,     // $10
-		tenant.Consumption.WriteBytes,        // $11
-		tenant.Consumption.SQLPodsCPUSeconds, // $12
-		int64(instance.ID),                   // $13
-		int64(instance.NextInstance),         // $14
-		&instance.Lease,                      // $15
-		instance.Seq,                         // $16
-		instance.Shares,                      // $17
-		&instance.LastUpdate,                 // $18
+		&tenant.LastUpdate,                   // $3
+		tenant.Bucket.RUBurstLimit,           // $4
+		tenant.Bucket.RURefillRate,           // $5
+		tenant.Bucket.RUCurrent,              // $6
+		tenant.Bucket.CurrentShareSum,        // $7
+		tenant.Consumption.RU,                // $8
+		tenant.Consumption.ReadRequests,      // $9
+		tenant.Consumption.ReadBytes,         // $10
+		tenant.Consumption.WriteRequests,     // $11
+		tenant.Consumption.WriteBytes,        // $12
+		tenant.Consumption.SQLPodsCPUSeconds, // $13
+		int64(instance.ID),                   // $14
+		int64(instance.NextInstance),         // $15
+		&instance.LastUpdate,                 // $16
+		&instance.Lease,                      // $17
+		instance.Seq,                         // $18
+		instance.Shares,                      // $19
 	)
 	return err
 }
@@ -284,10 +292,10 @@ func (h *sysTableHelper) accomodateNewInstance(tenant *tenantState, instance *in
 		`SELECT
 		  instance_id,               /* 0 */
 			next_instance_id,          /* 1 */
-			instance_lease,            /* 2 */
-			instance_seq,              /* 3 */
-			instance_shares,           /* 4 */
-			instance_last_update       /* 5 */
+			last_update,               /* 2 */
+			instance_lease,            /* 3 */
+			instance_seq,              /* 4 */
+			instance_shares            /* 5 */
 		 FROM system.tenant_usage
 		 WHERE tenant_id = $1 AND instance_id > 0 AND instance_id < $2
 		 ORDER BY instance_id DESC
@@ -303,10 +311,10 @@ func (h *sysTableHelper) accomodateNewInstance(tenant *tenantState, instance *in
 	}
 	prevInstanceID := base.SQLInstanceID(tree.MustBeDInt(row[0]))
 	instance.NextInstance = base.SQLInstanceID(tree.MustBeDInt(row[1]))
-	prevInstanceLease := row[2]
-	prevInstanceSeq := row[3]
-	prevInstanceShares := row[4]
-	prevInstanceLastUpdate := row[5]
+	prevInstanceLastUpdate := row[2]
+	prevInstanceLease := row[3]
+	prevInstanceSeq := row[4]
+	prevInstanceShares := row[5]
 
 	// Update the previous instance: its next_instance_id is the new instance.
 	// TODO(radu): consider coalescing this with updateTenantAndInstanceState to
@@ -319,6 +327,7 @@ func (h *sysTableHelper) accomodateNewInstance(tenant *tenantState, instance *in
 		  tenant_id,
 		  instance_id,
 			next_instance_id,
+			last_update,
 			ru_burst_limit,
 			ru_refill_rate,
 			ru_current,
@@ -331,17 +340,16 @@ func (h *sysTableHelper) accomodateNewInstance(tenant *tenantState, instance *in
 			total_sql_pod_cpu_seconds,
 			instance_lease,
 			instance_seq,
-			instance_shares,
-			instance_last_update
-		 ) VALUES ($1, $2, $3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, $4, $5, $6, $7)
+			instance_shares
+		 ) VALUES ($1, $2, $3, $4, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, $5, $6, $7)
 		`,
-		h.tenantID.ToUint64(),
-		int64(prevInstanceID),
-		int64(instance.ID),
-		prevInstanceLease,
-		prevInstanceSeq,
-		prevInstanceShares,
-		prevInstanceLastUpdate,
+		h.tenantID.ToUint64(),  // $1
+		int64(prevInstanceID),  // $2
+		int64(instance.ID),     // $3
+		prevInstanceLastUpdate, // $4
+		prevInstanceLease,      // $5
+		prevInstanceSeq,        // $6
+		prevInstanceShares,     // $7
 	)
 	return err
 }
@@ -366,20 +374,20 @@ func (h *sysTableHelper) checkInvariants() error {
 		`SELECT
 		  instance_id,               /* 0 */
 			next_instance_id,          /* 1 */
-			ru_burst_limit,            /* 2 */
-			ru_refill_rate,            /* 3 */
-			ru_current,                /* 4 */
-			current_share_sum,         /* 5 */
-			total_ru_usage,            /* 6 */
-			total_read_requests,       /* 7 */
-			total_read_bytes,          /* 8 */
-			total_write_requests,      /* 9 */
-			total_write_bytes,         /* 10 */
-			total_sql_pod_cpu_seconds, /* 11 */
-			instance_lease,            /* 12 */
-			instance_seq,              /* 13 */
-			instance_shares,           /* 14 */
-			instance_last_update       /* 15 */
+			last_update,                /* 2 */
+			ru_burst_limit,            /* 3 */
+			ru_refill_rate,            /* 4 */
+			ru_current,                /* 5 */
+			current_share_sum,         /* 6 */
+			total_ru_usage,            /* 7 */
+			total_read_requests,       /* 8 */
+			total_read_bytes,          /* 9 */
+			total_write_requests,      /* 10 */
+			total_write_bytes,         /* 11 */
+			total_sql_pod_cpu_seconds, /* 12 */
+			instance_lease,            /* 13 */
+			instance_seq,              /* 14 */
+			instance_shares            /* 15 */
 		 FROM system.tenant_usage
 		 WHERE tenant_id = $1
 		 ORDER BY instance_id`,
@@ -409,10 +417,10 @@ func (h *sysTableHelper) checkInvariants() error {
 		var nullFirst, nullLast int
 		if i == 0 {
 			// Row 0 should have NULL per-instance values.
-			nullFirst, nullLast = 12, 15
+			nullFirst, nullLast = 13, 16
 		} else {
 			// Other rows should have NULL per-tenant values.
-			nullFirst, nullLast = 2, 11
+			nullFirst, nullLast = 3, 12
 		}
 		for j := range rows[i] {
 			isNull := (rows[i][j] == tree.DNull)
@@ -439,10 +447,10 @@ func (h *sysTableHelper) checkInvariants() error {
 	}
 
 	// Verify the shares sum.
-	sharesSum := float64(tree.MustBeDFloat(rows[0][5]))
+	sharesSum := float64(tree.MustBeDFloat(rows[0][6]))
 	var expSharesSum float64
 	for _, r := range rows[1:] {
-		expSharesSum += float64(tree.MustBeDFloat(r[14]))
+		expSharesSum += float64(tree.MustBeDFloat(r[15]))
 	}
 
 	a, b := sharesSum, expSharesSum
@@ -499,10 +507,10 @@ func InspectTenantMetadata(
 		`SELECT
 		  instance_id,               /* 0 */
 			next_instance_id,          /* 1 */
-			instance_lease,            /* 2 */
-			instance_seq,              /* 3 */
-			instance_shares,           /* 4 */
-			instance_last_update       /* 5 */
+			last_update,               /* 2 */
+			instance_lease,            /* 3 */
+			instance_seq,              /* 4 */
+			instance_shares            /* 5 */
 		 FROM system.tenant_usage
 		 WHERE tenant_id = $1 AND instance_id > 0
 		 ORDER BY instance_id`,
@@ -514,7 +522,7 @@ func InspectTenantMetadata(
 	for _, r := range rows {
 		fmt.Fprintf(
 			&buf, "  Instance %s:  lease=%s  seq=%s  shares=%s  next-instance=%s\n",
-			r[0], r[2], r[3], r[4], r[1],
+			r[0], r[3], r[4], r[5], r[1],
 		)
 	}
 	return buf.String(), nil
