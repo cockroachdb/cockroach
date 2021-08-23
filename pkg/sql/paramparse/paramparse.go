@@ -49,7 +49,7 @@ func DatumAsFloat(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) 
 		return v.Decimal.Float64()
 	}
 	err = pgerror.Newf(pgcode.InvalidParameterValue,
-		"parameter %q requires an float value", name)
+		"parameter %q requires a float value", name)
 	err = errors.WithDetailf(err,
 		"%s is a %s", value, errors.Safe(val.ResolvedType()))
 	return 0, err

@@ -627,6 +627,14 @@ var txnRowsReadErr = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 ).WithPublic()
 
+// This is a float setting (rather than an int setting) because the optimizer
+// uses floating point for calculating row estimates.
+var largeFullScanRows = settings.RegisterFloatSetting(
+	"sql.defaults.large_full_scan_rows",
+	"default value for large_full_scan_rows session setting",
+	1024.0,
+).WithPublic()
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -2912,6 +2920,10 @@ func (m *sessionDataMutator) SetTxnRowsReadLog(val int64) {
 
 func (m *sessionDataMutator) SetTxnRowsReadErr(val int64) {
 	m.data.TxnRowsReadErr = val
+}
+
+func (m *sessionDataMutator) SetLargeFullScanRows(val float64) {
+	m.data.LargeFullScanRows = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
