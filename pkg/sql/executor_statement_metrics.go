@@ -48,6 +48,10 @@ type EngineMetrics struct {
 
 	// FullTableOrIndexScanCount counts the number of full table or index scans.
 	FullTableOrIndexScanCount *metric.Counter
+
+	// FullTableOrIndexScanRejectedCount counts the number of queries that were
+	// rejected because of the `disallow_full_table_scans` guardrail.
+	FullTableOrIndexScanRejectedCount *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.
