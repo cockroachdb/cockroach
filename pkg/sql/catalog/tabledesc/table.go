@@ -84,6 +84,10 @@ func MakeColumnDefDescs(
 			return nil, nil, nil, errors.AssertionFailedf(
 				"column %s is of invalid generated as identity type (neither ALWAYS nor BY DEFAULT)", string(d.Name))
 		}
+		if genSeqOpt := d.GeneratedIdentity.SeqOptions; genSeqOpt != nil {
+			s := tree.Serialize(&d.GeneratedIdentity.SeqOptions)
+			col.GeneratedAsIdentitySequenceOption = &s
+		}
 	}
 
 	// Validate and assign column type.
