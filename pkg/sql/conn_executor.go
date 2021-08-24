@@ -257,7 +257,7 @@ type Server struct {
 
 	// sqlStats tracks per-application statistics for all applications on each
 	// node. Newly collected statistics flow into sqlStats.
-	sqlStats sqlstats.Provider
+	sqlStats *persistedsqlstats.PersistedSQLStats
 
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *sslocal.Controller
@@ -353,6 +353,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		InternalExecutor: &sqlStatsInternalExecutor,
 		KvDB:             cfg.DB,
 		SQLIDContainer:   cfg.NodeID,
+		JobRegistry:      s.cfg.JobRegistry,
 		Knobs:            cfg.SQLStatsTestingKnobs,
 		FlushCounter:     metrics.StatsMetrics.SQLStatsFlushStarted,
 		FailureCounter:   metrics.StatsMetrics.SQLStatsFlushFailure,
@@ -413,6 +414,7 @@ func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
 			SQLStatsFlushDuration: metric.NewLatency(
 				getMetricMeta(MetaSQLStatsFlushDuration, internal), 6*metricsSampleInterval,
 			),
+			SQLStatsRemovedRows: metric.NewCounter(getMetricMeta(MetaSQLStatsRemovedRows, internal)),
 		},
 	}
 }

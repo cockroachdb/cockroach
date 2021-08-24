@@ -50,3 +50,12 @@ var SQLStatsFlushJitter = settings.RegisterFloatSetting(
 		return nil
 	},
 )
+
+// SQLStatsMaxPersistedRows specifies maximum number of rows that will be
+// retained in system.statement_statistics and system.transaction_statistics.
+var SQLStatsMaxPersistedRows = settings.RegisterIntSetting(
+	"sql.stats.persisted_rows.max",
+	"maximum number of rows of statement and transaction"+
+		" statistics that will be persisted in the system tables",
+	10000, /* defaultValue */
+).WithPublic()

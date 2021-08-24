@@ -1506,14 +1506,11 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 	testFnAvro := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
-		schemaReg := cdctest.StartTestSchemaRegistry()
-		defer schemaReg.Close()
-
 		t.Run("regional by row change works", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
-			rbr := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR rbr WITH format=avro, confluent_schema_registry='%s'", schemaReg.URL()))
+			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr WITH format=avro`)
 			defer closeFeed(t, rbr)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (1, 2)`)
 			assertPayloads(t, rbr, []string{
@@ -1530,7 +1527,7 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT, region crdb_internal_region NOT NULL DEFAULT 'us-east-1')`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
-			rbr := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR rbr WITH format=avro, confluent_schema_registry='%s'", schemaReg.URL()))
+			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr WITH format=avro`)
 			defer closeFeed(t, rbr)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (1, 2)`)
 			assertPayloads(t, rbr, []string{
@@ -1574,15 +1571,12 @@ func TestChangefeedRBRAvroAddRegion(t *testing.T) {
 	cluster, db, cleanup := startTestCluster(t)
 	defer cleanup()
 
-	schemaReg := cdctest.StartTestSchemaRegistry()
-	defer schemaReg.Close()
-
 	f := makeKafkaFeedFactoryForCluster(cluster, db)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY)`)
 	waitForSchemaChange(t, sqlDB, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
 	sqlDB.Exec(t, `INSERT INTO rbr VALUES (0)`)
-	rbr := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR rbr WITH format=avro, confluent_schema_registry='%s'", schemaReg.URL()))
+	rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr WITH format=avro`)
 	defer closeFeed(t, rbr)
 	assertPayloads(t, rbr, []string{
 		`rbr: {"a":{"long":0},"crdb_region":{"string":"us-east1"}}->{"after":{"rbr":{"a":{"long":0},"crdb_region":{"string":"us-east1"}}}}`,

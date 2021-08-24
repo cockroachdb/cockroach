@@ -24,7 +24,8 @@ type TestingKnobs struct {
 
 	// DisableFollowerRead disallows the PersistedSQLStats to use follower read.
 	// This is used in the unit tests where it might be reading from the past
-	// where the stmt/txn stats system table are not yet created.
+	// where the stmt/txn stats system table are not yet created. This is not a
+	// scenario that is possible in outside of testing.
 	DisableFollowerRead bool
 }
 

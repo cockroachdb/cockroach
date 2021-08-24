@@ -913,6 +913,12 @@ var (
 		Measurement: "SQL Stats Flush",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	MetaSQLStatsRemovedRows = metric.Metadata{
+		Name:        "sql.stats.cleanup.rows_removed",
+		Help:        "Number of stale statistics rows that are removed",
+		Measurement: "SQL Stats Cleanup",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
