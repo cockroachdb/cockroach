@@ -119,17 +119,19 @@ const (
 
 	// canRunArgs are used in canRunClause, which specify whether a job can be
 	// run now or not.
-	canRunArgs   = `(SELECT $3::TIMESTAMP AS ts, $4::FLOAT AS initial_delay, $5::FLOAT AS max_delay) args`
-	canRunClause = `
-args.ts >= COALESCE(last_run, created) + least(
-          IF(
-            args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT >= 0.0,
-            args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT,
-            args.max_delay
-         ),
-        args.max_delay
-)::INTERVAL
-`
+	canRunArgs = `(SELECT $3::TIMESTAMP AS ts, $4::FLOAT AS initial_delay, $5::FLOAT AS max_delay) args`
+	// NextRunClause calculates the next execution time of a job with exponential backoff delay, calculated
+	// using last_run and num_runs values.
+	NextRunClause = `
+COALESCE(last_run, created) + least(
+	IF(
+		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT >= 0.0,
+		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT,
+		args.max_delay
+	),
+	args.max_delay
+)::INTERVAL`
+	canRunClause = `args.ts >= ` + NextRunClause
 	// processQueryBase and processQueryWhereBase select IDs of the jobs that
 	// can be processed among the claimed jobs.
 	processQueryBase      = `SELECT id FROM system.jobs`
@@ -158,15 +160,7 @@ func getProcessQuery(
 	if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
 		// Select only those jobs that can be executed right now.
 		query = processQueryWithBackoff
-		initDelay := retryInitialDelaySetting.Get(&r.settings.SV).Seconds()
-		maxDelay := retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
-		if r.knobs.IntervalOverrides.RetryInitialDelay != nil {
-			initDelay = r.knobs.IntervalOverrides.RetryInitialDelay.Seconds()
-		}
-		if r.knobs.IntervalOverrides.RetryMaxDelay != nil {
-			maxDelay = r.knobs.IntervalOverrides.RetryMaxDelay.Seconds()
-		}
-		args = append(args, r.clock.Now().GoTime(), initDelay, maxDelay)
+		args = append(args, r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay())
 	}
 	return query, args
 }
@@ -256,15 +250,7 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 	backoffIsActive := r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff)
 	if backoffIsActive {
 		resumeQuery = resumeQueryWithBackoff
-		initDelay := retryInitialDelaySetting.Get(&r.settings.SV).Seconds()
-		maxDelay := retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
-		if r.knobs.IntervalOverrides.RetryInitialDelay != nil {
-			initDelay = r.knobs.IntervalOverrides.RetryInitialDelay.Seconds()
-		}
-		if r.knobs.IntervalOverrides.RetryMaxDelay != nil {
-			maxDelay = r.knobs.IntervalOverrides.RetryMaxDelay.Seconds()
-		}
-		args = append(args, r.clock.Now().GoTime(), initDelay, maxDelay)
+		args = append(args, r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay())
 	}
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,

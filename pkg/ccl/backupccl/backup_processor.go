@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -631,7 +632,7 @@ func (s *sstSink) flushFile(ctx context.Context) error {
 }
 
 func (s *sstSink) open(ctx context.Context) error {
-	s.outName = storageccl.GenerateUniqueSSTName(s.conf.id)
+	s.outName = generateUniqueSSTName(s.conf.id)
 	if s.ctx == nil {
 		s.ctx, s.cancel = context.WithCancel(ctx)
 	}
@@ -738,6 +739,12 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 		log.VEventf(ctx, 3, "continuing to write to backup file %s of size %d", s.outName, s.flushedSize)
 	}
 	return nil
+}
+
+func generateUniqueSSTName(nodeID base.SQLInstanceID) string {
+	// The data/ prefix, including a /, is intended to group SSTs in most of the
+	// common file/bucket browse UIs.
+	return fmt.Sprintf("data/%d.sst", builtins.GenerateUniqueInt(nodeID))
 }
 
 func init() {
