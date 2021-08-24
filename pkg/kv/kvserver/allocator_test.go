@@ -1655,10 +1655,13 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 				zonepb.EmptyCompleteZoneConfig(),
 				c.existing,
 				c.leaseholder,
-				nil, /* replicaStats */
-				c.check,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,
+				false,
+				transferLeaseOptions{
+					checkTransferLeaseSource: c.check,
+					checkCandidateFullness:   true,
+					dryRun:                   false,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1739,14 +1742,11 @@ func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
-				context.Background(),
-				c.zone,
-				c.existing,
-				c.leaseholder,
-				nil, /* replicaStats */
-				true,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				context.Background(), c.zone, c.existing, c.leaseholder, nil, false, transferLeaseOptions{
+					checkTransferLeaseSource: true,
+					checkCandidateFullness:   true,
+					dryRun:                   false,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1837,14 +1837,11 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
-				context.Background(),
-				c.zone,
-				c.existing,
-				c.leaseholder,
-				nil, /* replicaStats */
-				c.check,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				context.Background(), c.zone, c.existing, c.leaseholder, nil, false, transferLeaseOptions{
+					checkTransferLeaseSource: c.check,
+					checkCandidateFullness:   true,
+					dryRun:                   false,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -2365,27 +2362,21 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 				t.Errorf("expected %v, but found %v", expectTransfer, result)
 			}
 			target := a.TransferLeaseTarget(
-				context.Background(),
-				zone,
-				c.existing,
-				c.leaseholder,
-				nil,   /* replicaStats */
-				true,  /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				context.Background(), zone, c.existing, c.leaseholder, nil, false, transferLeaseOptions{
+					checkTransferLeaseSource: true,
+					checkCandidateFullness:   true,
+					dryRun:                   false,
+				},
 			)
 			if c.expectedCheckTrue != target.StoreID {
 				t.Errorf("expected s%d for check=true, but found %v", c.expectedCheckTrue, target)
 			}
 			target = a.TransferLeaseTarget(
-				context.Background(),
-				zone,
-				c.existing,
-				c.leaseholder,
-				nil,   /* replicaStats */
-				false, /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				context.Background(), zone, c.existing, c.leaseholder, nil, false, transferLeaseOptions{
+					checkTransferLeaseSource: false,
+					checkCandidateFullness:   true,
+					dryRun:                   false,
+				},
 			)
 			if c.expectedCheckFalse != target.StoreID {
 				t.Errorf("expected s%d for check=false, but found %v", c.expectedCheckFalse, target)
@@ -2461,27 +2452,21 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			zone := &zonepb.ZoneConfig{NumReplicas: proto.Int32(0), LeasePreferences: c.preferences}
 			target := a.TransferLeaseTarget(
-				context.Background(),
-				zone,
-				c.existing,
-				c.leaseholder,
-				nil,   /* replicaStats */
-				true,  /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				context.Background(), zone, c.existing, c.leaseholder, nil, false, transferLeaseOptions{
+					checkTransferLeaseSource: true,
+					checkCandidateFullness:   true,
+					dryRun:                   false,
+				},
 			)
 			if c.expectedCheckTrue != target.StoreID {
 				t.Errorf("expected s%d for check=true, but found %v", c.expectedCheckTrue, target)
 			}
 			target = a.TransferLeaseTarget(
-				context.Background(),
-				zone,
-				c.existing,
-				c.leaseholder,
-				nil,   /* replicaStats */
-				false, /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				context.Background(), zone, c.existing, c.leaseholder, nil, false, transferLeaseOptions{
+					checkTransferLeaseSource: false,
+					checkCandidateFullness:   true,
+					dryRun:                   false,
+				},
 			)
 			if c.expectedCheckFalse != target.StoreID {
 				t.Errorf("expected s%d for check=false, but found %v", c.expectedCheckFalse, target)
@@ -4894,9 +4879,12 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 				existing,
 				c.leaseholder,
 				c.stats,
-				c.check,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				false,
+				transferLeaseOptions{
+					checkTransferLeaseSource: c.check,
+					checkCandidateFullness:   true,
+					dryRun:                   false,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Errorf("expected %d, got %d", c.expected, target.StoreID)
