@@ -330,7 +330,14 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.WaitPolicy = f.getWaitPolicy()
 	ba.Header.LockTimeout = f.lockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
-	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
+	// For bounded staleness reads, we allow fetching unlimited span keys
+	// as we currently guarantee we are only reading from one row.
+	// If a batch limit is put in, we may have two batch reads which
+	// evaluate different bounded staleness timestamps which is incorrect.
+	// See also: #69063.
+	if ba.Header.BoundedStaleness == nil {
+		ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
+	}
 	ba.AdmissionHeader = f.requestAdmissionHeader
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
 	keyLocking := f.getKeyLockingStrength()
