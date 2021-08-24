@@ -108,7 +108,7 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 	return m, true
 }
 
-// User retrieves the session user.
+// User retrieves the current user.
 func (s *SessionData) User() security.SQLUsername {
 	return s.UserProto.Decode()
 }

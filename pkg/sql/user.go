@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -353,6 +355,11 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[security.SQLUsername]boo
 }
 
 // RoleExists returns true if the role exists.
+func (p *planner) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+	return RoleExists(ctx, p.ExecCfg(), p.Txn(), role)
+}
+
+// RoleExists returns true if the role exists.
 func RoleExists(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, role security.SQLUsername,
 ) (bool, error) {
@@ -421,4 +428,105 @@ func (p *planner) bumpDatabaseRoleSettingsTableVersion(ctx context.Context) erro
 	return p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, "updating version for database_role_settings table",
 	)
+}
+
+func (p *planner) setRole(ctx context.Context, s security.SQLUsername) error {
+	m := p.sessionDataMutator
+
+	sessionUser := m.data.SessionUser()
+	becomeUser := sessionUser
+	// Check the role exists - if so, populate becomeUser.
+	if !s.IsNoneRole() {
+		becomeUser = s
+
+		exists, err := p.RoleExists(ctx, becomeUser)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"role %s does not exist",
+				becomeUser.Normalized(),
+			)
+		}
+	}
+
+	if err := p.checkCanBecomeUser(ctx, becomeUser); err != nil {
+		return err
+	}
+
+	// Buffer the ParamStatusUpdate. We must *always* send this on an update,
+	// so we can't short circuit.
+	updateStr := "off"
+	willBecomeAdmin, err := p.UserHasAdminRole(ctx, becomeUser)
+	if err != nil {
+		return err
+	}
+	if willBecomeAdmin {
+		updateStr = "on"
+	}
+	m.paramStatusUpdater.BufferParamStatusUpdate("is_superuser", updateStr)
+
+	// The "none" user does resets the SessionUserProto in a SET ROLE.
+	if becomeUser.IsNoneRole() {
+		if m.data.SessionUserProto.Decode().Normalized() != "" {
+			m.data.UserProto = m.data.SessionUserProto
+			m.data.SessionUserProto = ""
+		}
+		return nil
+	}
+
+	// Only update session_user when we are transitioning from the current_user
+	// being the session_user.
+	if m.data.SessionUserProto == "" {
+		m.data.SessionUserProto = m.data.UserProto
+	}
+	m.data.UserProto = becomeUser.EncodeProto()
+	return nil
+}
+
+func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQLUsername) error {
+	sessionUser := p.SessionData().SessionUser()
+
+	// Switching to None can always succeed.
+	if becomeUser.IsNoneRole() {
+		return nil
+	}
+	// Root users are able to become anyone.
+	if sessionUser.IsRootUser() {
+		return nil
+	}
+	// You can always become yourself.
+	if becomeUser.Normalized() == sessionUser.Normalized() {
+		return nil
+	}
+	// Only root can become root.
+	// This is a CockroachDB specialization of the superuser case, as we don't want
+	// to allow admins to become root in the tenant case, where only system
+	// admins can be the root user.
+	if becomeUser.IsRootUser() {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only root can become root",
+		)
+	}
+
+	memberships, err := p.MemberOfWithAdminOption(ctx, sessionUser)
+	if err != nil {
+		return err
+	}
+	// Superusers can become anyone except root. In CRDB, admins are superusers.
+	if _, ok := memberships[security.AdminRoleName()]; ok {
+		return nil
+	}
+	// Otherwise, check the session user is a member of the user they will become.
+	if _, ok := memberships[becomeUser]; !ok {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			`permission denied to set role "%s"`,
+			becomeUser.Normalized(),
+		)
+	}
+	return nil
 }

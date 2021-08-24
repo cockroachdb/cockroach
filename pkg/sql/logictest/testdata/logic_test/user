@@ -184,14 +184,3 @@ ALTER USER userlongpassword WITH PASSWORD '987654321021'
 
 statement ok
 DROP USER userlongpassword
-
-subtest set_role
-
-statement error unimplemented
-SET ROLE = 'testuser'
-
-statement error unimplemented
-SET ROLE testuser
-
-statement error unimplemented
-RESET ROLE

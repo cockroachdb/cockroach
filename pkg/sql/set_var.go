@@ -82,7 +82,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 		}
 	}
 
-	if v.Set == nil && v.RuntimeSet == nil {
+	if v.Set == nil && v.RuntimeSet == nil && v.SetWithPlanner == nil {
 		return nil, newCannotChangeParameterError(name)
 	}
 

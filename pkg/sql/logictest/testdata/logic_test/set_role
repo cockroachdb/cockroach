@@ -1,0 +1,275 @@
+statement ok
+CREATE TABLE priv_t (pk INT PRIMARY KEY);
+CREATE TABLE no_priv_t (pk INT PRIMARY KEY)
+
+statement ok
+GRANT SELECT ON priv_t TO testuser
+
+# Cannot become node or public.
+statement error role name "public" is reserved
+CREATE ROLE public
+
+statement error pgcode 22023 role public does not exist
+SET ROLE public
+
+statement error username "node" reserved
+CREATE ROLE node
+
+statement error pgcode 22023 role node does not exist
+SET ROLE node
+
+# Check root can reset and become itself.
+query TT
+SELECT current_user, session_user()
+----
+root  root
+
+query T
+SHOW ROLE
+----
+none
+
+statement ok
+RESET ROLE
+
+statement error pgcode 22023 role non_existent_user does not exist
+SET ROLE non_existent_user
+
+query TT
+SELECT current_user, session_user()
+----
+root  root
+
+query T
+SHOW ROLE
+----
+root
+
+statement ok
+SET ROLE = root
+
+query TT
+SELECT current_user, session_user()
+----
+root  root
+
+query T
+SHOW ROLE
+----
+root
+
+statement ok
+SET ROLE = 'testuser'
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  root
+
+statement ok
+SELECT * FROM priv_t
+
+statement error user testuser does not have SELECT privilege on relation no_priv_t
+SELECT * FROM no_priv_t
+
+statement ok
+RESET ROLE
+
+# Check root can transition between testuser and testuser2.
+statement ok
+CREATE USER testuser2
+
+statement ok
+SET ROLE testuser2
+
+query TT
+SELECT current_user, session_user()
+----
+testuser2  root
+
+statement ok
+SET ROLE = 'NoNe'
+
+query TT
+SELECT current_user, session_user()
+----
+root  root
+
+# Check testuser cannot transition to other users as it has no privileges.
+user testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser
+
+query T
+SHOW ROLE
+----
+none
+
+statement ok
+SET ROLE testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser
+
+query T
+SHOW ROLE
+----
+testuser
+
+statement error pgcode 42501 only root can become root
+SET ROLE root
+
+statement error pgcode 42501 permission denied to set role "testuser2"
+SET ROLE testuser2
+
+# Grant admin to testuser.
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+# testuser can now transition to testuser2, but not root.
+
+user testuser
+
+statement error pgcode 42501 only root can become root
+SET ROLE root
+
+statement ok
+SET ROLE testuser2
+
+query TT
+SELECT current_user, session_user()
+----
+testuser2  testuser
+
+statement error pgcode 42501 user testuser2 does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_t
+
+statement error pgcode 42501 user testuser2 does not have SELECT privilege on relation no_priv_t
+SELECT * FROM no_priv_t
+
+statement ok
+RESET ROLE
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser
+
+# testuser2 cannot become anyone.
+
+user testuser2
+
+statement error pgcode 42501 only root can become root
+SET ROLE root
+
+statement error pgcode 42501 permission denied to set role "testuser"
+SET ROLE testuser
+
+statement ok
+SET ROLE testuser2
+
+query TT
+SELECT current_user, session_user()
+----
+testuser2  testuser2
+
+statement ok
+RESET ROLE
+
+query TT
+SELECT current_user, session_user()
+----
+testuser2  testuser2
+
+# Set testuser2 as admin, check testuser2 can become testuser
+user root
+
+statement ok
+GRANT admin TO testuser2
+
+user testuser2
+
+statement ok
+SET ROLE testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser2
+
+statement ok
+RESET ROLE
+
+# Revoke admin but give testuser privileges for testuser2.
+# Make a testrole role.
+# Check testuser2 can become testuser and testrole as they are still
+# "admin" when impersonating testuser.
+user root
+
+statement ok
+CREATE ROLE testrole;
+REVOKE admin FROM testuser2;
+GRANT testuser TO testuser2
+
+statement ok
+RESET ROLE
+
+user testuser2
+
+statement ok
+SET ROLE testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser2
+
+statement ok
+SET ROLE testrole
+
+query TT
+SELECT current_user, session_user()
+----
+testrole  testuser2
+
+statement ok
+RESET ROLE
+
+# SET ROLE testuser to testuser2, then revoke admin.
+# Test permissions forbidden, but reset is allowed.
+
+user testuser
+
+statement ok
+SET ROLE testuser2
+
+user root
+
+statement ok
+REVOKE admin FROM testuser
+
+user testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser2  testuser
+
+statement error pgcode 42501 permission denied to set role "testuser2"
+SET ROLE testuser2
+
+statement ok
+SET ROLE 'none'
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  testuser

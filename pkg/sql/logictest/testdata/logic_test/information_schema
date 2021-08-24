@@ -4578,6 +4578,7 @@ propagate_input_ordering                               off
 reorder_joins_limit                                    8
 require_explicit_primary_keys                          off
 results_buffer_size                                    16384
+role                                                   none
 row_security                                           off
 save_tables_prefix                                     ·
 search_path                                            "$user", public
