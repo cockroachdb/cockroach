@@ -70,6 +70,7 @@ import SessionDetails from "src/views/sessions/sessionDetails";
 import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
+import HotRanges from "oss/src/views/hotRanges/index";
 import "styl/app.styl";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -342,7 +343,8 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   path={`/reports/statements/diagnosticshistory`}
                   component={StatementsDiagnosticsHistoryView}
                 />
-
+                {/* hot ranges */}
+                <Route exact path={`/hotranges`} component={HotRanges} />
                 {/* old route redirects */}
                 <Redirect
                   exact
