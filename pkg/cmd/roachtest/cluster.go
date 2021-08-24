@@ -1266,7 +1266,7 @@ func (c *clusterImpl) CheckReplicaDivergenceOnDB(
 	//
 	// We've seen the consistency checks hang indefinitely in some cases.
 	rows, err := db.QueryContext(ctx, `
-SET statement_timeout = '3m';
+SET statement_timeout = '5m';
 SELECT t.range_id, t.start_key_pretty, t.status, t.detail
 FROM
 crdb_internal.check_consistency(true, '', '') as t
@@ -1278,20 +1278,22 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 		l.Printf("consistency check failed with %v; ignoring", err)
 		return nil
 	}
+	defer rows.Close()
 	var finalErr error
 	for rows.Next() {
 		var rangeID int32
 		var prettyKey, status, detail string
 		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); scanErr != nil {
-			return scanErr
+			l.Printf("consistency check failed with %v; ignoring", scanErr)
+			return nil
 		}
 		finalErr = errors.CombineErrors(finalErr,
 			errors.Newf("r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail))
 	}
 	if err := rows.Err(); err != nil {
-		finalErr = errors.CombineErrors(finalErr, err)
+		l.Printf("consistency check failed with %v; ignoring", err)
+		return nil
 	}
-
 	return finalErr
 }
 
@@ -1330,7 +1332,7 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t test.Test) 
 	defer db.Close()
 
 	if err := contextutil.RunWithTimeout(
-		ctx, "consistency check", time.Minute,
+		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {
 			return c.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
 		},
