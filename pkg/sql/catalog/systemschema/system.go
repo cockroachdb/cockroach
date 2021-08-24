@@ -465,24 +465,26 @@ CREATE TABLE system.join_tokens (
 	//  implemented, we need to revisit this choice and retune the configuration.
 	StatementStatisticsTableSchema = `
 CREATE TABLE system.statement_statistics (
-    aggregated_ts  TIMESTAMPTZ NOT NULL,
-    fingerprint_id BYTES NOT NULL,
-    plan_hash      INT8 NOT NULL,
-    app_name       STRING NOT NULL,
-    node_id        INT8 NOT NULL,
+    aggregated_ts              TIMESTAMPTZ NOT NULL,
+    fingerprint_id             BYTES NOT NULL,
+    transaction_fingerprint_id BYTES NOT NULL,
+    plan_hash                  INT8 NOT NULL,
+    app_name                   STRING NOT NULL,
+    node_id                    INT8 NOT NULL,
 
     agg_interval INTERVAL NOT NULL,
     metadata   JSONB NOT NULL,
     statistics JSONB NOT NULL,
     plan JSONB NOT NULL,
 
-    PRIMARY KEY (aggregated_ts, fingerprint_id, plan_hash, app_name, node_id)
+    PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
       USING HASH WITH BUCKET_COUNT = 8,
-    INDEX "fingerprint_stats_idx" (fingerprint_id, aggregated_ts, plan_hash, app_name, node_id),
+    INDEX "fingerprint_stats_idx" (fingerprint_id, transaction_fingerprint_id),
 		FAMILY "primary" (
-			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8,
+			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
 			aggregated_ts,
 			fingerprint_id,
+			transaction_fingerprint_id,
 			plan_hash,
 			app_name,
 			node_id,
@@ -507,7 +509,7 @@ CREATE TABLE system.transaction_statistics (
 
     PRIMARY KEY (aggregated_ts, fingerprint_id, app_name, node_id)
       USING HASH WITH BUCKET_COUNT = 8,
-    INDEX "fingerprint_stats_idx" (fingerprint_id, aggregated_ts, app_name, node_id),
+    INDEX "fingerprint_stats_idx" (fingerprint_id),
 		FAMILY "primary" (
 			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,
 			aggregated_ts,
@@ -642,7 +644,7 @@ var (
 	// TABLE statements for both statement and transaction tables in a SQL shell.
 	// If we are to change how we compute hash values in the future, we need to
 	// modify these two expressions as well.
-	sqlStmtHashComputeExpr = `mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash)), 8:::INT8)`
+	sqlStmtHashComputeExpr = `mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
 	sqlTxnHashComputeExpr  = `mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
 )
 
@@ -655,7 +657,7 @@ const (
 
 	// StmtStatsHashColumnName is the name of the hash column of
 	// system.statement_statistics.
-	StmtStatsHashColumnName = "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8"
+	StmtStatsHashColumnName = "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8"
 
 	// TxnStatsHashColumnName is the name of the hash column of
 	// system.transaction_statistics.
@@ -1905,16 +1907,17 @@ var (
 			[]descpb.ColumnDescriptor{
 				{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
 				{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
-				{Name: "plan_hash", ID: 3, Type: types.Int, Nullable: false},
-				{Name: "app_name", ID: 4, Type: types.String, Nullable: false},
-				{Name: "node_id", ID: 5, Type: types.Int, Nullable: false},
-				{Name: "agg_interval", ID: 6, Type: types.Interval, Nullable: false},
-				{Name: "metadata", ID: 7, Type: types.Jsonb, Nullable: false},
-				{Name: "statistics", ID: 8, Type: types.Jsonb, Nullable: false},
-				{Name: "plan", ID: 9, Type: types.Jsonb, Nullable: false},
+				{Name: "transaction_fingerprint_id", ID: 3, Type: types.Bytes, Nullable: false},
+				{Name: "plan_hash", ID: 4, Type: types.Int, Nullable: false},
+				{Name: "app_name", ID: 5, Type: types.String, Nullable: false},
+				{Name: "node_id", ID: 6, Type: types.Int, Nullable: false},
+				{Name: "agg_interval", ID: 7, Type: types.Interval, Nullable: false},
+				{Name: "metadata", ID: 8, Type: types.Jsonb, Nullable: false},
+				{Name: "statistics", ID: 9, Type: types.Jsonb, Nullable: false},
+				{Name: "plan", ID: 10, Type: types.Jsonb, Nullable: false},
 				{
-					Name:        "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
-					ID:          10,
+					Name:        "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
+					ID:          11,
 					Type:        types.Int4,
 					Nullable:    false,
 					ComputeExpr: &sqlStmtHashComputeExpr,
@@ -1926,11 +1929,11 @@ var (
 					Name: "primary",
 					ID:   0,
 					ColumnNames: []string{
-						"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
-						"aggregated_ts", "fingerprint_id", "plan_hash", "app_name", "node_id",
+						"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
+						"aggregated_ts", "fingerprint_id", "transaction_fingerprint_id", "plan_hash", "app_name", "node_id",
 						"agg_interval", "metadata", "statistics", "plan",
 					},
-					ColumnIDs:       []descpb.ColumnID{10, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+					ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 					DefaultColumnID: 0,
 				},
 			},
@@ -1939,9 +1942,10 @@ var (
 				ID:     1,
 				Unique: true,
 				KeyColumnNames: []string{
-					"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
+					"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 					"aggregated_ts",
 					"fingerprint_id",
+					"transaction_fingerprint_id",
 					"plan_hash",
 					"app_name",
 					"node_id",
@@ -1953,12 +1957,13 @@ var (
 					descpb.IndexDescriptor_ASC,
 					descpb.IndexDescriptor_ASC,
 					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
 				},
-				KeyColumnIDs: []descpb.ColumnID{10, 1, 2, 3, 4, 5},
+				KeyColumnIDs: []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
 				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
 				Sharded: descpb.ShardedDescriptor{
 					IsSharded:    true,
-					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
+					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 					ShardBuckets: 8,
 					ColumnNames: []string{
 						"aggregated_ts",
@@ -1966,6 +1971,7 @@ var (
 						"fingerprint_id",
 						"node_id",
 						"plan_hash",
+						"transaction_fingerprint_id",
 					},
 				},
 			},
@@ -1975,29 +1981,23 @@ var (
 				Unique: false,
 				KeyColumnNames: []string{
 					"fingerprint_id",
-					"aggregated_ts",
-					"plan_hash",
-					"app_name",
-					"node_id",
+					"transaction_fingerprint_id",
 				},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 					descpb.IndexDescriptor_ASC,
 					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
 				},
-				KeyColumnIDs:       []descpb.ColumnID{2, 1, 3, 4, 5},
-				KeySuffixColumnIDs: []descpb.ColumnID{10},
+				KeyColumnIDs:       []descpb.ColumnID{2, 3},
+				KeySuffixColumnIDs: []descpb.ColumnID{11, 1, 4, 5, 6},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Expr:                "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
-				Name:                "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
+				Expr:                "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
+				Name:                "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 				Validity:            descpb.ConstraintValidity_Validated,
-				ColumnIDs:           []descpb.ColumnID{10},
+				ColumnIDs:           []descpb.ColumnID{11},
 				IsNonNullConstraint: false,
 				Hidden:              true,
 			}}
@@ -2079,18 +2079,12 @@ var (
 				Unique: false,
 				KeyColumnNames: []string{
 					"fingerprint_id",
-					"aggregated_ts",
-					"app_name",
-					"node_id",
 				},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
 				},
-				KeyColumnIDs:       []descpb.ColumnID{2, 1, 3, 4},
-				KeySuffixColumnIDs: []descpb.ColumnID{8},
+				KeyColumnIDs:       []descpb.ColumnID{2},
+				KeySuffixColumnIDs: []descpb.ColumnID{8, 1, 3, 4},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		),
