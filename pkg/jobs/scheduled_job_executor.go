@@ -86,21 +86,43 @@ func newScheduledJobExecutorLocked(name string) (ScheduledJobExecutor, error) {
 
 // GetScheduledJobExecutor returns a singleton instance of
 // ScheduledJobExecutor and a flag indicating if that instance was just created.
-func GetScheduledJobExecutor(name string) (ScheduledJobExecutor, bool, error) {
+func GetScheduledJobExecutor(name string) (ScheduledJobExecutor, error) {
 	executorRegistry.Lock()
 	defer executorRegistry.Unlock()
+	return getScheduledJobExecutorLocked(name)
+}
+
+func getScheduledJobExecutorLocked(name string) (ScheduledJobExecutor, error) {
 	if executorRegistry.executors == nil {
 		executorRegistry.executors = make(map[string]ScheduledJobExecutor)
 	}
 	if ex, ok := executorRegistry.executors[name]; ok {
-		return ex, false, nil
+		return ex, nil
 	}
 	ex, err := newScheduledJobExecutorLocked(name)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	executorRegistry.executors[name] = ex
-	return ex, true, nil
+	return ex, nil
+}
+
+// RegisterExecutorsMetrics registered the metrics updated by each executor.
+func RegisterExecutorsMetrics(registry *metric.Registry) error {
+	executorRegistry.Lock()
+	defer executorRegistry.Unlock()
+
+	for executorType := range executorRegistry.factories {
+		ex, err := getScheduledJobExecutorLocked(executorType)
+		if err != nil {
+			return err
+		}
+		if m := ex.Metrics(); m != nil {
+			registry.AddMetricStruct(m)
+		}
+	}
+
+	return nil
 }
 
 // DefaultHandleFailedRun is a default implementation for handling failed run
@@ -143,7 +165,7 @@ func NotifyJobTermination(
 	if err != nil {
 		return err
 	}
-	executor, _, err := GetScheduledJobExecutor(schedule.ExecutorType())
+	executor, err := GetScheduledJobExecutor(schedule.ExecutorType())
 	if err != nil {
 		return err
 	}
