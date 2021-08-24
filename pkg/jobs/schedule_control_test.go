@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -324,5 +325,127 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 
 		// Clear the system.jobs table for the next test run.
 		th.sqlDB.Exec(t, "DELETE FROM system.jobs")
+	}
+}
+
+func TestJobControlByType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ResetConstructors()()
+
+	argsFn := func(args *base.TestServerArgs) {
+		// Prevent registry from changing job state while running this test.
+		interval := 24 * time.Hour
+		args.Knobs.JobsTestingKnobs = NewTestingKnobsWithIntervals(interval, interval, interval, interval)
+	}
+	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables, argsFn)
+	defer cleanup()
+
+	registry := th.server.JobRegistry().(*Registry)
+	blockResume := make(chan struct{})
+	defer close(blockResume)
+
+	var allJobStates = []Status{StatusPending, StatusRunning, StatusPaused, StatusFailed,
+		StatusReverting, StatusSucceeded, StatusCanceled, StatusCancelRequested, StatusPauseRequested}
+
+	var JobspbTypeToJobsType = map[jobspb.Type]tree.JobType{
+		jobspb.TypeChangefeed: tree.TypeChangefeed,
+		jobspb.TypeBackup:     tree.TypeBackup,
+		jobspb.TypeImport:     tree.TypeImport,
+		jobspb.TypeRestore:    tree.TypeRestore,
+	}
+
+	var allJobTypes = []jobspb.Type{jobspb.TypeChangefeed, jobspb.TypeImport, jobspb.TypeBackup, jobspb.TypeRestore}
+
+	// Required to make jobs of each type controllable
+	for _, jobType := range allJobTypes {
+		RegisterConstructor(jobType, func(job *Job, _ *cluster.Settings) Resumer {
+			return FakeResumer{
+				OnResume: func(ctx context.Context) error {
+					<-ctx.Done()
+					return nil
+				},
+			}
+		})
+	}
+
+	for _, jobType := range allJobTypes {
+		for _, tc := range []struct {
+			command        string
+			startingStates []Status
+			endState       Status
+		}{
+			{"pause", []Status{StatusPending, StatusRunning, StatusReverting}, StatusPauseRequested},
+			{"resume", []Status{StatusPaused}, StatusRunning},
+			{"cancel", []Status{StatusPending, StatusRunning, StatusPaused}, StatusCancelRequested},
+		} {
+			commandQuery := fmt.Sprintf("%s every %s job", tc.command, tree.JobTypeToStatement[JobspbTypeToJobsType[jobType]])
+			t.Run(commandQuery, func(t *testing.T) {
+				var jobIDStrings []string
+
+				// Make multiple jobs of every permutation of job type and job state
+				const numJobsPerStatus = 3
+				for _, jobInfo := range []struct {
+					jobDetails  jobspb.Details
+					jobProgress jobspb.ProgressDetails
+				}{
+					{jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}},
+					{jobspb.ImportDetails{}, jobspb.ImportProgress{}},
+					{jobspb.BackupDetails{}, jobspb.BackupProgress{}},
+					{jobspb.RestoreDetails{}, jobspb.RestoreProgress{}},
+				} {
+					for _, status := range allJobStates {
+						for i := 0; i < numJobsPerStatus; i++ {
+							record := Record{
+								Description: "fake job",
+								Username:    security.TestUserName(),
+								Details:     jobInfo.jobDetails,
+								Progress:    jobInfo.jobProgress,
+							}
+
+							jobID := registry.MakeJobID()
+							jobIDStrings = append(jobIDStrings, fmt.Sprintf("%d", jobID))
+							_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */)
+							require.NoError(t, err)
+							th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", status, jobID)
+						}
+					}
+				}
+
+				jobIdsClause := fmt.Sprint(strings.Join(jobIDStrings, ", "))
+
+				// Execute the command and verify its executed on the expected number of rows
+				numEffected, err := th.cfg.InternalExecutor.ExecEx(
+					context.Background(),
+					"test-num-effected",
+					nil,
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+					commandQuery,
+				)
+				require.NoError(t, err)
+
+				// Jobs in the starting state should be affected
+				numExpectedJobsAffected := numJobsPerStatus * len(tc.startingStates)
+				require.Equal(t, numExpectedJobsAffected, numEffected)
+
+				// Both the affected jobs + the jobs originally in the target state should be in that state
+				numExpectedJobsWithEndState := numExpectedJobsAffected + numJobsPerStatus
+
+				// By verifying that the correct number of jobs are in the expected end state and
+				// the expected number of jobs were affected by the command, we guarantee that
+				// only the expected jobs have changed
+				var numJobs = 0
+				th.sqlDB.QueryRow(
+					t,
+					fmt.Sprintf(
+						"SELECT count(*) FROM [SHOW JOBS] WHERE status='%s' AND job_type='%s' AND job_id IN (%s)",
+						tc.endState, jobType, jobIdsClause,
+					),
+				).Scan(&numJobs)
+				require.Equal(t, numJobs, numExpectedJobsWithEndState)
+
+				// Clear the system.jobs table for the next test run.
+				th.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM system.jobs WHERE id IN (%s)", jobIdsClause))
+			})
+		}
 	}
 }
