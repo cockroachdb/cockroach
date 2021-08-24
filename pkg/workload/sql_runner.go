@@ -93,11 +93,10 @@ func (sr *SQLRunner) Define(sql string) StmtHandle {
 //    workers; this avoids lock contention in the sql.Rows objects they produce.
 //    See #30811.
 //
-//  - "noprepare": don't use explicit prepared statements, but use the internal
-//    pgx prepared statement cache. See jackc/pgconn/stmtcache. This cache
-//    automatically prepares every statement, but has a maximum capacity. It
-//    will evict prepared statements and deallocate (a.k.a. unprepare)
-//    statements that were least recently uses.
+//  - "noprepare": each query is issued separately (on the given connection).
+//    This results in Parse, Bind, Execute on the server each time we run a
+//    query. The statement is an anonymous prepared statement; that is, the
+//    name is the empty string.
 //
 //  - "simple": each query is issued in a single string; parameters are
 //    rendered inside the string. This results in a single SimpleExecute
