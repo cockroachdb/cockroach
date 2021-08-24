@@ -431,6 +431,10 @@ message SorterSpec {
   // first 'n' output ordering columns, can be optionally specified for
   // possible speed-ups taking advantage of the partial orderings.
   optional uint32 ordering_match_len = 2 [(gogoproto.nullable) = false];
+
+  // The limit of a top-k sort is the number of rows that the sorter should
+  // output. If limit is 0, then all rows should be output.
+  optional int64 limit = 3 [(gogoproto.nullable) = false];
 }
 
 message DistinctSpec {

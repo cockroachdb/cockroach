@@ -165,16 +165,14 @@ vectorized: true
 • index join
 │ table: abcd@primary
 │
-└── • limit
-    │ count: 5
+└── • top-k
+    │ order: -b
+    │ k: 5
     │
-    └── • sort
-        │ order: -b
-        │
-        └── • scan
-              missing stats
-              table: abcd@b
-              spans: FULL SCAN
+    └── • scan
+          missing stats
+          table: abcd@b
+          spans: FULL SCAN
 
 # Force index cd
 query T

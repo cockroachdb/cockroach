@@ -356,6 +356,14 @@ define Limit {
     Offset tree.TypedExpr
 }
 
+# TopK implements a TopK sorter that outputs the top K rows from the input
+# according to the ordering.
+define TopK {
+    Input exec.Node
+    K int64
+    Ordering exec.OutputOrdering
+}
+
 # Max1Row permits at most one row from the given input node, causing an error
 # with the given text at runtime if the node tries to return more than one row.
 define Max1Row {

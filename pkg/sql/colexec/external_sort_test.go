@@ -176,49 +176,54 @@ func TestExternalSortRandomized(t *testing.T) {
 		flowCtx.Cfg.TestingKnobs = tk
 		for nCols := 1; nCols <= maxCols; nCols++ {
 			for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-				namePrefix := "MemoryLimit=" + humanizeutil.IBytes(tk.MemoryLimitBytes)
-				if tk.ForceDiskSpill {
-					namePrefix = "ForceDiskSpill=true"
-				}
-				delegateFDAcquisition := rng.Float64() < 0.5
-				name := fmt.Sprintf("%s/nCols=%d/nOrderingCols=%d/delegateFDAcquisition=%t", namePrefix, nCols, nOrderingCols, delegateFDAcquisition)
-				log.Infof(ctx, "%s", name)
-				// Unfortunately, there is currently no better way to check that a
-				// sorter does not have leftover file descriptors other than appending
-				// each semaphore used to this slice on construction. This is because
-				// some tests don't fully drain the input, making intercepting the
-				// sorter.Close() method not a useful option, since it is impossible
-				// to check between an expected case where more than 0 FDs are open
-				// (e.g. in verifySelAndNullResets, where the sorter is not fully
-				// drained so Close must be called explicitly) and an unexpected one.
-				// These cases happen during normal execution when a limit is
-				// satisfied, but flows will call Close explicitly on Cleanup.
-				// TODO(asubiotto): Not implemented yet, currently we rely on the
-				//  flow tracking open FDs and releasing any leftovers.
-				var semsToCheck []semaphore.Semaphore
-				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
-				colexectestutils.RunTests(
-					t,
-					testAllocator,
-					[]colexectestutils.Tuples{tups},
-					expected,
-					colexectestutils.OrderedVerifier,
-					func(input []colexecop.Operator) (colexecop.Operator, error) {
-						sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
-						semsToCheck = append(semsToCheck, sem)
-						sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
-							ctx, flowCtx, input, typs[:nCols], ordCols,
-							0 /* matchLen */, 0 /* k */, func() {},
-							numForcedRepartitions, delegateFDAcquisition, queueCfg, sem)
-						// TODO(asubiotto): Explicitly Close when testing.T is passed into
-						//  this constructor and we do a substring match.
-						require.Equal(t, 1, len(closers))
-						accounts = append(accounts, newAccounts...)
-						monitors = append(monitors, newMonitors...)
-						return sorter, err
-					})
-				for i, sem := range semsToCheck {
-					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+				for _, k := range []int{0, rng.Intn(nTups) + 1} {
+					namePrefix := "MemoryLimit=" + humanizeutil.IBytes(tk.MemoryLimitBytes)
+					if tk.ForceDiskSpill {
+						namePrefix = "ForceDiskSpill=true"
+					}
+					delegateFDAcquisition := rng.Float64() < 0.5
+					name := fmt.Sprintf("%s/nCols=%d/nOrderingCols=%d/delegateFDAcquisition=%t/k=%d", namePrefix, nCols, nOrderingCols, delegateFDAcquisition, k)
+					log.Infof(ctx, "%s", name)
+					// Unfortunately, there is currently no better way to check that a
+					// sorter does not have leftover file descriptors other than appending
+					// each semaphore used to this slice on construction. This is because
+					// some tests don't fully drain the input, making intercepting the
+					// sorter.Close() method not a useful option, since it is impossible
+					// to check between an expected case where more than 0 FDs are open
+					// (e.g. in verifySelAndNullResets, where the sorter is not fully
+					// drained so Close must be called explicitly) and an unexpected one.
+					// These cases happen during normal execution when a limit is
+					// satisfied, but flows will call Close explicitly on Cleanup.
+					// TODO(asubiotto): Not implemented yet, currently we rely on the
+					//  flow tracking open FDs and releasing any leftovers.
+					var semsToCheck []semaphore.Semaphore
+					tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
+					if k > 0 {
+						expected = expected[:k]
+					}
+					colexectestutils.RunTests(
+						t,
+						testAllocator,
+						[]colexectestutils.Tuples{tups},
+						expected,
+						colexectestutils.OrderedVerifier,
+						func(input []colexecop.Operator) (colexecop.Operator, error) {
+							sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
+							semsToCheck = append(semsToCheck, sem)
+							sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
+								ctx, flowCtx, input, typs[:nCols], ordCols,
+								0 /* matchLen */, uint64(k), func() {},
+								numForcedRepartitions, delegateFDAcquisition, queueCfg, sem)
+							// TODO(asubiotto): Explicitly Close when testing.T is passed into
+							//  this constructor and we do a substring match.
+							require.Equal(t, 1, len(closers))
+							accounts = append(accounts, newAccounts...)
+							monitors = append(monitors, newMonitors...)
+							return sorter, err
+						})
+					for i, sem := range semsToCheck {
+						require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+					}
 				}
 			}
 		}

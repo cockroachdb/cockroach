@@ -212,6 +212,7 @@ var _ planNode = &showFingerprintsNode{}
 var _ planNode = &showTraceNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
+var _ planNode = &topKNode{}
 var _ planNode = &unsplitNode{}
 var _ planNode = &unsplitAllNode{}
 var _ planNode = &truncateNode{}

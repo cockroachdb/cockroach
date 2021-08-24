@@ -321,22 +321,18 @@ vectorized: true
     │ render x: x
     │ render v: v
     │
-    └── • limit
+    └── • top-k
         │ columns: (x, v)
+        │ ordering: -v
         │ estimated row count: 10 (missing stats)
-        │ count: 10
+        │ order: -v
+        │ k: 10
         │
-        └── • sort
-            │ columns: (x, v)
-            │ ordering: -v
-            │ estimated row count: 1,000 (missing stats)
-            │ order: -v
-            │
-            └── • scan
-                  columns: (x, v)
-                  estimated row count: 1,000 (missing stats)
-                  table: select_t@primary
-                  spans: FULL SCAN
+        └── • scan
+              columns: (x, v)
+              estimated row count: 1,000 (missing stats)
+              table: select_t@primary
+              spans: FULL SCAN
 
 # Check that INSERT supports LIMIT (MySQL extension)
 query T
@@ -399,16 +395,13 @@ vectorized: true
 └── • render
     │ estimated row count: 1
     │
-    └── • limit
+    └── • top-k
         │ estimated row count: 1
-        │ count: 1
+        │ order: +column2
+        │ k: 1
         │
-        └── • sort
-            │ estimated row count: 2
-            │ order: +column2
-            │
-            └── • values
-                  size: 2 columns, 2 rows
+        └── • values
+              size: 2 columns, 2 rows
 
 query T
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
@@ -423,16 +416,13 @@ vectorized: true
 └── • render
     │ estimated row count: 1
     │
-    └── • limit
+    └── • top-k
         │ estimated row count: 1
-        │ count: 1
+        │ order: +column2
+        │ k: 1
         │
-        └── • sort
-            │ estimated row count: 2
-            │ order: +column2
-            │
-            └── • values
-                  size: 2 columns, 2 rows
+        └── • values
+              size: 2 columns, 2 rows
 
 query T
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
@@ -447,16 +437,13 @@ vectorized: true
 └── • render
     │ estimated row count: 1
     │
-    └── • limit
+    └── • top-k
         │ estimated row count: 1
-        │ count: 1
+        │ order: +column2
+        │ k: 1
         │
-        └── • sort
-            │ estimated row count: 2
-            │ order: +column2
-            │
-            └── • values
-                  size: 2 columns, 2 rows
+        └── • values
+              size: 2 columns, 2 rows
 
 # ORDER BY expression that's not inserted into table.
 query T
@@ -483,29 +470,25 @@ vectorized: true
         │ render length: length
         │ render ?column?: "?column?"
         │
-        └── • limit
+        └── • top-k
             │ columns: (length, "?column?", column12)
+            │ ordering: +column12
             │ estimated row count: 10 (missing stats)
-            │ count: 10
+            │ order: +column12
+            │ k: 10
             │
-            └── • sort
+            └── • render
                 │ columns: (length, "?column?", column12)
-                │ ordering: +column12
                 │ estimated row count: 1,000 (missing stats)
-                │ order: +column12
+                │ render length: length(k)
+                │ render ?column?: 2
+                │ render column12: k::STRING || v::STRING
                 │
-                └── • render
-                    │ columns: (length, "?column?", column12)
-                    │ estimated row count: 1,000 (missing stats)
-                    │ render length: length(k)
-                    │ render ?column?: 2
-                    │ render column12: k::STRING || v::STRING
-                    │
-                    └── • scan
-                          columns: (k, v)
-                          estimated row count: 1,000 (missing stats)
-                          table: kv@primary
-                          spans: FULL SCAN
+                └── • scan
+                      columns: (k, v)
+                      estimated row count: 1,000 (missing stats)
+                      table: kv@primary
+                      spans: FULL SCAN
 
 # ------------------------------------------------------------------------------
 # Insert rows into table during schema changes.
