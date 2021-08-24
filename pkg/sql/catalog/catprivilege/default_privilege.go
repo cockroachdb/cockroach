@@ -11,6 +11,8 @@
 package catprivilege
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -32,6 +34,14 @@ type immutable struct {
 // that exposes getters and setters.
 type Mutable struct {
 	immutable
+}
+
+// MakeNewDefaultPrivilegeDescriptor returns a new DefaultPrivilegeDescriptor.
+func MakeNewDefaultPrivilegeDescriptor() *descpb.DefaultPrivilegeDescriptor {
+	var defaultPrivilegesForRole []descpb.DefaultPrivilegesForRole
+	return &descpb.DefaultPrivilegeDescriptor{
+		DefaultPrivilegesPerRole: defaultPrivilegesForRole,
+	}
 }
 
 // MakeDefaultPrivileges returns an immutable
@@ -62,15 +72,16 @@ func (d *Mutable) GrantDefaultPrivileges(
 	grantees []security.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
-	defaultPrivilegesPerObject := d.defaultPrivilegeDescriptor.
-		FindOrCreateUser(role).DefaultPrivilegesPerObject
+	defaultPrivilegesForRole := d.defaultPrivilegeDescriptor.FindOrCreateUser(role)
 	for _, grantee := range grantees {
-		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
-		defaultPrivileges.Grant(
-			grantee,
-			privileges,
-		)
-		defaultPrivilegesPerObject[targetObject] = defaultPrivileges
+		defaultPrivileges := defaultPrivilegesForRole.DefaultPrivilegesPerObject[targetObject]
+		// expandPrivileges turns flags on the DefaultPrivilegesForRole representing
+		// special privilege cases into real privileges on the PrivilegeDescriptor.
+		// foldPrivileges converts the real privileges back into flags.
+		expandPrivileges(defaultPrivilegesForRole, role, &defaultPrivileges, targetObject)
+		defaultPrivileges.Grant(grantee, privileges)
+		foldPrivileges(defaultPrivilegesForRole, role, &defaultPrivileges, targetObject)
+		defaultPrivilegesForRole.DefaultPrivilegesPerObject[targetObject] = defaultPrivileges
 	}
 }
 
@@ -81,30 +92,37 @@ func (d *Mutable) RevokeDefaultPrivileges(
 	grantees []security.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
-	defaultPrivilegesPerObject := d.defaultPrivilegeDescriptor.
-		FindOrCreateUser(role).DefaultPrivilegesPerObject
+	defaultPrivilegesForRole := d.defaultPrivilegeDescriptor.FindOrCreateUser(role)
 	for _, grantee := range grantees {
-		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
-		defaultPrivileges.Revoke(
-			grantee,
-			privileges,
-			targetObject.ToPrivilegeObjectType(),
-		)
+		defaultPrivileges := defaultPrivilegesForRole.DefaultPrivilegesPerObject[targetObject]
+		// expandPrivileges turns flags on the DefaultPrivilegesForRole representing
+		// special privilege cases into real privileges on the PrivilegeDescriptor.
+		// foldPrivileges converts the real privileges back into flags.
+		expandPrivileges(defaultPrivilegesForRole, role, &defaultPrivileges, targetObject)
+		defaultPrivileges.Revoke(grantee, privileges, targetObject.ToPrivilegeObjectType())
+		foldPrivileges(defaultPrivilegesForRole, role, &defaultPrivileges, targetObject)
 
-		defaultPrivilegesPerObject[targetObject] = defaultPrivileges
+		defaultPrivilegesForRole.DefaultPrivilegesPerObject[targetObject] = defaultPrivileges
 	}
 
-	// If ForAllRoles was specified, we do not have to remove any users.
-	if role.ForAllRoles {
-		return
-	}
+	defaultPrivilegesPerObject := defaultPrivilegesForRole.DefaultPrivilegesPerObject
 	// Check if there are any default privileges remaining on the descriptor.
-	// If empty we will remove the map entry.
+	// If there are no privileges left remaining and the descriptor is in the
+	// default state, we can remove it.
 	for _, defaultPrivs := range defaultPrivilegesPerObject {
 		if len(defaultPrivs.Users) != 0 {
 			return
 		}
 	}
+	if defaultPrivilegesForRole.IsExplicitRole() &&
+		(!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, tree.Tables) ||
+			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, tree.Sequences) ||
+			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, tree.Types) ||
+			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, tree.Schemas)) ||
+		!GetPublicHasUsageOnTypes(defaultPrivilegesForRole) {
+		return
+	}
+
 	// There no entries remaining, remove the entry for the role.
 	d.defaultPrivilegeDescriptor.RemoveUser(role)
 }
@@ -126,43 +144,32 @@ func (d *immutable) CreatePrivilegesFromDefaultPrivileges(
 		return descpb.NewDefaultPrivilegeDescriptor(security.NodeUserName())
 	}
 
+	newPrivs := descpb.NewDefaultPrivilegeDescriptor(user)
+	// If default privileges are not defined for the creator role, we handle
+	// it as the default case where the user has all privileges.
+	role := descpb.DefaultPrivilegesRole{Role: user}
+	if _, found := d.GetDefaultPrivilegesForRole(role); !found {
+		defaultPrivilegesForCreatorRole := descpb.InitDefaultPrivilegesForRole(role)
+		for _, user := range GetUserPrivilegesForObject(defaultPrivilegesForCreatorRole, targetObject) {
+			newPrivs.Grant(
+				user.UserProto.Decode(),
+				privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
+			)
+		}
+	}
+
 	// The privileges for the object are the union of the default privileges
 	// defined for the object for the object creator and the default privileges
 	// defined for all roles.
-	newPrivs := descpb.NewDefaultPrivilegeDescriptor(user)
-	defaultPrivilegesForAllRoles, found := d.GetDefaultPrivilegesForRole(
-		descpb.DefaultPrivilegesRole{
-			ForAllRoles: true,
-		},
-	)
-	if found {
-		defaultPrivileges, descriptorExists := defaultPrivilegesForAllRoles.DefaultPrivilegesPerObject[targetObject]
-		if descriptorExists {
-			for _, user := range defaultPrivileges.Users {
-				newPrivs.Grant(
-					user.UserProto.Decode(),
-					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
-				)
-			}
+	_ = d.ForEachDefaultPrivilegeForRole(func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
+		for _, user := range GetUserPrivilegesForObject(defaultPrivilegesForRole, targetObject) {
+			newPrivs.Grant(
+				user.UserProto.Decode(),
+				privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
+			)
 		}
-	}
-
-	defaultPrivilegesForCreator, defaultPrivilegesDefinedForCreator := d.GetDefaultPrivilegesForRole(
-		descpb.DefaultPrivilegesRole{
-			Role: user,
-		})
-	if defaultPrivilegesDefinedForCreator {
-		defaultPrivileges, descriptorExists := defaultPrivilegesForCreator.DefaultPrivilegesPerObject[targetObject]
-		if descriptorExists {
-			for _, user := range defaultPrivileges.Users {
-				newPrivs.Grant(
-					user.UserProto.Decode(),
-					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
-				)
-			}
-		}
-	}
-
+		return nil
+	})
 	newPrivs.SetOwner(user)
 	newPrivs.Version = descpb.Version21_2
 
@@ -211,4 +218,158 @@ func (d *immutable) GetDefaultPrivilegesForRole(
 		return nil, false
 	}
 	return &d.defaultPrivilegeDescriptor.DefaultPrivilegesPerRole[idx], true
+}
+
+// foldPrivileges folds ALL privileges for role and USAGE on public into
+// the corresponding flag on the DefaultPrivilegesForRole object.
+// For example, if after a Grant operation, role has ALL on tables, ALL
+// privilege is removed from the UserPrivileges object and instead
+// RoleHasAllPrivilegesOnTable is set to true.
+// This is necessary as role having ALL privileges on tables is the default state
+// and should not prevent the role from being dropped if it has ALL privileges.
+func foldPrivileges(
+	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole,
+	role descpb.DefaultPrivilegesRole,
+	privileges *descpb.PrivilegeDescriptor,
+	targetObject tree.AlterDefaultPrivilegesTargetObject,
+) {
+	if targetObject == tree.Types &&
+		privileges.CheckPrivilege(security.PublicRoleName(), privilege.USAGE) {
+		setPublicHasUsageOnTypes(defaultPrivilegesForRole, true)
+		privileges.Revoke(
+			security.PublicRoleName(),
+			privilege.List{privilege.USAGE},
+			privilege.Type,
+		)
+	}
+	// ForAllRoles cannot be a grantee, nothing left to do.
+	if role.ForAllRoles {
+		return
+	}
+	if privileges.HasAllPrivileges(role.Role, targetObject.ToPrivilegeObjectType()) {
+		setRoleHasAllOnTargetObject(defaultPrivilegesForRole, true, targetObject)
+		privileges.RemoveUser(role.Role)
+	}
+}
+
+// expandPrivileges expands the pseudo privilege flags on
+// DefaultPrivilegesForRole into real privileges on the UserPrivileges object.
+// After expandPrivileges, UserPrivileges can be Granted/Revoked from normally.
+// For example - if RoleHasAllPrivilegesOnTables is true, ALL privilege is added
+// into the UserPrivileges array for the Role.
+func expandPrivileges(
+	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole,
+	role descpb.DefaultPrivilegesRole,
+	privileges *descpb.PrivilegeDescriptor,
+	targetObject tree.AlterDefaultPrivilegesTargetObject,
+) {
+	if targetObject == tree.Types && GetPublicHasUsageOnTypes(defaultPrivilegesForRole) {
+		privileges.Grant(security.PublicRoleName(), privilege.List{privilege.USAGE})
+		setPublicHasUsageOnTypes(defaultPrivilegesForRole, false)
+	}
+	// ForAllRoles cannot be a grantee, nothing left to do.
+	if role.ForAllRoles {
+		return
+	}
+	if GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, targetObject) {
+		privileges.Grant(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode(), privilege.List{privilege.ALL})
+		setRoleHasAllOnTargetObject(defaultPrivilegesForRole, false, targetObject)
+	}
+}
+
+// GetUserPrivilegesForObject returns the set of []UserPrivileges constructed
+// from the DefaultPrivilegesForRole.
+func GetUserPrivilegesForObject(
+	p descpb.DefaultPrivilegesForRole, targetObject tree.AlterDefaultPrivilegesTargetObject,
+) []descpb.UserPrivileges {
+	var userPrivileges []descpb.UserPrivileges
+	if privileges, ok := p.DefaultPrivilegesPerObject[targetObject]; ok {
+		userPrivileges = privileges.Users
+	}
+	if GetPublicHasUsageOnTypes(&p) && targetObject == tree.Types {
+		userPrivileges = append(userPrivileges, descpb.UserPrivileges{
+			UserProto:  security.PublicRoleName().EncodeProto(),
+			Privileges: privilege.USAGE.Mask(),
+		})
+	}
+	// If ForAllRoles is specified, we can return early.
+	// ForAllRoles is not a real role and does not have implicit default privileges
+	// for itself.
+	if !p.IsExplicitRole() {
+		return userPrivileges
+	}
+	userProto := p.GetExplicitRole().UserProto
+	if GetRoleHasAllPrivilegesOnTargetObject(&p, targetObject) {
+		return append(userPrivileges, descpb.UserPrivileges{
+			UserProto:  userProto,
+			Privileges: privilege.ALL.Mask(),
+		})
+	}
+	return userPrivileges
+}
+
+// GetPublicHasUsageOnTypes returns whether Public has Usage privilege on types.
+func GetPublicHasUsageOnTypes(defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole) bool {
+	if defaultPrivilegesForRole.IsExplicitRole() {
+		return defaultPrivilegesForRole.GetExplicitRole().PublicHasUsageOnTypes
+	}
+	return defaultPrivilegesForRole.GetForAllRoles().PublicHasUsageOnTypes
+}
+
+// GetRoleHasAllPrivilegesOnTargetObject returns whether the creator role
+// has all privileges on the default privileges target object.
+func GetRoleHasAllPrivilegesOnTargetObject(
+	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole,
+	targetObject tree.AlterDefaultPrivilegesTargetObject,
+) bool {
+	if !defaultPrivilegesForRole.IsExplicitRole() {
+		// ForAllRoles is a pseudo role and does not actually have privileges on it.
+		return false
+	}
+	switch targetObject {
+	case tree.Tables:
+		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTables
+	case tree.Sequences:
+		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSequences
+	case tree.Types:
+		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes
+	case tree.Schemas:
+		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSchemas
+	default:
+		panic(fmt.Sprintf("unknown target object %s", targetObject))
+	}
+}
+
+// setPublicHasUsageOnTypes sets PublicHasUsageOnTypes to publicHasUsageOnTypes.
+func setPublicHasUsageOnTypes(
+	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole, publicHasUsageOnTypes bool,
+) {
+	if defaultPrivilegesForRole.IsExplicitRole() {
+		defaultPrivilegesForRole.GetExplicitRole().PublicHasUsageOnTypes = publicHasUsageOnTypes
+	} else {
+		defaultPrivilegesForRole.GetForAllRoles().PublicHasUsageOnTypes = publicHasUsageOnTypes
+	}
+}
+
+func setRoleHasAllOnTargetObject(
+	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole,
+	roleHasAll bool,
+	targetObject tree.AlterDefaultPrivilegesTargetObject,
+) {
+	if !defaultPrivilegesForRole.IsExplicitRole() {
+		// ForAllRoles is a pseudo role and does not actually have privileges on it.
+		panic("DefaultPrivilegesForRole must be for an explicit role")
+	}
+	switch targetObject {
+	case tree.Tables:
+		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTables = roleHasAll
+	case tree.Sequences:
+		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSequences = roleHasAll
+	case tree.Types:
+		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes = roleHasAll
+	case tree.Schemas:
+		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSchemas = roleHasAll
+	default:
+		panic(fmt.Sprintf("unknown target object %s", targetObject))
+	}
 }

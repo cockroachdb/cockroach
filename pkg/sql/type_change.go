@@ -875,6 +875,21 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				}
 			}
 
+			// If this column has an ON UPDATE expression, check if it uses the enum
+			// member being dropped.
+			if col.HasOnUpdate() {
+				foundUsage, err := findUsagesOfEnumValue(col.GetOnUpdateExpr(), member, typeDesc.ID)
+				if err != nil {
+					return err
+				}
+				if foundUsage {
+					return pgerror.Newf(pgcode.DependentObjectsStillExist,
+						"could not remove enum value %q as it is being used in an ON UPDATE expression"+
+							" of %q",
+						member.LogicalRepresentation, desc.GetName())
+				}
+			}
+
 			if col.GetType().UserDefined() {
 				tid, terr := typedesc.GetUserDefinedTypeDescID(col.GetType())
 				if terr != nil {

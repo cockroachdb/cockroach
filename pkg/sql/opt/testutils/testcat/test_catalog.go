@@ -775,10 +775,16 @@ func (tt *Table) CollectTypes(ord int) (descpb.IDs, error) {
 		return nil
 	}
 
-	// Collect UDTs in default expression, computed column and the column type itself.
+	// Collect UDTs in default expression, ON UPDATE expression, computed column
+	// and the column type itself.
 	col := tt.Columns[ord]
 	if col.HasDefault() {
 		if err := addOIDsInExpr(col.DefaultExprStr()); err != nil {
+			return nil, err
+		}
+	}
+	if col.HasOnUpdate() {
+		if err := addOIDsInExpr(col.OnUpdateExprStr()); err != nil {
 			return nil, err
 		}
 	}

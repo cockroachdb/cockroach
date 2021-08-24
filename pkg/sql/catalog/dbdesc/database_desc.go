@@ -217,7 +217,7 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// The DefaultPrivilegeDescriptor may be nil.
 	if desc.GetDefaultPrivileges() != nil {
 		// Validate the default privilege descriptor.
-		vea.Report(desc.GetDefaultPrivileges().Validate())
+		vea.Report(catprivilege.ValidateDefaultPrivileges(*desc.GetDefaultPrivileges()))
 	}
 
 	if desc.IsMultiRegion() {
@@ -421,7 +421,7 @@ func (desc *Mutable) HasPostDeserializationChanges() bool {
 func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
 	if defaultPrivilegeDescriptor == nil {
-		defaultPrivilegeDescriptor = descpb.InitDefaultPrivilegeDescriptor()
+		defaultPrivilegeDescriptor = catprivilege.MakeNewDefaultPrivilegeDescriptor()
 	}
 	return catprivilege.MakeDefaultPrivileges(defaultPrivilegeDescriptor)
 }
@@ -430,7 +430,7 @@ func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeD
 func (desc *Mutable) GetMutableDefaultPrivilegeDescriptor() *catprivilege.Mutable {
 	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
 	if defaultPrivilegeDescriptor == nil {
-		defaultPrivilegeDescriptor = descpb.InitDefaultPrivilegeDescriptor()
+		defaultPrivilegeDescriptor = catprivilege.MakeNewDefaultPrivilegeDescriptor()
 	}
 	return catprivilege.NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 }
