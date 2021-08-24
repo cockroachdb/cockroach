@@ -10,7 +10,10 @@
 
 package spanconfig
 
-import "github.com/cockroachdb/cockroach/pkg/base"
+import (
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 // TestingKnobs provide fine-grained control over the various span config
 // components for testing.
@@ -31,6 +34,14 @@ type TestingKnobs struct {
 	// manager has checked if the auto span config reconciliation job exists or
 	// not.
 	ManagerAfterCheckedReconciliationJobExistsInterceptor func(exists bool)
+
+	// KVSubscriberOnFrontierAdvanceInterceptor is invoked for each time the
+	// KVSubscriber's underlying rangefeed sees its frontier timestamp advanced.
+	KVSubscriberOnFrontierAdvanceInterceptor func(hlc.Timestamp)
+
+	// StoreKVSubscriberOverride is used to override the KVSubscriber used when
+	// setting up a new store.
+	StoreKVSubscriberOverride KVSubscriber
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

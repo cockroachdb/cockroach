@@ -105,7 +105,7 @@ func TestingDefaultSpanConfig() SpanConfig {
 		// default. Users desiring to take incremental backups every 24h may
 		// incorrectly assume that the previous default 24h was sufficient to do
 		// that. But the equation for incremental backups is:
-		//      GC TTLSeconds >= (desired backup interval)  (time to perform incremental backup)
+		// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
 		// We think most new users' incremental backups will complete within an
 		// hour, and larger clusters will have more experienced operators and will
 		// understand how to change these settings if needed.
