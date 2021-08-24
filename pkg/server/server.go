@@ -71,6 +71,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvwatcher"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -614,6 +616,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	var spanConfigAccessor spanconfig.KVAccessor
 	if cfg.SpanConfigsEnabled {
 		storeCfg.SpanConfigsEnabled = true
+		storeCfg.SpanConfigWatcher = spanconfigkvwatcher.New(stopper, db, clock, rangeFeedFactory, keys.SpanConfigurationsTableID)
+		storeCfg.SpanConfigStore = spanconfigstore.New(storeCfg.DefaultSpanConfig)
 		spanConfigAccessor = spanconfigkvaccessor.New(
 			db, internalExecutor, cfg.Settings,
 			systemschema.SpanConfigurationsTableName.FQString(),

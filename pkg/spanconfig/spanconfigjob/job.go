@@ -30,8 +30,8 @@ var _ jobs.Resumer = (*resumer)(nil)
 func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	rc := execCtx.SpanConfigReconciliationJobDeps()
-	// TODO(zcfg-pod): Upcoming PRs will actually make use of these reconciliation
-	// dependencies.
+
+	// TODO(irfansharif): Actually make use of these dependencies.
 	_ = rc
 
 	<-ctx.Done()
