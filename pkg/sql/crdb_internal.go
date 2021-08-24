@@ -5107,6 +5107,7 @@ CREATE TABLE crdb_internal.statement_statistics (
 			InternalExecutor: execCfg.InternalExecutor,
 			KvDB:             execCfg.DB,
 			SQLIDContainer:   execCfg.NodeID,
+			Knobs:            execCfg.SQLStatsTestingKnobs,
 		}, memSQLStats)
 
 		row := make(tree.Datums, 7 /* number of columns for this virtual table */)
@@ -5245,6 +5246,7 @@ CREATE TABLE crdb_internal.transaction_statistics (
 			InternalExecutor: execCfg.InternalExecutor,
 			KvDB:             execCfg.DB,
 			SQLIDContainer:   execCfg.NodeID,
+			Knobs:            execCfg.SQLStatsTestingKnobs,
 		}, memSQLStats)
 
 		row := make(tree.Datums, 5 /* number of columns for this virtual table */)
