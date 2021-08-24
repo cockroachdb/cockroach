@@ -14,18 +14,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type instance struct {
-	db       *kv.DB
-	executor *sql.InternalExecutor
-	metrics  Metrics
+	db         *kv.DB
+	executor   *sql.InternalExecutor
+	metrics    Metrics
+	timeSource timeutil.TimeSource
 }
 
-func newInstance(db *kv.DB, executor *sql.InternalExecutor) *instance {
+func newInstance(
+	db *kv.DB, executor *sql.InternalExecutor, timeSource timeutil.TimeSource,
+) *instance {
 	res := &instance{
-		db:       db,
-		executor: executor,
+		db:         db,
+		executor:   executor,
+		timeSource: timeSource,
 	}
 	res.metrics.init()
 	return res
@@ -42,6 +47,6 @@ func init() {
 	server.NewTenantUsageServer = func(
 		db *kv.DB, executor *sql.InternalExecutor,
 	) multitenant.TenantUsageServer {
-		return newInstance(db, executor)
+		return newInstance(db, executor, timeutil.DefaultTimeSource{})
 	}
 }
