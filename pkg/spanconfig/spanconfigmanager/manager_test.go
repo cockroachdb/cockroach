@@ -17,9 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,6 +48,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			EnableExperimentalSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation
@@ -67,6 +70,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		spanconfigstore.New(roachpb.TestingDefaultSpanConfig()),
 		&spanconfig.TestingKnobs{
 			ManagerCreatedJobInterceptor: func(jobI interface{}) {
 				job := jobI.(*jobs.Job)
@@ -136,6 +140,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			EnableExperimentalSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation
@@ -153,6 +158,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		spanconfigstore.New(roachpb.TestingDefaultSpanConfig()),
 		&spanconfig.TestingKnobs{
 			ManagerAfterCheckedReconciliationJobExistsInterceptor: func(exists bool) {
 				require.False(t, exists)

@@ -1,0 +1,39 @@
+# Test basic get/set/del operations where the spans retrieved are identical to the
+# ones stored.
+
+get span=[a,z)
+----
+
+set span=[b,d) conf=A
+----
+
+get span=[b,d)
+----
+[b,d):A
+
+set span=[f,g) conf=B
+----
+
+get span=[b,d)
+----
+[b,d):A
+
+get span=[b,g)
+----
+[b,d):A
+[f,g):B
+
+get span=[b,j)
+----
+[b,d):A
+[f,g):B
+
+del span=[f,g)
+----
+
+get span=[f,g)
+----
+
+get span=[b,j)
+----
+[b,d):A

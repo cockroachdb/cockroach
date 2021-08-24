@@ -41,13 +41,9 @@ var checkAndStartReconciliationJobInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
-// Manager is the coordinator of the span config subsystem. It is responsible
-// for the following tasks:
-//
-// 1. Ensuring that one (and only one) span config reconciliation job exists for
-// every tenant.
-// 2. Encapsulating all dependencies required by the span config reconciliation
-// job to perform its task.
+// Manager is the coordinator of the span config subsystem. It ensures that one
+// (and only one) span config reconciliation job exists for every tenant. It
+// also holds the dependencies needed by the span config reconciliation job.
 type Manager struct {
 	db       *kv.DB
 	jr       *jobs.Registry
@@ -57,6 +53,7 @@ type Manager struct {
 	knobs    *spanconfig.TestingKnobs
 
 	spanconfig.KVAccessor
+	spanconfig.StoreWriter
 }
 
 var _ spanconfig.ReconciliationDependencies = &Manager{}
@@ -69,19 +66,21 @@ func New(
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
 	kvAccessor spanconfig.KVAccessor,
+	storeWriter spanconfig.StoreWriter,
 	knobs *spanconfig.TestingKnobs,
 ) *Manager {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &Manager{
-		db:         db,
-		jr:         jr,
-		ie:         ie,
-		stopper:    stopper,
-		settings:   settings,
-		knobs:      knobs,
-		KVAccessor: kvAccessor,
+		db:          db,
+		jr:          jr,
+		ie:          ie,
+		stopper:     stopper,
+		settings:    settings,
+		knobs:       knobs,
+		KVAccessor:  kvAccessor,
+		StoreWriter: storeWriter,
 	}
 }
 

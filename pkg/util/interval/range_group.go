@@ -65,7 +65,7 @@ type RangeGroup interface {
 	Iterator() RangeGroupIterator
 	// Len returns the number of Ranges currently within the RangeGroup.
 	// This will always be equal to or less than the number of ranges added,
-	// as ranges that overlap will merge to produce a single larger range.
+	// as ranges that overlap will Merge to produce a single larger range.
 	Len() int
 	fmt.Stringer
 }
@@ -241,7 +241,7 @@ func (rl *rangeList) insertAtIdx(e *list.Element, n *rangeListNode, r Range, i i
 // range increases the range of the rangeList, in which case it will be
 // added to the list, and false if it does not increase the range, in which
 // case it won't be added. If the range is added, the function will also attempt
-// to merge any ranges within the list that now overlap.
+// to Merge any ranges within the list that now overlap.
 func (rl *rangeList) Add(r Range) bool {
 	prev, cur, inCur := rl.findNode(r, true /* inclusive */)
 
@@ -284,10 +284,10 @@ func (rl *rangeList) Add(r Range) bool {
 		//
 		// In this example, n.slots[i] is the first existing range that overlaps
 		// with the new range.
-		newR := merge(nr, r)
+		newR := Merge(nr, r)
 		n.slots[i] = newR
 
-		// Each iteration attempts to merge all of the ranges in a rangeListNode.
+		// Each iteration attempts to Merge all of the ranges in a rangeListNode.
 		mergeElem := cur
 		origNode := true
 		for {
@@ -300,14 +300,14 @@ func (rl *rangeList) Add(r Range) bool {
 				mergeStart = i + 1
 			}
 
-			// Each iteration attempts to merge a single range into the current
-			// merge batch.
+			// Each iteration attempts to Merge a single range into the current
+			// Merge batch.
 			j := mergeStart
 			for ; j < origLen; j++ {
 				mergeR := mergeN.slots[j]
 
 				if overlapsInclusive(newR, mergeR) {
-					newR = merge(newR, mergeR)
+					newR = Merge(newR, mergeR)
 					n.slots[i] = newR
 					mergeN.len--
 					rl.len--
@@ -593,7 +593,7 @@ func (rk rangeKey) String() string {
 // range increases the range of the rangeTree, in which case it will be
 // added to the tree, and false if it does not increase the range, in which
 // case it won't be added. If the range is added, the function will also attempt
-// to merge any ranges within the tree that now overlap.
+// to Merge any ranges within the tree that now overlap.
 func (rt *rangeTree) Add(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
@@ -615,10 +615,10 @@ func (rt *rangeTree) Add(r Range) bool {
 	}
 
 	// Merge as many ranges as possible, and replace old range.
-	first.r = merge(first.r, r)
+	first.r = Merge(first.r, r)
 	for _, o := range overlaps[1:] {
 		other := o.(*rangeKey)
-		first.r = merge(first.r, other.r)
+		first.r = Merge(first.r, other.r)
 		if err := rt.t.Delete(o, true /* fast */); err != nil {
 			panic(err)
 		}
@@ -756,9 +756,9 @@ func contains(out, in Range) bool {
 	return in.Start.Compare(out.Start) >= 0 && out.End.Compare(in.End) >= 0
 }
 
-// merge merges the provided ranges together into their union range. The
+// Merge merges the provided ranges together into their union range. The
 // ranges must overlap or the function will not produce the correct output.
-func merge(l, r Range) Range {
+func Merge(l, r Range) Range {
 	start := l.Start
 	if r.Start.Compare(start) < 0 {
 		start = r.Start

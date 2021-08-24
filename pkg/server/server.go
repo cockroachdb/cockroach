@@ -68,8 +68,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvwatcher"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -627,6 +630,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ProtectedTimestampCache: protectedtsProvider,
 		KVMemoryMonitor:         kvMemoryMonitor,
 	}
+
+	var spanConfigAccessor spanconfig.KVAccessor
+	if cfg.ExperimentalSpanConfigs {
+		storeCfg.ExperimentalSpanConfigs = true
+		storeCfg.SpanConfigWatcher = spanconfigkvwatcher.New(stopper, db, clock, rangeFeedFactory, keys.SpanConfigurationsTableID)
+		storeCfg.SpanConfigStore = spanconfigstore.New(storeCfg.DefaultSpanConfig)
+		spanConfigAccessor = spanconfigkvaccessor.New(
+			db, internalExecutor, cfg.Settings,
+			systemschema.SpanConfigurationsTableName.FQString(),
+		)
+	}
+
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
 	}
@@ -654,11 +669,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	tenantUsage := NewTenantUsageServer(db, internalExecutor)
 	registry.AddMetricStruct(tenantUsage.Metrics())
-
-	spanConfigAccessor := spanconfigkvaccessor.New(
-		db, internalExecutor, cfg.Settings,
-		systemschema.SpanConfigurationsTableName.FQString(),
-	)
 
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,

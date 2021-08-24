@@ -222,6 +222,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.EnableDemoLoginEndpoint = true
 	}
 
+	if params.EnableExperimentalSpanConfigs {
+		cfg.ExperimentalSpanConfigs = true
+	}
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
 	if len(params.StoreSpecs) == 0 {

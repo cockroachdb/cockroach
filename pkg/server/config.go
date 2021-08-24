@@ -222,6 +222,11 @@ type KVConfig struct {
 	// The following values can only be set via environment variables and are
 	// for testing only. They are not meant to be set by the end user.
 
+	// Enables the use of experimental span config store to replace the
+	// gossipped system config span.
+	// Environment Variable: COCKROACH_EXPERIMENTAL_SPAN_CONFIGS
+	ExperimentalSpanConfigs bool
+
 	// Enables linearizable behavior of operations on this node by making sure
 	// that no commit timestamp is reported back to the client until all other
 	// node clocks have necessarily passed it.
@@ -416,6 +421,9 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	if cfg.Linearizable {
 		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
+	}
+	if cfg.ExperimentalSpanConfigs {
+		fmt.Fprintln(w, "experimental span configs enabled\t", cfg.ExperimentalSpanConfigs)
 	}
 	_ = w.Flush()
 
@@ -651,6 +659,7 @@ func (cfg *Config) readEnvironmentVariables() {
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMinIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MIN_IDLE_TIME", cfg.ScanMinIdleTime)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
+	cfg.ExperimentalSpanConfigs = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_SPAN_CONFIGS", cfg.ExperimentalSpanConfigs)
 }
 
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.

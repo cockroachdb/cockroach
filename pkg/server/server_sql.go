@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -222,6 +223,7 @@ type sqlServerArgs struct {
 
 	// Used by the span config reconciliation job.
 	spanConfigAccessor spanconfig.KVAccessor
+	spanConfigStore    spanconfig.StoreWriter
 
 	// Used by DistSQLPlanner.
 	nodeDialer *nodedialer.Dialer
@@ -832,7 +834,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Instantiate a span config manager; it exposes a hook to idempotently
 	// create the span config reconciliation job and captures all relevant job
 	// dependencies.
-	knobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+	cfg.spanConfigStore = spanconfigstore.New(roachpb.SpanConfig{})
+	spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 	spanconfigMgr := spanconfigmanager.New(
 		cfg.db,
 		jobRegistry,
@@ -840,7 +843,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.stopper,
 		cfg.Settings,
 		cfg.spanConfigAccessor,
-		knobs,
+		cfg.spanConfigStore,
+		spanConfigKnobs,
 	)
 	execCfg.SpanConfigReconciliationJobDeps = spanconfigMgr
 
