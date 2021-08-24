@@ -9,21 +9,27 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import { useDispatch } from "react-redux";
-import { getHotRangesAction } from "oss/src/redux/hotRanges/hotRangesActions";
+import { useDispatch, useSelector } from "react-redux";
 import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
+import { getHotRangesAction } from "../../redux/hotRanges/hotRangesActions";
+import { HotRangesState } from "../../redux/hotRanges/hotRangesReducer";
+import { selectHotRanges } from "../../redux/hotRanges/hotRangesSelectors";
+import HotRangesTable from "./hotRangesTable";
 
 const HotRanges = () => {
   const dispatch = useDispatch();
+  const hotRanges: HotRangesState = useSelector(selectHotRanges);
 
   useEffect(() => {
     dispatch(getHotRangesAction());
-  });
+  }, [dispatch]);
+
   return (
     <div className="section">
       <Helmet title="Hot Ranges" />
       <h1 className="base-heading">Hot ranges</h1>
+      {hotRanges && <HotRangesTable hotRangesList={hotRanges.data} />}
     </div>
   );
 };
