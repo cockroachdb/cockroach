@@ -1278,7 +1278,17 @@ func replicationChangesForRebalance(
 	return chgs, performingSwap, nil
 }
 
+// leaseTransferConvergenceGoal dictates whether a call to TransferLeaseTarget
+// should further convergence of lease counts or of QPS.
+type leaseTransferConvergenceGoal int
+
+const (
+	leaseCountConvergence leaseTransferConvergenceGoal = iota
+	qpsConvergence
+)
+
 type transferLeaseOptions struct {
+	goal                     leaseTransferConvergenceGoal
 	checkTransferLeaseSource bool
 	checkCandidateFullness   bool
 	dryRun                   bool
@@ -1327,9 +1337,12 @@ func (rq *replicateQueue) shedLease(
 		desc.Replicas().VoterDescriptors(),
 		repl.store.StoreID(),
 		repl.leaseholderStats,
-		opts.checkTransferLeaseSource,
-		opts.checkCandidateFullness,
-		false, /* alwaysAllowDecisionWithoutStats */
+		false, /* forceDecisionWithoutStats */
+		transferLeaseOptions{
+			checkTransferLeaseSource: opts.checkTransferLeaseSource,
+			checkCandidateFullness:   opts.checkCandidateFullness,
+			dryRun:                   false,
+		},
 	)
 	if target == (roachpb.ReplicaDescriptor{}) {
 		return noSuitableTarget, nil

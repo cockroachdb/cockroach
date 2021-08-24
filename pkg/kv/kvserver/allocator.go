@@ -1272,15 +1272,16 @@ func (a *Allocator) TransferLeaseTarget(
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	stats *replicaStats,
-	checkTransferLeaseSource bool,
-	checkCandidateFullness bool,
-	alwaysAllowDecisionWithoutStats bool,
+	forceDecisionWithoutStats bool,
+	opts transferLeaseOptions,
 ) roachpb.ReplicaDescriptor {
+	allStoresList, _, _ := a.storePool.getStoreList(storeFilterNone)
+	storeDescMap := storeListToMap(allStoresList)
+
 	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.excludeInvalid(zone.Constraints)
 	sl = sl.excludeInvalid(zone.VoterConstraints)
-	// The only thing we use the storeList for is for the lease mean across the
-	// eligible stores, make that explicit here.
+
 	candidateLeasesMean := sl.candidateLeases.mean
 
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
@@ -1293,6 +1294,7 @@ func (a *Allocator) TransferLeaseTarget(
 	// store matches, it's where the lease should be (unless the preferred store
 	// is the current one and checkTransferLeaseSource is false).
 	var preferred []roachpb.ReplicaDescriptor
+	checkTransferLeaseSource := opts.checkTransferLeaseSource
 	if checkTransferLeaseSource {
 		preferred = a.preferredLeaseholders(zone, existing)
 	} else {
@@ -1335,65 +1337,104 @@ func (a *Allocator) TransferLeaseTarget(
 		return roachpb.ReplicaDescriptor{}
 	}
 
-	// Try to pick a replica to transfer the lease to while also determining
-	// whether we actually should be transferring the lease. The transfer
-	// decision is only needed if we've been asked to check the source.
-	transferDec, repl := a.shouldTransferLeaseUsingStats(
-		ctx, source, existing, stats, nil, candidateLeasesMean,
-	)
-	if checkTransferLeaseSource {
-		switch transferDec {
-		case shouldNotTransfer:
-			if !alwaysAllowDecisionWithoutStats {
-				return roachpb.ReplicaDescriptor{}
+	switch g := opts.goal; g {
+	case leaseCountConvergence:
+		// Try to pick a replica to transfer the lease to while also determining
+		// whether we actually should be transferring the lease. The transfer
+		// decision is only needed if we've been asked to check the source.
+		transferDec, repl := a.shouldTransferLeaseForAccessLocality(
+			ctx, source, existing, stats, nil, candidateLeasesMean,
+		)
+		if checkTransferLeaseSource {
+			switch transferDec {
+			case shouldNotTransfer:
+				if !forceDecisionWithoutStats {
+					return roachpb.ReplicaDescriptor{}
+				}
+				fallthrough
+			case decideWithoutStats:
+				if !a.shouldTransferLeaseForLeaseCountConvergence(ctx, sl, source, existing) {
+					return roachpb.ReplicaDescriptor{}
+				}
+			case shouldTransfer:
+			default:
+				log.Fatalf(ctx, "unexpected transfer decision %d with replica %+v", transferDec, repl)
 			}
-			fallthrough
-		case decideWithoutStats:
-			if !a.shouldTransferLeaseWithoutStats(ctx, sl, source, existing) {
-				return roachpb.ReplicaDescriptor{}
+		}
+		if repl != (roachpb.ReplicaDescriptor{}) {
+			return repl
+		}
+
+		// Fall back to logic that doesn't take request counts and latency into
+		// account if the counts/latency-based logic couldn't pick a best replica.
+		candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
+		var bestOption roachpb.ReplicaDescriptor
+		bestOptionLeaseCount := int32(math.MaxInt32)
+		for _, repl := range existing {
+			if leaseStoreID == repl.StoreID {
+				continue
 			}
-		case shouldTransfer:
-		default:
-			log.Fatalf(ctx, "unexpected transfer decision %d with replica %+v", transferDec, repl)
+			storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+			if !ok {
+				continue
+			}
+			if !opts.checkCandidateFullness || float64(storeDesc.Capacity.LeaseCount) < candidateLeasesMean-0.5 {
+				candidates = append(candidates, repl)
+			} else if storeDesc.Capacity.LeaseCount < bestOptionLeaseCount {
+				bestOption = repl
+				bestOptionLeaseCount = storeDesc.Capacity.LeaseCount
+			}
 		}
-	}
-
-	if repl != (roachpb.ReplicaDescriptor{}) {
-		return repl
-	}
-
-	// Fall back to logic that doesn't take request counts and latency into
-	// account if the counts/latency-based logic couldn't pick a best replica.
-	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
-	var bestOption roachpb.ReplicaDescriptor
-	bestOptionLeaseCount := int32(math.MaxInt32)
-	for _, repl := range existing {
-		if leaseStoreID == repl.StoreID {
-			continue
+		if len(candidates) == 0 {
+			// If we aren't supposed to be considering the current leaseholder (e.g.
+			// because we need to remove this replica for some reason), return
+			// our best option if we otherwise wouldn't want to do anything.
+			if !checkTransferLeaseSource {
+				return bestOption
+			}
+			return roachpb.ReplicaDescriptor{}
 		}
-		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+		a.randGen.Lock()
+		defer a.randGen.Unlock()
+		return candidates[a.randGen.Intn(len(candidates))]
+
+	case qpsConvergence:
+		// We pick a suitable replica to transfer the lease to based on which
+		// receiving store we expect to have the lowest QPS after receiving the
+		// lease transfer.
+		leaseStore, ok := storeDescMap[leaseStoreID]
 		if !ok {
-			continue
+			log.VEventf(
+				ctx,
+				1,
+				"current leaseholder store (s%d) not found in StoreList %v; skipping",
+				leaseStoreID,
+				allStoresList,
+			)
+			return roachpb.ReplicaDescriptor{}
 		}
-		if !checkCandidateFullness || float64(storeDesc.Capacity.LeaseCount) < candidateLeasesMean-0.5 {
-			candidates = append(candidates, repl)
-		} else if storeDesc.Capacity.LeaseCount < bestOptionLeaseCount {
-			bestOption = repl
-			bestOptionLeaseCount = storeDesc.Capacity.LeaseCount
+		leaseStoreQPS := leaseStore.Capacity.QueriesPerSecond
+		leaseholderReplQPS, _ := stats.avgQPS()
+		var bestOption roachpb.ReplicaDescriptor
+		bestOptionQPS := leaseStoreQPS
+		for _, repl := range existing {
+			if leaseStoreID == repl.StoreID {
+				continue
+			}
+			storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+			if !ok {
+				continue
+			}
+			if qpsAfterTransfer := storeDesc.Capacity.QueriesPerSecond + leaseholderReplQPS; qpsAfterTransfer < bestOptionQPS {
+				bestOption = repl
+				bestOptionQPS = qpsAfterTransfer
+			}
 		}
+		return bestOption
+	default:
+		log.Fatalf(ctx, "unexpected lease transfer goal %d", g)
 	}
-	if len(candidates) == 0 {
-		// If we aren't supposed to be considering the current leaseholder (e.g.
-		// because we need to remove this replica for some reason), return
-		// our best option if we otherwise wouldn't want to do anything.
-		if !checkTransferLeaseSource {
-			return bestOption
-		}
-		return roachpb.ReplicaDescriptor{}
-	}
-	a.randGen.Lock()
-	defer a.randGen.Unlock()
-	return candidates[a.randGen.Intn(len(candidates))]
+	panic("unreachable")
 }
 
 // ShouldTransferLease returns true if the specified store is overfull in terms
@@ -1439,7 +1480,7 @@ func (a *Allocator) ShouldTransferLease(
 		return false
 	}
 
-	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, source, existing, stats, nil, sl.candidateLeases.mean)
+	transferDec, _ := a.shouldTransferLeaseForAccessLocality(ctx, source, existing, stats, nil, sl.candidateLeases.mean)
 	var result bool
 	switch transferDec {
 	case shouldNotTransfer:
@@ -1447,7 +1488,7 @@ func (a *Allocator) ShouldTransferLease(
 	case shouldTransfer:
 		result = true
 	case decideWithoutStats:
-		result = a.shouldTransferLeaseWithoutStats(ctx, sl, source, existing)
+		result = a.shouldTransferLeaseForLeaseCountConvergence(ctx, sl, source, existing)
 	default:
 		log.Fatalf(ctx, "unexpected transfer decision %d", transferDec)
 	}
@@ -1465,7 +1506,7 @@ func (a Allocator) followTheWorkloadPrefersLocal(
 	stats *replicaStats,
 ) bool {
 	adjustments := make(map[roachpb.StoreID]float64)
-	decision, _ := a.shouldTransferLeaseUsingStats(ctx, source, existing, stats, adjustments, sl.candidateLeases.mean)
+	decision, _ := a.shouldTransferLeaseForAccessLocality(ctx, source, existing, stats, adjustments, sl.candidateLeases.mean)
 	if decision == decideWithoutStats {
 		return false
 	}
@@ -1479,7 +1520,7 @@ func (a Allocator) followTheWorkloadPrefersLocal(
 	return false
 }
 
-func (a Allocator) shouldTransferLeaseUsingStats(
+func (a Allocator) shouldTransferLeaseForAccessLocality(
 	ctx context.Context,
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
@@ -1663,7 +1704,7 @@ func loadBasedLeaseRebalanceScore(
 	return totalScore, rebalanceAdjustment
 }
 
-func (a Allocator) shouldTransferLeaseWithoutStats(
+func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	ctx context.Context,
 	sl StoreList,
 	source roachpb.StoreDescriptor,

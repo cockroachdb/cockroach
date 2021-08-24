@@ -14,7 +14,6 @@ import (
 	"context"
 	"math"
 	"math/rand"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -380,8 +379,6 @@ func (sr *StoreRebalancer) rebalanceStore(
 		localDesc.StoreID, localDesc.Capacity.QueriesPerSecond, allStoresList.candidateQueriesPerSecond.mean, qpsMaxThreshold)
 }
 
-// TODO(a-robinson): Should we take the number of leases on each store into
-// account here or just continue to let that happen in allocator.go?
 func (sr *StoreRebalancer) chooseLeaseToTransfer(
 	ctx context.Context,
 	hottestRanges *[]replicaWithStats,
@@ -435,66 +432,39 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		// Learners or non-voters aren't allowed to become leaseholders or raft
 		// leaders, so only consider the `Voter` replicas.
 		candidates := desc.Replicas().DeepCopy().VoterDescriptors()
-		sort.Slice(candidates, func(i, j int) bool {
-			var iQPS, jQPS float64
-			if desc := storeMap[candidates[i].StoreID]; desc != nil {
-				iQPS = desc.Capacity.QueriesPerSecond
-			}
-			if desc := storeMap[candidates[j].StoreID]; desc != nil {
-				jQPS = desc.Capacity.QueriesPerSecond
-			}
-			return iQPS < jQPS
-		})
+		candidate := sr.rq.allocator.TransferLeaseTarget(
+			ctx,
+			zone,
+			candidates,
+			replWithStats.repl.StoreID(),
+			replWithStats.repl.leaseholderStats,
+			true, /* forceDecisionWithoutStats */
+			transferLeaseOptions{
+				goal:                     qpsConvergence,
+				checkTransferLeaseSource: true,
+			},
+		)
 
-		var raftStatus *raft.Status
+		filteredStoreList := storeList.excludeInvalid(zone.Constraints)
+		filteredStoreList = storeList.excludeInvalid(zone.VoterConstraints)
+		if sr.rq.allocator.followTheWorkloadPrefersLocal(
+			ctx,
+			filteredStoreList,
+			*localDesc,
+			candidate.StoreID,
+			candidates,
+			replWithStats.repl.leaseholderStats,
+		) {
+			log.VEventf(ctx, 3, "r%d is on s%d due to follow-the-workload; skipping",
+				desc.RangeID, localDesc.StoreID)
 
-		preferred := sr.rq.allocator.preferredLeaseholders(zone, candidates)
-		for _, candidate := range candidates {
-			if candidate.StoreID == localDesc.StoreID {
-				continue
-			}
-
-			meanQPS := storeList.candidateQueriesPerSecond.mean
-			if sr.shouldNotMoveTo(ctx, storeMap, replWithStats, candidate.StoreID, meanQPS, minQPS, maxQPS) {
-				continue
-			}
-
-			if raftStatus == nil {
-				raftStatus = sr.getRaftStatusFn(replWithStats.repl)
-			}
-			if replicaIsBehind(raftStatus, candidate.ReplicaID) {
-				log.VEventf(ctx, 3, "%v is behind or this store isn't the raft leader for r%d; raftStatus: %v",
-					candidate, desc.RangeID, raftStatus)
-				continue
-			}
-
-			if len(preferred) > 0 && !storeHasReplica(candidate.StoreID, roachpb.MakeReplicaSet(preferred).ReplicationTargets()) {
-				log.VEventf(ctx, 3, "s%d not a preferred leaseholder for r%d; preferred: %v",
-					candidate.StoreID, desc.RangeID, preferred)
-				continue
-			}
-
-			filteredStoreList := storeList.excludeInvalid(zone.Constraints)
-			filteredStoreList = storeList.excludeInvalid(zone.VoterConstraints)
-			if sr.rq.allocator.followTheWorkloadPrefersLocal(
-				ctx,
-				filteredStoreList,
-				*localDesc,
-				candidate.StoreID,
-				candidates,
-				replWithStats.repl.leaseholderStats,
-			) {
-				log.VEventf(ctx, 3, "r%d is on s%d due to follow-the-workload; skipping",
-					desc.RangeID, localDesc.StoreID)
-				continue
-			}
-
-			return replWithStats, candidate, considerForRebalance
+			// If the current leaseholder of the range provides better access locality
+			// compared to the result of `TransferLeaseTarget`, consider this range
+			// for replica rebalancing instead.
+			considerForRebalance = append(considerForRebalance, replWithStats)
+			continue
 		}
-
-		// If none of the other replicas are valid lease transfer targets, consider
-		// this range for replica rebalancing.
-		considerForRebalance = append(considerForRebalance, replWithStats)
+		return replWithStats, candidate, considerForRebalance
 	}
 }
 
