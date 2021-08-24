@@ -129,6 +129,8 @@ sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time unti
 sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.
 sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics
 sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region
+sql.mutations.max_row_size.err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; setting to 0 disables large row errors
+sql.mutations.max_row_size.log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); setting to 0 disables large row logging
 sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent
 sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability
 sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators
