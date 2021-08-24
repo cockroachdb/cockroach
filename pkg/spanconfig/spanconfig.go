@@ -24,7 +24,10 @@ import (
 type KVAccessor interface {
 	// GetSpanConfigEntriesFor returns the span configurations that overlap with
 	// the given spans.
-	GetSpanConfigEntriesFor(ctx context.Context, spans []roachpb.Span) ([]roachpb.SpanConfigEntry, error)
+	GetSpanConfigEntriesFor(
+		ctx context.Context,
+		spans []roachpb.Span,
+	) ([]roachpb.SpanConfigEntry, error)
 
 	// UpdateSpanConfigEntries updates configurations for the given spans. This
 	// is a "targeted" API: the spans being deleted are expected to have been
@@ -33,7 +36,16 @@ type KVAccessor interface {
 	// divvying up an existing span into multiple others with distinct configs,
 	// callers are to issue a delete for the previous span and upserts for the
 	// new ones.
-	UpdateSpanConfigEntries(ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry) error
+	UpdateSpanConfigEntries(
+		ctx context.Context,
+		toDelete []roachpb.Span,
+		toUpsert []roachpb.SpanConfigEntry,
+	) error
+}
+
+// KVWatcher emits KV span configuration updates.
+type KVWatcher interface {
+	WatchForKVUpdates(ctx context.Context) (<-chan Update, error)
 }
 
 // SQLTranslator translates SQL descriptors and their corresponding zone
@@ -178,8 +190,8 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
-// Update captures what span has seen a config change. It will be the unit of
-// what a {SQL,KV}Watcher emits, and what can be applied to a StoreWriter.
+// Update captures what span has seen a config change. It's the unit of what a
+// KVWatcher emits, and what can be applied to a StoreWriter.
 type Update struct {
 	// Span captures the key span being updated.
 	Span roachpb.Span

@@ -32,23 +32,25 @@ import (
 // KVAccessor provides read/write access to all the span configurations for a
 // CRDB cluster. It's a concrete implementation of the KVAccessor interface.
 type KVAccessor struct {
-	db        *kv.DB
-	ie        sqlutil.InternalExecutor
-	settings  *cluster.Settings
-	tableName string // typically system.span_configurations, but overridable for testing purposes
+	db       *kv.DB
+	ie       sqlutil.InternalExecutor
+	settings *cluster.Settings
+
+	spanConfigurationsTableFQN string // typically 'system.span_configurations', but overridable for testing purposes
 }
 
 var _ spanconfig.KVAccessor = &KVAccessor{}
 
-// New constructs a new Manager.
+// New constructs a new KVAccessor.
 func New(
 	db *kv.DB, ie sqlutil.InternalExecutor, settings *cluster.Settings, tableFQN string,
 ) *KVAccessor {
 	return &KVAccessor{
-		db:        db,
-		ie:        ie,
-		settings:  settings,
-		tableName: tableFQN,
+		db:       db,
+		ie:       ie,
+		settings: settings,
+
+		spanConfigurationsTableFQN: tableFQN,
 	}
 }
 
@@ -248,9 +250,9 @@ SELECT start_key, end_key, config FROM (
   WHERE start_key < $%[2]d ORDER BY start_key DESC LIMIT 1
 ) WHERE end_key > $%[2]d
 `,
-			k.tableName,   // [1]
-			startKeyIdx+1, // [2] -- prepared statement placeholder (1-indexed)
-			endKeyIdx+1,   // [3] -- prepared statement placeholder (1-indexed)
+			k.spanConfigurationsTableFQN, // [1]
+			startKeyIdx+1,                // [2] -- prepared statement placeholder (1-indexed)
+			endKeyIdx+1,                  // [3] -- prepared statement placeholder (1-indexed)
 		)
 	}
 	return getStmtBuilder.String(), queryArgs
@@ -275,7 +277,7 @@ func (k *KVAccessor) constructDeleteStmtAndArgs(toDelete []roachpb.Span) (string
 			startKeyIdx+1, endKeyIdx+1) // prepared statement placeholders (1-indexed)
 	}
 	deleteStmt := fmt.Sprintf(`DELETE FROM %[1]s WHERE (start_key, end_key) IN (VALUES %[2]s)`,
-		k.tableName, strings.Join(values, ", "))
+		k.spanConfigurationsTableFQN, strings.Join(values, ", "))
 	return deleteStmt, deleteQueryArgs
 }
 
@@ -306,7 +308,7 @@ func (k *KVAccessor) constructUpsertStmtAndArgs(
 			startKeyIdx+1, endKeyIdx+1, configIdx+1) // prepared statement placeholders (1-indexed)
 	}
 	upsertStmt := fmt.Sprintf(`UPSERT INTO %[1]s (start_key, end_key, config) VALUES %[2]s`,
-		k.tableName, strings.Join(upsertValues, ", "))
+		k.spanConfigurationsTableFQN, strings.Join(upsertValues, ", "))
 	return upsertStmt, upsertQueryArgs, nil
 }
 
@@ -369,9 +371,9 @@ SELECT count(*) = 1 FROM (
   ) WHERE end_key > $%[2]d
 )
 `,
-			k.tableName,   // [1]
-			startKeyIdx+1, // [2] -- prepared statement placeholder (1-indexed)
-			endKeyIdx+1,   // [3] -- prepared statement placeholder (1-indexed)
+			k.spanConfigurationsTableFQN, // [1]
+			startKeyIdx+1,                // [2] -- prepared statement placeholder (1-indexed)
+			endKeyIdx+1,                  // [3] -- prepared statement placeholder (1-indexed)
 		)
 	}
 	validationStmt := fmt.Sprintf("SELECT true = ALL(%s)", validationInnerStmtBuilder.String())
