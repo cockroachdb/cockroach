@@ -628,27 +628,23 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y
 distribution: local
 vectorized: true
 ·
-• limit
+• top-k
 │ columns: (x, y)
+│ ordering: +y
 │ estimated row count: 1 (missing stats)
-│ count: 1
+│ order: +y
+│ k: 1
 │
-└── • sort
+└── • filter
     │ columns: (x, y)
-    │ ordering: +y
     │ estimated row count: 10 (missing stats)
-    │ order: +y
+    │ filter: x = 1
     │
-    └── • filter
-        │ columns: (x, y)
-        │ estimated row count: 10 (missing stats)
-        │ filter: x = 1
-        │
-        └── • scan
-              columns: (x, y)
-              estimated row count: 1,000 (missing stats)
-              table: xyz@primary
-              spans: FULL SCAN
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y)
@@ -664,24 +660,20 @@ vectorized: true
 └── • project
     │ columns: ()
     │
-    └── • limit
+    └── • top-k
         │ columns: (x, y)
+        │ ordering: +y
         │ estimated row count: 1 (missing stats)
-        │ count: 1
+        │ order: +y
+        │ k: 1
         │
-        └── • sort
+        └── • filter
             │ columns: (x, y)
-            │ ordering: +y
             │ estimated row count: 10 (missing stats)
-            │ order: +y
+            │ filter: x = 1
             │
-            └── • filter
-                │ columns: (x, y)
-                │ estimated row count: 10 (missing stats)
-                │ filter: x = 1
-                │
-                └── • scan
-                      columns: (x, y)
-                      estimated row count: 1,000 (missing stats)
-                      table: xyz@primary
-                      spans: FULL SCAN
+            └── • scan
+                  columns: (x, y)
+                  estimated row count: 1,000 (missing stats)
+                  table: xyz@primary
+                  spans: FULL SCAN
