@@ -1278,6 +1278,7 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 		l.Printf("consistency check failed with %v; ignoring", err)
 		return nil
 	}
+	defer rows.Close()
 	var finalErr error
 	for rows.Next() {
 		var rangeID int32
@@ -1330,7 +1331,7 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t test.Test) 
 	defer db.Close()
 
 	if err := contextutil.RunWithTimeout(
-		ctx, "consistency check", time.Minute,
+		ctx, "consistency check", 3*time.Minute,
 		func(ctx context.Context) error {
 			return c.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
 		},
