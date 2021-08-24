@@ -3207,19 +3207,20 @@ func TestPauseReason(t *testing.T) {
 	}
 }
 
-// TestNonCancelableJobsRetry tests that a non-cancelable job is retried when
-// failed with a non-retryable error.
-func TestNonCancelableJobsRetry(t *testing.T) {
+// TestJobsRetryWhileReverting tests that a reverting job is always retried.
+func TestJobsRetryWhileReverting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// Create a non-cancelable job.
+
+	// Create a job.
 	// Fail the job in resume to cause the job to revert.
 	// Fail the job in revert state using a non-retryable error.
 	// Make sure that the jobs is retried and is again in the revert state.
+
 	rts := registryTestSuite{}
 	rts.setUp(t)
 	defer rts.tearDown()
-	// Make mockJob non-cancelable.
+	// Make mockJob non-cancelable, ensuring that non-cancelable jobs are also retried.
 	rts.mockJob.SetNonCancelable(rts.ctx, func(ctx context.Context, nonCancelable bool) bool {
 		return true
 	})
@@ -3243,7 +3244,7 @@ func TestNonCancelableJobsRetry(t *testing.T) {
 	rts.check(t, jobs.StatusReverting)
 
 	// Fail the job in reverting state without a retryable error.
-	rts.failOrCancelCh <- errors.New("failing with non-retryable error")
+	rts.failOrCancelCh <- errors.New("failing with a non-retryable error")
 	rts.mu.e.OnFailOrCancelExit = true
 
 	// Job should be retried even though it is non-cancelable.

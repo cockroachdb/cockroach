@@ -2187,6 +2187,12 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+	jobKnobs := params.Knobs.JobsTestingKnobs.(*jobs.TestingKnobs)
+	jobKnobs.ModifyErrorAfterOnFailOrCancel = func(_ jobspb.JobID, _ error) error {
+		// Allow jobs to terminate.
+		return nil
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
@@ -6365,7 +6371,7 @@ SELECT status, error FROM crdb_internal.jobs WHERE description LIKE '%CREATE UNI
 	require.Regexp(t, "violates unique constraint", jobError)
 }
 
-// TestPermanentErrorDuringRollback tests that a permanent error while rolling
+// TestPermanentErrorDuringRollback tests that an error while rolling
 // back a schema change causes the job to fail, and that the appropriate error
 // is displayed in the jobs table.
 func TestPermanentErrorDuringRollback(t *testing.T) {
@@ -6373,8 +6379,21 @@ func TestPermanentErrorDuringRollback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
+	var sqlDB *gosql.DB
+	validateError := func(jobID jobspb.JobID, err error) error {
+		var jobIDFromTable jobspb.JobID
+		row := sqlDB.QueryRow("SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
+		assert.NoError(t, row.Scan(&jobIDFromTable))
+		if jobIDFromTable == jobID {
+			assert.Error(t, err, "the job must fail with an error")
+			// Allow the job to terminate.
+			return nil
+		}
+		return err
+	}
 	runTest := func(t *testing.T, params base.TestServerArgs, gcJobRecord bool) {
-		s, sqlDB, _ := serverutils.StartServer(t, params)
+		var s serverutils.TestServerInterface
+		s, sqlDB, _ = serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 
 		_, err := sqlDB.Exec(`
@@ -6394,7 +6413,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 		var jobErr string
 		row := sqlDB.QueryRow("SELECT job_id, error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
 		require.NoError(t, row.Scan(&jobID, &jobErr))
-		require.Regexp(t, "cannot be reverted, manual cleanup may be required: permanent error", jobErr)
+		require.Regexp(t, `violates unique constraint "i"`, jobErr)
 
 		if gcJobRecord {
 			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id = $1`, jobID)
@@ -6427,9 +6446,11 @@ CREATE UNIQUE INDEX i ON t.test(v);
 					return errors.New("permanent error")
 				},
 			},
-			// Decrease the adopt loop interval so that retries happen quickly.
+			// Decrease the adopt-loop interval so that retries happen quickly.
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		}
+		jobKnobs := params.Knobs.JobsTestingKnobs.(*jobs.TestingKnobs)
+		jobKnobs.ModifyErrorAfterOnFailOrCancel = validateError
 		// Don't GC the job record after the schema change, so we can test dropping
 		// the table with a failed mutation job.
 		runTest(t, params, false /* gcJobRecord */)
@@ -6916,6 +6937,9 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("failed due to injected error", func(t *testing.T) {
+		const maxToRetry = 2
+		var lastJobError error
+		retryCnt := int32(0)
 		var s serverutils.TestServerInterface
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
@@ -6938,8 +6962,18 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 					return nil
 				},
 			},
-			// Decrease the adopt loop interval so that retries happen quickly.
+			// Decrease the adopt-loop interval so that retries happen quickly.
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		}
+		jobKnobs := params.Knobs.JobsTestingKnobs.(*jobs.TestingKnobs)
+		jobKnobs.ModifyErrorAfterOnFailOrCancel = func(_ jobspb.JobID, err error) error {
+			if retryCnt == maxToRetry {
+				// Let the job complete after a few retries.
+				lastJobError = err
+				return nil
+			}
+			retryCnt++
+			return err
 		}
 		var db *gosql.DB
 		s, db, _ = serverutils.StartServer(t, params)
@@ -6951,15 +6985,13 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 				sqlDB.Exec(t, tc.setupStmts)
 				sqlDB.ExpectErr(t, "injected permanent error", tc.scStmt)
 				result := sqlDB.QueryStr(t,
-					`SELECT status, error FROM crdb_internal.jobs WHERE description ~ $1`,
+					`SELECT status FROM crdb_internal.jobs WHERE description ~ $1`,
 					tc.jobRegex)
 				require.Len(t, result, 1)
-				status, jobError := result[0][0], result[0][1]
-				require.Equal(t, string(jobs.StatusRevertFailed), status)
+				require.Equal(t, string(jobs.StatusFailed), result[0][0])
 				require.Regexp(t,
-					"cannot be reverted, manual cleanup may be required: "+
-						"schema change jobs on databases and schemas cannot be reverted",
-					jobError)
+					"schema change jobs on databases and schemas cannot be reverted",
+					lastJobError)
 			})
 		}
 	})
@@ -7015,7 +7047,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 					return nil
 				},
 			},
-			// Decrease the adopt loop interval so that retries happen quickly.
+			// Decrease the adopt-loop interval so that retries happen quickly.
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		}
 		var db *gosql.DB
@@ -7092,6 +7124,11 @@ func TestDropColumnAfterMutations(t *testing.T) {
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+	jobKnobs := params.Knobs.JobsTestingKnobs.(*jobs.TestingKnobs)
+	jobKnobs.ModifyErrorAfterOnFailOrCancel = func(_ jobspb.JobID, _ error) error {
+		// Allow jobs to terminate.
+		return nil
 	}
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)

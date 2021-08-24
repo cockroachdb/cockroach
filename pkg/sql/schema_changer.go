@@ -740,8 +740,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 		// than tables. For jobs intended to drop other types of descriptors, we do
 		// nothing.
 		if _, ok := desc.(catalog.TableDescriptor); !ok {
-			// Mark the error as permanent so that is not retried in reverting state.
-			return jobs.MarkAsPermanentJobError(errors.Newf("schema change jobs on databases and schemas cannot be reverted"))
+			return errors.Newf("schema change jobs on databases and schemas cannot be reverted")
 		}
 
 		// Check that we aren't queued behind another schema changer.
@@ -2265,8 +2264,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	// unset. We cannot revert such schema changes, so just exit early with an
 	// error.
 	if details.DescID == descpb.InvalidID {
-		// Mark the error as permanent so that is not retried in reverting state.
-		return jobs.MarkAsPermanentJobError(errors.Newf("schema change jobs on databases and schemas cannot be reverted"))
+		return errors.Newf("schema change jobs on databases and schemas cannot be reverted")
 	}
 	sc := SchemaChanger{
 		descID:               details.DescID,

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1155,20 +1156,6 @@ func (r retryJobError) Error() string {
 	return string(r)
 }
 
-// Registry does not retry a job that fails due to a permanent error.
-var errJobPermanentSentinel = errors.New("permanent job-error")
-
-// MarkAsPermanentJobError marks an error as a permanent job error, which indicates
-// Registry to not retry the job when it fails due to this error.
-func MarkAsPermanentJobError(err error) error {
-	return errors.Mark(err, errJobPermanentSentinel)
-}
-
-// IsPermanentJobError checks whether the given error is a permanent error.
-func IsPermanentJobError(err error) bool {
-	return errors.Is(err, errJobPermanentSentinel)
-}
-
 // stepThroughStateMachine implements the state machine of the job lifecycle.
 // The job is executed with the ctx, so ctx must only be canceled if the job
 // should also be canceled. resultsCh is passed to the resumable func and should
@@ -1270,6 +1257,9 @@ func (r *Registry) stepThroughStateMachine(
 			defer jm.CurrentlyRunning.Dec(1)
 			err = resumer.OnFailOrCancel(onFailOrCancelCtx, execCtx)
 		}()
+		if r.knobs.ModifyErrorAfterOnFailOrCancel != nil {
+			err = r.knobs.ModifyErrorAfterOnFailOrCancel(job.ID(), err)
+		}
 		if successOnFailOrCancel := err == nil; successOnFailOrCancel {
 			jm.FailOrCancelCompleted.Inc(1)
 			// If the job has failed with any error different than canceled we
@@ -1290,11 +1280,13 @@ func (r *Registry) stepThroughStateMachine(
 			jm.FailOrCancelRetryError.Inc(1)
 			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
 		}
-		// A non-cancelable job is always retried while reverting unless the error is marked as permanent.
-		if job.Payload().Noncancelable && !IsPermanentJobError(err) {
+		if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			// All reverting jobs are retried.
 			jm.FailOrCancelRetryError.Inc(1)
-			return errors.Wrapf(err, "job %d: job is non-cancelable, restarting in background", job.ID())
+			return errors.Wrapf(err, "job %d: failed to revert, restarting in background", job.ID())
 		}
+		// TODO(sajjad): Remove rest of the code in this case after v21.2. All reverting jobs
+		// are retried after v21.2.
 		jm.FailOrCancelFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
 			if sErr.status != StatusPauseRequested {
@@ -1317,6 +1309,9 @@ func (r *Registry) stepThroughStateMachine(
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
 		return jobErr
 	case StatusRevertFailed:
+		// TODO(sajjad): Remove StatusRevertFailed and related code in other places in v22.1.
+		// v21.2 modified all reverting jobs to retry instead of go to revert-failed. Therefore,
+		// revert-failed state is not reachable after 21.2.
 		if jobErr == nil {
 			return errors.AssertionFailedf("job %d: has StatusRevertFailed but no error was provided",
 				job.ID())
