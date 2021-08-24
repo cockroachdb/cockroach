@@ -32,8 +32,6 @@ import (
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
-const defaultQPSRebalanceThreshold = 0.25
-
 var (
 	// multiRegionStores specifies a set of stores across 3 regions. These stores
 	// are arranged in descending order of the QPS they are receiving. Store 1 is
@@ -358,8 +356,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	for _, tc := range testCases {
 		loadRanges(rr, s, []testRange{{voters: tc.storeIDs, qps: tc.qps}})
 		hottestRanges := rr.topQPS()
-		_, target, _ := sr.chooseLeaseToTransfer(
-			ctx, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
+		_, target, _ := sr.chooseLeaseToTransfer(ctx, &hottestRanges, &localDesc, storeList, storeMap)
 		if target.StoreID != tc.expectTarget {
 			t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
 				target.StoreID, tc.storeIDs, tc.qps, tc.expectTarget)
@@ -783,9 +780,6 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
 
-	const minQPS = 800
-	const maxQPS = 1200
-
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
 	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -822,8 +816,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		return status
 	}
 
-	_, target, _ := sr.chooseLeaseToTransfer(
-		ctx, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
+	_, target, _ := sr.chooseLeaseToTransfer(ctx, &hottestRanges, &localDesc, storeList, storeMap)
 	expectTarget := roachpb.StoreID(4)
 	if target.StoreID != expectTarget {
 		t.Errorf("got target store s%d for range with RaftStatus %v; want s%d",
