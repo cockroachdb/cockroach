@@ -504,6 +504,10 @@ func mysqlTableToCockroach(
 	if p != nil {
 		semaCtxPtr = p.SemaCtx()
 	}
+
+	// Bundle imports do not support user defined types, and so we nil out the
+	// type resolver to protect against unexpected behavior on UDT resolution.
+	semaCtxPtr = makeSemaCtxWithoutTypeResolver(semaCtxPtr)
 	desc, err := MakeSimpleTableDescriptor(ctx, semaCtxPtr, evalCtx.Settings, stmt, parentID, keys.PublicSchemaID, id, fks, time.WallTime)
 	if err != nil {
 		return nil, nil, err

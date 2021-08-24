@@ -1076,6 +1076,30 @@ CREATE INDEX i ON t USING btree (a) WHERE (b > 10);
 			`,
 			err: "cannot import a table with partial indexes",
 		},
+		{
+			name: "user defined type",
+			typ:  "PGDUMP",
+			data: `
+CREATE TYPE duration AS ENUM (
+    'YESTERDAY',
+    'LAST_7_DAYS',
+    'LAST_28_DAYS',
+    'LAST_90_DAYS',
+    'LAST_365_DAYS',
+    'LIFE_TIME'
+);
+CREATE TABLE t (a duration);
+			`,
+			err: "IMPORT PGDUMP does not support user defined types",
+		},
+		{
+			name: "user defined type without create",
+			typ:  "PGDUMP",
+			data: `
+CREATE TABLE t (a duration);
+			`,
+			err: "type \"duration\" does not exist",
+		},
 
 		// Error
 		{

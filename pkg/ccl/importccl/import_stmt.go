@@ -850,8 +850,13 @@ func importPlanHook(
 						"IMPORT to REGIONAL BY ROW table not supported",
 					)
 				}
+				// IMPORT TABLE do not support user defined types, and so we nil out the
+				// type resolver to protect against unexpected behavior on UDT
+				// resolution.
+				semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
 				tbl, err := MakeSimpleTableDescriptor(
-					ctx, p.SemaCtx(), p.ExecCfg().Settings, create, parentID, parentSchemaID, defaultCSVTableID, NoFKs, walltime)
+					ctx, semaCtxPtr, p.ExecCfg().Settings, create, parentID, parentSchemaID, defaultCSVTableID, NoFKs,
+					walltime)
 				if err != nil {
 					return err
 				}
