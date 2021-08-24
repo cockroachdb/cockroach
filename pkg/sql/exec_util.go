@@ -1199,6 +1199,10 @@ type ExecutorTestingKnobs struct {
 	// tracing spans for every statement.
 	ForceRealTracingSpans bool
 
+	// ClusterSettingUpdateTimeout, if set, controls the time to wait for a
+	// CLUSTER SETTING to update across all nodes.
+	ClusterSettingUpdateTimeout time.Duration
+
 	// DistSQLReceiverPushCallbackFactory, if set, will be called every time a
 	// DistSQLReceiver is created for a new query execution, and it should
 	// return, possibly nil, a callback that will be called every time

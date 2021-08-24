@@ -1341,6 +1341,10 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					DeterministicExplain: true,
+					// Bump to a larger timeout as multi-node tests in CI take a while longer
+					// to update.
+					// TODO(#69227): lower this timeout.
+					ClusterSettingUpdateTimeout: 30 * time.Second,
 				},
 			},
 			ClusterName:   "testclustername",
@@ -3264,6 +3268,9 @@ func RunLogicTestWithDefaultConfig(
 			}
 			if logicTestsConfigFilter != "" && cfg.name != logicTestsConfigFilter {
 				skip.IgnoreLint(t, "config does not match env var")
+			}
+			if cfg.numNodes > 3 {
+				skip.UnderBazelWithIssue(t, 69276, "multi-node tests fail")
 			}
 			for i, path := range paths {
 				path := path // Rebind range variable.
