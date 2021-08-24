@@ -309,21 +309,21 @@ func tokensFor60sToString(tokens int64) string {
 func tokensFor1sToString(tokens int64) string {
 	// ioLoadListener works with floats, so we just approximate the unlimited
 	// calculation here.
-	if tokens >= (unlimitedTokens/60 - 5) {
+	if tokens >= (unlimitedTokens/adjustmentInterval - 15) {
 		return "unlimited"
 	}
 	return fmt.Sprintf("%d", tokens)
 }
 
 // TestIOLoadListener is a datadriven test with the following command that
-// sets the state for token calculation and then ticks 60 times to cause
-// tokens to be set in the testGranterWithIOTokens:
+// sets the state for token calculation and then ticks adjustmentInterval
+// times to cause tokens to be set in the testGranterWithIOTokens:
 // set-state admitted=<int> l0-bytes=<int> l0-added=<int> l0-files=<int> l0-sublevels=<int>
 func TestIOLoadListener(t *testing.T) {
 	req := &testRequesterForIOLL{}
 	kvGranter := &testGranterWithIOTokens{}
 	var ioll *ioLoadListener
-
+	st := cluster.MakeTestingClusterSettings()
 	datadriven.RunTest(t, "testdata/io_load_listener",
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -348,9 +348,8 @@ func TestIOLoadListener(t *testing.T) {
 				metrics.Levels[0].Sublevels = int32(l0SubLevels)
 				if ioll == nil {
 					ioll = &ioLoadListener{
-						l0FileCountOverloadThreshold:     l0FileCountOverloadThreshold,
-						l0SubLevelCountOverloadThreshold: l0SubLevelCountOverloadThreshold,
-						kvRequester:                      req,
+						settings:    st,
+						kvRequester: req,
 						// The mutex is needed by ioLoadListener but is not useful in this
 						// test -- the channels provide synchronization and prevent this
 						// test code and the ioLoadListener from being concurrently
