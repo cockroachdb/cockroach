@@ -79,7 +79,6 @@ table_name NOT IN (
 	'interleaved',
 	'lost_descriptors_with_data',
 	'table_columns',
-	'table_indexes',
 	'table_row_statistics',
 	'ranges',
 	'ranges_no_leases',
