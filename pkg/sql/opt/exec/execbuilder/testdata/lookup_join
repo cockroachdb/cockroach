@@ -1708,67 +1708,64 @@ ORDER BY numwait DESC, s_name
 distribution: full
 vectorized: true
 ·
-• limit
+• top-k
 │ estimated row count: 0
-│ count: 100
+│ order: -count_rows,+s_name
+│ k: 100
 │
-└── • sort
+└── • group
     │ estimated row count: 0
-    │ order: -count_rows,+s_name
+    │ group by: s_name
     │
-    └── • group
+    └── • lookup join (semi)
         │ estimated row count: 0
-        │ group by: s_name
+        │ table: lineitem@primary
+        │ equality: (l_orderkey) = (l_orderkey)
+        │ pred: l_suppkey != l_suppkey
         │
-        └── • lookup join (semi)
+        └── • lookup join
             │ estimated row count: 0
-            │ table: lineitem@primary
-            │ equality: (l_orderkey) = (l_orderkey)
-            │ pred: l_suppkey != l_suppkey
+            │ table: orders@primary
+            │ equality: (l_orderkey) = (o_orderkey)
+            │ equality cols are key
+            │ pred: o_orderstatus = 'F'
             │
-            └── • lookup join
+            └── • lookup join (anti)
                 │ estimated row count: 0
-                │ table: orders@primary
-                │ equality: (l_orderkey) = (o_orderkey)
-                │ equality cols are key
-                │ pred: o_orderstatus = 'F'
+                │ table: lineitem@primary
+                │ equality: (l_orderkey) = (l_orderkey)
+                │ pred: l_receiptdate > l_commitdate
                 │
-                └── • lookup join (anti)
-                    │ estimated row count: 0
+                └── • lookup join
                     │ table: lineitem@primary
-                    │ equality: (l_orderkey) = (l_orderkey)
+                    │ equality: (l_orderkey, l_linenumber) = (l_orderkey,l_linenumber)
+                    │ equality cols are key
                     │ pred: l_receiptdate > l_commitdate
                     │
                     └── • lookup join
-                        │ table: lineitem@primary
-                        │ equality: (l_orderkey, l_linenumber) = (l_orderkey,l_linenumber)
-                        │ equality cols are key
-                        │ pred: l_receiptdate > l_commitdate
+                        │ estimated row count: 240,049
+                        │ table: lineitem@l_sk
+                        │ equality: (s_suppkey) = (l_suppkey)
                         │
                         └── • lookup join
-                            │ estimated row count: 240,049
-                            │ table: lineitem@l_sk
-                            │ equality: (s_suppkey) = (l_suppkey)
+                            │ estimated row count: 400
+                            │ table: supplier@primary
+                            │ equality: (s_suppkey) = (s_suppkey)
+                            │ equality cols are key
                             │
                             └── • lookup join
                                 │ estimated row count: 400
-                                │ table: supplier@primary
-                                │ equality: (s_suppkey) = (s_suppkey)
-                                │ equality cols are key
+                                │ table: supplier@s_nk
+                                │ equality: (n_nationkey) = (s_nationkey)
                                 │
-                                └── • lookup join
-                                    │ estimated row count: 400
-                                    │ table: supplier@s_nk
-                                    │ equality: (n_nationkey) = (s_nationkey)
+                                └── • filter
+                                    │ estimated row count: 1
+                                    │ filter: n_name = 'SAUDI ARABIA'
                                     │
-                                    └── • filter
-                                        │ estimated row count: 1
-                                        │ filter: n_name = 'SAUDI ARABIA'
-                                        │
-                                        └── • scan
-                                              estimated row count: 25 (100% of the table; stats collected <hidden> ago)
-                                              table: nation@primary
-                                              spans: FULL SCAN
+                                    └── • scan
+                                          estimated row count: 25 (100% of the table; stats collected <hidden> ago)
+                                          table: nation@primary
+                                          spans: FULL SCAN
 
 # Regression test for #50964.
 statement ok

@@ -985,6 +985,17 @@ func (ef *execFactory) ConstructLimit(
 	}, nil
 }
 
+// ConstructTopK is part of the execFactory interface.
+func (ef *execFactory) ConstructTopK(
+	input exec.Node, k int64, ordering exec.OutputOrdering,
+) (exec.Node, error) {
+	return &topKNode{
+		plan:     input.(planNode),
+		k:        k,
+		ordering: colinfo.ColumnOrdering(ordering),
+	}, nil
+}
+
 // ConstructMax1Row is part of the exec.Factory interface.
 func (ef *execFactory) ConstructMax1Row(input exec.Node, errorText string) (exec.Node, error) {
 	plan := input.(planNode)
