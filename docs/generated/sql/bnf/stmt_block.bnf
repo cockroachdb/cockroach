@@ -132,6 +132,7 @@ cancel_stmt ::=
 	cancel_jobs_stmt
 	| cancel_queries_stmt
 	| cancel_sessions_stmt
+	| cancel_all_jobs_stmt
 
 create_stmt ::=
 	create_role_stmt
@@ -173,6 +174,7 @@ insert_stmt ::=
 pause_stmt ::=
 	pause_jobs_stmt
 	| pause_schedules_stmt
+	| pause_all_jobs_stmt
 
 reset_stmt ::=
 	reset_session_stmt
@@ -188,6 +190,7 @@ restore_stmt ::=
 resume_stmt ::=
 	resume_jobs_stmt
 	| resume_schedules_stmt
+	| resume_all_jobs_stmt
 
 export_stmt ::=
 	'EXPORT' 'INTO' import_format string_or_placeholder opt_with_options 'FROM' select_stmt
@@ -433,6 +436,9 @@ cancel_sessions_stmt ::=
 	| 'CANCEL' 'SESSIONS' select_stmt
 	| 'CANCEL' 'SESSIONS' 'IF' 'EXISTS' select_stmt
 
+cancel_all_jobs_stmt ::=
+	'CANCEL' 'ALL' name 'JOBS'
+
 create_role_stmt ::=
 	'CREATE' role_or_group_or_user string_or_placeholder opt_role_options
 	| 'CREATE' role_or_group_or_user 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_role_options
@@ -555,6 +561,9 @@ pause_schedules_stmt ::=
 	'PAUSE' 'SCHEDULE' a_expr
 	| 'PAUSE' 'SCHEDULES' select_stmt
 
+pause_all_jobs_stmt ::=
+	'PAUSE' 'ALL' name 'JOBS'
+
 reset_session_stmt ::=
 	'RESET' session_var
 	| 'RESET' 'SESSION' session_var
@@ -578,6 +587,9 @@ resume_jobs_stmt ::=
 resume_schedules_stmt ::=
 	'RESUME' 'SCHEDULE' a_expr
 	| 'RESUME' 'SCHEDULES' select_stmt
+
+resume_all_jobs_stmt ::=
+	'RESUME' 'ALL' name 'JOBS'
 
 scrub_table_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'TABLE' table_name opt_as_of_clause opt_scrub_options_clause
