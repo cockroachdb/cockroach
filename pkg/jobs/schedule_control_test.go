@@ -24,9 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -325,4 +328,105 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 		// Clear the system.jobs table for the next test run.
 		th.sqlDB.Exec(t, "DELETE FROM system.jobs")
 	}
+}
+
+func TestJobControlByType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ResetConstructors()()
+
+	argsFn := func(args *base.TestServerArgs) {
+		// Prevent registry from changing job state while running this test.
+		args.Knobs.JobsTestingKnobs = NewTestingKnobsWithShortIntervals()
+	}
+	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables, argsFn)
+	defer cleanup()
+
+	registry := th.server.JobRegistry().(*Registry)
+	blockResume := make(chan struct{})
+	defer close(blockResume)
+
+	// All job states other than "Requested" ones since the job system will resolve those
+	var allJobStates = []Status{StatusPending, StatusRunning, StatusPaused, StatusFailed,
+		StatusReverting, StatusSucceeded, StatusCanceled}
+
+	var JobspbTypeToJobsType = map[jobspb.Type]tree.JobType{
+		jobspb.TypeChangefeed: tree.TypeChangefeed,
+		jobspb.TypeBackup:     tree.TypeBackup,
+		jobspb.TypeImport:     tree.TypeImport,
+		jobspb.TypeRestore:    tree.TypeRestore,
+	}
+
+	// Iterate through every type of job
+	for _, jobInfo := range []struct {
+		jobType     jobspb.Type
+		jobDetails  jobspb.Details
+		jobProgress jobspb.ProgressDetails
+	}{
+		{jobspb.TypeChangefeed, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}},
+		//{jobspb.TypeImport, jobspb.ImportDetails{}, jobspb.ImportProgress{}},
+		//{jobspb.TypeBackup, jobspb.BackupDetails{}, jobspb.BackupProgress{}},
+		//{jobspb.TypeRestore, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}},
+	} {
+		RegisterConstructor(jobInfo.jobType, func(job *Job, _ *cluster.Settings) Resumer {
+			return FakeResumer{
+				OnResume: func(ctx context.Context) error {
+					<-ctx.Done()
+					return nil
+				},
+			}
+		})
+
+		record := Record{
+			Description: "fake job",
+			Username:    security.TestUserName(),
+			Details:     jobInfo.jobDetails,
+			Progress:    jobInfo.jobProgress,
+		}
+
+		numJobsPerStatus := 3
+
+		for _, tc := range []struct {
+			command        string
+			startingStates []Status
+			endState       Status
+		}{
+			{"pause", []Status{StatusPending, StatusRunning, StatusReverting}, StatusPaused},
+			{"resume", []Status{StatusPaused}, StatusRunning},
+			{"cancel", []Status{StatusPending, StatusRunning, StatusPaused}, StatusCanceled},
+		} {
+			commandQuery := fmt.Sprintf("%s every %s job", tc.command, tree.JobTypeToStatement[JobspbTypeToJobsType[jobInfo.jobType]])
+			t.Run(commandQuery, func(t *testing.T) {
+				var jobIDStrings []string
+
+				// Make multiple jobs for each possible state
+				for _, status := range allJobStates {
+					for i := 0; i < numJobsPerStatus; i++ {
+						jobID := registry.MakeJobID()
+						jobIDStrings = append(jobIDStrings, fmt.Sprintf("%d", jobID))
+						_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */)
+						require.NoError(t, err)
+						th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", status, jobID)
+					}
+				}
+
+				jobIdsClause := fmt.Sprint(strings.Join(jobIDStrings, ", "))
+
+				th.sqlDB.Exec(t, commandQuery)
+
+				// We expect the jobs that were in a valid starting state + the original jobs with the end state to end up in the end state
+				expectedJobsWithEndState := numJobsPerStatus * (len(tc.startingStates) + 1)
+				testutils.SucceedsSoon(t, func() error {
+					var numJobs = 0
+					th.sqlDB.QueryRow(t, fmt.Sprintf("SELECT count(*) FROM system.jobs WHERE status='%s' AND id IN (%s)", tc.endState, jobIdsClause)).Scan(&numJobs)
+					if numJobs == expectedJobsWithEndState {
+						return nil
+					}
+					return errors.New("Still waiting")
+				})
+				// Clear the system.jobs table for the next test run.
+				th.sqlDB.Exec(t, "DELETE FROM system.jobs")
+			})
+		}
+	}
+
 }

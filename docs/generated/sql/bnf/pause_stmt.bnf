@@ -1,3 +1,4 @@
 pause_stmt ::=
 	pause_jobs_stmt
 	| pause_schedules_stmt
+	| pause_every_stmt

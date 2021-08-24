@@ -528,6 +528,9 @@ func (u *sqlSymUnion) distinctOn() tree.DistinctOn {
 func (u *sqlSymUnion) dir() tree.Direction {
     return u.val.(tree.Direction)
 }
+func (u *sqlSymUnion) jobType() tree.JobType {
+    return u.val.(tree.JobType)
+}
 func (u *sqlSymUnion) nullsOrder() tree.NullsOrder {
     return u.val.(tree.NullsOrder)
 }
@@ -767,8 +770,8 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DESC DESTINATION DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
-%token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
+%token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EVERY EXCEPT EXCLUDE
+%token <str> EXCLUDING EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
@@ -1012,7 +1015,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> grant_stmt
 %type <tree.Statement> insert_stmt
 %type <tree.Statement> import_stmt
-%type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt
+%type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt pause_every_stmt
 %type <*tree.Select>   for_schedules_clause
 %type <tree.Statement> reassign_owned_by_stmt
 %type <tree.Statement> drop_owned_by_stmt
@@ -1190,6 +1193,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <bool> distinct_clause
 %type <tree.DistinctOn> distinct_on_clause
 %type <tree.NameList> opt_column_list insert_column_list opt_stats_columns query_stats_cols
+%type <tree.JobType> opt_job_type
 %type <tree.OrderBy> sort_clause single_sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
 %type <tree.IndexElemList> index_params create_as_params
@@ -3259,6 +3263,10 @@ cancel_stmt:
   cancel_jobs_stmt     // EXTEND WITH HELP: CANCEL JOBS
 | cancel_queries_stmt  // EXTEND WITH HELP: CANCEL QUERIES
 | cancel_sessions_stmt // EXTEND WITH HELP: CANCEL SESSIONS
+| CANCEL EVERY opt_job_type JOB
+  {
+    $$.val = &tree.ControlJobsOfType{Type: $3.jobType(), Command: tree.CancelJob}
+  }
 | CANCEL error         // SHOW HELP: CANCEL
 
 // %Help: CANCEL JOBS - cancel background jobs
@@ -6036,6 +6044,11 @@ for_grantee_clause:
     $$.val = tree.NameList(nil)
   }
 
+opt_job_type:
+  CHANGEFEED { $$.val = tree.TypeChangefeed }
+  | BACKUP { $$.val = tree.TypeImport }
+  | IMPORT { $$.val = tree.TypeBackup }
+  | RESTORE { $$.val = tree.TypeRestore }
 
 // %Help: PAUSE
 // %Category: Misc
@@ -6047,7 +6060,22 @@ for_grantee_clause:
 pause_stmt:
   pause_jobs_stmt       // EXTEND WITH HELP: PAUSE JOBS
 | pause_schedules_stmt  // EXTEND WITH HELP: PAUSE SCHEDULES
+| pause_every_stmt      // EXTEND WITH HELP: PAUSE EVERY JOB
 | PAUSE error           // SHOW HELP: PAUSE
+
+// %Help: PAUSE EVERY JOB
+// %Category: Misc
+// %Text:
+//
+// Pause all jobs of a given type
+//
+// PAUSE EVERY CHANGEFEED JOB, PAUSE EVERY BACKUP JOB
+pause_every_stmt:
+  PAUSE EVERY opt_job_type JOB
+  {
+    $$.val = &tree.ControlJobsOfType{Type: $3.jobType(), Command: tree.PauseJob}
+  }
+
 
 // %Help: RESUME
 // %Category: Misc
@@ -6059,6 +6087,10 @@ pause_stmt:
 resume_stmt:
   resume_jobs_stmt       // EXTEND WITH HELP: RESUME JOBS
 | resume_schedules_stmt  // EXTEND WITH HELP: RESUME SCHEDULES
+| RESUME EVERY opt_job_type JOB
+  {
+    $$.val = &tree.ControlJobsOfType{Type: $3.jobType(), Command: tree.ResumeJob}
+  }
 | RESUME error           // SHOW HELP: RESUME
 
 // %Help: PAUSE JOBS - pause background jobs
@@ -13066,6 +13098,7 @@ unreserved_keyword:
 | ENUM
 | ENUMS
 | ESCAPE
+| EVERY
 | EXCLUDE
 | EXCLUDING
 | EXECUTE
