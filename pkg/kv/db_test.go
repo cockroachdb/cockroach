@@ -292,6 +292,15 @@ func TestBatch(t *testing.T) {
 		"bb": []byte("2"),
 	}
 	checkResults(t, expected, b.Results)
+
+	b2 := &kv.Batch{}
+	b2.Put(42, "the answer")
+	if err := db.Run(context.Background(), b2); !testutils.IsError(err, "unable to marshal key") {
+		t.Fatal("expected marshaling error from running bad put")
+	}
+	if err := b2.MustPErr(); !testutils.IsPError(err, "unable to marshal key") {
+		t.Fatal("expected marshaling error from MustPErr")
+	}
 }
 
 func TestDB_Scan(t *testing.T) {

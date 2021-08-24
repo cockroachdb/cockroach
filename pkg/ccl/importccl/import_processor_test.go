@@ -87,7 +87,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	tests := []testSpec{
 		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
@@ -223,7 +223,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
@@ -324,7 +324,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 	pkBulkAdder := &doNothingKeyAdder{}
 	ctx := context.Background()
 
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
@@ -452,7 +452,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 
 	batchSize := 13
 	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{

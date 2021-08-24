@@ -458,7 +458,10 @@ func (n *createTableNode) startExec(params runParams) error {
 				params.ExecCfg().Codec,
 				desc.ImmutableCopy().(catalog.TableDescriptor),
 				desc.PublicColumns(),
-				params.p.alloc)
+				params.p.alloc,
+				&params.ExecCfg().Settings.SV,
+				params.p.SessionData().Internal,
+			)
 			if err != nil {
 				return err
 			}
