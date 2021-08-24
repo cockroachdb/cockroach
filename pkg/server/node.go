@@ -1466,6 +1466,7 @@ func (n *Node) UpdateSpanConfigs(
 	if !n.storeCfg.SpanConfigsEnabled {
 		return nil, errors.New("use of span configs disabled")
 	}
+
 	// TODO(irfansharif): We want to protect ourselves from tenants creating
 	// outlandishly large string buffers here and OOM-ing the host cluster. Is
 	// the maximum protobuf message size enough of a safeguard?

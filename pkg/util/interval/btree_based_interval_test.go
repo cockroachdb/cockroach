@@ -491,9 +491,9 @@ func TestBTree(t *testing.T) {
 }
 
 // TestDeleteAfterRootNodeMerge verifies that delete from a leaf node works
-// correctly after a merge which involves the root node. During the delete of a
+// correctly after a Merge which involves the root node. During the delete of a
 // Interface from a leaf node, if the root node has only one Interface and takes
-// part of a merge, the root does have any Interface after the merge. The
+// part of a Merge, the root does have any Interface after the Merge. The
 // subsequent adjustment of node range should take this into account.
 func TestDeleteAfterRootNodeMerge(t *testing.T) {
 	tree := newBTreeWithDegree(InclusiveOverlapper, 2)

@@ -642,7 +642,7 @@ func (n *node) removeFromLeaf(i int, fast bool) (out Interface, shrunk bool) {
 // For the latter, we have to check:
 //   a) left sibling has node to spare
 //   b) right sibling has node to spare
-//   c) we must merge
+//   c) we must Merge
 // To simplify our code here, we handle cases #1 and #2 the same:
 // If a node doesn't have enough Interfaces, we make sure it does (using a,b,c).
 // We then simply redo our remove call, and the second time (regardless of
@@ -801,7 +801,7 @@ func (n *node) stealFromRightChild(i int, fast bool) {
 //          +---------- +
 //
 func (n *node) mergeWithRightChild(i int, fast bool) {
-	// merge
+	// Merge
 	child := n.mutableChild(i)
 	mergeItem := n.items.removeAt(i)
 	mergeChild := n.children.removeAt(i + 1)
