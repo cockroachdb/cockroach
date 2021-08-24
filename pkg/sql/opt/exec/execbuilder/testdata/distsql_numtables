@@ -378,29 +378,25 @@ EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY
 distribution: full
 vectorized: true
 ·
-• limit
+• top-k
 │ columns: (y, str, res)
+│ ordering: +res
 │ estimated row count: 10 (missing stats)
-│ count: 10
+│ order: +res
+│ k: 10
 │
-└── • sort
+└── • render
     │ columns: (res, y, str)
-    │ ordering: +res
     │ estimated row count: 1,000 (missing stats)
-    │ order: +res
+    │ render res: repeat('test', y)
+    │ render y: y
+    │ render str: str
     │
-    └── • render
-        │ columns: (res, y, str)
-        │ estimated row count: 1,000 (missing stats)
-        │ render res: repeat('test', y)
-        │ render y: y
-        │ render str: str
-        │
-        └── • scan
-              columns: (y, str)
-              estimated row count: 1,000 (missing stats)
-              table: numtostr@primary
-              spans: FULL SCAN
+    └── • scan
+          columns: (y, str)
+          estimated row count: 1,000 (missing stats)
+          table: numtostr@primary
+          spans: FULL SCAN
 
 # Regression test for #20481.
 query T
@@ -411,15 +407,13 @@ vectorized: true
 ·
 • group (scalar)
 │
-└── • limit
-    │ count: 10
+└── • top-k
+    │ order: +xsquared
+    │ k: 10
     │
-    └── • sort
-        │ order: +xsquared
-        │
-        └── • scan
-              missing stats
-              table: numtosquare@primary
-              spans: [/11 - ]
+    └── • scan
+          missing stats
+          table: numtosquare@primary
+          spans: [/11 - ]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU1r20AQhu_9FcOc7HaLd-XbnuImKhUoViqppKUVZSsNQiDtKvsBLkb_vVgqNC7YJMd9Z555XtgjuqceJcZfH9JdsofVXVKUxed0DUWcxrcl1CZov3q7ho95dg-rv6mAXQFG05LqMHjjnoKyBI-f4jyGA_wInG8JBIcsv4tz-PANDstKA2lyn5Qg-BoZatPQXg3kUH5HgRXD0ZqanDP2FB3nhaQ5oOQMOz0Gf4orhrWxhPKIvvM9ocRS_eopJ9WQ3XBk2JBXXT-ffdbvZrTdoOxvZFiMSjsJGyHeYzUxNMH_u-68agmlmNjLGxTGerIbcS6_id4hwyx4CXujCRmm3dB5EPyiNXqNdde2llrljd1E5-bb7Mu-_Jlnj8VqfdG1fY0rJzca7ejMc-kynyqG1LS0_KMzwdb0YE09a5ZnNnNz0JDzy1Qsj0Qvo1PB57C4CkfX4egqvP0PrqY3fwIAAP__BvUB3w==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUksGOmzAQhu99itGcktYrMOzJp013qYrKwhaotlWLKhdGCCmxWdtIqaK8exWo1FApaHP0P_PN9x98QPuyRYHR16dkE6eweoiLsvicrKGIkui-hFoPyq3eruFDnj3C6m_KYVOAVjSlatg5bV8GaQieP0Z5BHv4Mfh-SMB9yPKHKIf332A_rTSQxI9xCdxfI0OlG0rljiyK78ixYtgbXZO12pyiw7gQN3sUPsNO9YM7xRXDWhtCcUDXuS2hwFL-2lJOsiHj-ciwISe77Xj2rN9db7qdNL-RYdFLZQV4nN9gdWSoB_fvunWyJRT8yF7foNDGkfH4XH4XvEOGpe4_CeD-RVNwjSnVN7r3grkoG5yAVCtChkm369ySLrxGt2lbQ6102njh3HmffUnLn3n2XKzWF12317hysr1WlmaeS5f9Y8WQmpamr2L1YGp6MroeNdMzG7kxaMi6acqnR6ym0angOcwX4WAZDhbhcBkOF-Hb_-Dq-OZPAAAA___EYjXK
