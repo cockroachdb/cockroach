@@ -860,12 +860,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		reporter.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
-	var settingsWatcher *settingswatcher.SettingsWatcher
-	if !codec.ForSystemTenant() {
-		settingsWatcher = settingswatcher.New(
-			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper,
-		)
-	}
+	settingsWatcher := settingswatcher.New(
+		cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper,
+	)
 
 	return &SQLServer{
 		stopper:                 cfg.stopper,
@@ -1058,10 +1055,8 @@ func (s *SQLServer) preStart(
 		bootstrapVersion = clusterversion.ByKey(clusterversion.Start20_2)
 	}
 
-	if s.settingsWatcher != nil {
-		if err := s.settingsWatcher.Start(ctx); err != nil {
-			return errors.Wrap(err, "initializing settings")
-		}
+	if err := s.settingsWatcher.Start(ctx); err != nil {
+		return errors.Wrap(err, "initializing settings")
 	}
 
 	// Run startup migrations (note: these depend on jobs subsystem running).

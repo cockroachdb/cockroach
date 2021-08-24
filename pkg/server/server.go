@@ -1485,12 +1485,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrap(err, "invalid init state")
 	}
 
-	// Apply any cached initial settings (and start the gossip listener) as early
-	// as possible, to avoid spending time with stale settings.
-	if err := s.refreshSettings(state.initialSettingsKVs); err != nil {
-		return errors.Wrap(err, "during initializing settings updater")
-	}
-
 	// TODO(irfansharif): Let's make this unconditional. We could avoid
 	// persisting + initializing the cluster version in response to being
 	// bootstrapped (within `ServeAndWait` above) and simply do it here, in the
