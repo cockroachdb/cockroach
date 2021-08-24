@@ -37,6 +37,11 @@ func (desc *ColumnDescriptor) HasDefault() bool {
 	return desc.DefaultExpr != nil
 }
 
+// HasOnUpdate returns true if the column has an on update expression.
+func (desc *ColumnDescriptor) HasOnUpdate() bool {
+	return desc.OnUpdateExpr != nil
+}
+
 // IsComputed returns true if this is a computed column.
 func (desc *ColumnDescriptor) IsComputed() bool {
 	return desc.ComputeExpr != nil

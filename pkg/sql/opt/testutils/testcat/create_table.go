@@ -125,6 +125,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			cat.Hidden,
 			&uniqueRowIDString, /* defaultExpr */
 			nil,                /* computedExpr */
+			nil,                /* onUpdateExpr */
 		)
 		tab.Columns = append(tab.Columns, rowid)
 	}
@@ -152,6 +153,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		cat.Hidden,
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
 	)
 	tab.Columns = append(tab.Columns, mvcc)
 
@@ -168,6 +170,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		cat.Hidden,
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
 	)
 	tab.Columns = append(tab.Columns, tableoid)
 
@@ -300,6 +303,7 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 		cat.Hidden,
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
 	)
 
 	tab.Columns = []cat.Column{pk}
@@ -356,6 +360,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 		cat.Hidden,
 		&uniqueRowIDString, /* defaultExpr */
 		nil,                /* computedExpr */
+		nil,                /* onUpdateExpr */
 	)
 
 	tab.Columns = append(tab.Columns, rowid)
@@ -585,7 +590,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		visibility = cat.Inaccessible
 	}
 
-	var defaultExpr, computedExpr *string
+	var defaultExpr, computedExpr, onUpdateExpr *string
 	if def.DefaultExpr.Expr != nil {
 		s := serializeTableDefExpr(def.DefaultExpr.Expr)
 		defaultExpr = &s
@@ -594,6 +599,11 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	if def.Computed.Expr != nil {
 		s := serializeTableDefExpr(def.Computed.Expr)
 		computedExpr = &s
+	}
+
+	if def.OnUpdateExpr.Expr != nil {
+		s := serializeTableDefExpr(def.OnUpdateExpr.Expr)
+		onUpdateExpr = &s
 	}
 
 	var col cat.Column
@@ -618,6 +628,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			visibility,
 			defaultExpr,
 			computedExpr,
+			onUpdateExpr,
 		)
 	}
 	tt.Columns = append(tt.Columns, col)

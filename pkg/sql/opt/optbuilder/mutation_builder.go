@@ -145,9 +145,17 @@ type mutationBuilder struct {
 	// are joined into larger LEFT OUTER JOIN expressions.
 	subqueries []*scope
 
-	// parsedColExprs is a cached set of parsed default and computed expressions
+	// parsedColComputedExprs is a cached set of parsed computed expressions
 	// from the table schema. These are parsed once and cached for reuse.
-	parsedColExprs []tree.Expr
+	parsedColComputedExprs []tree.Expr
+
+	// parsedColDefaultExprs is a cached set of parsed default expressions
+	// from the table schema. These are parsed once and cached for reuse.
+	parsedColDefaultExprs []tree.Expr
+
+	// parsedColOnUpdateExprs is a cached set of parsed ON UPDATE expressions from
+	// the table schema. These are parsed once and cached for reuse.
+	parsedColOnUpdateExprs []tree.Expr
 
 	// parsedIndexExprs is a cached set of parsed partial index predicate
 	// expressions from the table schema. These are parsed once and cached for
@@ -540,7 +548,7 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 					copy(newTuple, tuple[:itup])
 				}
 
-				val = mb.parseDefaultOrComputedExpr(mb.targetColList[itup])
+				val = mb.parseDefaultExpr(mb.targetColList[itup])
 			}
 			if newTuple != nil {
 				newTuple = append(newTuple, val)
@@ -581,7 +589,7 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 // NOTE: colIDs is updated with the column IDs of any synthesized columns which
 // are added to mb.outScope.
 func (mb *mutationBuilder) addSynthesizedDefaultCols(
-	colIDs opt.OptionalColList, includeOrdinary bool,
+	colIDs opt.OptionalColList, includeOrdinary bool, applyOnUpdate bool,
 ) {
 	// We will construct a new Project operator that will contain the newly
 	// synthesized column(s).
@@ -591,6 +599,8 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 		tabCol := mb.tab.Column(i)
 		if kind := tabCol.Kind(); kind == cat.WriteOnly {
 			// Always include WriteOnly columns.
+		} else if tabCol.HasOnUpdate() && applyOnUpdate {
+			// Use ON UPDATE columns if specified.
 		} else if includeOrdinary && kind == cat.Ordinary {
 			// Include Ordinary columns if indicated.
 		} else {
@@ -605,14 +615,23 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 			continue
 		}
 
+		// Use ON UPDATE expression if specified, default otherwise
 		tabColID := mb.tabID.ColumnID(i)
-		expr := mb.parseDefaultOrComputedExpr(tabColID)
+		var mutationSuffix string
+		var expr tree.Expr
+		if tabCol.HasOnUpdate() && applyOnUpdate {
+			mutationSuffix = "on_update"
+			expr = mb.parseOnUpdateExpr(tabColID)
+		} else {
+			mutationSuffix = "default"
+			expr = mb.parseDefaultExpr(tabColID)
+		}
 
 		// Add synthesized column. It is important to use the real column
 		// reference name, as this column may later be referred to by a computed
 		// column.
 		colName := scopeColName(tabCol.ColName()).WithMetadataName(
-			string(tabCol.ColName()) + "_default",
+			string(tabCol.ColName()) + "_" + mutationSuffix,
 		)
 		newCol, _ := pb.Add(colName, expr, tabCol.DatumType())
 
@@ -663,7 +682,7 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		}
 
 		tabColID := mb.tabID.ColumnID(i)
-		expr := mb.parseDefaultOrComputedExpr(tabColID)
+		expr := mb.parseComputedExpr(tabColID)
 
 		// Add synthesized column.
 		colName := scopeColName(tabCol.ColName()).WithMetadataName(
@@ -1143,38 +1162,77 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 	}
 }
 
-// parseDefaultOrComputedExpr parses the default (including nullable) or
-// computed value expression for the given table column, and caches it for
-// reuse.
-func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.Expr {
-	if mb.parsedColExprs == nil {
-		mb.parsedColExprs = make([]tree.Expr, mb.tab.ColumnCount())
+// parseComputedExpr parses the computed expression for the given table column,
+// and caches it for reuse.
+func (mb *mutationBuilder) parseComputedExpr(colID opt.ColumnID) tree.Expr {
+	if mb.parsedColComputedExprs == nil {
+		mb.parsedColComputedExprs = make([]tree.Expr, mb.tab.ColumnCount())
 	}
 
+	ord := mb.tabID.ColumnOrdinal(colID)
+	return mb.parseColExpr(
+		colID,
+		mb.parsedColComputedExprs,
+		mb.tab.Column(ord).ComputedExprStr(),
+	)
+}
+
+// parseDefaultExpr parses the default (including nullable) expression for the
+// given table column, and caches it for reuse.
+func (mb *mutationBuilder) parseDefaultExpr(colID opt.ColumnID) tree.Expr {
+	if mb.parsedColDefaultExprs == nil {
+		mb.parsedColDefaultExprs = make([]tree.Expr, mb.tab.ColumnCount())
+	}
+
+	ord := mb.tabID.ColumnOrdinal(colID)
+	col := mb.tab.Column(ord)
+	exprStr := col.DefaultExprStr()
+
+	// If no default expression, return NULL or a default value.
+	if exprStr == "" {
+		if col.IsMutation() && !col.IsNullable() {
+			// Synthesize default value for NOT NULL mutation column so that it can be
+			// set when in the write-only state. This is only used when no other value
+			// is possible (no default value available, NULL not allowed).
+			datum, err := tree.NewDefaultDatum(mb.b.evalCtx, col.DatumType())
+			if err != nil {
+				panic(err)
+			}
+			return datum
+		}
+
+		return tree.DNull
+	}
+
+	return mb.parseColExpr(
+		colID,
+		mb.parsedColDefaultExprs,
+		exprStr,
+	)
+}
+
+// parseOnUpdateExpr parses the on update (including nullable) expression for
+// the given table column, and caches it for reuse.
+func (mb *mutationBuilder) parseOnUpdateExpr(colID opt.ColumnID) tree.Expr {
+	if mb.parsedColOnUpdateExprs == nil {
+		mb.parsedColOnUpdateExprs = make([]tree.Expr, mb.tab.ColumnCount())
+	}
+
+	ord := mb.tabID.ColumnOrdinal(colID)
+	return mb.parseColExpr(
+		colID,
+		mb.parsedColOnUpdateExprs,
+		mb.tab.Column(ord).OnUpdateExprStr(),
+	)
+}
+
+func (mb *mutationBuilder) parseColExpr(
+	colID opt.ColumnID, cache []tree.Expr, exprStr string,
+) tree.Expr {
 	// Return expression from cache, if it was already parsed previously.
 	ord := mb.tabID.ColumnOrdinal(colID)
-	if mb.parsedColExprs[ord] != nil {
-		return mb.parsedColExprs[ord]
-	}
-
-	var exprStr string
-	tabCol := mb.tab.Column(ord)
-	switch {
-	case tabCol.IsComputed():
-		exprStr = tabCol.ComputedExprStr()
-	case tabCol.HasDefault():
-		exprStr = tabCol.DefaultExprStr()
-	case tabCol.IsMutation() && !tabCol.IsNullable():
-		// Synthesize default value for NOT NULL mutation column so that it can be
-		// set when in the write-only state. This is only used when no other value
-		// is possible (no default value available, NULL not allowed).
-		datum, err := tree.NewDefaultDatum(mb.b.evalCtx, tabCol.DatumType())
-		if err != nil {
-			panic(err)
-		}
-		return datum
-	default:
-		return tree.DNull
+	if cache[ord] != nil {
+		return cache[ord]
 	}
 
 	expr, err := parser.ParseExpr(exprStr)
@@ -1182,7 +1240,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 		panic(err)
 	}
 
-	mb.parsedColExprs[ord] = expr
+	cache[ord] = expr
 	return expr
 }
 

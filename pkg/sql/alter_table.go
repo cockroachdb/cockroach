@@ -15,6 +15,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -360,6 +361,22 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.ForeignKeyConstraintTableDef:
+				// We want to reject uses of FK ON UPDATE actions where there is already
+				// an ON UPDATE expression for the column.
+				if d.Actions.Update != tree.NoAction && d.Actions.Update != tree.Restrict {
+					for _, fromCol := range d.FromCols {
+						for _, toCheck := range n.tableDesc.Columns {
+							if fromCol == toCheck.ColName() && toCheck.HasOnUpdate() {
+								return pgerror.Newf(
+									pgcode.InvalidTableDefinition,
+									"cannot specify a foreign key update action and an ON UPDATE"+
+										" expression on the same column",
+								)
+							}
+						}
+					}
+				}
+
 				affected := make(map[descpb.ID]*tabledesc.Mutable)
 
 				// If there are any FKs, we will need to update the table descriptor of the
@@ -1124,44 +1141,46 @@ func applyColumnMutation(
 		return AlterColumnType(ctx, tableDesc, col, t, params, cmds, tn)
 
 	case *tree.AlterTableSetDefault:
-		if col.NumUsesSequences() > 0 {
-			if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, col); err != nil {
-				return err
-			}
+		if err := updateNonComputedColExpr(
+			params,
+			tableDesc,
+			col,
+			t.Default,
+			&col.ColumnDesc().DefaultExpr,
+			"DEFAULT",
+		); err != nil {
+			return err
 		}
-		if t.Default == nil {
-			col.ColumnDesc().DefaultExpr = nil
-		} else {
-			colDatumType := col.GetType()
-			expr, err := schemaexpr.SanitizeVarFreeExpr(
-				params.ctx, t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, tree.VolatilityVolatile,
-			)
-			if err != nil {
-				return pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
-			}
-			s := tree.Serialize(expr)
-			col.ColumnDesc().DefaultExpr = &s
 
-			// Add references to the sequence descriptors this column is now using.
-			changedSeqDescs, err := maybeAddSequenceDependencies(
-				params.ctx, params.p.ExecCfg().Settings, params.p, tableDesc, col.ColumnDesc(), expr, nil, /* backrefs */
-			)
-			if err != nil {
-				return err
-			}
-			for _, changedSeqDesc := range changedSeqDescs {
-				if err := params.p.writeSchemaChange(
-					params.ctx, changedSeqDesc, descpb.InvalidMutationID,
-					fmt.Sprintf("updating dependent sequence %s(%d) for table %s(%d)",
-						changedSeqDesc.Name, changedSeqDesc.ID, tableDesc.Name, tableDesc.ID,
-					)); err != nil {
-					return err
+	case *tree.AlterTableSetOnUpdate:
+		// We want to reject uses of ON UPDATE where there is also a foreign key ON
+		// UPDATE.
+		for _, fk := range tableDesc.OutboundFKs {
+			for _, colID := range fk.OriginColumnIDs {
+				if colID == col.GetID() &&
+					fk.OnUpdate != descpb.ForeignKeyReference_NO_ACTION &&
+					fk.OnUpdate != descpb.ForeignKeyReference_RESTRICT {
+					return pgerror.Newf(
+						pgcode.InvalidColumnDefinition,
+						"column %s(%d) cannot have both an ON UPDATE expression and a foreign"+
+							" key ON UPDATE action",
+						col.GetName(),
+						col.GetID(),
+					)
 				}
 			}
 		}
 
-	case *tree.AlterTableSetOnUpdate:
-		return errors.Newf("unimplemented")
+		if err := updateNonComputedColExpr(
+			params,
+			tableDesc,
+			col,
+			t.Expr,
+			&col.ColumnDesc().OnUpdateExpr,
+			"ON UPDATE",
+		); err != nil {
+			return err
+		}
 
 	case *tree.AlterTableSetVisible:
 		column, err := tableDesc.FindActiveOrNewColumnByName(col.ColName())
@@ -1264,6 +1283,146 @@ func labeledRowValues(cols []catalog.Column, values tree.Datums) string {
 		s.WriteString(values[i].String())
 	}
 	return s.String()
+}
+
+// updateNonComputedColExpr updates an ON UPDATE or DEFAULT column expression
+// and recalculates sequence dependencies for the column. `exprField1 is a
+// pointer to the column descriptor field that should be updated with the
+// serialized `newExpr`. For example, for DEFAULT expressions, this is
+// `&column.ColumnDesc().OnUpdateExpr`
+func updateNonComputedColExpr(
+	params runParams,
+	tab *tabledesc.Mutable,
+	col catalog.Column,
+	newExpr tree.Expr,
+	exprField **string,
+	op string,
+) error {
+	// If a DEFAULT or ON UPDATE expression starts using a sequence and is then
+	// modified to not use that sequence, we need to drop the dependency from
+	// the sequence to the column. The way this is done is by wiping all
+	// sequence dependencies on the column and then recalculating the
+	// dependencies after the new expression has been parsed.
+	if col.NumUsesSequences() > 0 {
+		if err := params.p.removeSequenceDependencies(params.ctx, tab, col); err != nil {
+			return err
+		}
+	}
+
+	if newExpr == nil {
+		*exprField = nil
+	} else {
+		_, s, err := sanitizeColumnExpression(params, newExpr, col, op)
+		if err != nil {
+			return err
+		}
+
+		*exprField = &s
+	}
+
+	if err := updateSequenceDependencies(params, tab, col); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func sanitizeColumnExpression(
+	p runParams, expr tree.Expr, col catalog.Column, opName string,
+) (tree.TypedExpr, string, error) {
+	colDatumType := col.GetType()
+	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
+		p.ctx, expr, colDatumType, opName, &p.p.semaCtx, tree.VolatilityVolatile,
+	)
+	if err != nil {
+		return nil, "", pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
+	}
+
+	s := tree.Serialize(typedExpr)
+	return typedExpr, s, nil
+}
+
+// updateSequenceDependencies checks for sequence dependencies on the provided
+// DEFAULT and ON UPDATE expressions and adds any dependencies to the tableDesc.
+func updateSequenceDependencies(
+	params runParams, tableDesc *tabledesc.Mutable, colDesc catalog.Column,
+) error {
+	var seqDescsToUpdate []*tabledesc.Mutable
+	mergeNewSeqDescs := func(toAdd []*tabledesc.Mutable) {
+		seqDescsToUpdate = append(seqDescsToUpdate, toAdd...)
+		sort.Slice(seqDescsToUpdate,
+			func(i, j int) bool {
+				return seqDescsToUpdate[i].GetID() < seqDescsToUpdate[j].GetID()
+			})
+		truncated := make([]*tabledesc.Mutable, 0, len(seqDescsToUpdate))
+		for i, v := range seqDescsToUpdate {
+			if i == 0 || seqDescsToUpdate[i-1].GetID() != v.GetID() {
+				truncated = append(truncated, v)
+			}
+		}
+		seqDescsToUpdate = truncated
+	}
+	for _, colExpr := range []struct {
+		name   string
+		exists func() bool
+		get    func() string
+	}{
+		{
+			name:   "DEFAULT",
+			exists: colDesc.HasDefault,
+			get:    colDesc.GetDefaultExpr,
+		},
+		{
+			name:   "ON UPDATE",
+			exists: colDesc.HasOnUpdate,
+			get:    colDesc.GetOnUpdateExpr,
+		},
+	} {
+		if !colExpr.exists() {
+			continue
+		}
+		untypedExpr, err := parser.ParseExpr(colExpr.get())
+		if err != nil {
+			panic(err)
+		}
+
+		typedExpr, _, err := sanitizeColumnExpression(
+			params,
+			untypedExpr,
+			colDesc,
+			"DEFAULT",
+		)
+		if err != nil {
+			return err
+		}
+
+		newSeqDescs, err := maybeAddSequenceDependencies(
+			params.ctx,
+			params.p.ExecCfg().Settings,
+			params.p,
+			tableDesc,
+			colDesc.ColumnDesc(),
+			typedExpr,
+			nil, /* backrefs */
+		)
+		if err != nil {
+			return err
+		}
+
+		mergeNewSeqDescs(newSeqDescs)
+	}
+
+	for _, changedSeqDesc := range seqDescsToUpdate {
+		if err := params.p.writeSchemaChange(
+			params.ctx, changedSeqDesc, descpb.InvalidMutationID,
+			fmt.Sprintf("updating dependent sequence %s(%d) for table %s(%d)",
+				changedSeqDesc.Name, changedSeqDesc.ID, tableDesc.Name, tableDesc.ID,
+			)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // injectTableStats implements the INJECT STATISTICS command, which deletes any

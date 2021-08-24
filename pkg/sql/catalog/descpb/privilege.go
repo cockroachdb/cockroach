@@ -92,8 +92,8 @@ func (p *PrivilegeDescriptor) FindOrCreateUser(user security.SQLUsername) *UserP
 	return &p.Users[idx]
 }
 
-// removeUser looks for a given user in the list and removes it if present.
-func (p *PrivilegeDescriptor) removeUser(user security.SQLUsername) {
+// RemoveUser looks for a given user in the list and removes it if present.
+func (p *PrivilegeDescriptor) RemoveUser(user security.SQLUsername) {
 	idx := p.findUserIndex(user)
 	if idx == -1 {
 		// Not found.
@@ -160,8 +160,6 @@ func NewDefaultPrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescrip
 }
 
 // Grant adds new privileges to this descriptor for a given list of users.
-// TODO(marc): if all privileges other than ALL are set, should we collapse
-// them into ALL?
 func (p *PrivilegeDescriptor) Grant(user security.SQLUsername, privList privilege.List) {
 	userPriv := p.FindOrCreateUser(user)
 	if privilege.ALL.IsSetIn(userPriv.Privileges) {
@@ -195,7 +193,7 @@ func (p *PrivilegeDescriptor) Revoke(
 		// Revoking 'ALL' privilege: remove user.
 		// TODO(marc): the grammar does not allow it, but we should
 		// check if other privileges are being specified and error out.
-		p.removeUser(user)
+		p.RemoveUser(user)
 		return
 	}
 
@@ -215,7 +213,7 @@ func (p *PrivilegeDescriptor) Revoke(
 	userPriv.Privileges &^= bits
 
 	if userPriv.Privileges == 0 {
-		p.removeUser(user)
+		p.RemoveUser(user)
 	}
 }
 
@@ -383,6 +381,28 @@ func (p PrivilegeDescriptor) AnyPrivilege(user security.SQLUsername) bool {
 		return false
 	}
 	return userPriv.Privileges != 0
+}
+
+// HasAllPrivileges returns whether the user has ALL privileges either through
+// ALL or having every privilege possible on the object.
+func (p PrivilegeDescriptor) HasAllPrivileges(
+	user security.SQLUsername, objectType privilege.ObjectType,
+) bool {
+	if p.CheckPrivilege(user, privilege.ALL) {
+		return true
+	}
+	// If ALL is not set, check if all other privileges would add up to all.
+	validPrivileges := privilege.GetValidPrivilegesForObject(objectType)
+	for _, priv := range validPrivileges {
+		if priv == privilege.ALL {
+			continue
+		}
+		if !p.CheckPrivilege(user, priv) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // SetOwner sets the owner of the privilege descriptor to the provided string.

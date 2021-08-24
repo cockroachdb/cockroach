@@ -436,14 +436,15 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	// payload tables created by john above. FileToTableSystem should have revoked
 	// these privileges.
 	//
-	// Only grantees on the table should be admin, root and john (5 privileges).
+	// Only grantees on the table should be admin, root and john
+	// (each user has ALL).
 	grantees, err := getTableGrantees(ctx, fileTableReadWriter.GetFQFileTableName(), conn)
 	require.NoError(t, err)
-	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
+	require.Equal(t, []string{"admin", "john", "root"}, grantees)
 
 	grantees, err = getTableGrantees(ctx, fileTableReadWriter.GetFQPayloadTableName(), conn)
 	require.NoError(t, err)
-	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
+	require.Equal(t, []string{"admin", "john", "root"}, grantees)
 }
 
 // TestDifferentRoleDisallowed tests that a user who does not own the file and
@@ -493,14 +494,15 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	// payload tables created by john above. FileToTableSystem should have
 	// revoked these privileges.
 	//
-	// Only grantees on the table should be admin, root and john (5 privileges).
+	// Only grantees on the table should be admin, root and john
+	// (each user has ALL).
 	grantees, err := getTableGrantees(ctx, fileTableReadWriter.GetFQFileTableName(), conn)
 	require.NoError(t, err)
-	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
+	require.Equal(t, []string{"admin", "john", "root"}, grantees)
 
 	grantees, err = getTableGrantees(ctx, fileTableReadWriter.GetFQPayloadTableName(), conn)
 	require.NoError(t, err)
-	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
+	require.Equal(t, []string{"admin", "john", "root"}, grantees)
 }
 
 // TestDatabaseScope tests that the FileToTableSystem executes all of its

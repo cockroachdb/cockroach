@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -141,7 +142,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	}
 
 	if n.dbDesc.GetDefaultPrivileges() == nil {
-		n.dbDesc.SetDefaultPrivilegeDescriptor(descpb.InitDefaultPrivilegeDescriptor())
+		n.dbDesc.SetDefaultPrivilegeDescriptor(catprivilege.MakeNewDefaultPrivilegeDescriptor())
 	}
 
 	defaultPrivs := n.dbDesc.GetMutableDefaultPrivilegeDescriptor()

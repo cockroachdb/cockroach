@@ -397,6 +397,11 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 				return err
 			}
 		}
+		if c.HasOnUpdate() {
+			if err := f(c.OnUpdateExpr); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	doIndex := func(i catalog.Index) error {

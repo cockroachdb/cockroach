@@ -632,7 +632,11 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 	// Start by adding non-computed columns that have not already been explicitly
 	// specified in the query. Do this before adding computed columns, since those
 	// may depend on non-computed columns.
-	mb.addSynthesizedDefaultCols(mb.insertColIDs, true /* includeOrdinary */)
+	mb.addSynthesizedDefaultCols(
+		mb.insertColIDs,
+		true,  /* includeOrdinary */
+		false, /* applyOnUpdate */
+	)
 
 	// Possibly round DECIMAL-related columns containing insertion values (whether
 	// synthesized or not).

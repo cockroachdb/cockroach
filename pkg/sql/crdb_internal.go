@@ -4924,8 +4924,8 @@ CREATE TABLE crdb_internal.default_privileges (
 							for _, priv := range privList {
 								role := tree.DNull
 								forAllRoles := tree.DBoolTrue
-								if !defaultPrivilegesForRole.GetForAllRoles() {
-									role = tree.NewDString(defaultPrivilegesForRole.GetUserProto().Decode().Normalized())
+								if defaultPrivilegesForRole.IsExplicitRole() {
+									role = tree.NewDString(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized())
 									forAllRoles = tree.DBoolFalse
 								}
 								if err := addRow(

@@ -217,7 +217,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 		// Allow right side of SET to be DEFAULT.
 		if _, ok := expr.(tree.DefaultVal); ok {
-			expr = mb.parseDefaultOrComputedExpr(targetColID)
+			expr = mb.parseDefaultExpr(targetColID)
 		}
 
 		// Add new column to the projections scope.
@@ -306,7 +306,11 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// table. These are not visible to queries, and will always be updated to
 	// their default values. This is necessary because they may not yet have been
 	// set by the backfiller.
-	mb.addSynthesizedDefaultCols(mb.updateColIDs, false /* includeOrdinary */)
+	mb.addSynthesizedDefaultCols(
+		mb.updateColIDs,
+		false, /* includeOrdinary */
+		true,  /* applyOnUpdate */
+	)
 
 	// Possibly round DECIMAL-related columns containing update values. Do
 	// this before evaluating computed expressions, since those may depend on

@@ -2131,20 +2131,10 @@ func planProjectionOperators(
 		op, err = projectDatum(t)
 		return op, resultIdx, typs, err
 	case *tree.Tuple:
-		isConstTuple := true
-		for _, expr := range t.Exprs {
-			if _, isDatum := expr.(tree.Datum); !isDatum {
-				isConstTuple = false
-				break
-			}
-		}
+		tuple, isConstTuple := evalTupleIfConst(evalCtx, t)
 		if isConstTuple {
-			// Tuple expression is a constant, so we can evaluate it and
-			// project the resulting datum.
-			tuple, err := t.Eval(evalCtx)
-			if err != nil {
-				return nil, resultIdx, typs, err
-			}
+			// Tuple expression is a constant, so we can just project the
+			// resulting datum.
 			op, err = projectDatum(tuple)
 			return op, resultIdx, typs, err
 		}
@@ -2370,17 +2360,14 @@ func planProjectionExpr(
 		if err != nil {
 			return nil, resultIdx, typs, err
 		}
-		// Note that this check exists only for testing purposes. On the
-		// regular workloads, we expect that tree.Tuples have already been
-		// pre-evaluated. We also don't need fully-fledged planning as we have
-		// for tree.Tuple in planProjectionOperators because the tests only
-		// use constant tuples.
+
 		if tuple, ok := right.(*tree.Tuple); ok {
-			tupleDatum, err := tuple.Eval(evalCtx)
-			if err != nil {
-				return nil, resultIdx, typs, err
+			// If we have a tuple on the right, try to pre-evaluate it in case
+			// it consists only of constant expressions.
+			tupleDatum, ok := evalTupleIfConst(evalCtx, tuple)
+			if ok {
+				right = tupleDatum
 			}
-			right = tupleDatum
 		}
 
 		// We have a special case behavior for Is{Not}DistinctFrom before
@@ -2591,4 +2578,20 @@ func useDefaultCmpOpForIn(tuple *tree.DTuple) bool {
 		}
 	}
 	return false
+}
+
+// evalTupleIfConst checks whether t contains only constant (i.e. tree.Datum)
+// expressions and evaluates the tuple if so.
+func evalTupleIfConst(evalCtx *tree.EvalContext, t *tree.Tuple) (_ tree.Datum, ok bool) {
+	for _, expr := range t.Exprs {
+		if _, isDatum := expr.(tree.Datum); !isDatum {
+			// Not a constant expression.
+			return nil, false
+		}
+	}
+	tuple, err := t.Eval(evalCtx)
+	if err != nil {
+		return nil, false
+	}
+	return tuple, true
 }
