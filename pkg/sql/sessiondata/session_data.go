@@ -127,9 +127,14 @@ func (s *SessionData) GetDateStyle() pgdate.DateStyle {
 }
 
 // SessionUser retrieves the session_user.
-// This currently returns current_user, as session_user is not implemented.
+// The SessionUser is the username that originally logged into the session.
+// If a user applies SET ROLE, the SessionUser remains the same whilst the
+// CurrentUser() changes.
 func (s *SessionData) SessionUser() security.SQLUsername {
-	return s.User()
+	if s.SessionUserProto == "" {
+		return s.User()
+	}
+	return s.SessionUserProto.Decode()
 }
 
 // LocalUnmigratableSessionData contains session parameters that cannot

@@ -4,13 +4,18 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "jobspb",
-    srcs = ["wrap.go"],
+    srcs = [
+        "json_encoding.go",
+        "wrap.go",
+    ],
     embed = [":jobspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/protoreflect",
+        "//pkg/util/json",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
     ],

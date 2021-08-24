@@ -94,13 +94,15 @@ func (b *Batch) MustPErr() *roachpb.Error {
 	return b.pErr
 }
 
-func (b *Batch) prepare() error {
-	for _, r := range b.Results {
-		if r.Err != nil {
-			return r.Err
-		}
+// validate that there were no errors while marshaling keys and values.
+func (b *Batch) validate() error {
+	err := b.resultErr()
+	if err != nil {
+		// Set pErr just as sendAndFill does, so that higher layers can find it
+		// using MustPErr.
+		b.pErr = roachpb.NewError(err)
 	}
-	return nil
+	return err
 }
 
 func (b *Batch) initResult(calls, numRows int, raw bool, err error) {

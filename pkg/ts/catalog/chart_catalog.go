@@ -1812,6 +1812,14 @@ var charts = []sectionDescription{
 				Title:   "Time took to complete internal SQL Stats flush",
 				Metrics: []string{"sql.stats.flush.duration.internal"},
 			},
+			{
+				Title:   "Number of stale statement/transaction roles removed by cleanup job",
+				Metrics: []string{"sql.stats.cleanup.rows_removed"},
+			},
+			{
+				Title:   "Number of internal stale statement/transaction roles removed by cleanup job",
+				Metrics: []string{"sql.stats.cleanup.rows_removed.internal"},
+			},
 		},
 	},
 	{
@@ -2526,6 +2534,7 @@ var charts = []sectionDescription{
 					"jobs.stream_ingestion.currently_running",
 					"jobs.migration.currently_running",
 					"jobs.auto_span_config_reconciliation.currently_running",
+					"jobs.sql_stats_compaction.currently_running",
 				},
 			},
 			{
@@ -2679,6 +2688,17 @@ var charts = []sectionDescription{
 					"jobs.auto_span_config_reconciliation.resume_completed",
 					"jobs.auto_span_config_reconciliation.resume_failed",
 					"jobs.auto_span_config_reconciliation.resume_retry_error"},
+			},
+			{
+				Title: "SQL Stats Compaction",
+				Metrics: []string{
+					"jobs.sql_stats_compaction.fail_or_cancel_completed",
+					"jobs.sql_stats_compaction.fail_or_cancel_failed",
+					"jobs.sql_stats_compaction.fail_or_cancel_retry_error",
+					"jobs.sql_stats_compaction.resume_completed",
+					"jobs.sql_stats_compaction.resume_failed",
+					"jobs.sql_stats_compaction.resume_retry_error",
+				},
 			},
 		},
 	},

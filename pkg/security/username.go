@@ -99,6 +99,9 @@ const PublicRole = "public"
 // It is primarily used in SET ROLE, where "none" symbolizes a reset.
 const NoneRole = "none"
 
+// IsNoneRole is true iff the username designates the none role.
+func (s SQLUsername) IsNoneRole() bool { return s.u == NoneRole }
+
 // PublicRoleName is the SQLUsername for PublicRole.
 func PublicRoleName() SQLUsername { return SQLUsername{PublicRole} }
 
