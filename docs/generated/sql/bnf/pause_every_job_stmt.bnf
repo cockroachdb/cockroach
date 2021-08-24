@@ -1,0 +1,2 @@
+pause_every_job_stmt ::=
+	'PAUSE' 'EVERY' opt_job_type 'JOB'
