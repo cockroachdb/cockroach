@@ -82,8 +82,7 @@ func TestInterleavedTableMigration(t *testing.T) {
 	})
 	// Check that creation of interleaved tables is fully disabled.
 	tdb.Exec(t, "CREATE TABLE customers2 (id INT PRIMARY KEY, name STRING(50));")
-	tdb.ExpectErr(t,
-		"pq: creation of new interleaved tables and interleaved indexes is no longer supported. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations",
+	tdb.Exec(t,
 		`CREATE TABLE orders2 (
    customer INT,
    id INT,
@@ -91,7 +90,28 @@ func TestInterleavedTableMigration(t *testing.T) {
    PRIMARY KEY (customer, id),
    CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers2
  ) INTERLEAVE IN PARENT customers2 (customer);`)
+	// Check that no interleaved tables were created and the syntax is now a no-op.
+	tdb.CheckQueryResults(t,
+		"SELECT EXISTS(SELECT * FROM crdb_internal.interleaved);",
+		[][]string{
+			{"false"},
+		})
 	// Migration to next phase should succeed.
 	tdb.ExecSucceedsSoon(t, "SET CLUSTER SETTING version = $1",
 		clusterversion.ByKey(clusterversion.EnsureNoInterleavedTables).String())
+	// Check that creation of interleaved tables is a no-op.
+	tdb.Exec(t,
+		`CREATE TABLE orders3 (
+   customer INT,
+   id INT,
+   total DECIMAL(20, 5),
+   PRIMARY KEY (customer, id),
+   CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers2
+ ) INTERLEAVE IN PARENT customers2 (customer);`)
+	// Check that no interleaved tables were created and the syntax is now a no-op.
+	tdb.CheckQueryResults(t,
+		"SELECT EXISTS(SELECT * FROM crdb_internal.interleaved);",
+		[][]string{
+			{"false"},
+		})
 }
