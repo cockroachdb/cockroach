@@ -348,12 +348,7 @@ func mustWrapValuesNode(planCtx *PlanningCtx, specifiedInQuery bool) bool {
 	// serialization of the values, and also to avoid situations in which
 	// expressions within the valuesNode were not distributable in the first
 	// place.
-	//
-	// Finally, if noEvalSubqueries is set, it means that nothing has replaced
-	// the subqueries with their results yet, which again means that we can't
-	// plan a DistSQL values node, which requires that all expressions be
-	// evaluatable.
-	if !specifiedInQuery || planCtx.isLocal || planCtx.noEvalSubqueries {
+	if !specifiedInQuery || planCtx.isLocal {
 		return true
 	}
 	return false
@@ -643,10 +638,6 @@ type PlanningCtx struct {
 	// mode.
 	planDepth int
 
-	// noEvalSubqueries indicates that the plan expects any subqueries to not
-	// be replaced by evaluation. Should only be set by EXPLAIN.
-	noEvalSubqueries bool
-
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
 	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error
@@ -684,14 +675,6 @@ func (p *PlanningCtx) EvalContext() *tree.EvalContext {
 // has no remote flows.
 func (p *PlanningCtx) IsLocal() bool {
 	return p.isLocal
-}
-
-// EvaluateSubqueries returns true if this plan requires subqueries be fully
-// executed before trying to marshal. This is normally true except for in the
-// case of EXPLAIN queries, which ultimately want to describe the subquery that
-// will run, without actually running it.
-func (p *PlanningCtx) EvaluateSubqueries() bool {
-	return !p.noEvalSubqueries
 }
 
 // getDefaultSaveFlowsFunc returns the default function used to save physical
