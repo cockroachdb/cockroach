@@ -130,6 +130,9 @@ type TestServerArgs struct {
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
 
+	// If set, the experimental span configs infrastructure will be enabled.
+	EnableExperimentalSpanConfigs bool
+
 	// If set, a TraceDir is initialized at the provided path.
 	TraceDir string
 

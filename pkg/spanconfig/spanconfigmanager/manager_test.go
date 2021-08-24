@@ -19,11 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -74,6 +76,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		spanconfigstore.New(roachpb.TestingDefaultSpanConfig()),
 		&spanconfig.TestingKnobs{
 			ManagerCreatedJobInterceptor: func(jobI interface{}) {
 				job := jobI.(*jobs.Job)
@@ -161,6 +164,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		spanconfigstore.New(roachpb.TestingDefaultSpanConfig()),
 		&spanconfig.TestingKnobs{
 			ManagerAfterCheckedReconciliationJobExistsInterceptor: func(exists bool) {
 				require.False(t, exists)
