@@ -764,7 +764,7 @@ func (w *tpcc) Ops(
 		i := i
 		g.Go(func() error {
 			var err error
-			dbs[i], err = workload.NewMultiConnPool(ctx, cfg, w.connFlags, urls[i])
+			dbs[i], err = workload.NewMultiConnPool(ctx, cfg, urls[i])
 			return err
 		})
 	}

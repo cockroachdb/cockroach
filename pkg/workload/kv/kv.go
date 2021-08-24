@@ -259,7 +259,7 @@ func (w *kv) Ops(
 	cfg := workload.MultiConnPoolCfg{
 		MaxTotalConnections: w.connFlags.Concurrency + 1,
 	}
-	mcp, err := workload.NewMultiConnPool(ctx, cfg, w.connFlags, urls...)
+	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -353,7 +353,7 @@ func (w *kv) Ops(
 			op.sfuStmt = op.sr.Define(sfuStmtStr)
 		}
 		op.spanStmt = op.sr.Define(spanStmtStr)
-		if err := op.sr.Init(ctx, mcp); err != nil {
+		if err := op.sr.Init(ctx, "kv", mcp, w.connFlags); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		op.mcp = mcp

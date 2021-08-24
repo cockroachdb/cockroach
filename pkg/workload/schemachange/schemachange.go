@@ -154,7 +154,7 @@ func (s *schemaChange) Ops(
 	cfg := workload.MultiConnPoolCfg{
 		MaxTotalConnections: s.concurrency * 2, //TODO(spaskob): pick a sensible default.
 	}
-	pool, err := workload.NewMultiConnPool(ctx, cfg, nil, urls...)
+	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
