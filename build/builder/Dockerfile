@@ -10,7 +10,7 @@ FROM ubuntu:focal-20210119
 # autopoint - sed build
 # bison - CRDB build system
 # clang-10 - compiler
-# cmake - c-deps: libroach, protobuf, et al.
+# cmake - c-deps: geos, protobuf, et al.
 # gcc/g++ - host builds
 # gettext - sed build
 # gnupg2 - for apt
