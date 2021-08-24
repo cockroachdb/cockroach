@@ -276,6 +276,11 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
     voter_constraints = '{+region=test: 1}',
     lease_preferences = '[]'
 
+# Different error based on if the test is being run in the system tenant or
+# a secondary tenant.
+statement error pq: (.* matches no existing nodes within the cluster)|(region "shouldFail" not found)
+ALTER TABLE a CONFIGURE ZONE USING voter_constraints = '{"+region=shouldFail": 1}'
+
 # Check entities for which we can set zone configs.
 subtest test_entity_validity
 
