@@ -920,6 +920,14 @@ func (n *Node) batchInternal(
 	return br, nil
 }
 
+func isSingleHeartbeatTxnRequest(b *roachpb.BatchRequest) bool {
+	if len(b.Requests) != 1 {
+		return false
+	}
+	_, ok := b.Requests[0].GetInner().(*roachpb.HeartbeatTxnRequest)
+	return ok
+}
+
 // Batch implements the roachpb.InternalServer interface.
 func (n *Node) Batch(
 	ctx context.Context, args *roachpb.BatchRequest,
@@ -961,7 +969,13 @@ func (n *Node) Batch(
 			BypassAdmission: bypassAdmission,
 		}
 		var err error
-		if args.IsWrite() {
+		// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
+		// it would bypass admission, it would consume a slot. When writes are
+		// throttled, we start generating more txn heartbeats, which then consume
+		// all the slots, causing no useful work to happen. We do want useful work
+		// to continue even when throttling since there are often significant
+		// number of tokens available.
+		if args.IsWrite() && !isSingleHeartbeatTxnRequest(args) {
 			storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(args.Replica.StoreID))
 		}
 		admissionEnabled := true
