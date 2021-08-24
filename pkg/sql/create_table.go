@@ -337,6 +337,19 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
+	for _, col := range desc.GetColumns() {
+		if col.HasOnUpdate() {
+			if !params.ExecCfg().Settings.Version.IsActive(
+				params.ctx,
+				clusterversion.OnUpdateExpressions,
+			) {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"version %v must be finalized to use ON UPDATE",
+					clusterversion.ByKey(clusterversion.OnUpdateExpressions))
+			}
+		}
+	}
+
 	// Descriptor written to store here.
 	if err := params.p.createDescriptorWithID(
 		params.ctx,
