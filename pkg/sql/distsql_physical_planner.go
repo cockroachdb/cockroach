@@ -339,6 +339,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *renderNode:
 	case *scanNode:
 	case *sortNode:
+	case *topKNode:
 	case *unaryNode:
 	case *unionNode:
 	case *valuesNode:
@@ -377,23 +378,23 @@ func mustWrapValuesNode(planCtx *PlanningCtx, specifiedInQuery bool) bool {
 // The error doesn't indicate complete failure - it's instead the reason that
 // this plan couldn't be distributed.
 // TODO(radu): add tests for this.
-func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecommendation, error) {
+func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 	switch n := node.(type) {
 	// Keep these cases alphabetized, please!
 	case *distinctNode:
-		return checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */)
+		return checkSupportForPlanNode(n.plan)
 
 	case *exportNode:
-		return checkSupportForPlanNode(n.source, false /* outputNodeHasLimit */)
+		return checkSupportForPlanNode(n.source)
 
 	case *filterNode:
 		if err := checkExpr(n.filter); err != nil {
 			return cannotDistribute, err
 		}
-		return checkSupportForPlanNode(n.source.plan, false /* outputNodeHasLimit */)
+		return checkSupportForPlanNode(n.source.plan)
 
 	case *groupNode:
-		rec, err := checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */)
+		rec, err := checkSupportForPlanNode(n.plan)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -403,10 +404,10 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 	case *indexJoinNode:
 		// n.table doesn't have meaningful spans, but we need to check support (e.g.
 		// for any filtering expression).
-		if _, err := checkSupportForPlanNode(n.table, false /* outputNodeHasLimit */); err != nil {
+		if _, err := checkSupportForPlanNode(n.table); err != nil {
 			return cannotDistribute, err
 		}
-		return checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */)
+		return checkSupportForPlanNode(n.input)
 
 	case *invertedFilterNode:
 		return checkSupportForInvertedFilterNode(n)
@@ -415,7 +416,7 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 		if err := checkExpr(n.onExpr); err != nil {
 			return cannotDistribute, err
 		}
-		rec, err := checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */)
+		rec, err := checkSupportForPlanNode(n.input)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -425,11 +426,11 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 		if err := checkExpr(n.pred.onCond); err != nil {
 			return cannotDistribute, err
 		}
-		recLeft, err := checkSupportForPlanNode(n.left.plan, false /* outputNodeHasLimit */)
+		recLeft, err := checkSupportForPlanNode(n.left.plan)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(n.right.plan, false /* outputNodeHasLimit */)
+		recRight, err := checkSupportForPlanNode(n.right.plan)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -446,7 +447,7 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 		// Note that we don't need to check whether we support distribution of
 		// n.countExpr or n.offsetExpr because those expressions are evaluated
 		// locally, during the physical planning.
-		return checkSupportForPlanNode(n.plan, true /* outputNodeHasLimit */)
+		return checkSupportForPlanNode(n.plan)
 
 	case *lookupJoinNode:
 		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -466,7 +467,7 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
-		rec, err := checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */)
+		rec, err := checkSupportForPlanNode(n.input)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -478,7 +479,7 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 		return cannotDistribute, nil
 
 	case *projectSetNode:
-		return checkSupportForPlanNode(n.source, false /* outputNodeHasLimit */)
+		return checkSupportForPlanNode(n.source)
 
 	case *renderNode:
 		for _, e := range n.render {
@@ -486,7 +487,7 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 				return cannotDistribute, err
 			}
 		}
-		return checkSupportForPlanNode(n.source.plan, outputNodeHasLimit)
+		return checkSupportForPlanNode(n.source.plan)
 
 	case *scanNode:
 		if n.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -515,28 +516,29 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 		}
 
 	case *sortNode:
-		rec, err := checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */)
+		rec, err := checkSupportForPlanNode(n.plan)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		if outputNodeHasLimit {
-			// If we have a top K sort, we can distribute the query.
-			rec = rec.compose(canDistribute)
-		} else {
-			// If we have to sort, distribute the query.
-			rec = rec.compose(shouldDistribute)
+		return rec.compose(shouldDistribute), nil
+
+	case *topKNode:
+		rec, err := checkSupportForPlanNode(n.plan)
+		if err != nil {
+			return cannotDistribute, err
 		}
-		return rec, nil
+		// If we have a top K sort, we can distribute the query.
+		return rec.compose(canDistribute), nil
 
 	case *unaryNode:
 		return canDistribute, nil
 
 	case *unionNode:
-		recLeft, err := checkSupportForPlanNode(n.left, false /* outputNodeHasLimit */)
+		recLeft, err := checkSupportForPlanNode(n.left)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(n.right, false /* outputNodeHasLimit */)
+		recRight, err := checkSupportForPlanNode(n.right)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -560,7 +562,7 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 		return canDistribute, nil
 
 	case *windowNode:
-		return checkSupportForPlanNode(n.plan, false /* outputNodeHasLimit */)
+		return checkSupportForPlanNode(n.plan)
 
 	case *zeroNode:
 		return canDistribute, nil
@@ -583,7 +585,7 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 }
 
 func checkSupportForInvertedFilterNode(n *invertedFilterNode) (distRecommendation, error) {
-	rec, err := checkSupportForPlanNode(n.input, false /* outputNodeHasLimit */)
+	rec, err := checkSupportForPlanNode(n.input)
 	if err != nil {
 		return cannotDistribute, err
 	}
@@ -1598,7 +1600,7 @@ func (dsp *DistSQLPlanner) createPlanForRender(
 // accordingly. When alreadyOrderedPrefix is non-zero, the input is already
 // ordered on the prefix ordering[:alreadyOrderedPrefix].
 func (dsp *DistSQLPlanner) addSorters(
-	p *PhysicalPlan, ordering colinfo.ColumnOrdering, alreadyOrderedPrefix int,
+	p *PhysicalPlan, ordering colinfo.ColumnOrdering, alreadyOrderedPrefix int, limit int64,
 ) {
 	// Sorting is needed; we add a stage of sorting processors.
 	outputOrdering := execinfrapb.ConvertToMappedSpecOrdering(ordering, p.PlanToStreamColMap)
@@ -1608,12 +1610,27 @@ func (dsp *DistSQLPlanner) addSorters(
 			Sorter: &execinfrapb.SorterSpec{
 				OutputOrdering:   outputOrdering,
 				OrderingMatchLen: uint32(alreadyOrderedPrefix),
+				Limit:            limit,
 			},
 		},
 		execinfrapb.PostProcessSpec{},
 		p.GetResultTypes(),
 		outputOrdering,
 	)
+
+	// Add a node to limit the number of output rows to the top K if a limit is
+	// required and there are multiple routers.
+	if limit > 0 && len(p.ResultRouters) > 1 {
+		post := execinfrapb.PostProcessSpec{
+			Limit: uint64(limit),
+		}
+		p.AddSingleGroupStage(
+			p.GatewayNodeID,
+			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+			post,
+			p.GetResultTypes(),
+		)
+	}
 }
 
 // aggregatorPlanningInfo is a utility struct that contains the information
@@ -2958,7 +2975,18 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			return nil, err
 		}
 
-		dsp.addSorters(plan, n.ordering, n.alreadyOrderedPrefix)
+		dsp.addSorters(plan, n.ordering, n.alreadyOrderedPrefix, 0 /* limit */)
+
+	case *topKNode:
+		plan, err = dsp.createPhysPlanForPlanNode(planCtx, n.plan)
+		if err != nil {
+			return nil, err
+		}
+
+		if n.k <= 0 {
+			return nil, errors.New("negative or zero value for LIMIT")
+		}
+		dsp.addSorters(plan, n.ordering, 0 /* alreadyOrderedPrefix */, n.k)
 
 	case *unaryNode:
 		plan, err = dsp.createPlanForUnary(planCtx, n)

@@ -1795,26 +1795,24 @@ EXPLAIN SELECT e.z, s.z, n FROM e, s, generate_series(0, s.z, 1000) as n WHERE e
 distribution: local
 vectorized: true
 ·
-• limit
-│ count: 10
+• top-k
+│ order: +z
+│ k: 10
 │
-└── • sort
-    │ order: +z
+└── • project set
     │
-    └── • project set
+    └── • hash join
+        │ equality: (y) = (y)
         │
-        └── • hash join
-            │ equality: (y) = (y)
-            │
-            ├── • scan
-            │     missing stats
-            │     table: e@primary
-            │     spans: FULL SCAN
-            │
-            └── • scan
-                  missing stats
-                  table: s@primary
-                  spans: FULL SCAN
+        ├── • scan
+        │     missing stats
+        │     table: e@primary
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              missing stats
+              table: s@primary
+              spans: FULL SCAN
 
 # Check that we have a sane row count estimate when there are a lot of null
 # values.

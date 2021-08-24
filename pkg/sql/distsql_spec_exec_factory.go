@@ -625,7 +625,7 @@ func (e *distSQLSpecExecFactory) ConstructSort(
 	input exec.Node, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
-	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix)
+	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, 0 /* limit */)
 	// Since addition of sorters doesn't change any properties of the physical
 	// plan, we don't need to update any of those.
 	return plan, nil
@@ -715,6 +715,20 @@ func (e *distSQLSpecExecFactory) ConstructLimit(
 	// Since addition of limit and/or offset doesn't change any properties of
 	// the physical plan, we don't need to update any of those (like
 	// PlanToStreamColMap, etc).
+	return plan, nil
+}
+
+func (e *distSQLSpecExecFactory) ConstructTopK(
+	input exec.Node, k int64, ordering exec.OutputOrdering,
+) (exec.Node, error) {
+	physPlan, plan := getPhysPlan(input)
+	if k <= 0 {
+		return nil, errors.New("negative or zero value for LIMIT")
+	}
+	// No already ordered prefix.
+	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), 0 /* alreadyOrderedPrefix */, k)
+	// Since addition of topk doesn't change any properties of
+	// the physical plan, we don't need to update any of those.
 	return plan, nil
 }
 
