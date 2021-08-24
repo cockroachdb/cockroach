@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -31,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -53,70 +51,91 @@ func isWebhookSink(u *url.URL) bool {
 	}
 }
 
+type webhookSink struct {
+	// Webhook configuration.
+	parallelism int
+	retryCfg    retry.Options
+	batchCfg    batchConfig
+	ts          timeutil.TimeSource
+
+	// Webhook destination.
+	url        sinkURL
+	authHeader string
+	client     *httputil.Client
+
+	// messages are written onto batch channel
+	// which batches matches based on batching configuration.
+	batchChan chan webhookMessage
+
+	// flushDone channel signaled when flushing completes.
+	flushDone chan struct{}
+
+	// errChan is written to indicate an error while sending message.
+	errChan chan error
+
+	// parallelism workers are created and controlled by the workerGroup, running with workerCtx.
+	// each worker gets its own events channel.
+	workerCtx   context.Context
+	workerGroup ctxgroup.Group
+	exitWorkers func() // Signaled to shut down all workers.
+	eventsChans []chan []messagePayload
+}
+
 type webhookSinkPayload struct {
 	Payload []json.RawMessage `json:"payload"`
 	Length  int               `json:"length"`
 }
 
-func encodePayloadWebhook(values []webhookMessage) ([]byte, error) {
-	payload := make([]json.RawMessage, len(values))
-	for i, value := range values {
-		payload[i] = value.m
+func encodePayloadWebhook(messages []messagePayload) ([]byte, kvevent.Alloc, error) {
+	var alloc kvevent.Alloc
+	payload := make([]json.RawMessage, len(messages))
+	for i, m := range messages {
+		alloc.Merge(&m.alloc)
+		payload[i] = m.val
 	}
+
 	body := &webhookSinkPayload{
 		Payload: payload,
 		Length:  len(payload),
 	}
 	j, err := json.Marshal(body)
 	if err != nil {
-		return nil, err
+		return nil, alloc, err
 	}
-	return j, err
+	return j, alloc, err
 }
 
+type messagePayload struct {
+	// Payload message fields.
+	key   []byte
+	val   []byte
+	alloc kvevent.Alloc
+}
+
+// webhookMessage contains either messagePayload or a flush request.
 type webhookMessage struct {
-	// include key to send to worker
-	k []byte
-	m []byte
-	a kvevent.Alloc
+	flushDone *chan struct{}
+	payload   messagePayload
 }
 
 type batch struct {
-	buffer                      []webhookMessage
-	bufferBytes, bufferMsgCount int
+	buffer      []messagePayload
+	bufferBytes int
 }
 
-func (b *batch) addToBuffer(payload webhookMessage) {
-	b.bufferMsgCount++
-	b.bufferBytes += len(payload.m)
-	b.buffer = append(b.buffer, payload)
+func (b *batch) addToBuffer(m messagePayload) {
+	b.bufferBytes += len(m.val)
+	b.buffer = append(b.buffer, m)
 }
 
 func (b *batch) reset() {
 	b.buffer = b.buffer[:0]
-	b.bufferMsgCount = 0
 	b.bufferBytes = 0
 }
 
 type batchConfig struct {
 	Bytes, Messages int          `json:",omitempty"`
 	Frequency       jsonDuration `json:",omitempty"`
-}
-
-type webhookSink struct {
-	workerCtx   context.Context
-	url         sinkURL
-	authHeader  string
-	parallelism int
-	client      *httputil.Client
-	workerGroup ctxgroup.Group
-	exitWorkers func()
-	eventsChans []chan []webhookMessage
-	inflight    *inflightTracker
-	retryCfg    retry.Options
-	batchCfg    batchConfig
-	ts          timeutil.TimeSource
-	batchChan   chan webhookMessage
 }
 
 // wrapper structs to unmarshal json, retry.Options will be the actual config
@@ -237,6 +256,7 @@ func makeWebhookSink(
 		return nil, errors.Wrapf(err, "error processing option %s", changefeedbase.OptWebhookSinkConfig)
 	}
 
+	// TODO(yevgeniy): Establish HTTP connection in Dial().
 	sink.client, err = makeWebhookClient(u, connTimeout)
 	if err != nil {
 		return nil, err
@@ -253,7 +273,6 @@ func makeWebhookSink(
 	sinkURLParsed.RawQuery = params.Encode()
 	sink.url = sinkURL{URL: sinkURLParsed}
 
-	sink.inflight = makeInflightTracker()
 	return sink, nil
 }
 
@@ -320,17 +339,29 @@ func defaultWorkerCount() int {
 	return system.NumCPU()
 }
 
+func (s *webhookSink) Dial() error {
+	s.setupWorkers()
+	return nil
+}
+
 func (s *webhookSink) setupWorkers() {
 	// setup events channels to send to workers and the worker group
-	s.eventsChans = make([]chan []webhookMessage, s.parallelism)
+	s.eventsChans = make([]chan []messagePayload, s.parallelism)
 	s.workerGroup = ctxgroup.WithContext(s.workerCtx)
 	s.batchChan = make(chan webhookMessage)
+
+	// an error channel with buffer for the first error.
+	s.errChan = make(chan error, 1)
+
+	// flushDone notified when flush completes.
+	s.flushDone = make(chan struct{})
+
 	s.workerGroup.GoCtx(func(ctx context.Context) error {
 		s.batchWorker()
 		return nil
 	})
 	for i := 0; i < s.parallelism; i++ {
-		s.eventsChans[i] = make(chan []webhookMessage)
+		s.eventsChans[i] = make(chan []messagePayload)
 		j := i
 		s.workerGroup.GoCtx(func(ctx context.Context) error {
 			s.workerLoop(j)
@@ -348,7 +379,7 @@ func (s *webhookSink) shouldSendBatch(b batch) bool {
 	case s.batchCfg.Messages == 0 && s.batchCfg.Bytes == 0 && s.batchCfg.Frequency == 0:
 		return true
 	// messages threshold has been reached
-	case s.batchCfg.Messages > 0 && b.bufferMsgCount >= s.batchCfg.Messages:
+	case s.batchCfg.Messages > 0 && len(b.buffer) >= s.batchCfg.Messages:
 		return true
 	// bytes threshold has been reached
 	case s.batchCfg.Bytes > 0 && b.bufferBytes >= s.batchCfg.Bytes:
@@ -358,11 +389,11 @@ func (s *webhookSink) shouldSendBatch(b batch) bool {
 	}
 }
 
-func (s *webhookSink) splitAndSendBatch(batch []webhookMessage) error {
-	workerBatches := make([][]webhookMessage, s.parallelism)
+func (s *webhookSink) splitAndSendBatch(batch []messagePayload) error {
+	workerBatches := make([][]messagePayload, s.parallelism)
 	for _, msg := range batch {
 		// split batch into per-worker batches
-		i := s.workerIndex(msg.k)
+		i := s.workerIndex(msg.key)
 		workerBatches[i] = append(workerBatches[i], msg)
 	}
 	for i, workerBatch := range workerBatches {
@@ -378,22 +409,57 @@ func (s *webhookSink) splitAndSendBatch(batch []webhookMessage) error {
 	return nil
 }
 
+// flushWorkers sends flush request to each worker and waits for each one to acknowledge.
+func (s *webhookSink) flushWorkers(done chan struct{}) error {
+	for i := 0; i < len(s.eventsChans); i++ {
+		// Ability to write a nil message to events channel indicates that
+		// the worker has processed all other messages.
+		select {
+		case <-s.workerCtx.Done():
+			return s.workerCtx.Err()
+		case s.eventsChans[i] <- nil:
+		}
+	}
+
+	select {
+	case <-s.workerCtx.Done():
+		return s.workerCtx.Err()
+	case done <- struct{}{}:
+		return nil
+	}
+}
+
 // batchWorker ingests messages from EmitRow into a batch and splits them into
 // per-worker batches to be sent separately
 func (s *webhookSink) batchWorker() {
 	var batchTracker batch
 	batchTimer := s.ts.NewTimer()
 	defer batchTimer.Stop()
+
 	for {
 		select {
 		case <-s.workerCtx.Done():
 			return
 		case msg := <-s.batchChan:
-			batchTracker.addToBuffer(msg)
-			if s.shouldSendBatch(batchTracker) {
-				err := s.splitAndSendBatch(batchTracker.buffer)
-				s.inflight.maybeSetError(err)
+			flushRequested := msg.flushDone != nil
+
+			if !flushRequested {
+				batchTracker.addToBuffer(msg.payload)
+			}
+
+			if s.shouldSendBatch(batchTracker) || flushRequested {
+				if err := s.splitAndSendBatch(batchTracker.buffer); err != nil {
+					s.exitWorkersWithError(err)
+					return
+				}
 				batchTracker.reset()
+
+				if flushRequested {
+					if err := s.flushWorkers(*msg.flushDone); err != nil {
+						s.exitWorkersWithError(err)
+						return
+					}
+				}
 			} else {
 				if len(batchTracker.buffer) == 1 && time.Duration(s.batchCfg.Frequency) > 0 {
 					// only start timer when first message appears
@@ -408,8 +474,10 @@ func (s *webhookSink) batchWorker() {
 		case <-batchTimer.Ch():
 			batchTimer.MarkRead()
 			if len(batchTracker.buffer) > 0 {
-				err := s.splitAndSendBatch(batchTracker.buffer)
-				s.inflight.maybeSetError(err)
+				if err := s.splitAndSendBatch(batchTracker.buffer); err != nil {
+					s.exitWorkersWithError(err)
+					return
+				}
 				batchTracker.reset()
 			}
 		}
@@ -422,15 +490,22 @@ func (s *webhookSink) workerLoop(workerIndex int) {
 		case <-s.workerCtx.Done():
 			return
 		case msgs := <-s.eventsChans[workerIndex]:
-			encodedMsgs, err := encodePayloadWebhook(msgs)
-			if err == nil {
-				err = s.sendMessageWithRetries(s.workerCtx, encodedMsgs)
+			if msgs == nil {
+				// It's a flush request: if we read it, it means all outstanding
+				// requests for this worker have been completed.
+				continue
 			}
-			s.inflight.maybeSetError(err)
-			for _, m := range msgs {
-				// reduce inflight count by one and reduce memory counter
-				s.inflight.FinishRequest(s.workerCtx, m.a)
+
+			encodedMsgs, alloc, err := encodePayloadWebhook(msgs)
+			if err != nil {
+				s.exitWorkersWithError(err)
+				return
 			}
+			if err := s.sendMessageWithRetries(s.workerCtx, encodedMsgs); err != nil {
+				s.exitWorkersWithError(err)
+				return
+			}
+			alloc.Release(s.workerCtx)
 			// shut down all other workers immediately if error encountered
 			if err != nil {
 				s.exitWorkers()
@@ -440,18 +515,11 @@ func (s *webhookSink) workerLoop(workerIndex int) {
 	}
 }
 
-func (s *webhookSink) Dial() error {
-	s.setupWorkers()
-	return nil
-}
-
 func (s *webhookSink) sendMessageWithRetries(ctx context.Context, reqBody []byte) error {
 	requestFunc := func() error {
 		return s.sendMessage(ctx, reqBody)
 	}
-
-	err := retry.WithMaxAttempts(ctx, s.retryCfg, s.retryCfg.MaxRetries+1, requestFunc)
-	return err
+	return retry.WithMaxAttempts(ctx, s.retryCfg, s.retryCfg.MaxRetries+1, requestFunc)
 }
 
 func (s *webhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
@@ -490,103 +558,40 @@ func (s *webhookSink) workerIndex(key []byte) uint32 {
 	return crc32.ChecksumIEEE(key) % uint32(s.parallelism)
 }
 
-// inflightTracker wraps logic for counting number of inflight messages to
-// track when flushing sink, with error handling and memory monitoring
-// functionality. Implemented as a wrapper for WaitGroup and lock to block
-// additional messages while flushing.
-type inflightTracker struct {
-	inflightGroup sync.WaitGroup
-	errChan       chan error
-	// lock used here to allow flush to block any new messages being enqueued
-	// from EmitRow or EmitResolvedTimestamp
-	flushMu syncutil.Mutex
-}
-
-func makeInflightTracker() *inflightTracker {
-	inflight := &inflightTracker{
-		inflightGroup: sync.WaitGroup{},
-		errChan:       make(chan error, 1),
-	}
-	return inflight
-}
-
-// maybeSetError sets flushErr to be err if it has not already been set.
-func (i *inflightTracker) maybeSetError(err error) {
-	if err == nil {
-		return
-	}
+// exitWorkersWithError saves the first error message encountered by webhook workers,
+// and requests all workers to terminate.
+func (s *webhookSink) exitWorkersWithError(err error) {
 	// errChan has buffer size 1, first error will be saved to the buffer and
 	// subsequent errors will be ignored
 	select {
-	case i.errChan <- err:
+	case s.errChan <- err:
+		s.exitWorkers()
 	default:
 	}
 }
 
-// hasError checks if inflightTracker has an error on the buffer and returns
-// error if exists.
-func (i *inflightTracker) hasError() error {
-	var err error
+// sinkError checks to see if any errors occurred inside workers go routines.
+func (s *webhookSink) sinkError() error {
 	select {
-	case err = <-i.errChan:
+	case err := <-s.errChan:
+		return err
 	default:
+		return nil
 	}
-	return err
-}
-
-// StartRequest enqueues one inflight message to be flushed.
-func (i *inflightTracker) StartRequest() {
-	i.flushMu.Lock()
-	defer i.flushMu.Unlock()
-	i.inflightGroup.Add(1)
-}
-
-// FinishRequest tells the inflight tracker one message has been delivered.
-func (i *inflightTracker) FinishRequest(ctx context.Context, alloc kvevent.Alloc) {
-	alloc.Release(ctx)
-	i.inflightGroup.Done()
-}
-
-// Wait waits for all inflight messages to be delivered (inflight = 0) and
-// returns a possible error. New messages delivered via EmitRow and
-// EmitResolvedTimestamp will be blocked until this returns.
-func (i *inflightTracker) Wait(ctx context.Context) error {
-	i.flushMu.Lock()
-	defer i.flushMu.Unlock()
-	i.inflightGroup.Wait()
-	var err error
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err = <-i.errChan:
-	default:
-	}
-	return err
-}
-
-func (i *inflightTracker) Close(ctx context.Context) {
-	close(i.errChan)
 }
 
 func (s *webhookSink) EmitRow(
 	ctx context.Context, _ TopicDescriptor, key, value []byte, _ hlc.Timestamp, alloc kvevent.Alloc,
 ) error {
-
-	// check if error has been encountered and exit if needed
-	err := s.inflight.hasError()
-	if err != nil {
-		return err
-	}
-
-	s.inflight.StartRequest()
-
 	select {
 	// check the webhook sink context in case workers have been terminated
 	case <-s.workerCtx.Done():
 		return s.workerCtx.Err()
 	case <-ctx.Done():
 		return ctx.Err()
-	case s.batchChan <- webhookMessage{k: key, m: value, a: alloc}:
+	case err := <-s.errChan:
+		return err
+	case s.batchChan <- webhookMessage{payload: messagePayload{key: key, val: value, alloc: alloc}}:
 	}
 	return nil
 }
@@ -604,24 +609,41 @@ func (s *webhookSink) EmitResolvedTimestamp(
 	case <-s.workerCtx.Done():
 		return s.workerCtx.Err()
 	// non-blocking check for error, restart changefeed if encountered
-	case <-s.inflight.errChan:
+	case <-s.errChan:
 		return err
 	default:
 	}
 
-	s.inflight.StartRequest()
-
 	// do worker logic directly here instead (there's no point using workers for
 	// resolved timestamps since there are no keys and everything must be
 	// in order)
-	err = s.sendMessageWithRetries(ctx, payload)
-	s.inflight.maybeSetError(err)
-	s.inflight.FinishRequest(ctx, kvevent.Alloc{})
-	return err
+	if err := s.sendMessageWithRetries(ctx, payload); err != nil {
+		s.exitWorkersWithError(err)
+		return err
+	}
+
+	return nil
 }
 
 func (s *webhookSink) Flush(ctx context.Context) error {
-	return s.inflight.Wait(ctx)
+	// Send flush request.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-s.errChan:
+		return err
+	case s.batchChan <- webhookMessage{flushDone: &s.flushDone}:
+	}
+
+	// Wait for flush completion -- or an error.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-s.errChan:
+		return err
+	case <-s.flushDone:
+		return s.sinkError()
+	}
 }
 
 func (s *webhookSink) Close() error {
@@ -629,7 +651,7 @@ func (s *webhookSink) Close() error {
 	// ignore errors here since we're closing the sink anyway
 	_ = s.workerGroup.Wait()
 	close(s.batchChan)
-	s.inflight.Close(s.workerCtx)
+	close(s.errChan)
 	for _, eventsChan := range s.eventsChans {
 		close(eventsChan)
 	}

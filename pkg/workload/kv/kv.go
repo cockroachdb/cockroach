@@ -474,8 +474,8 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 }
 
 func (o *kvOp) tryHandleWriteErr(name string, start time.Time, err error) error {
-	// If the error not an instance of pgx.PgError, then it is unexpected.
-	pgErr := pgconn.PgError{}
+	// If the error is not an instance of pgconn.PgError, then it is unexpected.
+	pgErr := new(pgconn.PgError)
 	if !errors.As(err, &pgErr) {
 		return err
 	}

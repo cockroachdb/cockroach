@@ -121,9 +121,6 @@ func (t *TxnStatsIterator) Next() bool {
 
 // Cur returns the roachpb.CollectedTransactionStatistics at the current internal
 // counter.
-func (t *TxnStatsIterator) Cur() (
-	roachpb.TransactionFingerprintID,
-	*roachpb.CollectedTransactionStatistics,
-) {
+func (t *TxnStatsIterator) Cur() *roachpb.CollectedTransactionStatistics {
 	return t.curIter.Cur()
 }

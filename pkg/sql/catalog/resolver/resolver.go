@@ -52,7 +52,9 @@ type SchemaResolver interface {
 // ObjectNameExistingResolver is the helper interface to resolve table
 // names when the object is expected to exist already. The boolean passed
 // is used to specify if a MutableTableDescriptor is to be returned in the
-// result.
+// result. ResolvedObjectPrefix should always be populated by implementors
+// to allows us to generate errors at higher level layers, since it allows
+// us to know if the schema and database were found.
 type ObjectNameExistingResolver interface {
 	LookupObject(
 		ctx context.Context, flags tree.ObjectLookupFlags,
@@ -370,9 +372,21 @@ func ResolveExisting(
 		// schema name is for a virtual schema.
 		_, isVirtualSchema := catconstants.VirtualSchemaNames[u.Schema()]
 		if isVirtualSchema || curDb != "" {
-			if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, u.Schema(), u.Object()); found || err != nil {
+			if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, u.Schema(), u.Object()); found ||
+				err != nil || isVirtualSchema {
 				prefix.ExplicitDatabase = false
 				prefix.ExplicitSchema = true
+				if !found && err == nil && isVirtualSchema && prefix.Database == nil {
+					// If the database was not found during the lookup for a virtual schema
+					// we should return a database not found error. We will use the prefix
+					// information to confirm this, since its possible that someone might
+					// be selecting a non-existent table or type. While normally we generate
+					// errors above this layer, we have no way of flagging if the looked up object
+					// was virtual schema. The Required flag is never set above when doing
+					// the object look up, so no errors will be generated for missing objects
+					// or databases.
+					err = sqlerrors.NewUndefinedDatabaseError(curDb)
+				}
 				return found, prefix, result, err
 			}
 		}

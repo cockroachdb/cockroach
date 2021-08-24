@@ -79,6 +79,15 @@ func getSink(
 		return nil, err
 	}
 
+	// check that options are compatible with the given sink
+	validateOptionsAndMakeSink := func(sinkSpecificOpts map[string]struct{}, makeSink func() (Sink, error)) (Sink, error) {
+		err := validateSinkOptions(feedCfg.Opts, sinkSpecificOpts)
+		if err != nil {
+			return nil, err
+		}
+		return makeSink()
+	}
+
 	newSink := func() (Sink, error) {
 		if feedCfg.SinkURI == "" {
 			return &bufferSink{}, nil
@@ -88,16 +97,24 @@ func getSink(
 		case u.Scheme == changefeedbase.SinkSchemeNull:
 			return makeNullSink(sinkURL{URL: u})
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
-			return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts)
+			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
+				return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts)
+			})
 		case isWebhookSink(u):
-			return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts, defaultWorkerCount(), timeutil.DefaultTimeSource{})
+			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+				return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts, defaultWorkerCount(), timeutil.DefaultTimeSource{})
+			})
 		case isCloudStorageSink(u):
-			return makeCloudStorageSink(
-				ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,
-				feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user,
-			)
+			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
+				return makeCloudStorageSink(
+					ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,
+					feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user,
+				)
+			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
-			return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets)
+			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
+				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets)
+			})
 		case u.Scheme == changefeedbase.SinkSchemeHTTP || u.Scheme == changefeedbase.SinkSchemeHTTPS:
 			return nil, errors.Errorf(`unsupported sink: %s. HTTP endpoints can be used with %s and %s`,
 				u.Scheme, changefeedbase.SinkSchemeWebhookHTTPS, changefeedbase.SinkSchemeCloudStorageHTTPS)
@@ -122,6 +139,21 @@ func getSink(
 	}
 
 	return sink, nil
+}
+
+func validateSinkOptions(opts map[string]string, sinkSpecificOpts map[string]struct{}) error {
+	for opt := range opts {
+		if _, ok := changefeedbase.CommonOptions[opt]; ok {
+			continue
+		}
+		if sinkSpecificOpts != nil {
+			if _, ok := sinkSpecificOpts[opt]; ok {
+				continue
+			}
+		}
+		return errors.Errorf("this sink is incompatible with option %s", opt)
+	}
+	return nil
 }
 
 // sinkURL is a helper struct which for "consuming" URL query

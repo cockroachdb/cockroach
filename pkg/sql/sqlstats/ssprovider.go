@@ -105,7 +105,7 @@ type StatementVisitor func(context.Context, *roachpb.CollectedStatementStatistic
 // TransactionVisitor is the callback that is invoked when caller iterate through
 // all transaction statistics using IterateTransactionStats(). If an error is
 // encountered when calling the visitor, the iteration is aborted.
-type TransactionVisitor func(context.Context, roachpb.TransactionFingerprintID, *roachpb.CollectedTransactionStatistics) error
+type TransactionVisitor func(context.Context, *roachpb.CollectedTransactionStatistics) error
 
 // AggregatedTransactionVisitor is the callback invoked when iterate through
 // transaction statistics collected at the application level using

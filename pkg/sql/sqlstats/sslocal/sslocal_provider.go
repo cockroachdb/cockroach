@@ -152,8 +152,8 @@ func (s *SQLStats) IterateTransactionStats(
 	iter := s.TxnStatsIterator(options)
 
 	for iter.Next() {
-		fingerprintID, stats := iter.Cur()
-		if err := visitor(ctx, fingerprintID, stats); err != nil {
+		stats := iter.Cur()
+		if err := visitor(ctx, stats); err != nil {
 			return err
 		}
 	}
