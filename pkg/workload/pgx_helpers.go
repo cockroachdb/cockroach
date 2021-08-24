@@ -61,6 +61,9 @@ func NewMultiConnPool(
 		connsPerPool := distributeMax(connsPerURL[i], maxConnsPerPool)
 		for _, numConns := range connsPerPool {
 			connCfg, err := pgxpool.ParseConfig(urls[i])
+			// Disable the automatic prepared statement cache. We've seen a lot of
+			// churn in this cache since workloads create many of different queries.
+			connCfg.ConnConfig.BuildStatementCache = nil
 			if err != nil {
 				return nil, err
 			}
