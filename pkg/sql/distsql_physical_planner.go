@@ -321,6 +321,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *renderNode:
 	case *scanNode:
 	case *sortNode:
+	case *topKNode:
 	case *unaryNode:
 	case *unionNode:
 	case *valuesNode:
@@ -513,6 +514,14 @@ func checkSupportForPlanNode(node planNode, outputNodeHasLimit bool) (distRecomm
 			// If we have to sort, distribute the query.
 			rec = rec.compose(shouldDistribute)
 		}
+		return rec, nil
+
+	case *topKNode:
+		rec, err := checkSupportForPlanNode(n.plan, true /* outputNodeHasLimit */)
+		if err != nil {
+			return cannotDistribute, err
+		}
+		rec = rec.compose(canDistribute)
 		return rec, nil
 
 	case *unaryNode:
@@ -1450,16 +1459,19 @@ func (dsp *DistSQLPlanner) createPlanForRender(
 // accordingly. When alreadyOrderedPrefix is non-zero, the input is already
 // ordered on the prefix ordering[:alreadyOrderedPrefix].
 func (dsp *DistSQLPlanner) addSorters(
-	p *PhysicalPlan, ordering colinfo.ColumnOrdering, alreadyOrderedPrefix int,
+	p *PhysicalPlan, ordering colinfo.ColumnOrdering, alreadyOrderedPrefix int, limit int64,
 ) {
 	// Sorting is needed; we add a stage of sorting processors.
 	outputOrdering := execinfrapb.ConvertToMappedSpecOrdering(ordering, p.PlanToStreamColMap)
+	isTopK := limit > 0;
 
 	p.AddNoGroupingStage(
 		execinfrapb.ProcessorCoreUnion{
 			Sorter: &execinfrapb.SorterSpec{
 				OutputOrdering:   outputOrdering,
 				OrderingMatchLen: uint32(alreadyOrderedPrefix),
+				IsTopk: isTopK,
+				Limit: limit,
 			},
 		},
 		execinfrapb.PostProcessSpec{},
@@ -2805,7 +2817,18 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			return nil, err
 		}
 
-		dsp.addSorters(plan, n.ordering, n.alreadyOrderedPrefix)
+		dsp.addSorters(plan, n.ordering, n.alreadyOrderedPrefix, 0 /* limit */)
+
+	case *topKNode:
+		plan, err = dsp.createPhysPlanForPlanNode(planCtx, n.plan)
+		if err != nil {
+			return nil, err
+		}
+
+		if n.k < 0 {
+			return nil, fmt.Errorf("negative value for LIMIT")
+		}
+		dsp.addSorters(plan, n.ordering, 0 /* alreadyOrderedPrefix */, n.k)
 
 	case *unaryNode:
 		plan, err = dsp.createPlanForUnary(planCtx, n)

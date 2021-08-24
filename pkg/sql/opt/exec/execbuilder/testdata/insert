@@ -326,10 +326,12 @@ vectorized: true
         │ estimated row count: 10 (missing stats)
         │ count: 10
         │
-        └── • sort
+        └── • top-k
             │ columns: (x, v)
             │ ordering: -v
+            │ estimated row count: 1,000 (missing stats)
             │ order: -v
+            │ count: 10
             │
             └── • scan
                   columns: (x, v)
@@ -402,8 +404,10 @@ vectorized: true
         │ estimated row count: 1
         │ count: 1
         │
-        └── • sort
+        └── • top-k
+            │ estimated row count: 2
             │ order: +column2
+            │ count: 1
             │
             └── • values
                   size: 2 columns, 2 rows
@@ -425,8 +429,10 @@ vectorized: true
         │ estimated row count: 1
         │ count: 1
         │
-        └── • sort
+        └── • top-k
+            │ estimated row count: 2
             │ order: +column2
+            │ count: 1
             │
             └── • values
                   size: 2 columns, 2 rows
@@ -448,8 +454,10 @@ vectorized: true
         │ estimated row count: 1
         │ count: 1
         │
-        └── • sort
+        └── • top-k
+            │ estimated row count: 2
             │ order: +column2
+            │ count: 1
             │
             └── • values
                   size: 2 columns, 2 rows
@@ -484,10 +492,12 @@ vectorized: true
             │ estimated row count: 10 (missing stats)
             │ count: 10
             │
-            └── • sort
+            └── • top-k
                 │ columns: (length, "?column?", column12)
                 │ ordering: +column12
+                │ estimated row count: 1,000 (missing stats)
                 │ order: +column12
+                │ count: 10
                 │
                 └── • render
                     │ columns: (length, "?column?", column12)

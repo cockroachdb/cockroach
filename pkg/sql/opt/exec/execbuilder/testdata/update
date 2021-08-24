@@ -257,8 +257,9 @@ vectorized: true
     └── • limit
         │ count: 10
         │
-        └── • sort
+        └── • top-k
             │ order: -v
+            │ count: 10
             │
             └── • scan
                   missing stats

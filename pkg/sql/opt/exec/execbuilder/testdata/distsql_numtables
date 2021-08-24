@@ -383,10 +383,12 @@ vectorized: true
 │ estimated row count: 10 (missing stats)
 │ count: 10
 │
-└── • sort
+└── • top-k
     │ columns: (res, y, str)
     │ ordering: +res
+    │ estimated row count: 1,000 (missing stats)
     │ order: +res
+    │ count: 10
     │
     └── • render
         │ columns: (res, y, str)
@@ -413,8 +415,9 @@ vectorized: true
 └── • limit
     │ count: 10
     │
-    └── • sort
+    └── • top-k
         │ order: +xsquared
+        │ count: 10
         │
         └── • scan
               missing stats
