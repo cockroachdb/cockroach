@@ -129,9 +129,17 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 
 		aggregatedTs := s.computeAggregatedTs()
 		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(scopedStats.ID))
+		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(dummyTransactionFingerprintID))
 
 		insertFn := func(ctx context.Context, txn *kv.Txn) (alreadyExists bool, err error) {
-			rowsAffected, err := s.insertStatementStats(ctx, txn, aggregatedTs, serializedFingerprintID, &scopedStats)
+			rowsAffected, err := s.insertStatementStats(
+				ctx,
+				txn,
+				aggregatedTs,
+				serializedFingerprintID,
+				serializedTransactionFingerprintID,
+				&scopedStats,
+			)
 
 			if err != nil {
 				return false /* alreadyExists */, err
@@ -146,7 +154,15 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 
 		readFn := func(ctx context.Context, txn *kv.Txn) error {
 			persistedData := roachpb.StatementStatistics{}
-			err := s.fetchPersistedStatementStats(ctx, txn, aggregatedTs, serializedFingerprintID, &scopedStats.Key, &persistedData)
+			err := s.fetchPersistedStatementStats(
+				ctx,
+				txn,
+				aggregatedTs,
+				serializedFingerprintID,
+				serializedTransactionFingerprintID,
+				&scopedStats.Key,
+				&persistedData,
+			)
 			if err != nil {
 				return err
 			}
@@ -156,7 +172,14 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 		}
 
 		updateFn := func(ctx context.Context, txn *kv.Txn) error {
-			return s.updateStatementStats(ctx, txn, aggregatedTs, serializedFingerprintID, &scopedStats)
+			return s.updateStatementStats(
+				ctx,
+				txn,
+				aggregatedTs,
+				serializedFingerprintID,
+				serializedTransactionFingerprintID,
+				&scopedStats,
+			)
 		}
 
 		err := s.doInsertElseDoUpdate(ctx, txn, insertFn, readFn, updateFn)
@@ -314,16 +337,18 @@ func (s *PersistedSQLStats) updateStatementStats(
 	txn *kv.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
+	serializedTransactionFingerprintID []byte,
 	stats *roachpb.CollectedStatementStatistics,
 ) error {
 	updateStmt := `
 UPDATE system.statement_statistics
 SET statistics = $1
 WHERE fingerprint_id = $2
-	AND aggregated_ts = $3
-  AND app_name = $4
-  AND plan_hash = $5
-  AND node_id = $6
+  AND transaction_fingerprint_id = $3
+	AND aggregated_ts = $4
+  AND app_name = $5
+  AND plan_hash = $6
+  AND node_id = $7
 `
 
 	statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&stats.Stats)
@@ -342,6 +367,7 @@ WHERE fingerprint_id = $2
 		updateStmt,
 		statistics,                           // statistics
 		serializedFingerprintID,              // fingerprint_id
+		serializedTransactionFingerprintID,   // transaction_fingerprint_id
 		aggregatedTs,                         // aggregated_ts
 		stats.Key.App,                        // app_name
 		dummyPlanHash,                        // plan_id
@@ -366,12 +392,14 @@ func (s *PersistedSQLStats) insertStatementStats(
 	txn *kv.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
+	serializedTransactionFingerprintID []byte,
 	stats *roachpb.CollectedStatementStatistics,
 ) (rowsAffected int, err error) {
 	insertStmt := `
 INSERT INTO system.statement_statistics
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8, aggregated_ts, fingerprint_id, app_name, plan_hash, node_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
+             aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
 DO NOTHING
 `
 	aggInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
@@ -401,10 +429,11 @@ DO NOTHING
 		insertStmt,
 		aggregatedTs,                         // aggregated_ts
 		serializedFingerprintID,              // fingerprint_id
+		serializedTransactionFingerprintID,   // transaction_fingerprint_id
 		dummyPlanHash,                        // plan_hash
 		stats.Key.App,                        // app_name
 		s.cfg.SQLIDContainer.SQLInstanceID(), // node_id
-		aggInterval,                          // agg_internal
+		aggInterval,                          // agg_interval
 		metadata,                             // metadata
 		statistics,                           // statistics
 		plan,                                 // plan
@@ -474,6 +503,7 @@ func (s *PersistedSQLStats) fetchPersistedStatementStats(
 	txn *kv.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
+	serializedTransactionFingerprintID []byte,
 	key *roachpb.StatementStatisticsKey,
 	result *roachpb.StatementStatistics,
 ) error {
@@ -483,10 +513,11 @@ SELECT
 FROM
     system.statement_statistics
 WHERE fingerprint_id = $1
-    AND app_name = $2
-	  AND aggregated_ts = $3
-    AND plan_hash = $4
-    AND node_id = $5
+    AND transaction_fingerprint_id = $2
+    AND app_name = $3
+	  AND aggregated_ts = $4
+    AND plan_hash = $5
+    AND node_id = $6
 FOR UPDATE
 `
 	row, err := s.cfg.InternalExecutor.QueryRowEx(
@@ -498,6 +529,7 @@ FOR UPDATE
 		},
 		readStmt,                             // stmt
 		serializedFingerprintID,              // fingerprint_id
+		serializedTransactionFingerprintID,   // transaction_fingerprint_id
 		key.App,                              // app_name
 		aggregatedTs,                         // aggregated_ts
 		dummyPlanHash,                        // plan_hash
