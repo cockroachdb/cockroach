@@ -3289,7 +3289,13 @@ func RunLogicTestWithDefaultConfig(
 					//  - we're generating testfiles, or
 					//  - we are in race mode (where we can hit a limit on alive
 					//    goroutines).
-					if !*showSQL && !*rewriteResultsInTestfiles && !*rewriteSQL && !util.RaceEnabled && !cfg.useTenant {
+					//  - we have too many nodes (this can lead to general slowness)
+					if !*showSQL &&
+						!*rewriteResultsInTestfiles &&
+						!*rewriteSQL &&
+						!util.RaceEnabled &&
+						!cfg.useTenant &&
+						cfg.numNodes <= 3 {
 						// Skip parallelizing tests that use the kv-batch-size directive since
 						// the batch size is a global variable.
 						//
