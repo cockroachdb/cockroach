@@ -10,6 +10,25 @@
 
 package tree
 
+// JobType determines which type of job to act on
+type JobType int
+
+// JobType values
+const (
+	TypeChangefeed JobType = iota
+	TypeImport
+	TypeBackup
+	TypeRestore
+)
+
+// JobTypeToStatement translates a job type integer to an sql statement value.
+var JobTypeToStatement = map[JobType]string{
+	TypeChangefeed: "CHANGEFEED",
+	TypeBackup:     "BACKUP",
+	TypeImport:     "IMPORT",
+	TypeRestore:    "RESTORE",
+}
+
 // ControlJobs represents a PAUSE/RESUME/CANCEL JOBS statement.
 type ControlJobs struct {
 	Jobs    *Select
@@ -120,6 +139,21 @@ type ControlJobsForSchedules struct {
 	Command   JobCommand
 }
 
+// ControlJobsOfType represents PAUSE/RESUME/CANCEL clause which
+// applies the job command to the job matching a specified type
+type ControlJobsOfType struct {
+	Type    JobType
+	Command JobCommand
+}
+
+// Format implements the NodeFormatter interface.
+func (n *ControlJobsOfType) Format(ctx *FmtCtx) {
+	ctx.WriteString(JobCommandToStatement[n.Command])
+	ctx.WriteString(" EVERY ")
+	ctx.WriteString(JobTypeToStatement[n.Type])
+	ctx.WriteString(" JOB")
+}
+
 // Format implements NodeFormatter interface.
 func (n *ControlJobsForSchedules) Format(ctx *FmtCtx) {
 	ctx.WriteString(JobCommandToStatement[n.Command])
@@ -128,3 +162,4 @@ func (n *ControlJobsForSchedules) Format(ctx *FmtCtx) {
 }
 
 var _ Statement = &ControlJobsForSchedules{}
+var _ Statement = &ControlJobsOfType{}

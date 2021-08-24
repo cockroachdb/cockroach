@@ -132,6 +132,7 @@ cancel_stmt ::=
 	cancel_jobs_stmt
 	| cancel_queries_stmt
 	| cancel_sessions_stmt
+	| cancel_every_job_stmt
 
 create_stmt ::=
 	create_role_stmt
@@ -173,6 +174,7 @@ insert_stmt ::=
 pause_stmt ::=
 	pause_jobs_stmt
 	| pause_schedules_stmt
+	| pause_every_job_stmt
 
 reset_stmt ::=
 	reset_session_stmt
@@ -188,6 +190,7 @@ restore_stmt ::=
 resume_stmt ::=
 	resume_jobs_stmt
 	| resume_schedules_stmt
+	| resume_every_job_stmt
 
 export_stmt ::=
 	'EXPORT' 'INTO' import_format string_or_placeholder opt_with_options 'FROM' select_stmt
@@ -432,6 +435,9 @@ cancel_sessions_stmt ::=
 	| 'CANCEL' 'SESSIONS' select_stmt
 	| 'CANCEL' 'SESSIONS' 'IF' 'EXISTS' select_stmt
 
+cancel_every_job_stmt ::=
+	'CANCEL' 'EVERY' opt_job_type 'JOB'
+
 create_role_stmt ::=
 	'CREATE' role_or_group_or_user string_or_placeholder opt_role_options
 	| 'CREATE' role_or_group_or_user 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_role_options
@@ -554,6 +560,9 @@ pause_schedules_stmt ::=
 	'PAUSE' 'SCHEDULE' a_expr
 	| 'PAUSE' 'SCHEDULES' select_stmt
 
+pause_every_job_stmt ::=
+	'PAUSE' 'EVERY' opt_job_type 'JOB'
+
 reset_session_stmt ::=
 	'RESET' session_var
 	| 'RESET' 'SESSION' session_var
@@ -577,6 +586,9 @@ resume_jobs_stmt ::=
 resume_schedules_stmt ::=
 	'RESUME' 'SCHEDULE' a_expr
 	| 'RESUME' 'SCHEDULES' select_stmt
+
+resume_every_job_stmt ::=
+	'RESUME' 'EVERY' opt_job_type 'JOB'
 
 scrub_table_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'TABLE' table_name opt_as_of_clause opt_scrub_options_clause
@@ -879,6 +891,7 @@ unreserved_keyword ::=
 	| 'ENUM'
 	| 'ENUMS'
 	| 'ESCAPE'
+	| 'EVERY'
 	| 'EXCLUDE'
 	| 'EXCLUDING'
 	| 'EXECUTE'
@@ -1363,6 +1376,12 @@ a_expr ::=
 for_schedules_clause ::=
 	'FOR' 'SCHEDULES' select_stmt
 	| 'FOR' 'SCHEDULE' a_expr
+
+opt_job_type ::=
+	'CHANGEFEED'
+	| 'IMPORT'
+	| 'BACKUP'
+	| 'RESTORE'
 
 create_database_stmt ::=
 	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
