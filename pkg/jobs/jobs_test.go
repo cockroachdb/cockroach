@@ -3253,6 +3253,97 @@ func TestJobsRetry(t *testing.T) {
 		close(rts.failOrCancelCheckCh)
 		rts.check(t, jobs.StatusFailed)
 	})
+
+	t.Run("retry reverting", func(t *testing.T) {
+		// - Create a job.
+		// - Fail the job in resume to cause the job to revert.
+		// - Fail the job in revert state using a non-retryable error.
+		// - Make sure that the jobs is retried and is again in the revert state.
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		// Make Resume fail.
+		rts.resumeCh <- errors.New("failing resume to revert")
+		rts.mu.e.ResumeExit++
+
+		// Job is now reverting.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+
+		// Fail the job in reverting state without a retryable error.
+		rts.failOrCancelCh <- errors.New("failing with a non-retryable error")
+		rts.mu.e.OnFailOrCancelExit = true
+
+		// Job should be retried.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+		rts.failOrCancelCh <- nil
+		rts.mu.e.OnFailOrCancelExit = true
+
+		close(rts.failOrCancelCh)
+		close(rts.failOrCancelCheckCh)
+		rts.check(t, jobs.StatusFailed)
+	})
+
+	t.Run("retry non-cancelable reverting", func(t *testing.T) {
+		// - Create a non-cancelable job.
+		// - Fail the job in resume with a permanent error to cause the job to revert.
+		// - Fail the job in revert state using a permanent error to ensure that the
+		//   retries with a permanent error as well.
+		// - Make sure that the jobs is retried and is again in the revert state.
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+		// Make mockJob non-cancelable, ensuring that non-cancelable jobs are retried in reverting state.
+		rts.mockJob.SetNonCancelable(rts.ctx, func(ctx context.Context, nonCancelable bool) bool {
+			return true
+		})
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		// Make Resume fail with a permanent error.
+		rts.resumeCh <- jobs.MarkAsPermanentJobError(errors.New("permanent error"))
+		rts.mu.e.ResumeExit++
+
+		// Job is now reverting.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+
+		// Fail the job in reverting state with a permanent error a retryable error.
+		rts.failOrCancelCh <- jobs.MarkAsPermanentJobError(errors.New("permanent error"))
+		rts.mu.e.OnFailOrCancelExit = true
+
+		// Job should be retried.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+		rts.failOrCancelCh <- nil
+		rts.mu.e.OnFailOrCancelExit = true
+
+		close(rts.failOrCancelCh)
+		close(rts.failOrCancelCheckCh)
+		rts.check(t, jobs.StatusFailed)
+	})
 }
 
 // TestExecutionLogToJSON tests conversion of an executionLog in jobs payload
