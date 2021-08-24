@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
         "//pkg/spanconfig",
         "//pkg/util/interval",
         "//pkg/util/log",
