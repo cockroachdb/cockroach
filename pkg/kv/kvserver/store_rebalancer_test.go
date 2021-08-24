@@ -32,8 +32,6 @@ import (
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
-const defaultQPSRebalanceThreshold = 0.25
-
 var (
 	// multiRegionStores specifies a set of stores across 3 regions. These stores
 	// are arranged in descending order of the QPS they are receiving. Store 1 is
@@ -273,7 +271,10 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 		// TODO(a-robinson): The below three lines won't be needed once the old
 		// rangeInfo code is ripped out of the allocator.
 		repl.mu.state.Stats = &enginepb.MVCCStats{}
+
 		repl.leaseholderStats = newReplicaStats(s.Clock(), nil)
+		repl.leaseholderStats.testingSetAvgQPS(r.qps)
+
 		repl.writeStats = newReplicaStats(s.Clock(), nil)
 		acc.addReplica(replicaWithStats{
 			repl: repl,
@@ -296,10 +297,6 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
 	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
-
-	const minQPS = 800
-	const maxQPS = 1200
-
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
 	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -332,38 +329,143 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 		qps          float64
 		expectTarget roachpb.StoreID
 	}{
-		{[]roachpb.StoreID{1}, 100, 0},
-		{[]roachpb.StoreID{1, 2}, 100, 0},
-		{[]roachpb.StoreID{1, 3}, 100, 0},
-		{[]roachpb.StoreID{1, 4}, 100, 4},
-		{[]roachpb.StoreID{1, 5}, 100, 5},
-		{[]roachpb.StoreID{5, 1}, 100, 0},
-		{[]roachpb.StoreID{1, 2}, 200, 0},
-		{[]roachpb.StoreID{1, 3}, 200, 0},
-		{[]roachpb.StoreID{1, 4}, 200, 0},
-		{[]roachpb.StoreID{1, 5}, 200, 5},
-		{[]roachpb.StoreID{1, 2}, 500, 0},
-		{[]roachpb.StoreID{1, 3}, 500, 0},
-		{[]roachpb.StoreID{1, 4}, 500, 0},
-		{[]roachpb.StoreID{1, 5}, 500, 5},
-		{[]roachpb.StoreID{1, 5}, 600, 5},
-		{[]roachpb.StoreID{1, 5}, 700, 5},
-		{[]roachpb.StoreID{1, 5}, 800, 0},
-		{[]roachpb.StoreID{1, 4}, 1.5, 4},
-		{[]roachpb.StoreID{1, 5}, 1.5, 5},
-		{[]roachpb.StoreID{1, 4}, 1.49, 0},
-		{[]roachpb.StoreID{1, 5}, 1.49, 0},
+		{
+			storeIDs:     []roachpb.StoreID{1},
+			qps:          100,
+			expectTarget: 0,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 2},
+			qps:          100,
+			expectTarget: 2,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 3},
+			qps:          100,
+			expectTarget: 3,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 4},
+			qps:          100,
+			expectTarget: 4,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 5},
+			qps:          100,
+			expectTarget: 5,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{5, 1},
+			qps:          100,
+			expectTarget: 0,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 2},
+			qps:          200,
+			expectTarget: 2,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 3},
+			qps:          200,
+			expectTarget: 3,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 4},
+			qps:          200,
+			expectTarget: 4,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 5},
+			qps:          200,
+			expectTarget: 5,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 2},
+			qps:          500,
+			expectTarget: 0,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 3},
+			qps:          500,
+			expectTarget: 0,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 4},
+			qps:          500,
+			expectTarget: 4,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 5},
+			qps:          500,
+			expectTarget: 5,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 5},
+			qps:          600,
+			expectTarget: 5,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 5},
+			qps:          700,
+			expectTarget: 5,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 5},
+			qps:          800,
+			expectTarget: 5,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 4, 5},
+			qps:          800,
+			expectTarget: 5,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 3, 4, 5},
+			qps:          800,
+			expectTarget: 5,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 4},
+			qps:          1.5,
+			expectTarget: 4,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 5},
+			qps:          1.5,
+			expectTarget: 5,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 4},
+			qps:          1.49,
+			expectTarget: 0,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 5},
+			qps:          1.49,
+			expectTarget: 0,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 2, 3, 4},
+			qps:          1500,
+			expectTarget: 0,
+		},
+		{
+			storeIDs:     []roachpb.StoreID{1, 2, 3, 4, 5},
+			qps:          1500,
+			expectTarget: 0,
+		},
 	}
 
 	for _, tc := range testCases {
-		loadRanges(rr, s, []testRange{{voters: tc.storeIDs, qps: tc.qps}})
-		hottestRanges := rr.topQPS()
-		_, target, _ := sr.chooseLeaseToTransfer(
-			ctx, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
-		if target.StoreID != tc.expectTarget {
-			t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
-				target.StoreID, tc.storeIDs, tc.qps, tc.expectTarget)
-		}
+		t.Run("", func(t *testing.T) {
+			loadRanges(rr, s, []testRange{{voters: tc.storeIDs, qps: tc.qps}})
+			hottestRanges := rr.topQPS()
+			_, target, _ := sr.chooseLeaseToTransfer(ctx, &hottestRanges, &localDesc, storeList, storeMap)
+			if target.StoreID != tc.expectTarget {
+				t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
+					target.StoreID, tc.storeIDs, tc.qps, tc.expectTarget)
+			}
+		})
 	}
 }
 
@@ -783,9 +885,6 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
 
-	const minQPS = 800
-	const maxQPS = 1200
-
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
 	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -822,8 +921,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		return status
 	}
 
-	_, target, _ := sr.chooseLeaseToTransfer(
-		ctx, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
+	_, target, _ := sr.chooseLeaseToTransfer(ctx, &hottestRanges, &localDesc, storeList, storeMap)
 	expectTarget := roachpb.StoreID(4)
 	if target.StoreID != expectTarget {
 		t.Errorf("got target store s%d for range with RaftStatus %v; want s%d",
