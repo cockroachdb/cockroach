@@ -803,7 +803,7 @@ func sendAndFill(ctx context.Context, send SenderFunc, b *Batch) error {
 // operation. The order of the results matches the order the operations were
 // added to the batch.
 func (db *DB) Run(ctx context.Context, b *Batch) error {
-	if err := b.prepare(); err != nil {
+	if err := b.validate(); err != nil {
 		return err
 	}
 	return sendAndFill(ctx, db.send, b)

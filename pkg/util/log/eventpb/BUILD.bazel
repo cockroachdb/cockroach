@@ -27,6 +27,7 @@ go_library(
     srcs = [
         "doc.go",
         "events.go",
+        "sql_audit_events.go",
         ":gen-eventlog-channels-generated-go",  # keep
         ":gen-json-encode-generated-go",  # keep
     ],
@@ -36,6 +37,7 @@ go_library(
     deps = [
         "//pkg/util/jsonbytes",  # keep
         "//pkg/util/log/logpb",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
 )
