@@ -381,7 +381,28 @@ func createTestAllocator(
 	a := MakeAllocator(
 		storePool, func(string) (time.Duration, bool) {
 			return 0, true
-		})
+		},
+		nil, /* knobs */
+	)
+	return stopper, g, storePool, a, manual
+}
+
+// createTestAllocatorWithKnobs is like `createTestAllocator`, but allows the
+// caller to pass in custom AllocatorTestingKnobs. Stopper must be stopped by
+// the caller.
+func createTestAllocatorWithKnobs(
+	numNodes int, deterministic bool, knobs *AllocatorTestingKnobs,
+) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
+	stopper, g, manual, storePool, _ := createTestStorePool(
+		TestTimeUntilStoreDeadOff, deterministic,
+		func() int { return numNodes },
+		livenesspb.NodeLivenessStatus_LIVE)
+	a := MakeAllocator(
+		storePool, func(string) (time.Duration, bool) {
+			return 0, true
+		},
+		knobs,
+	)
 	return stopper, g, storePool, a, manual
 }
 
@@ -1700,10 +1721,12 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 					replicationFactor: 3,
 					storeID:           c.leaseholder,
 				},
-				nil, /* replicaStats */
-				c.check,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: c.check,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1811,9 +1834,11 @@ func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 				c.existing,
 				repl,
 				nil,
-				c.checkSource,
-				true,  /* checkCandidateFullness */
 				false, /* alwaysAllowDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: c.checkSource,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.transferTarget != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.transferTarget, target.StoreID)
@@ -1901,10 +1926,12 @@ func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
 					replicationFactor: 3,
 					storeID:           c.leaseholder,
 				},
-				nil, /* replicaStats */
-				true,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: true,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1922,9 +1949,11 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
-		return 0, true
-	})
+	a := MakeAllocator(
+		storePool, func(string) (time.Duration, bool) {
+			return 0, true
+		}, nil, /* knobs */
+	)
 	defer stopper.Stop(context.Background())
 
 	// 3 stores where the lease count for each store is equal to 100x the store
@@ -2003,10 +2032,12 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 					replicationFactor: 3,
 					storeID:           c.leaseholder,
 				},
-				nil, /* replicaStats */
-				c.check,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: c.check,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -2293,9 +2324,11 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
-		return 0, true
-	})
+	a := MakeAllocator(
+		storePool, func(string) (time.Duration, bool) {
+			return 0, true
+		}, nil, /* knobs */
+	)
 	defer stopper.Stop(context.Background())
 
 	// 4 stores where the lease count for each store is equal to 10x the store
@@ -2355,9 +2388,11 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
-		return 0, true
-	})
+	a := MakeAllocator(
+		storePool, func(string) (time.Duration, bool) {
+			return 0, true
+		}, nil, /* knobs */
+	)
 	defer stopper.Stop(context.Background())
 
 	var stores []*roachpb.StoreDescriptor
@@ -2533,10 +2568,12 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 					replicationFactor: 5,
 					storeID:           c.leaseholder,
 				},
-				nil,   /* replicaStats */
-				true,  /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: true,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expectedCheckTrue != target.StoreID {
 				t.Errorf("expected s%d for check=true, but found %v", c.expectedCheckTrue, target)
@@ -2549,10 +2586,12 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 					replicationFactor: 5,
 					storeID:           c.leaseholder,
 				},
-				nil,   /* replicaStats */
-				false, /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: false,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expectedCheckFalse != target.StoreID {
 				t.Errorf("expected s%d for check=false, but found %v", c.expectedCheckFalse, target)
@@ -2635,10 +2674,12 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 					replicationFactor: 6,
 					storeID:           c.leaseholder,
 				},
-				nil,   /* replicaStats */
-				true,  /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: true,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expectedCheckTrue != target.StoreID {
 				t.Errorf("expected s%d for check=true, but found %v", c.expectedCheckTrue, target)
@@ -2651,10 +2692,12 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 					replicationFactor: 6,
 					storeID:           c.leaseholder,
 				},
-				nil,   /* replicaStats */
-				false, /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: false,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expectedCheckFalse != target.StoreID {
 				t.Errorf("expected s%d for check=false, but found %v", c.expectedCheckFalse, target)
@@ -5057,9 +5100,11 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			a := MakeAllocator(storePool, func(addr string) (time.Duration, bool) {
-				return c.latency[addr], true
-			})
+			a := MakeAllocator(
+				storePool, func(addr string) (time.Duration, bool) {
+					return c.latency[addr], true
+				}, nil, /* knobs */
+			)
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				emptySpanConfig(),
@@ -5069,9 +5114,12 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				c.stats,
-				c.check,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				false,
+				transferLeaseOptions{
+					checkTransferLeaseSource: c.check,
+					checkCandidateFullness:   true,
+					dryRun:                   false,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Errorf("expected %d, got %d", c.expected, target.StoreID)
@@ -6631,9 +6679,11 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		TestTimeUntilStoreDeadOff, false, /* deterministic */
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(sp, func(string) (time.Duration, bool) {
-		return 0, true
-	})
+	a := MakeAllocator(
+		sp, func(string) (time.Duration, bool) {
+			return 0, true
+		}, nil, /* knobs */
+	)
 
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
@@ -6738,7 +6788,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
+	a := MakeAllocator(nil /* storePool */, nil /* nodeLatencyFn */, nil /* knobs */)
 	action, priority := a.ComputeAction(context.Background(), roachpb.SpanConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -7258,9 +7308,11 @@ func TestAllocatorFullDisks(t *testing.T) {
 		mockNodeLiveness.nodeLivenessFunc,
 		false, /* deterministic */
 	)
-	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
-		return 0, false
-	})
+	alloc := MakeAllocator(
+		sp, func(string) (time.Duration, bool) {
+			return 0, false
+		}, nil, /* knobs */
+	)
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
@@ -7404,9 +7456,11 @@ func Example_rebalancing() {
 		newMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE).nodeLivenessFunc,
 		/* deterministic */ true,
 	)
-	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
-		return 0, false
-	})
+	alloc := MakeAllocator(
+		sp, func(string) (time.Duration, bool) {
+			return 0, false
+		}, nil, /* knobs */
+	)
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
