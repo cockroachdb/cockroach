@@ -1,0 +1,2 @@
+resume_every_job_stmt ::=
+	'RESUME' 'EVERY' opt_job_type 'JOB'
