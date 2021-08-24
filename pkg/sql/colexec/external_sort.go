@@ -156,6 +156,9 @@ type externalSorter struct {
 	// it is true, we won't reduce maxNumberPartitions any further.
 	maxNumberPartitionsDynamicallyReduced bool
 	numForcedMerges                       int
+	// emitted is the number of tuples emitted by the externalSorter so far, and
+	// is used if there is a topK limit to only emit topK tuples.
+	emitted uint64
 
 	// partitionsInfo tracks some information about all current partitions
 	// (those in currentPartitionIdxs).
@@ -458,6 +461,15 @@ func (s *externalSorter) Next() coldata.Batch {
 				s.state = externalSorterFinished
 				continue
 			}
+			if s.topK > 0 {
+				// If there's a topK limit, only emit the first topK tuples.
+				if b.Length() >= int(s.topK-s.emitted) {
+					// This batch contains the last of the topK tuples to emit.
+					b.SetLength(int(s.topK - s.emitted))
+					s.state = externalSorterFinished
+				}
+				s.emitted += uint64(b.Length())
+			}
 			return b
 
 		case externalSorterFinished:
@@ -586,6 +598,7 @@ func (s *externalSorter) Reset(ctx context.Context) {
 	// Note that we consciously do not reset maxNumberPartitions and
 	// maxNumberPartitionsDynamicallyReduced (when the latter is true) since we
 	// are keeping the memory used for dequeueing batches.
+	s.emitted = 0
 }
 
 func (s *externalSorter) Close() error {
