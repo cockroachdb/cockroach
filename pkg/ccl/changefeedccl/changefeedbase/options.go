@@ -192,11 +192,4 @@ var CloudStorageValidOptions = makeStringSet(OptCompression)
 var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig)
 
 // CaseInsensitiveOpts options which supports case Insensitive value
-var CaseInsensitiveOpts = map[string]struct{}{
-	OptFormat:             {},
-	OptEnvelope:           {},
-	OptCompression:        {},
-	OptSchemaChangeEvents: {},
-	OptSchemaChangePolicy: {},
-	OptOnError:            {},
-}
+var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents, OptSchemaChangePolicy, OptOnError)
