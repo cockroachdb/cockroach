@@ -1518,11 +1518,12 @@ vectorized: true
 │ estimated row count: 1,000 (missing stats)
 │ count: 1000000
 │
-└── • sort
+└── • top-k
     │ columns: (a, b, c, d)
     │ ordering: +c
     │ estimated row count: 1,000 (missing stats)
     │ order: +c
+    │ count: 1000000
     │
     └── • scan
           columns: (a, b, c, d)

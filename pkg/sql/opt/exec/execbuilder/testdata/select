@@ -1792,8 +1792,9 @@ vectorized: true
 • limit
 │ count: 10
 │
-└── • sort
+└── • top-k
     │ order: +z
+    │ count: 10
     │
     └── • project set
         │

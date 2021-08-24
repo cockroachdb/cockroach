@@ -27,11 +27,12 @@ vectorized: true
         │ estimated row count: 2 (missing stats)
         │ count: 2
         │
-        └── • sort
+        └── • top-k
             │ columns: (k, v)
             │ ordering: -v
             │ estimated row count: 1,000 (missing stats)
             │ order: -v
+            │ count: 2
             │
             └── • scan
                   columns: (k, v)
@@ -60,11 +61,12 @@ vectorized: true
         │ estimated row count: 2 (missing stats)
         │ count: 2
         │
-        └── • sort
+        └── • top-k
             │ columns: (k, v)
             │ ordering: -v
             │ estimated row count: 1,000 (missing stats)
             │ order: -v
+            │ count: 2
             │
             └── • scan
                   columns: (k, v)
@@ -93,11 +95,12 @@ vectorized: true
         │ estimated row count: 2 (missing stats)
         │ count: 2
         │
-        └── • sort
+        └── • top-k
             │ columns: (k, v)
             │ ordering: -v
             │ estimated row count: 1,000 (missing stats)
             │ order: -v
+            │ count: 2
             │
             └── • scan
                   columns: (k, v)
@@ -144,11 +147,12 @@ vectorized: true
                 │ estimated row count: 2 (missing stats)
                 │ count: 2
                 │
-                └── • sort
+                └── • top-k
                     │ columns: (k, v)
                     │ ordering: -v
                     │ estimated row count: 1,000 (missing stats)
                     │ order: -v
+                    │ count: 2
                     │
                     └── • scan
                           columns: (k, v)

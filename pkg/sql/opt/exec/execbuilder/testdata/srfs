@@ -429,11 +429,12 @@ vectorized: true
 │ estimated row count: 10 (missing stats)
 │ count: 10
 │
-└── • sort
+└── • top-k
     │ columns: (id, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null)
     │ ordering: +any_not_null
     │ estimated row count: 14 (missing stats)
     │ order: +any_not_null
+    │ count: 10
     │
     └── • group
         │ columns: (id, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null)

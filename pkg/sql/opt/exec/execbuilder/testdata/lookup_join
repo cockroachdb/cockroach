@@ -1712,9 +1712,10 @@ vectorized: true
 │ estimated row count: 0
 │ count: 100
 │
-└── • sort
+└── • top-k
     │ estimated row count: 0
     │ order: -count_rows,+s_name
+    │ count: 100
     │
     └── • group
         │ estimated row count: 0

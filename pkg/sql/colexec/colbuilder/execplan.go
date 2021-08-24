@@ -349,6 +349,7 @@ func (r opResult) createDiskBackedSort(
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	ordering execinfrapb.Ordering,
+	limit int64,
 	matchLen uint32,
 	maxNumberPartitions int,
 	processorID int32,
@@ -386,16 +387,13 @@ func (r opResult) createDiskBackedSort(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
 			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
 		)
-	} else if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
+	} else if limit != 0 || (post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset) {
 		// There is a limit specified, so we know exactly how many rows the
 		// sorter should output. The last part of the condition is making sure
 		// there is no overflow.
 		//
 		// Choose a top K sorter, which uses a heap to avoid storing more rows
 		// than necessary.
-		//
-		// TODO(radu): we should not choose this processor when K is very large
-		// - it is slower unless we get significantly more rows than the limit.
 		var topKSorterMemAccount *mon.BoundAccount
 		if useStreamingMemAccountForBuffering {
 			topKSorterMemAccount = streamingMemAccount
@@ -404,7 +402,11 @@ func (r opResult) createDiskBackedSort(
 				ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
 			)
 		}
-		topK = post.Limit + post.Offset
+		if limit != 0 {
+			topK = uint64(limit)
+		} else {
+			topK = post.Limit + post.Offset
+		}
 		inMemorySorter = colexec.NewTopKSorter(
 			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
 			inputTypes, ordering.Columns, topK, maxOutputBatchMemSize,
@@ -506,7 +508,7 @@ func (r opResult) makeDiskBackedSorterConstructor(
 		}
 		sorter, err := r.createDiskBackedSort(
 			ctx, flowCtx, &sortArgs, input, inputTypes,
-			execinfrapb.Ordering{Columns: orderingCols},
+			execinfrapb.Ordering{Columns: orderingCols}, 0 /* limit */,
 			0 /* matchLen */, maxNumberPartitions, args.Spec.ProcessorID,
 			&execinfrapb.PostProcessSpec{}, opNamePrefix+"-", factory,
 		)
@@ -1213,8 +1215,9 @@ func NewColOperator(
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			ordering := core.Sorter.OutputOrdering
 			matchLen := core.Sorter.OrderingMatchLen
+			limit := core.Sorter.Limit
 			result.Root, err = result.createDiskBackedSort(
-				ctx, flowCtx, args, input, result.ColumnTypes, ordering, matchLen, 0, /* maxNumberPartitions */
+				ctx, flowCtx, args, input, result.ColumnTypes, ordering, limit, matchLen, 0, /* maxNumberPartitions */
 				spec.ProcessorID, post, "" /* opNamePrefix */, factory,
 			)
 
@@ -1274,7 +1277,7 @@ func NewColOperator(
 						func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecop.Operator, error) {
 							return result.createDiskBackedSort(
 								ctx, flowCtx, args, input, inputTypes,
-								execinfrapb.Ordering{Columns: orderingCols}, 0, /* matchLen */
+								execinfrapb.Ordering{Columns: orderingCols}, 0 /*limit */, 0 /* matchLen */,
 								0 /* maxNumberPartitions */, spec.ProcessorID,
 								&execinfrapb.PostProcessSpec{}, opNamePrefix, factory)
 						},
@@ -1287,7 +1290,7 @@ func NewColOperator(
 					if len(wf.Ordering.Columns) > 0 {
 						input, err = result.createDiskBackedSort(
 							ctx, flowCtx, args, input, typs,
-							wf.Ordering, 0 /* matchLen */, 0, /* maxNumberPartitions */
+							wf.Ordering, 0 /* limit */, 0 /* matchLen */, 0, /* maxNumberPartitions */
 							spec.ProcessorID, &execinfrapb.PostProcessSpec{}, opNamePrefix, factory,
 						)
 					}

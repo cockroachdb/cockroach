@@ -61,11 +61,12 @@ vectorized: true
         │ estimated row count: 100 (missing stats)
         │ count: 100
         │
-        └── • sort
+        └── • top-k
             │ columns: (w)
             │ ordering: +w
             │ estimated row count: 1,000 (missing stats)
             │ order: +w
+            │ count: 100
             │
             └── • scan
                   columns: (w)
@@ -162,11 +163,12 @@ vectorized: true
         │ estimated row count: 10 (missing stats)
         │ count: 10
         │
-        └── • sort
+        └── • top-k
             │ columns: (k, sum, any_not_null)
             │ ordering: -any_not_null
             │ estimated row count: 1,000 (missing stats)
             │ order: -any_not_null
+            │ count: 10
             │
             └── • group
                 │ columns: (k, sum, any_not_null)

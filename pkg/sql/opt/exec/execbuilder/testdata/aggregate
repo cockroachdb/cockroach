@@ -1118,11 +1118,12 @@ vectorized: true
     │ estimated row count: 1 (missing stats)
     │ count: (1)[int]
     │
-    └── • sort
+    └── • top-k
         │ columns: (column5 int)
         │ ordering: +column5
         │ estimated row count: 333 (missing stats)
         │ order: +column5
+        │ count: 1
         │
         └── • render
             │ columns: (column5 int)

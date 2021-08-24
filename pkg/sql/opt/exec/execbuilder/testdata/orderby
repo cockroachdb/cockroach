@@ -46,8 +46,9 @@ vectorized: true
 • limit
 │ count: 2
 │
-└── • sort
+└── • top-k
     │ order: +b
+    │ count: 2
     │
     └── • scan
           missing stats
@@ -65,11 +66,12 @@ vectorized: true
 │ estimated row count: 2 (missing stats)
 │ count: 2
 │
-└── • sort
+└── • top-k
     │ columns: (b, c)
     │ ordering: +b
     │ estimated row count: 300 (missing stats)
     │ order: +b
+    │ count: 2
     │
     └── • distinct
         │ columns: (b, c)

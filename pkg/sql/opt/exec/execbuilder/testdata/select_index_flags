@@ -168,8 +168,9 @@ vectorized: true
 └── • limit
     │ count: 5
     │
-    └── • sort
+    └── • top-k
         │ order: -b
+        │ count: 5
         │
         └── • scan
               missing stats

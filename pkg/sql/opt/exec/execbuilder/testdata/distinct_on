@@ -633,11 +633,12 @@ vectorized: true
 │ estimated row count: 1 (missing stats)
 │ count: 1
 │
-└── • sort
+└── • top-k
     │ columns: (x, y)
     │ ordering: +y
     │ estimated row count: 10 (missing stats)
     │ order: +y
+    │ count: 1
     │
     └── • filter
         │ columns: (x, y)
@@ -669,11 +670,12 @@ vectorized: true
         │ estimated row count: 1 (missing stats)
         │ count: 1
         │
-        └── • sort
+        └── • top-k
             │ columns: (x, y)
             │ ordering: +y
             │ estimated row count: 10 (missing stats)
             │ order: +y
+            │ count: 1
             │
             └── • filter
                 │ columns: (x, y)
