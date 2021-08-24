@@ -34,7 +34,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
         </Tooltip>
       ),
       cell: (val: HotRange) => (
-        <Link to={`/database/${val.rangeId}`}>{val.rangeId}</Link>
+        <Link to={`/reports/range/${val.rangeId}`}>{val.rangeId}</Link>
       ),
       sort: (val) => val.rangeId,
     },
@@ -54,7 +54,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
         </Tooltip>
       ),
       cell: (val) => (
-        <Link to={`/database/${val.nodeIds}`}>{val.nodeIds.join(", ")}</Link>
+        <Link to={`/node/${val.nodeIds[0]}`}>{val.nodeIds.join(", ")}</Link>
       ),
       sort: (val) => val.nodeIds[0],
     },
@@ -64,9 +64,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Leaseholder
         </Tooltip>
       ),
-      cell: (val) => (
-        <Link to={`/database/${val.leaseHolder}`}>{val.leaseHolder}</Link>
-      ),
+      cell: (val) => <>{val.leaseHolder}</>,
       sort: (val) => val.leaseHolder,
     },
     {
@@ -84,7 +82,11 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Table
         </Tooltip>
       ),
-      cell: (val) => <Link to={`/database/${val.table}`}>{val.table}</Link>,
+      cell: (val) => (
+        <Link to={`/database/${val.database}/table/${val.table}`}>
+          {val.table}
+        </Link>
+      ),
       sort: (val) => val.table,
     },
     {
