@@ -1475,6 +1475,11 @@ func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 // present as defined by the current configuration.
 func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind bool) {
 	frontier := cf.frontier.Frontier()
+	if frontier.IsEmpty() {
+		// Do not log potentially confusing "behind" messages when backfilling, but
+		// consider span(s) behind so that we do not inadvertently release protected timestamp.
+		return true
+	}
 	now := timeutil.Now()
 	resolvedBehind := now.Sub(frontier.GoTime())
 	if resolvedBehind <= cf.slownessThreshold() {
