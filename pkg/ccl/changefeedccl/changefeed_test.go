@@ -4398,7 +4398,7 @@ CREATE CHANGEFEED FOR tbl INTO 'null://';
 
 }
 
-func TestChangefeedCaceInsensitiveOpts(t *testing.T) {
+func TestChangefeedCaseInsensitiveOpts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
