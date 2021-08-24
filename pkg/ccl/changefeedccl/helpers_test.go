@@ -406,19 +406,10 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 func startTestTenant(
 	t testing.TB, options feedTestOptions,
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
-	// We need to open a new log scope because StartTenant
-	// calls log.SetNodeIDs which can only be called once
-	// per log scope. If we don't open a log scope here,
-	// then any test function that wants to use this twice
-	// would fail.
-	logScope := log.Scope(t)
+	log.TestingClearServerIdentifiers()
 	ctx := context.Background()
 
-	kvServer, _, kvCleanup := startTestFullServer(t, options)
-	cleanup := func() {
-		kvCleanup()
-		logScope.Close(t)
-	}
+	kvServer, _, cleanup := startTestFullServer(t, options)
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
