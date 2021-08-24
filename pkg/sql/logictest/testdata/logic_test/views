@@ -902,3 +902,30 @@ DROP TYPE v4
 
 statement ok
 DROP TABLE t
+
+subtest view-cascade-nesting
+
+statement ok
+CREATE TABLE t1nest (id INT PRIMARY KEY, name varchar(256))
+
+statement ok
+CREATE VIEW v1nest AS (SELECT name FROM t1nest)
+
+statement ok
+CREATE VIEW v2nest AS (SELECT name AS n1, name AS n2 FROM v1nest)
+
+statement ok
+CREATE VIEW v3nest AS (SELECT name, n1 FROM v1nest, v2nest);
+
+statement ok
+DROP table t1nest CASCADE
+
+# Validate the objects being dropped
+query T
+SELECT info::JSONB - 'Timestamp' - 'DescriptorID'
+FROM system.eventlog
+WHERE "eventType" in ('drop_view', 'drop_table')
+ORDER BY "timestamp" DESC, info
+LIMIT 1
+----
+{"CascadeDroppedViews": ["v3nest", "v2nest", "v1nest"], "Statement": "DROP TABLE t1nest CASCADE", "TableName": "db2.public.t1nest", "User": "root"}
