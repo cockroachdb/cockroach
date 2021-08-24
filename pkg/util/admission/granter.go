@@ -35,6 +35,20 @@ var KVSlotAdjusterOverloadThreshold = settings.RegisterIntSetting(
 		"slot adjuster considers the cpu to be overloaded",
 	32, settings.PositiveInt)
 
+// L0FileCountOverloadThreshold sets a file count threshold that signals an
+// overloaded store.
+var L0FileCountOverloadThreshold = settings.RegisterIntSetting(
+	"admission.l0_file_count_overload_threshold",
+	"when the L0 file count exceeds this theshold, the store is considered overloaded",
+	l0FileCountOverloadThreshold, settings.PositiveInt)
+
+// L0SubLevelCountOverloadThreshold sets a sub-level count threshold that
+// signals an overloaded store.
+var L0SubLevelCountOverloadThreshold = settings.RegisterIntSetting(
+	"admission.l0_sub_level_count_overload_threshold",
+	"when the L0 sub-level count exceeds this threshold, the store is considered overloaded",
+	l0SubLevelCountOverloadThreshold, settings.PositiveInt)
+
 // grantChainID is the ID for a grant chain. See continueGrantChain for
 // details.
 type grantChainID uint64
@@ -790,9 +804,9 @@ func appendMetricStructsForQueues(ms []metric.Struct, coord *GrantCoordinator) [
 	return ms
 }
 
-// pebbleMetricsTick is called every 1min and passes through to the
-// ioLoadListener, so that it can adjust the plan for future IO token
-// allocations.
+// pebbleMetricsTick is called every adjustmentInterval seconds and passes
+// through to the ioLoadListener, so that it can adjust the plan for future IO
+// token allocations.
 func (coord *GrantCoordinator) pebbleMetricsTick(m pebble.Metrics) {
 	coord.ioLoadListener.pebbleMetricsTick(m)
 }
@@ -1152,21 +1166,24 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(pmp PebbleMetricsPro
 	}()
 }
 
-// Experimental observations: sub-level count of ~40 caused a node heartbeat
-// latency p90, p99 of 2.5s, 4s. With the following setting that limits
-// sub-level count to 10, before the system is considered overloaded, we see
-// the actual sub-level count ranging from 5-30, with p90, p99 node heartbeat
-// latency showing a similar wide range, with 1s, 2s being the middle of the
-// range respectively.
+// Experimental observations:
+// - Sub-level count of ~40 caused a node heartbeat latency p90, p99 of 2.5s,
+//   4s. With a setting that limits sub-level count to 10, before the system
+//   is considered overloaded, and adjustmentInterval = 60, we see the actual
+//   sub-level count ranging from 5-30, with p90, p99 node heartbeat latency
+//   showing a similar wide range, with 1s, 2s being the middle of the range
+//   respectively.
+// - With tpcc, we sometimes see a sub-level count > 10 with only 100 files in
+//   L0. We don't want to restrict tokens in this case since the store is able
+//   to recover on its own. One possibility would be to require both the
+//   thresholds to be exceeded before we consider the store overloaded. But
+//   then we run the risk of having 100+ sub-levels when we hit a file count
+//   of 1000. Instead we use a sub-level overload threshold of 20.
 //
 // We've set these overload thresholds in a way that allows the system to
 // absorb short durations (say a few minutes) of heavy write load.
-//
-// TODO(sumeer): make these configurable since it is possible that different
-// users have different tolerance for read slowness caused by higher
-// read-amplification.
 const l0FileCountOverloadThreshold = 1000
-const l0SubLevelCountOverloadThreshold = 10
+const l0SubLevelCountOverloadThreshold = 20
 
 func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoordinator {
 	coord := &GrantCoordinator{
@@ -1188,12 +1205,11 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 	kvg.requester = coord.queues[KVWork]
 	coord.granters[KVWork] = kvg
 	coord.ioLoadListener = &ioLoadListener{
-		storeID:                          storeID,
-		l0FileCountOverloadThreshold:     l0FileCountOverloadThreshold,
-		l0SubLevelCountOverloadThreshold: l0SubLevelCountOverloadThreshold,
-		kvRequester:                      coord.queues[KVWork],
-		mu:                               &coord.mu,
-		kvGranter:                        coord.granters[KVWork].(*kvGranter),
+		storeID:     storeID,
+		settings:    sgc.settings,
+		kvRequester: coord.queues[KVWork],
+		mu:          &coord.mu,
+		kvGranter:   coord.granters[KVWork].(*kvGranter),
 	}
 	return coord
 }
@@ -1360,10 +1376,9 @@ type granterWithIOTokens interface {
 // just means that the write has been applied to the WAL. Most of the work is
 // in flushing to sstables and the following compactions, which happens later.
 type ioLoadListener struct {
-	storeID                          int32
-	l0FileCountOverloadThreshold     int64
-	l0SubLevelCountOverloadThreshold int32
-	kvRequester                      requester
+	storeID     int32
+	settings    *cluster.Settings
+	kvRequester requester
 	// mu is used when changing state in kvGranter.
 	mu        *syncutil.Mutex
 	kvGranter granterWithIOTokens
@@ -1386,14 +1401,14 @@ type ioLoadListener struct {
 
 const unlimitedTokens = math.MaxInt64
 
-// Token changes are made at a coarse time granularity of 1min since
+// Token changes are made at a coarse time granularity of 15s since
 // compactions can take ~10s to complete. The totalTokens to give out over
-// the 1min interval are given out in a smoothed manner, at 1s intervals.
+// the 15s interval are given out in a smoothed manner, at 1s intervals.
 // This has similarities with the following kinds of token buckets:
-// - Zero replenishment rate and a burst value that is changed every 1min. We
-//   explicitly don't want a huge burst every 1min.
-// - A replenishment rate equal to totalTokens/60, with a burst capped at
-//   totalTokens/60. The only difference with the code here is that if
+// - Zero replenishment rate and a burst value that is changed every 15s. We
+//   explicitly don't want a huge burst every 15s.
+// - A replenishment rate equal to totalTokens/15, with a burst capped at
+//   totalTokens/15. The only difference with the code here is that if
 //   totalTokens is small, the integer rounding effects are compensated for.
 //
 // In an experiment with extreme overload using KV0 with block size 64KB,
@@ -1423,10 +1438,10 @@ const unlimitedTokens = math.MaxInt64
 // reasonable to simply use metrics that are updated when compactions
 // complete (as opposed to also tracking progress in bytes of on-going
 // compactions).
-const adjustmentInterval = 60
+const adjustmentInterval = 15
 
-// pebbleMetricsTicks is called every 1min, and decides the token allocations
-// for the next 1min.
+// pebbleMetricsTicks is called every adjustmentInterval seconds, and decides
+// the token allocations until the next call.
 func (io *ioLoadListener) pebbleMetricsTick(m pebble.Metrics) {
 	if !io.statsInitialized {
 		io.statsInitialized = true
@@ -1434,14 +1449,15 @@ func (io *ioLoadListener) pebbleMetricsTick(m pebble.Metrics) {
 		io.admittedCount = io.kvRequester.getAdmittedCount()
 		io.l0Bytes = m.Levels[0].Size
 		io.l0AddedBytes = m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested
-		// No initial limit, i.e, the first 1min is unlimited.
+		// No initial limit, i.e, the first interval is unlimited.
 		io.totalTokens = unlimitedTokens
 		return
 	}
 	io.adjustTokens(m)
 }
 
-// allocateTokensTick gives out 1/60th of the totalTokens every 1s.
+// allocateTokensTick gives out 1/adjustmentInterval of the totalTokens every
+// 1s.
 func (io *ioLoadListener) allocateTokensTick() {
 	toAllocate := int64(math.Ceil(float64(io.totalTokens) / adjustmentInterval))
 	if io.totalTokens != unlimitedTokens && toAllocate+io.tokensAllocated > io.totalTokens {
@@ -1489,8 +1505,8 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 		doLog = false
 	}
 	// We constrain admission if the store if over the threshold.
-	if m.Levels[0].NumFiles > io.l0FileCountOverloadThreshold ||
-		m.Levels[0].Sublevels > io.l0SubLevelCountOverloadThreshold {
+	if m.Levels[0].NumFiles > L0FileCountOverloadThreshold.Get(&io.settings.SV) ||
+		m.Levels[0].Sublevels > int32(L0SubLevelCountOverloadThreshold.Get(&io.settings.SV)) {
 		// Attribute the bytesAdded equally to all the admitted work.
 		bytesAddedPerWork := float64(bytesAdded) / float64(admitted)
 		// Don't admit more work than we can remove via compactions. numAdmit
@@ -1506,9 +1522,10 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 		io.totalTokens = int64(io.smoothedNumAdmit)
 		if doLog {
 			log.Infof(context.Background(),
-				"IO overload on store %d: admitted: %d, added: %d, removed (%d, %d), admit: (%f, %d)",
-				io.storeID, admitted, bytesAdded, bytesRemoved, io.smoothedBytesRemoved, numAdmit,
-				io.totalTokens)
+				"IO overload on store %d (files %d, sub-levels %d): admitted: %d, added: %d, "+
+					"removed (%d, %d), admit: (%f, %d)",
+				io.storeID, m.Levels[0].NumFiles, m.Levels[0].Sublevels, admitted, bytesAdded,
+				bytesRemoved, io.smoothedBytesRemoved, numAdmit, io.totalTokens)
 		}
 	} else {
 		// Under the threshold. Maintain a smoothedNumAdmit so that it is not 0
