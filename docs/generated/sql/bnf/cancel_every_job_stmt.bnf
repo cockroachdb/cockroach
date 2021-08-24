@@ -1,0 +1,2 @@
+cancel_every_job_stmt ::=
+	'CANCEL' 'EVERY' opt_job_type 'JOB'
