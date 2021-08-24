@@ -321,6 +321,9 @@ func (f *RangeFeed) processEvents(
 				if _, err := frontier.Forward(ev.Checkpoint.Span, ev.Checkpoint.ResolvedTS); err != nil {
 					return err
 				}
+				if f.onCheckpoint != nil {
+					f.onCheckpoint(ctx, ev.Checkpoint)
+				}
 			case ev.Error != nil:
 				// Intentionally do nothing, we'll get an error returned from the
 				// call to RangeFeed.
