@@ -41,6 +41,7 @@ var _ Details = StreamIngestionDetails{}
 var _ Details = NewSchemaChangeDetails{}
 var _ Details = MigrationDetails{}
 var _ Details = AutoSpanConfigReconciliationDetails{}
+var _ Details = ImportDetails{}
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}

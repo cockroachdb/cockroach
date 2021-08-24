@@ -21,7 +21,8 @@ import (
 )
 
 // EnvTablesType tells JobSchedulerTestEnv whether to use the system tables,
-// or to use test tables.
+// or to use test tables. System tables such as system.jobs may be affected
+// by the system in the background, while test tables are completely isolated.
 type EnvTablesType bool
 
 // UseTestTables instructs JobSchedulerTestEnv to use test tables.
