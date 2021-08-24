@@ -1164,6 +1164,7 @@ func (rq *replicateQueue) considerRebalance(
 		desc,
 		conf,
 		transferLeaseOptions{
+			goal:                     followTheWorkload,
 			checkTransferLeaseSource: true,
 			checkCandidateFullness:   true,
 			dryRun:                   dryRun,
@@ -1271,7 +1272,19 @@ func replicationChangesForRebalance(
 	return chgs, performingSwap, nil
 }
 
+// transferLeaseGoal dictates whether a call to TransferLeaseTarget should
+// improve locality of access, convergence of lease counts or convergence of
+// QPS.
+type transferLeaseGoal int
+
+const (
+	followTheWorkload transferLeaseGoal = iota
+	leaseCountConvergence
+	qpsConvergence
+)
+
 type transferLeaseOptions struct {
+	goal                     transferLeaseGoal
 	checkTransferLeaseSource bool
 	checkCandidateFullness   bool
 	dryRun                   bool
@@ -1320,9 +1333,8 @@ func (rq *replicateQueue) shedLease(
 		desc.Replicas().VoterDescriptors(),
 		repl,
 		repl.leaseholderStats,
-		opts.checkTransferLeaseSource,
-		opts.checkCandidateFullness,
-		false, /* alwaysAllowDecisionWithoutStats */
+		false, /* forceDecisionWithoutStats */
+		opts,
 	)
 	if target == (roachpb.ReplicaDescriptor{}) {
 		return noSuitableTarget, nil
