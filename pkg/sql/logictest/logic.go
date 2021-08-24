@@ -465,6 +465,8 @@ type testClusterConfig struct {
 	// localities is set if nodes should be set to a particular locality.
 	// Nodes are 1-indexed.
 	localities map[int]roachpb.Locality
+	// if set, skip this config.
+	skip bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -678,6 +680,7 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:          9,
 		overrideAutoStats: "false",
 		localities:        multiregion9node3region3azsLocalities,
+		skip:              true,
 	},
 	{
 		name:              "multiregion-9node-3region-3azs-tenant",
@@ -3256,6 +3259,9 @@ func RunLogicTestWithDefaultConfig(
 		}
 		// Top-level test: one per test configuration.
 		t.Run(cfg.name, func(t *testing.T) {
+			if cfg.skip {
+				skip.IgnoreLint(t, "config skipped since the `skip` field was set")
+			}
 			if testing.Short() && cfg.skipShort {
 				skip.IgnoreLint(t, "config skipped by -test.short")
 			}
