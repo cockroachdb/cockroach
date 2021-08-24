@@ -72,8 +72,12 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	if alterPKNode.Interleave != nil {
-		if err := interleavedTableDeprecationAction(p.RunParams(ctx)); err != nil {
+		interleaveIgnored, err := interleavedTableDeprecationAction(p.RunParams(ctx))
+		if err != nil {
 			return err
+		}
+		if interleaveIgnored {
+			alterPKNode.Interleave = nil
 		}
 	}
 
