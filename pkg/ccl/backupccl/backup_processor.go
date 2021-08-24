@@ -55,6 +55,12 @@ var (
 		time.Second*5,
 		settings.NonNegativeDuration,
 	)
+	alwaysWriteInProc = settings.RegisterBoolSetting(
+		"bulkio.backup.proxy_file_writes.enabled",
+		"return files to the backup coordination processes to write to "+
+			"external storage instead of writing them directly from the storage layer",
+		false,
+	)
 )
 
 const backupProcessorName = "backupDataProcessor"
@@ -199,7 +205,7 @@ func runBackupProcessor(
 	exportRequestStoreByLocalityKV := storageConfByLocalityKV
 
 	// If this is a tenant backup, we need to write the file from the SQL layer.
-	writeSSTsInProcessor := !flowCtx.Cfg.Codec.ForSystemTenant()
+	writeSSTsInProcessor := !flowCtx.Cfg.Codec.ForSystemTenant() || alwaysWriteInProc.Get(&clusterSettings.SV)
 
 	var defaultStore cloud.ExternalStorage
 	if writeSSTsInProcessor {
@@ -253,6 +259,10 @@ func runBackupProcessor(
 					TargetFileSize:                      targetFileSize,
 					ReturnSST:                           writeSSTsInProcessor,
 					OmitChecksum:                        true,
+				}
+
+				if writeSSTsInProcessor {
+					req.Encryption = nil
 				}
 
 				// If we're doing re-attempts but are not yet in the priority regime,
@@ -338,7 +348,7 @@ func runBackupProcessor(
 				for _, file := range res.Files {
 					if writeSSTsInProcessor {
 						file.Path = storageccl.GenerateUniqueSSTName(flowCtx.EvalCtx.NodeID.SQLInstanceID())
-						if err := writeFile(ctx, file, defaultStore, storeByLocalityKV); err != nil {
+						if err := writeFile(ctx, file, defaultStore, storeByLocalityKV, spec.Encryption); err != nil {
 							return err
 						}
 					}
@@ -410,6 +420,7 @@ func writeFile(
 	file roachpb.ExportResponse_File,
 	defaultStore cloud.ExternalStorage,
 	storeByLocalityKV map[string]cloud.ExternalStorage,
+	encryption *roachpb.FileEncryptionOptions,
 ) error {
 	if defaultStore == nil {
 		return errors.New("no default store created when writing SST")
@@ -423,6 +434,13 @@ func writeFile(
 		exportStore = localitySpecificStore
 	}
 
+	if encryption != nil {
+		var err error
+		data, err = storageccl.EncryptFile(data, encryption.Key)
+		if err != nil {
+			return err
+		}
+	}
 	if err := exportStore.WriteFile(ctx, file.Path, bytes.NewReader(data)); err != nil {
 		log.VEventf(ctx, 1, "failed to put file: %+v", err)
 		return errors.Wrap(err, "writing SST")
