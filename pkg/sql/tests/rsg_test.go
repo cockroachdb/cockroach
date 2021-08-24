@@ -127,8 +127,21 @@ func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) er
 func (db *verifyFormatDB) execWithTimeout(
 	t *testing.T, ctx context.Context, sql string, duration time.Duration,
 ) error {
-	if err := verifyFormat(sql); err != nil {
-		db.verifyFormatErr = err
+	if err := func() (retErr error) {
+		defer func() {
+			if err := recover(); err != nil {
+				retErr = errors.CombineErrors(
+					errors.AssertionFailedf("panic executing %s: err %v", sql, err),
+					retErr,
+				)
+			}
+		}()
+		if err := verifyFormat(sql); err != nil {
+			db.verifyFormatErr = err
+			return err
+		}
+		return nil
+	}(); err != nil {
 		return err
 	}
 
