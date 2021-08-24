@@ -29,7 +29,7 @@ const HotRanges = () => {
     <div className="section">
       <Helmet title="Hot Ranges" />
       <h1 className="base-heading">Hot ranges</h1>
-      {hotRanges && <HotRangesTable hotRangesList={hotRanges.data} />}
+      {hotRanges.data && <HotRangesTable hotRangesList={hotRanges.data} />}
     </div>
   );
 };
