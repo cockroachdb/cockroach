@@ -26,6 +26,7 @@ ALL_TESTS = [
     "//pkg/ccl/migrationccl/migrationsccl:migrationsccl_test",
     "//pkg/ccl/multiregionccl:multiregionccl_test",
     "//pkg/ccl/multitenantccl/tenantcostclient:tenantcostclient_test",
+    "//pkg/ccl/multitenantccl/tenantcostserver/tenanttokenbucket:tenanttokenbucket_test",
     "//pkg/ccl/multitenantccl/tenantcostserver:tenantcostserver_test",
     "//pkg/ccl/oidcccl:oidcccl_test",
     "//pkg/ccl/partitionccl:partitionccl_test",
