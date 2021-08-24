@@ -28,10 +28,6 @@ type ExprContext interface {
 
 	// IsLocal returns true if the current plan is local.
 	IsLocal() bool
-
-	// EvaluateSubqueries returns true if subqueries should be evaluated before
-	// creating the execinfrapb.Expression.
-	EvaluateSubqueries() bool
 }
 
 // fakeExprContext is a fake implementation of ExprContext that always behaves
@@ -46,10 +42,6 @@ func (fakeExprContext) EvalContext() *tree.EvalContext {
 
 func (fakeExprContext) IsLocal() bool {
 	return false
-}
-
-func (fakeExprContext) EvaluateSubqueries() bool {
-	return true
 }
 
 // MakeExpression creates a execinfrapb.Expression.
@@ -72,18 +64,17 @@ func MakeExpression(
 		ctx = &fakeExprContext{}
 	}
 
+	// Always replace the subqueries with their results (they must have been
+	// executed before the main query).
 	evalCtx := ctx.EvalContext()
 	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
 		evalCtx: evalCtx,
 	}
-
-	if ctx.EvaluateSubqueries() {
-		outExpr, _ := tree.WalkExpr(subqueryVisitor, expr)
-		if subqueryVisitor.err != nil {
-			return execinfrapb.Expression{}, subqueryVisitor.err
-		}
-		expr = outExpr.(tree.TypedExpr)
+	outExpr, _ := tree.WalkExpr(subqueryVisitor, expr)
+	if subqueryVisitor.err != nil {
+		return execinfrapb.Expression{}, subqueryVisitor.err
 	}
+	expr = outExpr.(tree.TypedExpr)
 
 	if indexVarMap != nil {
 		// Remap our indexed vars.
