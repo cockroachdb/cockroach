@@ -299,7 +299,7 @@ func (g *testGranterWithIOTokens) setAvailableIOTokensLocked(tokens int64) {
 	fmt.Fprintf(&g.buf, "setAvailableIOTokens: %s", tokensFor1sToString(tokens))
 }
 
-func tokensFor60sToString(tokens int64) string {
+func tokensForIntervalToString(tokens int64) string {
 	if tokens == unlimitedTokens {
 		return "unlimited"
 	}
@@ -307,9 +307,7 @@ func tokensFor60sToString(tokens int64) string {
 }
 
 func tokensFor1sToString(tokens int64) string {
-	// ioLoadListener works with floats, so we just approximate the unlimited
-	// calculation here.
-	if tokens >= (unlimitedTokens/adjustmentInterval - 15) {
+	if tokens >= unlimitedTokens/adjustmentInterval {
 		return "unlimited"
 	}
 	return fmt.Sprintf("%d", tokens)
@@ -364,7 +362,7 @@ func TestIOLoadListener(t *testing.T) {
 				fmt.Fprintf(&buf, "admitted: %d, bytes: %d, added-bytes: %d,\nsmoothed-removed: %d, "+
 					"smoothed-admit: %d,\ntokens: %s, tokens-allocated: %s\n", ioll.admittedCount,
 					ioll.l0Bytes, ioll.l0AddedBytes, ioll.smoothedBytesRemoved,
-					int64(ioll.smoothedNumAdmit), tokensFor60sToString(ioll.totalTokens),
+					int64(ioll.smoothedNumAdmit), tokensForIntervalToString(ioll.totalTokens),
 					tokensFor1sToString(ioll.tokensAllocated))
 				for i := 0; i < adjustmentInterval; i++ {
 					ioll.allocateTokensTick()
