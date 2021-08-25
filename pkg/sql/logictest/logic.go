@@ -3265,9 +3265,6 @@ func RunLogicTestWithDefaultConfig(
 			if logicTestsConfigFilter != "" && cfg.name != logicTestsConfigFilter {
 				skip.IgnoreLint(t, "config does not match env var")
 			}
-			if cfg.numNodes > 3 {
-				skip.UnderBazelWithIssue(t, 69276, "multi-node tests fail")
-			}
 			for i, path := range paths {
 				path := path // Rebind range variable.
 				onlyNonMetamorphic := nonMetamorphic[i]
