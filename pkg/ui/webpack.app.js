@@ -168,6 +168,7 @@ module.exports = (env, argv) => {
 
     stats: "errors-only",
 
+    devtool: 'source-map',
     devServer: {
       contentBase: path.join(__dirname, `dist${env.dist}`),
       index: "",
