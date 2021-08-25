@@ -975,15 +975,22 @@ func FormatRetriableExecutionErrorLogToStringArray(
 		if ev == nil { // no reason this should happen, but be defensive
 			continue
 		}
-
+		var cause error
+		if ev.Error != nil {
+			cause = errors.DecodeError(ctx, *ev.Error)
+		} else {
+			cause = fmt.Errorf("(truncated) %s", ev.TruncatedError)
+		}
 		msg := formatRetriableExecutionFailure(
 			ev.InstanceID,
 			Status(ev.Status),
 			timeutil.FromUnixMicros(ev.ExecutionStartMicros),
 			timeutil.FromUnixMicros(ev.ExecutionEndMicros),
-			errors.DecodeError(ctx, *ev.Error),
+			cause,
 		)
-		arr.Append(tree.NewDString(msg))
+		// We really don't care about errors here. I'd much rather see nothing
+		// in my log than crash.
+		_ = arr.Append(tree.NewDString(msg))
 	}
 	return arr
 }

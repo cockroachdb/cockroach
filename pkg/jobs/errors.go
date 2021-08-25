@@ -138,14 +138,24 @@ func (e *retriableExecutionError) SafeFormatError(p errors.Printer) error {
 }
 
 func (e *retriableExecutionError) toRetriableExecutionFailure(
-	ctx context.Context,
+	ctx context.Context, maxErrorSize int,
 ) *jobspb.RetriableExecutionFailure {
-	ee := errors.EncodeError(ctx, e.cause)
-	return &jobspb.RetriableExecutionFailure{
+	// If the cause is too large, we format it, losing all structure, and retain
+	// a prefix.
+	ef := &jobspb.RetriableExecutionFailure{
 		Status:               string(e.status),
 		ExecutionStartMicros: timeutil.ToUnixMicros(e.start),
 		ExecutionEndMicros:   timeutil.ToUnixMicros(e.end),
 		InstanceID:           e.instanceID,
-		Error:                &ee,
 	}
+	if encodedCause := errors.EncodeError(ctx, e.cause); encodedCause.Size() < maxErrorSize {
+		ef.Error = &encodedCause
+	} else {
+		formatted := e.cause.Error()
+		if len(formatted) > maxErrorSize {
+			formatted = formatted[:maxErrorSize]
+		}
+		ef.TruncatedError = formatted
+	}
+	return ef
 }
