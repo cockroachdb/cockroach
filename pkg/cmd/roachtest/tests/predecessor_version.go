@@ -28,11 +28,13 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 
 	buildVersionMajorMinor := fmt.Sprintf("%d.%d", buildVersion.Major(), buildVersion.Minor())
 
-	// NB: you can update the values in this map to point at newer patch
-	// releases. You will need to run acceptance/version-upgrade with the
-	// checkpoint option enabled to create the missing store directory fixture
-	// (see runVersionUpgrade). The same is true for adding a new key to this
-	// map.
+	// You can update the values in verMap to point at newer patch releases.
+	//
+	// NB: If a new key was added (e.g. if you're releasing a new major
+	// release), you'll also need to regenerate fixtures. To regenerate
+	// fixtures, you will need to run acceptance/version-upgrade with the
+	// checkpoint option enabled to create the missing store directory
+	// fixture (see runVersionUpgrade).
 	verMap := map[string]string{
 		"21.2": "21.1.7",
 		"21.1": "20.2.12",
