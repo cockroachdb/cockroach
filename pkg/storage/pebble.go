@@ -357,6 +357,19 @@ func DefaultPebbleOptions() *pebble.Options {
 	//
 	// TODO(bilal): Remove this line when the above issue is addressed.
 	opts.Experimental.ReadSamplingMultiplier = -1
+	// Validate min/max keys in each SSTable when performing a compaction. This
+	// serves as a simple protection against corruption or programmer-error in
+	// Pebble.
+	opts.Experimental.KeyValidationFunc = func(userKey []byte) error {
+		engineKey, ok := DecodeEngineKey(userKey)
+		if !ok {
+			return errors.Newf("key %s could not be decoded as an EngineKey", string(userKey))
+		}
+		if err := engineKey.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
@@ -582,9 +595,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	storeIDContainer := &base.StoreIDContainer{}
 	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
 
-	cfg.Opts.Logger = pebbleLogger{
-		ctx:   logCtx,
-		depth: 1,
+	if cfg.Opts.Logger == nil {
+		cfg.Opts.Logger = pebbleLogger{
+			ctx:   logCtx,
+			depth: 1,
+		}
 	}
 
 	// Establish the emergency ballast if we can. If there's not sufficient
