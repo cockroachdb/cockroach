@@ -740,7 +740,6 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 		// than tables. For jobs intended to drop other types of descriptors, we do
 		// nothing.
 		if _, ok := desc.(catalog.TableDescriptor); !ok {
-			// Mark the error as permanent so that is not retried in reverting state.
 			return jobs.MarkAsPermanentJobError(errors.Newf("schema change jobs on databases and schemas cannot be reverted"))
 		}
 
@@ -2262,12 +2261,17 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.SchemaChangeDetails)
 
+	if fn := p.ExecCfg().SchemaChangerTestingKnobs.RunBeforeOnFailOrCancel; fn != nil {
+		if err := fn(r.job.ID()); err != nil {
+			return err
+		}
+	}
+
 	// If this is a schema change to drop a database or schema, DescID will be
 	// unset. We cannot revert such schema changes, so just exit early with an
 	// error.
 	if details.DescID == descpb.InvalidID {
-		// Mark the error as permanent so that is not retried in reverting state.
-		return jobs.MarkAsPermanentJobError(errors.Newf("schema change jobs on databases and schemas cannot be reverted"))
+		return errors.Newf("schema change jobs on databases and schemas cannot be reverted")
 	}
 	sc := SchemaChanger{
 		descID:               details.DescID,
@@ -2286,12 +2290,6 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 		ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
 			return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
 		},
-	}
-
-	if fn := sc.testingKnobs.RunBeforeOnFailOrCancel; fn != nil {
-		if err := fn(r.job.ID()); err != nil {
-			return err
-		}
 	}
 
 	if r.job.Payload().FinalResumeError == nil {
