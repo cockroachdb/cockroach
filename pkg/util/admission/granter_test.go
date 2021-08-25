@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -159,7 +160,7 @@ func TestGranterBasic(t *testing.T) {
 			var runnable, procs int
 			d.ScanArgs(t, "runnable", &runnable)
 			d.ScanArgs(t, "procs", &procs)
-			coord.CPULoad(runnable, procs)
+			coord.CPULoad(runnable, procs, time.Millisecond)
 			return flushAndReset()
 
 		case "set-io-tokens":
