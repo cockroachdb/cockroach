@@ -973,12 +973,18 @@ func FormatRetriableExecutionErrorLogToStringArray(ctx context.Context, pl *jobs
 		if ev == nil { // no reason this should happen, but be defensive
 			continue
 		}
+		var cause error
+		if ev.Error != nil {
+			cause = errors.DecodeError(ctx, *ev.Error)
+		} else {
+			cause = fmt.Errorf("(truncated) %s", ev.TruncatedError)
+		}
 		arr.Append(tree.NewDString(newRetriableExecutionError(
 			ev.InstanceID,
 			timeutil.FromUnixMicros(ev.ExecutionStartMicros),
 			timeutil.FromUnixMicros(ev.ExecutionEndMicros),
 			Status(ev.Status),
-			errors.DecodeError(ctx, *ev.Error),
+			cause,
 		).Error()))
 	}
 	return arr

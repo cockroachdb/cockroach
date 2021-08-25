@@ -1156,7 +1156,7 @@ func (r *Registry) stepThroughStateMachine(
 		)
 		start := job.getRunStats().LastRun
 		return newRetriableExecutionError(
-			r.nodeID.SQLInstanceID(),  start, r.clock.Now().GoTime(), status, cause,
+			r.nodeID.SQLInstanceID(), start, r.clock.Now().GoTime(), status, cause,
 		)
 	}
 	switch status {
@@ -1370,20 +1370,28 @@ func (r *Registry) RetryMaxDelay() float64 {
 
 // maybeRecordRetriableExeuctionFailure will record a
 // RetriableExecutionFailureError into the job payload.
-//
-// TODO(ajwerner): Truncate errors and the slice of existing errors.
 func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j *Job) {
 	var efe *retriableExecutionError
 	if !errors.As(err, &efe) {
 		return
 	}
+
 	updateErr := j.Update(ctx, nil, func(
 		txn *kv.Txn, md JobMetadata, ju *JobUpdater,
 	) error {
-		// TODO(ajwerner): Truncate this list
 		pl := md.Payload
-		pl.RetriableExecutionFailureLog = append(pl.RetriableExecutionFailureLog,
-			efe.toRetriableExecutionFailure(ctx))
+		{ // Append the entry to the log
+			maxSize := int(executionErrorsMaxEntrySize.Get(&r.settings.SV))
+			pl.RetriableExecutionFailureLog = append(pl.RetriableExecutionFailureLog,
+				efe.toRetriableExecutionFailure(ctx, maxSize))
+		}
+		{ // Maybe truncate the log.
+			maxEntries := int(executionErrorsMaxEntriesSetting.Get(&r.settings.SV))
+			log := &pl.RetriableExecutionFailureLog
+			if len(*log) > maxEntries {
+				*log = (*log)[len(*log)-maxEntries:]
+			}
+		}
 		ju.UpdatePayload(pl)
 		return nil
 	})
