@@ -194,6 +194,9 @@ message LocalOnlySessionData {
   // trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
   // means disabled.
   int64 txn_rows_read_err = 50;
+  // AutoRehomingEnabled indicates whether or not REGIONAL BY ROW tables should
+  // have a rehoming ON UPDATE clause added to them.
+  bool auto_rehoming_enabled = 51;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
