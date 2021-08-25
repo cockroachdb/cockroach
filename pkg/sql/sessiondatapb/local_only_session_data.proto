@@ -176,6 +176,9 @@ message LocalOnlySessionData {
   // This is only populated when SET ROLE is used, otherwise the session_user
   // is the same as the UserProto in SessionData.
   string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  // AutoRehomingEnabled indicates whether or not REGIONAL BY ROW tables should
+  // have a rehoming ON UPDATE clause added to them.
+  bool auto_rehoming_enabled = 47;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
