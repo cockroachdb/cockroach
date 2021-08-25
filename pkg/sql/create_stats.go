@@ -536,24 +536,29 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 
 	dsp := p.DistSQLPlanner()
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Make the copy of the extended eval context since we're modifying it
+		// below. Notably, evalCtxCopy.EvalContext.Mon is overwritten during the
+		// flow setup, and we want to use the original monitor in case DB.Txn is
+		// retried automatically.
+		evalCtxCopy := p.ExtendedEvalContext().copy()
 		// Set the transaction on the EvalContext to this txn. This allows for
 		// use of the txn during processor setup during the execution of the flow.
-		evalCtx.Txn = txn
+		evalCtxCopy.Txn = txn
 
 		if details.AsOf != nil {
-			p.ExtendedEvalContext().AsOfSystemTime = &tree.AsOfSystemTime{Timestamp: *details.AsOf}
-			p.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
+			evalCtxCopy.AsOfSystemTime = &tree.AsOfSystemTime{Timestamp: *details.AsOf}
+			evalCtxCopy.SetTxnTimestamp(details.AsOf.GoTime())
 			if err := txn.SetFixedTimestamp(ctx, *details.AsOf); err != nil {
 				return err
 			}
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn, true /* distribute */)
+		planCtx := dsp.NewPlanningCtx(ctx, evalCtxCopy, nil /* planner */, txn, true /* distribute */)
 		// CREATE STATS flow doesn't produce any rows and only emits the
 		// metadata, so we can use a nil rowContainerHelper.
 		resultWriter := NewRowResultWriter(nil /* rowContainer */)
 		if err := dsp.planAndRunCreateStats(
-			ctx, evalCtx, planCtx, txn, r.job, resultWriter,
+			ctx, evalCtxCopy, planCtx, txn, r.job, resultWriter,
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
 			if grpcutil.IsContextCanceled(err) {
