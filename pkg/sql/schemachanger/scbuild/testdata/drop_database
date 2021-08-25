@@ -59,40 +59,51 @@ DROP DATABASE db1 CASCADE
     - 53
     - 54
     - 57
-- DROP DefaultExpression:{DescID: 56, ColumnID: 1}
+- DROP NamespaceEntry:{DescID: 54, ElementName: "sq1"}
   state: PUBLIC
   details:
-    columnId: 1
-    tableId: 56
-- DROP DefaultExpression:{DescID: 56, ColumnID: 2}
+    descriptorID: 54
+    name: sq1
+- DROP NamespaceEntry:{DescID: 55, ElementName: "sq1"}
   state: PUBLIC
   details:
-    columnId: 2
-    tableId: 56
-- DROP DefaultExpression:{DescID: 56, ColumnID: 3}
+    descriptorID: 55
+    name: sq1
+- DROP NamespaceEntry:{DescID: 56, ElementName: "t1"}
   state: PUBLIC
   details:
-    columnId: 3
-    tableId: 56
-    usesSequenceIDs:
-    - 55
-- DROP DefaultExpression:{DescID: 57, ColumnID: 1}
+    descriptorID: 56
+    name: t1
+- DROP NamespaceEntry:{DescID: 57, ElementName: "t1"}
   state: PUBLIC
   details:
-    columnId: 1
-    tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 2}
+    descriptorID: 57
+    name: t1
+- DROP NamespaceEntry:{DescID: 58, ElementName: "v1"}
   state: PUBLIC
   details:
-    columnId: 2
-    tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 3}
+    descriptorID: 58
+    name: v1
+- DROP NamespaceEntry:{DescID: 59, ElementName: "v2"}
   state: PUBLIC
   details:
-    columnId: 3
-    tableId: 57
-    usesSequenceIDs:
-    - 54
+    descriptorID: 59
+    name: v2
+- DROP NamespaceEntry:{DescID: 60, ElementName: "v3"}
+  state: PUBLIC
+  details:
+    descriptorID: 60
+    name: v3
+- DROP NamespaceEntry:{DescID: 61, ElementName: "v4"}
+  state: PUBLIC
+  details:
+    descriptorID: 61
+    name: v4
+- DROP NamespaceEntry:{DescID: 64, ElementName: "v5"}
+  state: PUBLIC
+  details:
+    descriptorID: 64
+    name: v5
 - DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}
   state: PUBLIC
   details:
@@ -184,41 +195,20 @@ DROP DATABASE db1 CASCADE
 - DROP View:{DescID: 58}
   state: PUBLIC
   details:
-    dependedOnBy:
-    - 59
-    - 60
-    dependsOn:
-    - 56
     tableId: 58
 - DROP View:{DescID: 59}
   state: PUBLIC
   details:
-    dependedOnBy:
-    - 60
-    - 61
-    dependsOn:
-    - 58
     tableId: 59
 - DROP View:{DescID: 60}
   state: PUBLIC
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 58
-    - 59
     tableId: 60
 - DROP View:{DescID: 61}
   state: PUBLIC
   details:
-    dependedOnBy:
-    - 64
-    dependsOn:
-    - 59
     tableId: 61
 - DROP View:{DescID: 64}
   state: PUBLIC
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 61
     tableId: 64

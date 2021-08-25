@@ -9,6 +9,11 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 build
 DROP VIEW defaultdb.v1
 ----
+- DROP NamespaceEntry:{DescID: 53, ElementName: "v1"}
+  state: PUBLIC
+  details:
+    descriptorID: 53
+    name: v1
 - DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
   state: PUBLIC
   details:
@@ -17,9 +22,6 @@ DROP VIEW defaultdb.v1
 - DROP View:{DescID: 53}
   state: PUBLIC
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 52
     tableId: 53
 
 create-view
@@ -45,6 +47,31 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 build
 DROP VIEW defaultdb.v1 CASCADE
 ----
+- DROP NamespaceEntry:{DescID: 53, ElementName: "v1"}
+  state: PUBLIC
+  details:
+    descriptorID: 53
+    name: v1
+- DROP NamespaceEntry:{DescID: 54, ElementName: "v2"}
+  state: PUBLIC
+  details:
+    descriptorID: 54
+    name: v2
+- DROP NamespaceEntry:{DescID: 55, ElementName: "v3"}
+  state: PUBLIC
+  details:
+    descriptorID: 55
+    name: v3
+- DROP NamespaceEntry:{DescID: 56, ElementName: "v4"}
+  state: PUBLIC
+  details:
+    descriptorID: 56
+    name: v4
+- DROP NamespaceEntry:{DescID: 59, ElementName: "v5"}
+  state: PUBLIC
+  details:
+    descriptorID: 59
+    name: v5
 - DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
   state: PUBLIC
   details:
@@ -88,41 +115,20 @@ DROP VIEW defaultdb.v1 CASCADE
 - DROP View:{DescID: 53}
   state: PUBLIC
   details:
-    dependedOnBy:
-    - 54
-    - 55
-    dependsOn:
-    - 52
     tableId: 53
 - DROP View:{DescID: 54}
   state: PUBLIC
   details:
-    dependedOnBy:
-    - 55
-    - 56
-    dependsOn:
-    - 53
     tableId: 54
 - DROP View:{DescID: 55}
   state: PUBLIC
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 53
-    - 54
     tableId: 55
 - DROP View:{DescID: 56}
   state: PUBLIC
   details:
-    dependedOnBy:
-    - 59
-    dependsOn:
-    - 54
     tableId: 56
 - DROP View:{DescID: 59}
   state: PUBLIC
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 56
     tableId: 59

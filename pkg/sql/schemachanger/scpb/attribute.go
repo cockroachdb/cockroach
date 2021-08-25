@@ -37,7 +37,8 @@ const (
 	AttributeElementName
 	// AttributeIndexID is the index ID to which this element corresponds.
 	AttributeIndexID
-
+	// AttributeColumnFamilyID is the column family ID to which this element corresponds.
+	AttributeColumnFamilyID
 	numAttributes int = iota
 )
 
@@ -48,6 +49,7 @@ var attributeOrder = [numAttributes]Attribute{
 	3: AttributeColumnID,
 	4: AttributeElementName,
 	5: AttributeIndexID,
+	6: AttributeColumnFamilyID,
 }
 
 // CompareElements compares two elements by their attributes.

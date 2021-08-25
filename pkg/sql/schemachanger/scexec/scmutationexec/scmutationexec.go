@@ -177,14 +177,24 @@ func (m *visitor) AddTypeBackRef(ctx context.Context, op scop.AddTypeBackRef) er
 func (m *visitor) RemoveRelationDependedOnBy(
 	ctx context.Context, op scop.RemoveRelationDependedOnBy,
 ) error {
-	// Remove the descriptors namespaces as the last stage
+	// Clean up dependencies for the relationship.
 	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	for depIdx, dependedOnBy := range tableDesc.DependedOnBy {
-		if dependedOnBy.ID == op.DependedOnBy {
+	depDesc, err := m.catalog.GetMutableTableByID(ctx, op.DependedOnBy)
+	if err != nil {
+		return err
+	}
+	for depIdx, dependsOnBy := range tableDesc.DependedOnBy {
+		if dependsOnBy.ID == op.DependedOnBy {
 			tableDesc.DependedOnBy = append(tableDesc.DependedOnBy[:depIdx], tableDesc.DependedOnBy[depIdx+1:]...)
+			break
+		}
+	}
+	for depIdx, dependsOn := range depDesc.DependsOn {
+		if dependsOn == op.TableID {
+			depDesc.DependsOn = append(depDesc.DependsOn[:depIdx], depDesc.DependsOn[depIdx+1:]...)
 			break
 		}
 	}
@@ -366,25 +376,55 @@ func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 	)
 }
 
+func (m *visitor) SetColumnName(ctx context.Context, op scop.SetColumnName) error {
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	mutations := table.GetMutations()
+	var columnMutation *descpb.ColumnDescriptor
+	for _, mutation := range mutations {
+		columnMutation = mutation.GetColumn()
+		if columnMutation != nil {
+			if columnMutation.ID == op.ColumnID {
+				break
+			}
+		}
+	}
+	// Update the name inside the entry.
+	columnMutation.Name = op.Name
+	// Update the name inside the column families for
+	// this column ID.
+	for _, family := range table.GetFamilies() {
+		for columnIdx, columnID := range family.ColumnIDs {
+			if columnID == op.ColumnID {
+				family.ColumnNames[columnIdx] = op.Name
+			}
+		}
+	}
+	return nil
+}
+
 func (m *visitor) MakeAddedColumnDeleteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDeleteOnly,
 ) error {
+	emptyStrToNil := func(v string) *string {
+		if v == "" {
+			return nil
+		}
+		return &v
+	}
 	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 
-	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
-	// or what-not.
-	if op.Column.ID >= table.NextColumnID {
-		table.NextColumnID = op.Column.ID + 1
-	}
-	var foundFamily bool
+	foundFamily := false
 	for i := range table.Families {
 		fam := &table.Families[i]
 		if foundFamily = fam.ID == op.FamilyID; foundFamily {
-			fam.ColumnIDs = append(fam.ColumnIDs, op.Column.ID)
-			fam.ColumnNames = append(fam.ColumnNames, op.Column.Name)
+			fam.ColumnIDs = append(fam.ColumnIDs, op.ColumnID)
+			fam.ColumnNames = append(fam.ColumnNames, "")
 			break
 		}
 	}
@@ -392,8 +432,8 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 		table.Families = append(table.Families, descpb.ColumnFamilyDescriptor{
 			Name:        op.FamilyName,
 			ID:          op.FamilyID,
-			ColumnNames: []string{op.Column.Name},
-			ColumnIDs:   []descpb.ColumnID{op.Column.ID},
+			ColumnNames: []string{""},
+			ColumnIDs:   []descpb.ColumnID{op.ColumnID},
 		})
 		sort.Slice(table.Families, func(i, j int) bool {
 			return table.Families[i].ID < table.Families[j].ID
@@ -402,7 +442,28 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 			table.NextFamilyID = op.FamilyID + 1
 		}
 	}
-	table.AddColumnMutation(&op.Column, descpb.DescriptorMutation_ADD)
+
+	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
+	// or what-not.
+	if op.ColumnID >= table.NextColumnID {
+		table.NextColumnID = op.ColumnID + 1
+	}
+
+	table.AddColumnMutation(&descpb.ColumnDescriptor{
+		ID:                                op.ColumnID,
+		Type:                              op.ColumnType,
+		Nullable:                          op.Nullable,
+		DefaultExpr:                       emptyStrToNil(op.DefaultExpr),
+		OnUpdateExpr:                      emptyStrToNil(op.OnUpdateExpr),
+		Hidden:                            op.Hidden,
+		Inaccessible:                      op.Inaccessible,
+		GeneratedAsIdentityType:           op.GeneratedAsIdentityType,
+		GeneratedAsIdentitySequenceOption: emptyStrToNil(op.GeneratedAsIdentitySequenceOption),
+		UsesSequenceIds:                   op.UsesSequenceIds,
+		ComputeExpr:                       emptyStrToNil(op.ComputerExpr),
+		PGAttributeNum:                    op.PgAttributeNum,
+		SystemColumnKind:                  op.SystemColumnKind,
+	}, descpb.DescriptorMutation_ADD)
 	return nil
 }
 

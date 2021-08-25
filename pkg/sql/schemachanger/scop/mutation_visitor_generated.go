@@ -47,6 +47,7 @@ type MutationVisitor interface {
 	AddColumnFamily(context.Context, AddColumnFamily) error
 	DropForeignKeyRef(context.Context, DropForeignKeyRef) error
 	RemoveSequenceOwnedBy(context.Context, RemoveSequenceOwnedBy) error
+	SetColumnName(context.Context, SetColumnName) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -65,7 +66,9 @@ func (op MakeAddedPrimaryIndexPublic) Visit(ctx context.Context, v MutationVisit
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(
+	ctx context.Context, v MutationVisitor,
+) error {
 	return v.MakeDroppedPrimaryIndexDeleteAndWriteOnly(ctx, op)
 }
 
@@ -115,7 +118,9 @@ func (op MakeAddedColumnDeleteAndWriteOnly) Visit(ctx context.Context, v Mutatio
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+func (op MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) Visit(
+	ctx context.Context, v MutationVisitor,
+) error {
 	return v.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(ctx, op)
 }
 
@@ -172,4 +177,9 @@ func (op DropForeignKeyRef) Visit(ctx context.Context, v MutationVisitor) error 
 // Visit is part of the MutationOp interface.
 func (op RemoveSequenceOwnedBy) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveSequenceOwnedBy(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op SetColumnName) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.SetColumnName(ctx, op)
 }

@@ -14,11 +14,12 @@ func _() {
 	_ = x[AttributeColumnID-3]
 	_ = x[AttributeElementName-4]
 	_ = x[AttributeIndexID-5]
+	_ = x[AttributeColumnFamilyID-6]
 }
 
-const _Attribute_name = "TypeDescIDReferencedDescIDColumnIDElementNameIndexID"
+const _Attribute_name = "TypeDescIDReferencedDescIDColumnIDElementNameIndexIDColumnFamilyID"
 
-var _Attribute_index = [...]uint8{0, 4, 10, 26, 34, 45, 52}
+var _Attribute_index = [...]uint8{0, 4, 10, 26, 34, 45, 52, 66}
 
 func (i Attribute) String() string {
 	if i < 0 || i >= Attribute(len(_Attribute_index)-1) {

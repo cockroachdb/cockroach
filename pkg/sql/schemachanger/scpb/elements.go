@@ -67,9 +67,7 @@ func (e *Column) getAttribute(attribute Attribute) attributeValue {
 	case AttributeDescID:
 		return (*descID)(&e.TableID)
 	case AttributeColumnID:
-		return (*columnID)(&e.Column.ID)
-	case AttributeElementName:
-		return (*elementName)(&e.Column.Name)
+		return (*columnID)(&e.ColumnID)
 	default:
 		return nil
 	}
@@ -292,6 +290,72 @@ func (e *Database) getAttribute(attr Attribute) attributeValue {
 		return getElementTypeID(e)
 	case AttributeDescID:
 		return (*descID)(&e.DatabaseID)
+	default:
+		return nil
+	}
+}
+
+// getAttributes implements the Element interface
+func (e *Namespace) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.DescriptorID)
+	case AttributeElementName:
+		return (*elementName)(&e.Name)
+	default:
+		return nil
+	}
+}
+
+func (e *ColumnName) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	case AttributeColumnID:
+		return (*descID)(&e.ColumnID)
+	case AttributeElementName:
+		return (*elementName)(&e.Name)
+	default:
+		return nil
+	}
+}
+
+func (e *Owner) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.DescriptorID)
+	case AttributeElementName:
+		return (*elementName)(&e.Owner)
+	default:
+		return nil
+	}
+}
+
+func (e *UserPrivileges) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.DescriptorID)
+	case AttributeElementName:
+		return (*elementName)(&e.Username)
+	default:
+		return nil
+	}
+}
+
+func (e *Locality) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.DescriptorID)
 	default:
 		return nil
 	}

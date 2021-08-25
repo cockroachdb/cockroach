@@ -13,6 +13,7 @@ package scbuild
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -163,7 +164,38 @@ func (b *buildContext) build(ctx context.Context, n tree.Statement) (output scpb
 	default:
 		return nil, &notImplementedError{n: n}
 	}
+	// Optimize the generated nodes to apply simplification
+	// rules to avoid useless operations.
+	b.optimizeNodes(ctx)
 	return b.output, nil
+}
+
+func (b *buildContext) forEachNodeOfType(
+	dir scpb.Target_Direction, elementType reflect.Type, elementFunc func(element scpb.Element) error,
+) error {
+	for _, node := range b.output {
+		if node.Target.Direction == dir &&
+			reflect.TypeOf(node.Element()) == elementType {
+			if err := elementFunc(node.Element()); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// addIfDuplicateDoesNotExistForDir only adds a node if a duplicate
+// in the matching direction does not exist for drops or static
+// additions.
+func (b *buildContext) addIfDuplicateDoesNotExistForDir(
+	dir scpb.Target_Direction, elem scpb.Element,
+) {
+	duplicateObjectsAllowed := dir == scpb.Target_DROP ||
+		dir == scpb.Target_STATIC
+	if exists, _ := b.checkIfNodeExists(dir, elem); exists && duplicateObjectsAllowed {
+		return
+	}
+	b.addNode(dir, elem)
 }
 
 // checkIfNodeExists checks if an existing node is already there,
@@ -245,4 +277,43 @@ func HasConcurrentSchemaChanges(table catalog.TableDescriptor) bool {
 	// statement execution, we'll have to take into account mutations that were
 	// written in this transaction.
 	return len(table.AllMutations()) > 0
+}
+
+func (b *buildContext) optimizeNodes(ctx context.Context) {
+	droppedDescs := make(map[descpb.ID]bool)
+	// Detect and track all dropped descriptors first.
+	for _, node := range b.output {
+		if node.Target.Direction == scpb.Target_DROP {
+			if node.Target.Table != nil ||
+				node.Target.View != nil ||
+				node.Target.Sequence != nil {
+				droppedDescs[scpb.GetDescIDOrInvalid(node.Element())] = true
+			}
+		}
+	}
+	// Drop any non-top level objects referring to dropped
+	// descriptors.
+	modifiedOutput := make(scpb.State, 0, len(b.output))
+	for _, node := range b.output {
+		if node.Target.Direction == scpb.Target_DROP &&
+			(node.Target.PrimaryIndex != nil ||
+				node.Target.SecondaryIndex != nil ||
+				node.Target.Column != nil ||
+				node.Target.ColumnName != nil ||
+				node.Target.DefaultExpression != nil ||
+				node.Target.InForeignKey != nil ||
+				node.Target.OutForeignKey != nil ||
+				node.Target.CheckConstraint != nil ||
+				node.Target.UniqueConstraint != nil ||
+				node.Target.Owner != nil ||
+				node.Target.UserPrivileges != nil ||
+				node.Target.Locality != nil) {
+			_, found := droppedDescs[scpb.GetDescIDOrInvalid(node.Element())]
+			if found {
+				continue
+			}
+		}
+		modifiedOutput = append(modifiedOutput, node)
+	}
+	b.output = modifiedOutput
 }

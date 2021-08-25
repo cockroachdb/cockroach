@@ -15,15 +15,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
 
+func columnNameMatchesColumn(this *scpb.ColumnName, that *scpb.Column) bool {
+	return this.TableID == that.TableID &&
+		this.ColumnID == that.ColumnID
+}
+
 func columnInSecondaryIndex(this *scpb.Column, that *scpb.SecondaryIndex) bool {
 	return this.TableID == that.TableID &&
-		indexContainsColumn(&that.Index, this.Column.ID)
+		indexContainsColumn(&that.Index, this.ColumnID)
 }
 
 func columnInPrimaryIndex(this *scpb.Column, that *scpb.PrimaryIndex) bool {
 	return this.TableID == that.TableID &&
-		indexContainsColumn(&that.Index, this.Column.ID) ||
-		columnsContainsID(that.Index.StoreColumnIDs, this.Column.ID)
+		indexContainsColumn(&that.Index, this.ColumnID) ||
+		columnsContainsID(that.Index.StoreColumnIDs, this.ColumnID)
 }
 
 func primaryIndexContainsColumn(this *scpb.PrimaryIndex, that *scpb.Column) bool {
@@ -39,22 +44,12 @@ func typeReferenceIsFromThisView(this *scpb.View, that *scpb.TypeReference) bool
 	return this.TableID == that.DescID
 }
 
-func thatViewDependsOnThisView(this *scpb.View, that *scpb.View) bool {
-	for _, dep := range this.DependedOnBy {
-		if dep == that.TableID {
-			return true
-		}
-	}
-	return false
+func thatViewDependsOnThisView(this *scpb.View, that *scpb.RelationDependedOnBy) bool {
+	return this.TableID == that.DependedOnBy
 }
 
-func tableReferencesView(this *scpb.Table, that *scpb.View) bool {
-	for _, dep := range that.DependsOn {
-		if dep == this.TableID {
-			return true
-		}
-	}
-	return false
+func tableReferencesView(this *scpb.Table, that *scpb.RelationDependedOnBy) bool {
+	return this.TableID == that.TableID
 }
 
 func tableReferencesType(this *scpb.Table, that *scpb.TypeReference) bool {
@@ -182,6 +177,14 @@ func typeHasReference(this *scpb.Type, that *scpb.TypeReference) bool {
 	return this.TypeID == that.TypeID
 }
 
+func namespaceIsATable(this *scpb.Namespace, that *scpb.Table) bool {
+	return this.DescriptorID == that.TableID
+}
+
+func relationDepIsView(this *scpb.RelationDependedOnBy, that *scpb.View) bool {
+	return this.TableID == that.TableID
+}
+
 func sameDirection(a, b scpb.Target_Direction) bool {
 	return a == b
 }
@@ -200,6 +203,12 @@ func bothDirectionsEqual(dir scpb.Target_Direction) func(a, b scpb.Target_Direct
 func directionsMatch(thisDir, thatDir scpb.Target_Direction) func(a, b scpb.Target_Direction) bool {
 	return func(a, b scpb.Target_Direction) bool {
 		return a == thisDir && b == thatDir
+	}
+}
+
+func bothDirectionsEqualOrStatic(dir scpb.Target_Direction) func(a, b scpb.Target_Direction) bool {
+	return func(a, b scpb.Target_Direction) bool {
+		return a == dir && (b == dir || b == scpb.Target_STATIC)
 	}
 }
 
@@ -372,7 +381,15 @@ var rules = map[scpb.Element]targetRules{
 		forward: nil,
 	},
 	(*scpb.RelationDependedOnBy)(nil): {
-		deps: targetDepRules{},
+		deps: targetDepRules{
+			scpb.Status_ABSENT: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    relationDepIsView,
+				},
+			},
+		},
 		backwards: targetOpRules{
 			scpb.Status_PUBLIC: {
 				{
@@ -711,10 +728,6 @@ var rules = map[scpb.Element]targetRules{
 							&scop.MarkDescriptorAsDropped{
 								TableID: this.TableID,
 							},
-							&scop.DrainDescriptorName{TableID: this.TableID},
-							&scop.CreateGcJobForDescriptor{
-								DescID: this.TableID,
-							},
 						}
 						return ops
 					},
@@ -762,10 +775,22 @@ var rules = map[scpb.Element]targetRules{
 					nextStatus: scpb.Status_DELETE_ONLY,
 					op: func(this *scpb.Column) scop.Op {
 						return &scop.MakeAddedColumnDeleteOnly{
-							TableID:    this.TableID,
-							FamilyID:   this.FamilyID,
-							FamilyName: this.FamilyName,
-							Column:     this.Column,
+							TableID:                           this.TableID,
+							ColumnID:                          this.ColumnID,
+							FamilyName:                        this.FamilyName,
+							FamilyID:                          this.FamilyID,
+							ColumnType:                        this.Type,
+							Nullable:                          this.Nullable,
+							DefaultExpr:                       this.DefaultExpr,
+							OnUpdateExpr:                      this.OnUpdateExpr,
+							Hidden:                            this.Hidden,
+							Inaccessible:                      this.Inaccessible,
+							GeneratedAsIdentityType:           this.GeneratedAsIdentityType,
+							GeneratedAsIdentitySequenceOption: this.GeneratedAsIdentitySequenceOption,
+							UsesSequenceIds:                   this.UsesSequenceIds,
+							ComputerExpr:                      this.ComputerExpr,
+							PgAttributeNum:                    this.PgAttributeNum,
+							SystemColumnKind:                  this.SystemColumnKind,
 						}
 					},
 				},
@@ -783,7 +808,7 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.Column) scop.Op {
 						return &scop.MakeAddedColumnDeleteAndWriteOnly{
 							TableID:  this.TableID,
-							ColumnID: this.Column.ID,
+							ColumnID: this.ColumnID,
 						}
 					},
 				},
@@ -794,7 +819,7 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.Column) scop.Op {
 						return &scop.MakeColumnPublic{
 							TableID:  this.TableID,
-							ColumnID: this.Column.ID,
+							ColumnID: this.ColumnID,
 						}
 					},
 				},
@@ -807,7 +832,7 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.Column) scop.Op {
 						return &scop.MakeDroppedColumnDeleteAndWriteOnly{
 							TableID:  this.TableID,
-							ColumnID: this.Column.ID,
+							ColumnID: this.ColumnID,
 						}
 					},
 				},
@@ -825,7 +850,7 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.Column) scop.Op {
 						return &scop.MakeDroppedColumnDeleteOnly{
 							TableID:  this.TableID,
-							ColumnID: this.Column.ID,
+							ColumnID: this.ColumnID,
 						}
 					},
 				},
@@ -836,7 +861,7 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.Column) scop.Op {
 						return &scop.MakeColumnAbsent{
 							TableID:  this.TableID,
-							ColumnID: this.Column.ID,
+							ColumnID: this.ColumnID,
 						}
 					},
 				},
@@ -1000,5 +1025,100 @@ var rules = map[scpb.Element]targetRules{
 				},
 			},
 		},
+	},
+	(*scpb.Namespace)(nil): {
+		deps: targetDepRules{
+			scpb.Status_ABSENT: {
+				{
+					dirPredicate: bothDirectionsEqualOrStatic(scpb.Target_ADD),
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    namespaceIsATable,
+				},
+			},
+		},
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.Namespace, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.DescriptorID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_ABSENT,
+					op: func(this *scpb.Namespace) []scop.Op {
+						return []scop.Op{
+							&scop.DrainDescriptorName{TableID: this.DescriptorID},
+							&scop.CreateGcJobForDescriptor{
+								DescID: this.DescriptorID,
+							},
+						}
+					},
+				},
+			},
+		},
+		forward: targetOpRules{},
+	},
+	(*scpb.ColumnName)(nil): {
+		forward: targetOpRules{
+			scpb.Status_ABSENT: {
+				{
+					predicate: func(this *scpb.ColumnName, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_PUBLIC,
+					op: func(this *scpb.ColumnName) scop.Op {
+						return &scop.SetColumnName{
+							TableID:  this.TableID,
+							ColumnID: this.ColumnID,
+							Name:     this.Name,
+						}
+					},
+				},
+			},
+		},
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.ColumnName, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_ABSENT,
+					op: func(this *scpb.ColumnName) []scop.Op {
+						return nil
+					},
+				},
+			},
+		},
+		deps: targetDepRules{
+			scpb.Status_PUBLIC: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_DELETE_ONLY,
+					predicate:    columnNameMatchesColumn,
+				},
+			},
+		},
+	},
+	(*scpb.Owner)(nil): {
+		deps:      targetDepRules{},
+		forward:   targetOpRules{},
+		backwards: targetOpRules{},
+	},
+	(*scpb.UserPrivileges)(nil): {
+		deps:      targetDepRules{},
+		forward:   targetOpRules{},
+		backwards: targetOpRules{},
+	},
+	(*scpb.Locality)(nil): {
+		deps:      targetDepRules{},
+		forward:   targetOpRules{},
+		backwards: targetOpRules{},
 	},
 }

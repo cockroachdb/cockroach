@@ -252,17 +252,17 @@ func TestSchemaChanger(t *testing.T) {
 					},
 					OtherPrimaryIndexID: fooTable.GetPrimaryIndexID(),
 				}),
+				scpb.NewTarget(scpb.Target_ADD, &scpb.ColumnName{
+					TableID:  fooTable.GetID(),
+					ColumnID: 2,
+					Name:     "j",
+				}),
 				scpb.NewTarget(scpb.Target_ADD, &scpb.Column{
-					TableID:    fooTable.GetID(),
-					FamilyID:   descpb.FamilyID(0),
-					FamilyName: "primary",
-					Column: descpb.ColumnDescriptor{
-						Name:           "j",
-						ID:             2,
-						Type:           types.Int,
-						Nullable:       true,
-						PGAttributeNum: 2,
-					},
+					TableID:        fooTable.GetID(),
+					ColumnID:       2,
+					Type:           types.Int,
+					Nullable:       true,
+					PgAttributeNum: 2,
 				}),
 				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
 					TableID: fooTable.GetID(),
@@ -290,6 +290,10 @@ func TestSchemaChanger(t *testing.T) {
 				},
 				{
 					Target: targetSlice[2],
+					Status: scpb.Status_ABSENT,
+				},
+				{
+					Target: targetSlice[3],
 					Status: scpb.Status_PUBLIC,
 				},
 			}
@@ -346,6 +350,10 @@ func TestSchemaChanger(t *testing.T) {
 			},
 			{
 				Target: targetSlice[2],
+				Status: scpb.Status_PUBLIC,
+			},
+			{
+				Target: targetSlice[3],
 				Status: scpb.Status_ABSENT,
 			},
 		}, after)

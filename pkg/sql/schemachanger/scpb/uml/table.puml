@@ -1,0 +1,208 @@
+@startuml
+
+object Table
+
+Table : TableID
+Table : Temporary
+Table : PartitionByAll
+Table : AuditMode
+
+object Column
+
+Column : TableID
+Column : ColumnID
+Column : FamilyID
+Column : FamilyName
+Column : Type
+Column : Nullable
+Column : DefaultExpr
+Column : OnUpdateExpr
+Column : Hidden
+Column : Inaccessible
+Column : GeneratedAsIdentityType
+Column : GeneratedAsIdentitySequenceOption
+Column : []UsesSequenceIDs
+Column : ComputeExpr
+Column : PGAttributeNum
+Column : SystemColumnKind
+
+Table <|-- Column
+
+object ColumnName
+
+ColumnName : TableID
+ColumnName : ColumnID
+ColumnName : Name
+
+Column <|-- ColumnName
+
+object SequenceOwnedByColumn
+
+SequenceOwnedByColumn : TableID
+SequenceOwnedByColumn : ColumnID
+SequenceOwnedByColumn : SequenceID
+
+Column <|-- SequenceOwnedByColumn
+
+
+object DefaultExpression
+
+DefaultExpression : TableID
+DefaultExpression : ColumnID
+DefaultExpression : UsesSequenceID
+DefaultExpression : Expression
+
+Column <|-- DefaultExpression
+
+object NamespaceEntry
+
+NamespaceEntry : DescriptorID
+NamespaceEntry : ObjectName
+
+Table <|-- NamespaceEntry
+
+object TypeReference
+
+TypeReference : DescriptorID
+TypeReference : TypeID
+
+Table <|-- TypeReference
+
+object PrimaryIndex
+
+PrimaryIndex : TableID
+PrimaryIndex : IndexID
+PrimaryIndex : IndexName
+PrimaryIndex : Unique
+PrimaryIndex : KeyColumnIDs
+PrimaryIndex : KeyColumnDirections
+PrimaryIndex : KeySuffixColumnIDs
+PrimaryIndex : StoringColumnIDs
+PrimaryIndex : CompositeColumnIDs
+PrimaryIndex : Inverted
+PrimaryIndex : ShardedDescriptor
+
+Table <|-- PrimaryIndex
+
+object SecondaryIndex
+
+SecondaryIndex : TableID
+SecondaryIndex : IndexID
+SecondaryIndex : IndexName
+SecondaryIndex : Unique
+SecondaryIndex : KeyColumnIDs
+SecondaryIndex : KeyColumnDirections
+SecondaryIndex : KeySuffixColumnIDs
+SecondaryIndex : StoringColumnIDs
+SecondaryIndex : CompositeColumnIDs
+SecondaryIndex : Inverted
+SecondaryIndex : ShardedDescriptor
+
+Table <|-- SecondaryIndex
+
+
+object Partitioning
+
+Partitioning : TableID
+Partitioning : IndexID
+Partitioning : Fields
+Partitioning : ListPartitions
+Partitioning : RangePartitions
+
+SecondaryIndex <|-- Partitioning
+PrimaryIndex <|-- Partitioning
+
+object UniqueConstraint
+
+UniqueConstraint : TableID
+UniqueConstraint : IndexID
+UniqueConstraint : Columns
+
+Table <|-- UniqueConstraint
+SecondaryIndex <|-- UniqueConstraint
+
+object CheckConstraint
+
+CheckConstraint : TableID
+CheckConstraint : Name
+CheckConstraint : Expr
+CheckConstraint : Columns
+CheckConstraint : Validated
+
+Table <|-- CheckConstraint
+
+object PrimaryKeyConstraint
+
+PrimaryKeyConstraint : TableID
+PrimaryKeyConstraint : IndexID
+PrimaryKeyConstraint : Columns
+
+Table <|-- PrimaryKeyConstraint
+PrimaryIndex <|-- PrimaryKeyConstraint
+
+object ForeignKeyConstraint
+
+ForeignKeyConstraint : TableID
+ForeignKeyConstraint :	 OriginColumnIDs
+ForeignKeyConstraint : ReferencedColumnIDs
+ForeignKeyConstraint : ReferencedTableID
+ForeignKeyConstraint :	Name
+ForeignKeyConstraint : OnDelete
+ForeignKeyConstraint : OnUpdate
+ForeignKeyConstraint : Match
+
+Table <|-- ForeignKeyConstraint
+
+object InboundForeignKey
+
+InboundForeignKey : OriginID
+InboundForeignKey : OriginColumns
+InboundForeignKey : ReferenceID
+InboundForeignKey : ReferenceColumns
+InboundForeignKey : Name
+
+Table <|-- InboundForeignKey
+
+object OutboundForeignKey
+
+OutboundForeignKey : OriginID
+OutboundForeignKey : OriginColumns
+OutboundForeignKey : ReferenceID
+OutboundForeignKey : ReferenceColumns
+OutboundForeignKey : Name
+
+Table <|-- OutboundForeignKey
+
+object Locality
+
+Locality : TableID
+Locality : Kind
+Locality : Global
+Locality : RegionalByTable
+Locality : RegionalByRow
+
+Table <|-- Locality
+
+object Owner
+
+Owner : DescriptorID
+Owner : Owner
+
+Table <|-- Owner
+
+object UserPrivilege
+
+UserPrivilege : DescriptorID
+UserPrivilege : Username
+UserPrivilege : Privileges
+
+Table <|-- UserPrivilege
+
+object Privilege
+
+Privilege : DescriptorID
+Privilege : Privileges
+
+Table <|-- Privilege
+
+@enduml

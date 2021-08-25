@@ -42,6 +42,20 @@ func GetDescID(e Element) descpb.ID {
 		"element of type %T returned a nil descriptor ID", e))
 }
 
+// GetDescIDOrInvalid returns the ID of the descriptor to which this element
+// corresponds.
+func GetDescIDOrInvalid(e Element) descpb.ID {
+	attribute := e.getAttribute(AttributeDescID)
+	if attribute == nil {
+		return descpb.InvalidID
+	}
+	if id, ok := attribute.(*descID); attribute != nil && ok {
+		return descpb.ID(*id)
+	}
+	return descpb.InvalidID
+
+}
+
 type descID descpb.ID
 
 func (id descID) String() string {
