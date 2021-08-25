@@ -831,7 +831,7 @@ func UnmarshalProgress(datum tree.Datum) (*jobspb.Progress, error) {
 	return progress, nil
 }
 
-// unnarshalCreatedBy unrmarshals and returns created_by_type and created_by_id datums
+// unmarshalCreatedBy unmarshals and returns created_by_type and created_by_id datums
 // which may be tree.DNull, or tree.DString and tree.DInt respectively.
 func unmarshalCreatedBy(createdByType, createdByID tree.Datum) (*CreatedByInfo, error) {
 	if createdByType == tree.DNull || createdByID == tree.DNull {

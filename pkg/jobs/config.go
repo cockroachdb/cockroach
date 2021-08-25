@@ -31,7 +31,7 @@ const (
 	retryMaxDelaySettingKey     = "jobs.registry.retry.max_delay"
 )
 
-var (
+const (
 	// defaultAdoptInterval is the default adopt interval.
 	defaultAdoptInterval = 30 * time.Second
 
