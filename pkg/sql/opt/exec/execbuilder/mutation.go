@@ -1115,7 +1115,7 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(mutExpr memo.RelExpr
 // not worth risking the transformation being a pessimization, so it is only
 // applied when doing so does not risk creating artificial contention.
 func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) bool {
-	if !b.evalCtx.SessionData.ImplicitSelectForUpdate {
+	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
 		return false
 	}
 
@@ -1136,7 +1136,7 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 // should apply a FOR UPDATE row-level locking mode to the initial row scan of
 // an UPSERT statement.
 func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) bool {
-	if !b.evalCtx.SessionData.ImplicitSelectForUpdate {
+	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
 		return false
 	}
 

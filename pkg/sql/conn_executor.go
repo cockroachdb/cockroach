@@ -2365,7 +2365,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			Tenant:                 p,
 			JoinTokenCreator:       p,
 			PreparedStatementState: &ex.extraTxnState.prepStmtsNamespace,
-			SessionData:            ex.sessionDataStack.Top(),
+			SessionDataStack:       ex.sessionDataStack,
 			Settings:               ex.server.cfg.Settings,
 			TestingKnobs:           ex.server.cfg.EvalContextTestingKnobs,
 			ClusterID:              ex.server.cfg.ClusterID(),

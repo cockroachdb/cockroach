@@ -3454,9 +3454,10 @@ type SQLStatsController interface {
 // more fields from the sql package. Through that extendedEvalContext, this
 // struct now generally used by planNodes.
 type EvalContext struct {
-	// Session variables. This is a read-only copy of the values owned by the
-	// Session.
-	SessionData *sessiondata.SessionData
+	// SessionDataStack stores the session variables accessible by the correct
+	// context. Each element on the stack represents the beginning of a new
+	// transaction or nested transaction (savepoints).
+	SessionDataStack *sessiondata.Stack
 	// TxnState is a string representation of the current transactional state.
 	TxnState string
 	// TxnReadOnly specifies if the current transaction is read-only.
@@ -3599,11 +3600,11 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) EvalContext {
 	ctx := EvalContext{
-		Codec:       keys.SystemSQLCodec,
-		Txn:         &kv.Txn{},
-		SessionData: &sessiondata.SessionData{},
-		Settings:    st,
-		NodeID:      base.TestingIDContainer,
+		Codec:            keys.SystemSQLCodec,
+		Txn:              &kv.Txn{},
+		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+		Settings:         st,
+		NodeID:           base.TestingIDContainer,
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor
@@ -3612,6 +3613,14 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
 	return ctx
+}
+
+// SessionData returns the SessionData the current EvalCtx should use to eval.
+func (ctx *EvalContext) SessionData() *sessiondata.SessionData {
+	if ctx.SessionDataStack == nil {
+		return nil
+	}
+	return ctx.SessionDataStack.Top()
 }
 
 // Copy returns a deep copy of ctx.
@@ -3651,9 +3660,9 @@ func (ctx *EvalContext) Stop(c context.Context) {
 
 // FmtCtx creates a FmtCtx with the given options as well as the EvalContext's session data.
 func (ctx *EvalContext) FmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
-	if ctx.SessionData != nil {
+	if ctx.SessionData() != nil {
 		opts = append(
-			[]FmtCtxOption{FmtDataConversionConfig(ctx.SessionData.DataConversionConfig)},
+			[]FmtCtxOption{FmtDataConversionConfig(ctx.SessionData().DataConversionConfig)},
 			opts...,
 		)
 	}
@@ -3835,23 +3844,23 @@ func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 
 // GetLocation returns the session timezone.
 func (ctx *EvalContext) GetLocation() *time.Location {
-	return ctx.SessionData.GetLocation()
+	return ctx.SessionData().GetLocation()
 }
 
 // GetIntervalStyle returns the session interval style.
 func (ctx *EvalContext) GetIntervalStyle() duration.IntervalStyle {
-	if ctx.SessionData == nil {
+	if ctx.SessionData() == nil {
 		return duration.IntervalStyle_POSTGRES
 	}
-	return ctx.SessionData.GetIntervalStyle()
+	return ctx.SessionData().GetIntervalStyle()
 }
 
 // GetDateStyle returns the session date style.
 func (ctx *EvalContext) GetDateStyle() pgdate.DateStyle {
-	if ctx.SessionData == nil {
+	if ctx.SessionData() == nil {
 		return pgdate.DefaultDateStyle()
 	}
-	return ctx.SessionData.GetDateStyle()
+	return ctx.SessionData().GetDateStyle()
 }
 
 // Ctx returns the session's context.

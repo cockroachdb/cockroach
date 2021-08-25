@@ -267,7 +267,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		row.UpdaterOnlyColumns,
 		&cb.alloc,
 		&cb.evalCtx.Settings.SV,
-		cb.evalCtx.SessionData.Internal,
+		cb.evalCtx.SessionData().Internal,
 	)
 	if err != nil {
 		return roachpb.Key{}, err

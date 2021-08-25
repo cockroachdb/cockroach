@@ -556,7 +556,7 @@ func (r opResult) createAndWrapRowSource(
 		return errors.New("processorConstructor is nil")
 	}
 	log.VEventf(ctx, 1, "planning a row-execution processor in the vectorized flow: %v", causeToWrap)
-	if err := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
+	if err := canWrap(flowCtx.EvalCtx.SessionData().VectorizeMode, spec); err != nil {
 		log.VEventf(ctx, 1, "planning a wrapped processor failed: %v", err)
 		// Return the original error for why we don't support this spec
 		// natively since it is more interesting.

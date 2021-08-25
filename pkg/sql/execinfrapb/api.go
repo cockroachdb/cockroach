@@ -47,8 +47,8 @@ type DistSQLVersion uint32
 // MakeEvalContext serializes some of the fields of a tree.EvalContext into a
 // execinfrapb.EvalContext proto.
 func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
-	sessionDataProto := evalCtx.SessionData.SessionData
-	sessiondata.MarshalNonLocal(evalCtx.SessionData, &sessionDataProto)
+	sessionDataProto := evalCtx.SessionData().SessionData
+	sessiondata.MarshalNonLocal(evalCtx.SessionData(), &sessionDataProto)
 	return EvalContext{
 		SessionData:        sessionDataProto,
 		StmtTimestampNanos: evalCtx.StmtTimestamp.UnixNano(),

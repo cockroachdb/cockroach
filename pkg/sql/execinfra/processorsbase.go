@@ -962,7 +962,7 @@ func NewLimitedMonitorNoFlowCtx(
 	flowCtx := &FlowCtx{
 		Cfg: config,
 		EvalCtx: &tree.EvalContext{
-			SessionData: sd,
+			SessionDataStack: sessiondata.NewStack(sd),
 		},
 	}
 	return NewLimitedMonitor(ctx, parent, flowCtx, name)

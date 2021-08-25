@@ -407,11 +407,11 @@ func makePGPrivilegeInquiryDef(
 					// Remove the first argument.
 					args = args[1:]
 				} else {
-					if ctx.SessionData.User().Undefined() {
+					if ctx.SessionData().User().Undefined() {
 						// Wut... is this possible?
 						return tree.DNull, nil
 					}
-					user = ctx.SessionData.User()
+					user = ctx.SessionData().User()
 				}
 				return fn(ctx, args, user)
 			},
@@ -460,7 +460,7 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 		if _, err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
 			return nil, err
 		}
-		if ctx.SessionData.Database != "" && ctx.SessionData.Database != string(tn.CatalogName) {
+		if ctx.SessionData().Database != "" && ctx.SessionData().Database != string(tn.CatalogName) {
 			// Postgres does not allow cross-database references in these
 			// functions, so we don't either.
 			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
@@ -476,7 +476,7 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 		if err != nil || r == nil {
 			return nil, err
 		}
-		db := tree.Name(ctx.SessionData.Database)
+		db := tree.Name(ctx.SessionData().Database)
 		schema := tree.Name(tree.MustBeDString(r[0]))
 		table := tree.Name(tree.MustBeDString(r[1]))
 		tn := tree.MakeTableNameWithSchema(db, schema, table)
@@ -1124,7 +1124,7 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
 				isVisible, exists, err := ctx.Planner.IsTableVisible(
-					ctx.Context, ctx.SessionData.Database, ctx.SessionData.SearchPath, oid.Oid(oidArg.DInt),
+					ctx.Context, ctx.SessionData().Database, ctx.SessionData().SearchPath, oid.Oid(oidArg.DInt),
 				)
 				if err != nil {
 					return nil, err
@@ -1152,7 +1152,7 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
 				isVisible, exists, err := ctx.Planner.IsTypeVisible(
-					ctx.Context, ctx.SessionData.Database, ctx.SessionData.SearchPath, oid.Oid(oidArg.DInt),
+					ctx.Context, ctx.SessionData().Database, ctx.SessionData().SearchPath, oid.Oid(oidArg.DInt),
 				)
 				if err != nil {
 					return nil, err
@@ -1555,13 +1555,13 @@ SELECT description
 					retNull = true
 				}
 			}
-			if len(ctx.SessionData.Database) == 0 {
+			if len(ctx.SessionData().Database) == 0 {
 				// If no database is set, return NULL.
 				retNull = true
 			}
 
 			pred := fmt.Sprintf("table_catalog = '%s' AND table_schema = '%s'",
-				ctx.SessionData.Database, schema)
+				ctx.SessionData().Database, schema)
 			return parsePrivilegeStr(args[1], pgPrivList{
 				"CREATE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {

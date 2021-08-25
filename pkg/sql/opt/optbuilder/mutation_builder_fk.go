@@ -732,7 +732,7 @@ func (h *fkCheckHelper) buildInsertionCheck() memo.FKChecksItem {
 		)
 	}
 	var p memo.JoinPrivate
-	if h.mb.b.evalCtx.SessionData.PreferLookupJoinsForFKs {
+	if h.mb.b.evalCtx.SessionData().PreferLookupJoinsForFKs {
 		p.Flags = memo.PreferLookupJoinIntoRight
 	}
 	antiJoin := f.ConstructAntiJoin(withScanScope.expr, scanScope.expr, antiJoinFilters, &p)
@@ -774,7 +774,7 @@ func (h *fkCheckHelper) buildDeletionCheck(
 		)
 	}
 	var p memo.JoinPrivate
-	if h.mb.b.evalCtx.SessionData.PreferLookupJoinsForFKs {
+	if h.mb.b.evalCtx.SessionData().PreferLookupJoinsForFKs {
 		p.Flags = memo.PreferLookupJoinIntoRight
 	}
 	semiJoin := f.ConstructSemiJoin(deletedRows, scanScope.expr, semiJoinFilters, &p)

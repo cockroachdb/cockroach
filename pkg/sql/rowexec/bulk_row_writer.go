@@ -106,7 +106,7 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if conv.EvalCtx.SessionData == nil {
+	if conv.EvalCtx.SessionData() == nil {
 		panic("uninitialized session data")
 	}
 

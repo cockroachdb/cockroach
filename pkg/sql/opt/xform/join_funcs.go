@@ -63,7 +63,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		mustGenerateMergeJoin = true
 	}
 
-	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
+	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData().ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
 		rightOrders := ordering.DeriveInterestingOrderings(right).Copy()
@@ -1420,7 +1420,7 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	input memo.RelExpr, private *memo.LookupJoinPrivate,
 ) (localExpr memo.FiltersExpr, remoteExpr memo.FiltersExpr, ok bool) {
 	// Respect the session setting LocalityOptimizedSearch.
-	if !c.e.evalCtx.SessionData.LocalityOptimizedSearch {
+	if !c.e.evalCtx.SessionData().LocalityOptimizedSearch {
 		return nil, nil, false
 	}
 

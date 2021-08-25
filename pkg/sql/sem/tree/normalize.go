@@ -829,7 +829,7 @@ var _ Visitor = &isConstVisitor{}
 
 func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.isConst {
-		if !operatorIsImmutable(expr, v.ctx.SessionData) || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
+		if !operatorIsImmutable(expr, v.ctx.SessionData()) || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 			v.isConst = false
 			return false, expr
 		}
@@ -916,7 +916,7 @@ func (v *fastIsConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	// If the parent expression is a variable or non-immutable operator, we know
 	// that it is not constant.
 
-	if !operatorIsImmutable(expr, v.ctx.SessionData) || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
+	if !operatorIsImmutable(expr, v.ctx.SessionData()) || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 		v.isConst = false
 		return false, expr
 	}

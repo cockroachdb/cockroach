@@ -175,18 +175,18 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	// reused. Field reuse must be explicit.
 	*m = Memo{
 		metadata:                m.metadata,
-		reorderJoinsLimit:       int(evalCtx.SessionData.ReorderJoinsLimit),
-		zigzagJoinEnabled:       evalCtx.SessionData.ZigzagJoinEnabled,
-		useHistograms:           evalCtx.SessionData.OptimizerUseHistograms,
-		useMultiColStats:        evalCtx.SessionData.OptimizerUseMultiColStats,
-		localityOptimizedSearch: evalCtx.SessionData.LocalityOptimizedSearch,
-		safeUpdates:             evalCtx.SessionData.SafeUpdates,
-		preferLookupJoinsForFKs: evalCtx.SessionData.PreferLookupJoinsForFKs,
-		saveTablesPrefix:        evalCtx.SessionData.SaveTablesPrefix,
-		intervalStyleEnabled:    evalCtx.SessionData.IntervalStyleEnabled,
-		dateStyleEnabled:        evalCtx.SessionData.DateStyleEnabled,
-		dateStyle:               evalCtx.SessionData.GetDateStyle(),
-		intervalStyle:           evalCtx.SessionData.GetIntervalStyle(),
+		reorderJoinsLimit:       int(evalCtx.SessionData().ReorderJoinsLimit),
+		zigzagJoinEnabled:       evalCtx.SessionData().ZigzagJoinEnabled,
+		useHistograms:           evalCtx.SessionData().OptimizerUseHistograms,
+		useMultiColStats:        evalCtx.SessionData().OptimizerUseMultiColStats,
+		localityOptimizedSearch: evalCtx.SessionData().LocalityOptimizedSearch,
+		safeUpdates:             evalCtx.SessionData().SafeUpdates,
+		preferLookupJoinsForFKs: evalCtx.SessionData().PreferLookupJoinsForFKs,
+		saveTablesPrefix:        evalCtx.SessionData().SaveTablesPrefix,
+		intervalStyleEnabled:    evalCtx.SessionData().IntervalStyleEnabled,
+		dateStyleEnabled:        evalCtx.SessionData().DateStyleEnabled,
+		dateStyle:               evalCtx.SessionData().GetDateStyle(),
+		intervalStyle:           evalCtx.SessionData().GetIntervalStyle(),
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -287,18 +287,18 @@ func (m *Memo) IsStale(
 ) (bool, error) {
 	// Memo is stale if fields from SessionData that can affect planning have
 	// changed.
-	if m.reorderJoinsLimit != int(evalCtx.SessionData.ReorderJoinsLimit) ||
-		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled ||
-		m.useHistograms != evalCtx.SessionData.OptimizerUseHistograms ||
-		m.useMultiColStats != evalCtx.SessionData.OptimizerUseMultiColStats ||
-		m.localityOptimizedSearch != evalCtx.SessionData.LocalityOptimizedSearch ||
-		m.safeUpdates != evalCtx.SessionData.SafeUpdates ||
-		m.preferLookupJoinsForFKs != evalCtx.SessionData.PreferLookupJoinsForFKs ||
-		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix ||
-		m.intervalStyleEnabled != evalCtx.SessionData.IntervalStyleEnabled ||
-		m.dateStyleEnabled != evalCtx.SessionData.DateStyleEnabled ||
-		m.dateStyle != evalCtx.SessionData.GetDateStyle() ||
-		m.intervalStyle != evalCtx.SessionData.GetIntervalStyle() {
+	if m.reorderJoinsLimit != int(evalCtx.SessionData().ReorderJoinsLimit) ||
+		m.zigzagJoinEnabled != evalCtx.SessionData().ZigzagJoinEnabled ||
+		m.useHistograms != evalCtx.SessionData().OptimizerUseHistograms ||
+		m.useMultiColStats != evalCtx.SessionData().OptimizerUseMultiColStats ||
+		m.localityOptimizedSearch != evalCtx.SessionData().LocalityOptimizedSearch ||
+		m.safeUpdates != evalCtx.SessionData().SafeUpdates ||
+		m.preferLookupJoinsForFKs != evalCtx.SessionData().PreferLookupJoinsForFKs ||
+		m.saveTablesPrefix != evalCtx.SessionData().SaveTablesPrefix ||
+		m.intervalStyleEnabled != evalCtx.SessionData().IntervalStyleEnabled ||
+		m.dateStyleEnabled != evalCtx.SessionData().DateStyleEnabled ||
+		m.dateStyle != evalCtx.SessionData().GetDateStyle() ||
+		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() {
 		return true, nil
 	}
 

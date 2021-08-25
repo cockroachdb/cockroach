@@ -303,15 +303,15 @@ func (ds *ServerImpl) setupFlow(
 			return nil, nil, nil, err
 		}
 		evalCtx = &tree.EvalContext{
-			Settings:    ds.ServerConfig.Settings,
-			SessionData: sd,
-			ClusterID:   ds.ServerConfig.ClusterID.Get(),
-			ClusterName: ds.ServerConfig.ClusterName,
-			NodeID:      ds.ServerConfig.NodeID,
-			Codec:       ds.ServerConfig.Codec,
-			ReCache:     ds.regexpCache,
-			Mon:         monitor,
-			Locality:    ds.ServerConfig.Locality,
+			Settings:         ds.ServerConfig.Settings,
+			SessionDataStack: sessiondata.NewStack(sd),
+			ClusterID:        ds.ServerConfig.ClusterID.Get(),
+			ClusterName:      ds.ServerConfig.ClusterName,
+			NodeID:           ds.ServerConfig.NodeID,
+			Codec:            ds.ServerConfig.Codec,
+			ReCache:          ds.regexpCache,
+			Mon:              monitor,
+			Locality:         ds.ServerConfig.Locality,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
 			Context:            ctx,
@@ -445,7 +445,7 @@ func (ds *ServerImpl) newFlowContext(
 		// If we weren't passed a descs.Collection, then make a new one. We are
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
-		collection := ds.CollectionFactory.NewCollection(evalCtx.SessionData)
+		collection := ds.CollectionFactory.NewCollection(evalCtx.SessionData())
 		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
 			Descriptors: collection,
 			CleanupFunc: func(ctx context.Context) {

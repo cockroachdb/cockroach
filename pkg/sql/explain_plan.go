@@ -55,7 +55,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 
 	distribution := getPlanDistribution(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
+		params.extendedEvalCtx.SessionData().DistSQLMode, plan.main,
 	)
 	ob.AddDistribution(distribution.String())
 
@@ -84,7 +84,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		flows := physicalPlan.GenerateFlowSpecs()
 		flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p)
 
-		ctxSessionData := flowCtx.EvalCtx.SessionData
+		ctxSessionData := flowCtx.EvalCtx.SessionData()
 		var willVectorize bool
 		if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
 			willVectorize = false

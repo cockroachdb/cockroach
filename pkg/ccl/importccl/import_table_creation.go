@@ -205,7 +205,7 @@ func MakeSimpleTableDescriptor(
 	evalCtx := tree.EvalContext{
 		Context:            ctx,
 		Sequence:           &importSequenceOperators{},
-		SessionData:        &sessiondata.SessionData{},
+		SessionDataStack:   sessiondata.NewStack(&sessiondata.SessionData{}),
 		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
 		Settings:           st,
 	}
@@ -226,7 +226,7 @@ func MakeSimpleTableDescriptor(
 		affected,
 		semaCtx,
 		&evalCtx,
-		evalCtx.SessionData, /* sessionData */
+		evalCtx.SessionData(), /* sessionData */
 		tree.PersistencePermanent,
 		// We need to bypass the LOCALITY on non multi-region check here because
 		// we cannot access the database region config at import level.
