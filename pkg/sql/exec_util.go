@@ -2398,13 +2398,21 @@ var _ paramStatusUpdater = (*noopParamStatusUpdater)(nil)
 
 func (noopParamStatusUpdater) BufferParamStatusUpdate(string, string) {}
 
-// sessionDataMutator is the interface used by sessionVars to change the session
-// state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
-// see curTxnReadOnly).
-type sessionDataMutator struct {
-	data               *sessiondata.SessionData
-	defaults           SessionDefaults
-	settings           *cluster.Settings
+// sessionDataMutatorBase contains elements in a sessionDataMutator
+// which is the same across all SessionData elements in the sessiondata.Stack.
+type sessionDataMutatorBase struct {
+	defaults SessionDefaults
+	settings *cluster.Settings
+	sessionDataMutatorTopOnlyBase
+}
+
+// sessionDataMutatorTopOnlyBase contains elements in a sessionDataMutator
+// which are only populated when mutating the top sessionData.
+// It is intended for functions which should only be called once per SET
+// (e.g. param status updates, which only should be sent once within
+// a transaction where there may be two or more SessionData elements in
+// the stack)
+type sessionDataMutatorTopOnlyBase struct {
 	paramStatusUpdater paramStatusUpdater
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
 	setCurTxnReadOnly func(val bool)
@@ -2414,6 +2422,67 @@ type sessionDataMutator struct {
 	// onSessionDataChangeListeners stores all the observers to execute when
 	// session data is modified, keyed by the value to change on.
 	onSessionDataChangeListeners map[string][]func(val string)
+}
+
+// sessionDataMutatorFactory generates sessionDataMutators which allow
+// the changing of SessionData on some element inside the sessiondata Stack.
+type sessionDataMutatorFactory struct {
+	sessionDataMutatorBase
+	sds *sessiondata.Stack
+}
+
+// mutator returns a mutator for the given sessionData.
+func (f *sessionDataMutatorFactory) mutator(sd *sessiondata.SessionData) *sessionDataMutator {
+	ret := &sessionDataMutator{
+		data:                   sd,
+		sessionDataMutatorBase: f.sessionDataMutatorBase,
+	}
+	// Change the sessionDataMutatorTopOnlyBase if our SessionData element is not
+	// the top.
+	if sd != f.sds.Top() {
+		ret.sessionDataMutatorTopOnlyBase = sessionDataMutatorTopOnlyBase{
+			paramStatusUpdater: &noopParamStatusUpdater{},
+		}
+	}
+	return ret
+}
+
+// SetSessionDefaultIntSize sets the default int size for the session.
+// It is exported for use in import which is a CCL package.
+func (f *sessionDataMutatorFactory) SetSessionDefaultIntSize(size int32) {
+	f.forEachMutator(func(m *sessionDataMutator) {
+		m.SetDefaultIntSize(size)
+	})
+}
+
+// forEachMutator iterates over each mutator over all SessionData elements
+// in the stack and applies the given function to them.
+// It is the equivalent of SET SESSION x = y.
+func (f *sessionDataMutatorFactory) forEachMutator(applyFunc func(m *sessionDataMutator)) {
+	for _, sd := range f.sds.Elems() {
+		applyFunc(f.mutator(sd))
+	}
+}
+
+// forEachMutatorError is the same as forEachMutator, but takes in a function
+// that can return an error, erroring if any of applications error.
+func (f *sessionDataMutatorFactory) forEachMutatorError(
+	applyFunc func(m *sessionDataMutator) error,
+) error {
+	for _, sd := range f.sds.Elems() {
+		if err := applyFunc(f.mutator(sd)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// sessionDataMutator is the interface used by sessionVars to change the session
+// state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
+// see curTxnReadOnly).
+type sessionDataMutator struct {
+	data *sessiondata.SessionData
+	sessionDataMutatorBase
 }
 
 // RegisterOnSessionDataChange adds a listener to execute when a change on the

@@ -221,3 +221,8 @@ func (s *Stack) Pop() error {
 	s.stack = s.stack[:len(s.stack)-1]
 	return nil
 }
+
+// Elems returns all elements in the Stack.
+func (s *Stack) Elems() []*SessionData {
+	return s.stack
+}
