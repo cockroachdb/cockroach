@@ -301,13 +301,15 @@ export function populateRegionNodeForStatements(
     const regions: { [region: string]: Set<number> } = {};
     // For each region, populate a list of all nodes where the statement was executed.
     // E.g. {"gcp-us-east1" : [1,3,4]}
-    stmt.stats.nodes.forEach(node => {
-      if (Object.keys(regions).includes(nodeRegions[node.toString()])) {
-        regions[nodeRegions[node.toString()]].add(longToInt(node));
-      } else {
-        regions[nodeRegions[node.toString()]] = new Set([longToInt(node)]);
-      }
-    });
+    if (stmt.stats.nodes) {
+      stmt.stats.nodes.forEach(node => {
+        if (Object.keys(regions).includes(nodeRegions[node.toString()])) {
+          regions[nodeRegions[node.toString()]].add(longToInt(node));
+        } else {
+          regions[nodeRegions[node.toString()]] = new Set([longToInt(node)]);
+        }
+      });
+    }
     // Create a list nodes/regions where a statement was executed on, with
     // format: region (node1,node2)
     const regionNodes: string[] = [];

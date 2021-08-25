@@ -129,15 +129,16 @@ export const filterTransactions = (
       let foundNode: boolean = nodes.length == 0;
 
       getStatementsById(t.stats_data.statement_ids, statements).some(stmt => {
-        stmt.stats.nodes.some(node => {
-          if (foundRegion || regions.includes(nodeRegions[node.toString()])) {
-            foundRegion = true;
-          }
-          if (foundNode || nodes.includes("n" + node)) {
-            foundNode = true;
-          }
-          if (foundNode && foundRegion) return true;
-        });
+        stmt.stats.nodes &&
+          stmt.stats.nodes.some(node => {
+            if (foundRegion || regions.includes(nodeRegions[node.toString()])) {
+              foundRegion = true;
+            }
+            if (foundNode || nodes.includes("n" + node)) {
+              foundNode = true;
+            }
+            if (foundNode && foundRegion) return true;
+          });
       });
 
       return foundRegion && foundNode;
@@ -170,14 +171,15 @@ export const generateRegionNode = (
   // E.g. {"gcp-us-east1" : [1,3,4]}
   getStatementsById(transaction.stats_data.statement_ids, statements).forEach(
     stmt => {
-      stmt.stats.nodes.forEach(n => {
-        const node = n.toString();
-        if (Object.keys(regions).includes(nodeRegions[node])) {
-          regions[nodeRegions[node]].add(longToInt(n));
-        } else {
-          regions[nodeRegions[node]] = new Set([longToInt(n)]);
-        }
-      });
+      stmt.stats.nodes &&
+        stmt.stats.nodes.forEach(n => {
+          const node = n.toString();
+          if (Object.keys(regions).includes(nodeRegions[node])) {
+            regions[nodeRegions[node]].add(longToInt(n));
+          } else {
+            regions[nodeRegions[node]] = new Set([longToInt(n)]);
+          }
+        });
     },
   );
 
