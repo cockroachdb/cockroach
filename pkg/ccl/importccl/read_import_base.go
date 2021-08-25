@@ -657,7 +657,7 @@ func (p *parallelImporter) importWorker(
 	if err != nil {
 		return err
 	}
-	if conv.EvalCtx.SessionData == nil {
+	if conv.EvalCtx.SessionData() == nil {
 		panic("uninitialized session data")
 	}
 

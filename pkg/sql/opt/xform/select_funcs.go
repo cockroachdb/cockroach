@@ -914,7 +914,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
 ) {
 	// Short circuit unless zigzag joins are explicitly enabled.
-	if !c.e.evalCtx.SessionData.ZigzagJoinEnabled || scanPrivate.Flags.NoZigzagJoin {
+	if !c.e.evalCtx.SessionData().ZigzagJoinEnabled || scanPrivate.Flags.NoZigzagJoin {
 		return
 	}
 
@@ -1270,7 +1270,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
 ) {
 	// Short circuit unless zigzag joins are explicitly enabled.
-	if !c.e.evalCtx.SessionData.ZigzagJoinEnabled || scanPrivate.Flags.NoZigzagJoin {
+	if !c.e.evalCtx.SessionData().ZigzagJoinEnabled || scanPrivate.Flags.NoZigzagJoin {
 		return
 	}
 

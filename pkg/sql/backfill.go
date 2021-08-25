@@ -2486,7 +2486,7 @@ func indexTruncateInTxn(
 	for done := false; !done; done = sp.Key == nil {
 		rd := row.MakeDeleter(
 			execCfg.Codec, tableDesc, nil /* requestedCols */, &execCfg.Settings.SV,
-			evalCtx.SessionData.Internal,
+			evalCtx.SessionData().Internal,
 		)
 		td := tableDeleter{rd: rd, alloc: alloc}
 		if err := td.init(ctx, txn, evalCtx); err != nil {

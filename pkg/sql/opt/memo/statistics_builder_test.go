@@ -30,7 +30,7 @@ import (
 // by the optimizer.
 func TestGetStatsFromConstraint(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	evalCtx.SessionData.OptimizerUseMultiColStats = true
+	evalCtx.SessionData().OptimizerUseMultiColStats = true
 
 	catalog := testcat.New()
 	if _, err := catalog.ExecuteDDL(

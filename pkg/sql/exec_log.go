@@ -175,7 +175,7 @@ func (p *planner) maybeLogStatementInternal(
 	// Compute the pieces of data that are going to be included in logged events.
 
 	// The session's application_name.
-	appName := p.EvalContext().SessionData.ApplicationName
+	appName := p.EvalContext().SessionData().ApplicationName
 	// The duration of the query so far. Age is the duration expressed in milliseconds.
 	queryDuration := timeutil.Now().Sub(startTime)
 	age := float32(queryDuration.Nanoseconds()) / 1e6

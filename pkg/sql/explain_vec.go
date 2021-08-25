@@ -43,7 +43,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution := getPlanDistribution(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
+		params.extendedEvalCtx.SessionData().DistSQLMode, n.plan.main,
 	)
 	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
@@ -70,7 +70,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	// With all other options, we don't change the setting to the
 	// most-inclusive option as we used to because the plan can be different
 	// based on 'vectorize' setting.
-	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondatapb.VectorizeOff {
+	if flowCtx.EvalCtx.SessionData().VectorizeMode == sessiondatapb.VectorizeOff {
 		return errors.New("vectorize is set to 'off'")
 	}
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]

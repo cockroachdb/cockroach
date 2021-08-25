@@ -186,7 +186,7 @@ func (b *Builder) buildCTE(
 	if !isRecursive {
 		cteScope := b.buildStmt(cte.Stmt, nil /* desiredTypes */, inScope)
 		cteScope.removeHiddenCols()
-		if b.evalCtx.SessionData.PropagateInputOrdering && len(inScope.ordering) == 0 {
+		if b.evalCtx.SessionData().PropagateInputOrdering && len(inScope.ordering) == 0 {
 			// Preserve the CTE ordering.
 			inScope.copyOrdering(cteScope)
 		} else {

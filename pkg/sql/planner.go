@@ -437,7 +437,7 @@ func internalExtendedEvalCtx(
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Txn:                txn,
-			SessionData:        sd,
+			SessionDataStack:   sessiondata.NewStack(sd),
 			TxnReadOnly:        false,
 			TxnImplicit:        true,
 			Settings:           execCfg.Settings,
@@ -773,7 +773,7 @@ func (p *planner) TypeAsStringArray(
 
 // SessionData is part of the PlanHookState interface.
 func (p *planner) SessionData() *sessiondata.SessionData {
-	return p.EvalContext().SessionData
+	return p.EvalContext().SessionData()
 }
 
 // Ann is a shortcut for the Annotations from the eval context.

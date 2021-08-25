@@ -1112,7 +1112,7 @@ func (p *planner) AlterDatabasePlacement(
 		return nil, err
 	}
 
-	if !p.EvalContext().SessionData.PlacementEnabled {
+	if !p.EvalContext().SessionData().PlacementEnabled {
 		return nil, errors.WithHint(pgerror.New(
 			pgcode.FeatureNotSupported,
 			"ALTER DATABASE PLACEMENT requires that the session setting "+

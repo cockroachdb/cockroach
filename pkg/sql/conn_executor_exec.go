@@ -1045,7 +1045,7 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	flags := planner.curPlan.flags
 
 	if flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan) {
-		if ex.executorType == executorTypeExec && planner.EvalContext().SessionData.DisallowFullTableScans {
+		if ex.executorType == executorTypeExec && planner.EvalContext().SessionData().DisallowFullTableScans {
 			// We don't execute the statement if:
 			// - plan contains a full table or full index scan.
 			// - the session setting disallows full table/index scans.
