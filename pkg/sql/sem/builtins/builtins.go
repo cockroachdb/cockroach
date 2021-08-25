@@ -2129,7 +2129,7 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				val, err := evalCtx.SessionData.SequenceState.GetLastValue()
+				val, err := evalCtx.SessionData().SequenceState.GetLastValue()
 				if err != nil {
 					return nil, err
 				}
@@ -2946,7 +2946,7 @@ value if you rely on the HLC for accuracy.`,
 					}
 					val, err := tree.AsJSON(
 						d,
-						ctx.SessionData.DataConversionConfig,
+						ctx.SessionData().DataConversionConfig,
 						ctx.GetLocation(),
 					)
 					if err != nil {
@@ -4123,10 +4123,10 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if len(ctx.SessionData.Database) == 0 {
+				if len(ctx.SessionData().Database) == 0 {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.SessionData.Database), nil
+				return tree.NewDString(ctx.SessionData().Database), nil
 			},
 			Info:       "Returns the current database.",
 			Volatility: tree.VolatilityStable,
@@ -4150,8 +4150,8 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ctx := evalCtx.Ctx()
-				curDb := evalCtx.SessionData.Database
-				iter := evalCtx.SessionData.SearchPath.IterWithoutImplicitPGSchemas()
+				curDb := evalCtx.SessionData().Database
+				iter := evalCtx.SessionData().SearchPath.IterWithoutImplicitPGSchemas()
 				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 					if found, err := evalCtx.Planner.SchemaExists(ctx, curDb, scName); found || err != nil {
 						if err != nil {
@@ -4187,14 +4187,14 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.StringArray),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ctx := evalCtx.Ctx()
-				curDb := evalCtx.SessionData.Database
+				curDb := evalCtx.SessionData().Database
 				includeImplicitPgSchemas := *(args[0].(*tree.DBool))
 				schemas := tree.NewDArray(types.String)
 				var iter sessiondata.SearchPathIter
 				if includeImplicitPgSchemas {
-					iter = evalCtx.SessionData.SearchPath.Iter()
+					iter = evalCtx.SessionData().SearchPath.Iter()
 				} else {
-					iter = evalCtx.SessionData.SearchPath.IterWithoutImplicitPGSchemas()
+					iter = evalCtx.SessionData().SearchPath.IterWithoutImplicitPGSchemas()
 				}
 				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 					if found, err := evalCtx.Planner.SchemaExists(ctx, curDb, scName); found || err != nil {
@@ -4220,10 +4220,10 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if ctx.SessionData.User().Undefined() {
+				if ctx.SessionData().User().Undefined() {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.SessionData.User().Normalized()), nil
+				return tree.NewDString(ctx.SessionData().User().Normalized()), nil
 			},
 			Info: "Returns the current user. This function is provided for " +
 				"compatibility with PostgreSQL.",
@@ -4237,7 +4237,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				u := ctx.SessionData.SessionUser()
+				u := ctx.SessionData().SessionUser()
 				if u.Undefined() {
 					return tree.DNull, nil
 				}
@@ -5753,7 +5753,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 					return nil, pgerror.Newf(
 						pgcode.InvalidDatabaseDefinition,
 						"current database %s is not multi-region enabled",
-						evalCtx.SessionData.Database,
+						evalCtx.SessionData().Database,
 					)
 				}
 				if regionConfig.IsValidRegionNameString(s) {
@@ -5937,7 +5937,7 @@ table's zone configuration this will return NULL.`,
 					)
 				}
 
-				sd := evalCtx.SessionData
+				sd := evalCtx.SessionData()
 				if sd == nil {
 					return nil, pgerror.Newf(
 						pgcode.InvalidTransactionState,
@@ -5996,15 +5996,15 @@ table's zone configuration this will return NULL.`,
 					return nil, err
 				}
 				sd.SessionData = m.SessionData
-				sd.LocalUnmigratableSessionData = evalCtx.SessionData.LocalUnmigratableSessionData
+				sd.LocalUnmigratableSessionData = evalCtx.SessionData().LocalUnmigratableSessionData
 				sd.LocalOnlySessionData = m.LocalOnlySessionData
-				if sd.SessionUser().Normalized() != evalCtx.SessionData.SessionUser().Normalized() {
+				if sd.SessionUser().Normalized() != evalCtx.SessionData().SessionUser().Normalized() {
 					return nil, pgerror.Newf(
 						pgcode.InsufficientPrivilege,
 						"can only deserialize matching session users",
 					)
 				}
-				*evalCtx.SessionData = *sd
+				*evalCtx.SessionData() = *sd
 				return tree.MakeDBool(true), nil
 			},
 			Info:       `This function deserializes the serialized variables into the current session.`,
@@ -6748,7 +6748,7 @@ var jsonBuildObjectImpl = tree.Overload{
 
 			key, err := asJSONBuildObjectKey(
 				args[i],
-				ctx.SessionData.DataConversionConfig,
+				ctx.SessionData().DataConversionConfig,
 				ctx.GetLocation(),
 			)
 			if err != nil {
@@ -6757,7 +6757,7 @@ var jsonBuildObjectImpl = tree.Overload{
 
 			val, err := tree.AsJSON(
 				args[i+1],
-				ctx.SessionData.DataConversionConfig,
+				ctx.SessionData().DataConversionConfig,
 				ctx.GetLocation(),
 			)
 			if err != nil {
@@ -6816,7 +6816,7 @@ var jsonBuildArrayImpl = tree.Overload{
 		for _, arg := range args {
 			j, err := tree.AsJSON(
 				arg,
-				ctx.SessionData.DataConversionConfig,
+				ctx.SessionData().DataConversionConfig,
 				ctx.GetLocation(),
 			)
 			if err != nil {
@@ -6850,7 +6850,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 				}
 				val, err := tree.AsJSON(
 					arr.Array[i+1],
-					ctx.SessionData.DataConversionConfig,
+					ctx.SessionData().DataConversionConfig,
 					ctx.GetLocation(),
 				)
 				if err != nil {
@@ -6886,7 +6886,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 				}
 				val, err := tree.AsJSON(
 					values.Array[i],
-					ctx.SessionData.DataConversionConfig,
+					ctx.SessionData().DataConversionConfig,
 					ctx.GetLocation(),
 				)
 				if err != nil {
@@ -8108,7 +8108,7 @@ func asJSONObjectKey(d tree.Datum) (string, error) {
 }
 
 func toJSONObject(ctx *tree.EvalContext, d tree.Datum) (tree.Datum, error) {
-	j, err := tree.AsJSON(d, ctx.SessionData.DataConversionConfig, ctx.GetLocation())
+	j, err := tree.AsJSON(d, ctx.SessionData().DataConversionConfig, ctx.GetLocation())
 	if err != nil {
 		return nil, err
 	}
@@ -8203,7 +8203,7 @@ var errInsufficientPriv = pgerror.New(
 )
 
 func checkPrivilegedUser(ctx *tree.EvalContext) error {
-	if !ctx.SessionData.User().IsRootUser() {
+	if !ctx.SessionData().User().IsRootUser() {
 		return errInsufficientPriv
 	}
 	return nil

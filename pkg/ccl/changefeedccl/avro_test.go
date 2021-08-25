@@ -370,7 +370,9 @@ func TestAvroSchema(t *testing.T) {
 			require.NoError(t, err)
 
 			for _, row := range rows {
-				evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
+				evalCtx := &tree.EvalContext{
+					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+				}
 				serialized, err := origSchema.textualFromRow(row)
 				require.NoError(t, err)
 				roundtripped, err := roundtrippedSchema.rowFromTextual(serialized)

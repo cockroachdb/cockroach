@@ -89,7 +89,7 @@ func (b *Builder) buildDataSource(
 				outCols[i] = newCol.id
 			}
 
-			if b.evalCtx.SessionData.PropagateInputOrdering && len(inScope.ordering) > 0 {
+			if b.evalCtx.SessionData().PropagateInputOrdering && len(inScope.ordering) > 0 {
 				var oldToNew opt.ColMap
 				for i := range inCols {
 					oldToNew.Set(int(inCols[i]), int(outCols[i]))

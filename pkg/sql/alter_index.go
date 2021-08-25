@@ -85,7 +85,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					"cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning",
 				)
 			}
-			allowImplicitPartitioning := params.p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
+			allowImplicitPartitioning := params.p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
 				n.tableDesc.IsLocalityRegionalByRow()
 			alteredIndexDesc := n.index.IndexDescDeepCopy()
 			newImplicitCols, newPartitioning, err := CreatePartitioning(

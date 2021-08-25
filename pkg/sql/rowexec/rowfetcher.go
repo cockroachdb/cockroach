@@ -98,7 +98,7 @@ func initRowFetcher(
 		reverseScan,
 		lockStrength,
 		lockWaitPolicy,
-		flowCtx.EvalCtx.SessionData.LockTimeout,
+		flowCtx.EvalCtx.SessionData().LockTimeout,
 		isCheck,
 		alloc,
 		mon,

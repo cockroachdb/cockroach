@@ -69,7 +69,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	}
 
 	// UX friendliness safeguard.
-	if upd.Where == nil && b.evalCtx.SessionData.SafeUpdates {
+	if upd.Where == nil && b.evalCtx.SessionData().SafeUpdates {
 		panic(pgerror.DangerousStatementf("UPDATE without WHERE clause"))
 	}
 

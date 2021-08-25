@@ -1654,7 +1654,7 @@ func initCFetcher(
 
 	if err := fetcher.Init(
 		flowCtx.Codec(), allocator, args.memoryLimit, args.reverse, args.lockingStrength,
-		args.lockingWaitPolicy, flowCtx.EvalCtx.SessionData.LockTimeout, tableArgs,
+		args.lockingWaitPolicy, flowCtx.EvalCtx.SessionData().LockTimeout, tableArgs,
 	); err != nil {
 		return nil, err
 	}

@@ -344,7 +344,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 			isLocal := !getPlanDistribution(
 				ctx, localPlanner, localPlanner.execCfg.NodeID,
-				localPlanner.extendedEvalCtx.SessionData.DistSQLMode,
+				localPlanner.extendedEvalCtx.SessionData().DistSQLMode,
 				localPlanner.curPlan.main,
 			).WillDistribute()
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
@@ -2005,7 +2005,7 @@ func createSchemaChangeEvalCtx(
 		ExecCfg: execCfg,
 		Descs:   descriptors,
 		EvalContext: tree.EvalContext{
-			SessionData:      sd,
+			SessionDataStack: sessiondata.NewStack(sd),
 			InternalExecutor: ieFactory(ctx, sd),
 			// TODO(andrei): This is wrong (just like on the main code path on
 			// setupFlow). Each processor should override Ctx with its own context.

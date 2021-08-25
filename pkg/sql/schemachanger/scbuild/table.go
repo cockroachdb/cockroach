@@ -75,7 +75,7 @@ func (b *buildContext) alterTableAddColumn(
 	d := t.ColumnDef
 
 	if d.IsComputed() {
-		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.EvalCtx.SessionData)
+		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.EvalCtx.SessionData())
 	}
 
 	toType, err := tree.ResolveType(ctx, d.Type, b.SemaCtx.GetTypeResolver())
@@ -267,7 +267,7 @@ func (b *buildContext) findOrAddColumnFamily(
 func (b *buildContext) alterTableDropColumn(
 	ctx context.Context, table catalog.TableDescriptor, t *tree.AlterTableDropColumn,
 ) {
-	if b.EvalCtx.SessionData.SafeUpdates {
+	if b.EvalCtx.SessionData().SafeUpdates {
 		panic(pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
 			"remove all data in that column"))
 	}

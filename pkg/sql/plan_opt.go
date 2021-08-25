@@ -349,7 +349,7 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 
 	_, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan)
 	if isCanned {
-		if !p.EvalContext().SessionData.AllowPrepareAsOptPlan {
+		if !p.EvalContext().SessionData().AllowPrepareAsOptPlan {
 			return nil, pgerror.New(pgcode.InsufficientPrivilege,
 				"PREPARE AS OPT PLAN is a testing facility that should not be used directly",
 			)

@@ -111,11 +111,11 @@ func (ex *connExecutor) execStmt(
 	case stateOpen:
 		if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 			remoteAddr := "internal"
-			if rAddr := ex.sessionData.RemoteAddr; rAddr != nil {
+			if rAddr := ex.sessionData().RemoteAddr; rAddr != nil {
 				remoteAddr = rAddr.String()
 			}
 			labels := pprof.Labels(
-				"appname", ex.sessionData.ApplicationName,
+				"appname", ex.sessionData().ApplicationName,
 				"addr", remoteAddr,
 				"stmt.tag", ast.StatementTag(),
 				"stmt.anonymized", anonymizeStmt(ast),
@@ -141,15 +141,15 @@ func (ex *connExecutor) execStmt(
 		panic(errors.AssertionFailedf("unexpected txn state: %#v", ex.machine.CurState()))
 	}
 
-	if ex.sessionData.IdleInSessionTimeout > 0 {
+	if ex.sessionData().IdleInSessionTimeout > 0 {
 		// Cancel the session if the idle time exceeds the idle in session timeout.
 		ex.mu.IdleInSessionTimeout = timeout{time.AfterFunc(
-			ex.sessionData.IdleInSessionTimeout,
+			ex.sessionData().IdleInSessionTimeout,
 			ex.cancelSession,
 		)}
 	}
 
-	if ex.sessionData.IdleInTransactionSessionTimeout > 0 {
+	if ex.sessionData().IdleInTransactionSessionTimeout > 0 {
 		startIdleInTransactionSessionTimeout := func() {
 			switch ast.(type) {
 			case *tree.CommitTransaction, *tree.RollbackTransaction:
@@ -157,7 +157,7 @@ func (ex *connExecutor) execStmt(
 				// an idle timer.
 			default:
 				ex.mu.IdleInTransactionSessionTimeout = timeout{time.AfterFunc(
-					ex.sessionData.IdleInTransactionSessionTimeout,
+					ex.sessionData().IdleInTransactionSessionTimeout,
 					ex.cancelSession,
 				)}
 			}
@@ -421,7 +421,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		var err error
-		pinfo, err = fillInPlaceholders(ctx, ps, name, e.Params, ex.sessionData.SearchPath)
+		pinfo, err = fillInPlaceholders(ctx, ps, name, e.Params, ex.sessionData().SearchPath)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -465,9 +465,9 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// We exempt `SET` statements from the statement timeout, particularly so as
 	// not to block the `SET statement_timeout` command itself.
-	if ex.sessionData.StmtTimeout > 0 && ast.StatementTag() != "SET" {
+	if ex.sessionData().StmtTimeout > 0 && ast.StatementTag() != "SET" {
 		timerDuration :=
-			ex.sessionData.StmtTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
+			ex.sessionData().StmtTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
 		// There's no need to proceed with execution if the timer has already expired.
 		if timerDuration < 0 {
 			queryTimedOut = true
@@ -488,7 +488,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			if perr, ok := retPayload.(payloadWithError); ok {
 				execErr = perr.errorCause()
 			}
-			filter(ctx, ex.sessionData, ast.String(), execErr)
+			filter(ctx, ex.sessionData(), ast.String(), execErr)
 		}
 
 		// Do the auto-commit, if necessary.
@@ -961,7 +961,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeID, ex.sessionData.DistSQLMode, planner.curPlan.main,
+		ctx, planner, planner.execCfg.NodeID, ex.sessionData().DistSQLMode, planner.curPlan.main,
 	)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
@@ -1045,7 +1045,7 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	flags := planner.curPlan.flags
 
 	if flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan) {
-		if ex.executorType == executorTypeExec && planner.EvalContext().SessionData.DisallowFullTableScans {
+		if ex.executorType == executorTypeExec && planner.EvalContext().SessionData().DisallowFullTableScans {
 			// We don't execute the statement if:
 			// - plan contains a full table or full index scan.
 			// - the session setting disallows full table/index scans.

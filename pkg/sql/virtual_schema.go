@@ -418,8 +418,8 @@ func (e *virtualDefEntry) Desc() catalog.Descriptor {
 func canQueryVirtualTable(evalCtx *tree.EvalContext, e *virtualDefEntry) bool {
 	return !e.unimplemented ||
 		evalCtx == nil ||
-		evalCtx.SessionData == nil ||
-		evalCtx.SessionData.StubCatalogTablesEnabled
+		evalCtx.SessionData() == nil ||
+		evalCtx.SessionData().StubCatalogTablesEnabled
 }
 
 type mutableVirtualDefEntry struct {

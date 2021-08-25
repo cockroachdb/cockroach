@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/errors"
 )
 
 // SessionData contains session parameters. They are all user-configurable.
@@ -183,4 +184,40 @@ func (s *SessionData) MaybeGetDatabaseForTemporarySchemaID(schemaID uint32) (uin
 func (s *SessionData) GetTemporarySchemaIDForDb(dbID uint32) (uint32, bool) {
 	schemaID, found := s.DatabaseIDToTempSchemaID[dbID]
 	return schemaID, found
+}
+
+// Stack represents a stack of SessionData objects.
+// This is used to support transaction-scoped variables, where SET LOCAL only
+// affects the top of the stack.
+// There is always guaranteed to be one element in the stack.
+type Stack struct {
+	// Use an internal variable to prevent abstraction leakage.
+	stack []*SessionData
+}
+
+// NewStack creates a new tack.
+func NewStack(firstElem *SessionData) *Stack {
+	return &Stack{stack: []*SessionData{firstElem}}
+}
+
+// Top returns the top element of the stack.
+func (s *Stack) Top() *SessionData {
+	if len(s.stack) == 0 {
+		return nil
+	}
+	return s.stack[len(s.stack)-1]
+}
+
+// Push pushes a SessionData element to the stack.
+func (s *Stack) Push(elem *SessionData) {
+	s.stack = append(s.stack, elem)
+}
+
+// Pop removes the top SessionData element from the stack.
+func (s *Stack) Pop() error {
+	if len(s.stack) <= 1 {
+		return errors.AssertionFailedf("there must always be at least one element in the SessionData stack")
+	}
+	s.stack = s.stack[:len(s.stack)-1]
+	return nil
 }

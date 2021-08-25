@@ -834,7 +834,7 @@ func populateTableConstraints(
 				&buf, db.GetName(),
 				table, con.FK,
 				tableLookup,
-				p.extendedEvalCtx.SessionData.SearchPath,
+				p.extendedEvalCtx.SessionData().SearchPath,
 			); err != nil {
 				return err
 			}

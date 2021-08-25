@@ -87,7 +87,7 @@ FROM "".information_schema.type_privileges`
 			fmt.Fprintf(&cond, `WHERE database_name IN (%s)`, strings.Join(params, ","))
 		}
 	} else if n.Targets != nil && len(n.Targets.Schemas) > 0 {
-		currDB := d.evalCtx.SessionData.Database
+		currDB := d.evalCtx.SessionData().Database
 
 		for _, schema := range n.Targets.Schemas {
 			_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &schema)
@@ -144,7 +144,7 @@ FROM "".information_schema.type_privileges`
 		if len(params) == 0 {
 			dbNameClause := "true"
 			// If the current database is set, restrict the command to it.
-			if currDB := d.evalCtx.SessionData.Database; currDB != "" {
+			if currDB := d.evalCtx.SessionData().Database; currDB != "" {
 				dbNameClause = fmt.Sprintf("database_name = %s", lexbase.EscapeSQLString(currDB))
 			}
 			cond.WriteString(fmt.Sprintf(`WHERE %s`, dbNameClause))
@@ -215,7 +215,7 @@ FROM "".information_schema.type_privileges`
 			source.WriteString(typePrivQuery)
 			source.WriteByte(')')
 			// If the current database is set, restrict the command to it.
-			if currDB := d.evalCtx.SessionData.Database; currDB != "" {
+			if currDB := d.evalCtx.SessionData().Database; currDB != "" {
 				fmt.Fprintf(&cond, ` WHERE database_name = %s`, lexbase.EscapeSQLString(currDB))
 			} else {
 				cond.WriteString(`WHERE true`)
