@@ -1,15 +1,20 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip } from "antd";
+import moment from "moment";
 import { HotRange } from "../../redux/hotRanges/hotRangesReducer";
 import {
   ColumnDescriptor,
   SortedTable,
-} from "../shared/components/sortedtable";
-import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/cluster-ui";
+  Pagination,
+  ResultsPerPageLabel,
+  SortSetting,
+} from "@cockroachlabs/cluster-ui";
+import classNames from "classnames/bind";
+import styles from "./hotRanges.module.styl";
 
 const PAGE_SIZE = 50;
-
+const cx = classNames.bind(styles);
 interface HotRangesTableProps {
   hotRangesList: HotRange[];
 }
@@ -21,13 +26,24 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
   });
   const [sortSetting, setSortSetting] = useState({
     ascending: true,
-    sortKey: null,
+    columnTitle: null,
   });
+  const getCurrentDateTime = () => {
+    const nowUtc = moment.utc();
+    return (
+      nowUtc.format("MMM DD, YYYY") +
+      " at " +
+      nowUtc.format("h:mm A") +
+      " (UTC)"
+    );
+  };
+
   if (hotRangesList.length === 0) {
     return <div>No hot ranges</div>;
   }
   const columns: ColumnDescriptor<HotRange>[] = [
     {
+      name: "rangeId",
       title: (
         <Tooltip placement="bottom" title="Range ID">
           Range ID
@@ -39,6 +55,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
       sort: (val) => val.rangeId,
     },
     {
+      name: "qps",
       title: (
         <Tooltip placement="bottom" title="QPS">
           QPS
@@ -48,6 +65,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
       sort: (val) => val.queriesPerSecond,
     },
     {
+      name: "nodes",
       title: (
         <Tooltip placement="bottom" title="Nodes">
           Nodes
@@ -59,6 +77,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
       sort: (val) => val.nodeIds[0],
     },
     {
+      name: "leasholder",
       title: (
         <Tooltip placement="bottom" title="Leaseholder">
           Leaseholder
@@ -68,6 +87,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
       sort: (val) => val.leaseHolder,
     },
     {
+      name: "database",
       title: (
         <Tooltip placement="bottom" title="Database">
           Database
@@ -77,6 +97,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
       sort: (val) => val.database,
     },
     {
+      name: "table",
       title: (
         <Tooltip placement="bottom" title="Table">
           Table
@@ -90,6 +111,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
       sort: (val) => val.table,
     },
     {
+      name: "index",
       title: (
         <Tooltip placement="bottom" title="Index">
           Index
@@ -102,7 +124,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
 
   return (
     <div>
-      <div>
+      <div className={cx("hotranges-heading-container")}>
         <h4>
           <ResultsPerPageLabel
             pagination={{
@@ -112,12 +134,19 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
             pageName="hot ranges"
           />
         </h4>
+        <div>Last update: {getCurrentDateTime()}</div>
       </div>
       <SortedTable
         data={hotRangesList}
         columns={columns}
+        className={cx("hotranges-table")}
         sortSetting={sortSetting}
-        onChangeSortSetting={setSortSetting}
+        onChangeSortSetting={(ss: SortSetting) =>
+          setSortSetting({
+            ascending: ss.ascending,
+            columnTitle: ss.columnTitle,
+          })
+        }
         pagination={pagination}
       />
       <Pagination
