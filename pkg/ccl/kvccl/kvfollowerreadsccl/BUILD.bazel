@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/utilccl",
+        "//pkg/clusterversion",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/kv/kvserver",
