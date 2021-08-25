@@ -18,12 +18,18 @@ type Alloc struct {
 	bytes   int64 // memory allocated for this request.
 	entries int64 // number of entries using those bytes, usually 1.
 	ap      pool  // pool where those resources ought to be released.
+
+	// Merged allocations that belong to a different pool.  Normally nil.
+	merged []*Alloc
 }
 
 // Release releases resources associated with this allocation.
 func (a Alloc) Release(ctx context.Context) {
 	if a.ap != nil {
 		a.ap.Release(ctx, a.bytes, a.entries)
+	}
+	for _, m := range a.merged {
+		m.ap.Release(ctx, m.bytes, m.entries)
 	}
 }
 
@@ -36,8 +42,11 @@ func (a *Alloc) Merge(other *Alloc) {
 	}
 
 	if a.ap != other.ap {
-		panic("cannot merge allocations from two different pools")
+		// Slow case: this doesn't happen frequently (only right after backfill completes).
+		a.merged = append(a.merged, other)
+		return
 	}
+
 	a.bytes += other.bytes
 	a.entries += other.entries
 	other.bytes = 0

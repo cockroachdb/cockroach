@@ -259,7 +259,8 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	cfg := ca.flowCtx.Cfg
 	buf := kvevent.NewThrottlingBuffer(
-		kvevent.MakeChanBuffer(), cdcutils.NodeLevelThrottler(&cfg.Settings.SV))
+		kvevent.NewMemBuffer(ca.kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
+		cdcutils.NodeLevelThrottler(&cfg.Settings.SV))
 	kvfeedCfg := makeKVFeedCfg(ctx, ca.flowCtx.Cfg, ca.kvFeedMemMon,
 		ca.spec, spans, buf, ca.metrics, ca.knobs.FeedKnobs)
 
@@ -426,6 +427,12 @@ func (ca *changeAggregator) close() {
 				log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
 			}
 		}
+		if ca.eventProducer != nil {
+			if err := ca.eventProducer.Close(ca.Ctx); err != nil {
+				log.Warningf(ca.Ctx, "error closing event producer: %v", err)
+			}
+		}
+
 		ca.memAcc.Close(ca.Ctx)
 		if ca.kvFeedMemMon != nil {
 			ca.kvFeedMemMon.Stop(ca.Ctx)
@@ -571,10 +578,12 @@ func (ca *changeAggregator) ConsumerClosed() {
 type kvEventProducer interface {
 	// GetEvent returns the next kv event.
 	GetEvent(ctx context.Context) (kvevent.Event, error)
+	// Close closes this producer.
+	Close(ctx context.Context) error
 }
 
 type bufEventProducer struct {
-	kvevent.Reader
+	kvevent.Buffer
 }
 
 var _ kvEventProducer = &bufEventProducer{}
@@ -582,6 +591,11 @@ var _ kvEventProducer = &bufEventProducer{}
 // GetEvent implements kvEventProducer interface
 func (p *bufEventProducer) GetEvent(ctx context.Context) (kvevent.Event, error) {
 	return p.Get(ctx)
+}
+
+// Close implements kvEventProducer interface
+func (p *bufEventProducer) Close(ctx context.Context) error {
+	return p.Buffer.Close(ctx)
 }
 
 type kvEventConsumer interface {
