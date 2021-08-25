@@ -1,0 +1,13 @@
+# LogicTest: local-mixed-21.1-21.2
+
+statement ok
+SET intervalstyle_enabled = false
+
+statement ok
+SET datestyle_enabled = false
+
+statement error IntervalStyle changes requires all nodes to be upgraded
+SET intervalstyle_enabled = true
+
+statement error DateStyle changes requires all nodes to be upgraded
+SET datestyle_enabled = true
