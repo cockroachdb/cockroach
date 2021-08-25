@@ -40,7 +40,7 @@ func (r *FileRegistry) SetVersion(version RegistryVersion) {
 
 // Empty returns whether a batch is empty.
 func (b *RegistryUpdateBatch) Empty() bool {
-	return len(b.Updates) == 0
+	return len(b.Updates) == 0 && b.GlobalSettings == nil
 }
 
 // PutEntry adds an update to the batch corresponding to the addition of a new

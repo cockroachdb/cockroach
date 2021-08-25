@@ -75,3 +75,33 @@ message EncryptionSettings {
   bytes nonce = 3;    // 12 bytes
   uint32 counter = 4; // 4 bytes
 }
+
+// RegistryMetadata describes metadata about the various registries
+// involved in encryption-at-rest. This is written to the 'file
+// registry' within the `global_settings` protobuf.Any field of the
+// `RegistryUpdateBatch` message as described in:
+// pkg/storage/enginepb/file_registry.proto
+//
+// When a new data keys registry is written, a new RegistryMetadata
+// protocol buffer is appended to the file registry log. The new data
+// keys registry isn't active until it's written to the file registry
+// log.
+message RegistryMetadata {
+    // The filename for the active data keys registry.
+    string                   data_keys_filename = 1;
+    // Current data keys registry file number; monotonically increasing
+    // and used to formulate next data_keys_filename.
+    uint64                   data_keys_filenum  = 2;
+    // The encoding for the active data keys registry.
+    DataKeysRegistryEncoding data_keys_encoding = 3;
+}
+
+// DataKeysRegistryEncoding describes the encoding of the data keys
+// registry.
+enum DataKeysRegistryEncoding {
+  // Monolith is the current encoding of the data keys registry. The
+  // data keys registry contains a single protocol buffer message of the
+  // type enginepbccl.DataKeysRegsitry. Because it's a single protocol
+  // buffer, every key rotation rewrites the entire file.
+  Monolith = 0;
+}

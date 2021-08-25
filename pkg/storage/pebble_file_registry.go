@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/pebble/record"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 )
 
 // CanRegistryElideFunc is a function that returns true for entries that can be
@@ -71,6 +72,10 @@ type PebbleFileRegistry struct {
 		// TODO(ayang): convert enginepb.FileRegistry to a regular struct
 		// when we deprecate the old registry and rename currProto
 		currProto *enginepb.FileRegistry
+		// A protocol buffer containing the current state of global
+		// settings. The protocol buffer is env-specific, within the
+		// scope of CCL code only.
+		globalSettings *types.Any
 		// registryFile is the opened file for the records-based registry.
 		registryFile vfs.File
 		// registryWriter is a record.Writer for registryFile.
@@ -247,6 +252,9 @@ func (r *PebbleFileRegistry) maybeLoadNewRecordsRegistry() (bool, error) {
 		if err := protoutil.Unmarshal(b, batch); err != nil {
 			return false, err
 		}
+		if batch.GlobalSettings != nil {
+			r.mu.globalSettings = batch.GlobalSettings
+		}
 		r.mu.currProto.ProcessBatch(batch)
 	}
 	if err := records.Close(); err != nil {
@@ -270,6 +278,25 @@ func (r *PebbleFileRegistry) UpgradedToRecordsVersion() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.currProto.Version == enginepb.RegistryVersion_Records
+}
+
+// GlobalSettings returns the active global settings protocol buffer, if
+// any is set.
+func (r *PebbleFileRegistry) GlobalSettings() *types.Any {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.globalSettings
+}
+
+// SetGlobalSettings updates the active global settings to the provided
+// protocol buffer, writing and syncing the new settings to the file
+// registry.
+func (r *PebbleFileRegistry) SetGlobalSettings(newSettings *types.Any) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.processBatchLocked(&enginepb.RegistryUpdateBatch{
+		GlobalSettings: newSettings,
+	})
 }
 
 func (r *PebbleFileRegistry) maybeElideEntries() error {
@@ -445,6 +472,9 @@ func (r *PebbleFileRegistry) processBatchLocked(batch *enginepb.RegistryUpdateBa
 	}
 	if err := r.writeToRegistryFile(batch); err != nil {
 		panic(err)
+	}
+	if batch.GlobalSettings != nil {
+		r.mu.globalSettings = batch.GlobalSettings
 	}
 	r.mu.currProto.ProcessBatch(batch)
 	return nil
