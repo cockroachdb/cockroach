@@ -1,0 +1,266 @@
+@startuml
+
+object Table
+
+Table : TableID
+Table : Temporary
+Table : PartitionByAll
+Table : AuditMode
+
+object Column
+
+Column : TableID
+Column : ColumnID
+Column : FamilyID
+Column : FamilyName
+Column : Type
+Column : Nullable
+Column : DefaultExpr
+Column : OnUpdateExpr
+Column : Hidden
+Column : Inaccessible
+Column : GeneratedAsIdentityType
+Column : GeneratedAsIdentitySequenceOption
+Column : []UsesSequenceIDs
+Column : ComputeExpr
+Column : PGAttributeNum
+Column : SystemColumnKind
+
+Table <|-- Column
+
+object ColumnName
+
+ColumnName : TableID
+ColumnName : ColumnID
+ColumnName : Name
+
+Column <|-- ColumnName
+
+object SequenceOwnedByColumn
+
+SequenceOwnedByColumn : TableID
+SequenceOwnedByColumn : ColumnID
+SequenceOwnedByColumn : SequenceID
+
+Column <|-- SequenceOwnedByColumn
+
+
+object DefaultExpression
+
+DefaultExpression : TableID
+DefaultExpression : ColumnID
+DefaultExpression : []UsesSequenceID
+DefaultExpression : Expression
+
+Column <|-- DefaultExpression
+
+object OnUpdateExpr
+
+OnUpdateExpr : TableID
+OnUpdateExpr : ColumnID
+OnUpdateExpr : []UsesSequenceID
+OnUpdateExpr : Expression
+
+Column <|-- OnUpdateExpr
+
+object ComputedExpr
+
+ComputedExpr : TableID
+ComputedExpr : ColumnID
+ComputedExpr : []UsesSequenceID
+ComputedExpr : Expression
+
+Column <|-- ComputedExpr
+
+object NamespaceEntry
+
+NamespaceEntry : DescriptorID
+NamespaceEntry : ObjectName
+
+Table <|-- NamespaceEntry
+
+object DefaultExprTypeReference
+
+DefaultExprTypeReference : TableID
+DefaultExprTypeReference : ColumnID
+DefaultExprTypeReference : TypeID
+
+Column <|-- DefaultExprTypeReference
+
+object OnUpdateTypeReference
+
+OnUpdateTypeReference : TableID
+OnUpdateTypeReference : ColumnID
+OnUpdateTypeReference : TypeID
+
+Column <|-- OnUpdateTypeReference
+
+object ComputedExprTypeReference
+
+ComputedExprTypeReference : TableID
+ComputedExprTypeReference : ColumnID
+ComputedExprTypeReference : TypeID
+
+Column <|-- ComputedExprTypeReference
+
+object ColumnTypeReference
+
+ColumnTypeReference : TableID
+ColumnTypeReference : ColumnID
+ColumnTypeReference : TypeID
+
+Column <|-- ColumnTypeReference
+
+
+object ViewDependsOnType
+
+ViewDependsOnType : TableID
+ViewDependsOnType : TypeID
+
+Table <|-- ViewDependsOnType
+
+object PrimaryIndex
+
+PrimaryIndex : TableID
+PrimaryIndex : IndexID
+PrimaryIndex : IndexName
+PrimaryIndex : Unique
+PrimaryIndex : []KeyColumnIDs
+PrimaryIndex : []KeyColumnDirections
+PrimaryIndex : []KeySuffixColumnIDs
+PrimaryIndex : []StoringColumnIDs
+PrimaryIndex : []CompositeColumnIDs
+PrimaryIndex : Inverted
+PrimaryIndex : ShardedDescriptor
+
+Table <|-- PrimaryIndex
+
+object SecondaryIndex
+
+SecondaryIndex : TableID
+SecondaryIndex : IndexID
+SecondaryIndex : IndexName
+SecondaryIndex : Unique
+SecondaryIndex : []KeyColumnIDs
+SecondaryIndex : []KeyColumnDirections
+SecondaryIndex : []KeySuffixColumnIDs
+SecondaryIndex : []StoringColumnIDs
+SecondaryIndex : []CompositeColumnIDs
+SecondaryIndex : Inverted
+SecondaryIndex : ShardedDescriptor
+
+Table <|-- SecondaryIndex
+
+object IndexName
+
+IndexName : TableID
+IndexName : IndexID
+IndexName : Name
+
+IndexName <|-- PrimaryIndex
+IndexName <|-- SecondaryIndex
+
+
+object Partitioning
+
+Partitioning : TableID
+Partitioning : IndexID
+Partitioning : []Fields
+Partitioning : []ListPartitions
+Partitioning : []RangePartitions
+
+SecondaryIndex <|-- Partitioning
+PrimaryIndex <|-- Partitioning
+
+object UniqueConstraintWithoutIndex
+
+UniqueConstraintWithoutIndex : TableID
+UniqueConstraintWithoutIndex : []Columns
+
+Table <|-- UniqueConstraintWithoutIndex
+SecondaryIndex <|-- UniqueConstraintWithoutIndex
+
+object ConstraintName
+
+ConstraintName : Type
+ConstraintName : Ordinal
+ConstraintName : Name
+
+ConstraintName <|-- UniqueConstraintWithoutIndex
+
+object CheckConstraint
+
+CheckConstraint : TableID
+CheckConstraint : Name
+CheckConstraint : Expr
+CheckConstraint : []Columns
+CheckConstraint : Validated
+
+Table <|-- CheckConstraint
+ConstraintName <|-- ConstraintName
+
+object PrimaryKeyConstraint
+
+PrimaryKeyConstraint : TableID
+PrimaryKeyConstraint : IndexID
+PrimaryKeyConstraint : []Columns
+
+Table <|-- PrimaryKeyConstraint
+PrimaryIndex <|-- PrimaryKeyConstraint
+
+object ForeignKeyBackReference
+
+ForeignKeyBackReference : OriginID
+ForeignKeyBackReference : []OriginColumns
+ForeignKeyBackReference : ReferenceID
+ForeignKeyBackReference : []ReferenceColumns
+ForeignKeyBackReference : OnDelete
+ForeignKeyBackReference : OnUpdate
+ForeignKeyBackReference : Name
+
+Table <|-- ForeignKeyBackReference
+
+object ForeignKey
+
+ForeignKey : OriginID
+ForeignKey : []OriginColumns
+ForeignKey : ReferenceID
+ForeignKey : []ReferenceColumns
+ForeignKey : OnDelete
+ForeignKey : OnUpdate
+ForeignKey : Name
+
+Table <|-- ForeignKey
+
+object Locality
+
+Locality : TableID
+Locality : Kind
+Locality : Global
+Locality : RegionalByTable
+Locality : RegionalByRow
+
+Table <|-- Locality
+
+object Owner
+
+Owner : DescriptorID
+Owner : Owner
+
+Table <|-- Owner
+
+object UserPrivilege
+
+UserPrivilege : DescriptorID
+UserPrivilege : Username
+UserPrivilege : Privileges
+
+Table <|-- UserPrivilege
+
+object DefaultPrivilege
+
+DefaultPrivilege : DescriptorID
+DefaultPrivilege : Role
+DefaultPrivilege : map[ObjectType]PrivilegesPerObject
+
+@enduml

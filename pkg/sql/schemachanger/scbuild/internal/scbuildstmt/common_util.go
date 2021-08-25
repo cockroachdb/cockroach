@@ -28,7 +28,7 @@ func onErrPanic(err error) {
 // index descriptor.
 func primaryIndexElemFromDescriptor(
 	indexDesc *descpb.IndexDescriptor, tbl catalog.TableDescriptor,
-) *scpb.PrimaryIndex {
+) (*scpb.PrimaryIndex, *scpb.IndexName) {
 	if len(indexDesc.Partitioning.Range) > 0 ||
 		len(indexDesc.Partitioning.List) > 0 {
 		panic(scerrors.NotImplementedErrorf(nil, "partitioning on new indexes is not supported."))
@@ -45,23 +45,27 @@ func primaryIndexElemFromDescriptor(
 		}
 	}
 	return &scpb.PrimaryIndex{TableID: tbl.GetID(),
-		IndexID:             indexDesc.ID,
-		IndexName:           indexDesc.Name,
-		Unique:              indexDesc.Unique,
-		KeyColumnIDs:        indexDesc.KeyColumnIDs,
-		KeyColumnDirections: keyColumnDirs,
-		KeySuffixColumnIDs:  indexDesc.KeySuffixColumnIDs,
-		StoringColumnIDs:    indexDesc.StoreColumnIDs,
-		CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
-		Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
-		ShardedDescriptor:   &indexDesc.Sharded}
+			IndexID:             indexDesc.ID,
+			Unique:              indexDesc.Unique,
+			KeyColumnIDs:        indexDesc.KeyColumnIDs,
+			KeyColumnDirections: keyColumnDirs,
+			KeySuffixColumnIDs:  indexDesc.KeySuffixColumnIDs,
+			StoringColumnIDs:    indexDesc.StoreColumnIDs,
+			CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
+			Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
+			ShardedDescriptor:   &indexDesc.Sharded},
+		&scpb.IndexName{
+			TableID: tbl.GetID(),
+			IndexID: indexDesc.ID,
+			Name:    indexDesc.Name,
+		}
 }
 
 // secondaryIndexElemFromDescriptor constructs a secondary index element from an
 // index descriptor.
 func secondaryIndexElemFromDescriptor(
 	indexDesc *descpb.IndexDescriptor, tbl catalog.TableDescriptor,
-) *scpb.SecondaryIndex {
+) (*scpb.SecondaryIndex, *scpb.IndexName) {
 	if len(indexDesc.Partitioning.Range) > 0 ||
 		len(indexDesc.Partitioning.List) > 0 {
 		panic(scerrors.NotImplementedErrorf(nil, "partitioning on new indexes is not supported."))
@@ -78,14 +82,18 @@ func secondaryIndexElemFromDescriptor(
 		}
 	}
 	return &scpb.SecondaryIndex{TableID: tbl.GetID(),
-		IndexID:             indexDesc.ID,
-		IndexName:           indexDesc.Name,
-		Unique:              indexDesc.Unique,
-		KeyColumnIDs:        indexDesc.KeyColumnIDs,
-		KeyColumnDirections: keyColumnDirs,
-		KeySuffixColumnIDs:  indexDesc.KeySuffixColumnIDs,
-		StoringColumnIDs:    indexDesc.StoreColumnIDs,
-		CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
-		Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
-		ShardedDescriptor:   &indexDesc.Sharded}
+			IndexID:             indexDesc.ID,
+			Unique:              indexDesc.Unique,
+			KeyColumnIDs:        indexDesc.KeyColumnIDs,
+			KeyColumnDirections: keyColumnDirs,
+			KeySuffixColumnIDs:  indexDesc.KeySuffixColumnIDs,
+			StoringColumnIDs:    indexDesc.StoreColumnIDs,
+			CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
+			Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
+			ShardedDescriptor:   &indexDesc.Sharded},
+		&scpb.IndexName{
+			TableID: tbl.GetID(),
+			IndexID: indexDesc.ID,
+			Name:    indexDesc.Name,
+		}
 }

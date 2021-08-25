@@ -122,18 +122,21 @@ func alterTableAddColumn(
 			}
 		}
 		if !found {
-			b.EnqueueAdd(&scpb.TypeReference{
-				TypeID: typeDesc.GetID(),
-				DescID: table.GetID(),
+			b.EnqueueAdd(&scpb.ColumnTypeReference{
+				TypeID:   typeDesc.GetID(),
+				ColumnID: col.ID,
+				TableID:  table.GetID(),
 			})
 		}
 	}
 
-	b.EnqueueAdd(&scpb.Column{
-		TableID:    table.GetID(),
-		Column:     *col,
-		FamilyID:   familyID,
-		FamilyName: familyName,
+	b.EnqueueAdd(
+		columnDescToElement(table, *col, &familyName, &familyID),
+	)
+	b.EnqueueAdd(&scpb.ColumnName{
+		TableID:  table.GetID(),
+		ColumnID: col.ID,
+		Name:     col.Name,
 	})
 	// Virtual computed columns do not exist inside the primary index,
 	if !col.Virtual {
@@ -141,8 +144,9 @@ func alterTableAddColumn(
 		if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
 			idxID := b.NextIndexID(table)
 			idx.ID = idxID
-			secondaryIndex := secondaryIndexElemFromDescriptor(idx, table)
+			secondaryIndex, secondaryIndexName := secondaryIndexElemFromDescriptor(idx, table)
 			b.EnqueueAdd(secondaryIndex)
+			b.EnqueueAdd(secondaryIndexName)
 		}
 	}
 }
@@ -162,8 +166,8 @@ func validateColumnName(
 		panic(sqlerrors.NewColumnAlreadyExistsError(string(d.Name), table.GetName()))
 	}
 	b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-		if t, ok := elem.(*scpb.Column); ok {
-			if t.TableID != table.GetID() || t.Column.Name != d.Name.String() {
+		if t, ok := elem.(*scpb.ColumnName); ok {
+			if t.TableID != table.GetID() || t.Name != d.Name.String() {
 				return
 			}
 			switch dir {
@@ -294,10 +298,14 @@ func addOrUpdatePrimaryIndexTargetsForAddColumn(
 		newIdx.StoreColumnNames = append(newIdx.StoreColumnNames, colName)
 	}
 
-	b.EnqueueAdd(primaryIndexElemFromDescriptor(&newIdx, table))
+	newPrimaryIndex, newPrimaryIndexName := primaryIndexElemFromDescriptor(&newIdx, table)
+	b.EnqueueAdd(newPrimaryIndex)
+	b.EnqueueAdd(newPrimaryIndexName)
 
 	// Drop the existing primary index.
-	b.EnqueueDrop(primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table))
+	oldPrimaryIndex, oldPrimaryIndexName := primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table)
+	b.EnqueueDrop(oldPrimaryIndex)
+	b.EnqueueDrop(oldPrimaryIndexName)
 
 	return idxID
 }

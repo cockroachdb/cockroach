@@ -27,8 +27,8 @@ func (b buildCtx) NextColumnID(tbl catalog.TableDescriptor) descpb.ColumnID {
 		if dir != scpb.Target_ADD || screl.GetDescID(elem) != tbl.GetID() {
 			return
 		}
-		if ac, ok := elem.(*scpb.Column); ok && ac.Column.ID > maxAddedColID {
-			maxAddedColID = ac.Column.ID
+		if ac, ok := elem.(*scpb.Column); ok && ac.ColumnID > maxAddedColID {
+			maxAddedColID = ac.ColumnID
 		}
 	})
 	if maxAddedColID != 0 {

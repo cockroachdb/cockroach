@@ -39,13 +39,8 @@ func init() {
 			}),
 		),
 		to(scpb.Status_ABSENT,
-			minPhase(scop.PreCommitPhase),
+			minPhase(scop.PostCommitPhase),
 			revertible(false),
-			emit(func(this *scpb.Sequence) scop.Op {
-				return &scop.DrainDescriptorName{
-					TableID: this.SequenceID,
-				}
-			}),
 			emit(func(this *scpb.Sequence, md *scpb.ElementMetadata) scop.Op {
 				return &scop.LogEvent{Metadata: *md,
 					DescID:    this.SequenceID,
