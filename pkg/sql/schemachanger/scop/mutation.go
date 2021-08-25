@@ -13,6 +13,7 @@ package scop
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 //go:generate go run ./generate_visitor.go scop Mutation mutation.go mutation_visitor_generated.go
@@ -173,10 +174,23 @@ type MakeIndexAbsent struct {
 // MakeAddedColumnDeleteOnly adds a new column in the DELETE_ONLY state.
 type MakeAddedColumnDeleteOnly struct {
 	mutationOp
-	TableID    descpb.ID
-	FamilyID   descpb.FamilyID
-	FamilyName string
-	Column     descpb.ColumnDescriptor
+	ColumnID                          descpb.ColumnID
+	TableID                           descpb.ID
+	FamilyID                          descpb.FamilyID
+	FamilyName                        string
+	ColumnType                        *types.T
+	Nullable                          bool
+	DefaultExpr                       string
+	OnUpdateExpr                      string
+	Hidden                            bool
+	Inaccessible                      bool
+	GeneratedAsIdentityType           descpb.GeneratedAsIdentityType
+	GeneratedAsIdentitySequenceOption string
+	UsesSequenceIds                   []descpb.ID
+	ComputerExpr                      string
+	PgAttributeNum                    uint32
+	SystemColumnKind                  descpb.SystemColumnKind
+	Virtual                           bool
 }
 
 // MakeColumnPublic moves a new column from its mutation to public.
@@ -265,4 +279,22 @@ type LogEvent struct {
 	Metadata  scpb.ElementMetadata
 	Element   *scpb.ElementProto
 	Direction scpb.Target_Direction
+}
+
+// SetColumnName makes a column only to allocate
+// the name and ID.
+type SetColumnName struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+	Name     string
+}
+
+// SetIndexName makes a index name only to allocate
+// the name and ID.
+type SetIndexName struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+	Name    string
 }

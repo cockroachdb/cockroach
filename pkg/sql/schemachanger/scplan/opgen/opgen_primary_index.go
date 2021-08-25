@@ -43,7 +43,6 @@ func init() {
 				return &scop.MakeAddedIndexDeleteOnly{
 					TableID:             this.TableID,
 					IndexID:             this.IndexID,
-					IndexName:           this.IndexName,
 					Unique:              this.Unique,
 					KeyColumnIDs:        this.KeyColumnIDs,
 					KeyColumnDirections: convertPrimaryIndexColumnDir(this),
