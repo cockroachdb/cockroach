@@ -214,10 +214,6 @@ DROP SCHEMA s;
 # Ensure testuser no longer owns anything.
 user root
 
-query TBTTT
-SHOW DEFAULT PRIVILEGES FOR ALL ROLES
-----
-
 statement ok
 REVOKE CREATE ON DATABASE test FROM testuser, testuser2;
 DROP ROLE testuser;

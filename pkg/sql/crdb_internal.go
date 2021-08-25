@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -4916,18 +4917,18 @@ CREATE TABLE crdb_internal.default_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(descriptor catalog.DatabaseDescriptor) error {
-				f := func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
+				addRowHelper := func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
+					role := tree.DNull
+					forAllRoles := tree.DBoolTrue
+					if defaultPrivilegesForRole.IsExplicitRole() {
+						role = tree.NewDString(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized())
+						forAllRoles = tree.DBoolFalse
+					}
 					for objectType, privs := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
 						privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 						for _, userPrivs := range privs.Users {
 							privList := privilege.ListFromBitField(userPrivs.Privileges, privilegeObjectType)
 							for _, priv := range privList {
-								role := tree.DNull
-								forAllRoles := tree.DBoolTrue
-								if defaultPrivilegesForRole.IsExplicitRole() {
-									role = tree.NewDString(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized())
-									forAllRoles = tree.DBoolFalse
-								}
 								if err := addRow(
 									tree.NewDString(descriptor.GetName()),
 									// When the schema_name is NULL, that means the default
@@ -4944,9 +4945,67 @@ CREATE TABLE crdb_internal.default_privileges (
 							}
 						}
 					}
+					for _, objectType := range tree.GetAlterDefaultPrivilegesTargetObjects() {
+						if catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, objectType) {
+							if err := addRow(
+								tree.NewDString(descriptor.GetName()),
+								// When the schema_name is NULL, that means the default
+								// privileges are defined at the database level.
+								tree.DNull, /* schema is currently always nil. See: #67376 */
+								role,
+								forAllRoles,
+								tree.NewDString(objectType.String()),
+								tree.NewDString(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized()),
+								tree.NewDString(privilege.ALL.String()),
+							); err != nil {
+								return err
+							}
+						}
+					}
+					if catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
+						if err := addRow(
+							tree.NewDString(descriptor.GetName()),
+							// When the schema_name is NULL, that means the default
+							// privileges are defined at the database level.
+							tree.DNull, /* schema is currently always nil. See: #67376 */
+							role,
+							forAllRoles,
+							tree.NewDString(tree.Types.String()),
+							tree.NewDString(security.PublicRoleName().Normalized()),
+							tree.NewDString(privilege.USAGE.String()),
+						); err != nil {
+							return err
+						}
+					}
 					return nil
 				}
-				return descriptor.GetDefaultPrivilegeDescriptor().ForEachDefaultPrivilegeForRole(f)
+				addRowForRole := func(role descpb.DefaultPrivilegesRole) error {
+					defaultPrivilegesForRole, found := dbContext.GetDefaultPrivilegeDescriptor().GetDefaultPrivilegesForRole(role)
+					if !found {
+						// If an entry is not found for the role, the role still has
+						// the default set of default privileges.
+						newDefaultPrivilegesForRole := descpb.InitDefaultPrivilegesForRole(role)
+						defaultPrivilegesForRole = &newDefaultPrivilegesForRole
+					}
+					if err := addRowHelper(*defaultPrivilegesForRole); err != nil {
+						return err
+					}
+					return nil
+				}
+				if err := forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, noLogin bool, rolValidUntil *time.Time) error {
+					role := descpb.DefaultPrivilegesRole{
+						Role: username,
+					}
+					return addRowForRole(role)
+				}); err != nil {
+					return err
+				}
+
+				// Handle ForAllRoles outside of forEachRole since it is a pseudo role.
+				role := descpb.DefaultPrivilegesRole{
+					ForAllRoles: true,
+				}
+				return addRowForRole(role)
 			})
 	},
 }
