@@ -2398,13 +2398,31 @@ var _ paramStatusUpdater = (*noopParamStatusUpdater)(nil)
 
 func (noopParamStatusUpdater) BufferParamStatusUpdate(string, string) {}
 
-// sessionDataMutator is the interface used by sessionVars to change the session
-// state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
-// see curTxnReadOnly).
-type sessionDataMutator struct {
-	data               *sessiondata.SessionData
-	defaults           SessionDefaults
-	settings           *cluster.Settings
+// sessionDataMutatorBase contains elements in a sessionDataMutator
+// which is the same across all SessionData elements in the sessiondata.Stack.
+type sessionDataMutatorBase struct {
+	defaults SessionDefaults
+	settings *cluster.Settings
+	sessionDataMutatorCallbacks
+}
+
+// RegisterOnSessionDataChange adds a listener to execute when a change on the
+// given key is made using the mutator object.
+func (b *sessionDataMutatorBase) RegisterOnSessionDataChange(key string, f func(val string)) {
+	if b.onSessionDataChangeListeners == nil {
+		b.onSessionDataChangeListeners = make(map[string][]func(val string))
+	}
+	b.onSessionDataChangeListeners[key] = append(b.onSessionDataChangeListeners[key], f)
+}
+
+// sessionDataMutatorCallbacks contains elements in a sessionDataMutator
+// which are only populated when mutating the "top" sessionData element.
+// It is intended for functions which should only be called once per SET
+// (e.g. param status updates, which only should be sent once within
+// a transaction where there may be two or more SessionData elements in
+type sessionDataMutatorCallbacks struct {
+	// paramStatusUpdater is called when there is a ParamStatusUpdate.
+	// It can be nil, in which case nothing triggers on execution.
 	paramStatusUpdater paramStatusUpdater
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
 	setCurTxnReadOnly func(val bool)
@@ -2416,13 +2434,70 @@ type sessionDataMutator struct {
 	onSessionDataChangeListeners map[string][]func(val string)
 }
 
-// RegisterOnSessionDataChange adds a listener to execute when a change on the
-// given key is made using the mutator object.
-func (m *sessionDataMutator) RegisterOnSessionDataChange(key string, f func(val string)) {
-	if m.onSessionDataChangeListeners == nil {
-		m.onSessionDataChangeListeners = make(map[string][]func(val string))
+// sessionDataMutatorIterator generates sessionDataMutators which allow
+// the changing of SessionData on some element inside the sessiondata Stack.
+type sessionDataMutatorIterator struct {
+	sessionDataMutatorBase
+	sds *sessiondata.Stack
+}
+
+// mutator returns a mutator for the given sessionData.
+func (f *sessionDataMutatorIterator) mutator(
+	isTop bool, sd *sessiondata.SessionData,
+) *sessionDataMutator {
+	ret := &sessionDataMutator{
+		data:                   sd,
+		sessionDataMutatorBase: f.sessionDataMutatorBase,
 	}
-	m.onSessionDataChangeListeners[key] = append(m.onSessionDataChangeListeners[key], f)
+	// Change the sessionDataMutatorCallbacks if our SessionData element is not
+	// the top. This prevents us from calling, e.g. ParamStatusUpdate multiple
+	// times if we are nested in a transaction (it should only be called once).
+	if !isTop {
+		ret.sessionDataMutatorCallbacks = sessionDataMutatorCallbacks{
+			paramStatusUpdater: &noopParamStatusUpdater{},
+		}
+	}
+	return ret
+}
+
+// SetSessionDefaultIntSize sets the default int size for the session.
+// It is exported for use in import which is a CCL package.
+func (f *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
+	f.forEachMutator(func(m *sessionDataMutator) {
+		m.SetDefaultIntSize(size)
+	})
+}
+
+// forEachMutator iterates over each mutator over all SessionData elements
+// in the stack and applies the given function to them.
+// It is the equivalent of SET SESSION x = y.
+func (f *sessionDataMutatorIterator) forEachMutator(applyFunc func(m *sessionDataMutator)) {
+	elems := f.sds.Elems()
+	for i, sd := range elems {
+		applyFunc(f.mutator(i == len(elems)-1, sd))
+	}
+}
+
+// forEachMutatorError is the same as forEachMutator, but takes in a function
+// that can return an error, erroring if any of applications error.
+func (f *sessionDataMutatorIterator) forEachMutatorError(
+	applyFunc func(m *sessionDataMutator) error,
+) error {
+	elems := f.sds.Elems()
+	for i, sd := range elems {
+		if err := applyFunc(f.mutator(i == len(elems)-1, sd)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// sessionDataMutator is the object used by sessionVars to change the session
+// state. It mostly mutates the session's SessionData, but not exclusively (e.g.
+// see curTxnReadOnly).
+type sessionDataMutator struct {
+	data *sessiondata.SessionData
+	sessionDataMutatorBase
 }
 
 func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string) {
@@ -2451,7 +2526,9 @@ func (m *sessionDataMutator) SetDatabase(dbName string) {
 }
 
 func (m *sessionDataMutator) SetTemporarySchemaName(scName string) {
-	m.onTempSchemaCreation()
+	if m.onTempSchemaCreation != nil {
+		m.onTempSchemaCreation()
+	}
 	m.data.SearchPath = m.data.SearchPath.WithTemporarySchemaName(scName)
 }
 

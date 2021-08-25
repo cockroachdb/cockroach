@@ -2398,7 +2398,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 					globalDefVal := gen.GlobalDefault(&p.EvalContext().Settings.SV)
 					bootDatum = tree.NewDString(globalDefVal)
 				}
-				if hasDefault, defVal := getSessionVarDefaultString(vName, gen, p.sessionDataMutator); hasDefault {
+				if hasDefault, defVal := getSessionVarDefaultString(
+					vName,
+					gen,
+					p.sessionDataMutatorIterator.sessionDataMutatorBase,
+				); hasDefault {
 					resetDatum = tree.NewDString(defVal)
 				}
 			}
