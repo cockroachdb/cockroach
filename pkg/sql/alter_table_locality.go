@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -314,10 +315,16 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		// Note we initially set the default expression to be primary_region,
 		// so that it is backfilled this way. When the backfill is complete,
 		// we will change this to use gateway_region.
+		var onUpdateExpr tree.Expr
+		if params.EvalContext().SessionData().AutoRehomingEnabled &&
+			params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.OnUpdateExpressions) {
+			onUpdateExpr = regionalByRowGatewayRegionDefaultExpr(enumOID)
+		}
 		defaultColDef := &tree.AlterTableAddColumn{
 			ColumnDef: regionalByRowDefaultColDef(
 				enumOID,
 				regionalByRowRegionDefaultExpr(enumOID, tree.Name(primaryRegion)),
+				onUpdateExpr,
 			),
 		}
 		tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)

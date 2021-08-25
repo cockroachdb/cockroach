@@ -1484,9 +1484,18 @@ func NewTableDesc(
 				)
 			}
 			oid := typedesc.TypeIDToOID(regionConfig.RegionEnumID())
+			var onUpdateExpr tree.Expr
+			if evalCtx.SessionData().AutoRehomingEnabled &&
+				evalCtx.Settings.Version.IsActive(ctx, clusterversion.OnUpdateExpressions) {
+				onUpdateExpr = regionalByRowGatewayRegionDefaultExpr(oid)
+			}
 			n.Defs = append(
 				n.Defs,
-				regionalByRowDefaultColDef(oid, regionalByRowGatewayRegionDefaultExpr(oid)),
+				regionalByRowDefaultColDef(
+					oid,
+					regionalByRowGatewayRegionDefaultExpr(oid),
+					onUpdateExpr,
+				),
 			)
 			columnDefaultExprs = append(columnDefaultExprs, nil)
 		}
@@ -2792,7 +2801,9 @@ func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
 	}
 }
 
-func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.ColumnTableDef {
+func regionalByRowDefaultColDef(
+	oid oid.Oid, defaultExpr tree.Expr, onUpdateExpr tree.Expr,
+) *tree.ColumnTableDef {
 	c := &tree.ColumnTableDef{
 		Name:   tree.RegionalByRowRegionDefaultColName,
 		Type:   &tree.OIDTypeReference{OID: oid},
@@ -2800,6 +2811,8 @@ func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.Column
 	}
 	c.Nullable.Nullability = tree.NotNull
 	c.DefaultExpr.Expr = defaultExpr
+	c.OnUpdateExpr.Expr = onUpdateExpr
+
 	return c
 }
 
