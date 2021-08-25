@@ -40,7 +40,9 @@ func TestDrainingNamesAreCleanedOnTypeChangeFailure(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 		RunBeforeExec: func() error {
-			return errors.New("boom")
+			// As the job is non-cancelable, return a permanent-marked error so that
+			// the job can revert.
+			return jobs.MarkAsPermanentJobError(errors.New("boom"))
 		},
 	}
 	// Decrease the adopt loop interval so that retries happen quickly.
@@ -174,7 +176,7 @@ func TestFailedTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	cleanupSuccessfullyFinished := make(chan struct{})
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 		RunBeforeExec: func() error {
-			return errors.New("yikes")
+			return jobs.MarkAsPermanentJobError(errors.New("yikes"))
 		},
 		RunAfterOnFailOrCancel: func() error {
 			mu.Lock()
