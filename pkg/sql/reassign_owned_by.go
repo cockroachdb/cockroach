@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/errors"
 )
 
 // ReassignOwnedByNode represents a REASSIGN OWNED BY <role(s)> TO <role> statement.
@@ -48,6 +49,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	}
 	// Check all roles in old roles exist. Checks in authorization.go will confirm that current user
 	// is a member of old roles and new roles and has CREATE privilege.
+	// Postgres first checks if the role exists before checking privileges.
 	for _, oldRole := range normalizedOldRole {
 		roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), oldRole)
 		if err != nil {
@@ -55,6 +57,46 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 		}
 		if !roleExists {
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", oldRole)
+		}
+	}
+	roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), n.NewRole)
+	if !roleExists {
+		return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", n.NewRole)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	hasAdminRole, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// The current user must either be an admin or we have to check that
+	// the current user is a member of both the new roles and all the
+	// old roles.
+	if !hasAdminRole {
+		memberOf, err := p.MemberOfWithAdminOption(ctx, p.User())
+		if err != nil {
+			return nil, err
+		}
+		if p.User() != n.NewRole {
+			if _, ok := memberOf[n.NewRole]; !ok {
+				return nil, errors.WithHint(
+					pgerror.Newf(pgcode.InsufficientPrivilege,
+						"permission denied to reassign objects"),
+					"user must be a member of the new role")
+			}
+		}
+		for _, oldRole := range normalizedOldRole {
+			if p.User() != oldRole {
+				if _, ok := memberOf[oldRole]; !ok {
+					return nil, errors.WithHint(
+						pgerror.Newf(pgcode.InsufficientPrivilege,
+							"permission denied to reassign objects"),
+						"user must be a member of the old roles")
+				}
+			}
 		}
 	}
 	return &reassignOwnedByNode{n: n, normalizedOldRoles: normalizedOldRole}, nil
@@ -121,8 +163,7 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	if err != nil {
 		return err
 	}
-	if err := params.p.checkCanAlterDatabaseAndSetNewOwner(params.ctx,
-		mutableDbDesc.(*dbdesc.Mutable), n.n.NewRole); err != nil {
+	if err := params.p.setNewDatabaseOwner(params.ctx, mutableDbDesc, n.n.NewRole); err != nil {
 		return err
 	}
 	if err := params.p.writeNonDropDatabaseChange(
@@ -143,7 +184,7 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 	if err != nil {
 		return err
 	}
-	if err := params.p.checkCanAlterSchemaAndSetNewOwner(
+	if err := params.p.setNewSchemaOwner(
 		params.ctx, mutableSchemaDesc.(*schemadesc.Mutable), n.n.NewRole); err != nil {
 		return err
 	}
@@ -164,7 +205,7 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 	if err != nil {
 		return err
 	}
-	if err := params.p.checkCanAlterTableAndSetNewOwner(
+	if err := params.p.setNewTableOwner(
 		params.ctx, mutableTbDesc.(*tabledesc.Mutable), n.n.NewRole); err != nil {
 		return err
 	}
@@ -189,7 +230,7 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 	if err != nil {
 		return err
 	}
-	if err := params.p.checkCanAlterTypeAndSetNewOwner(
+	if err := params.p.setNewTypeOwner(
 		params.ctx, mutableTypDesc.(*typedesc.Mutable), arrayDesc, n.n.NewRole); err != nil {
 		return err
 	}
