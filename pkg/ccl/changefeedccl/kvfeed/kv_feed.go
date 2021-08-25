@@ -103,6 +103,7 @@ func Run(ctx context.Context, cfg Config) error {
 	g.GoCtx(cfg.SchemaFeed.Run)
 	g.GoCtx(f.run)
 	err := g.Wait()
+
 	// NB: The higher layers of the changefeed should detect the boundary and the
 	// policy and tear everything down. Returning before the higher layers tear down
 	// the changefeed exposes synchronization challenges if the provided writer is
@@ -110,18 +111,27 @@ func Run(ctx context.Context, cfg Config) error {
 	// changefeedAggregator to exit even if all values haven't been read out of the
 	// provided buffer.
 	var scErr schemaChangeDetectedError
-	if errors.As(err, &scErr) {
-		log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
-		// Close the buffer so the consumer (changeAggregator) knows no more
-		// writes are expected and can transition to a draining state.
-		if err := f.writer.Close(ctx); err != nil {
-			return errors.Wrap(err, "failed to close kv event writer")
-		}
-		// This context is canceled by the change aggregator when it receives
-		// ErrBufferClosed from the kv buffer that we closed above.
-		<-ctx.Done()
-		err = nil
+	if !errors.As(err, &scErr) {
+		// Regardless of whether we exited KV feed with or without an error, that error
+		// is not a schema change; so, close the writer and return.
+		return errors.CombineErrors(err, f.writer.Close(ctx))
 	}
+
+	log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
+
+	// Drain the writer before we close it so that all events emitted prior to schema change
+	// boundary are consumed by the change aggregator.
+	// Regardless of whether drain succeeds, we must also close the buffer to release
+	// any resources, and to let the consumer (changeAggregator) know that no more writes
+	// are expected so that it can transition to a draining state.
+	err = errors.CombineErrors(f.writer.Drain(ctx), f.writer.Close(ctx))
+
+	if err == nil {
+		// This context is canceled by the change aggregator when it receives
+		// an error reading from the Writer that was closed above.
+		<-ctx.Done()
+	}
+
 	return err
 }
 

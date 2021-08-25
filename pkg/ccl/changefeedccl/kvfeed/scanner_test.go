@@ -38,6 +38,10 @@ func (r *recordResolvedWriter) Add(ctx context.Context, e kvevent.Event) error {
 	return nil
 }
 
+func (r *recordResolvedWriter) Drain(ctx context.Context) error {
+	return nil
+}
+
 func (r *recordResolvedWriter) Close(ctx context.Context) error {
 	return nil
 }

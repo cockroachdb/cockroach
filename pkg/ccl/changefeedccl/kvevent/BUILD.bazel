@@ -33,9 +33,12 @@ go_library(
 
 go_test(
     name = "kvevent_test",
-    srcs = ["blocking_buffer_test.go"],
+    srcs = [
+        "alloc_test.go",
+        "blocking_buffer_test.go",
+    ],
+    embed = [":kvevent"],
     deps = [
-        ":kvevent",
         "//pkg/keys",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
@@ -50,6 +53,7 @@ go_test(
         "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "@com_github_stretchr_testify//require",
     ],
 )

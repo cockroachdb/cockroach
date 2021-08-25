@@ -41,6 +41,8 @@ type Reader interface {
 type Writer interface {
 	// Add adds event to this writer.
 	Add(ctx context.Context, event Event) error
+	// Drain waits until all events buffered by this writer has been consumed.
+	Drain(ctx context.Context) error
 	// Close closes this writer.
 	Close(ctx context.Context) error
 }
