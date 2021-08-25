@@ -268,7 +268,6 @@ func TestSchemaChanger(t *testing.T) {
 			targetSlice = []*scpb.Target{
 				scpb.NewTarget(scpb.Target_ADD, &scpb.PrimaryIndex{
 					TableID:             fooTable.GetID(),
-					IndexName:           "new_primary_key",
 					IndexID:             2,
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
@@ -277,27 +276,39 @@ func TestSchemaChanger(t *testing.T) {
 					Inverted:            false,
 				},
 					metadata),
+				scpb.NewTarget(scpb.Target_ADD, &scpb.IndexName{
+					TableID: fooTable.GetID(),
+					IndexID: 2,
+					Name:    "new_primary_key",
+				},
+					metadata),
+				scpb.NewTarget(scpb.Target_ADD, &scpb.ColumnName{
+					TableID:  fooTable.GetID(),
+					ColumnID: 2,
+					Name:     "j",
+				},
+					metadata),
 				scpb.NewTarget(scpb.Target_ADD, &scpb.Column{
-					TableID:    fooTable.GetID(),
-					FamilyID:   descpb.FamilyID(0),
-					FamilyName: "primary",
-					Column: descpb.ColumnDescriptor{
-						Name:           "j",
-						ID:             2,
-						Type:           types.Int,
-						Nullable:       true,
-						PGAttributeNum: 2,
-					},
+					TableID:        fooTable.GetID(),
+					ColumnID:       2,
+					Type:           types.Int,
+					Nullable:       true,
+					PgAttributeNum: 2,
 				},
 					metadata),
 				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
 					TableID:             fooTable.GetID(),
-					IndexName:           "primary",
 					IndexID:             1,
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
 					Unique:              true,
 					Inverted:            false,
+				},
+					metadata),
+				scpb.NewTarget(scpb.Target_DROP, &scpb.IndexName{
+					TableID: fooTable.GetID(),
+					IndexID: 1,
+					Name:    "primary",
 				},
 					metadata),
 			}
@@ -314,6 +325,18 @@ func TestSchemaChanger(t *testing.T) {
 					},
 					{
 						Target: targetSlice[2],
+						Status: scpb.Status_ABSENT,
+					},
+					{
+						Target: targetSlice[3],
+						Status: scpb.Status_ABSENT,
+					},
+					{
+						Target: targetSlice[4],
+						Status: scpb.Status_PUBLIC,
+					},
+					{
+						Target: targetSlice[5],
 						Status: scpb.Status_PUBLIC,
 					},
 				},
@@ -366,9 +389,22 @@ func TestSchemaChanger(t *testing.T) {
 				},
 				{
 					Target: targetSlice[2],
+					Status: scpb.Status_PUBLIC,
+				},
+				{
+					Target: targetSlice[3],
+					Status: scpb.Status_PUBLIC,
+				},
+				{
+					Target: targetSlice[4],
 					Status: scpb.Status_ABSENT,
 				},
+				{
+					Target: targetSlice[5],
+					Status: scpb.Status_PUBLIC,
+				},
 			},
+
 			Statements: []*scpb.Statement{
 				{},
 			},

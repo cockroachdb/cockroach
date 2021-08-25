@@ -40,54 +40,19 @@ DROP TABLE defaultdb.shipments CASCADE;
 ----
 Stage 0
   *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 57
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 56
-  *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 55
-Stage 1 (non-revertible)
+  *scop.MarkDescriptorAsDroppedSynthetically
+    DescID: 57
+Stage 1
+  *scop.DrainDescriptorName
+    TableID: 55
+  *scop.DrainDescriptorName
+    TableID: 57
+Stage 2 (non-revertible)
   *scop.MarkDescriptorAsDropped
     DescID: 55
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 57
-    TableID: 55
-  *scop.MarkDescriptorAsDropped
-    DescID: 57
-  *scop.DropForeignKeyRef
-    Name: fk_customers
-    Outbound: true
-    TableID: 55
-  *scop.DropForeignKeyRef
-    Name: fk_customers
-    TableID: 52
-  *scop.DropForeignKeyRef
-    Name: fk_orders
-    Outbound: true
-    TableID: 55
-  *scop.DropForeignKeyRef
-    Name: fk_orders
-    TableID: 53
   *scop.RemoveColumnDefaultExpression
     ColumnID: 1
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.MarkDescriptorAsDropped
-    DescID: 56
-  *scop.RemoveSequenceOwnedBy
-    TableID: 56
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 3
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 4
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
@@ -96,20 +61,19 @@ Stage 1 (non-revertible)
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
+  *scop.RemoveSequenceOwnedBy
+    TableID: 56
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 55
     TableID: 54
-Stage 2 (non-revertible)
-  *scop.DrainDescriptorName
-    TableID: 57
+  *scop.MarkDescriptorAsDropped
+    DescID: 57
+Stage 3 (non-revertible)
   *scop.LogEvent
     DescID: 57
     Direction: 2
     Element:
       view:
-        dependedOnBy: []
-        dependsOn:
-        - 55
         tableId: 57
     Metadata:
       Statement: DROP TABLE defaultdb.shipments CASCADE
@@ -119,81 +83,37 @@ Stage 2 (non-revertible)
       Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 57
-  *scop.DrainDescriptorName
-    TableID: 56
-  *scop.LogEvent
-    DescID: 56
-    Direction: 2
-    Element:
-      sequence:
-        sequenceId: 56
-    Metadata:
-      Statement: DROP TABLE defaultdb.shipments CASCADE
-      TargetMetadata:
-        SourceElementID: 2
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 56
-  *scop.DrainDescriptorName
-    TableID: 55
-  *scop.LogEvent
-    DescID: 55
-    Direction: 2
-    Element:
-      table:
-        tableId: 55
-    Metadata:
-      Statement: DROP TABLE defaultdb.shipments CASCADE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
 
 deps
 DROP TABLE defaultdb.shipments CASCADE;
 ----
 - from: [DefaultExpression:{DescID: 55, ColumnID: 1}, ABSENT]
   to:   [Table:{DescID: 55}, DROPPED]
-- from: [DefaultExpression:{DescID: 55, ColumnID: 2}, ABSENT]
-  to:   [Table:{DescID: 55}, DROPPED]
-- from: [DefaultExpression:{DescID: 55, ColumnID: 3}, ABSENT]
-  to:   [Table:{DescID: 55}, DROPPED]
-- from: [DefaultExpression:{DescID: 55, ColumnID: 4}, ABSENT]
-  to:   [Table:{DescID: 55}, DROPPED]
 - from: [DefaultExpression:{DescID: 55, ColumnID: 5}, ABSENT]
   to:   [Table:{DescID: 55}, DROPPED]
-- from: [InboundForeignKey:{DescID: 52, Name: fk_customers, ReferencedDescID: 55}, ABSENT]
+- from: [Namespace:{DescID: 55, Name: shipments}, ABSENT]
   to:   [Table:{DescID: 55}, DROPPED]
-- from: [InboundForeignKey:{DescID: 53, Name: fk_orders, ReferencedDescID: 55}, ABSENT]
-  to:   [Table:{DescID: 55}, DROPPED]
-- from: [OutboundForeignKey:{DescID: 55, Name: fk_customers, ReferencedDescID: 52}, ABSENT]
-  to:   [Table:{DescID: 55}, DROPPED]
-- from: [OutboundForeignKey:{DescID: 55, Name: fk_orders, ReferencedDescID: 53}, ABSENT]
+- from: [Namespace:{DescID: 57, Name: v1}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
   to:   [Table:{DescID: 55}, DROPPED]
 - from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+  to:   [Table:{DescID: 55}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
   to:   [Table:{DescID: 55}, DROPPED]
-- from: [Sequence:{DescID: 56}, ABSENT]
-  to:   [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, ABSENT]
-- from: [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, ABSENT]
-  to:   [Sequence:{DescID: 56}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
 - from: [Table:{DescID: 55}, ABSENT]
   to:   [DefaultExpression:{DescID: 55, ColumnID: 1}, ABSENT]
 - from: [Table:{DescID: 55}, ABSENT]
-  to:   [DefaultExpression:{DescID: 55, ColumnID: 2}, ABSENT]
-- from: [Table:{DescID: 55}, ABSENT]
-  to:   [DefaultExpression:{DescID: 55, ColumnID: 3}, ABSENT]
-- from: [Table:{DescID: 55}, ABSENT]
-  to:   [DefaultExpression:{DescID: 55, ColumnID: 4}, ABSENT]
-- from: [Table:{DescID: 55}, ABSENT]
   to:   [DefaultExpression:{DescID: 55, ColumnID: 5}, ABSENT]
 - from: [Table:{DescID: 55}, ABSENT]
-  to:   [OutboundForeignKey:{DescID: 55, Name: fk_customers, ReferencedDescID: 52}, ABSENT]
+  to:   [ForeignKey:{DescID: 55, ReferencedDescID: 52, Name: fk_customers}, ABSENT]
 - from: [Table:{DescID: 55}, ABSENT]
-  to:   [OutboundForeignKey:{DescID: 55, Name: fk_orders, ReferencedDescID: 53}, ABSENT]
+  to:   [ForeignKey:{DescID: 55, ReferencedDescID: 53, Name: fk_orders}, ABSENT]
+- from: [Table:{DescID: 55}, ABSENT]
+  to:   [Namespace:{DescID: 55, Name: shipments}, ABSENT]
 - from: [Table:{DescID: 55}, ABSENT]
   to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
-- from: [Table:{DescID: 55}, ABSENT]
-  to:   [View:{DescID: 57}, ABSENT]
+- from: [View:{DescID: 57}, ABSENT]
+  to:   [Namespace:{DescID: 57, Name: v1}, ABSENT]

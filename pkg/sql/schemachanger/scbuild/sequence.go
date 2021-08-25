@@ -27,48 +27,34 @@ import (
 func (b *buildContext) dropSequenceDesc(
 	ctx context.Context, seq catalog.TableDescriptor, cascade tree.DropBehavior,
 ) {
+	onErrPanic(b.Dependencies.AuthorizationAccessor().CheckPrivilege(ctx, seq, privilege.DROP))
+	// Any elements added below will be children of this view.
+	lastSourceID := b.setSourceElementID(b.newSourceElementID())
+	// Add a node to drop the sequence
+	b.decomposeTableDescToElements(ctx, seq, scpb.Target_DROP)
 	// Check if there are dependencies.
-	_ = seq.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+	scpb.ForEachRelationDependedOnBy(b.output, func(dep *scpb.RelationDependedOnBy) error {
+		if dep.TableID != seq.GetID() {
+			return nil
+		}
 		if cascade != tree.DropCascade {
-			panic(pgerror.Newf(
+			return pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
 				"cannot drop sequence %s because other objects depend on it",
 				seq.GetName(),
-			))
+			)
 		}
-		desc := mustReadTable(ctx, b, dep.ID)
+		desc := mustReadTable(ctx, b.Dependencies, dep.TableID)
 		for _, col := range desc.PublicColumns() {
-			for _, id := range dep.ColumnIDs {
-				if col.GetID() != id {
-					continue
-				}
-				defaultExpr := &scpb.DefaultExpression{
-					TableID:         dep.ID,
-					ColumnID:        col.GetID(),
-					UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
-					DefaultExpr:     ""}
-				if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
-					b.addNode(scpb.Target_DROP, defaultExpr)
-				}
-				b.removeColumnTypeBackRefs(desc, col.GetID())
+			if dep.ColumnID != descpb.ColumnID(descpb.InvalidID) && col.GetID() != dep.ColumnID {
+				continue
 			}
+			// Convert the default expression into elements.
+			b.decomposeDefaultExprToElements(desc, col, scpb.Target_DROP)
 		}
 		return nil
 	})
-
-	// Add a node to drop the sequence
-	sequenceNode := &scpb.Sequence{SequenceID: seq.GetID()}
-	if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, sequenceNode); !exists {
-		b.addNode(scpb.Target_DROP, sequenceNode)
-	}
-	if seq.GetSequenceOpts().SequenceOwner.OwnerTableID != descpb.InvalidID {
-		sequenceOwnedBy := &scpb.SequenceOwnedBy{
-			SequenceID:   seq.GetID(),
-			OwnerTableID: seq.GetSequenceOpts().SequenceOwner.OwnerTableID}
-		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, sequenceOwnedBy); !exists {
-			b.addNode(scpb.Target_DROP, sequenceOwnedBy)
-		}
-	}
+	b.setSourceElementID(lastSourceID)
 }
 
 // dropSequence builds targets and transforms the provided schema change nodes

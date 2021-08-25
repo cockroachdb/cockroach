@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq/oid"
 )
 
 // alterTable builds targets and transforms the provided schema change nodes
@@ -71,7 +70,7 @@ func (b *buildContext) alterTableCmd(
 
 func primaryIndexElemFromDescriptor(
 	indexDesc *descpb.IndexDescriptor, tableDesc catalog.TableDescriptor,
-) *scpb.PrimaryIndex {
+) (*scpb.PrimaryIndex, *scpb.IndexName) {
 	if len(indexDesc.Partitioning.Range) > 0 ||
 		len(indexDesc.Partitioning.List) > 0 {
 		panic(notImplementedError{n: nil, detail: "partitioning on new indexes is not supported."})
@@ -88,21 +87,25 @@ func primaryIndexElemFromDescriptor(
 		}
 	}
 	return &scpb.PrimaryIndex{TableID: tableDesc.GetID(),
-		IndexID:             indexDesc.ID,
-		IndexName:           indexDesc.Name,
-		Unique:              indexDesc.Unique,
-		KeyColumnIDs:        indexDesc.KeyColumnIDs,
-		KeyColumnDirections: keyColumnDirs,
-		KeySuffixColumnIDs:  indexDesc.KeySuffixColumnIDs,
-		StoringColumnIDs:    indexDesc.StoreColumnIDs,
-		CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
-		Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
-		ShardedDescriptor:   &indexDesc.Sharded}
+			IndexID:             indexDesc.ID,
+			Unique:              indexDesc.Unique,
+			KeyColumnIDs:        indexDesc.KeyColumnIDs,
+			KeyColumnDirections: keyColumnDirs,
+			KeySuffixColumnIDs:  indexDesc.KeySuffixColumnIDs,
+			StoringColumnIDs:    indexDesc.StoreColumnIDs,
+			CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
+			Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
+			ShardedDescriptor:   &indexDesc.Sharded},
+		&scpb.IndexName{
+			TableID: tableDesc.GetID(),
+			IndexID: indexDesc.ID,
+			Name:    indexDesc.Name,
+		}
 }
 
 func secondaryIndexElemFromDescriptor(
 	indexDesc *descpb.IndexDescriptor, tableDesc catalog.TableDescriptor,
-) *scpb.SecondaryIndex {
+) (*scpb.SecondaryIndex, *scpb.IndexName) {
 	if len(indexDesc.Partitioning.Range) > 0 ||
 		len(indexDesc.Partitioning.List) > 0 {
 		panic(notImplementedError{n: nil, detail: "partitioning on new indexes is not supported."})
@@ -119,16 +122,20 @@ func secondaryIndexElemFromDescriptor(
 		}
 	}
 	return &scpb.SecondaryIndex{TableID: tableDesc.GetID(),
-		IndexID:             indexDesc.ID,
-		IndexName:           indexDesc.Name,
-		Unique:              indexDesc.Unique,
-		KeyColumnIDs:        indexDesc.KeyColumnIDs,
-		KeyColumnDirections: keyColumnDirs,
-		KeySuffixColumnIDs:  indexDesc.KeySuffixColumnIDs,
-		StoringColumnIDs:    indexDesc.StoreColumnIDs,
-		CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
-		Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
-		ShardedDescriptor:   &indexDesc.Sharded}
+			IndexID:             indexDesc.ID,
+			Unique:              indexDesc.Unique,
+			KeyColumnIDs:        indexDesc.KeyColumnIDs,
+			KeyColumnDirections: keyColumnDirs,
+			KeySuffixColumnIDs:  indexDesc.KeySuffixColumnIDs,
+			StoringColumnIDs:    indexDesc.StoreColumnIDs,
+			CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
+			Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
+			ShardedDescriptor:   &indexDesc.Sharded},
+		&scpb.IndexName{
+			TableID: tableDesc.GetID(),
+			IndexID: indexDesc.ID,
+			Name:    indexDesc.Name,
+		}
 }
 
 func (b *buildContext) alterTableAddColumn(
@@ -186,8 +193,8 @@ func (b *buildContext) alterTableAddColumn(
 
 	b.validateColumnName(table, d, col, t.IfNotExists)
 
-	familyID := descpb.FamilyID(0)
 	familyName := string(d.Family.Name)
+	var familyID descpb.FamilyID
 	// TODO(ajwerner,lucy-zhang): Figure out how to compute the default column ID
 	// for the family.
 	if d.HasColumnFamily() {
@@ -228,26 +235,31 @@ func (b *buildContext) alterTableAddColumn(
 			}
 		}
 		if !found {
-			b.addNode(scpb.Target_ADD, &scpb.TypeReference{
-				TypeID: typeDesc.GetID(),
-				DescID: table.GetID(),
+			b.addNode(scpb.Target_ADD, &scpb.ColumnTypeReference{
+				TableID:  table.GetID(),
+				ColumnID: col.ID,
+				TypeID:   typeDesc.GetID(),
 			})
 		}
 	}
-	b.addNode(scpb.Target_ADD, &scpb.Column{
-		TableID:    table.GetID(),
-		Column:     *col,
-		FamilyID:   familyID,
-		FamilyName: familyName,
-	})
+	b.addNode(scpb.Target_ADD,
+		&scpb.ColumnName{
+			TableID:  table.GetID(),
+			ColumnID: col.ID,
+			Name:     col.Name,
+		})
+	b.addNode(scpb.Target_ADD,
+		b.columnDescToElement(table, *col, &familyName, &familyID))
 	// Virtual computed columns do not exist inside the primary index,
 	if !col.Virtual {
 		b.addOrUpdatePrimaryIndexTargetsForAddColumn(table, colID, col.Name)
 		if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
 			idxID := b.nextIndexID(table)
 			idx.ID = idxID
-			secondaryIndex := secondaryIndexElemFromDescriptor(idx, table)
+			secondaryIndex, secondaryIndexName := secondaryIndexElemFromDescriptor(idx, table)
 			b.addNode(scpb.Target_ADD, secondaryIndex)
+			b.addNode(scpb.Target_ADD, secondaryIndexName)
+
 		}
 	}
 	b.incrementSubWorkID()
@@ -268,8 +280,8 @@ func (b *buildContext) validateColumnName(
 	}
 	for _, n := range b.output.Nodes {
 		switch t := n.Element().(type) {
-		case *scpb.Column:
-			if t.TableID != table.GetID() || t.Column.Name != string(d.Name) {
+		case *scpb.ColumnName:
+			if t.TableID != table.GetID() || t.Name != string(d.Name) {
 				continue
 			}
 			switch dir := n.Target.Direction; dir {
@@ -348,18 +360,31 @@ func (b *buildContext) alterTableDropColumn(
 		}
 		panic(err)
 	}
-	// Check whether the column is being dropped.
+	var columnID descpb.ColumnID
+	columnIDFound := false
 	for _, n := range b.output.Nodes {
 		switch col := n.Element().(type) {
-		case *scpb.Column:
-			if col.TableID != table.GetID() ||
-				n.Target.Direction != scpb.Target_DROP ||
-				col.Column.ColName() != t.Column {
-				continue
+		case *scpb.ColumnName:
+			if col.Name == t.Column.String() {
+				columnID = col.ColumnID
+				columnIDFound = true
 			}
-			// Column drops are, while the column is in the process of being dropped,
-			// for whatever reason, idempotent. Return silently here.
-			return
+		}
+	}
+	if columnIDFound {
+		// Check whether the column is being dropped.
+		for _, n := range b.output.Nodes {
+			switch col := n.Element().(type) {
+			case *scpb.Column:
+				if col.TableID != table.GetID() ||
+					n.Target.Direction != scpb.Target_DROP ||
+					columnID != col.ColumnID {
+					continue
+				}
+				// Column drops are, while the column is in the process of being dropped,
+				// for whatever reason, idempotent. Return silently here.
+				return
+			}
 		}
 	}
 
@@ -391,18 +416,23 @@ func (b *buildContext) alterTableDropColumn(
 			typeID, err := typedesc.UserDefinedTypeOIDToID(colType.Oid())
 			onErrPanic(err)
 			typ := mustReadType(ctx, b, typeID)
-			b.addNode(scpb.Target_DROP, &scpb.TypeReference{
-				TypeID: typ.GetID(),
-				DescID: table.GetID(),
+			b.addNode(scpb.Target_DROP, &scpb.ColumnTypeReference{
+				TypeID:   typ.GetID(),
+				TableID:  table.GetID(),
+				ColumnID: colToDrop.GetID(),
 			})
 		}
 	}
 
 	// TODO(ajwerner): Add family information to the column.
-	b.addNode(scpb.Target_DROP, &scpb.Column{
-		TableID: table.GetID(),
-		Column:  *colToDrop.ColumnDesc(),
-	})
+	b.addNode(scpb.Target_DROP,
+		&scpb.ColumnName{
+			TableID:  table.GetID(),
+			ColumnID: colToDrop.GetID(),
+			Name:     colToDrop.GetName(),
+		})
+	b.addNode(scpb.Target_DROP,
+		b.columnDescToElement(table, *colToDrop.ColumnDesc(), nil, nil))
 
 	b.addOrUpdatePrimaryIndexTargetsForDropColumn(table, colToDrop.GetID())
 }
@@ -481,10 +511,14 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 		newIdx.StoreColumnNames = append(newIdx.StoreColumnNames, colName)
 	}
 
-	b.addNode(scpb.Target_ADD, primaryIndexElemFromDescriptor(&newIdx, table))
+	newPrimaryIndex, newPrimaryIndexName := primaryIndexElemFromDescriptor(&newIdx, table)
+	b.addNode(scpb.Target_ADD, newPrimaryIndex)
+	b.addNode(scpb.Target_ADD, newPrimaryIndexName)
 
 	// Drop the existing primary index.
-	b.addNode(scpb.Target_DROP, primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table))
+	oldPrimaryIndex, oldPrimaryIndexName := primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table)
+	b.addNode(scpb.Target_DROP, oldPrimaryIndex)
+	b.addNode(scpb.Target_DROP, oldPrimaryIndexName)
 
 	return idxID
 }
@@ -538,10 +572,15 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 		}
 	}
 
-	b.addNode(scpb.Target_ADD, primaryIndexElemFromDescriptor(&newIdx, table))
+	newPrimaryIndex, newPrimaryIndexName := primaryIndexElemFromDescriptor(&newIdx, table)
+	b.addNode(scpb.Target_ADD, newPrimaryIndex)
+	b.addNode(scpb.Target_ADD, newPrimaryIndexName)
 
 	// Drop the existing primary index.
-	b.addNode(scpb.Target_DROP, primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table))
+	oldPrimaryIndex, oldPrimaryIndexName :=
+		primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table)
+	b.addNode(scpb.Target_DROP, oldPrimaryIndex)
+	b.addNode(scpb.Target_DROP, oldPrimaryIndexName)
 	return idxID
 }
 
@@ -558,8 +597,8 @@ func (b *buildContext) nextColumnID(table catalog.TableDescriptor) descpb.Column
 			continue
 		}
 		if ac, ok := n.Element().(*scpb.Column); ok {
-			if ac.Column.ID > maxColID {
-				maxColID = ac.Column.ID
+			if ac.ColumnID > maxColID {
+				maxColID = ac.ColumnID
 			}
 		}
 	}
@@ -592,164 +631,75 @@ func (b *buildContext) nextIndexID(table catalog.TableDescriptor) descpb.IndexID
 	return nextMaxID
 }
 
-func (b *buildContext) maybeCleanTableSequenceRefs(
-	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
-) {
-	// Setup nodes for dropping sequences
-	// and cleaning up default expressions.
-	for _, col := range table.PublicColumns() {
-		// Loop over owned sequences
-		for seqIdx := 0; seqIdx < col.NumOwnsSequences(); seqIdx++ {
-			seqID := col.GetOwnsSequenceID(seqIdx)
-			seq := mustReadTable(ctx, b, seqID)
-			if behavior != tree.DropCascade {
-				panic(pgerror.Newf(
-					pgcode.DependentObjectsStillExist,
-					"cannot drop table %s because other objects depend on it",
-					seq.GetName(),
-				))
-			}
-			onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, seq, privilege.DROP))
-			b.dropSequenceDesc(ctx, seq, tree.DropCascade)
-		}
-		// Setup logic to clean up the default expression always.
-		defaultExpr := &scpb.DefaultExpression{
-			DefaultExpr:     col.GetDefaultExpr(),
-			TableID:         table.GetID(),
-			UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
-			ColumnID:        col.GetID()}
-		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
-			b.addNode(scpb.Target_DROP, defaultExpr)
-		}
-		// Get all available type references and create nodes
-		// for dropping these type references.
-		visitor := &tree.TypeCollectorVisitor{
-			OIDs: make(map[oid.Oid]struct{}),
-		}
-		if col.HasDefault() && !col.ColumnDesc().HasNullDefault() {
-			expr, err := parser.ParseExpr(col.GetDefaultExpr())
-			onErrPanic(err)
-			tree.WalkExpr(visitor, expr)
-			for oid := range visitor.OIDs {
-				typeID, err := typedesc.UserDefinedTypeOIDToID(oid)
-				onErrPanic(err)
-				typeRef := &scpb.TypeReference{
-					TypeID: typeID,
-					DescID: table.GetID(),
-				}
-				if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, typeRef); !exists {
-					b.addNode(scpb.Target_DROP, typeRef)
-				}
-			}
-		}
-
-		// If there was a sequence dependency clean that up next.
-		if col.NumUsesSequences() > 0 {
-			// Drop the depends on within the sequence side.
-			for seqOrd := 0; seqOrd < col.NumUsesSequences(); seqOrd++ {
-				seqID := col.GetUsesSequenceID(seqOrd)
-				// Remove dependencies to this sequences.
-				dropDep := &scpb.RelationDependedOnBy{TableID: seqID,
-					DependedOnBy: table.GetID()}
-				if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, dropDep); !exists {
-					b.addNode(scpb.Target_DROP, dropDep)
-				}
-			}
-		}
-	}
-}
-
-func (b *buildContext) maybeCleanTableFKs(
-	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
-) { // Loop through and update inbound and outbound
-	// foreign key references.
-	_ = table.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-		dependentTable := mustReadTable(ctx, b, fk.OriginTableID)
-		if behavior != tree.DropCascade {
-			panic(pgerror.Newf(
-				pgcode.DependentObjectsStillExist,
-				"%q is referenced by foreign key from table %q", fk.Name, dependentTable.GetName()))
-		}
-		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, dependentTable, privilege.DROP))
-		outFkNode := &scpb.OutboundForeignKey{
-			OriginID:         fk.OriginTableID,
-			OriginColumns:    fk.OriginColumnIDs,
-			ReferenceID:      fk.ReferencedTableID,
-			ReferenceColumns: fk.ReferencedColumnIDs,
-			Name:             fk.Name,
-		}
-		inFkNode := &scpb.InboundForeignKey{
-			OriginID:         fk.ReferencedTableID,
-			OriginColumns:    fk.ReferencedColumnIDs,
-			ReferenceID:      fk.OriginTableID,
-			ReferenceColumns: fk.OriginColumnIDs,
-			Name:             fk.Name,
-		}
-		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, outFkNode); !exists {
-			b.addNode(scpb.Target_DROP,
-				outFkNode)
-		}
-		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, inFkNode); !exists {
-			b.addNode(scpb.Target_DROP,
-				inFkNode)
-		}
-		return nil
-	})
-
-	_ = table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-		outFkNode := &scpb.OutboundForeignKey{
-			OriginID:         fk.OriginTableID,
-			OriginColumns:    fk.OriginColumnIDs,
-			ReferenceID:      fk.ReferencedTableID,
-			ReferenceColumns: fk.ReferencedColumnIDs,
-			Name:             fk.Name,
-		}
-		inFkNode := &scpb.InboundForeignKey{
-			OriginID:         fk.ReferencedTableID,
-			OriginColumns:    fk.ReferencedColumnIDs,
-			ReferenceID:      fk.OriginTableID,
-			ReferenceColumns: fk.OriginColumnIDs,
-			Name:             fk.Name,
-		}
-		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, outFkNode); !exists {
-			b.addNode(scpb.Target_DROP,
-				outFkNode)
-		}
-		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, inFkNode); !exists {
-			b.addNode(scpb.Target_DROP,
-				inFkNode)
-		}
-		return nil
-	})
-}
-
 func (b *buildContext) dropTableDesc(
 	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
 ) {
+	onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, table, privilege.DROP))
+	b.decomposeTableDescToElements(ctx, table, scpb.Target_DROP)
 	lastSourceID := b.setSourceElementID(b.newSourceElementID())
-	// Drop dependent views
-	onErrPanic(table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-		dependentDesc := mustReadTable(ctx, b, dep.ID)
-		if behavior != tree.DropCascade {
-			return pgerror.Newf(
-				pgcode.DependentObjectsStillExist, "cannot drop table %q because view %q depends on it",
-				table.GetName(), dependentDesc.GetName())
+	// Go over the dependencies and generate drop targets
+	// for them. In our case they should only be views.
+	scpb.ForEachRelationDependedOnBy(b.output, func(dep *scpb.RelationDependedOnBy) error {
+		if dep.TableID != table.GetID() {
+			return nil
+		}
+		dependentDesc := mustReadTable(ctx, b.Dependencies, dep.DependedOnBy)
+		if !dependentDesc.IsView() {
+			panic(errors.AssertionFailedf("descriptor :%s is not a view", dependentDesc.GetName()))
 		}
 		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(ctx, dependentDesc, privilege.DROP))
+		if behavior != tree.DropCascade {
+
+			name, err := b.CatalogReader().GetQualifiedTableNameByID(ctx,
+				int64(table.GetID()),
+				tree.ResolveRequireTableDesc)
+			onErrPanic(err)
+
+			depViewName, err := b.CatalogReader().GetQualifiedTableNameByID(ctx,
+				int64(dep.DependedOnBy),
+				tree.ResolveRequireViewDesc)
+			onErrPanic(err)
+			panic(errors.WithHintf(
+				sqlerrors.NewDependentObjectErrorf("cannot drop table %q because view %q depends on it",
+					name, depViewName.FQString()),
+				"you can drop %s instead.", depViewName.FQString()))
+		}
+		// Decompose and recursively attempt to drop
 		b.maybeDropViewAndDependents(ctx, dependentDesc, behavior)
+		b.setSourceElementID(lastSourceID)
 		return nil
-	}))
-	// Clean up foreign key references (both inbound
-	// and out bound).
-	b.maybeCleanTableFKs(ctx, table, behavior)
-	// Clean up sequence references and ownerships.
-	b.maybeCleanTableSequenceRefs(ctx, table, behavior)
-	// Clean up type back references
-	b.removeTypeBackRefDeps(ctx, table)
-	b.setSourceElementID(lastSourceID)
-	b.addNode(scpb.Target_DROP,
-		&scpb.Table{TableID: table.GetID()})
+	})
+	// Detect if foreign keys will end up preventing this drop behavior.
+	scpb.ForEachForeignKeyBackReference(b.output,
+		func(fk *scpb.ForeignKeyBackReference) error {
+			dependentTable := mustReadTable(ctx, b.Dependencies, fk.ReferenceID)
+			if fk.OriginID == table.GetID() {
+				if behavior != tree.DropCascade {
+					panic(pgerror.Newf(
+						pgcode.DependentObjectsStillExist,
+						"%q is referenced by foreign key from table %q", fk.Name, dependentTable.GetName()))
+				}
+			}
+			return nil
+		})
+	// Detect any sequence ownerships and prevent clean up if cascades
+	// are disallowed.
+	scpb.ForEachSequenceOwnedBy(b.output, func(sequenceOwnedBy *scpb.SequenceOwnedBy) error {
+		if sequenceOwnedBy.OwnerTableID != table.GetID() {
+			return nil
+		}
+		sequence := mustReadTable(ctx, b.Dependencies, sequenceOwnedBy.SequenceID)
+		if behavior != tree.DropCascade {
+			panic(pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop table %s because other objects depend on it",
+				sequence.GetName(),
+			))
+		}
+		return nil
+	})
 }
+
 func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 	// Find the table first.
 	for _, name := range n.Names {

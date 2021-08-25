@@ -119,20 +119,24 @@ func (b *buildContext) maybeCreateAndAddShardCol(
 			//desc.AddColumn(shardColDesc)
 		} else {
 			shardColDesc.ID = b.nextColumnID(desc)
-			column := &scpb.Column{
-				Column:     *shardColDesc,
-				TableID:    desc.GetID(),
-				FamilyID:   desc.GetFamilies()[0].ID,
-				FamilyName: desc.GetFamilies()[0].Name,
-			}
+			column := b.columnDescToElement(desc,
+				*shardColDesc,
+				&desc.GetFamilies()[0].Name,
+				&desc.GetFamilies()[0].ID)
 			b.addNode(scpb.Target_ADD, column)
+			b.addNode(scpb.Target_ADD, &scpb.ColumnName{
+				TableID:  desc.GetID(),
+				ColumnID: column.ColumnID,
+				Name:     shardColDesc.Name,
+			})
 		}
 		if !shardColDesc.Virtual {
 			// Replace the primary index
-			oldPrimaryIndex := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
-			newPrimaryIndex := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
+			oldPrimaryIndex, oldPrimaryIndexName := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
+			newPrimaryIndex, newPrimaryIndexName := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
 			newPrimaryIndex.IndexID = b.nextIndexID(desc)
-			newPrimaryIndex.IndexName = tabledesc.GenerateUniqueName(
+			newPrimaryIndexName.IndexID = newPrimaryIndex.IndexID
+			newPrimaryIndexName.Name = tabledesc.GenerateUniqueName(
 				"new_primary_key",
 				func(name string) bool {
 					// TODO (lucy): Also check the new indexes specified in the targets.
@@ -142,7 +146,9 @@ func (b *buildContext) maybeCreateAndAddShardCol(
 			)
 			newPrimaryIndex.StoringColumnIDs = append(newPrimaryIndex.StoringColumnIDs, shardColDesc.ID)
 			b.addNode(scpb.Target_DROP, oldPrimaryIndex)
+			b.addNode(scpb.Target_DROP, oldPrimaryIndexName)
 			b.addNode(scpb.Target_ADD, newPrimaryIndex)
+			b.addNode(scpb.Target_ADD, newPrimaryIndexName)
 		}
 		created = true
 	}
@@ -187,7 +193,6 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 
 	// Setup an secondary index node.
 	secondaryIndex := &scpb.SecondaryIndex{TableID: table.GetID(),
-		IndexName:          n.Name.Normalize(),
 		Unique:             n.Unique,
 		KeyColumnIDs:       make([]descpb.ColumnID, 0, len(n.Columns)),
 		StoringColumnIDs:   make([]descpb.ColumnID, 0, len(n.Storing)),
@@ -247,18 +252,18 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 
 			// Add a new column element
 			b.alterTableAddColumn(ctx, table, addCol, &n.Table)
-			var addColumn *scpb.Column = nil
+			var addColumn *scpb.ColumnName = nil
 			for _, node := range b.output.Nodes {
-				if node.Target.Column != nil &&
-					node.Target.Column.TableID == table.GetID() &&
-					node.Target.Column.Column.Name == colName {
-					addColumn = node.Target.Column
+				if node.Target.ColumnName != nil &&
+					node.Target.ColumnName.TableID == table.GetID() &&
+					node.Target.ColumnName.Name == colName {
+					addColumn = node.Target.ColumnName
 				}
 			}
 
 			// Set up the index based on the new column.
 			colNames = append(colNames, colName)
-			secondaryIndex.KeyColumnIDs = append(secondaryIndex.KeyColumnIDs, addColumn.Column.ID)
+			secondaryIndex.KeyColumnIDs = append(secondaryIndex.KeyColumnIDs, addColumn.ColumnID)
 		}
 		if columnNode.Expr == nil {
 			column, err := table.FindColumnWithName(columnNode.Column)
@@ -312,6 +317,11 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 	// Assign the ID here, since we may have added columns
 	// and made a new primary key above.
 	secondaryIndex.IndexID = b.nextIndexID(table)
+	secondaryIndexName := &scpb.IndexName{
+		TableID: secondaryIndex.TableID,
+		IndexID: secondaryIndex.IndexID,
+		Name:    n.Name.String(),
+	}
 	// Convert partitioning information for the execution
 	// side of things.
 	if n.PartitionByIndex.ContainsPartitions() {
@@ -378,4 +388,6 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 
 	b.addNode(scpb.Target_ADD,
 		secondaryIndex)
+	b.addNode(scpb.Target_ADD,
+		secondaryIndexName)
 }
