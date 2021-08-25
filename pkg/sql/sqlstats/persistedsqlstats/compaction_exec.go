@@ -196,11 +196,12 @@ func (c *StatsCompactor) getQueryForCheckingTableRowCounts(
 	existingRowCountQuery := `
 SELECT count(*)
 FROM %[1]s
+%[3]s
 WHERE %[2]s = $1
-%[3]s`
+`
 	followerReadClause := "AS OF SYSTEM TIME follower_read_timestamp()"
 
-	if c.knobs.DisableFollowerRead {
+	if c.knobs != nil && c.knobs.DisableFollowerRead {
 		followerReadClause = ""
 	}
 
