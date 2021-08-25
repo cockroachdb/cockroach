@@ -1,0 +1,21 @@
+# Do not add environment-specific entries here (see the top-level .gitignore
+# for reasoning and alternatives).
+
+# NPM
+node_modules
+yarn.installed
+yarn.opt.installed
+yarn.cluster-ui.installed
+yarn.protobuf.installed
+yarn-error.log
+
+# Generated intermediates
+.cache-loader
+dist*/**
+!distccl/distccl.go
+!distoss/distoss.go
+*manifest.json
+
+cypress/screenshots/*
+cypress/videos/*
+cypress/snapshots/**/__diff_output__
