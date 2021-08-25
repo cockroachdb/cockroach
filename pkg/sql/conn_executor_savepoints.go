@@ -153,7 +153,7 @@ func (ex *connExecutor) execRelease(
 		// Non-retriable error. The transaction might have committed (i.e. the
 		// error might be ambiguous). We can't allow a ROLLBACK TO SAVEPOINT to
 		// recover the transaction, so we're not adding the savepoint back.
-		ex.rollbackSQLTransaction(ctx)
+		ex.rollbackSQLTransaction(ctx, s)
 		ev := eventNonRetriableErr{IsCommit: fsm.FromBool(false)}
 		payload := eventNonRetriableErrPayload{err: err}
 		return ev, payload
