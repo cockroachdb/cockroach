@@ -2928,7 +2928,7 @@ func TestMetrics(t *testing.T) {
 			// Fail the Resume with a retriable error.
 			errCh := <-resuming
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
-			errCh <- jobs.NewRetryJobError("")
+			errCh <- jobs.MarkAsRetryJobError(errors.New("boom"))
 			int64EqSoon(t, importMetrics.ResumeRetryError.Count, 1)
 			// It will be retried.
 			int64EqSoon(t, importMetrics.CurrentlyRunning.Value, 1)
@@ -2992,7 +2992,7 @@ func TestMetrics(t *testing.T) {
 			// We'll inject retriable errors in OnFailOrCancel.
 			errCh := <-resuming
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
-			errCh <- jobs.NewRetryJobError("boom")
+			errCh <- jobs.MarkAsRetryJobError(errors.New("boom"))
 			int64EqSoon(t, importMetrics.FailOrCancelRetryError.Count, 1)
 		}
 		{
