@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -59,13 +60,17 @@ type TestingKnobs struct {
 	// AfterJobStateMachine is called once the running instance of the job has
 	// returned from the state machine that transitions it from one state to
 	// another.
-	AfterJobStateMachine func()
+	AfterJobStateMachine func(jobID jobspb.JobID)
 
 	// TimeSource replaces registry's clock.
 	TimeSource *hlc.Clock
 
 	// DisableAdoptions disables job adoptions.
 	DisableAdoptions bool
+
+	// ModifyErrorAfterOnFailOrCancel captures the error returned from OnFailOorCancel
+	// and sets the error to the returned value of this function.
+	ModifyErrorAfterOnFailOrCancel func(jobspb.JobID, error) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

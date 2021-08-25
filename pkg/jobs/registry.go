@@ -1192,10 +1192,16 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.
-		if errors.Is(err, errRetryJobSentinel) {
+
+		if nonCancelableRetry := job.Payload().Noncancelable && !IsPermanentJobError(err); nonCancelableRetry ||
+			errors.Is(err, errRetryJobSentinel) {
 			jm.ResumeRetryError.Inc(1)
+			if nonCancelableRetry {
+				err = errors.Wrapf(err, "non-cancelable")
+			}
 			return onExecutionFailed(err)
 		}
+
 		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
 			if sErr.status != StatusCancelRequested && sErr.status != StatusPauseRequested {
@@ -1264,15 +1270,12 @@ func (r *Registry) stepThroughStateMachine(
 			// mark the job as failed because it can be resumed by another node.
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
-		if errors.Is(err, errRetryJobSentinel) {
+		if true {
+			// All reverting jobs are retried.
 			jm.FailOrCancelRetryError.Inc(1)
 			return onExecutionFailed(err)
 		}
-		// A non-cancelable job is always retried while reverting unless the error is marked as permanent.
-		if job.Payload().Noncancelable && !IsPermanentJobError(err) {
-			jm.FailOrCancelRetryError.Inc(1)
-			return errors.Wrapf(err, "job %d: job is non-cancelable, restarting in background", job.ID())
-		}
+		// TODO(sajjad): Remove rest of the code in this condition. It will be in the next commit in this PR.
 		jm.FailOrCancelFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
 			if sErr.status != StatusPauseRequested {
@@ -1295,6 +1298,9 @@ func (r *Registry) stepThroughStateMachine(
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
 		return jobErr
 	case StatusRevertFailed:
+		// TODO(sajjad): Remove StatusRevertFailed and related code in other places in v22.1.
+		// v21.2 modified all reverting jobs to retry instead of go to revert-failed. Therefore,
+		// revert-failed state is not reachable after 21.2.
 		if jobErr == nil {
 			return errors.AssertionFailedf("job %d: has StatusRevertFailed but no error was provided",
 				job.ID())

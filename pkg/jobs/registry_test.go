@@ -470,7 +470,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		jobMetrics               *JobTypeMetrics
 		adopted                  *metric.Counter
 		resumed                  *metric.Counter
-		afterJobStateMachineKnob func()
+		afterJobStateMachineKnob func(id jobspb.JobID)
 	}
 	testInfraSetUp := func(ctx context.Context, bti *BackoffTestInfra) func() {
 		// We use a manual clock to control and evaluate job execution times.
@@ -608,7 +608,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("running", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(_ jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
@@ -630,7 +630,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("pause running", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(_ jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
@@ -655,7 +655,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("revert on fail", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(_ jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
@@ -705,7 +705,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("pause reverting", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(_ jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}

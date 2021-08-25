@@ -265,7 +265,7 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 							<-rbrOpFinished
 							if !regionAlterCmd.shouldSucceed {
 								// Trigger a roll-back.
-								return errors.New("boom")
+								return jobs.MarkAsPermanentJobError(errors.New("boom"))
 							}
 							// Trod on.
 							return nil

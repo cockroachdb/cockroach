@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -186,7 +185,7 @@ type registryTestSuite struct {
 
 	// afterJobStateMachine is invoked in the AfterJobStateMachine testing knob if
 	// non-nil.
-	afterJobStateMachine func()
+	afterJobStateMachine func(id jobspb.JobID)
 
 	// Instead of a ch for success, use a variable because it can retry since it
 	// is in a transaction.
@@ -216,9 +215,9 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			}
 			return nil
 		}
-		knobs.AfterJobStateMachine = func() {
+		knobs.AfterJobStateMachine = func(jobID jobspb.JobID) {
 			if rts.afterJobStateMachine != nil {
-				rts.afterJobStateMachine()
+				rts.afterJobStateMachine(jobID)
 			}
 		}
 		args.Knobs.JobsTestingKnobs = knobs
@@ -297,11 +296,14 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 					rts.mu.Lock()
 					rts.mu.a.OnFailOrCancelExit = true
 					rts.mu.Unlock()
-					t.Log("Exiting OnFailOrCancel")
+					t.Log("Exiting FailOrCancel")
 					return err
 				}
 			},
 
+			// TODO(sajjad): To discuss: This success function is not called from Registry
+			// when the resumer completes without error. Instead, it is being called from
+			// Resume itself. Is this on purpose or is it a bug?
 			Success: func() error {
 				t.Log("Starting success")
 				rts.mu.Lock()
@@ -362,7 +364,8 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 
 func TestRegistryLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 68315, "flaky test")
+	// TODO(sajjad): Temporarily disabling to skip this test. Rebase before merging. fial teh lniter.
+	//skip.WithIssue(t, 68315, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	t.Run("normal success", func(t *testing.T) {
@@ -737,17 +740,21 @@ func TestRegistryLifecycle(t *testing.T) {
 	})
 
 	// Attempt to mark success, but fail, but fail that also.
-	// TODO(ajwerner): This test seems a bit stale in that it really
-	// fails the resume rather than succeeding but failing to mark success.
-	// I think this is due to changes in responsibilities of the jobs
-	// lifecycle.
 	t.Run("fail marking success and fail OnFailOrCancel", func(t *testing.T) {
 		rts := registryTestSuite{}
+		var triedToMarkSucceeded atomic.Value
+		triedToMarkSucceeded.Store(false)
+		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
+			// Fail marking succeeded.
+			if updated.Status == jobs.StatusSucceeded {
+				triedToMarkSucceeded.Store(true)
+				return errors.New("injected failure at marking as succeeded")
+			}
+			return nil
+		}
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		// Make marking success fail.
-		rts.successErr = errors.New("injected failure at marking as succeeded")
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
@@ -757,20 +764,41 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
 		rts.check(t, jobs.StatusRunning)
-
+		// Let the resumer complete without error.
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
-		rts.mu.e.OnFailOrCancelStart = true
+
+		// The job is retried as we failed to mark the job successful.
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+		// Fail the resumer to transition to reverting state.
+		rts.resumeCh <- errors.New("injected error in resume")
+		rts.mu.e.ResumeExit++
 
 		// The job is now in state reverting and will never resume again because
 		// OnFailOrCancel also fails.
-		rts.check(t, jobs.StatusReverting)
+		//
+		// First retry.
+		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.mu.e.OnFailOrCancelExit = true
-		close(rts.failOrCancelCheckCh)
+		require.True(t, triedToMarkSucceeded.Load().(bool))
+		rts.check(t, jobs.StatusReverting)
 		rts.failOrCancelCh <- errors.New("injected failure while blocked in reverting")
-		rts.check(t, jobs.StatusRevertFailed)
+		rts.mu.e.OnFailOrCancelExit = true
+
+		// The job will be retried as all reverting jobs are retried.
+		//
+		// Second retry.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+		rts.failOrCancelCh <- errors.New("injected failure while blocked in reverting")
+		rts.mu.e.OnFailOrCancelExit = true
+
+		// The job will stay in reverting state unless it succeeds reverting. So we don't have
+		// to exit clean.
 	})
 	// Succeed the job but inject an error actually marking the jobs successful.
 	// This could happen due to a transient network error or something like that.
@@ -821,11 +849,19 @@ func TestRegistryLifecycle(t *testing.T) {
 	// Fail the job, but also fail to mark it failed.
 	t.Run("fail marking failed", func(t *testing.T) {
 		rts := registryTestSuite{}
+		var triedToMarkFailed atomic.Value
+		triedToMarkFailed.Store(false)
+		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
+			if rts.job != nil && orig.ID == rts.job.ID() && updated.Status == jobs.StatusFailed {
+				triedToMarkFailed.Store(true)
+				return errors.New("injected error while marking as failed")
+			}
+			return nil
+		}
 		rts.setUp(t)
 		defer rts.tearDown()
 
 		// Make marking success fail.
-		rts.successErr = errors.New("resume failed")
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
@@ -838,16 +874,25 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.resumeCh <- errors.New("resume failed")
 		rts.mu.e.ResumeExit++
+
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		close(rts.failOrCancelCheckCh)
-		// The job is now in state reverting and will never resume again.
 		rts.check(t, jobs.StatusReverting)
-
-		// But let it fail.
+		// The job is now in state reverting and will never resume again.
+		// Let revert complete without error so that the job is attempted to mark as failed.
+		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit = true
-		rts.failOrCancelCh <- errors.New("resume failed")
-		rts.check(t, jobs.StatusRevertFailed)
+
+		// We will fail to mark the jobs as failed, resulting in the job to be retried.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+		require.True(t, triedToMarkFailed.Load().(bool))
+		// The job is now in state reverting and will never resume again.
+		// Let revert complete without error so that the job is attempted to mark as failed.
+		rts.failOrCancelCh <- nil
+		rts.mu.e.OnFailOrCancelExit = true
+		// The job will be retried again, However, we don't have to continue the test.
 	})
 
 	t.Run("OnPauseRequest", func(t *testing.T) {
@@ -1004,9 +1049,12 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("dump traces on pause-unpause-success", func(t *testing.T) {
 		completeCh := make(chan struct{})
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			completeCh <- struct{}{}
-		}}
+		rts := registryTestSuite{traceRealSpan: true}
+		rts.afterJobStateMachine = func(jobID jobspb.JobID) {
+			if rts.job != nil && jobID == rts.job.ID() {
+				completeCh <- struct{}{}
+			}
+		}
 		rts.setUp(t)
 		defer rts.tearDown()
 
@@ -1053,9 +1101,12 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("dump traces on fail", func(t *testing.T) {
 		completeCh := make(chan struct{})
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			completeCh <- struct{}{}
-		}}
+		rts := registryTestSuite{traceRealSpan: true}
+		rts.afterJobStateMachine = func(jobID jobspb.JobID) {
+			if rts.job != nil && jobID == rts.job.ID() {
+				completeCh <- struct{}{}
+			}
+		}
 		rts.setUp(t)
 		defer rts.tearDown()
 
@@ -3207,53 +3258,141 @@ func TestPauseReason(t *testing.T) {
 	}
 }
 
-// TestNonCancelableJobsRetry tests that a non-cancelable job is retried when
-// failed with a non-retryable error.
-func TestNonCancelableJobsRetry(t *testing.T) {
+// TestJobsRetry tests that (1) non-cancelable jobs retry if they fail with an
+// error marked as permanent, (2) reverting job always retry instead of failing.
+func TestJobsRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// Create a non-cancelable job.
-	// Fail the job in resume to cause the job to revert.
-	// Fail the job in revert state using a non-retryable error.
-	// Make sure that the jobs is retried and is again in the revert state.
-	rts := registryTestSuite{}
-	rts.setUp(t)
-	defer rts.tearDown()
-	// Make mockJob non-cancelable.
-	rts.mockJob.SetNonCancelable(rts.ctx, func(ctx context.Context, nonCancelable bool) bool {
-		return true
+
+	t.Run("retry non-cancelable running", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+		// Make mockJob non-cancelable, ensuring that non-cancelable jobs are retried in running state.
+		rts.mockJob.SetNonCancelable(rts.ctx, func(ctx context.Context, nonCancelable bool) bool {
+			return true
+		})
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		// First job run in running state.
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+		// Make Resume fail.
+		rts.resumeCh <- errors.New("non-permanent error")
+		rts.mu.e.ResumeExit++
+
+		// Job should be retried in running state.
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+		rts.resumeCh <- jobs.MarkAsPermanentJobError(errors.New("permanent error"))
+		rts.mu.e.ResumeExit++
+
+		// Job should now revert.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+		rts.failOrCancelCh <- nil
+		rts.mu.e.OnFailOrCancelExit = true
+
+		close(rts.failOrCancelCh)
+		close(rts.failOrCancelCheckCh)
+		rts.check(t, jobs.StatusFailed)
 	})
-	j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rts.job = j
 
-	rts.mu.e.ResumeStart = true
-	rts.resumeCheckCh <- struct{}{}
-	rts.check(t, jobs.StatusRunning)
+	t.Run("retry reverting", func(t *testing.T) {
+		// - Create a job.
+		// - Fail the job in resume to cause the job to revert.
+		// - Fail the job in revert state using a non-retryable error.
+		// - Make sure that the jobs is retried and is again in the revert state.
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
 
-	// Make Resume fail.
-	rts.resumeCh <- errors.New("failing resume to revert")
-	rts.mu.e.ResumeExit++
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
 
-	// Job is now reverting.
-	rts.mu.e.OnFailOrCancelStart = true
-	rts.failOrCancelCheckCh <- struct{}{}
-	rts.check(t, jobs.StatusReverting)
+		// Make Resume fail.
+		rts.resumeCh <- errors.New("failing resume to revert")
+		rts.mu.e.ResumeExit++
 
-	// Fail the job in reverting state without a retryable error.
-	rts.failOrCancelCh <- errors.New("failing with non-retryable error")
-	rts.mu.e.OnFailOrCancelExit = true
+		// Job is now reverting.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
 
-	// Job should be retried even though it is non-cancelable.
-	rts.mu.e.OnFailOrCancelStart = true
-	rts.failOrCancelCheckCh <- struct{}{}
-	rts.check(t, jobs.StatusReverting)
-	rts.failOrCancelCh <- nil
-	rts.mu.e.OnFailOrCancelExit = true
+		// Fail the job in reverting state without a retryable error.
+		rts.failOrCancelCh <- errors.New("failing with a non-retryable error")
+		rts.mu.e.OnFailOrCancelExit = true
 
-	close(rts.failOrCancelCh)
-	close(rts.failOrCancelCheckCh)
-	rts.check(t, jobs.StatusFailed)
+		// Job should be retried.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+		rts.failOrCancelCh <- nil
+		rts.mu.e.OnFailOrCancelExit = true
+
+		close(rts.failOrCancelCh)
+		close(rts.failOrCancelCheckCh)
+		rts.check(t, jobs.StatusFailed)
+	})
+
+	t.Run("retry non-cancelable reverting", func(t *testing.T) {
+		// - Create a non-cancelable job.
+		// - Fail the job in resume with a permanent error to cause the job to revert.
+		// - Fail the job in revert state using a permanent error to ensure that the
+		//   retries with a permanent error as well.
+		// - Make sure that the jobs is retried and is again in the revert state.
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+		// Make mockJob non-cancelable, ensuring that non-cancelable jobs are retried in reverting state.
+		rts.mockJob.SetNonCancelable(rts.ctx, func(ctx context.Context, nonCancelable bool) bool {
+			return true
+		})
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		// Make Resume fail with a permanent error.
+		rts.resumeCh <- jobs.MarkAsPermanentJobError(errors.New("permanent error"))
+		rts.mu.e.ResumeExit++
+
+		// Job is now reverting.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+
+		// Fail the job in reverting state with a permanent error a retryable error.
+		rts.failOrCancelCh <- jobs.MarkAsPermanentJobError(errors.New("permanent error"))
+		rts.mu.e.OnFailOrCancelExit = true
+
+		// Job should be retried.
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+		rts.failOrCancelCh <- nil
+		rts.mu.e.OnFailOrCancelExit = true
+
+		close(rts.failOrCancelCh)
+		close(rts.failOrCancelCheckCh)
+		rts.check(t, jobs.StatusFailed)
+	})
 }
