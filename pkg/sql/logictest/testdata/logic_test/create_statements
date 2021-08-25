@@ -520,7 +520,7 @@ CREATE TABLE crdb_internal.jobs (
    last_run TIMESTAMP NULL,
    next_run TIMESTAMP NULL,
    num_runs INT8 NULL,
-   execution_log JSONB NULL
+   execution_errors STRING[] NULL
 )  CREATE TABLE crdb_internal.jobs (
    job_id INT8 NULL,
    job_type STRING NULL,
@@ -542,7 +542,7 @@ CREATE TABLE crdb_internal.jobs (
    last_run TIMESTAMP NULL,
    next_run TIMESTAMP NULL,
    num_runs INT8 NULL,
-   execution_log JSONB NULL
+   execution_errors STRING[] NULL
 )  {}  {}
 CREATE TABLE crdb_internal.kv_node_liveness (
    node_id INT8 NOT NULL,

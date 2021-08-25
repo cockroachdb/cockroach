@@ -11,9 +11,14 @@
 package jobs
 
 import (
+	"context"
 	"fmt"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -66,4 +71,72 @@ func SimplifyInvalidStatusError(err error) error {
 		return errors.Errorf("job %s", ierr.status)
 	}
 	return err
+}
+
+// retriableExecutionError captures metadata about retriable errors encountered
+// during the execution of a job. These errors propagate information to be
+// stored in the payload in Payload.RetriableExecutionErrorLog.
+type retriableExecutionError struct {
+	instanceID base.SQLInstanceID
+	start, end time.Time
+	status     Status
+	cause      error
+}
+
+func newRetriableExecutionError(
+	instanceID base.SQLInstanceID, start, end time.Time, status Status, cause error,
+) *retriableExecutionError {
+	return &retriableExecutionError{
+		instanceID: instanceID,
+		status:     status,
+		start:      start,
+		end:        end,
+		cause:      cause,
+	}
+}
+
+// Error makes retriableExecutionError and error.
+func (e *retriableExecutionError) Error() string {
+	mustTimestamp := func(ts time.Time) *tree.DTimestamp {
+		ret, _ := tree.MakeDTimestamp(ts, time.Microsecond)
+		return ret
+	}
+	return fmt.Sprintf(
+		"%s execution from %v to %v on %d failed: %v",
+		e.status,
+		mustTimestamp(e.start),
+		mustTimestamp(e.end),
+		e.instanceID,
+		e.cause,
+	)
+}
+
+// Cause exposes the underlying error.
+func (e *retriableExecutionError) Cause() error { return e.cause }
+
+// Unwrap exposes the underlying error.
+func (e *retriableExecutionError) Unwrap() error { return e.cause }
+
+// Format formats the error.
+func (e *retriableExecutionError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+// SafeFormatError formats the error safely.
+func (e *retriableExecutionError) SafeFormatError(p errors.Printer) error {
+	if p.Detail() {
+		p.Printf("retriable execution error")
+	}
+	return e.cause
+}
+
+func (e *retriableExecutionError) toRetriableExecutionFailure(
+	ctx context.Context,
+) *jobspb.RetriableExecutionFailure {
+	ee := errors.EncodeError(ctx, e.cause)
+	return &jobspb.RetriableExecutionFailure{
+		Status:               string(e.status),
+		ExecutionStartMicros: timeutil.ToUnixMicros(e.start),
+		ExecutionEndMicros:   timeutil.ToUnixMicros(e.end),
+		InstanceID:           e.instanceID,
+		Error:                &ee,
+	}
 }
