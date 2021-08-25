@@ -79,8 +79,8 @@ var (
 )
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
-func createTestPebbleEngine() Engine {
-	return NewDefaultInMemForTesting()
+func createTestPebbleEngine(opts ...ConfigOption) Engine {
+	return NewDefaultInMemForTesting(opts...)
 }
 
 // TODO(sumeer): the following is legacy from when we had multiple engine
@@ -89,7 +89,7 @@ func createTestPebbleEngine() Engine {
 // the rest and remove this.
 var mvccEngineImpls = []struct {
 	name   string
-	create func() Engine
+	create func(opts ...ConfigOption) Engine
 }{
 	{"pebble", createTestPebbleEngine},
 }

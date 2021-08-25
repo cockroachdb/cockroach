@@ -40,7 +40,8 @@ func CheckEmittedEvents(
 			t.Fatal(err)
 		}
 		foundEntry := false
-		for i, e := range entries {
+		var matchingEntryIndex int
+		for _, e := range entries {
 			if !strings.Contains(e.Message, expectedMessage) {
 				continue
 			}
@@ -56,10 +57,11 @@ func CheckEmittedEvents(
 			}
 			require.Equal(t, expectedJobType, ev.JobType)
 			require.Equal(t, jobID, ev.JobID)
-			if i >= len(expectedStatus) {
+			if matchingEntryIndex >= len(expectedStatus) {
 				return errors.New("more events fround in log than expected")
 			}
-			require.Equal(t, expectedStatus[i], ev.Status)
+			require.Equal(t, expectedStatus[matchingEntryIndex], ev.Status)
+			matchingEntryIndex++
 		}
 		if !foundEntry {
 			return errors.New("structured entry for import not found in log")

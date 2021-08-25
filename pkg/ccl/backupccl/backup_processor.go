@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -289,7 +290,7 @@ func runBackupProcessor(
 						StartTime:                           span.start,
 						EnableTimeBoundIteratorOptimization: useTBI.Get(&clusterSettings.SV),
 						MVCCFilter:                          spec.MVCCFilter,
-						TargetFileSize:                      storageccl.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
+						TargetFileSize:                      batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
 						ReturnSST:                           true,
 						SplitMidKey:                         splitMidKey,
 					}
