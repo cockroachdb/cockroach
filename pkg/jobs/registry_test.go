@@ -558,7 +558,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		//   can be retried in the next adopt-loop.
 		// - We wait until the resumer completes one execution and the job needs
 		//   to be picked up again in the next adopt-loop.
-		// - Now we validate that resumedJobs counter has increment, which ensures
+		// - Now we validate that resumedJobs counter has incremented, which ensures
 		//   that the job has completed only one cycle in this time.
 		//
 		// If retries do not happen based on exponential-backoff times, our counters

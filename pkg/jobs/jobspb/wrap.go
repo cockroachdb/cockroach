@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
@@ -59,6 +60,10 @@ var _ ProgressDetails = AutoSpanConfigReconciliationDetails{}
 func (p *Payload) Type() Type {
 	return DetailsType(p.Details)
 }
+
+// Import base which is in the generated proto field but won't get picked up
+// by bazel if it were not imported in a non-generated file.
+var _ base.SQLInstanceID
 
 // AutoStatsName is the name to use for statistics created automatically.
 // The name is chosen to be something that users are unlikely to choose when
