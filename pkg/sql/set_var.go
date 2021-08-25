@@ -31,8 +31,9 @@ import (
 
 // setVarNode represents a SET SESSION statement.
 type setVarNode struct {
-	name string
-	v    sessionVar
+	name  string
+	local bool
+	v     sessionVar
 	// typedValues == nil means RESET.
 	typedValues []tree.TypedExpr
 }
@@ -95,7 +96,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 		}
 	}
 
-	return &setVarNode{name: name, v: v, typedValues: typedValues}, nil
+	return &setVarNode{name: name, local: n.Local, v: v, typedValues: typedValues}, nil
 }
 
 func (n *setVarNode) startExec(params runParams) error {
@@ -143,6 +144,12 @@ func (n *setVarNode) startExec(params runParams) error {
 			return n.v.SetWithPlanner(params.ctx, params.p, strVal)
 		}
 		return n.v.Set(params.ctx, m, strVal)
+	}
+	if n.local {
+		if params.p.EvalContext().TxnImplicit {
+			return nil
+		}
+		return params.p.sessionDataMutatorFactory.applyOnTopMutator(applyFunc)
 	}
 	return params.p.sessionDataMutatorFactory.forEachMutatorError(applyFunc)
 }

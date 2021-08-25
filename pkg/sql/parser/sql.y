@@ -4429,7 +4429,12 @@ nonpreparable_set_stmt:
   set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
 | set_exprs_internal   { /* SKIP DOC */ }
 | SET CONSTRAINTS error { return unimplemented(sqllex, "set constraints") }
-| SET LOCAL error { return unimplementedWithIssue(sqllex, 32562) }
+| SET LOCAL set_rest
+  {
+    ret := $3.setVar()
+    ret.Local = true
+    $$.val = ret
+  }
 
 // SET SESSION / SET CLUSTER SETTING
 preparable_set_stmt:

@@ -514,7 +514,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	case *tree.RollbackTransaction:
 		// RollbackTransaction is executed fully here; there's no plan for it.
-		ev, payload := ex.rollbackSQLTransaction(ctx)
+		ev, payload := ex.rollbackSQLTransaction(ctx, s)
 		return ev, payload, nil
 
 	case *tree.Savepoint:
@@ -816,6 +816,11 @@ func (ex *connExecutor) commitSQLTransaction(
 		return ex.makeErrEvent(err, ast)
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndTransactionCommit, timeutil.Now())
+	if !ex.implicitTxn() {
+		if err := ex.sessionDataStack.Pop(); err != nil {
+			return ex.makeErrEvent(err, ast)
+		}
+	}
 	return eventTxnFinishCommitted{}, nil
 }
 
@@ -873,9 +878,16 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 
 // rollbackSQLTransaction executes a ROLLBACK statement: the KV transaction is
 // rolled-back and an event is produced.
-func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, fsm.EventPayload) {
+func (ex *connExecutor) rollbackSQLTransaction(
+	ctx context.Context, stmt tree.Statement,
+) (fsm.Event, fsm.EventPayload) {
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
+	}
+	if !ex.implicitTxn() {
+		if err := ex.sessionDataStack.Pop(); err != nil {
+			return ex.makeErrEvent(err, stmt)
+		}
 	}
 	// We're done with this txn.
 	return eventTxnFinishAborted{}, nil
@@ -1250,6 +1262,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if err != nil {
 			return ex.makeErrEvent(err, s)
 		}
+		c := *ex.sessionDataStack.Top()
+		ex.sessionDataStack.Push(&c)
 		return eventTxnStart{ImplicitTxn: fsm.False},
 			makeEventTxnStartPayload(
 				ex.txnPriorityWithSessionDefault(s.Modes.UserPriority),
@@ -1309,7 +1323,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 			// Note: Postgres replies to COMMIT of failed txn with "ROLLBACK" too.
 			res.ResetStmtType((*tree.RollbackTransaction)(nil))
 		}
-		return ex.rollbackSQLTransaction(ctx)
+		return ex.rollbackSQLTransaction(ctx, s)
 
 	case *tree.RollbackToSavepoint:
 		return ex.execRollbackToSavepointInAbortedState(ctx, s)

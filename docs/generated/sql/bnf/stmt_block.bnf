@@ -108,6 +108,7 @@ refresh_stmt ::=
 
 nonpreparable_set_stmt ::=
 	set_transaction_stmt
+	| 'SET' 'LOCAL' set_rest
 
 transaction_stmt ::=
 	begin_stmt
@@ -355,6 +356,9 @@ opt_clear_data ::=
 set_transaction_stmt ::=
 	'SET' 'TRANSACTION' transaction_mode_list
 	| 'SET' 'SESSION' 'TRANSACTION' transaction_mode_list
+
+set_rest ::=
+	generic_set
 
 begin_stmt ::=
 	'BEGIN' opt_transaction begin_transaction
@@ -1256,6 +1260,9 @@ username_or_sconst ::=
 transaction_mode_list ::=
 	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
 
+generic_set ::=
+	var_name to_or_eq var_list
+
 opt_transaction ::=
 	'TRANSACTION'
 	| 
@@ -1684,6 +1691,9 @@ opt_comma ::=
 	','
 	| 
 
+var_list ::=
+	( var_value ) ( ( ',' var_value ) )*
+
 alter_onetable_stmt ::=
 	'ALTER' 'TABLE' relation_expr alter_table_cmds
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr alter_table_cmds
@@ -1829,9 +1839,6 @@ abbreviated_revoke_stmt ::=
 
 role_options ::=
 	( role_option ) ( ( role_option ) )*
-
-set_rest ::=
-	generic_set
 
 backup_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
@@ -2329,9 +2336,6 @@ role_option ::=
 	| password_clause
 	| valid_until_clause
 
-generic_set ::=
-	var_name to_or_eq var_list
-
 d_expr ::=
 	'ICONST'
 	| 'FCONST'
@@ -2680,9 +2684,6 @@ password_clause ::=
 valid_until_clause ::=
 	'VALID' 'UNTIL' string_or_placeholder
 	| 'VALID' 'UNTIL' 'NULL'
-
-var_list ::=
-	( var_value ) ( ( ',' var_value ) )*
 
 typed_literal ::=
 	func_name_no_crdb_extra 'SCONST'
