@@ -89,48 +89,6 @@ func init() {
 }
 
 func init() {
-	from, fromTarget, fromNode := targetNodeVars("from")
-	to, toTarget, toNode := targetNodeVars("to")
-	register(
-		"view depends on view",
-		fromNode, toNode,
-		screl.MustQuery(
-			from.Type((*scpb.View)(nil)),
-			to.Type((*scpb.View)(nil)),
-			rel.Filter(
-				"depended-on-by",
-				from, to,
-			)(func(from, to *scpb.View) bool {
-				return from != to && idInIDs(from.DependedOnBy, to.TableID)
-			}),
-
-			joinTargetNode(from, fromTarget, fromNode, drop, absent),
-			joinTargetNode(to, toTarget, toNode, drop, absent),
-		),
-	)
-
-	// TODO(ajwerner): What does this even mean? The table starts in
-	// public.
-	register(
-		"table drop depended on by on view",
-		fromNode, toNode,
-		screl.MustQuery(
-			from.Type((*scpb.Table)(nil)),
-			to.Type((*scpb.View)(nil)),
-			rel.Filter(
-				"viewDependsOnTable",
-				to, from,
-			)(func(to *scpb.View, from *scpb.Table) bool {
-				return idInIDs(to.DependsOn, from.TableID)
-			}),
-
-			joinTargetNode(from, fromTarget, fromNode, drop, absent),
-			joinTargetNode(to, toTarget, toNode, drop, absent),
-		),
-	)
-}
-
-func init() {
 	columnInList := func(targetColumn descpb.ColumnID, columnList descpb.ColumnIDs) bool {
 		for _, column := range columnList {
 			if targetColumn == column {
@@ -160,15 +118,15 @@ func init() {
 			)(func(from *scpb.Column, to scpb.Element) bool {
 				switch to := to.(type) {
 				case *scpb.PrimaryIndex:
-					if columnInList(from.Column.ID, to.KeyColumnIDs) ||
-						columnInList(from.Column.ID, to.StoringColumnIDs) ||
-						columnInList(from.Column.ID, to.KeySuffixColumnIDs) {
+					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
+						columnInList(from.ColumnID, to.StoringColumnIDs) ||
+						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
 						return true
 					}
 				case *scpb.SecondaryIndex:
-					if columnInList(from.Column.ID, to.KeyColumnIDs) ||
-						columnInList(from.Column.ID, to.StoringColumnIDs) ||
-						columnInList(from.Column.ID, to.KeySuffixColumnIDs) {
+					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
+						columnInList(from.ColumnID, to.StoringColumnIDs) ||
+						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
 						return true
 					}
 				default:
@@ -200,15 +158,15 @@ func init() {
 			)(func(from *scpb.Column, to scpb.Element) bool {
 				switch to := to.(type) {
 				case *scpb.PrimaryIndex:
-					if columnInList(from.Column.ID, to.KeyColumnIDs) ||
-						columnInList(from.Column.ID, to.StoringColumnIDs) ||
-						columnInList(from.Column.ID, to.KeySuffixColumnIDs) {
+					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
+						columnInList(from.ColumnID, to.StoringColumnIDs) ||
+						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
 						return true
 					}
 				case *scpb.SecondaryIndex:
-					if columnInList(from.Column.ID, to.KeyColumnIDs) ||
-						columnInList(from.Column.ID, to.StoringColumnIDs) ||
-						columnInList(from.Column.ID, to.KeySuffixColumnIDs) {
+					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
+						columnInList(from.ColumnID, to.StoringColumnIDs) ||
+						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
 						return true
 					}
 				default:
@@ -300,9 +258,6 @@ func init() {
 	)
 }
 
-// TODO(ajwerner): What does this even mean? The sequence starts in
-// public.
-
 func init() {
 	depNeedsRelationToExitSynthDrop := func(ruleName string, depTypes []interface{}, depDescIDMatch rel.Attr) {
 		// Before any parts of a relation/type can be dropped, the relation
@@ -327,11 +282,13 @@ func init() {
 	}
 	depNeedsRelationToExitSynthDrop("dependency needs relation/type as non-synthetically dropped",
 		[]interface{}{(*scpb.DefaultExpression)(nil), (*scpb.RelationDependedOnBy)(nil),
-			(*scpb.SequenceOwnedBy)(nil), (*scpb.OutboundForeignKey)(nil)},
+			(*scpb.SequenceOwnedBy)(nil), (*scpb.ForeignKey)(nil)},
 		screl.DescID)
 
 	depNeedsRelationToExitSynthDrop("dependency (ref desc) needs relation/type as non-synthetically dropped",
-		[]interface{}{(*scpb.InboundForeignKey)(nil), (*scpb.TypeReference)(nil)},
+		[]interface{}{(*scpb.ForeignKeyBackReference)(nil), (*scpb.RelationDependedOnBy)(nil),
+			(*scpb.ViewDependsOnType)(nil), (*scpb.DefaultExprTypeReference)(nil),
+			(*scpb.OnUpdateExprTypeReference)(nil), (*scpb.ComputedExprTypeReference)(nil)},
 		screl.ReferencedDescID)
 }
 
@@ -359,10 +316,131 @@ func init() {
 	}
 	relationNeedsDepToBeRemoved("relation/type needs dependency as dropped",
 		[]interface{}{(*scpb.DefaultExpression)(nil), (*scpb.RelationDependedOnBy)(nil),
-			(*scpb.SequenceOwnedBy)(nil), (*scpb.OutboundForeignKey)(nil)},
+			(*scpb.SequenceOwnedBy)(nil), (*scpb.ForeignKey)(nil)},
 		screl.DescID)
 
 	relationNeedsDepToBeRemoved("relation/type (ref desc) needs dependency as dropped",
-		[]interface{}{(*scpb.InboundForeignKey)(nil), (*scpb.TypeReference)(nil)},
+		[]interface{}{(*scpb.ForeignKeyBackReference)(nil), (*scpb.RelationDependedOnBy)(nil),
+			(*scpb.ViewDependsOnType)(nil), (*scpb.DefaultExprTypeReference)(nil),
+			(*scpb.OnUpdateExprTypeReference)(nil), (*scpb.ComputedExprTypeReference)(nil)},
 		screl.ReferencedDescID)
+}
+
+func init() {
+	// Ensures that the name is drained first, only when
+	// the descriptor is cleaned up.
+	ns, nsTarget, nsNode := targetNodeVars("namespace")
+	dep, depTarget, depNode := targetNodeVars("dep")
+	tabID := rel.Var("desc-id")
+	register(
+		"namespace needs descriptor to be dropped",
+		nsNode, depNode,
+		screl.MustQuery(
+
+			ns.Type((*scpb.Namespace)(nil)),
+			dep.Type((*scpb.Table)(nil), (*scpb.View)(nil),
+				(*scpb.Sequence)(nil), (*scpb.Database)(nil), (*scpb.Schema)(nil)),
+
+			tabID.Entities(screl.DescID, dep, ns),
+
+			joinTargetNode(ns, nsTarget, nsNode, drop, absent),
+			joinTargetNode(dep, depTarget, depNode, drop, dropped),
+		),
+	)
+
+	// Descriptor can only be cleaned up once the namespace has been
+	// dropped.
+	register(
+		"descriptor can only be cleaned up once the name is drained",
+		depNode, nsNode,
+		screl.MustQuery(
+
+			ns.Type((*scpb.Namespace)(nil)),
+			dep.Type((*scpb.Table)(nil), (*scpb.View)(nil),
+				(*scpb.Sequence)(nil), (*scpb.Database)(nil), (*scpb.Schema)(nil)),
+
+			tabID.Entities(screl.DescID, dep, ns),
+
+			joinTargetNode(ns, nsTarget, nsNode, drop, absent),
+			joinTargetNode(dep, depTarget, depNode, drop, absent),
+		),
+	)
+}
+
+func init() {
+	columnName, columnNameTarget, columnNameNode := targetNodeVars("column-name")
+	column, columnTarget, columnNode := targetNodeVars("column")
+	tabID := rel.Var("desc-id")
+	columnID := rel.Var("column-id")
+
+	register(
+		"column name is assigned once the column is created",
+		columnNameNode, columnNode,
+		screl.MustQuery(
+
+			columnName.Type((*scpb.ColumnName)(nil)),
+			column.Type((*scpb.Column)(nil)),
+
+			tabID.Entities(screl.DescID, column, columnName),
+			columnID.Entities(screl.ColumnID, column, columnName),
+
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, add, public),
+			joinTargetNode(column, columnTarget, columnNode, add, deleteOnly),
+		),
+	)
+
+	register(
+		"column needs a name to be assigned",
+		columnNode, columnNameNode,
+		screl.MustQuery(
+
+			columnName.Type((*scpb.ColumnName)(nil)),
+			column.Type((*scpb.Column)(nil)),
+
+			tabID.Entities(screl.DescID, column, columnName),
+			columnID.Entities(screl.ColumnID, column, columnName),
+
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, add, public),
+			joinTargetNode(column, columnTarget, columnNode, add, deleteAndWriteOnly),
+		),
+	)
+}
+
+func init() {
+	indexName, indexNameTarget, indexNameNode := targetNodeVars("index-name")
+	index, indexTarget, indexNode := targetNodeVars("index")
+	tabID := rel.Var("desc-id")
+	columnID := rel.Var("index-id")
+
+	register(
+		"index name is assigned once the index is created",
+		indexNameNode, indexNode,
+		screl.MustQuery(
+
+			indexName.Type((*scpb.IndexName)(nil)),
+			index.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+
+			tabID.Entities(screl.DescID, index, indexName),
+			columnID.Entities(screl.IndexID, index, indexName),
+
+			joinTargetNode(indexName, indexNameTarget, indexNameNode, add, public),
+			joinTargetNode(index, indexTarget, indexNode, add, deleteOnly),
+		),
+	)
+
+	register(
+		"index needs a name to be assigned",
+		indexNode, indexNameNode,
+		screl.MustQuery(
+
+			indexName.Type((*scpb.IndexName)(nil)),
+			index.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+
+			tabID.Entities(screl.DescID, index, indexName),
+			columnID.Entities(screl.IndexID, index, indexName),
+
+			joinTargetNode(indexName, indexNameTarget, indexNameNode, add, public),
+			joinTargetNode(index, indexTarget, indexNode, add, deleteAndWriteOnly),
+		),
+	)
 }

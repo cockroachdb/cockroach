@@ -159,14 +159,27 @@ func (b *buildContext) checkIfNewColumnExistsByName(tableID descpb.ID, name tree
 		if node.Status != scpb.Status_ABSENT {
 			continue
 		}
-		column, ok := node.Element().(*scpb.Column)
+		column, ok := node.Element().(*scpb.ColumnName)
 		if ok &&
 			column.TableID == tableID &&
-			column.Column.Name == string(name) {
+			column.Name == string(name) {
 			return true
 		}
 	}
 	return false
+}
+
+// addIfDuplicateDoesNotExistForDir only adds a node if a duplicate
+// in the matching direction does not exist for drops or static
+// additions.
+func (b *buildContext) addIfDuplicateDoesNotExistForDir(
+	dir scpb.Target_Direction, elem scpb.Element,
+) {
+	duplicateObjectsAllowed := dir == scpb.Target_DROP
+	if exists, _ := b.checkIfNodeExists(dir, elem); exists && duplicateObjectsAllowed {
+		return
+	}
+	b.addNode(dir, elem)
 }
 
 // checkIfNodeExists checks if an existing node is already there,

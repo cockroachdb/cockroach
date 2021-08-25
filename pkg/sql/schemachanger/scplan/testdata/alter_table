@@ -7,15 +7,18 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
 Stage 0
   *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ID: 2
-      Name: j
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
+    ColumnID: 2
+    ColumnType:
+      family: IntFamily
+      oid: 20
+      width: 64
     FamilyName: primary
+    Nullable: true
+    PgAttributeNum: 2
+    TableID: 52
+  *scop.SetColumnName
+    ColumnID: 2
+    Name: j
     TableID: 52
   *scop.LogEvent
     DescID: 52
@@ -40,7 +43,6 @@ Stage 0
       Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
-    IndexName: new_primary_key
     KeyColumnDirections:
     - 0
     KeyColumnIDs:
@@ -50,6 +52,10 @@ Stage 0
     - 2
     TableID: 52
     Unique: true
+  *scop.SetIndexName
+    IndexID: 2
+    Name: new_primary_key
+    TableID: 52
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
@@ -89,16 +95,19 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
 Stage 0
   *scop.MakeAddedColumnDeleteOnly
-    Column:
-      DefaultExpr: 123:::INT8
-      ID: 2
-      Name: j
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
+    ColumnID: 2
+    ColumnType:
+      family: IntFamily
+      oid: 20
+      width: 64
+    DefaultExpr: 123:::INT8
     FamilyName: primary
+    Nullable: true
+    PgAttributeNum: 2
+    TableID: 52
+  *scop.SetColumnName
+    ColumnID: 2
+    Name: j
     TableID: 52
   *scop.LogEvent
     DescID: 52
@@ -124,7 +133,6 @@ Stage 0
       Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
-    IndexName: new_primary_key
     KeyColumnDirections:
     - 0
     KeyColumnIDs:
@@ -134,6 +142,10 @@ Stage 0
     - 2
     TableID: 52
     Unique: true
+  *scop.SetIndexName
+    IndexID: 2
+    Name: new_primary_key
+    TableID: 52
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
@@ -174,16 +186,19 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
 Stage 0
   *scop.MakeAddedColumnDeleteOnly
-    Column:
-      DefaultExpr: 123:::INT8
-      ID: 2
-      Name: j
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
+    ColumnID: 2
+    ColumnType:
+      family: IntFamily
+      oid: 20
+      width: 64
+    DefaultExpr: 123:::INT8
     FamilyName: primary
+    Nullable: true
+    PgAttributeNum: 2
+    TableID: 52
+  *scop.SetColumnName
+    ColumnID: 2
+    Name: j
     TableID: 52
   *scop.LogEvent
     DescID: 52
@@ -208,16 +223,15 @@ Stage 0
         SubWorkID: 1
       Username: root
   *scop.MakeAddedColumnDeleteOnly
-    Column:
-      DefaultExpr: 456:::INT8
-      ID: 3
-      Name: k
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
+    ColumnID: 3
+    ColumnType:
+      family: IntFamily
+      oid: 20
+      width: 64
+    DefaultExpr: 456:::INT8
     FamilyName: primary
+    Nullable: true
+    PgAttributeNum: 3
     TableID: 52
   *scop.LogEvent
     DescID: 52
@@ -244,7 +258,6 @@ Stage 0
       Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
-    IndexName: new_primary_key
     KeyColumnDirections:
     - 0
     KeyColumnIDs:
@@ -255,6 +268,14 @@ Stage 0
     - 3
     TableID: 52
     Unique: true
+  *scop.SetIndexName
+    IndexID: 2
+    Name: new_primary_key
+    TableID: 52
+  *scop.SetColumnName
+    ColumnID: 3
+    Name: k
+    TableID: 52
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
@@ -300,16 +321,19 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
 Stage 0
   *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ComputeExpr: i + 1:::INT8
-      ID: 2
-      Name: a
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
+    ColumnID: 2
+    ColumnType:
+      family: IntFamily
+      oid: 20
+      width: 64
+    ComputerExpr: i + 1:::INT8
     FamilyName: primary
+    Nullable: true
+    PgAttributeNum: 2
+    TableID: 52
+  *scop.SetColumnName
+    ColumnID: 2
+    Name: a
     TableID: 52
   *scop.LogEvent
     DescID: 52
@@ -335,7 +359,6 @@ Stage 0
       Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
-    IndexName: new_primary_key
     KeyColumnDirections:
     - 0
     KeyColumnIDs:
@@ -345,6 +368,10 @@ Stage 0
     - 2
     TableID: 52
     Unique: true
+  *scop.SetIndexName
+    IndexID: 2
+    Name: new_primary_key
+    TableID: 52
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
@@ -390,15 +417,18 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
 Stage 0
   *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ID: 2
-      Name: a
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
+    ColumnID: 2
+    ColumnType:
+      family: IntFamily
+      oid: 20
+      width: 64
     FamilyName: primary
+    Nullable: true
+    PgAttributeNum: 2
+    TableID: 52
+  *scop.SetColumnName
+    ColumnID: 2
+    Name: a
     TableID: 52
   *scop.LogEvent
     DescID: 52
@@ -423,7 +453,6 @@ Stage 0
       Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
-    IndexName: new_primary_key
     KeyColumnDirections:
     - 0
     KeyColumnIDs:
@@ -433,16 +462,23 @@ Stage 0
     - 2
     TableID: 52
     Unique: true
+  *scop.SetIndexName
+    IndexID: 2
+    Name: new_primary_key
+    TableID: 52
   *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ID: 3
-      Name: b
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
+    ColumnID: 3
+    ColumnType:
+      family: IntFamily
+      oid: 20
+      width: 64
     FamilyName: primary
+    Nullable: true
+    PgAttributeNum: 3
+    TableID: 53
+  *scop.SetColumnName
+    ColumnID: 3
+    Name: b
     TableID: 53
   *scop.LogEvent
     DescID: 53
@@ -468,7 +504,6 @@ Stage 0
       Username: root
   *scop.MakeAddedIndexDeleteOnly
     IndexID: 2
-    IndexName: new_primary_key
     KeyColumnDirections:
     - 0
     KeyColumnIDs:
@@ -479,6 +514,10 @@ Stage 0
     - 3
     TableID: 53
     Unique: true
+  *scop.SetIndexName
+    IndexID: 2
+    Name: new_primary_key
+    TableID: 53
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
