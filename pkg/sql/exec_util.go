@@ -2395,13 +2395,6 @@ type paramStatusUpdater interface {
 	BufferParamStatusUpdate(string, string)
 }
 
-// noopParamStatusUpdater implements paramStatusUpdater by performing a no-op.
-type noopParamStatusUpdater struct{}
-
-var _ paramStatusUpdater = (*noopParamStatusUpdater)(nil)
-
-func (noopParamStatusUpdater) BufferParamStatusUpdate(string, string) {}
-
 // sessionDataMutatorBase contains elements in a sessionDataMutator
 // which is the same across all SessionData elements in the sessiondata.Stack.
 type sessionDataMutatorBase struct {
@@ -2426,11 +2419,15 @@ func (b *sessionDataMutatorBase) RegisterOnSessionDataChange(key string, f func(
 // a transaction where there may be two or more SessionData elements in
 // the stack)
 type sessionDataMutatorTopOnlyBase struct {
+	// paramStatusUpdater is called when there is a ParamStatusUpdate.
+	// It can be nil, in which case nothing triggers on execution.
 	paramStatusUpdater paramStatusUpdater
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
+	// It can be nil, in which case nothing triggers on execution.
 	setCurTxnReadOnly func(val bool)
 	// onTempSchemaCreation is called when the temporary schema is set
 	// on the search path (the first and only time).
+	// It can be nil, in which case nothing triggers on execution.
 	onTempSchemaCreation func()
 	// onSessionDataChangeListeners stores all the observers to execute when
 	// session data is modified, keyed by the value to change on.
@@ -2453,9 +2450,7 @@ func (f *sessionDataMutatorIterator) mutator(sd *sessiondata.SessionData) *sessi
 	// Change the sessionDataMutatorTopOnlyBase if our SessionData element is not
 	// the top.
 	if sd != f.sds.Top() {
-		ret.sessionDataMutatorTopOnlyBase = sessionDataMutatorTopOnlyBase{
-			paramStatusUpdater: &noopParamStatusUpdater{},
-		}
+		ret.sessionDataMutatorTopOnlyBase = sessionDataMutatorTopOnlyBase{}
 	}
 	return ret
 }
@@ -2504,11 +2499,17 @@ func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string)
 	}
 }
 
+func (m *sessionDataMutator) bufferParamStatusUpdate(param string, status string) {
+	if m.paramStatusUpdater != nil {
+		m.paramStatusUpdater.BufferParamStatusUpdate(param, status)
+	}
+}
+
 // SetApplicationName sets the application name.
 func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.data.ApplicationName = appName
 	m.notifyOnDataChangeListeners("application_name", appName)
-	m.paramStatusUpdater.BufferParamStatusUpdate("application_name", appName)
+	m.bufferParamStatusUpdate("application_name", appName)
 }
 
 func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondatapb.BytesEncodeFormat) {
@@ -2645,7 +2646,7 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.data.Location = loc
-	m.paramStatusUpdater.BufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
+	m.bufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
@@ -2749,13 +2750,13 @@ func (m *sessionDataMutator) initSequenceCache() {
 // SetIntervalStyle sets the IntervalStyle for the given session.
 func (m *sessionDataMutator) SetIntervalStyle(style duration.IntervalStyle) {
 	m.data.DataConversionConfig.IntervalStyle = style
-	m.paramStatusUpdater.BufferParamStatusUpdate("IntervalStyle", strings.ToLower(style.String()))
+	m.bufferParamStatusUpdate("IntervalStyle", strings.ToLower(style.String()))
 }
 
 // SetDateStyle sets the DateStyle for the given session.
 func (m *sessionDataMutator) SetDateStyle(style pgdate.DateStyle) {
 	m.data.DataConversionConfig.DateStyle = style
-	m.paramStatusUpdater.BufferParamStatusUpdate("DateStyle", style.SQLString())
+	m.bufferParamStatusUpdate("DateStyle", style.SQLString())
 }
 
 // SetIntervalStyleEnabled sets the IntervalStyleEnabled for the given session.
