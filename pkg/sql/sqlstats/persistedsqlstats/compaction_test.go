@@ -25,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -38,6 +40,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSQLStatsCompactorNilTestingKnobCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer server.Stopper().Stop(ctx)
+
+	statsCompactor := persistedsqlstats.NewStatsCompactor(
+		server.ClusterSettings(),
+		server.InternalExecutor().(sqlutil.InternalExecutor),
+		server.DB(),
+		metric.NewCounter(metric.Metadata{}),
+		nil, /* knobs */
+	)
+
+	// We run the compactor without disabling the follower read. This can possibly
+	// fail due to descriptor not found.
+	err := statsCompactor.DeleteOldestEntries(ctx)
+	if err != nil {
+		require.ErrorIs(t, err, catalog.ErrDescriptorNotFound)
+	}
+}
 
 func TestSQLStatsCompactor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -63,8 +89,8 @@ func TestSQLStatsCompactor(t *testing.T) {
 		t, 3 /* numNodes */, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					SQLStatsKnobs: &persistedsqlstats.TestingKnobs{
-						DisableFollowerRead: true,
+					SQLStatsKnobs: &sqlstats.TestingKnobs{
+						AOSTClause: "AS OF SYSTEM TIME '-1us'",
 					},
 				},
 			},
@@ -134,8 +160,8 @@ func TestSQLStatsCompactor(t *testing.T) {
 						firstServer.InternalExecutor().(sqlutil.InternalExecutor),
 						firstServer.DB(),
 						metric.NewCounter(metric.Metadata{}),
-						&persistedsqlstats.TestingKnobs{
-							DisableFollowerRead: true,
+						&sqlstats.TestingKnobs{
+							AOSTClause: "AS OF SYSTEM TIME '-1us'",
 						},
 					)
 
@@ -182,8 +208,8 @@ func TestAtMostOneSQLStatsCompactionJob(t *testing.T) {
 	var serverArgs base.TestServerArgs
 	var allowRequest chan struct{}
 
-	serverArgs.Knobs.SQLStatsKnobs = &persistedsqlstats.TestingKnobs{
-		DisableFollowerRead: true,
+	serverArgs.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
+		AOSTClause: "AS OF SYSTEM TIME '-1us'",
 	}
 
 	params := base.TestClusterArgs{ServerArgs: serverArgs}

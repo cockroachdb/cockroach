@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
@@ -38,6 +39,11 @@ func TestTelemetrySQLStatsIndependence(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLStatsKnobs: &sqlstats.TestingKnobs{
+			AOSTClause: "AS OF SYSTEM TIME '-1us'",
+		},
+	}
 
 	r := diagutils.NewServer()
 	defer r.Close()
@@ -302,10 +308,10 @@ func TestClusterResetSQLStats(t *testing.T) {
 
 	ctx := context.Background()
 
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Insecure: true,
-		},
+		ServerArgs: params,
 	})
 	defer testCluster.Stopper().Stop(ctx)
 

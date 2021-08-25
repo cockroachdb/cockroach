@@ -43,9 +43,9 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: &persistedsqlstats.TestingKnobs{
-					StubTimeNow:         fakeTime.StubTimeNow,
-					DisableFollowerRead: true,
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					StubTimeNow: fakeTime.StubTimeNow,
+					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
 				},
 			},
 		},

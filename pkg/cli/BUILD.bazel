@@ -154,6 +154,7 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlstats",
         "//pkg/startupmigrations",
         "//pkg/storage",
         "//pkg/storage/enginepb",

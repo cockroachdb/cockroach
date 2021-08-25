@@ -477,6 +477,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
+
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 

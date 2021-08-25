@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
@@ -1351,6 +1352,9 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					DeterministicExplain: true,
 				},
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause: "AS OF SYSTEM TIME '-1us'",
+				},
 			},
 			ClusterName:   "testclustername",
 			ExternalIODir: t.sharedIODir,
@@ -1456,6 +1460,9 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 			TestingKnobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					DeterministicExplain: true,
+				},
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause: "AS OF SYSTEM TIME '-1us'",
 				},
 			},
 			MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,

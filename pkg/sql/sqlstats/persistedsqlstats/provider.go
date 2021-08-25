@@ -55,7 +55,7 @@ type Config struct {
 	FailureCounter *metric.Counter
 
 	// Testing knobs.
-	Knobs *TestingKnobs
+	Knobs *sqlstats.TestingKnobs
 }
 
 // PersistedSQLStats is a sqlstats.Provider that wraps a node-local in-memory
