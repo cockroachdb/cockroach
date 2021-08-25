@@ -18,12 +18,18 @@ type Alloc struct {
 	bytes   int64 // memory allocated for this request.
 	entries int64 // number of entries using those bytes, usually 1.
 	ap      pool  // pool where those resources ought to be released.
+
+	// Merged allocations that belong to a different pool.  Normally nil.
+	otherPoolAllocs map[pool]*Alloc
 }
 
 // Release releases resources associated with this allocation.
 func (a Alloc) Release(ctx context.Context) {
 	if a.ap != nil {
 		a.ap.Release(ctx, a.bytes, a.entries)
+	}
+	for _, oa := range a.otherPoolAllocs {
+		oa.Release(ctx)
 	}
 }
 
@@ -35,13 +41,53 @@ func (a *Alloc) Merge(other *Alloc) {
 		return
 	}
 
-	if a.ap != other.ap {
-		panic("cannot merge allocations from two different pools")
+	samePool := a.ap == other.ap
+	mergeOtherAllocs := (a.otherPoolAllocs == nil && other.otherPoolAllocs != nil) ||
+		(a.otherPoolAllocs != nil && other.otherPoolAllocs == nil)
+
+	if !samePool || mergeOtherAllocs {
+		// Slow case: this doesn't happen frequently (only right after backfill completes).
+		a.mergeSlow(other)
 	}
-	a.bytes += other.bytes
-	a.entries += other.entries
-	other.bytes = 0
-	other.entries = 0
+
+	if samePool {
+		a.bytes += other.bytes
+		a.entries += other.entries
+	}
+
+	other.clearAlloc()
+}
+
+func (a *Alloc) clearAlloc() {
+	a.bytes = 0
+	a.entries = 0
+	a.ap = nil
+	a.otherPoolAllocs = nil
+}
+
+// mergeSlow merges allocation that belongs to another alloc pool.
+func (a *Alloc) mergeSlow(other *Alloc) {
+	if a.otherPoolAllocs == nil {
+		a.otherPoolAllocs = make(map[pool]*Alloc, 1)
+	}
+
+	mergeOther := func(toMerge *Alloc) {
+		if mergeAlloc, ok := a.otherPoolAllocs[toMerge.ap]; ok {
+			mergeAlloc.Merge(toMerge)
+		} else {
+			a.otherPoolAllocs[toMerge.ap] = mergeAlloc
+		}
+	}
+
+	if a.ap != other.ap {
+		// If we're merging across different pools, merge single allocation
+		mergeOther(other)
+	} else {
+		// Merge other.otherPoolAllocs into a.otherPoolAllocs
+		for _, opa := range other.otherPoolAllocs {
+			mergeOther(opa)
+		}
+	}
 }
 
 // pool is an allocation pool responsible for freeing up previously acquired resources.
