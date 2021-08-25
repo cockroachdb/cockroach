@@ -10,7 +10,6 @@ package kvevent
 
 import (
 	"context"
-	"io"
 	"sync"
 	"time"
 
@@ -34,8 +33,9 @@ type blockingBuffer struct {
 
 	mu struct {
 		syncutil.Mutex
-		closed bool
-		queue  bufferEntryQueue
+		closed  bool
+		drainCh chan struct{}
+		queue   bufferEntryQueue
 	}
 }
 
@@ -70,9 +70,14 @@ func (b *blockingBuffer) pop() (e *bufferEntry, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.mu.closed {
-		return nil, io.EOF
+		return nil, ErrBufferClosed
 	}
-	return b.mu.queue.dequeue(), nil
+	e = b.mu.queue.dequeue()
+	if b.mu.drainCh != nil && b.mu.queue.empty() {
+		close(b.mu.drainCh)
+		b.mu.drainCh = nil
+	}
+	return e, nil
 }
 
 // Get implements kvevent.Reader interface.
@@ -116,26 +121,33 @@ func (b *blockingBuffer) ensureOpenedLocked(ctx context.Context) error {
 
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
-	if e.alloc.ap != nil {
-		return errors.AssertionFailedf("event unexpectedly has a alloc associated with it")
-	}
-
 	if err := b.ensureOpened(ctx); err != nil {
 		return err
 	}
 
-	// Acquire the quota first.
-	alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.approxSize))
-	if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); alloc > l {
-		return errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
-	}
+	var be *bufferEntry
+	if e.alloc.ap == nil {
+		// Acquire the quota first.
+		alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.approxSize))
+		if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); alloc > l {
+			return errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
+		}
+		e.alloc = Alloc{
+			bytes:   alloc,
+			entries: 1,
+			ap:      &b.qp,
+		}
+		be = newBufferEntry(e)
 
-	be := newBufferEntry(e, &b.qp, alloc)
-	if err := b.qp.Acquire(ctx, be); err != nil {
-		bufferEntryPool.Put(be)
-		return err
+		if err := b.qp.Acquire(ctx, be); err != nil {
+			bufferEntryPool.Put(be)
+			return err
+		}
+		b.metrics.BufferEntriesMemAcquired.Inc(alloc)
+	} else {
+		// Use allocation associated with the event itself.
+		be = newBufferEntry(e)
 	}
-	b.metrics.BufferEntriesMemAcquired.Inc(alloc)
 
 	// Enqueue message, and signal if anybody is waiting.
 	b.mu.Lock()
@@ -153,6 +165,34 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 	return nil
 }
 
+// tryDrain attempts to see if the buffer already empty.
+// If so, returns nil.  If not, returns a channel that will be closed once the buffer is empty.
+func (b *blockingBuffer) tryDrain() chan struct{} {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.mu.queue.empty() {
+		return nil
+	}
+
+	b.mu.drainCh = make(chan struct{})
+	return b.mu.drainCh
+}
+
+// Drain implements Writer interface.
+func (b *blockingBuffer) Drain(ctx context.Context) error {
+	if drained := b.tryDrain(); drained != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-drained:
+			return nil
+		}
+	}
+
+	return nil
+}
+
+// Close implements Writer interface.
 func (b *blockingBuffer) Close(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -236,13 +276,8 @@ var bufferEntryPool = sync.Pool{
 	},
 }
 
-func newBufferEntry(e Event, ap *allocPool, alloc int64) *bufferEntry {
+func newBufferEntry(e Event) *bufferEntry {
 	be := bufferEntryPool.Get().(*bufferEntry)
-	e.alloc = Alloc{
-		bytes:   alloc,
-		entries: 1,
-		ap:      ap,
-	}
 	be.e = e
 	be.next = nil
 	return be
@@ -300,6 +335,10 @@ func (l *bufferEntryQueue) enqueue(be *bufferEntry) {
 		l.tail.next = be
 		l.tail = be
 	}
+}
+
+func (l *bufferEntryQueue) empty() bool {
+	return l.head == nil
 }
 
 func (l *bufferEntryQueue) dequeue() *bufferEntry {
