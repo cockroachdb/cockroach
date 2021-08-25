@@ -382,6 +382,7 @@ type tokenGranter struct {
 	requester            requester
 	availableBurstTokens int
 	maxBurstTokens       int
+	skipTokenEnforcement bool
 	// Optional. Practically, both uses of tokenGranter, for SQLKVResponseWork
 	// and SQLSQLResponseWork have a non-nil value. We don't expect to use
 	// memory overload indicators here since memory accounting and disk spilling
@@ -396,8 +397,9 @@ func (tg *tokenGranter) getPairedRequester() requester {
 	return tg.requester
 }
 
-func (tg *tokenGranter) refillBurstTokens() {
+func (tg *tokenGranter) refillBurstTokens(skipTokenEnforcement bool) {
 	tg.availableBurstTokens = tg.maxBurstTokens
+	tg.skipTokenEnforcement = skipTokenEnforcement
 }
 
 func (tg *tokenGranter) grantKind() grantKind {
@@ -412,7 +414,7 @@ func (tg *tokenGranter) tryGetLocked() grantResult {
 	if tg.cpuOverload != nil && tg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
-	if tg.availableBurstTokens > 0 {
+	if tg.availableBurstTokens > 0 || tg.skipTokenEnforcement {
 		tg.availableBurstTokens--
 		return grantSuccess
 	}
@@ -446,10 +448,12 @@ func (tg *tokenGranter) continueGrantChain(grantChainID grantChainID) {
 // KVWork, that are limited by slots (CPU bound work) and/or tokens (IO
 // bound work).
 type kvGranter struct {
-	coord           *GrantCoordinator
-	requester       requester
-	usedSlots       int
-	totalSlots      int
+	coord               *GrantCoordinator
+	requester           requester
+	usedSlots           int
+	totalSlots          int
+	skipSlotEnforcement bool
+
 	ioTokensEnabled bool
 	// There is no rate limiting in granting these tokens. That is, they are all
 	// burst tokens.
@@ -478,7 +482,7 @@ func (sg *kvGranter) tryGet() bool {
 }
 
 func (sg *kvGranter) tryGetLocked() grantResult {
-	if sg.usedSlots < sg.totalSlots {
+	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement {
 		if !sg.ioTokensEnabled || sg.availableIOTokens > 0 {
 			sg.usedSlots++
 			if sg.usedSlotsMetric != nil {
@@ -555,8 +559,11 @@ func (sg *kvGranter) setAvailableIOTokensLocked(tokens int64) {
 // StoreGrantCoordinators) for KVWork that uses that store. See the
 // NewGrantCoordinators and NewGrantCoordinatorSQL functions.
 type GrantCoordinator struct {
-	settings *cluster.Settings
+	settings                *cluster.Settings
+	lastCPULoadSamplePeriod time.Duration
+
 	// mu is ordered before any mutex acquired in a requester implementation.
+	// TODO(sumeer): move everything covered by mu into a nested struct.
 	mu syncutil.Mutex
 	// NB: Some granters can be nil.
 	granters [numWorkKinds]granterWithLockedCalls
@@ -842,20 +849,38 @@ func (coord *GrantCoordinator) GetWorkQueue(workKind WorkKind) *WorkQueue {
 	return coord.queues[workKind].(*WorkQueue)
 }
 
-// CPULoad implements CPULoadListener and is called every 1ms. The same
-// frequency is used for refilling the burst tokens since synchronizing the
-// two means that the refilled burst can take into account the latest
-// schedulers stats (indirectly, via the implementation of
-// cpuOverloadIndicator).
-// TODO(sumeer): after experimentation, possibly generalize the 1ms ticks used
-// for CPULoad.
-func (coord *GrantCoordinator) CPULoad(runnable int, procs int) {
+// CPULoad implements CPULoadListener and is called periodically (see
+// CPULoadListener for details). The same frequency is used for refilling the
+// burst tokens since synchronizing the two means that the refilled burst can
+// take into account the latest schedulers stats (indirectly, via the
+// implementation of cpuOverloadIndicator).
+func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod time.Duration) {
+	if coord.lastCPULoadSamplePeriod != 0 && coord.lastCPULoadSamplePeriod != samplePeriod &&
+		KVAdmissionControlEnabled.Get(&coord.settings.SV) {
+		log.Infof(context.Background(), "CPULoad switching to period %s", samplePeriod.String())
+	}
+	coord.lastCPULoadSamplePeriod = samplePeriod
+
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	coord.numProcs = procs
-	coord.cpuLoadListener.CPULoad(runnable, procs)
-	coord.granters[SQLKVResponseWork].(*tokenGranter).refillBurstTokens()
-	coord.granters[SQLSQLResponseWork].(*tokenGranter).refillBurstTokens()
+	coord.cpuLoadListener.CPULoad(runnable, procs, samplePeriod)
+
+	// Slot adjustment and token refilling requires 1ms periods to work well. If
+	// the CPULoad ticks are less frequent, there is no guarantee that the
+	// tokens or slots will be sufficient to service requests. This is
+	// particularly the case for slots where we dynamically adjust them, and
+	// high contention can suddenly result in high slot utilization even while
+	// cpu utilization stays low. We don't want to artificially bottleneck
+	// request processing when we are in this slow CPULoad ticks regime since we
+	// can't adjust slots or refill tokens fast enough. So we explicitly tell
+	// the granters to not do token or slot enforcement.
+	skipEnforcement := samplePeriod > time.Millisecond
+	coord.granters[SQLKVResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
+	coord.granters[SQLSQLResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
+	if coord.granters[KVWork] != nil {
+		coord.granters[KVWork].(*kvGranter).skipSlotEnforcement = skipEnforcement
+	}
 	if coord.grantChainActive && !coord.tryTerminateGrantChain() {
 		return
 	}
@@ -1264,12 +1289,11 @@ type cpuOverloadIndicator interface {
 }
 
 // CPULoadListener listens to the latest CPU load information. Currently we
-// expect this to be called every 1ms.
-// TODO(sumeer): experiment with more smoothing. It is possible that rapid
-// slot fluctuation may be resulting in under-utilization at a time scale that
-// is not observable at our metrics frequency.
+// expect this to be called every 1ms, unless the cpu is extremely
+// underloaded. If the samplePeriod is > 1ms, admission control enforcement
+// for CPU is disabled.
 type CPULoadListener interface {
-	CPULoad(runnable int, procs int)
+	CPULoad(runnable int, procs int, samplePeriod time.Duration)
 }
 
 // kvSlotAdjuster is an implementer of CPULoadListener and
@@ -1293,8 +1317,9 @@ type kvSlotAdjuster struct {
 var _ cpuOverloadIndicator = &kvSlotAdjuster{}
 var _ CPULoadListener = &kvSlotAdjuster{}
 
-func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int) {
+func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, _ time.Duration) {
 	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&kvsa.settings.SV))
+
 	// Simple heuristic, which worked ok in experiments. More sophisticated ones
 	// could be devised.
 	if runnable >= threshold*procs {
@@ -1332,7 +1357,7 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int) {
 }
 
 func (kvsa *kvSlotAdjuster) isOverloaded() bool {
-	return kvsa.granter.usedSlots >= kvsa.granter.totalSlots
+	return kvsa.granter.usedSlots >= kvsa.granter.totalSlots && !kvsa.granter.skipSlotEnforcement
 }
 
 // sqlNodeCPUOverloadIndicator is the implementation of cpuOverloadIndicator
@@ -1559,7 +1584,9 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 var _ cpuOverloadIndicator = &sqlNodeCPUOverloadIndicator{}
 var _ CPULoadListener = &sqlNodeCPUOverloadIndicator{}
 
-func (sn *sqlNodeCPUOverloadIndicator) CPULoad(runnable int, procs int) {
+func (sn *sqlNodeCPUOverloadIndicator) CPULoad(
+	runnable int, procs int, samplePeriod time.Duration,
+) {
 }
 
 func (sn *sqlNodeCPUOverloadIndicator) isOverloaded() bool {

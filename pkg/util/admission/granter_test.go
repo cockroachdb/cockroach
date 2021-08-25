@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -83,7 +84,7 @@ func (tr *testRequester) getAdmittedCount() uint64 {
 // return-grant work=<kind>
 // took-without-permission work=<kind>
 // continue-grant-chain work=<kind>
-// cpu-load runnable=<int> procs=<int>
+// cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
 // set-io-tokens tokens=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -159,7 +160,15 @@ func TestGranterBasic(t *testing.T) {
 			var runnable, procs int
 			d.ScanArgs(t, "runnable", &runnable)
 			d.ScanArgs(t, "procs", &procs)
-			coord.CPULoad(runnable, procs)
+			infrequent := false
+			if d.HasArg("infrequent") {
+				d.ScanArgs(t, "infrequent", &infrequent)
+			}
+			samplePeriod := time.Millisecond
+			if infrequent {
+				samplePeriod = 250 * time.Millisecond
+			}
+			coord.CPULoad(runnable, procs, samplePeriod)
 			return flushAndReset()
 
 		case "set-io-tokens":
