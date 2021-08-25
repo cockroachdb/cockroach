@@ -147,7 +147,24 @@ func (i *CatchupIterator) CatchupScan(
 			// If write is inline, it doesn't have a timestamp so we don't
 			// filter on the registration's starting timestamp. Instead, we
 			// return all inline writes.
+			//
+			// TODO(ssd): Do we want to continue to
+			// support inline values here at all? TBI may
+			// miss inline values completely and normal
+			// iterators may result in the rangefeed not
+			// seeing some intermeidate values.
 			unsafeVal = meta.RawBytes
+		}
+
+		// Ignore the version if it's not inline and its timestamp is at
+		// or before the registration's (exclusive) starting timestamp.
+		ts := unsafeKey.Timestamp
+		ignore := !(ts.IsEmpty() || catchupTimestamp.Less(ts))
+		if ignore && !withDiff {
+			// Skip all the way to the next key.
+			// NB: fast-path to avoid value copy when !r.withDiff.
+			i.NextKey()
+			continue
 		}
 
 		// Determine whether the iterator moved to a new key.
@@ -160,21 +177,14 @@ func (i *CatchupIterator) CatchupScan(
 			a, lastKey.Key = a.Copy(unsafeKey.Key, 0)
 		}
 		key := lastKey.Key
-		ts := unsafeKey.Timestamp
+
 		lastKey.Timestamp = unsafeKey.Timestamp
 
-		// Ignore the version if it's not inline and its timestamp is at
-		// or before the registration's (exclusive) starting timestamp.
-		ignore := !(ts.IsEmpty() || catchupTimestamp.Less(ts))
-		if ignore && !withDiff {
-			// Skip all the way to the next key.
-			// NB: fast-path to avoid value copy when !r.withDiff.
-			i.NextKey()
-			continue
+		var val []byte
+		if !ignore || (withDiff && len(reorderBuf) > 0) {
+			a, val = a.Copy(unsafeVal, 0)
 		}
 
-		var val []byte
-		a, val = a.Copy(unsafeVal, 0)
 		if withDiff {
 			// Update the last version with its previous value (this version).
 			addPrevToLastEvent(val)
