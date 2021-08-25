@@ -404,7 +404,22 @@ func (p *planner) alterTypeOwner(
 		return err
 	}
 
-	if err := p.checkCanAlterTypeAndSetNewOwner(ctx, typeDesc, arrayDesc, newOwner); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, newOwner); err != nil {
+		return err
+	}
+
+	// Ensure the new owner has CREATE privilege on the type's schema.
+	if err := p.canCreateOnSchema(
+		ctx, typeDesc.GetParentSchemaID(), typeDesc.ParentID, newOwner, checkPublicSchema); err != nil {
+		return err
+	}
+
+	typeNameWithPrefix := tree.MakeTypeNameWithPrefix(n.prefix.NamePrefix(), typeDesc.GetName())
+
+	arrayTypeNameWithPrefix := tree.MakeTypeNameWithPrefix(n.prefix.NamePrefix(), arrayDesc.GetName())
+
+	if err := p.setNewTypeOwner(ctx, typeDesc, arrayDesc, typeNameWithPrefix,
+		arrayTypeNameWithPrefix, newOwner); err != nil {
 		return err
 	}
 
@@ -424,24 +439,16 @@ func (p *planner) alterTypeOwner(
 	)
 }
 
-// checkCanAlterTypeAndSetNewOwner handles privilege checking and setting new owner.
+// setNewTypeOwner handles setting a new type owner.
 // Called in ALTER TYPE and REASSIGN OWNED BY.
-func (p *planner) checkCanAlterTypeAndSetNewOwner(
+func (p *planner) setNewTypeOwner(
 	ctx context.Context,
 	typeDesc *typedesc.Mutable,
 	arrayTypeDesc *typedesc.Mutable,
+	typeName tree.TypeName,
+	arrayTypeName tree.TypeName,
 	newOwner security.SQLUsername,
 ) error {
-	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, newOwner); err != nil {
-		return err
-	}
-
-	// Ensure the new owner has CREATE privilege on the type's schema.
-	if err := p.canCreateOnSchema(
-		ctx, typeDesc.GetParentSchemaID(), typeDesc.ParentID, newOwner, checkPublicSchema); err != nil {
-		return err
-	}
-
 	privs := typeDesc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
@@ -451,9 +458,7 @@ func (p *planner) checkCanAlterTypeAndSetNewOwner(
 	if err := p.logEvent(ctx,
 		typeDesc.GetID(),
 		&eventpb.AlterTypeOwner{
-			// TODO(knz): This name is insufficiently qualified.
-			// See: https://github.com/cockroachdb/cockroach/issues/57734
-			TypeName: typeDesc.GetName(),
+			TypeName: typeName.FQString(),
 			Owner:    newOwner.Normalized(),
 		}); err != nil {
 		return err
@@ -461,9 +466,7 @@ func (p *planner) checkCanAlterTypeAndSetNewOwner(
 	return p.logEvent(ctx,
 		arrayTypeDesc.GetID(),
 		&eventpb.AlterTypeOwner{
-			// TODO(knz): This name is insufficiently qualified.
-			// See: https://github.com/cockroachdb/cockroach/issues/57734
-			TypeName: arrayTypeDesc.GetName(),
+			TypeName: arrayTypeName.FQString(),
 			Owner:    newOwner.Normalized(),
 		})
 }
