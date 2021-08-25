@@ -863,7 +863,7 @@ func readPostgresStmt(
 		// handled during the data ingestion pass.
 	case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
 		*tree.CommentOnIndex, *tree.CommentOnColumn, *tree.SetVar, *tree.Analyze,
-		*tree.CommentOnSchema:
+		*tree.CommentOnSchema,*tree.CommentOnConstraint:
 		// These are the statements that can be parsed by CRDB but are not
 		// supported, or are not required to be processed, during an IMPORT.
 		// - ignore txns.
@@ -1358,7 +1358,7 @@ func (m *pgDumpReader) readFile(
 			}
 		case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
 			*tree.CommentOnIndex, *tree.CommentOnColumn, *tree.AlterSequence,
-			*tree.CommentOnSchema:
+			*tree.CommentOnSchema,*tree.CommentOnConstraint:
 			// handled during schema extraction.
 		case *tree.SetVar, *tree.BeginTransaction, *tree.CommitTransaction, *tree.Analyze:
 			// handled during schema extraction.

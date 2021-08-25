@@ -29,6 +29,7 @@ go_library(
         "collatedstring.go",
         "comment_on_column.go",
         "comment_on_database.go",
+        "comment_on_constraint.go",
         "comment_on_index.go",
         "comment_on_schema.go",
         "comment_on_table.go",

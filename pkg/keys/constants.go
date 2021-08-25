@@ -419,6 +419,7 @@ const (
 	ColumnCommentType   = 2
 	IndexCommentType    = 3
 	SchemaCommentType   = 4
+	ConstraintCommentType = 5
 )
 
 const (

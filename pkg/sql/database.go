@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -123,4 +124,39 @@ func (p *planner) forEachMutableTableInDatabase(
 		}
 	}
 	return nil
+}
+
+type ConstraintAndTable struct {
+	constraints descpb.ConstraintDetail
+	tableDesc *descpb.TableDescriptor
+}
+func (p *planner) searchConstraintFromAllMutableTables(
+	ctx context.Context,
+	dbDesc catalog.DatabaseDescriptor,
+	name tree.Name,
+) (*ConstraintAndTable,error) {
+	ct := &ConstraintAndTable{}
+	//var constraint descpb.ConstraintDetail
+	allDescs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	if err != nil {
+		return ct,err
+	}
+
+	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil /* fallback */)
+	for _, tbID := range lCtx.tbIDs {
+		desc := lCtx.tbDescs[tbID]
+		if desc.Dropped() {
+			continue
+		}
+		mutable := tabledesc.NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
+		constraints,_ := mutable.GetConstraintInfo()
+
+
+		if val, ok := constraints[name.String()]; ok {
+			ct = &ConstraintAndTable{constraints: val,tableDesc: desc.TableDesc()}
+			break
+		}
+
+	}
+	return ct,nil
 }
