@@ -135,23 +135,6 @@ func (p *planner) alterSchemaOwner(
 ) error {
 	oldOwner := scDesc.GetPrivileges().Owner()
 
-	if err := p.checkCanAlterSchemaAndSetNewOwner(ctx, scDesc, newOwner); err != nil {
-		return err
-	}
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == oldOwner {
-		return nil
-	}
-
-	return p.writeSchemaDescChange(ctx, scDesc, jobDescription)
-}
-
-// checkCanAlterSchemaAndSetNewOwner handles privilege checking and setting new owner.
-// Called in ALTER SCHEMA and REASSIGN OWNED BY.
-func (p *planner) checkCanAlterSchemaAndSetNewOwner(
-	ctx context.Context, scDesc *schemadesc.Mutable, newOwner security.SQLUsername,
-) error {
 	if err := p.checkCanAlterToNewOwner(ctx, scDesc, newOwner); err != nil {
 		return err
 	}
@@ -165,13 +148,35 @@ func (p *planner) checkCanAlterSchemaAndSetNewOwner(
 		return err
 	}
 
+	if err := p.setNewSchemaOwner(ctx, parentDBDesc.(*dbdesc.Mutable), scDesc, newOwner); err != nil {
+		return err
+	}
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == oldOwner {
+		return nil
+	}
+
+	return p.writeSchemaDescChange(ctx, scDesc, jobDescription)
+}
+
+// setNewSchemaOwner handles setting a new schema owner.
+// Called in ALTER SCHEMA and REASSIGN OWNED BY.
+func (p *planner) setNewSchemaOwner(
+	ctx context.Context,
+	dbDesc *dbdesc.Mutable,
+	scDesc *schemadesc.Mutable,
+	newOwner security.SQLUsername,
+) error {
 	// Update the owner of the schema.
 	privs := scDesc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
-	qualifiedSchemaName, err := p.getQualifiedSchemaName(ctx, scDesc)
-	if err != nil {
-		return err
+	qualifiedSchemaName := &tree.ObjectNamePrefix{
+		CatalogName:     tree.Name(dbDesc.GetName()),
+		SchemaName:      tree.Name(scDesc.GetName()),
+		ExplicitCatalog: true,
+		ExplicitSchema:  true,
 	}
 
 	return p.logEvent(ctx,

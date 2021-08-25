@@ -821,8 +821,8 @@ ORDER BY "timestamp", info
 1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "Tag": "ALTER DATABASE OWNER", "User": "root"}
 1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "u", "SchemaName": "atest.sc", "Statement": "ALTER SCHEMA atest.sc OWNER TO u", "Tag": "ALTER SCHEMA", "User": "root"}
 1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "atest.sc.t", "Tag": "ALTER TABLE OWNER", "User": "root"}
-1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "ty", "User": "root"}
-1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "_ty", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "atest.sc.ty", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "atest.sc._ty", "User": "root"}
 
 subtest alter_owner
 
@@ -862,8 +862,8 @@ ORDER BY "timestamp", info
 1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.t", "Tag": "REASSIGN OWNED BY", "User": "root"}
 1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.v", "Tag": "REASSIGN OWNED BY", "User": "root"}
 1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.s", "Tag": "REASSIGN OWNED BY", "User": "root"}
-1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "Tag": "REASSIGN OWNED BY", "TypeName": "ty", "User": "root"}
-1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "Tag": "REASSIGN OWNED BY", "TypeName": "_ty", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "Tag": "REASSIGN OWNED BY", "TypeName": "atest.sc.ty", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "Tag": "REASSIGN OWNED BY", "TypeName": "atest.sc._ty", "User": "root"}
 
 statement ok
 USE defaultdb
