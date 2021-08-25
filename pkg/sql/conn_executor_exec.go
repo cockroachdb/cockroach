@@ -363,7 +363,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
-	p.sessionDataMutator.paramStatusUpdater = res
+	p.sessionDataMutatorIterator.paramStatusUpdater = res
 	p.noticeSender = res
 	ih := &p.instrumentation
 
