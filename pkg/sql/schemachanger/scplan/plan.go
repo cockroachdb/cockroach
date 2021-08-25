@@ -77,7 +77,6 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 	if err := deprules.Apply(g); err != nil {
 		return Plan{}, err
 	}
-
 	stages := buildStages(initial, g, params)
 	return Plan{
 		Params:  params,

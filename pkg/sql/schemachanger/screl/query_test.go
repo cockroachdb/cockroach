@@ -27,9 +27,9 @@ func TestQueryBasic(t *testing.T) {
 		return scpb.NewTarget(scpb.Target_ADD, &scpb.Type{TypeID: id}, nil /* metadata */)
 	}
 	mkTypeRef := func(typID, descID descpb.ID) *scpb.Target {
-		return scpb.NewTarget(scpb.Target_ADD, &scpb.TypeReference{
-			TypeID: typID,
-			DescID: descID,
+		return scpb.NewTarget(scpb.Target_ADD, &scpb.ViewDependsOnType{
+			TypeID:  typID,
+			TableID: descID,
 		}, nil /* metadata */)
 	}
 	mkTable := func(id descpb.ID) *scpb.Target {
@@ -63,7 +63,7 @@ func TestQueryBasic(t *testing.T) {
 		tableID, typeID, dir, status    rel.Var = "table-id", "type-id", "dir", "status"
 		pathJoinQuery                           = screl.MustQuery(
 			tableEl.Type((*scpb.Table)(nil)),
-			refEl.Type((*scpb.TypeReference)(nil)),
+			refEl.Type((*scpb.ViewDependsOnType)(nil)),
 			typeEl.Type((*scpb.Type)(nil)),
 
 			tableEl.AttrEqVar(screl.DescID, tableID),
@@ -117,13 +117,13 @@ func TestQueryBasic(t *testing.T) {
 					exp: []string{`
 [Table:{DescID: 2}, ABSENT, ADD]
 [Type:{DescID: 1}, ABSENT, ADD]
-[TypeReference:{DescID: 2, ReferencedDescID: 1}, ABSENT, ADD]`, `
+[ViewDependsOnType:{DescID: 2, ReferencedDescID: 1}, ABSENT, ADD]`, `
 [Table:{DescID: 2}, PUBLIC, ADD]
 [Type:{DescID: 1}, PUBLIC, ADD]
-[TypeReference:{DescID: 2, ReferencedDescID: 1}, PUBLIC, ADD]`, `
+[ViewDependsOnType:{DescID: 2, ReferencedDescID: 1}, PUBLIC, ADD]`, `
 [Table:{DescID: 4}, ABSENT, ADD]
 [Type:{DescID: 3}, ABSENT, ADD]
-[TypeReference:{DescID: 4, ReferencedDescID: 3}, ABSENT, ADD]`,
+[ViewDependsOnType:{DescID: 4, ReferencedDescID: 3}, ABSENT, ADD]`,
 					},
 				},
 			},
