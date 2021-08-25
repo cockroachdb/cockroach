@@ -160,7 +160,24 @@ func (i *CatchUpIterator) CatchUpScan(
 			// If write is inline, it doesn't have a timestamp so we don't
 			// filter on the registration's starting timestamp. Instead, we
 			// return all inline writes.
+			//
+			// TODO(ssd): Do we want to continue to
+			// support inline values here at all? TBI may
+			// miss inline values completely and normal
+			// iterators may result in the rangefeed not
+			// seeing some intermediate values.
 			unsafeVal = meta.RawBytes
+		}
+
+		// Ignore the version if it's not inline and its timestamp is at
+		// or before the registration's (exclusive) starting timestamp.
+		ts := unsafeKey.Timestamp
+		ignore := !(ts.IsEmpty() || catchUpTimestamp.Less(ts))
+		if ignore && !withDiff {
+			// Skip all the way to the next key.
+			// NB: fast-path to avoid value copy when !r.withDiff.
+			i.NextKey()
+			continue
 		}
 
 		// Determine whether the iterator moved to a new key.
@@ -173,23 +190,40 @@ func (i *CatchUpIterator) CatchUpScan(
 			a, lastKey = a.Copy(unsafeKey.Key, 0)
 		}
 		key := lastKey
-		ts := unsafeKey.Timestamp
 
-		// Ignore the version if it's not inline and its timestamp is at
-		// or before the registration's (exclusive) starting timestamp.
-		ignore := !(ts.IsEmpty() || catchUpTimestamp.Less(ts))
-		if ignore && !withDiff {
-			// Skip all the way to the next key.
-			// NB: fast-path to avoid value copy when !r.withDiff.
-			i.NextKey()
-			continue
-		}
+		// INVARIANT: !ignore || withDiff
+		//
+		// Cases:
+		//
+		// - !ignore: we need to copy the unsafeVal to add to
+		//   the reorderBuf to be output eventually,
+		//   regardless of the value of withDiff
+		//
+		// - withDiff && ignore: we need to copy the unsafeVal
+		//   only if there is already something in the
+		//   reorderBuf for which we need to set the previous
+		//   value.
+		if !ignore || (withDiff && len(reorderBuf) > 0) {
+			var val []byte
+			a, val = a.Copy(unsafeVal, 0)
+			if withDiff {
+				// Update the last version with its
+				// previous value (this version).
+				addPrevToLastEvent(val)
+			}
 
-		var val []byte
-		a, val = a.Copy(unsafeVal, 0)
-		if withDiff {
-			// Update the last version with its previous value (this version).
-			addPrevToLastEvent(val)
+			if !ignore {
+				// Add value to reorderBuf to be output.
+				var event roachpb.RangeFeedEvent
+				event.MustSetValue(&roachpb.RangeFeedValue{
+					Key: key,
+					Value: roachpb.Value{
+						RawBytes:  val,
+						Timestamp: ts,
+					},
+				})
+				reorderBuf = append(reorderBuf, event)
+			}
 		}
 
 		if ignore {
@@ -198,16 +232,6 @@ func (i *CatchUpIterator) CatchUpScan(
 		} else {
 			// Move to the next version of this key.
 			i.Next()
-
-			var event roachpb.RangeFeedEvent
-			event.MustSetValue(&roachpb.RangeFeedValue{
-				Key: key,
-				Value: roachpb.Value{
-					RawBytes:  val,
-					Timestamp: ts,
-				},
-			})
-			reorderBuf = append(reorderBuf, event)
 		}
 	}
 

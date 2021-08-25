@@ -40,7 +40,7 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) {
 		Key:    startKey,
 		EndKey: endKey,
 	}
-	// fmt.Println(eng.GetMetrics().String())
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		iter := rangefeed.NewCatchUpIterator(eng, &roachpb.RangeFeedRequest{
@@ -91,12 +91,19 @@ func BenchmarkCatchUpScan(b *testing.B) {
 			numKeys:        numKeys,
 			valueBytes:     valueBytes,
 		},
-		// mixed-case is a middling case. We write keys in
-		// random order but with the timestamps that keep
-		// marching forward.  But, we set LBaseMaxBytes rather
-		// low and also return a read only engine to prevent
-		// read-based compactions after the initial data
-		// generation.
+		// mixed-case is a middling case.
+		//
+		// This case is trying to simulate a larger store, but
+		// with fewer bytes. If we did not reduce
+		// LBaseMaxBytes, almost all data would be in Lbase or
+		// L6, and TBI would be ineffective. By reducing
+		// LBaseMaxBytes, the data should spread out over more
+		// levels, like in a real store. The LSM state
+		// depicted below shows that this was only partially
+		// successful.
+		//
+		// We return a read only engine to prevent read-based
+		// compactions after the initial data generation.
 		//
 		// As of 2021-08-18 data generated using these
 		// settings looked like:
@@ -238,11 +245,9 @@ func setupData(
 	}
 
 	if opts.randomKeyOrder {
-		// Randomize the order in which the keys are written.
-		for i, n := 0, len(order); i < n-1; i++ {
-			j := i + rng.Intn(n-i)
+		rng.Shuffle(len(order), func(i, j int) {
 			order[i], order[j] = order[j], order[i]
-		}
+		})
 	}
 
 	writeKey := func(batch storage.Batch, idx int, pos int) {
