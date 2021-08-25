@@ -83,7 +83,7 @@ func createStockLevel(
 		)`,
 	)
 
-	if err := s.sr.Init(ctx, mcp); err != nil {
+	if err := s.sr.Init(ctx, "stock-level", mcp, config.connFlags); err != nil {
 		return nil, err
 	}
 

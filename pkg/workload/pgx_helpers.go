@@ -12,10 +12,8 @@ package workload
 
 import (
 	"context"
-	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/sync/errgroup"
 )
@@ -49,7 +47,7 @@ type MultiConnPoolCfg struct {
 // The pools have approximately the same number of max connections, adding up to
 // MaxTotalConnections.
 func NewMultiConnPool(
-	ctx context.Context, cfg MultiConnPoolCfg, flags *ConnFlags, urls ...string,
+	ctx context.Context, cfg MultiConnPoolCfg, urls ...string,
 ) (*MultiConnPool, error) {
 	m := &MultiConnPool{}
 	connsPerURL := distribute(cfg.MaxTotalConnections, len(urls))
@@ -57,28 +55,19 @@ func NewMultiConnPool(
 	if maxConnsPerPool == 0 {
 		maxConnsPerPool = cfg.MaxTotalConnections
 	}
-	method := prepare
-	if flags != nil {
-		var ok bool
-		method, ok = stringToMethod[strings.ToLower(flags.Method)]
-		if !ok {
-			return nil, errors.Errorf("unknown method %s", flags.Method)
-		}
-	}
 
 	var warmupConns [][]*pgxpool.Conn
 	for i := range urls {
 		connsPerPool := distributeMax(connsPerURL[i], maxConnsPerPool)
 		for _, numConns := range connsPerPool {
 			connCfg, err := pgxpool.ParseConfig(urls[i])
+			// Disable the automatic prepared statement cache. We've seen a lot of
+			// churn in this cache since workloads create many of different queries.
+			connCfg.ConnConfig.BuildStatementCache = nil
 			if err != nil {
 				return nil, err
 			}
 			connCfg.MaxConns = int32(numConns)
-			if method == simple {
-				connCfg.ConnConfig.PreferSimpleProtocol = true
-			}
-
 			p, err := pgxpool.ConnectConfig(ctx, connCfg)
 			if err != nil {
 				return nil, err
