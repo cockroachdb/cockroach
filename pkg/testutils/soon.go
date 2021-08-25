@@ -15,14 +15,22 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// DefaultSucceedsSoonDuration is the maximum amount of time unittests
-// will wait for a condition to become true. See SucceedsSoon().
-const DefaultSucceedsSoonDuration = 45 * time.Second
+const (
+	// DefaultSucceedsSoonDuration is the maximum amount of time unittests
+	// will wait for a condition to become true. See SucceedsSoon().
+	DefaultSucceedsSoonDuration = 45 * time.Second
+
+	// RaceSucceedsSoonDuration is the maximum amount of time
+	// unittests will wait for a condition to become true when
+	// running with the race detector enabled.
+	RaceSucceedsSoonDuration = DefaultSucceedsSoonDuration * 5
+)
 
 // SucceedsSoon fails the test (with t.Fatal) unless the supplied
 // function runs without error within a preset maximum duration. The
@@ -30,10 +38,7 @@ const DefaultSucceedsSoonDuration = 45 * time.Second
 // an exponential backoff starting at 1ns and ending at around 1s.
 func SucceedsSoon(t TB, fn func() error) {
 	t.Helper()
-	if err := SucceedsSoonError(fn); err != nil {
-		t.Fatalf("condition failed to evaluate within %s: %s\n%s",
-			DefaultSucceedsSoonDuration, err, string(debug.Stack()))
-	}
+	SucceedsWithin(t, fn, succeedsSoonDuration())
 }
 
 // SucceedsSoonError returns an error unless the supplied function runs without
@@ -41,6 +46,26 @@ func SucceedsSoon(t TB, fn func() error) {
 // at first and then successively with an exponential backoff starting at 1ns
 // and ending at around 1s.
 func SucceedsSoonError(fn func() error) error {
+	return SucceedsWithinError(fn, succeedsSoonDuration())
+}
+
+// SucceedsWithin fails the test (with t.Fatal) unless the supplied
+// function runs without error within the given duration. The function
+// is invoked immediately at first and then successively with an
+// exponential backoff starting at 1ns and ending at around 1s.
+func SucceedsWithin(t TB, fn func() error, duration time.Duration) {
+	t.Helper()
+	if err := SucceedsWithinError(fn, duration); err != nil {
+		t.Fatalf("condition failed to evaluate within %s: %s\n%s",
+			duration, err, string(debug.Stack()))
+	}
+}
+
+// SucceedsWithinError returns an error unless the supplied function
+// runs without error within the given duration. The function is
+// invoked immediately at first and then successively with an
+// exponential backoff starting at 1ns and ending at around 1s.
+func SucceedsWithinError(fn func() error, duration time.Duration) error {
 	tBegin := timeutil.Now()
 	wrappedFn := func() error {
 		err := fn()
@@ -49,5 +74,12 @@ func SucceedsSoonError(fn func() error) error {
 		}
 		return err
 	}
-	return retry.ForDuration(DefaultSucceedsSoonDuration, wrappedFn)
+	return retry.ForDuration(duration, wrappedFn)
+}
+
+func succeedsSoonDuration() time.Duration {
+	if util.RaceEnabled {
+		return RaceSucceedsSoonDuration
+	}
+	return DefaultSucceedsSoonDuration
 }
