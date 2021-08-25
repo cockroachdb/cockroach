@@ -26,11 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	"github.com/cockroachdb/redact"
 )
 
@@ -76,6 +78,7 @@ type Job struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
 		progress jobspb.Progress
+		runStats *RunStats
 	}
 }
 
@@ -844,6 +847,17 @@ func (j *Job) CurrentStatus(ctx context.Context, txn *kv.Txn) (Status, error) {
 	return Status(statusString), nil
 }
 
+// getRunStats returns the RunStats for a job. If they are not set, it will
+// return a zero-value.
+func (j *Job) getRunStats() (rs RunStats) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.mu.runStats != nil {
+		rs = *j.mu.runStats
+	}
+	return rs
+}
+
 // Start will resume the job. The transaction used to create the StartableJob
 // must be committed. If a non-nil error is returned, the job was not started
 // and nothing will be send on errCh. Clients must not start jobs more than
@@ -949,4 +963,21 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 func (sj *StartableJob) Cancel(ctx context.Context) error {
 	defer sj.registry.unregister(sj.ID())
 	return sj.registry.CancelRequested(ctx, nil, sj.ID())
+}
+
+// FormatExecutionErrorsToStringArray extracts the execution errors stored
+// in the payload in ResumeErrors and CleanupErrors, formats them into
+// strings and returns an array. This function is intended for use with
+// crdb_internal.jobs.
+func FormatExecutionErrorsToStringArray(ctx context.Context, pl *jobspb.Payload) *tree.DArray {
+	arr := tree.NewDArray(types.String)
+	for _, el := range [][]*errorspb.EncodedError{pl.ResumeErrors, pl.CleanupErrors} {
+		for _, ee := range el {
+			if ee == nil { // no reason this should happen, but be defensive
+				continue
+			}
+			arr.Append(tree.NewDString(errors.DecodeError(ctx, *ee).Error()))
+		}
+	}
+	return arr
 }
