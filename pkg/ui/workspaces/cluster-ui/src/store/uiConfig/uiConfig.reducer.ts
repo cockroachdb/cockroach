@@ -13,6 +13,7 @@ import { merge } from "lodash";
 import { DOMAIN_NAME } from "../utils";
 
 export type UIConfigState = {
+  isTenant: boolean;
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: boolean;
@@ -24,6 +25,7 @@ export type UIConfigState = {
 };
 
 const initialState: UIConfigState = {
+  isTenant: false,
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: true,

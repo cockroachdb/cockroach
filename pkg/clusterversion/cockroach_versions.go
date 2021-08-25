@@ -307,6 +307,9 @@ const (
 	// GeneratedAsIdentity is the syntax support for `GENERATED {ALWAYS | BY
 	// DEFAULT} AS IDENTITY` under `CREATE TABLE` syntax.
 	GeneratedAsIdentity
+	// OnUpdateExpressions setting ON UPDATE column expressions is supported in
+	// this version.
+	OnUpdateExpressions
 	// Step (1): Add new versions here.
 )
 
@@ -526,7 +529,10 @@ var versionsSingleton = keyedVersions{
 		Key:     GeneratedAsIdentity,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 150},
 	},
-
+	{
+		Key:     OnUpdateExpressions,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 152},
+	},
 	// Step (2): Add new versions here.
 }
 
