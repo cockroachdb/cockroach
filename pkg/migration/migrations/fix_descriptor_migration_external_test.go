@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -297,4 +298,67 @@ func TestFixDBDescriptorDroppedSchemaName(t *testing.T) {
 
 	// Validate that the bad entry is removed.
 	require.False(t, hasSameNameSchema(dbName), "bad entry exists")
+}
+
+// TestCrossDBReferencesTelemetryDuringMigration tests that telemetry for cross-database
+// views, sequences, and foreign-key constraints are recorded.
+func TestCrossDBReferencesTelemetryDuringMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: 1,
+					BinaryVersionOverride: clusterversion.ByKey(
+						clusterversion.FixDescriptors - 1),
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := tc.ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create cross-db references.
+	tdb.Exec(t, `
+SET CLUSTER SETTING sql.cross_db_fks.enabled = true;
+SET CLUSTER SETTING sql.cross_db_views.enabled = true;
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = true;
+
+CREATE DATABASE referenced_db;
+CREATE TABLE referenced_db.referenced_table (referenced_col INT PRIMARY KEY);
+CREATE SEQUENCE referenced_db.referenced_sequence;
+
+CREATE DATABASE d;
+
+-- To create a cross-db FK constraint.
+CREATE TABLE d.t (
+  fk_col INT REFERENCES referenced_db.referenced_table(referenced_col)
+);
+
+-- To create a cross-db view.
+CREATE VIEW d.v AS SELECT referenced_col FROM referenced_db.referenced_table;
+
+-- To create a cross-db sequence ownership. 
+CREATE SEQUENCE d.s OWNED BY referenced_db.referenced_table.referenced_col;
+`)
+
+	// Reset the counts.
+	_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+
+	// Migrate to the new version.
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING version = $1`,
+		clusterversion.ByKey(clusterversion.FixDescriptors).String())
+	require.NoError(t, err)
+
+	// Validate the counters.
+	counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+	require.Equal(t, int32(1), counts[`sql.schema.cross_database_reference_during_migration.foreign-key`])
+	require.Equal(t, int32(1), counts[`sql.schema.cross_database_reference_during_migration.sequence-ownership`])
+	require.Equal(t, int32(1), counts[`sql.schema.cross_database_reference_during_migration.view`])
 }

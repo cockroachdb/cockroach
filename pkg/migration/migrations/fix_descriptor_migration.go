@@ -17,9 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -59,10 +62,7 @@ func fixDescriptorMigration(
 				})
 			}
 		}
-		if err := fixDescriptors(ctx, d, descIDAndVersions); err != nil {
-			return err
-		}
-		return nil
+		return fixDescriptors(ctx, d, descIDAndVersions)
 	}
 
 	query := `SELECT id, descriptor, crdb_internal_mvcc_timestamp FROM system.descriptor ORDER BY ID ASC`
@@ -76,7 +76,7 @@ func fixDescriptorMigration(
 	return descriptorUpgradeMigration(ctx, rows, fixDescriptorFunc, 1<<19 /* 512 KiB batch size */)
 }
 
-// fixDescriptors grabs a descriptor using it's ID and fixes the descriptor
+// fixDescriptors grabs a descriptor using its ID and fixes the descriptor
 // by running RunPostDeserializationChanges.
 // The descriptor will only be fixed if the version written to disk is the same
 // as the version provided in the array.
@@ -136,6 +136,7 @@ func descriptorUpgradeMigration(
 	var ids []descpb.ID
 	var descs []descpb.Descriptor
 	var timestamps []hlc.Timestamp
+	var allDescs []descpb.Descriptor
 	for ; ok; ok, err = rows.Next(ctx) {
 		if err != nil {
 			return err
@@ -148,6 +149,7 @@ func descriptorUpgradeMigration(
 		ids = append(ids, id)
 		descs = append(descs, desc)
 		timestamps = append(timestamps, ts)
+		allDescs = append(allDescs, desc)
 		currSize += desc.Size()
 		if currSize > minBatchSizeInBytes || minBatchSizeInBytes == 0 {
 			err = fixDescFunc(ids, descs, timestamps)
@@ -162,7 +164,10 @@ func descriptorUpgradeMigration(
 		}
 	}
 	// Fix remaining descriptors.
-	return fixDescFunc(ids, descs, timestamps)
+	if err = fixDescFunc(ids, descs, timestamps); err != nil {
+		return err
+	}
+	return maybeCheckCrossDBReferences(ctx, allDescs)
 }
 
 // unmarshalDescFromDescriptorRow takes in an InternalRow from a query that gets:
@@ -184,4 +189,89 @@ func unmarshalDescFromDescriptorRow(
 			"failed to unmarshal descriptor with ID %d", id)
 	}
 	return id, desc, ts, nil
+}
+
+// crossDBReferenceDuringMigrationCounter is incremented when a cross-database references is
+// found during a long-running migration that accesses all descriptors.
+func crossDBReferenceDuringMigrationCounter(typ string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.cross_database_reference_during_migration." + typ)
+}
+
+// maybeCheckCrossDBReferences checks for cross-database references for foreign-key constraints,
+// views, and sequences for table descriptors.
+func maybeCheckCrossDBReferences(ctx context.Context, allDescs []descpb.Descriptor) error {
+	var tbDescs []catalog.TableDescriptor
+	for _, desc := range allDescs {
+		if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil {
+			tbDescs = append(tbDescs, tabledesc.NewBuilder(table).BuildImmutableTable())
+		}
+	}
+
+	dg := catalog.MakeMapDescGetter()
+	for _, desc := range tbDescs {
+		dg.Descriptors[desc.GetID()] = desc
+	}
+
+	for _, tbDesc := range tbDescs {
+		if err := maybeRecordTelemetryForCrossDBReferences(ctx, dg, tbDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// maybeRecordTelemetryForCrossDBReferences records telemetry for cross-db reference
+// in foreign-key constraints, columns using sequences, and views.
+func maybeRecordTelemetryForCrossDBReferences(
+	ctx context.Context, dg catalog.DescGetter, tbDesc catalog.TableDescriptor,
+) error {
+	// - If descriptor is a table desc, check for FKs and sequence ownership.
+	// - If desc is a view, check if the view depends on a table in another DB.
+	if tbDesc.IsTable() {
+		// - Iterate over all FKs.
+		// - Increment telemetry if the parent DB of the referenced table is different from
+		//   this table's DB.
+		if err := tbDesc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+			referencedTable, err := catalog.GetTableDescFromID(ctx, dg, fk.ReferencedTableID)
+			if err != nil {
+				return err
+			}
+			if referencedTable.GetParentID() != tbDesc.GetParentID() {
+				telemetry.Inc(crossDBReferenceDuringMigrationCounter("foreign-key"))
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// For views check if we depend on tables in a different database.
+	if tbDesc.IsView() {
+		dependsOn := tbDesc.GetDependsOn()
+		for _, dependency := range dependsOn {
+			dependentTable, err := catalog.GetTableDescFromID(ctx, dg, dependency)
+			if err != nil {
+				return err
+			}
+			if dependentTable.GetParentID() != tbDesc.GetParentID() {
+				telemetry.Inc(crossDBReferenceDuringMigrationCounter("view"))
+			}
+		}
+	}
+
+	if tbDesc.IsSequence() {
+		// Check ownership for sequences.
+		sequenceOpts := tbDesc.GetSequenceOpts()
+		if sequenceOpts.SequenceOwner.OwnerTableID != descpb.InvalidID {
+			ownerTable, err := catalog.GetTableDescFromID(ctx, dg, sequenceOpts.SequenceOwner.OwnerTableID)
+			if err != nil {
+				return err
+			}
+			if ownerTable.GetParentID() != tbDesc.GetParentID() {
+				telemetry.Inc(crossDBReferenceDuringMigrationCounter("sequence-ownership"))
+			}
+		}
+	}
+	return nil
 }
