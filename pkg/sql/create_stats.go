@@ -611,8 +611,8 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			0, /* depth: use event_log=2 for vmodule filtering */
 			eventLogOptions{dst: LogEverywhere},
 			sqlEventCommonExecPayload{
-				user:         evalCtx.SessionData.User(),
-				appName:      evalCtx.SessionData.ApplicationName,
+				user:         evalCtx.SessionData().User(),
+				appName:      evalCtx.SessionData().ApplicationName,
 				stmt:         redact.Sprint(details.Statement),
 				stmtTag:      "CREATE STATISTICS",
 				placeholders: nil, /* no placeholders known at this point */

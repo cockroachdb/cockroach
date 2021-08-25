@@ -277,7 +277,7 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 // isCommitOnReleaseSavepoint returns true if the savepoint name implies special
 // release semantics: releasing it commits the underlying KV txn.
 func (ex *connExecutor) isCommitOnReleaseSavepoint(savepoint tree.Name) bool {
-	if ex.sessionData.ForceSavepointRestart {
+	if ex.sessionData().ForceSavepointRestart {
 		// The session setting force_savepoint_restart implies that all
 		// uses of the SAVEPOINT statement are targeting restarts.
 		return true

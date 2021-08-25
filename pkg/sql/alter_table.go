@@ -926,7 +926,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				newPrimaryIndexDesc,
 				t.PartitionBy,
 				nil, /* allowedNewColumnNames */
-				params.p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
+				params.p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
 					n.tableDesc.IsLocalityRegionalByRow(),
 			)
 			if err != nil {

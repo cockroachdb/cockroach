@@ -3647,7 +3647,7 @@ func newJSONAggregate(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) tr
 func (a *jsonAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
 	j, err := tree.AsJSON(
 		datum,
-		a.evalCtx.SessionData.DataConversionConfig,
+		a.evalCtx.SessionData().DataConversionConfig,
 		a.evalCtx.GetLocation(),
 	)
 	if err != nil {
@@ -3985,7 +3985,7 @@ func (a *jsonObjectAggregate) Add(
 
 	key, err := asJSONBuildObjectKey(
 		datum,
-		a.evalCtx.SessionData.DataConversionConfig,
+		a.evalCtx.SessionData().DataConversionConfig,
 		a.evalCtx.GetLocation(),
 	)
 	if err != nil {
@@ -3993,7 +3993,7 @@ func (a *jsonObjectAggregate) Add(
 	}
 	val, err := tree.AsJSON(
 		others[0],
-		a.evalCtx.SessionData.DataConversionConfig,
+		a.evalCtx.SessionData().DataConversionConfig,
 		a.evalCtx.GetLocation(),
 	)
 	if err != nil {

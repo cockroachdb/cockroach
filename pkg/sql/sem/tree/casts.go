@@ -977,7 +977,7 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			s = t.BitArray.String()
 		case *DFloat:
 			s = strconv.FormatFloat(float64(*t), 'g',
-				ctx.SessionData.DataConversionConfig.GetFloatPrec(), 64)
+				ctx.SessionData().DataConversionConfig.GetFloatPrec(), 64)
 		case *DBool, *DInt, *DDecimal:
 			s = d.String()
 		case *DTimestamp, *DDate, *DTime, *DTimeTZ, *DGeography, *DGeometry, *DBox2D:
@@ -996,13 +996,13 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			s = AsStringWithFlags(
 				d,
 				FmtPgwireText,
-				FmtDataConversionConfig(ctx.SessionData.DataConversionConfig),
+				FmtDataConversionConfig(ctx.SessionData().DataConversionConfig),
 			)
 		case *DArray:
 			s = AsStringWithFlags(
 				d,
 				FmtPgwireText,
-				FmtDataConversionConfig(ctx.SessionData.DataConversionConfig),
+				FmtDataConversionConfig(ctx.SessionData().DataConversionConfig),
 			)
 		case *DInterval:
 			// When converting an interval to string, we need a string representation
@@ -1011,7 +1011,7 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			s = AsStringWithFlags(
 				d,
 				FmtPgwireText,
-				FmtDataConversionConfig(ctx.SessionData.DataConversionConfig),
+				FmtDataConversionConfig(ctx.SessionData().DataConversionConfig),
 			)
 		case *DUuid:
 			s = t.UUID.String()
@@ -1024,7 +1024,7 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 		case *DBytes:
 			s = lex.EncodeByteArrayToRawBytes(
 				string(*t),
-				ctx.SessionData.DataConversionConfig.BytesEncodeFormat,
+				ctx.SessionData().DataConversionConfig.BytesEncodeFormat,
 				false, /* skipHexPrefix */
 			)
 		case *DOid:

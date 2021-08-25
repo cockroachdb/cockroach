@@ -788,7 +788,7 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 				return indexDesc, err
 			}
 		}
-		allowImplicitPartitioning := p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
+		allowImplicitPartitioning := p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
 			tableDesc.IsLocalityRegionalByRow()
 		if partitionBy != nil {
 			newImplicitCols, newPartitioning, err := CreatePartitioning(

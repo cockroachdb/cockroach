@@ -29,7 +29,7 @@ import (
 // become a physical property required of the Delete operator).
 func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope) {
 	// UX friendliness safeguard.
-	if del.Where == nil && b.evalCtx.SessionData.SafeUpdates {
+	if del.Where == nil && b.evalCtx.SessionData().SafeUpdates {
 		panic(pgerror.DangerousStatementf("DELETE without WHERE clause"))
 	}
 

@@ -99,7 +99,7 @@ const regionKey = "region"
 // GenerateLocalityOptimizedScan rule for details.
 func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.ScanPrivate) bool {
 	// Respect the session setting LocalityOptimizedSearch.
-	if !c.e.evalCtx.SessionData.LocalityOptimizedSearch {
+	if !c.e.evalCtx.SessionData().LocalityOptimizedSearch {
 		return false
 	}
 

@@ -226,7 +226,7 @@ func (d *delegator) delegateShowCreateAllTables() (tree.Statement, error) {
 	const showCreateAllTablesQuery = `
 	SELECT crdb_internal.show_create_all_tables(%[1]s) AS create_statement;
 `
-	databaseLiteral := d.evalCtx.SessionData.Database
+	databaseLiteral := d.evalCtx.SessionData().Database
 
 	query := fmt.Sprintf(showCreateAllTablesQuery,
 		lexbase.EscapeSQLString(databaseLiteral),

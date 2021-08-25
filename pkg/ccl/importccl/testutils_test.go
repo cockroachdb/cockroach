@@ -86,9 +86,11 @@ func descForTable(
 }
 
 var testEvalCtx = &tree.EvalContext{
-	SessionData: &sessiondata.SessionData{
-		Location: time.UTC,
-	},
+	SessionDataStack: sessiondata.NewStack(
+		&sessiondata.SessionData{
+			Location: time.UTC,
+		},
+	),
 	StmtTimestamp: timeutil.Unix(100000000, 0),
 	Settings:      cluster.MakeTestingClusterSettings(),
 	Codec:         keys.SystemSQLCodec,

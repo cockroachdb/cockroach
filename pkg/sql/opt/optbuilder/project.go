@@ -24,7 +24,7 @@ import (
 // different set of columns than its input. Either way, it updates
 // projectionsScope.group with the output memo group ID.
 func (b *Builder) constructProjectForScope(inScope, projectionsScope *scope) {
-	if b.evalCtx.SessionData.PropagateInputOrdering && len(projectionsScope.ordering) == 0 {
+	if b.evalCtx.SessionData().PropagateInputOrdering && len(projectionsScope.ordering) == 0 {
 		// Preserve the input ordering.
 		projectionsScope.copyOrdering(inScope)
 	}

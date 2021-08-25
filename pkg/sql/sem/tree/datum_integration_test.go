@@ -883,9 +883,9 @@ func TestDTimeTZ(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := &tree.EvalContext{
-		SessionData: &sessiondata.SessionData{
+		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
 			Location: time.UTC,
-		},
+		}),
 	}
 
 	maxTime, depOnCtx, err := tree.ParseDTimeTZ(ctx, "24:00:00-1559", time.Microsecond)

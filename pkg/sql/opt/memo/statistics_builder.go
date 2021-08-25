@@ -547,7 +547,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		// column set. Stats are ordered with most recent first.
 		for i := 0; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
-			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData.OptimizerUseMultiColStats {
+			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
 				continue
 			}
 
@@ -560,7 +560,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				colStat.DistinctCount = float64(stat.DistinctCount())
 				colStat.NullCount = float64(stat.NullCount())
 				if cols.Len() == 1 && stat.Histogram() != nil &&
-					sb.evalCtx.SessionData.OptimizerUseHistograms {
+					sb.evalCtx.SessionData().OptimizerUseHistograms {
 					col, _ := cols.Next(0)
 
 					// If this column is invertable, the histogram describes the inverted index
@@ -3572,7 +3572,7 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
 ) (selectivity props.Selectivity) {
 	// Respect the session setting OptimizerUseMultiColStats.
-	if !sb.evalCtx.SessionData.OptimizerUseMultiColStats {
+	if !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
 		return sb.selectivityFromSingleColDistinctCounts(cols, e, s)
 	}
 

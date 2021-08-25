@@ -294,7 +294,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		resultChan = make(chan runnerResult, len(flows)-1)
 	}
 
-	if vectorizeMode := evalCtx.SessionData.VectorizeMode; vectorizeMode != sessiondatapb.VectorizeOff {
+	if vectorizeMode := evalCtx.SessionData().VectorizeMode; vectorizeMode != sessiondatapb.VectorizeOff {
 		// Now we determine whether the vectorized engine supports the flow
 		// specs.
 		for _, spec := range flows {
@@ -1351,7 +1351,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		// In cyclical reference situations, the number of cascading operations can
 		// be arbitrarily large. To avoid OOM, we enforce a limit. This is also a
 		// safeguard in case we have a bug that results in an infinite cascade loop.
-		if limit := int(evalCtx.SessionData.OptimizerFKCascadesLimit); len(plan.cascades) > limit {
+		if limit := int(evalCtx.SessionData().OptimizerFKCascadesLimit); len(plan.cascades) > limit {
 			telemetry.Inc(sqltelemetry.CascadesLimitReached)
 			err := pgerror.Newf(pgcode.TriggeredActionException, "cascades limit (%d) reached", limit)
 			recv.SetError(err)

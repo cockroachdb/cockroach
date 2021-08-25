@@ -278,9 +278,9 @@ func GetWorkMemLimit(flowCtx *FlowCtx) int64 {
 	if flowCtx.Cfg.TestingKnobs.MemoryLimitBytes != 0 {
 		return flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
 	}
-	if flowCtx.EvalCtx.SessionData.WorkMemLimit <= 0 {
+	if flowCtx.EvalCtx.SessionData().WorkMemLimit <= 0 {
 		// If for some reason workmem limit is not set, use the default value.
 		return DefaultMemoryLimit
 	}
-	return flowCtx.EvalCtx.SessionData.WorkMemLimit
+	return flowCtx.EvalCtx.SessionData().WorkMemLimit
 }

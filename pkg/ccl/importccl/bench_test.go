@@ -176,8 +176,8 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 			wc := importccl.NewWorkloadKVConverter(
 				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
 			evalCtx := &tree.EvalContext{
-				SessionData: &sessiondata.SessionData{},
-				Codec:       keys.SystemSQLCodec,
+				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+				Codec:            keys.SystemSQLCodec,
 			}
 			return wc.Worker(ctx, evalCtx)
 		})

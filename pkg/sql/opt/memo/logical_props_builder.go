@@ -1568,7 +1568,7 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *tree.EvalContex
 
 	case *CastExpr:
 		from, to := t.Input.DataType(), t.Typ
-		volatility, ok := tree.LookupCastVolatility(from, to, evalCtx.SessionData)
+		volatility, ok := tree.LookupCastVolatility(from, to, evalCtx.SessionData())
 		if !ok {
 			panic(errors.AssertionFailedf("no volatility for cast %s::%s", from, to))
 		}

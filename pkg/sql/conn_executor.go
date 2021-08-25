@@ -612,7 +612,7 @@ func (h ConnectionHandler) GetUnqualifiedIntSize() *types.T {
 	if h.ex != nil {
 		// The executor will be nil in certain testing situations where
 		// no server is actually present.
-		size = h.ex.sessionData.DefaultIntSize
+		size = h.ex.sessionData().DefaultIntSize
 	}
 	return parser.NakedIntTypeFromDefaultIntSize(size)
 }
@@ -742,14 +742,14 @@ func (s *Server) newConnExecutor(
 	sdMutator := new(sessionDataMutator)
 	*sdMutator = s.makeSessionDataMutator(sd, sdDefaults)
 	ex := &connExecutor{
-		server:      s,
-		metrics:     srvMetrics,
-		stmtBuf:     stmtBuf,
-		clientComm:  clientComm,
-		mon:         sessionRootMon,
-		sessionMon:  sessionMon,
-		sessionData: sd,
-		dataMutator: sdMutator,
+		server:           s,
+		metrics:          srvMetrics,
+		stmtBuf:          stmtBuf,
+		clientComm:       clientComm,
+		mon:              sessionRootMon,
+		sessionMon:       sessionMon,
+		sessionDataStack: sessiondata.NewStack(sd),
+		dataMutator:      sdMutator,
 		state: txnState{
 			mon:                          txnMon,
 			connCtx:                      ctx,
@@ -791,7 +791,7 @@ func (s *Server) newConnExecutor(
 		ex.hasCreatedTemporarySchema = true
 	}
 
-	ex.applicationName.Store(ex.sessionData.ApplicationName)
+	ex.applicationName.Store(ex.sessionData().ApplicationName)
 	ex.statsWriter = statsWriter
 	ex.statsCollector = sslocal.NewStatsCollector(statsWriter, ex.phaseTimes)
 	sdMutator.RegisterOnSessionDataChange("application_name", func(newName string) {
@@ -1224,8 +1224,8 @@ type connExecutor struct {
 		hasAdminRoleCache HasAdminRoleCache
 	}
 
-	// sessionData contains the user-configurable connection variables.
-	sessionData *sessiondata.SessionData
+	// sessionDataStack contains the user-configurable connection variables.
+	sessionDataStack *sessiondata.Stack
 	// dataMutator is nil for session-bound internal executors; we shouldn't issue
 	// statements that manipulate session state to an internal executor.
 	dataMutator *sessionDataMutator
@@ -1425,7 +1425,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.schemaChangerState = SchemaChangerState{
-		mode: ex.sessionData.NewSchemaChangerMode,
+		mode: ex.sessionData().NewSchemaChangerMode,
 	}
 
 	for k := range ex.extraTxnState.schemaChangeJobRecords {
@@ -1477,6 +1477,14 @@ func (ex *connExecutor) Ctx() context.Context {
 	return ctx
 }
 
+// sessionData returns the top SessionData on the executor.
+func (ex *connExecutor) sessionData() *sessiondata.SessionData {
+	if ex.sessionDataStack == nil {
+		return nil
+	}
+	return ex.sessionDataStack.Top()
+}
+
 // activate engages the use of resources that must be cleaned up
 // afterwards. after activate() completes, the close() method must be
 // called.
@@ -1499,11 +1507,11 @@ func (ex *connExecutor) activate(
 	// Enable the trace if configured.
 	if traceSessionEventLogEnabled.Get(&ex.server.cfg.Settings.SV) {
 		remoteStr := "<admin>"
-		if ex.sessionData.RemoteAddr != nil {
-			remoteStr = ex.sessionData.RemoteAddr.String()
+		if ex.sessionData().RemoteAddr != nil {
+			remoteStr = ex.sessionData().RemoteAddr.String()
 		}
 		ex.eventLog = trace.NewEventLog(
-			fmt.Sprintf("sql session [%s]", ex.sessionData.User()), remoteStr)
+			fmt.Sprintf("sql session [%s]", ex.sessionData().User()), remoteStr)
 	}
 
 	ex.activated = true
@@ -1637,8 +1645,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				NeedRowDesc,
 				pos,
 				nil, /* formatCodes */
-				ex.sessionData.DataConversionConfig,
-				ex.sessionData.GetLocation(),
+				ex.sessionData().DataConversionConfig,
+				ex.sessionData().GetLocation(),
 				0,  /* limit */
 				"", /* portalName */
 				ex.implicitTxn(),
@@ -1706,8 +1714,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				// needed.
 				DontNeedRowDesc,
 				pos, portal.OutFormats,
-				ex.sessionData.DataConversionConfig,
-				ex.sessionData.GetLocation(),
+				ex.sessionData().DataConversionConfig,
+				ex.sessionData().GetLocation(),
 				tcmd.Limit,
 				portalName,
 				ex.implicitTxn(),
@@ -2299,7 +2307,7 @@ func txnPriorityToProto(mode tree.UserPriority) roachpb.UserPriority {
 
 func (ex *connExecutor) txnPriorityWithSessionDefault(mode tree.UserPriority) roachpb.UserPriority {
 	if mode == tree.UnspecifiedUserPriority {
-		mode = tree.UserPriority(ex.sessionData.DefaultTxnPriority)
+		mode = tree.UserPriority(ex.sessionData().DefaultTxnPriority)
 	}
 	return txnPriorityToProto(mode)
 }
@@ -2308,7 +2316,7 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 	mode tree.ReadWriteMode,
 ) tree.ReadWriteMode {
 	if mode == tree.UnspecifiedReadWriteMode {
-		if ex.sessionData.DefaultTxnReadOnly {
+		if ex.sessionData().DefaultTxnReadOnly {
 			return tree.ReadOnly
 		}
 		return tree.ReadWrite
@@ -2327,7 +2335,7 @@ var followerReadTimestampExpr = &tree.FuncExpr{
 
 func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.AsOfClause {
 	if expr.Expr == nil {
-		if ex.sessionData.DefaultTxnUseFollowerReads {
+		if ex.sessionData().DefaultTxnUseFollowerReads {
 			return tree.AsOfClause{Expr: followerReadTimestampExpr}
 		}
 		return tree.AsOfClause{}
@@ -2345,7 +2353,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		ex.memMetrics,
 		ex.server.cfg.Settings,
 	)
-	ie.SetSessionData(ex.sessionData)
+	ie.SetSessionData(ex.sessionData())
 
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
@@ -2357,7 +2365,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			Tenant:                 p,
 			JoinTokenCreator:       p,
 			PreparedStatementState: &ex.extraTxnState.prepStmtsNamespace,
-			SessionData:            ex.sessionData,
+			SessionDataStack:       ex.sessionDataStack,
 			Settings:               ex.server.cfg.Settings,
 			TestingKnobs:           ex.server.cfg.EvalContextTestingKnobs,
 			ClusterID:              ex.server.cfg.ClusterID(),
@@ -2472,14 +2480,14 @@ func (ex *connExecutor) resetPlanner(
 	p.cancelChecker.Reset(ctx)
 
 	p.semaCtx = tree.MakeSemaContext()
-	p.semaCtx.SearchPath = ex.sessionData.SearchPath
-	p.semaCtx.IntervalStyleEnabled = ex.sessionData.IntervalStyleEnabled
-	p.semaCtx.DateStyleEnabled = ex.sessionData.DateStyleEnabled
+	p.semaCtx.SearchPath = ex.sessionData().SearchPath
+	p.semaCtx.IntervalStyleEnabled = ex.sessionData().IntervalStyleEnabled
+	p.semaCtx.DateStyleEnabled = ex.sessionData().DateStyleEnabled
 	p.semaCtx.Annotations = nil
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.TableNameResolver = p
-	p.semaCtx.DateStyle = ex.sessionData.GetDateStyle()
-	p.semaCtx.IntervalStyle = ex.sessionData.GetIntervalStyle()
+	p.semaCtx.DateStyle = ex.sessionData().GetDateStyle()
+	p.semaCtx.IntervalStyle = ex.sessionData().GetIntervalStyle()
 
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 
@@ -2692,7 +2700,7 @@ func (ex *connExecutor) cancelSession() {
 
 // user is part of the registrySession interface.
 func (ex *connExecutor) user() security.SQLUsername {
-	return ex.sessionData.User()
+	return ex.sessionData().User()
 }
 
 // serialize is part of the registrySession interface.
@@ -2768,12 +2776,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	}
 
 	remoteStr := "<admin>"
-	if ex.sessionData.RemoteAddr != nil {
-		remoteStr = ex.sessionData.RemoteAddr.String()
+	if ex.sessionData().RemoteAddr != nil {
+		remoteStr = ex.sessionData().RemoteAddr.String()
 	}
 
 	return serverpb.Session{
-		Username:        ex.sessionData.User().Normalized(),
+		Username:        ex.sessionData().User().Normalized(),
 		ClientAddress:   remoteStr,
 		ApplicationName: ex.applicationName.Load().(string),
 		Start:           ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
