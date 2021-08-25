@@ -50,4 +50,13 @@ func TestStack(t *testing.T) {
 	require.Equal(t, s.Top(), initialElem)
 	require.EqualError(t, s.Pop(), "there must always be at least one element in the SessionData stack")
 	require.Equal(t, s.Elems(), []*SessionData{initialElem})
+
+	s.Push(secondElem)
+	s.Push(thirdElem)
+	s.PushTopClone()
+	require.Equal(t, s.Elems(), []*SessionData{initialElem, secondElem, thirdElem, thirdElem})
+	s.PopAll()
+	require.Equal(t, s.Elems(), []*SessionData{initialElem})
+	s.PopAll()
+	require.Equal(t, s.Elems(), []*SessionData{initialElem})
 }
