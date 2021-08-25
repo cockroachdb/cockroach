@@ -1486,7 +1486,11 @@ func NewTableDesc(
 			oid := typedesc.TypeIDToOID(regionConfig.RegionEnumID())
 			n.Defs = append(
 				n.Defs,
-				regionalByRowDefaultColDef(oid, regionalByRowGatewayRegionDefaultExpr(oid)),
+				regionalByRowDefaultColDef(
+					oid,
+					regionalByRowGatewayRegionDefaultExpr(oid),
+					regionalByRowOnUpdateExpr(evalCtx, oid),
+				),
 			)
 			columnDefaultExprs = append(columnDefaultExprs, nil)
 		}
@@ -2792,7 +2796,17 @@ func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
 	}
 }
 
-func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.ColumnTableDef {
+func regionalByRowOnUpdateExpr(evalCtx *tree.EvalContext, enumOid oid.Oid) tree.Expr {
+	if evalCtx.SessionData().AutoRehomingEnabled &&
+		evalCtx.Settings.Version.IsActive(evalCtx.Ctx(), clusterversion.OnUpdateExpressions) {
+		return regionalByRowGatewayRegionDefaultExpr(enumOid)
+	}
+	return nil
+}
+
+func regionalByRowDefaultColDef(
+	oid oid.Oid, defaultExpr tree.Expr, onUpdateExpr tree.Expr,
+) *tree.ColumnTableDef {
 	c := &tree.ColumnTableDef{
 		Name:   tree.RegionalByRowRegionDefaultColName,
 		Type:   &tree.OIDTypeReference{OID: oid},
@@ -2800,6 +2814,8 @@ func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.Column
 	}
 	c.Nullable.Nullability = tree.NotNull
 	c.DefaultExpr.Expr = defaultExpr
+	c.OnUpdateExpr.Expr = onUpdateExpr
+
 	return c
 }
 
