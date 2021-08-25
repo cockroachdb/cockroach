@@ -382,6 +382,7 @@ type tokenGranter struct {
 	requester            requester
 	availableBurstTokens int
 	maxBurstTokens       int
+	skipTokenEnforcement bool
 	// Optional. Practically, both uses of tokenGranter, for SQLKVResponseWork
 	// and SQLSQLResponseWork have a non-nil value. We don't expect to use
 	// memory overload indicators here since memory accounting and disk spilling
@@ -396,7 +397,7 @@ func (tg *tokenGranter) getPairedRequester() requester {
 	return tg.requester
 }
 
-func (tg *tokenGranter) refillBurstTokens() {
+func (tg *tokenGranter) refillBurstTokens(skipTokenEnforcement bool) {
 	tg.availableBurstTokens = tg.maxBurstTokens
 }
 
@@ -412,7 +413,7 @@ func (tg *tokenGranter) tryGetLocked() grantResult {
 	if tg.cpuOverload != nil && tg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
-	if tg.availableBurstTokens > 0 {
+	if tg.availableBurstTokens > 0 || tg.skipTokenEnforcement {
 		tg.availableBurstTokens--
 		return grantSuccess
 	}
@@ -446,10 +447,12 @@ func (tg *tokenGranter) continueGrantChain(grantChainID grantChainID) {
 // KVWork, that are limited by slots (CPU bound work) and/or tokens (IO
 // bound work).
 type kvGranter struct {
-	coord           *GrantCoordinator
-	requester       requester
-	usedSlots       int
-	totalSlots      int
+	coord               *GrantCoordinator
+	requester           requester
+	usedSlots           int
+	totalSlots          int
+	skipSlotEnforcement bool
+
 	ioTokensEnabled bool
 	// There is no rate limiting in granting these tokens. That is, they are all
 	// burst tokens.
@@ -478,7 +481,7 @@ func (sg *kvGranter) tryGet() bool {
 }
 
 func (sg *kvGranter) tryGetLocked() grantResult {
-	if sg.usedSlots < sg.totalSlots {
+	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement {
 		if !sg.ioTokensEnabled || sg.availableIOTokens > 0 {
 			sg.usedSlots++
 			if sg.usedSlotsMetric != nil {
@@ -842,24 +845,35 @@ func (coord *GrantCoordinator) GetWorkQueue(workKind WorkKind) *WorkQueue {
 	return coord.queues[workKind].(*WorkQueue)
 }
 
-// CPULoad implements CPULoadListener and is called every 1ms. The same
-// frequency is used for refilling the burst tokens since synchronizing the
-// two means that the refilled burst can take into account the latest
-// schedulers stats (indirectly, via the implementation of
-// cpuOverloadIndicator).
-// TODO(sumeer): after experimentation, possibly generalize the 1ms ticks used
-// for CPULoad.
-func (coord *GrantCoordinator) CPULoad(runnable int, procs int) {
+// CPULoad implements CPULoadListener and is called periodically (see
+// CPULoadListener for details). The same frequency is used for refilling the
+// burst tokens since synchronizing the two means that the refilled burst can
+// take into account the latest schedulers stats (indirectly, via the
+// implementation of cpuOverloadIndicator).
+func (coord *GrantCoordinator) CPULoad(runnable int, procs int) (extremelyUnderloaded bool) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	coord.numProcs = procs
-	coord.cpuLoadListener.CPULoad(runnable, procs)
-	coord.granters[SQLKVResponseWork].(*tokenGranter).refillBurstTokens()
-	coord.granters[SQLSQLResponseWork].(*tokenGranter).refillBurstTokens()
+	extremelyUnderloaded = coord.cpuLoadListener.CPULoad(runnable, procs)
+	// Our extreme underload signal is based on runnable goroutines. However,
+	// once we slow down the CPULoad ticks there is no guarantee that the tokens
+	// or slots will be sufficient to service requests. This is particularly the
+	// case for slots where we dynamically adjust them, and high contention can
+	// suddenly result in high slot utilization even while cpu utilization stays
+	// low. We don't want to artificially bottleneck request processing when we
+	// are in this slow CPULoad ticks regime since we can't adjust slots or
+	// refill tokens fast enough. So we explicitly tell the granters to not do
+	// token or slot enforcement.
+	coord.granters[SQLKVResponseWork].(*tokenGranter).refillBurstTokens(extremelyUnderloaded)
+	coord.granters[SQLSQLResponseWork].(*tokenGranter).refillBurstTokens(extremelyUnderloaded)
+	if coord.granters[KVWork] != nil {
+		coord.granters[KVWork].(*kvGranter).skipSlotEnforcement = extremelyUnderloaded
+	}
 	if coord.grantChainActive && !coord.tryTerminateGrantChain() {
-		return
+		return extremelyUnderloaded
 	}
 	coord.tryGrant()
+	return extremelyUnderloaded
 }
 
 // tryGet is called by granter.tryGet with the WorkKind.
@@ -1264,12 +1278,15 @@ type cpuOverloadIndicator interface {
 }
 
 // CPULoadListener listens to the latest CPU load information. Currently we
-// expect this to be called every 1ms.
-// TODO(sumeer): experiment with more smoothing. It is possible that rapid
-// slot fluctuation may be resulting in under-utilization at a time scale that
-// is not observable at our metrics frequency.
+// expect this to be called every 1ms, unless the return value of
+// extremelyUnderloaded is true -- that gives the caller freedom to reduce the
+// frequency if it wishes to (but should be called at least once per second).
+// Reducing frequency can cause sluggish response to a load spike, so it is
+// not ideal. We support this behavior only because of deficiencies in the Go
+// runtime that cause 5-10% of cpu utilization for cheap 1ms polling. See
+// #66881.
 type CPULoadListener interface {
-	CPULoad(runnable int, procs int)
+	CPULoad(runnable int, procs int) (extremelyUnderloaded bool)
 }
 
 // kvSlotAdjuster is an implementer of CPULoadListener and
@@ -1287,14 +1304,47 @@ type kvSlotAdjuster struct {
 	minCPUSlots int
 	maxCPUSlots int
 
+	// History used for deciding whether CPULoad tick frequency can be reduced.
+	extremelyUnderloadedTicks int
+	totalTicks                int
+	// Current disposition of whether we are extremely underloaded.
+	extremelyUnderloaded bool
+
 	totalSlotsMetric *metric.Gauge
 }
 
 var _ cpuOverloadIndicator = &kvSlotAdjuster{}
 var _ CPULoadListener = &kvSlotAdjuster{}
 
-func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int) {
+func (kvsa *kvSlotAdjuster) computeExtremeUnderload(runnable int, procs int, threshold int) {
+	kvsa.totalTicks++
+	if runnable <= threshold*procs {
+		kvsa.extremelyUnderloadedTicks++
+	}
+	// When extremelyUnderloaded is false, we are receiving ticks every 1ms. In
+	// that case we use a history length equivalent to 30s. When true, the tick
+	// frequency can be lower, potentially as slow as once per second -- in that
+	// case we use a historyLength of 30, so that we can switch back to 1ms
+	// ticks after ~30s of load.
+	historyLength := 30000
+	if kvsa.extremelyUnderloaded {
+		historyLength = 30
+	}
+	const extremelyUnderloadedFraction = 0.90
+	if kvsa.totalTicks >= historyLength {
+		kvsa.extremelyUnderloaded =
+			float64(kvsa.extremelyUnderloadedTicks)/float64(kvsa.totalTicks) > extremelyUnderloadedFraction
+	}
+}
+
+func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int) (extremelyUnderloaded bool) {
 	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&kvsa.settings.SV))
+	const extremelyUnderloadedMultiplier = 16
+	extremelyUnderloadedThreshold := threshold / 16
+	if extremelyUnderloadedThreshold == 0 {
+		extremelyUnderloadedThreshold = 1
+	}
+	kvsa.computeExtremeUnderload(runnable, procs, extremelyUnderloadedThreshold)
 	// Simple heuristic, which worked ok in experiments. More sophisticated ones
 	// could be devised.
 	if runnable >= threshold*procs {
@@ -1329,10 +1379,11 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int) {
 		}
 	}
 	kvsa.totalSlotsMetric.Update(int64(kvsa.granter.totalSlots))
+	return kvsa.extremelyUnderloaded
 }
 
 func (kvsa *kvSlotAdjuster) isOverloaded() bool {
-	return kvsa.granter.usedSlots >= kvsa.granter.totalSlots
+	return kvsa.granter.usedSlots >= kvsa.granter.totalSlots && !kvsa.granter.skipSlotEnforcement
 }
 
 // sqlNodeCPUOverloadIndicator is the implementation of cpuOverloadIndicator
@@ -1543,7 +1594,10 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 var _ cpuOverloadIndicator = &sqlNodeCPUOverloadIndicator{}
 var _ CPULoadListener = &sqlNodeCPUOverloadIndicator{}
 
-func (sn *sqlNodeCPUOverloadIndicator) CPULoad(runnable int, procs int) {
+func (sn *sqlNodeCPUOverloadIndicator) CPULoad(
+	runnable int, procs int,
+) (extremelyUnderloaded bool) {
+	return true
 }
 
 func (sn *sqlNodeCPUOverloadIndicator) isOverloaded() bool {

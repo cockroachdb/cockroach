@@ -54,8 +54,11 @@ func RecentNormalizedRunnableGoroutines() float64 {
 // will have to add a new version of that file.
 var _ = numRunnableGoroutines
 
-// We sample the number of runnable goroutines once per samplePeriod.
-const samplePeriod = time.Millisecond
+// We sample the number of runnable goroutines once per samplePeriodShort or
+// samplePeriodLong. The decision is based on the desires of the registered
+// RunnableCountCallback.
+const samplePeriodShort = time.Millisecond
+const samplePeriodLong = 250 * time.Millisecond
 
 // We "report" the average value every reportingPeriod.
 // Note: if this is changed from 1s, CumulativeNormalizedRunnableGoroutines()
@@ -78,8 +81,10 @@ var total uint64
 var ewma uint64
 
 // RunnableCountCallback is provided the current value of runnable goroutines,
-// and GOMAXPROCS.
-type RunnableCountCallback func(numRunnable int, numProcs int)
+// and GOMAXPROCS. If it returns true from extremelyUnderloaded, the caller is
+// allowed to (but not required to) switch to a lower frequency for callbacks,
+// with at least one per second.
+type RunnableCountCallback func(numRunnable int, numProcs int) (extremelyUnderloaded bool)
 
 type callbackWithID struct {
 	RunnableCountCallback
@@ -146,7 +151,8 @@ func init() {
 		var sum uint64
 		var numSamples int
 
-		ticker := time.NewTicker(samplePeriod)
+		curPeriod := samplePeriodLong
+		ticker := time.NewTicker(curPeriod)
 		// We keep local versions of "total" and "ewma" and we just Store the
 		// updated values to the globals.
 		var localTotal, localEWMA uint64
@@ -173,8 +179,22 @@ func init() {
 			callbackInfo.mu.Lock()
 			cbs := callbackInfo.cbs
 			callbackInfo.mu.Unlock()
+			nextPeriod := samplePeriodLong
 			for i := range cbs {
-				cbs[i].RunnableCountCallback(runnable, numProcs)
+				if !cbs[i].RunnableCountCallback(runnable, numProcs) {
+					nextPeriod = samplePeriodShort
+				}
+			}
+			if numSamples == 0 {
+				// We switch the sample period only at reportingPeriod boundaries
+				// since it ensures that all samples contributing to a reporting
+				// period were at equal intervals (this is desirable since we average
+				// them). It also naturally reduces the frequency at which we will
+				// reset a ticker.
+				if nextPeriod != curPeriod {
+					ticker.Reset(nextPeriod)
+					curPeriod = nextPeriod
+				}
 			}
 			// The value of the sample is the ratio of runnable to numProcs (scaled
 			// for fixed-point arithmetic).
