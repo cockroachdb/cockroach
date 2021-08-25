@@ -12,22 +12,520 @@
 
 package scpb
 
+import "github.com/cockroachdb/cockroach/pkg/util/iterutil"
+
+type NodeIterator interface {
+	ForEachNode(fn func(status Status, dir Target_Direction, elem Element))
+}
+
+
 func (e Column) element() {}
+
+// ForEachColumn iterates over nodes of type Column.
+func ForEachColumn (b NodeIterator, elementFunc func(element *Column) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Column)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e PrimaryIndex) element() {}
+
+// ForEachPrimaryIndex iterates over nodes of type PrimaryIndex.
+func ForEachPrimaryIndex (b NodeIterator, elementFunc func(element *PrimaryIndex) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*PrimaryIndex)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e SecondaryIndex) element() {}
+
+// ForEachSecondaryIndex iterates over nodes of type SecondaryIndex.
+func ForEachSecondaryIndex (b NodeIterator, elementFunc func(element *SecondaryIndex) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*SecondaryIndex)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e SequenceDependency) element() {}
+
+// ForEachSequenceDependency iterates over nodes of type SequenceDependency.
+func ForEachSequenceDependency (b NodeIterator, elementFunc func(element *SequenceDependency) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*SequenceDependency)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e UniqueConstraint) element() {}
+
+// ForEachUniqueConstraint iterates over nodes of type UniqueConstraint.
+func ForEachUniqueConstraint (b NodeIterator, elementFunc func(element *UniqueConstraint) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*UniqueConstraint)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e CheckConstraint) element() {}
+
+// ForEachCheckConstraint iterates over nodes of type CheckConstraint.
+func ForEachCheckConstraint (b NodeIterator, elementFunc func(element *CheckConstraint) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*CheckConstraint)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e Sequence) element() {}
+
+// ForEachSequence iterates over nodes of type Sequence.
+func ForEachSequence (b NodeIterator, elementFunc func(element *Sequence) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Sequence)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e DefaultExpression) element() {}
+
+// ForEachDefaultExpression iterates over nodes of type DefaultExpression.
+func ForEachDefaultExpression (b NodeIterator, elementFunc func(element *DefaultExpression) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*DefaultExpression)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e View) element() {}
-func (e TypeReference) element() {}
+
+// ForEachView iterates over nodes of type View.
+func ForEachView (b NodeIterator, elementFunc func(element *View) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*View)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e Table) element() {}
-func (e OutboundForeignKey) element() {}
-func (e InboundForeignKey) element() {}
+
+// ForEachTable iterates over nodes of type Table.
+func ForEachTable (b NodeIterator, elementFunc func(element *Table) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Table)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e ForeignKey) element() {}
+
+// ForEachForeignKey iterates over nodes of type ForeignKey.
+func ForEachForeignKey (b NodeIterator, elementFunc func(element *ForeignKey) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ForeignKey)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e ForeignKeyBackReference) element() {}
+
+// ForEachForeignKeyBackReference iterates over nodes of type ForeignKeyBackReference.
+func ForEachForeignKeyBackReference (b NodeIterator, elementFunc func(element *ForeignKeyBackReference) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ForeignKeyBackReference)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e RelationDependedOnBy) element() {}
+
+// ForEachRelationDependedOnBy iterates over nodes of type RelationDependedOnBy.
+func ForEachRelationDependedOnBy (b NodeIterator, elementFunc func(element *RelationDependedOnBy) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*RelationDependedOnBy)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e SequenceOwnedBy) element() {}
+
+// ForEachSequenceOwnedBy iterates over nodes of type SequenceOwnedBy.
+func ForEachSequenceOwnedBy (b NodeIterator, elementFunc func(element *SequenceOwnedBy) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*SequenceOwnedBy)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e Type) element() {}
+
+// ForEachType iterates over nodes of type Type.
+func ForEachType (b NodeIterator, elementFunc func(element *Type) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Type)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e Schema) element() {}
+
+// ForEachSchema iterates over nodes of type Schema.
+func ForEachSchema (b NodeIterator, elementFunc func(element *Schema) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Schema)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e Database) element() {}
+
+// ForEachDatabase iterates over nodes of type Database.
+func ForEachDatabase (b NodeIterator, elementFunc func(element *Database) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Database)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
 func (e Partitioning) element() {}
+
+// ForEachPartitioning iterates over nodes of type Partitioning.
+func ForEachPartitioning (b NodeIterator, elementFunc func(element *Partitioning) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Partitioning)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e Namespace) element() {}
+
+// ForEachNamespace iterates over nodes of type Namespace.
+func ForEachNamespace (b NodeIterator, elementFunc func(element *Namespace) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Namespace)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e Owner) element() {}
+
+// ForEachOwner iterates over nodes of type Owner.
+func ForEachOwner (b NodeIterator, elementFunc func(element *Owner) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Owner)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e UserPrivileges) element() {}
+
+// ForEachUserPrivileges iterates over nodes of type UserPrivileges.
+func ForEachUserPrivileges (b NodeIterator, elementFunc func(element *UserPrivileges) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*UserPrivileges)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e ColumnName) element() {}
+
+// ForEachColumnName iterates over nodes of type ColumnName.
+func ForEachColumnName (b NodeIterator, elementFunc func(element *ColumnName) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ColumnName)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e Locality) element() {}
+
+// ForEachLocality iterates over nodes of type Locality.
+func ForEachLocality (b NodeIterator, elementFunc func(element *Locality) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Locality)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e IndexName) element() {}
+
+// ForEachIndexName iterates over nodes of type IndexName.
+func ForEachIndexName (b NodeIterator, elementFunc func(element *IndexName) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*IndexName)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e ConstraintName) element() {}
+
+// ForEachConstraintName iterates over nodes of type ConstraintName.
+func ForEachConstraintName (b NodeIterator, elementFunc func(element *ConstraintName) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ConstraintName)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e DefaultExprTypeReference) element() {}
+
+// ForEachDefaultExprTypeReference iterates over nodes of type DefaultExprTypeReference.
+func ForEachDefaultExprTypeReference (b NodeIterator, elementFunc func(element *DefaultExprTypeReference) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*DefaultExprTypeReference)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e OnUpdateExprTypeReference) element() {}
+
+// ForEachOnUpdateExprTypeReference iterates over nodes of type OnUpdateExprTypeReference.
+func ForEachOnUpdateExprTypeReference (b NodeIterator, elementFunc func(element *OnUpdateExprTypeReference) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*OnUpdateExprTypeReference)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e ComputedExprTypeReference) element() {}
+
+// ForEachComputedExprTypeReference iterates over nodes of type ComputedExprTypeReference.
+func ForEachComputedExprTypeReference (b NodeIterator, elementFunc func(element *ComputedExprTypeReference) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ComputedExprTypeReference)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e ViewDependsOnType) element() {}
+
+// ForEachViewDependsOnType iterates over nodes of type ViewDependsOnType.
+func ForEachViewDependsOnType (b NodeIterator, elementFunc func(element *ViewDependsOnType) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ViewDependsOnType)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}
+func (e ColumnTypeReference) element() {}
+
+// ForEachColumnTypeReference iterates over nodes of type ColumnTypeReference.
+func ForEachColumnTypeReference (b NodeIterator, elementFunc func(element *ColumnTypeReference) error ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ColumnTypeReference)
+		if ok {
+		err := elementFunc(e)
+		if err != nil {
+			if iterutil.Done(err) {
+				return
+			}
+			panic(err)
+		}
+	}
+  })
+}

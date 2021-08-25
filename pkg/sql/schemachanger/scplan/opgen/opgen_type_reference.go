@@ -17,30 +17,146 @@ import (
 
 func init() {
 	opRegistry.register(
-		(*scpb.TypeReference)(nil),
+		(*scpb.ColumnTypeReference)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
 		to(scpb.Status_ABSENT,
 			minPhase(scop.PreCommitPhase),
 			revertible(false),
-			emit(func(this *scpb.TypeReference) scop.Op {
+			emit(func(this *scpb.ColumnTypeReference) scop.Op {
 				return &scop.RemoveTypeBackRef{
 					TypeID: this.TypeID,
-					DescID: this.DescID,
+					DescID: this.TableID,
 				}
 			})),
 	)
 
 	opRegistry.register(
-		(*scpb.TypeReference)(nil),
+		(*scpb.DefaultExprTypeReference)(nil),
+		scpb.Target_DROP,
+		scpb.Status_PUBLIC,
+		to(scpb.Status_ABSENT,
+			minPhase(scop.PreCommitPhase),
+			revertible(false),
+			emit(func(this *scpb.DefaultExprTypeReference) scop.Op {
+				return &scop.RemoveTypeBackRef{
+					TypeID: this.TypeID,
+					DescID: this.TableID,
+				}
+			})),
+	)
+
+	opRegistry.register(
+		(*scpb.ComputedExprTypeReference)(nil),
+		scpb.Target_DROP,
+		scpb.Status_PUBLIC,
+		to(scpb.Status_ABSENT,
+			minPhase(scop.PreCommitPhase),
+			revertible(false),
+			emit(func(this *scpb.ComputedExprTypeReference) scop.Op {
+				return &scop.RemoveTypeBackRef{
+					TypeID: this.TypeID,
+					DescID: this.TableID,
+				}
+			})),
+	)
+
+	opRegistry.register(
+		(*scpb.OnUpdateExprTypeReference)(nil),
+		scpb.Target_DROP,
+		scpb.Status_PUBLIC,
+		to(scpb.Status_ABSENT,
+			minPhase(scop.PreCommitPhase),
+			revertible(false),
+			emit(func(this *scpb.OnUpdateExprTypeReference) scop.Op {
+				return &scop.RemoveTypeBackRef{
+					TypeID: this.TypeID,
+					DescID: this.TableID,
+				}
+			})),
+	)
+
+	opRegistry.register(
+		(*scpb.ViewDependsOnType)(nil),
+		scpb.Target_DROP,
+		scpb.Status_PUBLIC,
+		to(scpb.Status_ABSENT,
+			minPhase(scop.PreCommitPhase),
+			revertible(false),
+			emit(func(this *scpb.ViewDependsOnType) scop.Op {
+				return &scop.RemoveTypeBackRef{
+					TypeID: this.TypeID,
+					DescID: this.TableID,
+				}
+			})),
+	)
+
+	opRegistry.register(
+		(*scpb.ColumnTypeReference)(nil),
 		scpb.Target_ADD,
 		scpb.Status_ABSENT,
 		to(scpb.Status_PUBLIC,
 			minPhase(scop.PreCommitPhase),
-			emit(func(this *scpb.TypeReference) scop.Op {
+			emit(func(this *scpb.ColumnTypeReference) scop.Op {
 				return &scop.AddTypeBackRef{
 					TypeID: this.TypeID,
-					DescID: this.DescID,
+					DescID: this.TableID,
+				}
+			})),
+	)
+
+	opRegistry.register(
+		(*scpb.DefaultExprTypeReference)(nil),
+		scpb.Target_ADD,
+		scpb.Status_ABSENT,
+		to(scpb.Status_PUBLIC,
+			minPhase(scop.PreCommitPhase),
+			emit(func(this *scpb.DefaultExprTypeReference) scop.Op {
+				return &scop.AddTypeBackRef{
+					TypeID: this.TypeID,
+					DescID: this.TableID,
+				}
+			})),
+	)
+
+	opRegistry.register(
+		(*scpb.ComputedExprTypeReference)(nil),
+		scpb.Target_ADD,
+		scpb.Status_ABSENT,
+		to(scpb.Status_PUBLIC,
+			minPhase(scop.PreCommitPhase),
+			emit(func(this *scpb.ComputedExprTypeReference) scop.Op {
+				return &scop.AddTypeBackRef{
+					TypeID: this.TypeID,
+					DescID: this.TableID,
+				}
+			})),
+	)
+
+	opRegistry.register(
+		(*scpb.OnUpdateExprTypeReference)(nil),
+		scpb.Target_ADD,
+		scpb.Status_ABSENT,
+		to(scpb.Status_PUBLIC,
+			minPhase(scop.PreCommitPhase),
+			emit(func(this *scpb.OnUpdateExprTypeReference) scop.Op {
+				return &scop.AddTypeBackRef{
+					TypeID: this.TypeID,
+					DescID: this.TableID,
+				}
+			})),
+	)
+
+	opRegistry.register(
+		(*scpb.ViewDependsOnType)(nil),
+		scpb.Target_ADD,
+		scpb.Status_ABSENT,
+		to(scpb.Status_PUBLIC,
+			minPhase(scop.PreCommitPhase),
+			emit(func(this *scpb.ViewDependsOnType) scop.Op {
+				return &scop.AddTypeBackRef{
+					TypeID: this.TypeID,
+					DescID: this.TableID,
 				}
 			})),
 	)

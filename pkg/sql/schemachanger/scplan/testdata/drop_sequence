@@ -8,12 +8,13 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 Stage 0
   *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 52
-Stage 1 (non-revertible)
-  *scop.MarkDescriptorAsDropped
-    DescID: 52
-Stage 2 (non-revertible)
+Stage 1
   *scop.DrainDescriptorName
     TableID: 52
+Stage 2 (non-revertible)
+  *scop.MarkDescriptorAsDropped
+    DescID: 52
+Stage 3 (non-revertible)
   *scop.LogEvent
     DescID: 52
     Direction: 2
@@ -43,22 +44,13 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 Stage 0
   *scop.MarkDescriptorAsDroppedSynthetically
     DescID: 52
-Stage 1 (non-revertible)
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 53
-  *scop.UpdateRelationDeps
-    TableID: 53
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 54
-  *scop.UpdateRelationDeps
-    TableID: 54
-  *scop.MarkDescriptorAsDropped
-    DescID: 52
-Stage 2 (non-revertible)
+Stage 1
   *scop.DrainDescriptorName
     TableID: 52
+Stage 2 (non-revertible)
+  *scop.MarkDescriptorAsDropped
+    DescID: 52
+Stage 3 (non-revertible)
   *scop.LogEvent
     DescID: 52
     Direction: 2
@@ -73,8 +65,30 @@ Stage 2 (non-revertible)
       Username: root
   *scop.CreateGcJobForDescriptor
     DescID: 52
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 53
+    TableID: 52
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 54
+    TableID: 52
 
 
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
+- from: [Namespace:{DescID: 52, Name: sq1}, ABSENT]
+  to:   [Sequence:{DescID: 52}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT]
+  to:   [Sequence:{DescID: 52}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT]
+  to:   [Sequence:{DescID: 52}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 54}, ABSENT]
+  to:   [Sequence:{DescID: 52}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 54}, ABSENT]
+  to:   [Sequence:{DescID: 52}, DROPPED]
+- from: [Sequence:{DescID: 52}, ABSENT]
+  to:   [Namespace:{DescID: 52, Name: sq1}, ABSENT]
+- from: [Sequence:{DescID: 52}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT]
+- from: [Sequence:{DescID: 52}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 54}, ABSENT]

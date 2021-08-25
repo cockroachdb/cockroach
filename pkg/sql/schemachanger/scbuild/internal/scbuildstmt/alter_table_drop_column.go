@@ -39,8 +39,8 @@ func alterTableDropColumn(b BuildCtx, table catalog.TableDescriptor, t *tree.Alt
 	// Check whether the column is being dropped.
 	found := false
 	b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-		if col, ok := elem.(*scpb.Column); ok && dir == scpb.Target_DROP {
-			if col.TableID == table.GetID() && col.Column.ColName() == t.Column {
+		if col, ok := elem.(*scpb.ColumnName); ok && dir == scpb.Target_DROP {
+			if col.TableID == table.GetID() && col.Name == string(t.Column) {
 				found = true
 			}
 		}
@@ -79,19 +79,23 @@ func alterTableDropColumn(b BuildCtx, table catalog.TableDescriptor, t *tree.Alt
 			typeID, err := typedesc.UserDefinedTypeOIDToID(colType.Oid())
 			onErrPanic(err)
 			typ := b.MustReadType(typeID)
-			b.EnqueueDrop(&scpb.TypeReference{
-				TypeID: typ.GetID(),
-				DescID: table.GetID(),
+			b.EnqueueDrop(&scpb.ColumnTypeReference{
+				TypeID:   typ.GetID(),
+				TableID:  table.GetID(),
+				ColumnID: colToDrop.GetID(),
 			})
 		}
 	}
 
 	// TODO(ajwerner): Add family information to the column.
-	b.EnqueueDrop(&scpb.Column{
-		TableID: table.GetID(),
-		Column:  *colToDrop.ColumnDesc(),
+	b.EnqueueDrop(
+		columnDescToElement(table, colToDrop.ColumnDescDeepCopy(), nil, nil),
+	)
+	b.EnqueueDrop(&scpb.ColumnName{
+		TableID:  table.GetID(),
+		ColumnID: colToDrop.GetID(),
+		Name:     colToDrop.GetName(),
 	})
-
 	addOrUpdatePrimaryIndexTargetsForDropColumn(b, table, colToDrop.GetID())
 }
 
@@ -151,10 +155,14 @@ func addOrUpdatePrimaryIndexTargetsForDropColumn(
 		}
 	}
 
-	b.EnqueueAdd(primaryIndexElemFromDescriptor(&newIdx, table))
+	newPrimaryIndex, newPrimaryIndexName := primaryIndexElemFromDescriptor(&newIdx, table)
+	b.EnqueueAdd(newPrimaryIndex)
+	b.EnqueueAdd(newPrimaryIndexName)
 
 	// Drop the existing primary index.
-	b.EnqueueDrop(primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table))
+	oldPrimaryIndex, oldPrimaryIndexName := primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table)
+	b.EnqueueDrop(oldPrimaryIndex)
+	b.EnqueueDrop(oldPrimaryIndexName)
 	return idxID
 }
 
