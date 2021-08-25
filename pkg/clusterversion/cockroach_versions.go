@@ -310,6 +310,8 @@ const (
 	// OnUpdateExpressions setting ON UPDATE column expressions is supported in
 	// this version.
 	OnUpdateExpressions
+	// BoundedStaleness adds capabilities to perform bounded staleness reads.
+	BoundedStaleness
 	// Step (1): Add new versions here.
 )
 
@@ -532,6 +534,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     OnUpdateExpressions,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 152},
+	},
+	{
+		Key:     BoundedStaleness,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 154},
 	},
 	// Step (2): Add new versions here.
 }
