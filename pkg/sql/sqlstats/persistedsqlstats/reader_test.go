@@ -44,14 +44,17 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &persistedsqlstats.TestingKnobs{
-					StubTimeNow:         fakeTime.StubTimeNow,
-					DisableFollowerRead: true,
+					StubTimeNow: fakeTime.StubTimeNow,
+					ASOTClause:  "AS OF SYSTEM TIME '-1us'",
 				},
 			},
 		},
 	})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
+
+	// Wait for the system table to be created by ASOT timestamp.
+	time.Sleep(time.Microsecond)
 
 	server1 := testCluster.Server(0 /* idx */)
 	sqlConn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0 /* idx */))

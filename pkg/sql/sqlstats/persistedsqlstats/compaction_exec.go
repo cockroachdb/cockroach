@@ -191,20 +191,21 @@ func (c *StatsCompactor) getQueryForCheckingTableRowCounts(
 	tableName, hashColumnName string,
 ) string {
 	// [1]: table name
-	// [2]: hash column name
-	// [3]: follower read clause
+	// [2]: follower read clause
+	// [3]: hash column name
 	existingRowCountQuery := `
 SELECT count(*)
 FROM %[1]s
-WHERE %[2]s = $1
-%[3]s`
+%[2]s
+WHERE %[3]s = $1
+`
 	followerReadClause := "AS OF SYSTEM TIME follower_read_timestamp()"
 
-	if c.knobs.DisableFollowerRead {
-		followerReadClause = ""
+	if c.knobs != nil {
+		followerReadClause = c.knobs.ASOTClause
 	}
 
-	return fmt.Sprintf(existingRowCountQuery, tableName, hashColumnName, followerReadClause)
+	return fmt.Sprintf(existingRowCountQuery, tableName, followerReadClause, hashColumnName)
 }
 
 func (c *StatsCompactor) getStatementForDeletingStaleRows(

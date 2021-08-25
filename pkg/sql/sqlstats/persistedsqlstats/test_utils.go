@@ -22,11 +22,9 @@ type TestingKnobs struct {
 	// by the flush operation to calculate aggregated_ts timestamp.
 	StubTimeNow func() time.Time
 
-	// DisableFollowerRead disallows the PersistedSQLStats to use follower read.
-	// This is used in the unit tests where it might be reading from the past
-	// where the stmt/txn stats system table are not yet created. This is not a
-	// scenario that is possible in outside of testing.
-	DisableFollowerRead bool
+	// ASOTClause overrides the AS OF SYSTEM TIME clause in queries used in
+	// persistedsqlstats.
+	ASOTClause string
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
