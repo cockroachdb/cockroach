@@ -646,4 +646,81 @@ SELECT unnest(execution_errors)
 		close(fourthRun.resume)
 		require.Regexp(t, err2, registry.WaitForJobs(ctx, ie, []jobspb.JobID{id}))
 	})
+	t.Run("truncation", func(t *testing.T) {
+		id := mkJob(t)
+		firstRun, firstStart := waitForEvent(t, id)
+		const maxSize, largeSize = 2 << 10, 8 << 10
+		tdb.Exec(t, "SET CLUSTER SETTING "+jobs.ExecutionErrorsMaxEntrySizeKey+" = $1", maxSize)
+		tdb.Exec(t, "SET CLUSTER SETTING "+jobs.ExecutionErrorsMaxEntriesKey+" = $1", 1)
+		err1 := strings.Repeat("a", largeSize)
+		firstRun.resume <- jobs.MarkAsRetryJobError(errors.New(err1))
+
+		// Wait for the job to get restarted.
+		secondRun, secondStart := waitForEvent(t, id)
+		// Confirm the previous execution error was properly recorded.
+		var firstExecErr parsedError
+		{
+			execErrs := getExecErrors(t, id)
+			require.Len(t, execErrs, 1)
+			firstExecErr = execErrs[0]
+			// Ensure we see the truncated error in the table but the full error
+			// in the logs.
+			expTruncatedError := "(truncated) " + err1[:maxSize]
+			checkExecutionError(t, firstExecErr, jobs.StatusRunning, firstStart, secondStart, expTruncatedError)
+			checkLogEntry(t, id, jobs.StatusRunning, firstStart, secondStart, err1)
+		}
+		const err2 = "boom2"
+		secondRun.resume <- jobs.MarkAsRetryJobError(errors.New(err2))
+		thirdRun, thirdStart := waitForEvent(t, id)
+		var secondExecErr parsedError
+		{
+			execErrs := getExecErrors(t, id)
+			require.Len(t, execErrs, 1)
+			secondExecErr = execErrs[0]
+			checkExecutionError(t, secondExecErr, jobs.StatusRunning, secondStart, thirdStart, err2)
+			checkLogEntry(t, id, jobs.StatusRunning, secondStart, thirdStart, err2)
+		}
+		// Fail the job so we can also test the truncation of reverting retry
+		// errors.
+		const err3 = "boom3"
+		thirdRun.resume <- errors.New(err3)           // not retriable
+		fourthRun, fourthStart := waitForEvent(t, id) // first Reverting run
+		{
+			execErrs := getExecErrors(t, id)
+			require.Len(t, execErrs, 1)
+			executionErrorEqual(t, secondExecErr, execErrs[0])
+		}
+		err4 := strings.Repeat("b", largeSize)
+		fourthRun.resume <- jobs.MarkAsRetryJobError(errors.New(err4))
+		fifthRun, fifthStart := waitForEvent(t, id)
+		{
+			execErrs := getExecErrors(t, id)
+			require.Len(t, execErrs, 1)
+			// Ensure we see the truncated error in the table but the full error
+			// in the logs.
+			expTruncatedError := "(truncated) " + err4[:maxSize]
+			checkExecutionError(t, execErrs[0], jobs.StatusReverting, fourthStart, fifthStart, expTruncatedError)
+			checkLogEntry(t, id, jobs.StatusReverting, fourthStart, fifthStart, err4)
+		}
+		const err5 = "boom5"
+		fifthRun.resume <- jobs.MarkAsRetryJobError(errors.New(err5))
+		sixthRun, sixthStart := waitForEvent(t, id)
+		{
+			execErrs := getExecErrors(t, id)
+			require.Len(t, execErrs, 1)
+			checkExecutionError(t, execErrs[0], jobs.StatusReverting, fifthStart, sixthStart, err5)
+			checkLogEntry(t, id, jobs.StatusReverting, fifthStart, sixthStart, err5)
+		}
+		const err6 = "boom5"
+		tdb.Exec(t, "SET CLUSTER SETTING "+jobs.ExecutionErrorsMaxEntriesKey+" = $1", 0)
+		sixthRun.resume <- jobs.MarkAsRetryJobError(errors.New(err6))
+		seventhRun, seventhStart := waitForEvent(t, id)
+		{
+			execErrs := getExecErrors(t, id)
+			require.Len(t, execErrs, 0)
+			checkLogEntry(t, id, jobs.StatusReverting, sixthStart, seventhStart, err6)
+		}
+		close(seventhRun.resume)
+		require.Regexp(t, err3, registry.WaitForJobs(ctx, ie, []jobspb.JobID{id}))
+	})
 }
