@@ -690,22 +690,8 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 
-			// TODO(arul): Switch over from using the node status server to using
-			// the region server to validate localities.
-			if params.p.ExecCfg().Codec.ForSystemTenant() {
-				ss, err := params.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(MultitenancyZoneCfgIssueNo)
-				if err != nil {
-					return err
-				}
-
-				// Validate that the result makes sense.
-				if err := validateZoneAttrsAndLocalities(
-					params.ctx,
-					ss.ListNodesInternal,
-					&newZone,
-				); err != nil {
-					return err
-				}
+			if err := validateZoneAttrsAndLocalities(params.ctx, params.p.ExecCfg(), &newZone); err != nil {
+				return err
 			}
 
 			// Are we operating on an index?
@@ -830,6 +816,7 @@ func (*setZoneConfigNode) Close(context.Context)          {}
 func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
 
 type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesResponse, error)
+type regionsGetter func(context.Context, *serverpb.RegionsRequest) (*serverpb.RegionsResponse, error)
 
 // Check that there are not duplicated values for a particular
 // constraint. For example, constraints [+region=us-east1,+region=us-east2]
@@ -877,43 +864,20 @@ func validateNoRepeatKeysInConjunction(conjunctions []zonepb.ConstraintsConjunct
 	return nil
 }
 
-// validateZoneAttrsAndLocalities ensures that all constraints/lease preferences
-// specified in the new zone config snippet are actually valid, meaning that
-// they match at least one node. This protects against user typos causing
-// zone configs that silently don't work as intended.
-//
-// Note that this really only catches typos in required constraints -- we don't
-// want to reject prohibited constraints whose attributes/localities don't
-// match any of the current nodes because it's a reasonable use case to add
-// prohibited constraints for a new set of nodes before adding the new nodes to
-// the cluster. If you had to first add one of the nodes before creating the
-// constraints, data could be replicated there that shouldn't be.
-func validateZoneAttrsAndLocalities(
-	ctx context.Context, getNodes nodeGetter, zone *zonepb.ZoneConfig,
-) error {
-	if len(zone.Constraints) == 0 && len(zone.VoterConstraints) == 0 && len(zone.LeasePreferences) == 0 {
-		return nil
-	}
-
-	// Given that we have something to validate, do the work to retrieve the
-	// set of attributes and localities present on at least one node.
-	nodes, err := getNodes(ctx, &serverpb.NodesRequest{})
-	if err != nil {
-		return err
-	}
-
-	// Accumulate a unique list of constraints to validate.
-	toValidate := make([]zonepb.Constraint, 0)
+// accumulateUniqueConstraints returns a list of unique constraints in the
+// given zone config proto.
+func accumulateUniqueConstraints(zone *zonepb.ZoneConfig) []zonepb.Constraint {
+	constraints := make([]zonepb.Constraint, 0)
 	addToValidate := func(c zonepb.Constraint) {
 		var alreadyInList bool
-		for _, val := range toValidate {
+		for _, val := range constraints {
 			if c == val {
 				alreadyInList = true
 				break
 			}
 		}
 		if !alreadyInList {
-			toValidate = append(toValidate, c)
+			constraints = append(constraints, c)
 		}
 	}
 	for _, constraints := range zone.Constraints {
@@ -931,6 +895,55 @@ func validateZoneAttrsAndLocalities(
 			addToValidate(constraint)
 		}
 	}
+	return constraints
+}
+
+// validateZoneAttrsAndLocalities ensures that all constraints/lease preferences
+// specified in the new zone config snippet are actually valid, meaning that
+// they match at least one node. This protects against user typos causing
+// zone configs that silently don't work as intended.
+//
+// validateZoneAttrsAndLocalities is tenant aware in its validation. Secondary
+// tenants don't have access to the NodeStatusServer, and as such, aren't
+// allowed to set non-locality attributes in their constraints.
+func validateZoneAttrsAndLocalities(
+	ctx context.Context, execCfg *ExecutorConfig, zone *zonepb.ZoneConfig,
+) error {
+	// Avoid RPCs to the Node/Region server if we don't have anything to validate.
+	if len(zone.Constraints) == 0 && len(zone.VoterConstraints) == 0 && len(zone.LeasePreferences) == 0 {
+		return nil
+	}
+	if execCfg.Codec.ForSystemTenant() {
+		ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(MultitenancyZoneCfgIssueNo)
+		if err != nil {
+			return err
+		}
+		return validateZoneAttrsAndLocalitiesForSystemTenant(ctx, ss.ListNodesInternal, zone)
+	}
+	return validateZoneLocalitiesForSecondaryTenants(ctx, execCfg.RegionsServer.Regions, zone)
+}
+
+// validateZoneAttrsAndLocalitiesForSystemTenant performs all the constraint/
+// lease preferences validation for the system tenant. The system tenant is
+// allowed to reference both locality and non-locality attributes as it has
+// access to node information via the NodeStatusServer.
+//
+// For the system tenant, this only catches typos in required constraints. This
+// is by design. We don't want to reject prohibited constraints whose
+// attributes/localities don't match any of the current nodes because it's a
+// reasonable use case to add prohibited constraints for a new set of nodes
+// before adding the new nodes to the cluster. If you had to first add one of
+// the nodes before creating the constraints, data could be replicated there
+// that shouldn't be.
+func validateZoneAttrsAndLocalitiesForSystemTenant(
+	ctx context.Context, getNodes nodeGetter, zone *zonepb.ZoneConfig,
+) error {
+	nodes, err := getNodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return err
+	}
+
+	toValidate := accumulateUniqueConstraints(zone)
 
 	// Check that each constraint matches some store somewhere in the cluster.
 	for _, constraint := range toValidate {
@@ -959,6 +972,66 @@ func validateZoneAttrsAndLocalities(
 		}
 	}
 
+	return nil
+}
+
+// validateZoneLocalitiesForSecondaryTenants performs all the constraint/lease
+// preferences validation for secondary tenants. Secondary tenants are only
+// allowed to reference locality attributes as they only have access to region
+// information via the RegionServer. Even then, they're only allowed to
+// reference the "region" and "zone" tiers.
+//
+// Unlike the system tenant, we also validate prohibited constraints. This is
+// because secondary tenant must operate in the narrow view exposed via the
+// RegionServer and are not allowed to configure arbitrary constraints
+// (required or otherwise).
+func validateZoneLocalitiesForSecondaryTenants(
+	ctx context.Context, getRegions regionsGetter, zone *zonepb.ZoneConfig,
+) error {
+	toValidate := accumulateUniqueConstraints(zone)
+	resp, err := getRegions(ctx, &serverpb.RegionsRequest{})
+	if err != nil {
+		return err
+	}
+	regions := make(map[string]struct{})
+	zones := make(map[string]struct{})
+	for regionName, regionMeta := range resp.Regions {
+		regions[regionName] = struct{}{}
+		for _, zone := range regionMeta.Zones {
+			zones[zone] = struct{}{}
+		}
+	}
+
+	for _, constraint := range toValidate {
+		switch constraint.Key {
+		case "zone":
+			_, found := zones[constraint.Value]
+			if !found {
+				return pgerror.Newf(
+					pgcode.CheckViolation,
+					"zone %q not found",
+					constraint.Value,
+				)
+			}
+		case "region":
+			_, found := regions[constraint.Value]
+			if !found {
+				return pgerror.Newf(
+					pgcode.CheckViolation,
+					"region %q not found",
+					constraint.Value,
+				)
+			}
+		default:
+			return errors.WithHint(pgerror.Newf(
+				pgcode.CheckViolation,
+				"invalid constraint attribute: %q",
+				constraint.Key,
+			),
+				`only "zone" and "region" are allowed`,
+			)
+		}
+	}
 	return nil
 }
 
