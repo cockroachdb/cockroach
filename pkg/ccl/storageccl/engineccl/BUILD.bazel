@@ -21,6 +21,7 @@ go_library(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 

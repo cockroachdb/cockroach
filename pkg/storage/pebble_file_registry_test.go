@@ -15,10 +15,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/gogo/protobuf/types"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -164,6 +166,51 @@ func TestFileRegistryOps(t *testing.T) {
 	require.Error(t, roRegistry.MaybeDeleteEntry("file3"))
 	require.Error(t, roRegistry.MaybeRenameEntry("file3", "file4"))
 	require.Error(t, roRegistry.MaybeLinkEntry("file3", "file4"))
+}
+
+func TestFileRegistry_GlobalSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	fs := vfs.NewMem()
+	registry := &PebbleFileRegistry{FS: fs, DBDir: ""}
+	require.NoError(t, registry.Load())
+	require.NoError(t, registry.StopUsingOldRegistry())
+
+	// There should be no global settings yet.
+	require.Nil(t, registry.GlobalSettings())
+
+	// SetGlobalSettings should take any protocol buffer. In practice,
+	// we only call it with cclenginepb.RegistryMetadata protocol
+	// buffers. Here we test with the roachpb.Attributes protocol buffer
+	// because its convenient.
+	attrs := &roachpb.Attributes{Attrs: []string{"hello", "world"}}
+	attrsAny, err := types.MarshalAny(attrs)
+	require.NoError(t, err)
+	require.NoError(t, registry.SetGlobalSettings(attrsAny))
+
+	// Retrieving and unmarshaling should yield the same message.
+	require.NotNil(t, registry.GlobalSettings())
+	var unmarshaledAttrs roachpb.Attributes
+	require.NoError(t, types.UnmarshalAny(registry.GlobalSettings(), &unmarshaledAttrs))
+	require.Equal(t, attrs, &unmarshaledAttrs)
+
+	// Overwrite the previous global settings.
+	attrs2 := &roachpb.Attributes{Attrs: []string{"hello", "all"}}
+	attrs2Any, err := types.MarshalAny(attrs2)
+	require.NoError(t, err)
+	require.NoError(t, registry.SetGlobalSettings(attrs2Any))
+	require.NoError(t, registry.Close())
+
+	// Re-opening the registry, we should see the most-recently
+	// persisted global settings.
+	registry = &PebbleFileRegistry{FS: fs, DBDir: ""}
+	require.NoError(t, registry.Load())
+	require.NotNil(t, registry.GlobalSettings())
+	var unmarshaledAttrs2 roachpb.Attributes
+	require.NoError(t, types.UnmarshalAny(registry.GlobalSettings(), &unmarshaledAttrs2))
+	require.Equal(t, attrs2, &unmarshaledAttrs2)
+	require.NoError(t, registry.Close())
 }
 
 func TestFileRegistryCheckNoFile(t *testing.T) {

@@ -307,6 +307,7 @@ func newEncryptedEnv(
 		fs:             storeFS,
 		dbDir:          dbDir,
 		rotationPeriod: options.DataKeyRotationPeriod,
+		fileRegistry:   fr,
 	}
 	if err := dataKeyManager.Load(context.TODO()); err != nil {
 		return nil, nil, err

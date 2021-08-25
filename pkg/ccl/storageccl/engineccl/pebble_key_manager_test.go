@@ -11,6 +11,7 @@ package engineccl
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -235,6 +237,7 @@ func TestDataKeyManager(t *testing.T) {
 
 	memFS := vfs.NewMem()
 
+	var fr *storage.PebbleFileRegistry
 	var dkm *DataKeyManager
 	var keyMap map[string]*enginepbccl.SecretKey
 	var lastActiveDataKey *enginepbccl.SecretKey
@@ -258,10 +261,23 @@ func TestDataKeyManager(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
+
+				fr = &storage.PebbleFileRegistry{
+					FS:       memFS,
+					DBDir:    data[0],
+					ReadOnly: false,
+				}
+				require.NoError(t, fr.Load())
+
 				keyMap = make(map[string]*enginepbccl.SecretKey)
 				lastActiveDataKey = nil
 				require.NoError(t, memFS.MkdirAll(data[0], 0755))
-				dkm = &DataKeyManager{fs: memFS, dbDir: data[0], rotationPeriod: int64(period)}
+				dkm = &DataKeyManager{
+					fs:             memFS,
+					dbDir:          data[0],
+					rotationPeriod: int64(period),
+					fileRegistry:   fr,
+				}
 				dkr := &enginepbccl.DataKeysRegistry{
 					StoreKeys: make(map[string]*enginepbccl.KeyInfo),
 					DataKeys:  make(map[string]*enginepbccl.SecretKey),
@@ -287,11 +303,30 @@ func TestDataKeyManager(t *testing.T) {
 					if err != nil {
 						return err.Error()
 					}
-					writeToFile(t, memFS, memFS.PathJoin(data[0], keyRegistryFilename), b)
+					writeToFile(t, memFS, memFS.PathJoin(data[0], keyRegistryFilenameBase), b)
 				}
 				return ""
 			case "load":
 				if err := dkm.Load(context.Background()); err != nil {
+					return err.Error()
+				}
+				return ""
+			case "registry-metadata":
+				var buf bytes.Buffer
+				enc := json.NewEncoder(&buf)
+				enc.SetIndent("", "  ")
+				dkm.mu.Lock()
+				err := enc.Encode(dkm.mu.registryMetadata)
+				dkm.mu.Unlock()
+				if err != nil {
+					return err.Error()
+				}
+				return buf.String()
+			case "upgrade-to-records":
+				// Perform the 21.2 upgrade to the records-based
+				// registry.
+				err := fr.StopUsingOldRegistry()
+				if err != nil {
 					return err.Error()
 				}
 				return ""

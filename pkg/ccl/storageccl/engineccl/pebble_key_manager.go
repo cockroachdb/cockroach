@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 )
 
 const (
@@ -33,8 +34,9 @@ const (
 	plainKeyID = "plain"
 	// The length of a real key id.
 	keyIDLength = 32
-	// The filename used for writing the data keys by the DataKeyManager.
-	keyRegistryFilename = "COCKROACHDB_DATA_KEYS"
+	// The base filename used for writing the data keys by the
+	// DataKeyManager. The base is extended with a file number.
+	keyRegistryFilenameBase = "COCKROACHDB_DATA_KEYS"
 )
 
 // PebbleKeyManager manages encryption keys. There are two implementations. See encrypted_fs.go for
@@ -147,11 +149,9 @@ type DataKeyManager struct {
 	fs             vfs.FS
 	dbDir          string
 	rotationPeriod int64 // seconds
+	fileRegistry   *storage.PebbleFileRegistry
 
 	// Implementation.
-
-	// Initialized in Load()
-	registryFilename string
 
 	mu struct {
 		syncutil.Mutex
@@ -162,6 +162,8 @@ type DataKeyManager struct {
 		// Transitions to true when SetActiveStoreKeyInfo() is called for the
 		// first time.
 		rotationEnabled bool
+		// Initialized in Load()
+		registryMetadata enginepbccl.RegistryMetadata
 	}
 }
 
@@ -174,8 +176,19 @@ func makeRegistryProto() *enginepbccl.DataKeysRegistry {
 
 // Load must be called before calling other methods.
 func (m *DataKeyManager) Load(ctx context.Context) error {
-	m.registryFilename = m.fs.PathJoin(m.dbDir, keyRegistryFilename)
-	_, err := m.fs.Stat(m.registryFilename)
+	m.mu.registryMetadata = enginepbccl.RegistryMetadata{
+		DataKeysFilename: keyRegistryFilenameBase,
+		DataKeysFilenum:  0,
+		DataKeysEncoding: enginepbccl.DataKeysRegistryEncoding_Monolith,
+	}
+	if settings := m.fileRegistry.GlobalSettings(); settings != nil {
+		if err := types.UnmarshalAny(settings, &m.mu.registryMetadata); err != nil {
+			return err
+		}
+	}
+
+	registryFilename := m.fs.PathJoin(m.dbDir, m.mu.registryMetadata.DataKeysFilename)
+	_, err := m.fs.Stat(registryFilename)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if oserror.IsNotExist(err) {
@@ -187,7 +200,7 @@ func (m *DataKeyManager) Load(ctx context.Context) error {
 		return err
 	}
 
-	f, err := m.fs.Open(m.registryFilename)
+	f, err := m.fs.Open(registryFilename)
 	if err != nil {
 		return err
 	}
@@ -391,8 +404,60 @@ func (m *DataKeyManager) rotateDataKeyAndWrite(
 	if err != nil {
 		return
 	}
-	if err = storage.SafeWriteToFile(m.fs, m.dbDir, m.registryFilename, bytes); err != nil {
-		return
+
+	// Write the marshaled registry to disk. Previously, we overwrote
+	// the `COCKROACHDB_DATA_KEYS` file each time. However, because the
+	// DataKeyManager reads and writes to the encryptedFS, Renames are
+	// not atomic, and `SafeWriteToFile` is not safe.
+	//
+	// To work around this, if we're using the new records-based
+	// incrementally-updated file registry, we:
+	//
+	// * Write the updated data keys registry to a new file path.
+	// * Write an updated enginepbccl.RegistryMetadata protocol buffer
+	//   to the file registry, including the new data keys registry
+	//   filename. At this point the new registry is active.
+	// * Remove the old registry file.
+	//
+	// If we're still using the old, monolithic file registry because
+	// the upgrade to 21.2 has not been finalized yet, we replace the
+	// file at `COCKROACHDB_DATA_KEYS`, hoping there's no crash in the
+	// middle of the Rename.
+
+	if m.fileRegistry.UpgradedToRecordsVersion() {
+		// TODO(jackson): The DATA_KEYS_REGISTRY could be updated to use
+		// an incremental, record writer too. The DataKeysEncoding field
+		// on RegistryMetadata provides a migration path if we change
+		// encodings in 22.1.
+
+		prevFilename := m.mu.registryMetadata.DataKeysFilename
+		nextFileNumber := m.mu.registryMetadata.DataKeysFilenum + 1
+		filename := fmt.Sprintf("%s-%010d", keyRegistryFilenameBase, nextFileNumber)
+
+		path := m.fs.PathJoin(m.dbDir, filename)
+		if err = storage.SafeWriteToFile(m.fs, m.dbDir, path, bytes); err != nil {
+			return
+		}
+		m.mu.registryMetadata = enginepbccl.RegistryMetadata{
+			DataKeysFilename: filename,
+			DataKeysFilenum:  nextFileNumber,
+			DataKeysEncoding: enginepbccl.DataKeysRegistryEncoding_Monolith,
+		}
+		var settingsAny *types.Any
+		settingsAny, err = types.MarshalAny(&m.mu.registryMetadata)
+		if err != nil {
+			return
+		}
+		if err = m.fileRegistry.SetGlobalSettings(settingsAny); err != nil {
+			return
+		}
+		_ = m.fs.Remove(prevFilename)
+	} else {
+		// TODO(jackson): Remove this case post-21.2.
+		path := m.fs.PathJoin(m.dbDir, keyRegistryFilenameBase)
+		if err = storage.SafeWriteToFile(m.fs, m.dbDir, path, bytes); err != nil {
+			return
+		}
 	}
 	m.mu.keyRegistry = keyRegistry
 	m.mu.activeKey = newKey

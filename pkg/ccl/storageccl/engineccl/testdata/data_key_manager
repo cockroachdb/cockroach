@@ -8,6 +8,21 @@ dir1
 load
 ----
 
+registry-metadata
+----
+{
+  "data_keys_filename": "COCKROACHDB_DATA_KEYS"
+}
+
+upgrade-to-records
+----
+
+registry-metadata
+----
+{
+  "data_keys_filename": "COCKROACHDB_DATA_KEYS"
+}
+
 get-active-data-key
 ----
 none
@@ -46,11 +61,33 @@ get-active-data-key
 ----
 encryption_type:AES128_CTR creation_time:6 source:"data key manager" parent_key_id:"foo"
 
+registry-metadata
+----
+{
+  "data_keys_filename": "COCKROACHDB_DATA_KEYS-0000000002",
+  "data_keys_filenum": 2
+}
+
 record-active-data-key
 ----
 
 check-all-recorded-data-keys
 ----
+
+init
+dir1
+5
+----
+
+load
+----
+
+registry-metadata
+----
+{
+  "data_keys_filename": "COCKROACHDB_DATA_KEYS-0000000002",
+  "data_keys_filenum": 2
+}
 
 # Test that starts with one active data and store key. Checks that data key is not rotated
 # until SetActiveStoreKeyInfo is called. Also tests key rotation and holding multiple store
@@ -75,6 +112,12 @@ foo
 
 record-active-data-key
 ----
+
+registry-metadata
+----
+{
+  "data_keys_filename": "COCKROACHDB_DATA_KEYS"
+}
 
 wait
 10
@@ -132,6 +175,16 @@ compare-active-data-key
 ----
 same
 
+upgrade-to-records
+----
+
+registry-metadata
+----
+{
+  "data_keys_filename": "COCKROACHDB_DATA_KEYS"
+}
+
+
 set-active-store-key id=baz
 ----
 
@@ -142,6 +195,13 @@ baz
 compare-active-data-key
 ----
 different
+
+registry-metadata
+----
+{
+  "data_keys_filename": "COCKROACHDB_DATA_KEYS-0000000001",
+  "data_keys_filenum": 1
+}
 
 get-active-data-key
 ----

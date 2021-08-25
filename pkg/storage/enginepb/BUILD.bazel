@@ -16,6 +16,7 @@ proto_library(
     deps = [
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:any_proto",
     ],
 )
 
