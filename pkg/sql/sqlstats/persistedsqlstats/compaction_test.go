@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
@@ -38,6 +39,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSQLStatsCompactorNilTestingKnobCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer server.Stopper().Stop(ctx)
+
+	statsCompactor := persistedsqlstats.NewStatsCompactor(
+		server.ClusterSettings(),
+		server.InternalExecutor().(sqlutil.InternalExecutor),
+		server.DB(),
+		metric.NewCounter(metric.Metadata{}),
+		nil, /* knobs */
+	)
+
+	// We run the compactor without disabling the follower read. This can possibly
+	// fail due to descriptor not found.
+	err := statsCompactor.DeleteOldestEntries(ctx)
+	if err != nil {
+		require.ErrorIs(t, err, catalog.ErrDescriptorNotFound)
+	}
+}
 
 func TestSQLStatsCompactor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
