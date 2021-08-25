@@ -1477,7 +1477,9 @@ func (ex *connExecutor) Ctx() context.Context {
 	return ctx
 }
 
-// sessionData returns the top SessionData on the executor.
+// sessionData returns the top SessionData in the executor's sessionDataStack.
+// This should be how callers should reference SessionData objects, as it
+// will always contain the "latest" SessionData object in the transaction.
 func (ex *connExecutor) sessionData() *sessiondata.SessionData {
 	if ex.sessionDataStack == nil {
 		return nil
