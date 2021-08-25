@@ -160,6 +160,9 @@ func (m *MockTransactionalSender) ReleaseSavepoint(context.Context, SavepointTok
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
 
+// IsLocking is part of the TxnSender interface.
+func (m *MockTransactionalSender) IsLocking() bool { return false }
+
 // TestingCloneTxn is part of the TxnSender interface.
 func (m *MockTransactionalSender) TestingCloneTxn() *roachpb.Transaction {
 	return m.txn.Clone()
