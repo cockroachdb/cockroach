@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,6 +33,11 @@ func (s *instance) TokenBucketRequest(
 	if instanceID < 1 {
 		return &roachpb.TokenBucketResponse{
 			Error: errors.EncodeError(ctx, errors.Errorf("invalid instance ID %d", instanceID)),
+		}
+	}
+	if in.RequestedRU < 0 {
+		return &roachpb.TokenBucketResponse{
+			Error: errors.EncodeError(ctx, errors.Errorf("negative requested RUs")),
 		}
 	}
 
@@ -56,10 +60,8 @@ func (s *instance) TokenBucketRequest(
 			return err
 		}
 
-		if !tenant.Present {
-			// TODO(radu): initialize tenant state.
-			tenant.FirstInstance = 0
-		}
+		now := s.timeSource.Now()
+		tenant.update(now)
 
 		if !instance.Present {
 			if err := h.accomodateNewInstance(&tenant, &instance); err != nil {
@@ -70,8 +72,9 @@ func (s *instance) TokenBucketRequest(
 		tenant.Consumption.Add(&in.ConsumptionSinceLastRequest)
 
 		// TODO(radu): update shares.
-		*result = tenant.Bucket.Request(in, timeutil.Now())
+		*result = tenant.Bucket.Request(in)
 
+		instance.LastUpdate.Time = now
 		if err := h.updateTenantAndInstanceState(tenant, instance); err != nil {
 			return err
 		}
