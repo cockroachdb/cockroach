@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
 )
@@ -1370,24 +1371,29 @@ func (r *Registry) RetryMaxDelay() float64 {
 
 // maybeRecordRetriableExeuctionFailure will record a
 // RetriableExecutionFailureError into the job payload.
-//
-// TODO(ajwerner): Truncate errors and the slice of existing errors.
 func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j *Job) {
 	var efe *RetriableExecutionError
 	if !errors.As(err, &efe) {
 		return
 	}
+	truncate := func(errs *[]*errorspb.EncodedError) {
+		maxEntries := int(executionErrorsMaxEntriesSetting.Get(&r.settings.SV))
+		if len(*errs) > maxEntries {
+			*errs = (*errs)[len(*errs)-maxEntries:]
+		}
+	}
 	updateErr := j.Update(ctx, nil, func(
 		txn *kv.Txn, md JobMetadata, ju *JobUpdater,
 	) error {
-		// TODO(ajwerner): Truncate this list
 		pl := md.Payload
-		ee := errors.EncodeError(ctx, efe)
-		if md.Status == StatusRunning {
+		ee := efe.encodeMaybeTruncate(ctx, int(executionErrorsMaxEntrySize.Get(&r.settings.SV)))
+		if efe.status() == StatusRunning {
 			pl.ResumeErrors = append(pl.ResumeErrors, &ee)
 		} else {
 			pl.CleanupErrors = append(pl.CleanupErrors, &ee)
 		}
+		truncate(&pl.ResumeErrors)
+		truncate(&pl.CleanupErrors)
 		ju.UpdatePayload(pl)
 		return nil
 	})

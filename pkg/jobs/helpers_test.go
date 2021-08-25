@@ -90,17 +90,20 @@ func (j *Job) Succeeded(ctx context.Context) error {
 }
 
 const (
-	AdoptQuery               = claimQuery
-	CancelQuery              = pauseAndCancelUpdate
-	GcQuery                  = expiredJobsQuery
-	RemoveClaimsQuery        = removeClaimsQuery
-	ProcessJobsQuery         = processQueryWithBackoff
-	IntervalBaseSettingKey   = intervalBaseSettingKey
-	AdoptIntervalSettingKey  = adoptIntervalSettingKey
-	CancelIntervalSettingKey = cancelIntervalSettingKey
-	GcIntervalSettingKey     = gcIntervalSettingKey
-	RetentionTimeSettingKey  = retentionTimeSettingKey
-	DefaultAdoptInterval     = defaultAdoptInterval
+	AdoptQuery                         = claimQuery
+	CancelQuery                        = pauseAndCancelUpdate
+	GcQuery                            = expiredJobsQuery
+	RemoveClaimsQuery                  = removeClaimsQuery
+	ProcessJobsQuery                   = processQueryWithBackoff
+	IntervalBaseSettingKey             = intervalBaseSettingKey
+	AdoptIntervalSettingKey            = adoptIntervalSettingKey
+	CancelIntervalSettingKey           = cancelIntervalSettingKey
+	GcIntervalSettingKey               = gcIntervalSettingKey
+	RetentionTimeSettingKey            = retentionTimeSettingKey
+	DefaultAdoptInterval               = defaultAdoptInterval
+	ExecutionErrorsMaxEntriesKey       = executionErrorsMaxEntriesKey
+	ExecutionErrorsMaxEntrySizeKey     = executionErrorsMaxEntrySizeKey
+	ExecutionErrorCauseTruncatedPrefix = executionErrorCauseTruncatedPrefix
 )
 
 var (

@@ -13,6 +13,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -137,6 +138,34 @@ func (w *RetriableExecutionError) SafeFormatError(p errbase.Printer) error {
 		p.Printf("assertion failure")
 	}
 	return w.cause
+}
+
+// executionErrorCauseTruncatePrefix is the string prefix appended to execution
+// errors when they are truncated.
+const executionErrorCauseTruncatedPrefix = "(truncated) "
+
+func (e *RetriableExecutionError) encodeMaybeTruncate(
+	ctx context.Context, maxErrorSize int,
+) errors.EncodedError {
+	// If the cause is too large, we format it, losing all structure, and retain
+	// a prefix.
+	if encodedCause := errors.EncodeError(ctx, e.cause); encodedCause.Size() > maxErrorSize {
+		size := encodedCause.Size()
+		log.Infof(ctx, "%v", size)
+		if maxErrorSize < len(executionErrorCauseTruncatedPrefix) {
+			maxErrorSize = len(executionErrorCauseTruncatedPrefix)
+		}
+		formatted := executionErrorCauseTruncatedPrefix + e.cause.Error()
+		if len(formatted) > maxErrorSize {
+			formatted = formatted[:maxErrorSize]
+		}
+		e.cause = errors.New(formatted)
+	}
+	return errors.EncodeError(ctx, e)
+}
+
+func (e *RetriableExecutionError) status() Status {
+	return Status(e.md.Status)
 }
 
 func init() {
