@@ -466,6 +466,7 @@ func (p *planner) setRole(ctx context.Context, s security.SQLUsername) error {
 	}
 
 	p.forEachMutator(func(m *sessionDataMutator) {
+		m.data.IsSuperuser = willBecomeAdmin
 		m.bufferParamStatusUpdate("is_superuser", updateStr)
 
 		// The "none" user does resets the SessionUserProto in a SET ROLE.
