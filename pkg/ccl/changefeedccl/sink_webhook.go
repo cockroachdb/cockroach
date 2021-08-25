@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -138,10 +139,37 @@ type batchConfig struct {
 	Frequency       jsonDuration `json:",omitempty"`
 }
 
+type jsonMaxRetries int
+
+func (j *jsonMaxRetries) UnmarshalJSON(b []byte) error {
+	var i int
+	// try to parse as int
+	if err := json.Unmarshal(b, &i); err != nil {
+		var s string
+		// if that fails, try to parse as string (only accept 'inf')
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		if strings.ToLower(s) == "inf" {
+			*j = 0
+		} else if n, err := strconv.Atoi(s); err == nil { // also accept ints as strings
+			*j = jsonMaxRetries(n)
+		} else {
+			return errors.Errorf("max retries must be either a positive int or 'inf' for infinite retries.")
+		}
+	} else {
+		if i <= 0 {
+			return errors.Errorf("max retry count must be a positive integer. use 'inf' for infinite retries.")
+		}
+		*j = jsonMaxRetries(i)
+	}
+	return nil
+}
+
 // wrapper structs to unmarshal json, retry.Options will be the actual config
 type retryConfig struct {
-	Max     int          `json:",omitempty"`
-	Backoff jsonDuration `json:",omitempty"`
+	Max     jsonMaxRetries `json:",omitempty"`
+	Backoff jsonDuration   `json:",omitempty"`
 }
 
 // proper JSON schema for webhook sink config:
@@ -167,10 +195,10 @@ func (s *webhookSink) getWebhookSinkConfig(
 	retryCfg = defaultRetryConfig()
 
 	var cfg webhookSinkConfig
+	cfg.Retry.Max = jsonMaxRetries(retryCfg.MaxRetries)
+	cfg.Retry.Backoff = jsonDuration(retryCfg.InitialBackoff)
 	if configStr, ok := opts[changefeedbase.OptWebhookSinkConfig]; ok {
 		// set retry defaults to be overridden if included in JSON
-		cfg.Retry.Max = retryCfg.MaxRetries
-		cfg.Retry.Backoff = jsonDuration(retryCfg.InitialBackoff)
 		if err = json.Unmarshal([]byte(configStr), &cfg); err != nil {
 			return batchCfg, retryCfg, errors.Wrapf(err, "error unmarshalling json")
 		}
@@ -187,7 +215,7 @@ func (s *webhookSink) getWebhookSinkConfig(
 		return batchCfg, retryCfg, errors.Errorf("invalid option value %s, flush frequency is not set, messages may never be sent", changefeedbase.OptWebhookSinkConfig)
 	}
 
-	retryCfg.MaxRetries = cfg.Retry.Max
+	retryCfg.MaxRetries = int(cfg.Retry.Max)
 	retryCfg.InitialBackoff = time.Duration(cfg.Retry.Backoff)
 	return cfg.Flush, retryCfg, nil
 }
@@ -506,11 +534,6 @@ func (s *webhookSink) workerLoop(workerIndex int) {
 				return
 			}
 			alloc.Release(s.workerCtx)
-			// shut down all other workers immediately if error encountered
-			if err != nil {
-				s.exitWorkers()
-				return
-			}
 		}
 	}
 }
@@ -586,7 +609,9 @@ func (s *webhookSink) EmitRow(
 	select {
 	// check the webhook sink context in case workers have been terminated
 	case <-s.workerCtx.Done():
-		return s.workerCtx.Err()
+		// check again for error in case it triggered since last check
+		// will return more verbose error instead of "context canceled"
+		return errors.CombineErrors(s.workerCtx.Err(), s.sinkError())
 	case <-ctx.Done():
 		return ctx.Err()
 	case err := <-s.errChan:
