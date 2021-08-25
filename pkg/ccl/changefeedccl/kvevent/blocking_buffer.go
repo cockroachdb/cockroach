@@ -116,26 +116,33 @@ func (b *blockingBuffer) ensureOpenedLocked(ctx context.Context) error {
 
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
-	if e.alloc.ap != nil {
-		return errors.AssertionFailedf("event unexpectedly has a alloc associated with it")
-	}
-
 	if err := b.ensureOpened(ctx); err != nil {
 		return err
 	}
 
-	// Acquire the quota first.
-	alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.approxSize))
-	if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); alloc > l {
-		return errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
-	}
+	var be *bufferEntry
+	if e.alloc.ap == nil {
+		// Acquire the quota first.
+		alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.approxSize))
+		if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); alloc > l {
+			return errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
+		}
+		e.alloc = Alloc{
+			bytes:   alloc,
+			entries: 1,
+			ap:      &b.qp,
+		}
+		be = newBufferEntry(e)
 
-	be := newBufferEntry(e, &b.qp, alloc)
-	if err := b.qp.Acquire(ctx, be); err != nil {
-		bufferEntryPool.Put(be)
-		return err
+		if err := b.qp.Acquire(ctx, be); err != nil {
+			bufferEntryPool.Put(be)
+			return err
+		}
+		b.metrics.BufferEntriesMemAcquired.Inc(alloc)
+	} else {
+		// Use allocation associated with the event itself.
+		be = newBufferEntry(e)
 	}
-	b.metrics.BufferEntriesMemAcquired.Inc(alloc)
 
 	// Enqueue message, and signal if anybody is waiting.
 	b.mu.Lock()
@@ -236,13 +243,8 @@ var bufferEntryPool = sync.Pool{
 	},
 }
 
-func newBufferEntry(e Event, ap *allocPool, alloc int64) *bufferEntry {
+func newBufferEntry(e Event) *bufferEntry {
 	be := bufferEntryPool.Get().(*bufferEntry)
-	e.alloc = Alloc{
-		bytes:   alloc,
-		entries: 1,
-		ap:      ap,
-	}
 	be.e = e
 	be.next = nil
 	return be

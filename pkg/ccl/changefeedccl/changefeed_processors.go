@@ -259,7 +259,8 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	cfg := ca.flowCtx.Cfg
 	buf := kvevent.NewThrottlingBuffer(
-		kvevent.MakeChanBuffer(), cdcutils.NodeLevelThrottler(&cfg.Settings.SV))
+		kvevent.NewMemBuffer(ca.kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
+		cdcutils.NodeLevelThrottler(&cfg.Settings.SV))
 	kvfeedCfg := makeKVFeedCfg(ctx, ca.flowCtx.Cfg, ca.kvFeedMemMon,
 		ca.spec, spans, buf, ca.metrics, ca.knobs.FeedKnobs)
 
