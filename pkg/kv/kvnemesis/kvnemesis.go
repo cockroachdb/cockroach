@@ -60,8 +60,11 @@ func RunNemesis(
 
 			recCtx, collect, cancel := tracing.ContextWithRecordingSpan(
 				ctx, tracing.NewTracer(), "txn step")
+			buf.Reset()
+			fmt.Fprintf(&buf, "step:")
+			step.format(&buf, formatCtx{indent: `  ` + workerName + ` PRE  `})
+			log.VEventf(recCtx, 2, "%v", buf.String())
 			err := a.Apply(recCtx, &step)
-			log.VEventf(recCtx, 2, "step: %v", step)
 			step.Trace = collect().String()
 			cancel()
 			if err != nil {
