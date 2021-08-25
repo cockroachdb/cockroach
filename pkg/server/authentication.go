@@ -254,7 +254,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
 
-	exists, canLogin, _, _, _, err := sql.GetUserSessionInitInfo(
+	exists, canLogin, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
 		s.server.sqlServer.execCfg.InternalExecutor,
@@ -417,7 +417,7 @@ WHERE id = $1`
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
-	exists, canLogin, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+	exists, canLogin, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
 		s.server.sqlServer.execCfg.InternalExecutor,

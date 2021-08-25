@@ -59,6 +59,8 @@ type Cache struct {
 type AuthInfo struct {
 	// UserExists is set to true if the user has a row in system.users.
 	UserExists bool
+	// IsSuperuser is set to true for any admin users.
+	IsSuperuser bool
 	// CanLogin is set to false if the user has the NOLOGIN role option.
 	CanLogin bool
 	// HashedPassword is the hashed password and can be nil.

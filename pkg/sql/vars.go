@@ -894,6 +894,13 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	`is_superuser`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.IsSuperuser)
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("is_superuser"),
+	},
+
 	// CockroachDB extension.
 	`locality`: {
 		Get: func(evalCtx *extendedEvalContext) string {
