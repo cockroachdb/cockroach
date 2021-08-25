@@ -129,7 +129,7 @@ func (i *CatchUpIterator) CatchUpScan(
 	for {
 		if ok, err := i.Valid(); err != nil {
 			return err
-		} else if !ok || !i.UnsafeKey().Less(endKey) {
+		} else if !ok {
 			break
 		}
 
