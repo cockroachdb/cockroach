@@ -318,6 +318,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			ColumnDef: regionalByRowDefaultColDef(
 				enumOID,
 				regionalByRowRegionDefaultExpr(enumOID, tree.Name(primaryRegion)),
+				maybeRegionalByRowOnUpdateExpr(params.EvalContext(), enumOID),
 			),
 		}
 		tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
