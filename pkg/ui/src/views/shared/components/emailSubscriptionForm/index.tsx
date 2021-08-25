@@ -9,7 +9,8 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { TextInput, Button } from "src/components";
+import { Button } from "src/components";
+import { EmailInput } from "src/components/input/form/EmailPasswordInput";
 import { isValidEmail } from "src/util/validation/isValidEmail";
 
 import "./emailSubscriptionForm.styl";
@@ -45,10 +46,10 @@ export class EmailSubscriptionForm extends React.Component<
     }
   };
 
-  handleChange = (value: string) => {
-    this.handleEmailValidation(value);
+  handleChange = (event: React.FormEvent<{ value: string }>) => {
+    this.handleEmailValidation(event.currentTarget.value);
     this.setState({
-      emailAddress: value,
+      emailAddress: event.currentTarget.value,
     });
   };
 
@@ -70,7 +71,7 @@ export class EmailSubscriptionForm extends React.Component<
     const { canSubmit, emailAddress } = this.state;
     return (
       <div className="email-subscription-form">
-        <TextInput
+        <EmailInput
           name="email"
           className="email-subscription-form__input"
           placeholder="Enter your email"
