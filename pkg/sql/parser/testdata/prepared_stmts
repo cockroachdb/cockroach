@@ -323,7 +323,7 @@ DEALLOCATE a
 ----
 DEALLOCATE a
 DEALLOCATE a -- fully parenthesized
-DEALLOCATE a -- literals removed
+DEALLOCATE _ -- literals removed
 DEALLOCATE _ -- identifiers removed
 
 parse
@@ -339,7 +339,7 @@ DEALLOCATE PREPARE a
 ----
 DEALLOCATE a -- normalized!
 DEALLOCATE a -- fully parenthesized
-DEALLOCATE a -- literals removed
+DEALLOCATE _ -- literals removed
 DEALLOCATE _ -- identifiers removed
 
 parse
