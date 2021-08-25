@@ -2147,9 +2147,11 @@ CREATE TABLE t.test (
 func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	waitUntilRevert := make(chan struct{})
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	attempts := 0
+	//syncChan := make(chan struct{})
 	// DROP UNIQUE COLUMN is executed in two steps: drop index and drop column.
 	// Dropping the index happens in a separate mutation job from the drop column
 	// which does not perform backfilling (like adding indexes and add/drop
@@ -2168,6 +2170,11 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 			// Aggressively checkpoint, so that a schema change
 			// failure happens after a checkpoint has been written.
 			WriteCheckpointInterval: time.Nanosecond,
+			RunBeforeOnFailOrCancel: func(jobID jobspb.JobID) error {
+				waitUntilRevert <- struct{}{}
+				<-waitUntilRevert
+				return nil
+			},
 		},
 		// Disable GC job.
 		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { select {} }},
@@ -2187,6 +2194,7 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
@@ -2208,9 +2216,16 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	}
 
 	// A schema change that fails.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP column v`); !testutils.IsError(err, `permanent failure`) {
-		t.Fatalf("err = %s", err)
-	}
+	go func() {
+		// This call is block until the test ends and connection is broken. Therefore, we test
+		// for "connection refused" error. This is not the best way to end a test.
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP column v`); !testutils.IsError(err, `connect: connection refused`) {
+			t.Fatalf("err = %s", err)
+		}
+	}()
+
+	// Wait until the job is reverted.
+	<-waitUntilRevert
 
 	// The index is not regenerated.
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
@@ -2230,6 +2245,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	} else if len(tableDesc.AllMutations()) != 2 {
 		t.Fatalf("mutations %+v", tableDesc.AllMutations())
 	}
+
+	close(waitUntilRevert)
 }
 
 // TestVisibilityDuringPrimaryKeyChange tests visibility of different indexes
@@ -6366,7 +6383,7 @@ SELECT status, error FROM crdb_internal.jobs WHERE description LIKE '%CREATE UNI
 }
 
 // TestPermanentErrorDuringRollback tests that a permanent error while rolling
-// back a schema change causes the job to fail, and that the appropriate error
+// back a schema change causes the job to revert, and that the appropriate error
 // is displayed in the jobs table.
 func TestPermanentErrorDuringRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -6394,7 +6411,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 		var jobErr string
 		row := sqlDB.QueryRow("SELECT job_id, error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
 		require.NoError(t, row.Scan(&jobID, &jobErr))
-		require.Regexp(t, "cannot be reverted, manual cleanup may be required: permanent error", jobErr)
+		require.Regexp(t, `violates unique constraint "i"`, jobErr)
 
 		if gcJobRecord {
 			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id = $1`, jobID)
@@ -6916,6 +6933,8 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("failed due to injected error", func(t *testing.T) {
+		var injectedError bool
+		var syncBeforeOnFailOrCancel chan struct{}
 		var s serverutils.TestServerInterface
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
@@ -6932,35 +6951,63 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 					}
 					for _, s := range []string{"DROP", "RENAME", "updating privileges"} {
 						if strings.Contains(pl.Description, s) {
-							return errors.New("injected permanent error")
+							if !injectedError {
+								injectedError = true
+								// Return a non-permanent error. The job will be retried in
+								// running state as the job is non-cancelable.
+								return errors.New("injected error")
+							} else {
+								// Return a permanent error to transition to reverting.
+								return jobs.MarkAsPermanentJobError(errors.New("injected permanent error"))
+							}
 						}
 					}
 					return nil
 				},
+				RunBeforeOnFailOrCancel: func(jobID jobspb.JobID) error {
+					// Jobs are always retried in reverting state.
+					syncBeforeOnFailOrCancel <- struct{}{}
+					<-syncBeforeOnFailOrCancel
+					return nil
+				},
 			},
-			// Decrease the adopt loop interval so that retries happen quickly.
+			// Decrease the adopt-loop interval so that retries happen quickly.
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		}
+
 		var db *gosql.DB
 		s, db, _ = serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
+		syncChans := make([]chan struct{}, 0, len(testCases))
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
+				syncBeforeOnFailOrCancel = make(chan struct{})
+				injectedError = false
 				sqlDB.Exec(t, tc.setupStmts)
-				sqlDB.ExpectErr(t, "injected permanent error", tc.scStmt)
-				result := sqlDB.QueryStr(t,
-					`SELECT status, error FROM crdb_internal.jobs WHERE description ~ $1`,
-					tc.jobRegex)
+
+				go func() {
+					db.Exec(tc.scStmt)
+				}()
+
+				// First retry.
+				<-syncBeforeOnFailOrCancel
+				// Continue to revert.
+				syncBeforeOnFailOrCancel <- struct{}{}
+
+				// Second retry.
+				<-syncBeforeOnFailOrCancel
+
+				result := sqlDB.QueryStr(t, `SELECT status FROM crdb_internal.jobs WHERE description ~ $1`, tc.jobRegex)
 				require.Len(t, result, 1)
-				status, jobError := result[0][0], result[0][1]
-				require.Equal(t, string(jobs.StatusRevertFailed), status)
-				require.Regexp(t,
-					"cannot be reverted, manual cleanup may be required: "+
-						"schema change jobs on databases and schemas cannot be reverted",
-					jobError)
+				status := result[0][0]
+				require.Equal(t, string(jobs.StatusReverting), status)
+				syncChans = append(syncChans, syncBeforeOnFailOrCancel)
 			})
+		}
+		for _, ch := range syncChans {
+			close(ch)
 		}
 	})
 
@@ -7015,7 +7062,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 					return nil
 				},
 			},
-			// Decrease the adopt loop interval so that retries happen quickly.
+			// Decrease the adopt-loop interval so that retries happen quickly.
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		}
 		var db *gosql.DB
@@ -7045,7 +7092,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 	})
 }
 
-// TestDropColumnAfterMutations tests the imapct of a drop column
+// TestDropColumnAfterMutations tests the impact of a drop column
 // after an existing a mutation on the column
 func TestDropColumnAfterMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -7228,7 +7275,10 @@ COMMIT;
 		delayJobChannels[1] <- struct{}{}
 		// Second job will also do backfill next
 		proceedBeforeBackfill <- errors.Newf("Bogus error for drop column transaction")
-		// Rollback attempt after failure
+
+		// TODO(sajjad): [WIP]
+		// At this point, job-0 is now waiting for job-1 to complete. However, job-1
+		// is in an infinite-loop due to retries while reverting.
 		proceedBeforeBackfill <- nil
 
 		schemaChangeWaitGroup.Wait()

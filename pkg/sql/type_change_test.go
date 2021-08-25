@@ -41,7 +41,20 @@ func TestDrainingNamesAreCleanedOnTypeChangeFailure(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 		RunBeforeExec: func() error {
-			return errors.New("boom")
+			// As the job is non-cancelable, return a permanent-marked error so that
+			// the job can revert.
+			// TODO(sajjad): To discuss: This test completes OnFailOrCancel. For the
+			// cases where revert fails forever, how do we plan to kill the job?
+			// My understanding is that we will have to manually fix the problem and
+			// pause the running job. The paused job can be deleted from the jobs table,
+			// in that case, do we maintain any internal state on a node that need to
+			// be cleaned-up?
+			//
+			// Another question is about the queries that wait for a never-ending reverting
+			// job to complete. Is it that our intention is to block such queries?
+			//
+			// I am leaning towards keeping the revert revert-failed state and
+			return jobs.MarkAsPermanentJobError(errors.New("boom"))
 		},
 	}
 	// Decrease the adopt loop interval so that retries happen quickly.
