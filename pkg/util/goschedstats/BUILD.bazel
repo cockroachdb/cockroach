@@ -19,5 +19,9 @@ go_test(
     name = "goschedstats_test",
     srcs = ["runnable_test.go"],
     embed = [":goschedstats"],
-    deps = ["//pkg/testutils"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
 )
