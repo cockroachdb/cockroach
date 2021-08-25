@@ -33,13 +33,6 @@ type planObserver struct {
 
 	// leaveNode is invoked upon leaving a tree node.
 	leaveNode func(nodeName string, plan planNode) error
-
-	// followRowSourceToPlanNode controls whether the tree walker continues
-	// walking when it encounters a rowSourceToPlanNode, which indicates that the
-	// logical plan has been mutated for distribution. This should normally be
-	// set to false, as normally the planNodeToRowSource on the other end will
-	// take care of propagating signals via its own walker.
-	followRowSourceToPlanNode bool
 }
 
 // walkPlan performs a depth-first traversal of the plan given as
@@ -275,9 +268,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.source = v.visit(n.source)
 
 	case *rowSourceToPlanNode:
-		if v.observer.followRowSourceToPlanNode && n.originalPlanNode != nil {
-			v.visit(n.originalPlanNode)
-		}
+		// No need to recurse into the original planNode since
+		// planNodeToRowSource on the other end of the adapter will take care of
+		// propagating signals via its own walker.
 
 	case *errorIfRowsNode:
 		n.plan = v.visit(n.plan)

@@ -260,6 +260,9 @@ type TxnSender interface {
 	// Epoch returns the txn's epoch.
 	Epoch() enginepb.TxnEpoch
 
+	// IsLocking returns whether the transaction has begun acquiring locks.
+	IsLocking() bool
+
 	// PrepareRetryableError generates a
 	// TransactionRetryWithProtoRefreshError with a payload initialized
 	// from this txn.

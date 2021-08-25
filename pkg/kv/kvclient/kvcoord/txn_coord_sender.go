@@ -1082,6 +1082,13 @@ func (tc *TxnCoordSender) Epoch() enginepb.TxnEpoch {
 	return tc.mu.txn.Epoch
 }
 
+// IsLocking is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) IsLocking() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.IsLocking()
+}
+
 // IsTracking returns true if the heartbeat loop is running.
 func (tc *TxnCoordSender) IsTracking() bool {
 	tc.mu.Lock()
