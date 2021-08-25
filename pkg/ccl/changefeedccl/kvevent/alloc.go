@@ -8,7 +8,10 @@
 
 package kvevent
 
-import "context"
+import (
+	"context"
+	"unsafe"
+)
 
 // Alloc describes the resources allocated on behalf of an event.
 // Allocations should eventually be released.
@@ -18,12 +21,18 @@ type Alloc struct {
 	bytes   int64 // memory allocated for this request.
 	entries int64 // number of entries using those bytes, usually 1.
 	ap      pool  // pool where those resources ought to be released.
+
+	// Merged allocations that belong to a different pool.  Normally nil.
+	otherPoolAllocs map[int64]*Alloc
 }
 
 // Release releases resources associated with this allocation.
 func (a Alloc) Release(ctx context.Context) {
 	if a.ap != nil {
 		a.ap.Release(ctx, a.bytes, a.entries)
+	}
+	for _, m := range a.otherPoolAllocs {
+		m.ap.Release(ctx, m.bytes, m.entries)
 	}
 }
 
@@ -36,12 +45,28 @@ func (a *Alloc) Merge(other *Alloc) {
 	}
 
 	if a.ap != other.ap {
-		panic("cannot merge allocations from two different pools")
+		// Slow case: this doesn't happen frequently (only right after backfill completes).
+		a.mergeSlow(other)
+		return
 	}
+
 	a.bytes += other.bytes
 	a.entries += other.entries
 	other.bytes = 0
 	other.entries = 0
+}
+
+// mergeSlow merges allocation that belongs to another alloc pool.
+func (a *Alloc) mergeSlow(other *Alloc) {
+	if a.otherPoolAllocs == nil {
+		a.otherPoolAllocs = make(map[int64]*Alloc, 1)
+	}
+	id := *(*int64)(unsafe.Pointer(&a.ap))
+	if opa, ok := a.otherPoolAllocs[id]; ok {
+		opa.Merge(other)
+	} else {
+		a.otherPoolAllocs[id] = other
+	}
 }
 
 // pool is an allocation pool responsible for freeing up previously acquired resources.
