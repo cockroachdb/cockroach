@@ -25,16 +25,18 @@ import (
 )
 
 // Step is a decision on what range to probe next, including info needed by
-// kvprober to execute on the plan, such as the range's start key.
+// kvprober to execute on the plan, such as the key to probe.
 //
 // Public to test from kvprober_test.go.
 type Step struct {
-	RangeID  roachpb.RangeID
-	StartKey roachpb.RKey
+	RangeID roachpb.RangeID
+	Key     roachpb.Key
 }
 
 // planner abstracts deciding on ranges to probe. It is public to integration
 // test from kvprober_test.
+//
+// planner is NOT thread-safe.
 type planner interface {
 	// Next returns a Step for the prober to execute on. A Step is a decision on
 	// on what range to probe next. Executing on a series of Steps returned by
@@ -48,6 +50,8 @@ type planner interface {
 
 // meta2Planner is a planner that scans meta2 to make plans. A plan is a slice
 // of steps. A Step is a decision on what range to probe next.
+//
+// meta2Planner is NOT thread-safe.
 type meta2Planner struct {
 	db       *kv.DB
 	settings *cluster.Settings
@@ -62,10 +66,12 @@ type meta2Planner struct {
 	// Note that crashes clear this field, so the rate limit is not enforced in
 	// case of a crash loop.
 	lastPlanTime time.Time
+	// See newMeta2Planner for details.
+	happyInterval func() time.Duration
 
 	// Swappable for testing.
 	now          func() time.Time
-	getRateLimit func(settings *cluster.Settings) time.Duration
+	getRateLimit func(interval time.Duration, settings *cluster.Settings) time.Duration
 	getNMeta2KVs func(
 		ctx context.Context,
 		db dbScan,
@@ -75,7 +81,13 @@ type meta2Planner struct {
 	meta2KVsToPlan func(kvs []kv.KeyValue) ([]Step, error)
 }
 
-func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
+// happyInterval returns how often next will be called in the happy path. This is
+// used to implement a rate limit. See getRateLimitImpl for more. A callback is
+// passed as the the rate at which next is called may change over the lifetime
+// of the meta2Planner.
+func newMeta2Planner(
+	db *kv.DB, settings *cluster.Settings, happyInterval func() time.Duration,
+) *meta2Planner {
 	return &meta2Planner{
 		db:       db,
 		settings: settings,
@@ -84,6 +96,7 @@ func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
 		// that planning will be allowed on the first call to next no matter what.
 		// After that, the field will be set correctly.
 		lastPlanTime:   timeutil.Unix(0, 0),
+		happyInterval:  happyInterval,
 		now:            timeutil.Now,
 		getRateLimit:   getRateLimitImpl,
 		getNMeta2KVs:   getNMeta2KVsImpl,
@@ -112,8 +125,8 @@ func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
 //
 // Note that though we scan meta2 here, we also randomize the order of
 // ranges in the plan. This is avoid all nodes probing the same ranges at
-// the same time. Jitter is also added to the sleep between probe time
-// to de-synchronize different nodes' .probe loops.
+// the same time. Jitter is also added to the sleep between probe times
+// to de-synchronize different nodes' probe loops.
 //
 // What about resource usage?
 //
@@ -140,9 +153,10 @@ func (p *meta2Planner) next(ctx context.Context) (Step, error) {
 		// Protect CRDB from planning executing too often, due to either issues
 		// with CRDB (meta2 unavailability) or bugs in kvprober.
 		timeSinceLastPlan := p.now().Sub(p.lastPlanTime) // Since(p.lastPlanTime)
-		if limit := p.getRateLimit(p.settings); timeSinceLastPlan < limit {
+		happyInterval := p.happyInterval()
+		if limit := p.getRateLimit(happyInterval, p.settings); timeSinceLastPlan < limit {
 			return Step{}, errors.Newf("planner rate limit hit: "+
-				"timSinceLastPlan=%v, limit=%v", timeSinceLastPlan, limit)
+				"timSinceLastPlan=%v, happyInterval=%v, limit=%v", timeSinceLastPlan, happyInterval, limit)
 		}
 		p.lastPlanTime = p.now()
 
@@ -175,18 +189,18 @@ func (p *meta2Planner) next(ctx context.Context) (Step, error) {
 
 // Consider the following configuration:
 //
-// 1. Read probes are sent every 1s.
+// 1. next is called every 1s.
 // 2. Planning is done 60 steps (ranges) at a time.
 //
 // In the happy path, planning is done once a minute.
 //
 // The rate limit calculation below implies that planning can be done max once
 // evey 30 seconds (since 60s / 2 -> 30s).
-func getRateLimitImpl(settings *cluster.Settings) time.Duration {
+func getRateLimitImpl(interval time.Duration, settings *cluster.Settings) time.Duration {
 	sv := &settings.SV
 	const happyPathIntervalToRateLimitIntervalRatio = 2
 	return time.Duration(
-		readInterval.Get(sv).Nanoseconds()*
+		(interval.Nanoseconds())*
 			numStepsToPlanAtOnce.Get(sv)/happyPathIntervalToRateLimitIntervalRatio) * time.Nanosecond
 }
 
@@ -236,13 +250,16 @@ func meta2KVsToPlanImpl(kvs []kv.KeyValue) ([]Step, error) {
 			return nil, err
 		}
 		plans[i] = Step{
-			RangeID:  rangeDesc.RangeID,
-			StartKey: rangeDesc.StartKey,
+			RangeID: rangeDesc.RangeID,
 		}
-		// It appears r1's start key (/Min) can't be queried. The prober gets
-		// back this error if it's attempted: "attempted access to empty key"
+		// r1's start key (/Min) can't be queried. kvprober gets back this
+		// error if it's attempted: "attempted access to empty key". LocalMax
+		// is the first key that doesn't have special casing associated
+		// with it, and it lives in r1.
 		if rangeDesc.RangeID == 1 {
-			plans[i].StartKey = plans[i].StartKey.Next()
+			plans[i].Key = keys.RangeProbeKey(keys.MustAddr(keys.LocalMax))
+		} else {
+			plans[i].Key = keys.RangeProbeKey(rangeDesc.StartKey)
 		}
 	}
 

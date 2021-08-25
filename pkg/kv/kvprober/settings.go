@@ -50,6 +50,37 @@ var readTimeout = settings.RegisterDurationSetting(
 		return nil
 	})
 
+var writeEnabled = settings.RegisterBoolSetting(
+	"kv.prober.write.enabled",
+	"whether the KV write prober is enabled",
+	false)
+
+var writeInterval = settings.RegisterDurationSetting(
+	"kv.prober.write.interval",
+	"how often each node sends a write probe to the KV layer on average (jitter is added); "+
+		"note that a very slow read can block kvprober from sending additional probes; "+
+		"kv.prober.write.timeout controls the max time kvprober can be blocked",
+	10*time.Second, func(duration time.Duration) error {
+		if duration <= 0 {
+			return errors.New("param must be >0")
+		}
+		return nil
+	})
+
+var writeTimeout = settings.RegisterDurationSetting(
+	"kv.prober.write.timeout",
+	// Slow enough response times are not different than errors from the
+	// perspective of the user.
+	"if this much time elapses without success, a KV write probe will be treated as an error; "+
+		"note that a very slow read can block kvprober from sending additional probes"+
+		"this setting controls the max time kvprober can be blocked",
+	4*time.Second, func(duration time.Duration) error {
+		if duration <= 0 {
+			return errors.New("param must be >0")
+		}
+		return nil
+	})
+
 var scanMeta2Timeout = settings.RegisterDurationSetting(
 	"kv.prober.planner.scan_meta2.timeout",
 	"timeout on scanning meta2 via db.Scan with max rows set to "+

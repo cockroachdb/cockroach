@@ -10,9 +10,11 @@ package throttler
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,73 +39,106 @@ func newTestLocalService(opts ...LocalOption) *testLocalService {
 	s := &testLocalService{
 		localService: NewLocalService(opts...).(*localService),
 	}
+	s.clock.next = timeutil.Now()
 	s.localService.clock = s.clock.Now
 	return s
 }
 
-func (s *localService) checkInvariants() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if len(s.mu.limiters) != len(s.mu.addrs) {
-		return fmt.Errorf("len(limiters) [%d] != len(addrs) [%d]", len(s.mu.limiters), len(s.mu.addrs))
+func TestReportSuccessReturnsToken(t *testing.T) {
+	policy := BucketPolicy{
+		Capacity:   1,
+		FillPeriod: math.MaxInt64,
 	}
+	s := newTestLocalService(WithPolicy(policy))
 
-	for i, addr := range s.mu.addrs {
-		l := s.mu.limiters[addr]
-		if l.index != i {
-			return fmt.Errorf("limiters[addrs[%d]].index != %d (addr=%s index=%d)", i, i, addr, l.index)
-		}
-	}
-	return nil
+	t1 := ConnectionTags{IP: "0.0.0.0", TenantID: "1"}
+	t2 := ConnectionTags{IP: "0.0.0.0", TenantID: "2"}
+
+	require.NoError(t, s.LoginCheck(t1))
+	require.Equal(t, s.LoginCheck(t2), errRequestDenied)
+	require.Equal(t, s.LoginCheck(t1), errRequestDenied)
+
+	s.ReportSuccess(t1)
+
+	require.NoError(t, s.LoginCheck(t1))
+	require.NoError(t, s.LoginCheck(t2))
+	require.Equal(t, s.LoginCheck(t2), errRequestDenied)
+
+	s.ReportSuccess(t2)
+
+	require.NoError(t, s.LoginCheck(t1))
+	require.NoError(t, s.LoginCheck(t2))
 }
 
-var expectedBackOff = []int{2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 3600, 3600, 3600}
+func TestIPHasUniqueBucket(t *testing.T) {
+	policy := BucketPolicy{
+		Capacity:   1,
+		FillPeriod: math.MaxInt64,
+	}
+	s := newTestLocalService(WithPolicy(policy))
 
-func TestLocalService_BackOff(t *testing.T) {
-	s := newTestLocalService()
+	t1 := ConnectionTags{IP: "0.0.0.0", TenantID: "1"}
+	t2 := ConnectionTags{IP: "0.0.0.1", TenantID: "1"}
 
-	const ipAddress = "127.0.0.1"
+	require.NoError(t, s.LoginCheck(t1))
+	require.Equal(t, s.LoginCheck(t1), errRequestDenied)
 
-	verifyBackOff := func() {
-		require.NoError(t, s.LoginCheck(ipAddress, s.clock.Now()))
+	require.NoError(t, s.LoginCheck(t2))
+	require.Equal(t, s.LoginCheck(t2), errRequestDenied)
+}
 
-		for _, delay := range expectedBackOff {
-			require.EqualError(t, s.LoginCheck(ipAddress, s.clock.Now()), errRequestDenied.Error())
+func TestPoolRefills(t *testing.T) {
+	policy := BucketPolicy{
+		Capacity:   20,
+		FillPeriod: time.Second,
+	}
+	s := newTestLocalService(WithPolicy(policy))
 
-			s.clock.advance(time.Duration(delay)*time.Second - time.Nanosecond)
-			require.EqualError(t, s.LoginCheck(ipAddress, s.clock.Now()), errRequestDenied.Error())
+	tags := ConnectionTags{IP: "0.0.0.0", TenantID: "1"}
 
-			s.clock.advance(time.Nanosecond)
-			require.NoError(t, s.LoginCheck(ipAddress, s.clock.Now()))
+	countSuccess := func() int {
+		result := 0
+		for {
+			if err := s.LoginCheck(tags); err != nil {
+				return result
+			}
+			result++
 		}
 	}
 
-	verifyBackOff()
+	// The bucket is initialized to its max size.
+	require.Equal(t, int(policy.Capacity), countSuccess())
+
+	s.clock.advance(10 * time.Second)
+	require.Equal(t, 10, countSuccess())
+
+	s.clock.advance(time.Minute)
+	require.Equal(t, int(policy.Capacity), countSuccess())
 }
 
-func TestLocalService_WithBaseDelay(t *testing.T) {
-	s := newTestLocalService(WithBaseDelay(time.Second))
+func TestReportSuccessDisablesThrottle(t *testing.T) {
+	emptyBucket := BucketPolicy{Capacity: 0, FillPeriod: time.Minute}
+	s := newTestLocalService(WithPolicy(emptyBucket))
 
-	const ipAddress = "127.0.0.1"
-
-	require.NoError(t, s.LoginCheck(ipAddress, s.clock.Now()))
-
-	s.clock.advance(time.Second - time.Nanosecond)
-	require.EqualError(t, s.LoginCheck(ipAddress, s.clock.Now()), errRequestDenied.Error())
-
-	s.clock.advance(time.Nanosecond)
-	require.NoError(t, s.LoginCheck(ipAddress, s.clock.Now()))
+	tags := ConnectionTags{IP: "0.0.0.0", TenantID: "1"}
+	require.Error(t, s.LoginCheck(tags))
+	s.ReportSuccess(tags)
+	for i := 0; i < 1000; i++ {
+		require.NoError(t, s.LoginCheck(tags))
+	}
 }
 
 func TestLocalService_Eviction(t *testing.T) {
 	s := newTestLocalService()
-	s.maxMapSize = 10
+	s.maxCacheSize = 10
 
 	for i := 0; i < 20; i++ {
-		ipAddress := fmt.Sprintf("%d", i)
-		_ = s.LoginCheck(ipAddress, s.clock.Now())
-		require.Less(t, len(s.mu.limiters), 11)
-		require.NoError(t, s.checkInvariants())
+		tags := ConnectionTags{IP: fmt.Sprintf("%d", i)}
+		_ = s.LoginCheck(tags)
+		s.ReportSuccess(tags)
+		require.Less(t, s.mu.ipCache.Len(), 11)
+		require.Less(t, s.mu.successCache.Len(), 11)
 	}
+	require.Equal(t, s.mu.ipCache.Len(), 10)
+	require.Equal(t, s.mu.successCache.Len(), 10)
 }
