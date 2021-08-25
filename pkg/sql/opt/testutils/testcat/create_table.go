@@ -126,6 +126,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			&uniqueRowIDString, /* defaultExpr */
 			nil,                /* computedExpr */
 			nil,                /* onUpdateExpr */
+			cat.NotGeneratedAsIdentity,
 		)
 		tab.Columns = append(tab.Columns, rowid)
 	}
@@ -154,6 +155,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
 		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
 	)
 	tab.Columns = append(tab.Columns, mvcc)
 
@@ -171,6 +173,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
 		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
 	)
 	tab.Columns = append(tab.Columns, tableoid)
 
@@ -304,6 +307,7 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
 		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
 	)
 
 	tab.Columns = []cat.Column{pk}
@@ -361,6 +365,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 		&uniqueRowIDString, /* defaultExpr */
 		nil,                /* computedExpr */
 		nil,                /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
 	)
 
 	tab.Columns = append(tab.Columns, rowid)
@@ -606,6 +611,21 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		onUpdateExpr = &s
 	}
 
+	generatedAsIdentityType := cat.NotGeneratedAsIdentity
+	if def.GeneratedIdentity.IsGeneratedAsIdentity {
+		switch def.GeneratedIdentity.GeneratedAsIdentityType {
+		case tree.GeneratedAlways:
+			generatedAsIdentityType = cat.GeneratedAlwaysAsIdentity
+		case tree.GeneratedByDefault:
+			generatedAsIdentityType = cat.GeneratedByDefaultAsIdentity
+		default:
+			panic(fmt.Errorf(
+				"column %s is of invalid generated as identity type (neither ALWAYS nor BY DEFAULT)",
+				def.Name,
+			))
+		}
+	}
+
 	var col cat.Column
 	if def.Computed.Virtual {
 		col.InitVirtualComputed(
@@ -629,6 +649,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			defaultExpr,
 			computedExpr,
 			onUpdateExpr,
+			generatedAsIdentityType,
 		)
 	}
 	tt.Columns = append(tt.Columns, col)
