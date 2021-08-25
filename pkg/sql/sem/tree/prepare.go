@@ -86,6 +86,13 @@ func (node *Deallocate) Format(ctx *FmtCtx) {
 	if node.Name == "" {
 		ctx.WriteString("ALL")
 	} else {
-		ctx.FormatNode(&node.Name)
+		// Special case for names in DEALLOCATE: the names are redacted
+		// in FmtHideConstants mode so that DEALLOCATE statements all
+		// show up together in the statement stats UI.
+		if ctx.HasFlags(FmtHideConstants) {
+			ctx.WriteByte('_')
+		} else {
+			ctx.FormatNode(&node.Name)
+		}
 	}
 }
