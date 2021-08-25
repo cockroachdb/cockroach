@@ -11,9 +11,11 @@
 package goschedstats
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -54,8 +56,15 @@ func RecentNormalizedRunnableGoroutines() float64 {
 // will have to add a new version of that file.
 var _ = numRunnableGoroutines
 
-// We sample the number of runnable goroutines once per samplePeriod.
-const samplePeriod = time.Millisecond
+// We sample the number of runnable goroutines once per samplePeriodShort or
+// samplePeriodLong (if the system is underloaded). Using samplePeriodLong can
+// cause sluggish response to a load spike, from the perspective of
+// RunnableCountCallback implementers (admission control), so it is not ideal.
+// We support this behavior only because of deficiencies in the Go runtime
+// that cause 5-10% of cpu utilization for what is otherwise cheap 1ms
+// polling. See #66881.
+const samplePeriodShort = time.Millisecond
+const samplePeriodLong = 250 * time.Millisecond
 
 // We "report" the average value every reportingPeriod.
 // Note: if this is changed from 1s, CumulativeNormalizedRunnableGoroutines()
@@ -78,8 +87,8 @@ var total uint64
 var ewma uint64
 
 // RunnableCountCallback is provided the current value of runnable goroutines,
-// and GOMAXPROCS.
-type RunnableCountCallback func(numRunnable int, numProcs int)
+// GOMAXPROCS, and the current sampling period.
+type RunnableCountCallback func(numRunnable int, numProcs int, samplePeriod time.Duration)
 
 type callbackWithID struct {
 	RunnableCountCallback
@@ -146,24 +155,42 @@ func init() {
 		var sum uint64
 		var numSamples int
 
-		ticker := time.NewTicker(samplePeriod)
+		curPeriod := samplePeriodLong
+		ticker := time.NewTicker(curPeriod)
 		// We keep local versions of "total" and "ewma" and we just Store the
 		// updated values to the globals.
 		var localTotal, localEWMA uint64
 		for {
 			t := <-ticker.C
 			if t.Sub(lastTime) > reportingPeriod {
+				var avgValue uint64
 				if numSamples > 0 {
 					// We want the average value over the reporting period, so we divide
 					// by numSamples.
-					newValue := sum / uint64(numSamples)
-					localTotal += newValue
+					avgValue = sum / uint64(numSamples)
+					localTotal += avgValue
 					atomic.StoreUint64(&total, localTotal)
 
 					// ewma(t) = c * value(t) + (1 - c) * ewma(t-1)
 					// We use c = 0.5.
-					localEWMA = (newValue + localEWMA) / 2
+					localEWMA = (avgValue + localEWMA) / 2
 					atomic.StoreUint64(&ewma, localEWMA)
+				}
+				nextPeriod := samplePeriodLong
+				avgNumRunnablePerProc := float64(avgValue) * fromFixedPoint
+				if avgNumRunnablePerProc > 1 {
+					// Not extremely underloaded
+					nextPeriod = samplePeriodShort
+				}
+				// We switch the sample period only at reportingPeriod boundaries
+				// since it ensures that all samples contributing to a reporting
+				// period were at equal intervals (this is desirable since we average
+				// them). It also naturally reduces the frequency at which we reset a
+				// ticker.
+				if nextPeriod != curPeriod {
+					ticker.Reset(nextPeriod)
+					curPeriod = nextPeriod
+					log.Infof(context.Background(), "switching to period %s", curPeriod.String())
 				}
 				lastTime = t
 				sum = 0
@@ -174,7 +201,7 @@ func init() {
 			cbs := callbackInfo.cbs
 			callbackInfo.mu.Unlock()
 			for i := range cbs {
-				cbs[i].RunnableCountCallback(runnable, numProcs)
+				cbs[i].RunnableCountCallback(runnable, numProcs, curPeriod)
 			}
 			// The value of the sample is the ratio of runnable to numProcs (scaled
 			// for fixed-point arithmetic).
