@@ -86,6 +86,18 @@ func (node *Deallocate) Format(ctx *FmtCtx) {
 	if node.Name == "" {
 		ctx.WriteString("ALL")
 	} else {
-		ctx.FormatNode(&node.Name)
+		// Special case for names in DEALLOCATE: the names are redacted in
+		// FmtHideConstants mode so that DEALLOCATE statements all show up together
+		// in the statement stats UI. The reason is that unlike other statements
+		// where the name being referenced is useful for observability, the name of
+		// a prepared statement doesn't matter that much. Also, it's extremely cheap
+		// to run DEALLOCATE, which can lead to thousands or more DEALLOCATE
+		// statements appearing in the UI; other statements that refer to things by
+		// name are too expensive for that to be a real problem.
+		if ctx.HasFlags(FmtHideConstants) {
+			ctx.WriteByte('_')
+		} else {
+			ctx.FormatNode(&node.Name)
+		}
 	}
 }
