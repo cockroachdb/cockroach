@@ -1321,7 +1321,7 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 				tc.typeID,
 			)
 		case !IsPermanentSchemaChangeError(rollbackErr):
-			return jobs.NewRetryJobError(rollbackErr.Error())
+			return jobs.MarkAsRetryJobError(rollbackErr)
 		default:
 			return rollbackErr
 		}

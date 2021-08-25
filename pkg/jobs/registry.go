@@ -1136,39 +1136,6 @@ func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer,
 	return fn(job, settings), nil
 }
 
-type retryJobError string
-
-// retryJobErrorSentinel exists so the errors returned from NewRetryJobError can
-// be marked with it, allowing more robust detection of retry errors even if
-// they are wrapped, etc. This was originally introduced to deal with injected
-// retry errors from testing knobs.
-var retryJobErrorSentinel = retryJobError("")
-
-// NewRetryJobError creates a new error that, if returned by a Resumer,
-// indicates to the jobs registry that the job should be restarted in the
-// background.
-func NewRetryJobError(s string) error {
-	return errors.Mark(retryJobError(s), retryJobErrorSentinel)
-}
-
-func (r retryJobError) Error() string {
-	return string(r)
-}
-
-// Registry does not retry a job that fails due to a permanent error.
-var errJobPermanentSentinel = errors.New("permanent job-error")
-
-// MarkAsPermanentJobError marks an error as a permanent job error, which indicates
-// Registry to not retry the job when it fails due to this error.
-func MarkAsPermanentJobError(err error) error {
-	return errors.Mark(err, errJobPermanentSentinel)
-}
-
-// IsPermanentJobError checks whether the given error is a permanent error.
-func IsPermanentJobError(err error) bool {
-	return errors.Is(err, errJobPermanentSentinel)
-}
-
 // stepThroughStateMachine implements the state machine of the job lifecycle.
 // The job is executed with the ctx, so ctx must only be canceled if the job
 // should also be canceled. resultsCh is passed to the resumable func and should
@@ -1214,9 +1181,9 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.
-		if errors.Is(err, retryJobErrorSentinel) {
+		if errors.Is(err, errRetryJobSentinel) {
 			jm.ResumeRetryError.Inc(1)
-			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
+			return errors.Wrapf(err, "job %d: restarting in background", job.ID())
 		}
 		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
@@ -1286,7 +1253,7 @@ func (r *Registry) stepThroughStateMachine(
 			// mark the job as failed because it can be resumed by another node.
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
-		if errors.Is(err, retryJobErrorSentinel) {
+		if errors.Is(err, errRetryJobSentinel) {
 			jm.FailOrCancelRetryError.Inc(1)
 			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
 		}

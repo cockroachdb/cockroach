@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "adopt.go",
         "config.go",
+        "errors.go",
         "executor_impl.go",
         "helpers.go",
         "job_scheduler.go",
