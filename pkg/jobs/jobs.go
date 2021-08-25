@@ -232,31 +232,6 @@ func (s Status) Terminal() bool {
 	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled || s == StatusRevertFailed
 }
 
-// InvalidStatusError is the error returned when the desired operation is
-// invalid given the job's current status.
-type InvalidStatusError struct {
-	id     jobspb.JobID
-	status Status
-	op     string
-	err    string
-}
-
-func (e *InvalidStatusError) Error() string {
-	if e.err != "" {
-		return fmt.Sprintf("cannot %s %s job (id %d, err: %q)", e.op, e.status, e.id, e.err)
-	}
-	return fmt.Sprintf("cannot %s %s job (id %d)", e.op, e.status, e.id)
-}
-
-// SimplifyInvalidStatusError unwraps an *InvalidStatusError into an error
-// message suitable for users. Other errors are returned as passed.
-func SimplifyInvalidStatusError(err error) error {
-	if ierr := (*InvalidStatusError)(nil); errors.As(err, &ierr) {
-		return errors.Errorf("job %s", ierr.status)
-	}
-	return err
-}
-
 // ID returns the ID of the job.
 func (j *Job) ID() jobspb.JobID {
 	return j.id

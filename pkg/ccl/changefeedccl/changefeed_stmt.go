@@ -711,7 +711,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				// retries will not help.
 				// Instead, we want to make sure that the changefeed job is not marked failed
 				// due to a transient, retryable error.
-				err = jobs.NewRetryJobError(fmt.Sprintf("retryable flow error: %+v", err))
+				err = jobs.MarkAsRetryJobError(err)
 				b.setJobRunningStatus(ctx, "retryable flow error: %s", err)
 			}
 

@@ -636,7 +636,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 							r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
 								if !alreadyErrored && systemTableName == customRestoreSystemTable {
 									alreadyErrored = true
-									return jobs.NewRetryJobError("injected error")
+									return jobs.MarkAsRetryJobError(errors.New("injected error"))
 								}
 								return nil
 							}
