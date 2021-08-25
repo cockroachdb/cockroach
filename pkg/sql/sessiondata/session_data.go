@@ -50,6 +50,16 @@ type SessionData struct {
 	SequenceState *SequenceState
 }
 
+// Clone returns a clone of SessionData.
+func (s *SessionData) Clone() *SessionData {
+	// Currently clone does a shallow copy of everything - we can get away with it
+	// as all the slices/maps does a copy if it mutates OR are operations that
+	// affect the whole SessionDataStack (e.g. setting SequenceState should be the
+	// setting the same value across all copied SessionData).
+	ret := *s
+	return &ret
+}
+
 // MarshalNonLocal serializes all non-local parameters from SessionData struct
 // that don't have native protobuf support into proto.
 func MarshalNonLocal(sd *SessionData, proto *sessiondatapb.SessionData) {
@@ -213,6 +223,11 @@ func (s *Stack) Push(elem *SessionData) {
 	s.stack = append(s.stack, elem)
 }
 
+// PushTopClone pushes a copy of the top element to the stack.
+func (s *Stack) PushTopClone() {
+	s.Push(s.Top().Clone())
+}
+
 // Pop removes the top SessionData element from the stack.
 func (s *Stack) Pop() error {
 	if len(s.stack) <= 1 {
@@ -222,6 +237,15 @@ func (s *Stack) Pop() error {
 	s.stack[idx] = nil
 	s.stack = s.stack[:idx]
 	return nil
+}
+
+// PopAll removes all except the base SessionData element from the stack.
+func (s *Stack) PopAll() {
+	// Explicitly unassign each pointer.
+	for i := 1; i < len(s.stack); i++ {
+		s.stack[i] = nil
+	}
+	s.stack = s.stack[:1]
 }
 
 // Elems returns all elements in the Stack.
