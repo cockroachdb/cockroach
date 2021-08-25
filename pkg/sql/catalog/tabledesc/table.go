@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -117,6 +118,16 @@ func MakeColumnDefDescs(
 	}
 
 	if d.HasOnUpdateExpr() {
+		// Verify that we're on an ON UPDATE supported version before continuing.
+		if !evalCtx.Settings.Version.IsActive(
+			ctx,
+			clusterversion.OnUpdateExpressions,
+		) {
+			return nil, nil, nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"version %v must be finalized to use ON UPDATE",
+				clusterversion.ByKey(clusterversion.OnUpdateExpressions))
+		}
+
 		// Verify the on update expression type is compatible with the column type
 		// and does not contain invalid functions.
 		var err error

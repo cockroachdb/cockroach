@@ -64,6 +64,7 @@ go_test(
         "helpers_test.go",
         "interleaved_tables_external_test.go",
         "main_test.go",
+        "on_update_test.go",
         "retry_jobs_with_exponential_backoff_external_test.go",
         "separated_intents_external_test.go",
         "separated_intents_test.go",
