@@ -39,6 +39,9 @@ func TestWatch(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	artifactsDir = dir
+	dir, cleanup = testutils.TempDir(t)
+	defer cleanup()
+	tmpDir = dir
 	testdata := testutils.TestDataPath(t)
 	info := buildInfo{
 		binDir:      path.Join(testdata, "bazel-bin"),
