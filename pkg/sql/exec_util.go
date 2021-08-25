@@ -252,6 +252,13 @@ var placementEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var autoRehomingEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_auto_rehoming.enabled",
+	"default value for experimental_enable_auto_rehoming;"+
+		" allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE",
+	false,
+).WithPublic()
+
 var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_temporary_tables.enabled",
 	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
@@ -2749,6 +2756,10 @@ func (m *sessionDataMutator) SetSaveTablesPrefix(prefix string) {
 
 func (m *sessionDataMutator) SetPlacementEnabled(val bool) {
 	m.data.PlacementEnabled = val
+}
+
+func (m *sessionDataMutator) SetAutoRehomingEnabled(val bool) {
+	m.data.AutoRehomingEnabled = val
 }
 
 func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
