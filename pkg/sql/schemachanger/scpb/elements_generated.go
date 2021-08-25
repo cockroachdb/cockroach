@@ -30,3 +30,8 @@ func (e SequenceOwnedBy) element() {}
 func (e Type) element() {}
 func (e Schema) element() {}
 func (e Database) element() {}
+func (e Namespace) element() {}
+func (e Owner) element() {}
+func (e UserPrivileges) element() {}
+func (e ColumnName) element() {}
+func (e Locality) element() {}

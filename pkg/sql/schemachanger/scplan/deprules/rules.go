@@ -96,12 +96,12 @@ func init() {
 		fromNode, toNode,
 		screl.MustQuery(
 			from.Type((*scpb.View)(nil)),
-			to.Type((*scpb.View)(nil)),
+			to.Type((*scpb.RelationDependedOnBy)(nil)),
 			rel.Filter(
 				"depended-on-by",
 				from, to,
-			)(func(from, to *scpb.View) bool {
-				return from != to && idInIDs(from.DependedOnBy, to.TableID)
+			)(func(from *scpb.View, to *scpb.RelationDependedOnBy) bool {
+				return from.TableID == to.DependedOnBy
 			}),
 
 			joinTargetNode(from, fromTarget, fromNode, drop, absent),
@@ -116,12 +116,12 @@ func init() {
 		fromNode, toNode,
 		screl.MustQuery(
 			from.Type((*scpb.Table)(nil)),
-			to.Type((*scpb.View)(nil)),
+			to.Type((*scpb.RelationDependedOnBy)(nil)),
 			rel.Filter(
 				"viewDependsOnTable",
 				to, from,
-			)(func(to *scpb.View, from *scpb.Table) bool {
-				return idInIDs(to.DependsOn, from.TableID)
+			)(func(from *scpb.Table, to *scpb.RelationDependedOnBy) bool {
+				return from.TableID == to.TableID
 			}),
 
 			joinTargetNode(from, fromTarget, fromNode, drop, absent),
@@ -160,7 +160,7 @@ func init() {
 				default:
 					panic(errors.AssertionFailedf("unexpected type %T", to))
 				}
-				return indexContainsColumn(idx, from.Column.ID)
+				return indexContainsColumn(idx, from.ColumnID)
 			}),
 
 			direction.Entities(screl.Direction, columnTarget, indexTarget),

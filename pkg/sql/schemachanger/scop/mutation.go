@@ -10,7 +10,10 @@
 
 package scop
 
-import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+)
 
 //go:generate go run ./generate_visitor.go scop Mutation mutation.go mutation_visitor_generated.go
 
@@ -154,10 +157,22 @@ type MakeIndexAbsent struct {
 // MakeAddedColumnDeleteOnly adds a new column in the DELETE_ONLY state.
 type MakeAddedColumnDeleteOnly struct {
 	mutationOp
-	TableID    descpb.ID
-	FamilyID   descpb.FamilyID
-	FamilyName string
-	Column     descpb.ColumnDescriptor
+	ColumnID                          descpb.ColumnID
+	TableID                           descpb.ID
+	FamilyID                          descpb.FamilyID
+	FamilyName                        string
+	ColumnType                        *types.T
+	Nullable                          bool
+	DefaultExpr                       string
+	OnUpdateExpr                      string
+	Hidden                            bool
+	Inaccessible                      bool
+	GeneratedAsIdentityType           descpb.GeneratedAsIdentityType
+	GeneratedAsIdentitySequenceOption string
+	UsesSequenceIds                   []descpb.ID
+	ComputerExpr                      string
+	PgAttributeNum                    uint32
+	SystemColumnKind                  descpb.SystemColumnKind
 }
 
 // MakeColumnPublic moves a new column from its mutation to public.
@@ -226,4 +241,13 @@ type DropForeignKeyRef struct {
 type RemoveSequenceOwnedBy struct {
 	mutationOp
 	TableID descpb.ID
+}
+
+// SetColumnName makes a column only to allocate
+// the name and ID
+type SetColumnName struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+	Name     string
 }

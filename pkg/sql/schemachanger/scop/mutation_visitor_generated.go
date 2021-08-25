@@ -48,6 +48,7 @@ type MutationVisitor interface {
 	AddColumnFamily(context.Context, AddColumnFamily) error
 	DropForeignKeyRef(context.Context, DropForeignKeyRef) error
 	RemoveSequenceOwnedBy(context.Context, RemoveSequenceOwnedBy) error
+	SetColumnName(context.Context, SetColumnName) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -178,4 +179,9 @@ func (op DropForeignKeyRef) Visit(ctx context.Context, v MutationVisitor) error 
 // Visit is part of the MutationOp interface.
 func (op RemoveSequenceOwnedBy) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveSequenceOwnedBy(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op SetColumnName) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.SetColumnName(ctx, op)
 }

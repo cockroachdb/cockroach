@@ -12,12 +12,13 @@ package scbuild
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -27,53 +28,41 @@ import (
 func (b *buildContext) dropSequenceDesc(
 	ctx context.Context, seq catalog.TableDescriptor, cascade tree.DropBehavior,
 ) {
-	// Check if there are dependencies.
-	err := seq.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-		if cascade != tree.DropCascade {
-			return pgerror.Newf(
-				pgcode.DependentObjectsStillExist,
-				"cannot drop sequence %s because other objects depend on it",
-				seq.GetName(),
-			)
-		}
-		desc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
-		if err != nil {
-			return err
-		}
-		for _, col := range desc.PublicColumns() {
-			for _, id := range dep.ColumnIDs {
-				if col.GetID() != id {
-					continue
-				}
-				defaultExpr := &scpb.DefaultExpression{
-					TableID:         dep.ID,
-					ColumnID:        col.GetID(),
-					UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
-					DefaultExpr:     ""}
-				if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
-					b.addNode(scpb.Target_DROP, defaultExpr)
-				}
-				b.removeColumnTypeBackRefs(desc, col.GetID())
-			}
-		}
-		return nil
-	})
-	if err != nil {
+	if err := b.AuthAccessor.CheckPrivilege(ctx, seq, privilege.DROP); err != nil {
 		panic(err)
 	}
-
 	// Add a node to drop the sequence
-	sequenceNode := &scpb.Sequence{SequenceID: seq.GetID()}
-	if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, sequenceNode); !exists {
-		b.addNode(scpb.Target_DROP, sequenceNode)
-	}
-	if seq.GetSequenceOpts().SequenceOwner.OwnerTableID != descpb.InvalidID {
-		sequenceOwnedBy := &scpb.SequenceOwnedBy{
-			SequenceID:   seq.GetID(),
-			OwnerTableID: seq.GetSequenceOpts().SequenceOwner.OwnerTableID}
-		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, sequenceOwnedBy); !exists {
-			b.addNode(scpb.Target_DROP, sequenceOwnedBy)
-		}
+	b.decomposeTableDescToElements(ctx, seq, scpb.Target_DROP)
+	// Check if there are dependencies.
+	err := b.forEachNodeOfType(scpb.Target_DROP, reflect.TypeOf((*scpb.RelationDependedOnBy)(nil)),
+		func(element scpb.Element) error {
+			dep := element.(*scpb.RelationDependedOnBy)
+			if dep.TableID != seq.GetID() {
+				return nil
+			}
+			if cascade != tree.DropCascade {
+				return pgerror.Newf(
+					pgcode.DependentObjectsStillExist,
+					"cannot drop sequence %s because other objects depend on it",
+					seq.GetName(),
+				)
+			}
+			desc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.TableID, tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				return err
+			}
+			for _, col := range desc.PublicColumns() {
+				if dep.GetXColumnID() == nil ||
+					col.GetID() != dep.GetColumnID() {
+					continue
+				}
+				// Convert the default expression into elements.
+				b.decomposeDefaultExprToElements(desc, col, scpb.Target_DROP)
+			}
+			return nil
+		})
+	if err != nil {
+		panic(err)
 	}
 }
 

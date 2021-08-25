@@ -246,7 +246,7 @@ func doesPathExistToNode(graph *scgraph.Graph, start *scpb.Node, target *scpb.No
 			visitedNodes[curr] = struct{}{}
 			edges, ok := graph.GetDepEdgesFrom(curr)
 			if !ok {
-				return false
+				continue
 			}
 			// Append all of the nodes to visit
 			for _, currEdge := range edges {
@@ -320,8 +320,12 @@ func compareOps(
 		// Equal, only implicit order determines which is first.
 		return firstImplicitOrder < secondImplicitOrder
 	}
-	firstExists := doesPathExistToNode(graph, firstNode, secondNode)
-	secondExists := doesPathExistToNode(graph, secondNode, firstNode)
+	// We need to check for dependencies between the To edges,
+	// not the starting point.
+	firstNodeEdge, _ := graph.GetOpEdgeFrom(firstNode)
+	secondNodeEdge, _ := graph.GetOpEdgeFrom(secondNode)
+	firstExists := doesPathExistToNode(graph, firstNodeEdge.To(), secondNodeEdge.To())
+	secondExists := doesPathExistToNode(graph, secondNodeEdge.To(), firstNodeEdge.To())
 
 	// If both paths exist, then we care about the direction of nodes,
 	// otherwise we have a cycle, and we can't sort.

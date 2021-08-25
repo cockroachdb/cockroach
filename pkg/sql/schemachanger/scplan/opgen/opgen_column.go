@@ -24,10 +24,22 @@ func init() {
 			minPhase(scop.PreCommitPhase),
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeAddedColumnDeleteOnly{
-					TableID:    this.TableID,
-					FamilyID:   this.FamilyID,
-					FamilyName: this.FamilyName,
-					Column:     this.Column,
+					TableID:                           this.TableID,
+					ColumnID:                          this.ColumnID,
+					FamilyName:                        this.FamilyName,
+					FamilyID:                          this.FamilyID,
+					ColumnType:                        this.Type,
+					Nullable:                          this.Nullable,
+					DefaultExpr:                       this.DefaultExpr,
+					OnUpdateExpr:                      this.OnUpdateExpr,
+					Hidden:                            this.Hidden,
+					Inaccessible:                      this.Inaccessible,
+					GeneratedAsIdentityType:           this.GeneratedAsIdentityType,
+					GeneratedAsIdentitySequenceOption: this.GeneratedAsIdentitySequenceOption,
+					UsesSequenceIds:                   this.UsesSequenceIds,
+					ComputerExpr:                      this.ComputerExpr,
+					PgAttributeNum:                    this.PgAttributeNum,
+					SystemColumnKind:                  this.SystemColumnKind,
 				}
 			})),
 		to(scpb.Status_DELETE_AND_WRITE_ONLY,
@@ -35,14 +47,14 @@ func init() {
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeAddedColumnDeleteAndWriteOnly{
 					TableID:  this.TableID,
-					ColumnID: this.Column.ID,
+					ColumnID: this.ColumnID,
 				}
 			})),
 		to(scpb.Status_PUBLIC,
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeColumnPublic{
 					TableID:  this.TableID,
-					ColumnID: this.Column.ID,
+					ColumnID: this.ColumnID,
 				}
 			})),
 	)
@@ -55,7 +67,7 @@ func init() {
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeDroppedColumnDeleteAndWriteOnly{
 					TableID:  this.TableID,
-					ColumnID: this.Column.ID,
+					ColumnID: this.ColumnID,
 				}
 			})),
 		to(scpb.Status_DELETE_ONLY,
@@ -64,7 +76,7 @@ func init() {
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeDroppedColumnDeleteOnly{
 					TableID:  this.TableID,
-					ColumnID: this.Column.ID,
+					ColumnID: this.ColumnID,
 				}
 			})),
 		to(scpb.Status_ABSENT,
@@ -72,7 +84,7 @@ func init() {
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeColumnAbsent{
 					TableID:  this.TableID,
-					ColumnID: this.Column.ID,
+					ColumnID: this.ColumnID,
 				}
 			})),
 	)
