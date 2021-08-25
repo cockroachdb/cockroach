@@ -142,7 +142,7 @@ RETURNING id;`).Scan(&secondID))
 	require.Regexp(t, "found multiple non-terminal jobs for version", err)
 
 	// Let the fake, erroneous job finish with an error.
-	fakeJobBlockChan <- errors.New("boom")
+	fakeJobBlockChan <- jobs.MarkAsPermanentJobError(errors.New("boom"))
 	require.Regexp(t, "boom", <-runErr)
 
 	// Launch a second migration which later we'll ensure does not kick off
@@ -504,7 +504,7 @@ func TestPrecondition(t *testing.T) {
 		) error {
 			atomic.AddInt64(run, 1)
 			if err.Load().(bool) {
-				return errors.New("boom")
+				return jobs.MarkAsPermanentJobError(errors.New("boom"))
 			}
 			return nil
 		}

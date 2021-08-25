@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,6 +67,10 @@ type TestingKnobs struct {
 
 	// DisableAdoptions disables job adoptions.
 	DisableAdoptions bool
+
+	// ModifyErrorAfterOnFailOrCancel captures the error returned from OnFailOorCancel
+	// and sets the error to the returned value of this function.
+	ModifyErrorAfterOnFailOrCancel func(jobspb.JobID, error) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
