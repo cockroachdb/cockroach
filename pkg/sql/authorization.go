@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -402,48 +403,12 @@ func (p *planner) MemberOfWithAdminOption(
 func (p *planner) resolveMemberOfWithAdminOption(
 	ctx context.Context, member security.SQLUsername, txn *kv.Txn,
 ) (map[security.SQLUsername]bool, error) {
-	ret := map[security.SQLUsername]bool{}
-
-	// Keep track of members we looked up.
-	visited := map[security.SQLUsername]struct{}{}
-	toVisit := []security.SQLUsername{member}
-	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
-
-	for len(toVisit) > 0 {
-		// Pop first element.
-		m := toVisit[0]
-		toVisit = toVisit[1:]
-		if _, ok := visited[m]; ok {
-			continue
-		}
-		visited[m] = struct{}{}
-
-		it, err := p.ExecCfg().InternalExecutor.QueryIterator(
-			ctx, "expand-roles", txn, lookupRolesStmt, m.Normalized(),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		var ok bool
-		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-			row := it.Cur()
-			roleName := tree.MustBeDString(row[0])
-			isAdmin := row[1].(*tree.DBool)
-
-			// system.role_members stores pre-normalized usernames.
-			role := security.MakeSQLUsernameFromPreNormalizedString(string(roleName))
-			ret[role] = bool(*isAdmin)
-
-			// We need to expand this role. Let the "pop" worry about already-visited elements.
-			toVisit = append(toVisit, role)
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return ret, nil
+	return sqlutil.ResolveMemberOfWithAdminOption(
+		ctx,
+		member,
+		txn,
+		p.ExecCfg().InternalExecutor,
+	)
 }
 
 // HasRoleOption implements the AuthorizationAccessor interface.

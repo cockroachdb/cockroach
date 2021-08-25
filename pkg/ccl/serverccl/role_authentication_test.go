@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -85,37 +86,38 @@ func TestVerifyPassword(t *testing.T) {
 	for _, tc := range []struct {
 		username           string
 		password           string
+		isSuperuser        bool
 		shouldAuthenticate bool
 		expectedErrString  string
 	}{
-		{"azure_diamond", "hunter2", true, ""},
-		{"Azure_Diamond", "hunter2", false, ""},
-		{"azure_diamond", "hunter", false, "crypto/bcrypt"},
-		{"azure_diamond", "", false, "crypto/bcrypt"},
-		{"azure_diamond", "🍦", false, "crypto/bcrypt"},
-		{"azure_diamond", "hunter2345", false, "crypto/bcrypt"},
-		{"azure_diamond", "shunter2", false, "crypto/bcrypt"},
-		{"azure_diamond", "12345", false, "crypto/bcrypt"},
-		{"azure_diamond", "*******", false, "crypto/bcrypt"},
-		{"druidia", "12345", true, ""},
-		{"druidia", "hunter2", false, "crypto/bcrypt"},
-		{"root", "", false, "crypto/bcrypt"},
-		{"", "", false, "does not exist"},
-		{"doesntexist", "zxcvbn", false, "does not exist"},
+		{"azure_diamond", "hunter2", false, true, ""},
+		{"Azure_Diamond", "hunter2", false, false, ""},
+		{"azure_diamond", "hunter", false, false, "crypto/bcrypt"},
+		{"azure_diamond", "", false, false, "crypto/bcrypt"},
+		{"azure_diamond", "🍦", false, false, "crypto/bcrypt"},
+		{"azure_diamond", "hunter2345", false, false, "crypto/bcrypt"},
+		{"azure_diamond", "shunter2", false, false, "crypto/bcrypt"},
+		{"azure_diamond", "12345", false, false, "crypto/bcrypt"},
+		{"azure_diamond", "*******", false, false, "crypto/bcrypt"},
+		{"druidia", "12345", false, true, ""},
+		{"druidia", "hunter2", false, false, "crypto/bcrypt"},
+		{"root", "", true, false, "crypto/bcrypt"},
+		{"", "", false, false, "does not exist"},
+		{"doesntexist", "zxcvbn", false, false, "does not exist"},
 
-		{"richardc", "12345", false,
+		{"richardc", "12345", false, false,
 			"richardc does not have login privilege"},
-		{"before_epoch", "12345", false, ""},
-		{"epoch", "12345", false, ""},
-		{"cockroach", "12345", true, ""},
-		{"toolate", "12345", false, ""},
-		{"timelord", "12345", true, ""},
-		{"cthon98", "12345", true, ""},
+		{"before_epoch", "12345", false, false, ""},
+		{"epoch", "12345", false, false, ""},
+		{"cockroach", "12345", false, true, ""},
+		{"toolate", "12345", false, false, ""},
+		{"timelord", "12345", false, true, ""},
+		{"cthon98", "12345", false, true, ""},
 	} {
 		t.Run("", func(t *testing.T) {
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			exists, canLogin, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+			exists, canLogin, isSuperuser, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 				context.Background(), &execCfg, &ie, username, "", /* databaseName */
 			)
 
@@ -165,6 +167,7 @@ func TestVerifyPassword(t *testing.T) {
 					tc.shouldAuthenticate,
 				)
 			}
+			require.Equal(t, tc.isSuperuser, isSuperuser)
 		})
 	}
 }
