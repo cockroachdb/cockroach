@@ -404,7 +404,17 @@ func (p *planner) alterTypeOwner(
 		return err
 	}
 
-	if err := p.checkCanAlterTypeAndSetNewOwner(ctx, typeDesc, arrayDesc, newOwner); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, newOwner); err != nil {
+		return err
+	}
+
+	// Ensure the new owner has CREATE privilege on the type's schema.
+	if err := p.canCreateOnSchema(
+		ctx, typeDesc.GetParentSchemaID(), typeDesc.ParentID, newOwner, checkPublicSchema); err != nil {
+		return err
+	}
+
+	if err := p.setNewTypeOwner(ctx, typeDesc, arrayDesc, &n.prefix, newOwner); err != nil {
 		return err
 	}
 
@@ -424,36 +434,51 @@ func (p *planner) alterTypeOwner(
 	)
 }
 
-// checkCanAlterTypeAndSetNewOwner handles privilege checking and setting new owner.
+// setNewTypeOwner handles setting a new type owner.
 // Called in ALTER TYPE and REASSIGN OWNED BY.
-func (p *planner) checkCanAlterTypeAndSetNewOwner(
+func (p *planner) setNewTypeOwner(
 	ctx context.Context,
 	typeDesc *typedesc.Mutable,
 	arrayTypeDesc *typedesc.Mutable,
+	prefix *catalog.ResolvedObjectPrefix,
 	newOwner security.SQLUsername,
 ) error {
-	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, newOwner); err != nil {
-		return err
-	}
-
-	// Ensure the new owner has CREATE privilege on the type's schema.
-	if err := p.canCreateOnSchema(
-		ctx, typeDesc.GetParentSchemaID(), typeDesc.ParentID, newOwner, checkPublicSchema); err != nil {
-		return err
-	}
-
 	privs := typeDesc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
 	// Also have to change the owner of the implicit array type.
 	arrayTypeDesc.Privileges.SetOwner(newOwner)
 
+	var err error
+	var typeName *tree.TypeName
+	var arrayTypeName *tree.TypeName
+	if prefix != nil {
+		typeNameWithPrefix := tree.MakeTypeNameWithPrefix(tree.ObjectNamePrefix{
+			SchemaName:  tree.Name(prefix.Schema.GetName()),
+			CatalogName: tree.Name(prefix.Database.GetName()),
+		}, typeDesc.GetName())
+		typeName = &typeNameWithPrefix
+
+		arrayTypeNameWithPrefix := tree.MakeTypeNameWithPrefix(tree.ObjectNamePrefix{
+			SchemaName:  tree.Name(prefix.Schema.GetName()),
+			CatalogName: tree.Name(prefix.Database.GetName()),
+		}, arrayTypeDesc.GetName())
+		arrayTypeName = &arrayTypeNameWithPrefix
+	} else {
+		typeName, err = p.getQualifiedTypeName(ctx, typeDesc)
+		if err != nil {
+			return err
+		}
+		arrayTypeName, err = p.getQualifiedTypeName(ctx, arrayTypeDesc)
+		if err != nil {
+			return err
+		}
+	}
+
 	if err := p.logEvent(ctx,
 		typeDesc.GetID(),
 		&eventpb.AlterTypeOwner{
-			// TODO(knz): This name is insufficiently qualified.
-			// See: https://github.com/cockroachdb/cockroach/issues/57734
-			TypeName: typeDesc.GetName(),
+			TypeName: typeName.FQString(),
 			Owner:    newOwner.Normalized(),
 		}); err != nil {
 		return err
@@ -461,9 +486,7 @@ func (p *planner) checkCanAlterTypeAndSetNewOwner(
 	return p.logEvent(ctx,
 		arrayTypeDesc.GetID(),
 		&eventpb.AlterTypeOwner{
-			// TODO(knz): This name is insufficiently qualified.
-			// See: https://github.com/cockroachdb/cockroach/issues/57734
-			TypeName: arrayTypeDesc.GetName(),
+			TypeName: arrayTypeName.FQString(),
 			Owner:    newOwner.Normalized(),
 		})
 }
