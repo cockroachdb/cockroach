@@ -1430,6 +1430,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
 			case keys.ConstraintCommentType:
 				objID = tree.NewDOid(tree.MustBeDInt(objID))
+				objSubID = tree.DZero
 				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
 			}
 			if err := addRow(

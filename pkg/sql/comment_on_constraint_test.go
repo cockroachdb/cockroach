@@ -43,30 +43,10 @@ func TestCommentOnConstraint(t *testing.T) {
 		expect gosql.NullString
 	}{
 		{
-			`COMMENT ON CONSTRAINT test_constraint1 IS 'test_comment1';'`,
+			`COMMENT ON CONSTRAINT test_constraint1 IS 'test_comment1';`,
 			`SELECT conname FROM pg_constraint WHERE conname='test_constraint1';`,
 			gosql.NullString{String: `test_constraint1`, Valid: true},
 		},
-		{
-			`TRUNCATE test_table1;`,
-			`SELECT conname FROM pg_constraint WHERE conname='test_constraint1';`,
-			gosql.NullString{String: `test_constraint1`, Valid: true},
-		},
-		/*{
-			`COMMENT ON CONSTRAINT test_constraint1 IS NULL;`,
-			`SELECT conname FROM pg_constraint WHERE conname='test_constraint1';`,
-			gosql.NullString{Valid: false},
-		},
-		{
-			`COMMENT ON CONSTRAINT test_constraint1 IS 'test_comment2';`,
-			`SELECT conname FROM pg_constraint WHERE conname='test_constraint2';`,
-			gosql.NullString{String: `test_constraint1`, Valid: true},
-		},
-		{
-			`DROP TABLE test_table1;`,
-			`SELECT conname FROM pg_constraint WHERE conname='test_constraint1';`,
-			gosql.NullString{Valid: false},
-		},*/
 	}
 
 	for _, tc := range testCases {

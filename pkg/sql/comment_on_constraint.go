@@ -79,7 +79,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		err := params.p.removeConstraintComment(params.ctx, n.constraintInfo.tableDesc.GetID())
+		err := params.p.removeConstraintComment(params.ctx, n.constraintInfo.tableDesc.ID)
 		if err != nil {
 			return err
 		}
