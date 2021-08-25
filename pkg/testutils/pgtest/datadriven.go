@@ -151,6 +151,7 @@ func hasKeepErrMsg(d *datadriven.TestData) bool {
 // more deterministic) if needed, see testdata for examples.
 func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
 	ignore := map[string]bool{}
+	ignoreAll := false
 	errs := map[string]string{}
 	for _, arg := range args.CmdArgs {
 		switch arg.Key {
@@ -187,6 +188,8 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 			}
 		case "mapError":
 			errs[arg.Vals[0]] = arg.Vals[1]
+		case "ignore_all":
+			ignoreAll = true
 		default:
 			panic(fmt.Errorf("unknown argument: %v", arg))
 		}
@@ -218,6 +221,9 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 		} else if err := enc.Encode(msg); err != nil {
 			panic(err)
 		}
+	}
+	if ignoreAll {
+		return ""
 	}
 	return sb.String()
 }

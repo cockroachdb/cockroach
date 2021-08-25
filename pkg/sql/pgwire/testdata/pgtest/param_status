@@ -129,6 +129,14 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
+Query {"String": "DROP ROLE IF EXISTS testuser"}
+----
+
+until ignore_all
+ReadyForQuery
+----
+
+send
 Query {"String": "CREATE ROLE testuser"}
 ----
 
