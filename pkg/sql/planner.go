@@ -352,11 +352,8 @@ func newInternalPlanner(
 				"application_name": "crdb-internal",
 				"database":         "system",
 			}),
-			settings: execCfg.Settings,
-			sessionDataMutatorTopOnlyBase: sessionDataMutatorTopOnlyBase{
-				paramStatusUpdater: &noopParamStatusUpdater{},
-				setCurTxnReadOnly:  func(bool) {},
-			},
+			settings:                      execCfg.Settings,
+			sessionDataMutatorTopOnlyBase: sessionDataMutatorTopOnlyBase{},
 		},
 	}
 
