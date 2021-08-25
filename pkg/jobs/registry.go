@@ -1148,7 +1148,18 @@ func (r *Registry) stepThroughStateMachine(
 	jobType := payload.Type()
 	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
-
+	onExecutionFailed := func(cause error) error {
+		log.InfofDepth(
+			ctx, 1,
+			"job %d: %s execution encountered retriable error: %v",
+			job.ID(), status, cause,
+		)
+		start := job.getRunStats().LastRun
+		end := r.clock.Now().GoTime()
+		return newRetriableExecutionError(
+			r.nodeID.SQLInstanceID(), status, start, end, cause,
+		)
+	}
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
@@ -1183,7 +1194,7 @@ func (r *Registry) stepThroughStateMachine(
 		// TODO(spaskob): enforce a limit on retries.
 		if errors.Is(err, errRetryJobSentinel) {
 			jm.ResumeRetryError.Inc(1)
-			return errors.Wrapf(err, "job %d: restarting in background", job.ID())
+			return onExecutionFailed(err)
 		}
 		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
@@ -1255,7 +1266,7 @@ func (r *Registry) stepThroughStateMachine(
 		}
 		if errors.Is(err, errRetryJobSentinel) {
 			jm.FailOrCancelRetryError.Inc(1)
-			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
+			return onExecutionFailed(err)
 		}
 		// A non-cancelable job is always retried while reverting unless the error is marked as permanent.
 		if job.Payload().Noncancelable && !IsPermanentJobError(err) {
@@ -1356,4 +1367,31 @@ func (r *Registry) RetryMaxDelay() float64 {
 		return r.knobs.IntervalOverrides.RetryMaxDelay.Seconds()
 	}
 	return retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
+}
+
+// maybeRecordRetriableExeuctionFailure will record a
+// RetriableExecutionFailureError into the job payload.
+//
+// TODO(ajwerner): Truncate errors and the slice of existing errors.
+func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j *Job) {
+	var efe *retriableExecutionError
+	if !errors.As(err, &efe) {
+		return
+	}
+	updateErr := j.Update(ctx, nil, func(
+		txn *kv.Txn, md JobMetadata, ju *JobUpdater,
+	) error {
+		// TODO(ajwerner): Truncate this list
+		pl := md.Payload
+		pl.RetriableExecutionFailureLog = append(pl.RetriableExecutionFailureLog,
+			efe.toRetriableExecutionFailure(ctx))
+		ju.UpdatePayload(pl)
+		return nil
+	})
+	if ctx.Err() != nil {
+		return
+	}
+	if updateErr != nil {
+		log.Warningf(ctx, "failed to record error for job %d: %v: %v", j.ID(), err, err)
+	}
 }
