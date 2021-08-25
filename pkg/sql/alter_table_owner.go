@@ -76,7 +76,17 @@ func (n *alterTableOwnerNode) startExec(params runParams) error {
 	newOwner := n.owner
 	oldOwner := n.desc.GetPrivileges().Owner()
 
-	if err := p.checkCanAlterTableAndSetNewOwner(ctx, tableDesc, newOwner); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, tableDesc, newOwner); err != nil {
+		return err
+	}
+
+	// Ensure the new owner has CREATE privilege on the table's schema.
+	if err := p.canCreateOnSchema(
+		ctx, tableDesc.GetParentSchemaID(), tableDesc.ParentID, newOwner, checkPublicSchema); err != nil {
+		return err
+	}
+
+	if err := p.setNewTableOwner(ctx, tableDesc, newOwner); err != nil {
 		return err
 	}
 
@@ -94,21 +104,11 @@ func (n *alterTableOwnerNode) startExec(params runParams) error {
 	return nil
 }
 
-// checkCanAlterTableAndSetNewOwner handles privilege checking
-// and setting new owner.
-func (p *planner) checkCanAlterTableAndSetNewOwner(
+// setNewTableOwner handles setting a new table owner.
+// Called in ALTER SCHEMA and REASSIGN OWNED BY.
+func (p *planner) setNewTableOwner(
 	ctx context.Context, desc *tabledesc.Mutable, newOwner security.SQLUsername,
 ) error {
-	if err := p.checkCanAlterToNewOwner(ctx, desc, newOwner); err != nil {
-		return err
-	}
-
-	// Ensure the new owner has CREATE privilege on the table's schema.
-	if err := p.canCreateOnSchema(
-		ctx, desc.GetParentSchemaID(), desc.ParentID, newOwner, checkPublicSchema); err != nil {
-		return err
-	}
-
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)
 

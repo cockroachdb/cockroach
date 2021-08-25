@@ -404,7 +404,17 @@ func (p *planner) alterTypeOwner(
 		return err
 	}
 
-	if err := p.checkCanAlterTypeAndSetNewOwner(ctx, typeDesc, arrayDesc, newOwner); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, newOwner); err != nil {
+		return err
+	}
+
+	// Ensure the new owner has CREATE privilege on the type's schema.
+	if err := p.canCreateOnSchema(
+		ctx, typeDesc.GetParentSchemaID(), typeDesc.ParentID, newOwner, checkPublicSchema); err != nil {
+		return err
+	}
+
+	if err := p.setNewTypeOwner(ctx, typeDesc, arrayDesc, newOwner); err != nil {
 		return err
 	}
 
@@ -424,24 +434,14 @@ func (p *planner) alterTypeOwner(
 	)
 }
 
-// checkCanAlterTypeAndSetNewOwner handles privilege checking and setting new owner.
+// setNewTypeOwner handles setting a new type owner.
 // Called in ALTER TYPE and REASSIGN OWNED BY.
-func (p *planner) checkCanAlterTypeAndSetNewOwner(
+func (p *planner) setNewTypeOwner(
 	ctx context.Context,
 	typeDesc *typedesc.Mutable,
 	arrayTypeDesc *typedesc.Mutable,
 	newOwner security.SQLUsername,
 ) error {
-	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, newOwner); err != nil {
-		return err
-	}
-
-	// Ensure the new owner has CREATE privilege on the type's schema.
-	if err := p.canCreateOnSchema(
-		ctx, typeDesc.GetParentSchemaID(), typeDesc.ParentID, newOwner, checkPublicSchema); err != nil {
-		return err
-	}
-
 	privs := typeDesc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
