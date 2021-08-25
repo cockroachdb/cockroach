@@ -146,6 +146,9 @@ const (
 	// takes in a region and returns it if it is a valid region on the database.
 	// Otherwise, it returns the primary region.
 	DefaultToDatabasePrimaryRegionBuiltinName = "default_to_database_primary_region"
+	// RehomeRowBuiltinName is the name for the builtin that rehomes a row to the
+	// user's gateway region, defaulting to the database primary region.
+	RehomeRowBuiltinName = "rehome_row"
 )
 
 var digitNames = [...]string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
@@ -5794,6 +5797,41 @@ the locality flag on node startup. Returns an error if no region is set.`,
 	This will error if the current database is not a multi-region database.`,
 			tree.VolatilityStable,
 		),
+	),
+	RehomeRowBuiltinName: makeBuiltin(
+		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, arg tree.Datums) (tree.Datum, error) {
+				regionConfig, err := evalCtx.Sequence.CurrentDatabaseRegionConfig(evalCtx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if regionConfig == nil {
+					return nil, pgerror.Newf(
+						pgcode.InvalidDatabaseDefinition,
+						"current database %s is not multi-region enabled",
+						evalCtx.SessionData().Database,
+					)
+				}
+				gatewayRegion, found := evalCtx.Locality.Find("region")
+				if !found {
+					return nil, pgerror.Newf(
+						pgcode.ConfigFile,
+						"no region set on the locality flag on this node",
+					)
+				}
+				if regionConfig.IsValidRegionNameString(gatewayRegion) {
+					return tree.NewDString(gatewayRegion), nil
+				}
+				primaryRegion := regionConfig.PrimaryRegionString()
+				return tree.NewDString(primaryRegion), nil
+			},
+			Info: `Returns the region of the connection's current node as defined by
+the locality flag on node startup. Returns an error if no region is set.`,
+			Volatility: tree.VolatilityStable,
+		},
 	),
 	"crdb_internal.validate_multi_region_zone_configs": makeBuiltin(
 		tree.FunctionProperties{Category: categoryMultiRegion},

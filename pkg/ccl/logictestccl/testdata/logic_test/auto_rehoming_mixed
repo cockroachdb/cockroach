@@ -1,0 +1,45 @@
+# LogicTest: local-mixed-21.1-21.2
+
+statement ok
+SET CLUSTER SETTING sql.defaults.experimental_auto_rehoming.enabled = true;
+
+statement ok
+SET experimental_enable_auto_rehoming = true;
+
+statement ok
+CREATE DATABASE db PRIMARY REGION "test";
+
+statement ok
+CREATE TABLE db.rbr (
+  p INT PRIMARY KEY,
+  s STRING,
+  FAMILY "primary" (p, s, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+query TT
+SHOW CREATE TABLE db.rbr
+----
+db.public.rbr               CREATE TABLE public.rbr (
+                            p INT8 NOT NULL,
+                            s STRING NULL,
+                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            CONSTRAINT "primary" PRIMARY KEY (p ASC),
+                            FAMILY "primary" (p, s, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+
+statement ok
+CREATE TABLE db.rbr_altered (p INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+ALTER TABLE db.rbr_altered SET LOCALITY REGIONAL BY ROW
+
+query TT
+SHOW CREATE TABLE db.rbr_altered
+----
+db.public.rbr_altered       CREATE TABLE public.rbr_altered (
+                            p INT8 NOT NULL,
+                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            CONSTRAINT "primary" PRIMARY KEY (p ASC),
+                            FAMILY "primary" (p, crdb_region)
+) LOCALITY REGIONAL BY ROW
