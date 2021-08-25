@@ -139,7 +139,7 @@
 /pkg/ccl/utilccl/            @cockroachdb/server-prs
 /pkg/ccl/workloadccl/        @cockroachdb/sql-experience
 /pkg/ccl/benchccl/rttanalysisccl/     @cockroachdb/sql-experience
-/pkg/clusterversion/         @cockroachdb/kv-prs
+/pkg/clusterversion/         @cockroachdb/kv-prs-noreview
 /pkg/cmd/allocsim/           @cockroachdb/kv-prs
 /pkg/cmd/bazci/              @cockroachdb/dev-inf
 /pkg/cmd/cmdutil/            @cockroachdb/dev-inf
