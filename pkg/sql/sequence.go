@@ -130,7 +130,11 @@ func incrementSequenceHelper(
 		return 0, err
 	}
 
-	p.ExtendedEvalContext().SessionMutator.RecordLatestSequenceVal(uint32(descriptor.GetID()), val)
+	p.ExtendedEvalContext().SessionMutatorIterator.forEachMutator(
+		func(m *sessionDataMutator) {
+			m.RecordLatestSequenceVal(uint32(descriptor.GetID()), val)
+		},
+	)
 
 	return val, nil
 }
