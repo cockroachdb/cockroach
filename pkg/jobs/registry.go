@@ -1155,16 +1155,18 @@ func (r retryJobError) Error() string {
 	return string(r)
 }
 
-// Registry does not retry a job that fails due to a permanent error.
+// Registry does not retry non-cancelable jobs with a permanent error.
 var errJobPermanentSentinel = errors.New("permanent job-error")
 
-// MarkAsPermanentJobError marks an error as a permanent job error, which indicates
-// Registry to not retry the job when it fails due to this error.
+// MarkAsPermanentJobError marks an error as a permanent error, which indicates
+// Registry to not retry the job in "running" state when the job fails due to
+// this error. This marking is ignored in reverting state: Jobs in "reverting"
+// state are always retried, regardless of the type of error.
 func MarkAsPermanentJobError(err error) error {
 	return errors.Mark(err, errJobPermanentSentinel)
 }
 
-// IsPermanentJobError checks whether the given error is a permanent error.
+// IsPermanentJobError checks whether the given error is a permanent job-error.
 func IsPermanentJobError(err error) bool {
 	return errors.Is(err, errJobPermanentSentinel)
 }
@@ -1217,6 +1219,9 @@ func (r *Registry) stepThroughStateMachine(
 		if errors.Is(err, retryJobErrorSentinel) {
 			jm.ResumeRetryError.Inc(1)
 			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
+		}
+		if job.Payload().Noncancelable && !IsPermanentJobError(err) {
+			return errors.Wrapf(err, "job %d: job is non-cancelable, restarting in background", job.ID())
 		}
 		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
