@@ -44,8 +44,8 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &persistedsqlstats.TestingKnobs{
-					StubTimeNow:         fakeTime.StubTimeNow,
-					DisableFollowerRead: true,
+					StubTimeNow: fakeTime.StubTimeNow,
+					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
 				},
 			},
 		},
