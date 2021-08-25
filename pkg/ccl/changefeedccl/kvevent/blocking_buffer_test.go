@@ -106,7 +106,8 @@ func TestBlockingBuffer(t *testing.T) {
 	for metrics.BufferPushbackNanos.Count() == 0 {
 		e, err := buf.Get(context.Background())
 		require.NoError(t, err)
-		e.DetachAlloc().Release(context.Background())
+		a := e.DetachAlloc()
+		a.Release(context.Background())
 	}
 	stopProducers()
 }
