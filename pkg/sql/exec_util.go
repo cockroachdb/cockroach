@@ -2530,6 +2530,14 @@ func (it *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
 	})
 }
 
+// applyOnTopMutator applies the given function on the mutator for the top
+// element on the sessiondata Stack only.
+func (it *sessionDataMutatorIterator) applyOnTopMutator(
+	applyFunc func(m *sessionDataMutator) error,
+) error {
+	return applyFunc(it.mutator(true /* applyCallbacks */, it.sds.Top()))
+}
+
 // forEachMutator iterates over each mutator over all SessionData elements
 // in the stack and applies the given function to them.
 // It is the equivalent of SET SESSION x = y.
