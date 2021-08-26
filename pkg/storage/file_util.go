@@ -23,6 +23,10 @@ const tempFileExtension = ".crdbtmp"
 // using the given fs.  It returns after both the file and the containing
 // directory are synced.
 func SafeWriteToFile(fs vfs.FS, dir string, filename string, b []byte) error {
+	// TODO(jackson): Assert that fs supports atomic renames once Pebble
+	// is bumped to the appropriate SHA and non-atomic use cases are
+	// updated to avoid this method.
+
 	tempName := filename + tempFileExtension
 	f, err := fs.Create(tempName)
 	if err != nil {
