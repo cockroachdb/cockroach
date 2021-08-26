@@ -180,7 +180,7 @@ type TypeSchemaChangerTestingKnobs struct {
 	RunBeforeExec func() error
 	// RunBeforeEnumMemberPromotion runs before enum members are promoted from
 	// readable to all permissions in the typeSchemaChanger.
-	RunBeforeEnumMemberPromotion func() error
+	RunBeforeEnumMemberPromotion func(ctx context.Context) error
 	// RunAfterOnFailOrCancel runs after OnFailOrCancel completes, if
 	// OnFailOrCancel is triggered.
 	RunAfterOnFailOrCancel func() error
@@ -272,7 +272,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM) &&
 		len(t.transitioningMembers) != 0 {
 		if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeEnumMemberPromotion; fn != nil {
-			if err := fn(); err != nil {
+			if err := fn(ctx); err != nil {
 				return err
 			}
 		}

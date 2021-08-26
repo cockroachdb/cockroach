@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -44,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -222,6 +222,9 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			}
 		}
 		args.Knobs.JobsTestingKnobs = knobs
+		args.Knobs.SpanConfig = &spanconfig.TestingKnobs{
+			ManagerDisableJobCreation: true,
+		}
 
 		if rts.traceRealSpan {
 			baseDir, dirCleanupFn := testutils.TempDir(t)
@@ -283,6 +286,11 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			},
 			FailOrCancel: func(ctx context.Context) error {
 				t.Log("Starting FailOrCancel")
+				if rts.traceRealSpan {
+					// Add a dummy recording so we actually see something in the trace.
+					span := tracing.SpanFromContext(ctx)
+					span.RecordStructured(&types.StringValue{Value: "boom"})
+				}
 				rts.mu.Lock()
 				rts.mu.a.OnFailOrCancelStart = true
 				rts.mu.Unlock()
@@ -362,7 +370,6 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 
 func TestRegistryLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 68315, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	t.Run("normal success", func(t *testing.T) {
@@ -1095,42 +1102,40 @@ func TestRegistryLifecycle(t *testing.T) {
 	})
 
 	t.Run("dump traces on cancel", func(t *testing.T) {
-		rts := registryTestSuite{traceRealSpan: true}
+		completeCh := make(chan struct{})
+		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
+			completeCh <- struct{}{}
+		}}
 		rts.setUp(t)
 		defer rts.tearDown()
-
-		runJobAndFail := func(expectedNumFiles int) {
-			j, err := jobs.TestingCreateAndStartJob(context.Background(), rts.registry, rts.s.DB(), rts.mockJob)
-			if err != nil {
-				t.Fatal(err)
-			}
-			rts.job = j
-
-			rts.mu.e.ResumeStart = true
-			rts.resumeCheckCh <- struct{}{}
-			rts.check(t, jobs.StatusRunning)
-
-			rts.sqlDB.Exec(t, "CANCEL JOB $1", j.ID())
-
-			// Cancellation will cause the running instance of the job to get context
-			// canceled causing it to potentially dump traces.
-			require.Error(t, rts.job.AwaitCompletion(rts.ctx))
-			checkTraceFiles(t, rts.registry, expectedNumFiles)
-
-			rts.mu.e.OnFailOrCancelStart = true
-			rts.check(t, jobs.StatusReverting)
-
-			rts.failOrCancelCheckCh <- struct{}{}
-			close(rts.failOrCancelCheckCh)
-			rts.failOrCancelCh <- nil
-			close(rts.failOrCancelCh)
-			rts.mu.e.OnFailOrCancelExit = true
-
-			rts.check(t, jobs.StatusCanceled)
-		}
-
 		rts.sqlDB.Exec(t, `SET CLUSTER SETTING jobs.trace.force_dump_mode='onStop'`)
-		runJobAndFail(1)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		rts.sqlDB.Exec(t, "CANCEL JOB $1", j.ID())
+
+		<-completeCh
+		checkTraceFiles(t, rts.registry, 1)
+
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.check(t, jobs.StatusReverting)
+
+		rts.failOrCancelCheckCh <- struct{}{}
+		close(rts.failOrCancelCheckCh)
+		rts.failOrCancelCh <- nil
+		close(rts.failOrCancelCh)
+		rts.mu.e.OnFailOrCancelExit = true
+
+		rts.check(t, jobs.StatusCanceled)
+
+		<-completeCh
 	})
 }
 
@@ -1754,7 +1759,7 @@ func TestShowJobs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	ctx := context.Background()
@@ -2583,11 +2588,9 @@ func TestStartableJob(t *testing.T) {
 		status, err := sj.CurrentStatus(ctx, nil /* txn */)
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusCancelRequested, status)
-		for _, id := range jr.CurrentlyRunningJobs() {
-			require.NotEqual(t, id, sj.ID())
-		}
+		// Start should fail since we have already called cancel on the job.
 		err = sj.Start(ctx)
-		require.Regexp(t, "job with status cancel-requested cannot be marked started", err)
+		require.Regexp(t, "cannot be started more than once", err)
 	})
 	setUpRunTest := func(t *testing.T) (
 		sj *jobs.StartableJob,
