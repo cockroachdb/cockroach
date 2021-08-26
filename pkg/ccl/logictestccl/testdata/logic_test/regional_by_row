@@ -876,6 +876,42 @@ SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 
       table: regional_by_row_table@primary
       spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 
+# Query with more than one key.
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk IN (1, 4)] OFFSET 2
+----
+·
+• union all
+│ limit: 2
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@primary
+│     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ap-southeast-2'/4 - /'ap-southeast-2'/4]
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@primary
+      spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'ca-central-1'/4 - /'ca-central-1'/4] [/'us-east-1'/1 - /'us-east-1'/1] [/'us-east-1'/4 - /'us-east-1'/4]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkV-L1DAQwN_9FMM8eRJp0z1B8lTRLi6s27MtKFzLkmuGtdhNapLiHUu_u7R9uKvcCrc-zp_fzG-SE7pfLQrMk23ysYA3sM7SL3CbfL_Zftjs4PWnTV7kX7dXsGywdGiMlu3-7mFvze-9l3ctwbfPSZZA9xNGkjO4vqogXa_zpIAIGWqjaCeP5FDcIseKYWdNTc4ZO6ZOU8NG3aMIGTa66_2YrhjWxhKKE_rGt4QCi3FbRlKRDUJkqMjLpp3GPisWd7Y5SvuADPNOaicgKLEs79-HJQY8CEFqBSsw_gdZhwzT3guIOYsjFq9YfM3id1gNDE3vH6WclwdCwQd2mTi_VDx-Is1n6Rc6R2edH1V7bawiS2qhWQ3PXLUzb00XRMt7ts2x8RCddQhf8m4Zuc5oR3-5nJtcMSR1oPkgZ3pb04019bRmDtOJmxKKnJ-r0Rxs9FSaPvYpzP8Hjv4JrxZwOFTDqz8BAAD__1J1KGk=
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk IN (1, 4); SET tracing = off
+
+# Both rows are found in the local region, so the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/72/1/"@"/1/0, /Table/72/1/"@"/4/0
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+output row: [1 1 2 3 '{"a": "b"}']
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/4/pk2/a/b/j -> /4/5/6/'{"c": "d"}'
+output row: [4 4 5 6 '{"c": "d"}']
+
 # Tests using locality optimized search for lookup joins (including foreign
 # key checks).
 statement ok
