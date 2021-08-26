@@ -1485,6 +1485,22 @@ func createImportingDescriptors(
 
 // Resume is part of the jobs.Resumer interface.
 func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	if err := r.doResume(ctx, execCtx); err != nil {
+		details := r.job.Details().(jobspb.RestoreDetails)
+		if details.DebugPauseOn == "error" {
+			const errorFmt = "job failed with error (%v) but is being paused due to the %s=%s setting"
+			log.Warningf(ctx, errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn)
+
+			return r.execCfg.JobRegistry.PauseRequested(ctx, nil, r.job.ID(),
+				fmt.Sprintf(errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn))
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := execCtx.(sql.JobExecContext)
 

@@ -867,6 +867,7 @@ unreserved_keyword ::=
 	| 'DATABASES'
 	| 'DAY'
 	| 'DEALLOCATE'
+	| 'DEBUG_PAUSE_ON'
 	| 'DECLARE'
 	| 'DELETE'
 	| 'DEFAULTS'
@@ -2095,6 +2096,7 @@ restore_options ::=
 	| 'SKIP_MISSING_VIEWS'
 	| 'DETACHED'
 	| 'SKIP_LOCALITIES_CHECK'
+	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*

@@ -244,7 +244,10 @@ message RestoreDetails {
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
 
-  // NEXT ID: 20.
+  // DebugPauseOn describes the events that the job should pause itself on for debugging purposes.
+  string debug_pause_on = 20;
+
+  // NEXT ID: 21.
 }
 
 message RestoreProgress {

@@ -71,11 +71,16 @@ const (
 	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	restoreOptSkipMissingViews          = "skip_missing_views"
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
+	restoreOptDebugPauseOn              = "debug_pause_on"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
 	restoreTempSystemDB = "crdb_temp_system"
 )
+
+var allowedDebugPauseOnValues = map[string]struct{}{
+	"error": {},
+}
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
 var featureRestoreEnabled = settings.RegisterBoolSetting(
@@ -1914,6 +1919,23 @@ func doRestorePlan(
 		}
 	}
 
+	var debugPauseOn string
+	if restoreStmt.Options.DebugPauseOn != nil {
+		pauseOnFn, err := p.TypeAsString(ctx, restoreStmt.Options.DebugPauseOn, "RESTORE")
+		if err != nil {
+			return err
+		}
+
+		debugPauseOn, err = pauseOnFn()
+		if err != nil {
+			return err
+		}
+
+		if _, ok := allowedDebugPauseOnValues[debugPauseOn]; len(debugPauseOn) > 0 && !ok {
+			return errors.Newf("%s cannot be set with the value %s", restoreOptDebugPauseOn, debugPauseOn)
+		}
+	}
+
 	filteredTablesByID, err := maybeFilterMissingViews(
 		tablesByID,
 		typesByID,
@@ -2011,6 +2033,7 @@ func doRestorePlan(
 			Encryption:         encryption,
 			RevalidateIndexes:  revalidateIndexes,
 			DatabaseModifiers:  databaseModifiers,
+			DebugPauseOn:       debugPauseOn,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}
