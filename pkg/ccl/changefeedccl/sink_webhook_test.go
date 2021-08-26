@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -180,9 +181,29 @@ func TestWebhookSink(t *testing.T) {
 		require.EqualError(t, sinkSrc.EmitRow(context.Background(), nil, nil, nil, hlc.Timestamp{}, zeroAlloc),
 			`context canceled`)
 
+		sinkDestHTTP, err := cdctest.StartMockWebhookSinkInsecure()
+		require.NoError(t, err)
+		details.SinkURI = fmt.Sprintf("webhook-https://%s", strings.TrimPrefix(sinkDestHTTP.URL(), "http://"))
+
+		sinkSrcWrongProtocol, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
+		require.NoError(t, err)
+
+		// sink's client should not accept the endpoint's use of HTTP (expects HTTPS)
+		require.NoError(t, sinkSrcWrongProtocol.EmitRow(context.Background(), nil, []byte("[1001]"),
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"),
+			hlc.Timestamp{}, zeroAlloc))
+
+		require.EqualError(t, sinkSrcWrongProtocol.Flush(context.Background()),
+			fmt.Sprintf(`Post "%s": http: server gave HTTP response to HTTPS client`, fmt.Sprintf("https://%s", strings.TrimPrefix(sinkDestHTTP.URL(),
+				"http://"))))
+		require.EqualError(t, sinkSrcWrongProtocol.EmitRow(context.Background(), nil, nil, nil, hlc.Timestamp{}, zeroAlloc),
+			`context canceled`)
+
 		require.NoError(t, sinkSrc.Close())
 		require.NoError(t, sinkSrcNoCert.Close())
 		require.NoError(t, sinkSrcInsecure.Close())
+		require.NoError(t, sinkSrcWrongProtocol.Close())
+		sinkDestHTTP.Close()
 	}
 
 	// run tests with parallelism from 1-4
@@ -312,7 +333,6 @@ func TestWebhookSinkConfig(t *testing.T) {
 
 	retryThenFailureDefaultFn := func(parallelism int) {
 		opts := getGenericWebhookSinkOptions()
-		opts[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms"}}`
 		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
@@ -352,7 +372,7 @@ func TestWebhookSinkConfig(t *testing.T) {
 
 	retryThenFailureCustomFn := func(parallelism int) {
 		opts := getGenericWebhookSinkOptions()
-		opts[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms", "Max": 6}}`
+		opts[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms", "Max": "6"}}`
 		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)

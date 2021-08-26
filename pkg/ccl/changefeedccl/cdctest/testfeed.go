@@ -72,6 +72,8 @@ type EnterpriseTestFeed interface {
 	WaitForStatus(func(s jobs.Status) bool) error
 	// FetchTerminalJobErr retrieves the error message from changefeed job.
 	FetchTerminalJobErr() error
+	// FetchRunningStatus retrieves running status from changefeed job.
+	FetchRunningStatus() (string, error)
 	// Details returns changefeed details for this feed.
 	Details() (*jobspb.ChangefeedDetails, error)
 }
