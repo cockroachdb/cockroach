@@ -218,6 +218,13 @@ func (s *Stack) Pop() error {
 	if len(s.stack) <= 1 {
 		return errors.AssertionFailedf("there must always be at least one element in the SessionData stack")
 	}
-	s.stack = s.stack[:len(s.stack)-1]
+	idx := len(s.stack) - 1
+	s.stack[idx] = nil
+	s.stack = s.stack[:idx]
 	return nil
+}
+
+// Elems returns all elements in the Stack.
+func (s *Stack) Elems() []*SessionData {
+	return s.stack
 }

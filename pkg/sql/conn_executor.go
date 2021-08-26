@@ -582,11 +582,13 @@ func (s *Server) SetupConn(
 	memMetrics MemoryMetrics,
 ) (ConnectionHandler, error) {
 	sd := s.newSessionData(args)
-
+	sds := sessiondata.NewStack(sd)
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
-	sdMut := s.makeSessionDataMutator(sd, args.SessionDefaults)
-	if err := resetSessionVars(ctx, &sdMut); err != nil {
+	sdMutIterator := s.makeSessionDataMutatorIterator(sds, args.SessionDefaults)
+	if err := sdMutIterator.forEachMutatorError(func(m *sessionDataMutator) error {
+		return resetSessionVars(ctx, m)
+	}); err != nil {
 		log.Errorf(ctx, "error setting up client session: %s", err)
 		return ConnectionHandler{}, err
 	}
@@ -627,7 +629,7 @@ func (h ConnectionHandler) GetParamStatus(ctx context.Context, varName string) s
 		log.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
 		return ""
 	}
-	hasDefault, defVal := getSessionVarDefaultString(name, v, h.ex.dataMutator)
+	hasDefault, defVal := getSessionVarDefaultString(name, v, h.ex.dataMutatorIterator.sessionDataMutatorBase)
 	if !hasDefault {
 		log.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
 		return ""
@@ -672,14 +674,16 @@ func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 	return sd
 }
 
-func (s *Server) makeSessionDataMutator(
-	sd *sessiondata.SessionData, defaults SessionDefaults,
-) sessionDataMutator {
-	return sessionDataMutator{
-		data:               sd,
-		defaults:           defaults,
-		settings:           s.cfg.Settings,
-		paramStatusUpdater: &noopParamStatusUpdater{},
+func (s *Server) makeSessionDataMutatorIterator(
+	sds *sessiondata.Stack, defaults SessionDefaults,
+) *sessionDataMutatorIterator {
+	return &sessionDataMutatorIterator{
+		sds: sds,
+		sessionDataMutatorBase: sessionDataMutatorBase{
+			defaults: defaults,
+			settings: s.cfg.Settings,
+		},
+		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
 	}
 }
 
@@ -739,8 +743,6 @@ func (s *Server) newConnExecutor(
 	)
 
 	nodeIDOrZero, _ := s.cfg.NodeID.OptionalNodeID()
-	sdMutator := new(sessionDataMutator)
-	*sdMutator = s.makeSessionDataMutator(sd, sdDefaults)
 	ex := &connExecutor{
 		server:           s,
 		metrics:          srvMetrics,
@@ -749,7 +751,6 @@ func (s *Server) newConnExecutor(
 		mon:              sessionRootMon,
 		sessionMon:       sessionMon,
 		sessionDataStack: sessiondata.NewStack(sd),
-		dataMutator:      sdMutator,
 		state: txnState{
 			mon:                          txnMon,
 			connCtx:                      ctx,
@@ -781,20 +782,23 @@ func (s *Server) newConnExecutor(
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
 
+	ex.dataMutatorIterator = s.makeSessionDataMutatorIterator(
+		ex.sessionDataStack,
+		sdDefaults,
+	)
 	// The transaction_read_only variable is special; its updates need to be
 	// hooked-up to the executor.
-	sdMutator.setCurTxnReadOnly = func(val bool) {
+	ex.dataMutatorIterator.setCurTxnReadOnly = func(val bool) {
 		ex.state.readOnly = val
 	}
-
-	sdMutator.onTempSchemaCreation = func() {
+	ex.dataMutatorIterator.onTempSchemaCreation = func() {
 		ex.hasCreatedTemporarySchema = true
 	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
 	ex.statsWriter = statsWriter
 	ex.statsCollector = sslocal.NewStatsCollector(statsWriter, ex.phaseTimes)
-	sdMutator.RegisterOnSessionDataChange("application_name", func(newName string) {
+	ex.dataMutatorIterator.RegisterOnSessionDataChange("application_name", func(newName string) {
 		ex.applicationName.Store(newName)
 		ex.statsWriter = ex.server.sqlStats.GetWriterForApplication(newName)
 	})
@@ -852,7 +856,9 @@ func (s *Server) newConnExecutorWithTxn(
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
-		ex.dataMutator.SetReadOnly(true)
+		ex.dataMutatorIterator.forEachMutator(func(m *sessionDataMutator) {
+			m.SetReadOnly(true)
+		})
 	}
 
 	// The new transaction stuff below requires active monitors and traces, so
@@ -1226,9 +1232,10 @@ type connExecutor struct {
 
 	// sessionDataStack contains the user-configurable connection variables.
 	sessionDataStack *sessiondata.Stack
-	// dataMutator is nil for session-bound internal executors; we shouldn't issue
-	// statements that manipulate session state to an internal executor.
-	dataMutator *sessionDataMutator
+	// dataMutatorIterator is nil for session-bound internal executors; we
+	// shouldn't issue statements that manipulate session state to an internal
+	// executor.
+	dataMutatorIterator *sessionDataMutatorIterator
 
 	// statsWriter is a writer interface for recording per-application SQL usage
 	// statistics. It is maintained to represent statistics for the application
@@ -1477,7 +1484,9 @@ func (ex *connExecutor) Ctx() context.Context {
 	return ctx
 }
 
-// sessionData returns the top SessionData on the executor.
+// sessionData returns the top SessionData in the executor's sessionDataStack.
+// This should be how callers should reference SessionData objects, as it
+// will always contain the "latest" SessionData object in the transaction.
 func (ex *connExecutor) sessionData() *sessiondata.SessionData {
 	if ex.sessionDataStack == nil {
 		return nil
@@ -2380,7 +2389,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SQLStatsController:     ex.server.sqlStatsController,
 			CompactEngineSpan:      ex.server.cfg.CompactEngineSpanFunc,
 		},
-		SessionMutator:         ex.dataMutator,
+		SessionMutatorIterator: ex.dataMutatorIterator,
 		VirtualSchemas:         ex.server.cfg.VirtualSchemas,
 		Tracing:                &ex.sessionTracing,
 		NodesStatusServer:      ex.server.cfg.NodesStatusServer,
@@ -2462,7 +2471,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 
 	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
 
-	p.sessionDataMutator = ex.dataMutator
+	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 

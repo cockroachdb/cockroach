@@ -431,9 +431,7 @@ func (p *planner) bumpDatabaseRoleSettingsTableVersion(ctx context.Context) erro
 }
 
 func (p *planner) setRole(ctx context.Context, s security.SQLUsername) error {
-	m := p.sessionDataMutator
-
-	sessionUser := m.data.SessionUser()
+	sessionUser := p.SessionData().SessionUser()
 	becomeUser := sessionUser
 	// Check the role exists - if so, populate becomeUser.
 	if !s.IsNoneRole() {
@@ -466,25 +464,28 @@ func (p *planner) setRole(ctx context.Context, s security.SQLUsername) error {
 	if willBecomeAdmin {
 		updateStr = "on"
 	}
-	m.paramStatusUpdater.BufferParamStatusUpdate("is_superuser", updateStr)
 
-	// The "none" user resets the SessionUserProto in a SET ROLE.
-	if becomeUser.IsNoneRole() {
-		if m.data.SessionUserProto.Decode().Normalized() != "" {
-			m.data.UserProto = m.data.SessionUserProto
-			m.data.SessionUserProto = ""
+	p.forEachMutator(func(m *sessionDataMutator) {
+		m.bufferParamStatusUpdate("is_superuser", updateStr)
+
+		// The "none" user does resets the SessionUserProto in a SET ROLE.
+		if becomeUser.IsNoneRole() {
+			if m.data.SessionUserProto.Decode().Normalized() != "" {
+				m.data.UserProto = m.data.SessionUserProto
+				m.data.SessionUserProto = ""
+			}
+			m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
+			return
 		}
-		m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
-		return nil
-	}
 
-	// Only update session_user when we are transitioning from the current_user
-	// being the session_user.
-	if m.data.SessionUserProto == "" {
-		m.data.SessionUserProto = m.data.UserProto
-	}
-	m.data.UserProto = becomeUser.EncodeProto()
-	m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
+		// Only update session_user when we are transitioning from the current_user
+		// being the session_user.
+		if m.data.SessionUserProto == "" {
+			m.data.SessionUserProto = m.data.UserProto
+		}
+		m.data.UserProto = becomeUser.EncodeProto()
+		m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
+	})
 	return nil
 }
 

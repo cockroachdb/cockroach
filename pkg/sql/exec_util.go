@@ -2391,38 +2391,108 @@ type paramStatusUpdater interface {
 	BufferParamStatusUpdate(string, string)
 }
 
-// noopParamStatusUpdater implements paramStatusUpdater by performing a no-op.
-type noopParamStatusUpdater struct{}
+// sessionDataMutatorBase contains elements in a sessionDataMutator
+// which is the same across all SessionData elements in the sessiondata.Stack.
+type sessionDataMutatorBase struct {
+	defaults SessionDefaults
+	settings *cluster.Settings
+}
 
-var _ paramStatusUpdater = (*noopParamStatusUpdater)(nil)
+// RegisterOnSessionDataChange adds a listener to execute when a change on the
+// given key is made using the mutator object.
+func (it *sessionDataMutatorIterator) RegisterOnSessionDataChange(key string, f func(val string)) {
+	if it.onSessionDataChangeListeners == nil {
+		it.onSessionDataChangeListeners = make(map[string][]func(val string))
+	}
+	it.onSessionDataChangeListeners[key] = append(it.onSessionDataChangeListeners[key], f)
+}
 
-func (noopParamStatusUpdater) BufferParamStatusUpdate(string, string) {}
-
-// sessionDataMutator is the interface used by sessionVars to change the session
-// state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
-// see curTxnReadOnly).
-type sessionDataMutator struct {
-	data               *sessiondata.SessionData
-	defaults           SessionDefaults
-	settings           *cluster.Settings
+// sessionDataMutatorCallbacks contains elements in a sessionDataMutator
+// which are only populated when mutating the "top" sessionData element.
+// It is intended for functions which should only be called once per SET
+// (e.g. param status updates, which only should be sent once within
+// a transaction where there may be two or more SessionData elements in
+// the stack)
+type sessionDataMutatorCallbacks struct {
+	// paramStatusUpdater is called when there is a ParamStatusUpdate.
+	// It can be nil, in which case nothing triggers on execution.
 	paramStatusUpdater paramStatusUpdater
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
+	// It can be nil, in which case nothing triggers on execution.
 	setCurTxnReadOnly func(val bool)
 	// onTempSchemaCreation is called when the temporary schema is set
 	// on the search path (the first and only time).
+	// It can be nil, in which case nothing triggers on execution.
 	onTempSchemaCreation func()
 	// onSessionDataChangeListeners stores all the observers to execute when
 	// session data is modified, keyed by the value to change on.
 	onSessionDataChangeListeners map[string][]func(val string)
 }
 
-// RegisterOnSessionDataChange adds a listener to execute when a change on the
-// given key is made using the mutator object.
-func (m *sessionDataMutator) RegisterOnSessionDataChange(key string, f func(val string)) {
-	if m.onSessionDataChangeListeners == nil {
-		m.onSessionDataChangeListeners = make(map[string][]func(val string))
+// sessionDataMutatorIterator generates sessionDataMutators which allow
+// the changing of SessionData on some element inside the sessiondata Stack.
+type sessionDataMutatorIterator struct {
+	sessionDataMutatorBase
+	sds *sessiondata.Stack
+	sessionDataMutatorCallbacks
+}
+
+// mutator returns a mutator for the given sessionData.
+func (it *sessionDataMutatorIterator) mutator(
+	applyCallbacks bool, sd *sessiondata.SessionData,
+) *sessionDataMutator {
+	ret := &sessionDataMutator{
+		data:                   sd,
+		sessionDataMutatorBase: it.sessionDataMutatorBase,
 	}
-	m.onSessionDataChangeListeners[key] = append(m.onSessionDataChangeListeners[key], f)
+	// We usually apply callbacks on the first element in the stack, as the txn
+	// rollback will always reset to the first element we touch in the stack,
+	// in which case it should be up-to-date by default.
+	if applyCallbacks {
+		ret.sessionDataMutatorCallbacks = it.sessionDataMutatorCallbacks
+	}
+	return ret
+}
+
+// SetSessionDefaultIntSize sets the default int size for the session.
+// It is exported for use in import which is a CCL package.
+func (it *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
+	it.forEachMutator(func(m *sessionDataMutator) {
+		m.SetDefaultIntSize(size)
+	})
+}
+
+// forEachMutator iterates over each mutator over all SessionData elements
+// in the stack and applies the given function to them.
+// It is the equivalent of SET SESSION x = y.
+func (it *sessionDataMutatorIterator) forEachMutator(applyFunc func(m *sessionDataMutator)) {
+	elems := it.sds.Elems()
+	for i, sd := range elems {
+		applyFunc(it.mutator(i == 0, sd))
+	}
+}
+
+// forEachMutatorError is the same as forEachMutator, but takes in a function
+// that can return an error, erroring if any of applications error.
+func (it *sessionDataMutatorIterator) forEachMutatorError(
+	applyFunc func(m *sessionDataMutator) error,
+) error {
+	elems := it.sds.Elems()
+	for i, sd := range elems {
+		if err := applyFunc(it.mutator(i == 0, sd)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// sessionDataMutator is the object used by sessionVars to change the session
+// state. It mostly mutates the session's SessionData, but not exclusively (e.g.
+// see curTxnReadOnly).
+type sessionDataMutator struct {
+	data *sessiondata.SessionData
+	sessionDataMutatorBase
+	sessionDataMutatorCallbacks
 }
 
 func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string) {
@@ -2431,11 +2501,17 @@ func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string)
 	}
 }
 
+func (m *sessionDataMutator) bufferParamStatusUpdate(param string, status string) {
+	if m.paramStatusUpdater != nil {
+		m.paramStatusUpdater.BufferParamStatusUpdate(param, status)
+	}
+}
+
 // SetApplicationName sets the application name.
 func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.data.ApplicationName = appName
 	m.notifyOnDataChangeListeners("application_name", appName)
-	m.paramStatusUpdater.BufferParamStatusUpdate("application_name", appName)
+	m.bufferParamStatusUpdate("application_name", appName)
 }
 
 func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondatapb.BytesEncodeFormat) {
@@ -2451,7 +2527,9 @@ func (m *sessionDataMutator) SetDatabase(dbName string) {
 }
 
 func (m *sessionDataMutator) SetTemporarySchemaName(scName string) {
-	m.onTempSchemaCreation()
+	if m.onTempSchemaCreation != nil {
+		m.onTempSchemaCreation()
+	}
 	m.data.SearchPath = m.data.SearchPath.WithTemporarySchemaName(scName)
 }
 
@@ -2570,7 +2648,7 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.data.Location = loc
-	m.paramStatusUpdater.BufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
+	m.bufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
@@ -2674,13 +2752,13 @@ func (m *sessionDataMutator) initSequenceCache() {
 // SetIntervalStyle sets the IntervalStyle for the given session.
 func (m *sessionDataMutator) SetIntervalStyle(style duration.IntervalStyle) {
 	m.data.DataConversionConfig.IntervalStyle = style
-	m.paramStatusUpdater.BufferParamStatusUpdate("IntervalStyle", strings.ToLower(style.String()))
+	m.bufferParamStatusUpdate("IntervalStyle", strings.ToLower(style.String()))
 }
 
 // SetDateStyle sets the DateStyle for the given session.
 func (m *sessionDataMutator) SetDateStyle(style pgdate.DateStyle) {
 	m.data.DataConversionConfig.DateStyle = style
-	m.paramStatusUpdater.BufferParamStatusUpdate("DateStyle", style.SQLString())
+	m.bufferParamStatusUpdate("DateStyle", style.SQLString())
 }
 
 // SetIntervalStyleEnabled sets the IntervalStyleEnabled for the given session.
