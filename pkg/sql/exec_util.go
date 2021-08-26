@@ -2396,16 +2396,15 @@ type paramStatusUpdater interface {
 type sessionDataMutatorBase struct {
 	defaults SessionDefaults
 	settings *cluster.Settings
-	sessionDataMutatorCallbacks
 }
 
 // RegisterOnSessionDataChange adds a listener to execute when a change on the
 // given key is made using the mutator object.
-func (b *sessionDataMutatorBase) RegisterOnSessionDataChange(key string, f func(val string)) {
-	if b.onSessionDataChangeListeners == nil {
-		b.onSessionDataChangeListeners = make(map[string][]func(val string))
+func (it *sessionDataMutatorIterator) RegisterOnSessionDataChange(key string, f func(val string)) {
+	if it.onSessionDataChangeListeners == nil {
+		it.onSessionDataChangeListeners = make(map[string][]func(val string))
 	}
-	b.onSessionDataChangeListeners[key] = append(b.onSessionDataChangeListeners[key], f)
+	it.onSessionDataChangeListeners[key] = append(it.onSessionDataChangeListeners[key], f)
 }
 
 // sessionDataMutatorCallbacks contains elements in a sessionDataMutator
@@ -2435,29 +2434,30 @@ type sessionDataMutatorCallbacks struct {
 type sessionDataMutatorIterator struct {
 	sessionDataMutatorBase
 	sds *sessiondata.Stack
+	sessionDataMutatorCallbacks
 }
 
 // mutator returns a mutator for the given sessionData.
-func (f *sessionDataMutatorIterator) mutator(
-	isTop bool, sd *sessiondata.SessionData,
+func (it *sessionDataMutatorIterator) mutator(
+	applyCallbacks bool, sd *sessiondata.SessionData,
 ) *sessionDataMutator {
 	ret := &sessionDataMutator{
 		data:                   sd,
-		sessionDataMutatorBase: f.sessionDataMutatorBase,
+		sessionDataMutatorBase: it.sessionDataMutatorBase,
 	}
-	// Change the sessionDataMutatorCallbacks if our SessionData element is not
-	// the top. This prevents us from calling, e.g. ParamStatusUpdate multiple
-	// times if we are nested in a transaction (it should only be called once).
-	if !isTop {
-		ret.sessionDataMutatorCallbacks = sessionDataMutatorCallbacks{}
+	// We usually apply callbacks on the first element in the stack, as the txn
+	// rollback will always reset to the first element we touch in the stack,
+	// in which case it should be up-to-date by default.
+	if applyCallbacks {
+		ret.sessionDataMutatorCallbacks = it.sessionDataMutatorCallbacks
 	}
 	return ret
 }
 
 // SetSessionDefaultIntSize sets the default int size for the session.
 // It is exported for use in import which is a CCL package.
-func (f *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
-	f.forEachMutator(func(m *sessionDataMutator) {
+func (it *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
+	it.forEachMutator(func(m *sessionDataMutator) {
 		m.SetDefaultIntSize(size)
 	})
 }
@@ -2465,21 +2465,21 @@ func (f *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
 // forEachMutator iterates over each mutator over all SessionData elements
 // in the stack and applies the given function to them.
 // It is the equivalent of SET SESSION x = y.
-func (f *sessionDataMutatorIterator) forEachMutator(applyFunc func(m *sessionDataMutator)) {
-	elems := f.sds.Elems()
+func (it *sessionDataMutatorIterator) forEachMutator(applyFunc func(m *sessionDataMutator)) {
+	elems := it.sds.Elems()
 	for i, sd := range elems {
-		applyFunc(f.mutator(i == len(elems)-1, sd))
+		applyFunc(it.mutator(i == 0, sd))
 	}
 }
 
 // forEachMutatorError is the same as forEachMutator, but takes in a function
 // that can return an error, erroring if any of applications error.
-func (f *sessionDataMutatorIterator) forEachMutatorError(
+func (it *sessionDataMutatorIterator) forEachMutatorError(
 	applyFunc func(m *sessionDataMutator) error,
 ) error {
-	elems := f.sds.Elems()
+	elems := it.sds.Elems()
 	for i, sd := range elems {
-		if err := applyFunc(f.mutator(i == len(elems)-1, sd)); err != nil {
+		if err := applyFunc(it.mutator(i == 0, sd)); err != nil {
 			return err
 		}
 	}
@@ -2492,6 +2492,7 @@ func (f *sessionDataMutatorIterator) forEachMutatorError(
 type sessionDataMutator struct {
 	data *sessiondata.SessionData
 	sessionDataMutatorBase
+	sessionDataMutatorCallbacks
 }
 
 func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string) {
