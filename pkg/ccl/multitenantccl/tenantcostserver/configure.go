@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,9 +51,11 @@ func (s *instance) ReconfigureTokenBucket(
 	if err != nil {
 		return err
 	}
+	now := s.timeSource.Now()
+	state.update(now)
 	state.Bucket.Reconfigure(
 		availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
-		timeutil.Now(), state.Consumption.RU,
+		now, state.Consumption.RU,
 	)
 	if err := h.updateTenantState(state); err != nil {
 		return err

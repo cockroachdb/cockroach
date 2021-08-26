@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -243,10 +244,12 @@ func runSampleAggregator(
 				for _, bucket := range r.buckets {
 					count += bucket.numEq + bucket.numRange
 				}
-				if count != r.rowCount-r.nullCount {
+				targetCount := r.rowCount - r.nullCount
+				// Due to rounding errors, we may be within +/- 1 of the target.
+				if count < targetCount-1 && count > targetCount+1 {
 					t.Errorf(
 						"Expected %d rows counted in histogram, got %d:\n  %v",
-						r.rowCount-r.nullCount, count, r,
+						targetCount, count, r,
 					)
 				}
 				r.buckets = nil
@@ -354,7 +357,7 @@ func TestSampleAggregator(t *testing.T) {
 		},
 	}
 
-	for _, tc := range []sampAggTestCase{
+	for i, tc := range []sampAggTestCase{
 		// Sample all rows, check that stats match expected results exactly except
 		// with histograms disabled in cases when stats collection hits the memory
 		// limit.
@@ -368,21 +371,23 @@ func TestSampleAggregator(t *testing.T) {
 		// and the number of rows counted by the histogram. This also tests that
 		// sampleAggregator can dynamically shrink capacity if fed from a
 		// lower-capacity samplerProcessor.
-		{0, false, 2, 2, 2, 2, 2, 2, inputRowsA, expectedA},
-		{0, false, 2, 2, 2, 2, 4, 2, inputRowsA, expectedA},
-		{0, false, 100, 100, 2, 2, 4, 2, inputRowsA, expectedA},
-		{0, false, 2, 2, 100, 100, 4, 2, inputRowsA, expectedA},
+		{0, false, 2, 2, 2, 2, 2, 4, inputRowsA, expectedA},
+		{0, false, 2, 2, 2, 2, 4, 4, inputRowsA, expectedA},
+		{0, false, 100, 100, 2, 2, 4, 4, inputRowsA, expectedA},
+		{0, false, 2, 2, 100, 100, 4, 4, inputRowsA, expectedA},
 
 		// Sample some rows with dynamic shrinking due to memory limits. Check that
 		// stats match and that histograms have the right number of buckets and
 		// number of rows.
-		{1 << 15, false, 200, 20, 200, 20, 200, 50, inputRowsB, expectedB},
-		{1 << 16, false, 200, 20, 200, 20, 200, 200, inputRowsB, expectedB},
+		{1 << 15, false, 200, 20, 200, 20, 200, 52, inputRowsB, expectedB},
+		{1 << 16, false, 200, 20, 200, 20, 200, 202, inputRowsB, expectedB},
 	} {
-		runSampleAggregator(
-			t, server, sqlDB, kvDB, st, &evalCtx, tc.memLimitBytes, tc.expectOutOfMemory,
-			tc.childNumSamples, tc.childMinNumSamples, tc.aggNumSamples, tc.aggMinNumSamples,
-			tc.maxBuckets, tc.expectedMaxBuckets, tc.inputRows, tc.expected,
-		)
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			runSampleAggregator(
+				t, server, sqlDB, kvDB, st, &evalCtx, tc.memLimitBytes, tc.expectOutOfMemory,
+				tc.childNumSamples, tc.childMinNumSamples, tc.aggNumSamples, tc.aggMinNumSamples,
+				tc.maxBuckets, tc.expectedMaxBuckets, tc.inputRows, tc.expected,
+			)
+		})
 	}
 }

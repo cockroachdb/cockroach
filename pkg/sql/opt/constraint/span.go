@@ -387,82 +387,15 @@ func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
 		}
 	}
 
-	thisVal := startKey.Value(prefixLength - 1)
-	otherVal := endKey.Value(prefixLength - 1)
-
-	if !thisVal.ResolvedType().Equivalent(otherVal.ResolvedType()) {
-		// The datums at index [prefixLength-1] must be of the same type.
-		return 0, false
-	}
-	if keyCtx.Compare(prefixLength-1, thisVal, otherVal) == 0 {
-		// If the datums are equal, the distinct count is 1.
-		return 1, true
-	}
-
-	// If the last columns are countable, return the distinct count between them.
-	var start, end int64
-
-	switch t := thisVal.(type) {
-	case *tree.DInt:
-		otherDInt, otherOk := tree.AsDInt(otherVal)
-		if otherOk {
-			start = int64(*t)
-			end = int64(otherDInt)
-		}
-
-	case *tree.DOid:
-		otherDOid, otherOk := tree.AsDOid(otherVal)
-		if otherOk {
-			start = int64((*t).DInt)
-			end = int64(otherDOid.DInt)
-		}
-
-	case *tree.DDate:
-		otherDDate, otherOk := otherVal.(*tree.DDate)
-		if otherOk {
-			if !t.IsFinite() || !otherDDate.IsFinite() {
-				// One of the DDates isn't finite, so we can't extract a distinct count.
-				return 0, false
-			}
-			start = int64((*t).PGEpochDays())
-			end = int64(otherDDate.PGEpochDays())
-		}
-
-	case *tree.DEnum:
-		otherDEnum, otherOk := otherVal.(*tree.DEnum)
-		if otherOk {
-			startIdx, err := t.EnumTyp.EnumGetIdxOfPhysical(t.PhysicalRep)
-			if err != nil {
-				panic(err)
-			}
-			endIdx, err := t.EnumTyp.EnumGetIdxOfPhysical(otherDEnum.PhysicalRep)
-			if err != nil {
-				panic(err)
-			}
-			start, end = int64(startIdx), int64(endIdx)
-		}
-
-	default:
-		// Uncountable type.
-		return 0, false
-	}
+	start := startKey.Value(prefixLength - 1)
+	end := endKey.Value(prefixLength - 1)
 
 	if keyCtx.Columns.Get(prefixLength - 1).Descending() {
 		// Normalize delta according to the key ordering.
 		start, end = end, start
 	}
 
-	if start > end {
-		// Incorrect ordering.
-		return 0, false
-	}
-
-	delta := end - start
-	if delta < 0 {
-		// Overflow or underflow.
-		return 0, false
-	}
-	return delta + 1, true
+	return tree.MaxDistinctCount(keyCtx.EvalCtx, start, end)
 }
 
 // Split returns a Spans object that describes an equivalent set of rows to the

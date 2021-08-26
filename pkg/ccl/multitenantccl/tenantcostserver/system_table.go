@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver/tenanttokenbucket"
@@ -42,6 +43,33 @@ type tenantState struct {
 
 	// Current consumption information.
 	Consumption roachpb.TenantConsumption
+}
+
+// defaultRefillRate is the default refill rate if it is never configured (via
+// the crdb_internal.update_tenant_resource_limits SQL built-in).
+const defaultRefillRate = 200
+
+// update accounts for the passing of time since LastUpdate.
+// If the tenantState is not initialized (Present=false), it is initialized now.
+func (ts *tenantState) update(now time.Time) {
+	if !ts.Present {
+		*ts = tenantState{
+			Present:       true,
+			LastUpdate:    tree.DTimestamp{Time: now},
+			FirstInstance: 0,
+			Bucket: tenanttokenbucket.State{
+				RURefillRate: defaultRefillRate,
+			},
+		}
+		return
+	}
+	delta := now.Sub(ts.LastUpdate.Time)
+	if delta > 0 {
+		// Make sure we never push back LastUpdate, or we'd refill tokens for the
+		// same period multiple times.
+		ts.Bucket.Update(delta)
+		ts.LastUpdate.Time = now
+	}
 }
 
 type instanceState struct {
@@ -473,7 +501,11 @@ func (h *sysTableHelper) checkInvariants() error {
 // for a given tenant, in a user-readable format (multi-line). Used for testing
 // and debugging.
 func InspectTenantMetadata(
-	ctx context.Context, ex *sql.InternalExecutor, txn *kv.Txn, tenantID roachpb.TenantID,
+	ctx context.Context,
+	ex *sql.InternalExecutor,
+	txn *kv.Txn,
+	tenantID roachpb.TenantID,
+	timeFormat string,
 ) (string, error) {
 	h := makeSysTableHelper(ctx, ex, txn, tenantID)
 	tenant, err := h.readTenantState()
@@ -499,6 +531,7 @@ func InspectTenantMetadata(
 		tenant.Consumption.WriteBytes,
 		tenant.Consumption.SQLPodsCPUSeconds,
 	)
+	fmt.Fprintf(&buf, "Last update: %s\n", tenant.LastUpdate.Time.Format(timeFormat))
 	fmt.Fprintf(&buf, "First active instance: %d\n", tenant.FirstInstance)
 
 	rows, err := ex.QueryBufferedEx(
@@ -521,8 +554,8 @@ func InspectTenantMetadata(
 	}
 	for _, r := range rows {
 		fmt.Fprintf(
-			&buf, "  Instance %s:  lease=%s  seq=%s  shares=%s  next-instance=%s\n",
-			r[0], r[3], r[4], r[5], r[1],
+			&buf, "  Instance %s:  lease=%s  seq=%s  shares=%s  next-instance=%s  last-update=%s\n",
+			r[0], r[3], r[4], r[5], r[1], tree.MustBeDTimestamp(r[2]).Time.Format(timeFormat),
 		)
 	}
 	return buf.String(), nil

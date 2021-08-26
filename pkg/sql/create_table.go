@@ -1324,7 +1324,7 @@ func NewTableDescOptionBypassLocalityOnNonMultiRegionDatabaseCheck() NewTableDes
 //
 // If the table definition *may* use the SERIAL type, the caller is
 // also responsible for processing serial types using
-// processSerialInColumnDef() on every column definition, and creating
+// processSerialLikeInColumnDef() on every column definition, and creating
 // the necessary sequences in KV before calling NewTableDesc().
 func NewTableDesc(
 	ctx context.Context,
@@ -2325,7 +2325,7 @@ func newTableDesc(
 		if !ok {
 			continue
 		}
-		newDef, prefix, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, &tn)
+		newDef, prefix, seqName, seqOpts, err := params.p.processSerialLikeInColumnDef(params.ctx, d, &tn)
 		if err != nil {
 			return nil, err
 		}

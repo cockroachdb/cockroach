@@ -1,0 +1,109 @@
+# The tests in this file verify token bucket requests. They are not meant to be
+# basic tests, not comprehensive tests of the logic (those belong in the
+# tenanttokenbucket subpackage).
+
+create-tenant tenant=5
+----
+
+token-bucket-request tenant=5
+instance_id: 1 
+ru: 10
+----
+10 RUs granted over 50ms.
+
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=200  ru-current=-10  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:00:00.000
+First active instance: 1
+  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:00.000
+
+advance
+10s
+----
+00:00:10.000
+
+token-bucket-request tenant=5
+instance_id: 1 
+ru: 500
+----
+500 RUs granted immediately.
+
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=200  ru-current=1490  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:00:10.000
+First active instance: 1
+  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:10.000
+
+token-bucket-request tenant=5
+instance_id: 2 
+ru: 500
+----
+500 RUs granted immediately.
+
+# Verify that if the time goes backward, the tenant's last_updated does not go
+# back (which would result in some tokens being doubly refilled). Note that in
+# practice this would happen when two nodes with drifting clocks serve token
+# bucket requests for the same tenant
+
+advance
+-1s
+----
+00:00:09.000
+
+token-bucket-request tenant=5
+instance_id: 1 
+ru: 10
+----
+10 RUs granted immediately.
+
+# Last update time for the tenant is unchanged. The per-instance time does get updated.
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=200  ru-current=980  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:00:10.000
+First active instance: 1
+  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=2  last-update=00:00:09.000
+  Instance 2:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:10.000
+
+advance
+1s
+----
+00:00:10.000
+
+token-bucket-request tenant=5
+instance_id: 1 
+----
+
+# The current RU amount stays the same.
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=200  ru-current=980  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:00:10.000
+First active instance: 1
+  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=2  last-update=00:00:10.000
+  Instance 2:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:10.000
+
+advance
+1s
+----
+00:00:11.000
+
+token-bucket-request tenant=5
+instance_id: 1 
+----
+
+# RU refilling resumed.
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=200  ru-current=1180  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:00:11.000
+First active instance: 1
+  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=2  last-update=00:00:11.000
+  Instance 2:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:10.000

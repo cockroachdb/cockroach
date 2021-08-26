@@ -36,6 +36,7 @@ go_library(
         "//pkg/sql/roleoption",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/sql/vtable",

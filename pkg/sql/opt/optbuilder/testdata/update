@@ -1762,9 +1762,7 @@ update on_update_with_default
            ├── 1 [as=a_new:11]
            └── 4 [as=v_new:12]
 
-# TODO(janexing): Right now the GENERATED ... AS IDENTITY / SERIAL columns are
-# projected to be NULL, which is incorrect, and will be fixed once the default
-# expression for a GENERATED ... AS IDENTITY / SERIAL column is implemented.
+
 build
 UPDATE generated_as_identity SET b=(1+1)
 ----
@@ -1788,7 +1786,7 @@ update generated_as_identity
       ├── scan generated_as_identity
       │    └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       └── projections
-           └── NULL::INT8 [as=b_new:13]
+           └── nextval('t.public.generated_as_identity_b_seq') [as=b_new:13]
 
 build
 UPDATE generated_as_identity SET a=10, b=DEFAULT
@@ -1805,7 +1803,7 @@ update generated_as_identity
       │    └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       └── projections
            ├── 10 [as=a_new:13]
-           └── NULL::INT8 [as=b_new:14]
+           └── nextval('t.public.generated_as_identity_b_seq') [as=b_new:14]
 
 build
 UPDATE generated_as_identity SET c=(1+1)
@@ -1852,7 +1850,7 @@ update generated_as_identity
       ├── scan generated_as_identity
       │    └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       └── projections
-           └── NULL::INT8 [as=c_new:13]
+           └── nextval('t.public.generated_as_identity_c_seq') [as=c_new:13]
 
 build
 UPDATE generated_as_identity SET a=10, c=DEFAULT
@@ -1869,8 +1867,9 @@ update generated_as_identity
       │    └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       └── projections
            ├── 10 [as=a_new:13]
-           └── NULL::INT8 [as=c_new:14]
+           └── nextval('t.public.generated_as_identity_c_seq') [as=c_new:14]
 
+# With SERIAL syntax
 exec-ddl
 CREATE TABLE serial_t (
   a SERIAL,
@@ -1906,4 +1905,4 @@ update serial_t
       ├── scan serial_t
       │    └── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       └── projections
-           └── NULL::INT8 [as=a_new:11]
+           └── unique_rowid() [as=a_new:11]

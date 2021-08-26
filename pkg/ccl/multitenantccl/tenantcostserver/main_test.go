@@ -6,13 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package tenantcostserver_test
+package tenantcostserver
 
 import (
 	"os"
 	"testing"
 
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -22,6 +21,9 @@ import (
 )
 
 //go:generate ../../../util/leaktest/add-leaktest.sh *_test.go
+
+// NewInstance is exported for testing purposes.
+var NewInstance = newInstance
 
 func TestMain(m *testing.M) {
 	security.SetAssetLoader(securitytest.EmbeddedAssets)

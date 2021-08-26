@@ -424,7 +424,6 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// closure.
 	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for _, si := range s.sketches {
-			distinctCount := int64(si.sketch.Estimate())
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
 				colIdx := int(si.spec.Columns[0])
@@ -437,7 +436,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 					colIdx,
 					typ,
 					si.numRows-si.numNulls,
-					distinctCount,
+					s.getDistinctCount(&si, false /* includeNulls */),
 					int(si.spec.HistogramMaxBuckets),
 				)
 				if err != nil {
@@ -455,7 +454,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				// by the existence of an inverted sketch on
 				// the column.
 
-				invDistinctCount := int64(invSketch.sketch.Estimate())
+				invDistinctCount := s.getDistinctCount(invSketch, false /* includeNulls */)
 				// Use 0 for the colIdx here because it refers
 				// to the column index of the samples, which
 				// only has a single bytes column with the
@@ -501,7 +500,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				si.spec.StatName,
 				columnIDs,
 				si.numRows,
-				distinctCount,
+				s.getDistinctCount(&si, true /* includeNulls */),
 				si.numNulls,
 				histogram,
 			); err != nil {
@@ -522,6 +521,30 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 		return stats.GossipTableStatAdded(g, s.tableID)
 	}
 	return nil
+}
+
+// getDistinctCount returns the number of distinct values in the given sketch,
+// optionally including null values.
+func (s *sampleAggregator) getDistinctCount(si *sketchInfo, includeNulls bool) int64 {
+	distinctCount := int64(si.sketch.Estimate())
+	if si.numNulls > 0 && !includeNulls {
+		// Nulls are included in the estimate, so reduce the count by 1 if nulls are
+		// not requested.
+		distinctCount--
+	}
+
+	// The maximum number of distinct values is the number of non-null rows plus 1
+	// if there are any nulls. It's possible that distinctCount was calculated to
+	// be greater than this number due to the approximate nature of HyperLogLog.
+	// If this is the case, set it equal to the max.
+	maxDistinctCount := si.numRows - si.numNulls
+	if si.numNulls > 0 && includeNulls {
+		maxDistinctCount++
+	}
+	if distinctCount > maxDistinctCount {
+		distinctCount = maxDistinctCount
+	}
+	return distinctCount
 }
 
 // generateHistogram returns a histogram (on a given column) from a set of
