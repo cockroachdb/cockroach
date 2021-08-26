@@ -14,9 +14,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,7 +33,8 @@ func TestStatements(t *testing.T) {
 
 	ctx := context.Background()
 
-	testServer, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	params, _ := tests.CreateTestServerParams()
+	testServer, db, _ := serverutils.StartServer(t, params)
 	defer testServer.Stopper().Stop(ctx)
 
 	conn, err := testServer.RPCContext().GRPCDialNode(

@@ -106,16 +106,23 @@ func (s *PersistedSQLStats) getFetchQueryForTxnStatsTable(
 		"metadata",
 		"statistics",
 	}
-	query = fmt.Sprintf(`
+
+	// [1]: selection columns
+	// [2]: AOST clause
+	query = `
 SELECT 
-  %s
+  %[1]s
 FROM
 	system.transaction_statistics
-`, strings.Join(selectedColumns, ","))
+%[2]s`
 
-	if s.cfg.Knobs != nil && !s.cfg.Knobs.DisableFollowerRead {
-		query = fmt.Sprintf("%s AS OF SYSTEM TIME follower_read_timestamp()", query)
+	followerReadClause := "AS OF SYSTEM TIME follower_read_timestamp()"
+
+	if s.cfg.Knobs != nil {
+		followerReadClause = s.cfg.Knobs.AOSTClause
 	}
+
+	query = fmt.Sprintf(query, strings.Join(selectedColumns, ","), followerReadClause)
 
 	orderByColumns := []string{"aggregated_ts"}
 	if options.SortedAppNames {

@@ -41,6 +41,8 @@ type updateNode struct {
 	run updateRun
 }
 
+var _ mutationPlanNode = &updateNode{}
+
 // updateRun contains the run-time state of updateNode during local execution.
 type updateRun struct {
 	tu         tableUpdater
@@ -190,6 +192,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
+		u.run.tu.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 		if err := u.run.tu.finalize(params.ctx); err != nil {
 			return false, err
 		}
@@ -366,6 +369,10 @@ func (u *updateNode) Close(ctx context.Context) {
 	u.run.tu.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)
+}
+
+func (u *updateNode) rowsWritten() int64 {
+	return u.run.tu.rowsWritten
 }
 
 func (u *updateNode) enableAutoCommit() {

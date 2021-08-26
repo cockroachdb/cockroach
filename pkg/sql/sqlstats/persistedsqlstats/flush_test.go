@@ -70,7 +70,7 @@ func TestSQLStatsFlush(t *testing.T) {
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: &persistedsqlstats.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					StubTimeNow: fakeTime.StubTimeNow,
 				},
 			},

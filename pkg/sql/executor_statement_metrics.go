@@ -78,6 +78,20 @@ var _ metric.Struct = StatsMetrics{}
 // MetricStruct is part of the metric.Struct interface.
 func (StatsMetrics) MetricStruct() {}
 
+// GuardrailMetrics groups metrics related to different guardrails in the SQL
+// layer.
+type GuardrailMetrics struct {
+	TxnRowsWrittenLogCount *metric.Counter
+	TxnRowsWrittenErrCount *metric.Counter
+	TxnRowsReadLogCount    *metric.Counter
+	TxnRowsReadErrCount    *metric.Counter
+}
+
+var _ metric.Struct = GuardrailMetrics{}
+
+// MetricStruct is part of the metric.Struct interface.
+func (GuardrailMetrics) MetricStruct() {}
+
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.

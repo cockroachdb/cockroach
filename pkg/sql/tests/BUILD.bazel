@@ -17,6 +17,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb:with-mocks",
+        "//pkg/sql/sqlstats",
         "//pkg/testutils/storageutils",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",

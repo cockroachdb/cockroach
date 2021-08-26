@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package persistedsqlstats
+package sqlstats
 
 import "time"
 
@@ -22,11 +22,9 @@ type TestingKnobs struct {
 	// by the flush operation to calculate aggregated_ts timestamp.
 	StubTimeNow func() time.Time
 
-	// DisableFollowerRead disallows the PersistedSQLStats to use follower read.
-	// This is used in the unit tests where it might be reading from the past
-	// where the stmt/txn stats system table are not yet created. This is not a
-	// scenario that is possible in outside of testing.
-	DisableFollowerRead bool
+	// AOSTClause overrides the AS OF SYSTEM TIME clause in queries used in
+	// persistedsqlstats.
+	AOSTClause string
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
