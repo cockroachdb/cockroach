@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // MockWebhookSink is the Webhook sink used in tests.
@@ -31,13 +32,21 @@ type MockWebhookSink struct {
 	}
 }
 
+// StartMockWebhookSinkInsecure starts a mock webhook sink without TLS.
+func StartMockWebhookSinkInsecure() (*MockWebhookSink, error) {
+	s := makeMockWebhookSink()
+	s.server.Start()
+	return s, nil
+}
+
 // StartMockWebhookSink creates and starts a mock webhook sink for tests.
 func StartMockWebhookSink(certificate *tls.Certificate) (*MockWebhookSink, error) {
 	s := makeMockWebhookSink()
-	if certificate != nil {
-		s.server.TLS = &tls.Config{
-			Certificates: []tls.Certificate{*certificate},
-		}
+	if certificate == nil {
+		return nil, errors.Errorf("Must pass a CA cert when creating a mock webhook sink.")
+	}
+	s.server.TLS = &tls.Config{
+		Certificates: []tls.Certificate{*certificate},
 	}
 	s.server.StartTLS()
 	return s, nil

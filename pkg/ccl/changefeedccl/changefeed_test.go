@@ -2861,6 +2861,26 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='gzip'`,
 		`webhook-https://fake-host`,
 	)
+	sqlDB.ExpectErr(
+		t, `max retries must be either a positive int or 'inf' for infinite retries.`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Retry": {"Max": "not valid"}}'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `max retry count must be a positive integer. use 'inf' for infinite retries.`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Retry": {"Max": 0}}'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `max retry count must be a positive integer. use 'inf' for infinite retries.`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Retry": {"Max": -1}}'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, ``,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, webhook_sink_config='{"Retry":{"Max":"inf"}}'`,
+		`webhook-https://fake-host`,
+	)
 
 	// Sanity check on_error option
 	sqlDB.ExpectErr(
@@ -4267,6 +4287,30 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
 			`foo: [1]->{"after": {"a": 1, "b": "b"}}`,
 			`foo: [1]->{"after": null}`,
+		})
+
+		webhookFoo.mockSink.SetStatusCodes([]int{http.StatusInternalServerError})
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (1, 'c')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (1, 'd')`)
+		feedJob := foo.(cdctest.EnterpriseTestFeed)
+
+		// check that running status correctly updates with retryable error
+		testutils.SucceedsSoon(t, func() error {
+			status, err := feedJob.FetchRunningStatus()
+			if err != nil {
+				return err
+			}
+			if status != "retryable error: retryable changefeed error: 500 Internal Server Error: " {
+				return errors.Errorf("expected retryable error: retryable changefeed error: 500 Internal Server Error:, got: %v", status)
+			}
+			return nil
+		})
+
+		webhookFoo.mockSink.SetStatusCodes([]int{http.StatusOK})
+		// retryable error should disappear after request becomes successful
+		assertPayloadsPerKeyOrderedStripTs(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "c"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "d"}}`,
 		})
 	}
 
