@@ -74,7 +74,7 @@ type tableWriter interface {
 
 	// finalize flushes out any remaining writes. It is called after all calls
 	// to row.
-	finalize(context.Context) error
+	finalize(context.Context, int64, int64) error
 
 	// tableDesc returns the TableDescriptor for the table that the tableWriter
 	// will modify.
@@ -185,10 +185,12 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 }
 
 // finalize shares the common finalize() code between tableWriters.
-func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
+func (tb *tableWriterBase) finalize(
+	ctx context.Context, rowsWritten, rowsWrittenLimit int64,
+) (err error) {
 	// NB: unlike flushAndStartNewBatch, we don't bother with admission control
 	// for response processing when finalizing.
-	if tb.autoCommit == autoCommitEnabled {
+	if tb.autoCommit == autoCommitEnabled && (rowsWrittenLimit == 0 || rowsWritten < rowsWrittenLimit) {
 		log.Event(ctx, "autocommit enabled")
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction

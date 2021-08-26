@@ -120,7 +120,7 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
-		if err := n.run.tw.finalize(params.ctx); err != nil {
+		if err := n.run.tw.finalize(params.ctx, n.rowsWritten(), params.SessionData().TxnRowsWrittenErr); err != nil {
 			return false, err
 		}
 		// Remember we're done for the next call to BatchedNext().

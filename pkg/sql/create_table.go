@@ -490,7 +490,11 @@ func (n *createTableNode) startExec(params runParams) error {
 					if err != nil {
 						return err
 					}
-					if err := tw.finalize(params.ctx); err != nil {
+					// We use zeroes for the rows written arguments because
+					// those matter only when the auto commit is enabled, which
+					// is not the case here since we're running in an explicit
+					// txn.
+					if err := tw.finalize(params.ctx, 0 /* rowsWritten */, 0 /* rowsWrittenLimit */); err != nil {
 						return err
 					}
 					break

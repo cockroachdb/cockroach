@@ -133,9 +133,16 @@ func New(
 		if sd.SaveTablesPrefix != "" {
 			b.nameGen = memo.NewExprNameGenerator(sd.SaveTablesPrefix)
 		}
-		// If we have the limits on the number of rows written/read by a single
-		// txn, we cannot auto commit.
-		b.allowAutoCommit = b.allowAutoCommit && sd.TxnRowsWrittenErr == 0 && sd.TxnRowsReadErr == 0
+		// If we have the limits on the number of rows read by a single txn, we
+		// cannot auto commit.
+		//
+		// Note that we don't impose such a requirement on the number of rows
+		// written by a single txn because Builder.canAutoCommit ensures that we
+		// try to auto commit iff there is a single mutation in the query, and
+		// in such a scenario tableWriterBase.finalize is responsible for making
+		// sure that the rows written limit is not reached before the auto
+		// commit.
+		b.allowAutoCommit = b.allowAutoCommit && sd.TxnRowsReadErr == 0
 		b.initialAllowAutoCommit = b.allowAutoCommit
 		b.allowInsertFastPath = sd.InsertFastPath
 	}

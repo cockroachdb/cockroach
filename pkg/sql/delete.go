@@ -135,7 +135,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
-		if err := d.run.td.finalize(params.ctx); err != nil {
+		if err := d.run.td.finalize(params.ctx, d.rowsWritten(), params.SessionData().TxnRowsWrittenErr); err != nil {
 			return false, err
 		}
 		// Remember we're done for the next call to BatchedNext().
