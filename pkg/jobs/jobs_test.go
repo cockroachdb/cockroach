@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -44,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -222,6 +222,9 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			}
 		}
 		args.Knobs.JobsTestingKnobs = knobs
+		args.Knobs.SpanConfig = &spanconfig.TestingKnobs{
+			ManagerDisableJobCreation: true,
+		}
 
 		if rts.traceRealSpan {
 			baseDir, dirCleanupFn := testutils.TempDir(t)
@@ -362,7 +365,6 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 
 func TestRegistryLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 68315, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	t.Run("normal success", func(t *testing.T) {
@@ -1754,7 +1756,7 @@ func TestShowJobs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	ctx := context.Background()
