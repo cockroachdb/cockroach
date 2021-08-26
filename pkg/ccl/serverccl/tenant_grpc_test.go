@@ -149,4 +149,10 @@ func TestTenantGRPCServices(t *testing.T) {
 		require.Errorf(t, err, "statements endpoint should not be accessed on KV node by tenant")
 	})
 
+	t.Run("sessions endpoint is available", func(t *testing.T) {
+		resp, err := httputil.Get(ctx, "http://"+tenant.HTTPAddr()+"/_status/sessions")
+		defer http.DefaultClient.CloseIdleConnections()
+		require.NoError(t, err)
+		require.Equal(t, 200, resp.StatusCode)
+	})
 }

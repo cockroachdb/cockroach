@@ -980,6 +980,12 @@ func (txn *Txn) Send(
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
 	}
 
+	// Requests with a bounded staleness header should use NegotiateAndSend.
+	if ba.BoundedStaleness != nil {
+		return nil, roachpb.NewError(errors.AssertionFailedf(
+			"bounded staleness header passed to Txn.Send: %s", ba.String()))
+	}
+
 	// Some callers have not initialized ba using a Batch constructed using
 	// Txn.NewBatch. So we fallback to partially overwriting here.
 	if ba.AdmissionHeader.CreateTime == 0 {

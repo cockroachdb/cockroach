@@ -62,14 +62,24 @@ func NewKVFetcher(
 	if bsHeader == nil {
 		sendFn = makeKVBatchFetcherDefaultSendFunc(txn)
 	} else {
-		sendFn = func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		negotiated := false
+		sendFn = func(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, _ error) {
 			ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
-			ba.BoundedStaleness = bsHeader
-			res, err := txn.NegotiateAndSend(ctx, ba)
-			if err != nil {
-				return nil, err.GoError()
+			var pErr *roachpb.Error
+			// Only use NegotiateAndSend if we have not yet negotiated a timestamp.
+			// If we have, fallback to Send which will already have the timestamp
+			// fixed.
+			if !negotiated {
+				ba.BoundedStaleness = bsHeader
+				br, pErr = txn.NegotiateAndSend(ctx, ba)
+				negotiated = true
+			} else {
+				br, pErr = txn.Send(ctx, ba)
 			}
-			return res, nil
+			if pErr != nil {
+				return nil, pErr.GoError()
+			}
+			return br, nil
 		}
 	}
 

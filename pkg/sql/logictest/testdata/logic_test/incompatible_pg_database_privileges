@@ -4,10 +4,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON DATABASE test TO testuser
 query TBTTT
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
-NULL  true  tables  testuser  SELECT
-NULL  true  tables  testuser  INSERT
 NULL  true  tables  testuser  DELETE
+NULL  true  tables  testuser  INSERT
+NULL  true  tables  testuser  SELECT
 NULL  true  tables  testuser  UPDATE
+NULL  true  types   public    USAGE
 
 query TTT
 SHOW GRANTS ON DATABASE test
@@ -21,6 +22,7 @@ REVOKE SELECT, INSERT, UPDATE, DELETE ON DATABASE test FROM testuser
 query TBTTT
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
+NULL  true  types  public  USAGE
 
 query TTT
 SHOW GRANTS ON DATABASE test
@@ -37,10 +39,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON DATABASE test, test2 TO testuser
 query TBTTT
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
-NULL  true  tables  testuser  SELECT
-NULL  true  tables  testuser  INSERT
 NULL  true  tables  testuser  DELETE
+NULL  true  tables  testuser  INSERT
+NULL  true  tables  testuser  SELECT
 NULL  true  tables  testuser  UPDATE
+NULL  true  types   public    USAGE
 
 statement ok
 use test2;
@@ -48,10 +51,11 @@ use test2;
 query TBTTT
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
-NULL  true  tables  testuser  SELECT
-NULL  true  tables  testuser  INSERT
 NULL  true  tables  testuser  DELETE
+NULL  true  tables  testuser  INSERT
+NULL  true  tables  testuser  SELECT
 NULL  true  tables  testuser  UPDATE
+NULL  true  types   public    USAGE
 
 statement ok
 REVOKE SELECT, INSERT, UPDATE, DELETE ON DATABASE test, test2 FROM testuser
@@ -62,6 +66,7 @@ use test
 query TBTTT
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
+NULL  true  types  public  USAGE
 
 statement ok
 use test2
@@ -69,6 +74,7 @@ use test2
 query TBTTT
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
+NULL  true  types  public  USAGE
 
 # Revoke should remove default privileges granted through alter default privileges.
 statement ok
@@ -80,10 +86,11 @@ ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT, INSERT, UPDATE, DELETE ON T
 query TBTTT
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
-NULL  true  tables  testuser  SELECT
-NULL  true  tables  testuser  INSERT
 NULL  true  tables  testuser  DELETE
+NULL  true  tables  testuser  INSERT
+NULL  true  tables  testuser  SELECT
 NULL  true  tables  testuser  UPDATE
+NULL  true  types   public    USAGE
 
 statement ok
 REVOKE SELECT, INSERT, UPDATE, DELETE ON DATABASE test FROM testuser
@@ -91,6 +98,7 @@ REVOKE SELECT, INSERT, UPDATE, DELETE ON DATABASE test FROM testuser
 query TBTTT
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
+NULL  true  types  public  USAGE
 
 # Ensure roles with special characters can be the target of a GRANT that is
 # converted to ALTER DEFAULT PRIVILEGES.
@@ -104,3 +112,4 @@ query TBTTT
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
 NULL  true  tables  test-user  SELECT
+NULL  true  types   public     USAGE
