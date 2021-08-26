@@ -15,13 +15,13 @@ import {
   StatementDetails,
   StatementDetailsDispatchProps,
   StatementDetailsProps,
-  StatementDetailsStateProps,
 } from "./statementDetails";
 import { AppState } from "../store";
 import {
   selectStatement,
   selectStatementDetailsUiConfig,
 } from "./statementDetails.selectors";
+import { selectIsTenant } from "../store/uiConfig";
 import {
   nodeDisplayNameByIDSelector,
   nodeRegionsByIDSelector,
@@ -49,6 +49,7 @@ const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
       statementFingerprint,
     ),
     uiConfig: selectStatementDetailsUiConfig(state),
+    isTenant: selectIsTenant(state),
   };
 };
 
