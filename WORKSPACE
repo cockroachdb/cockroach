@@ -34,7 +34,7 @@ git_repository(
 
 # Load up cockroachdb's go dependencies (the ones listed under go.mod). The
 # `DEPS.bzl` file is kept up to date using the `update-repos` Gazelle command
-# (see `make bazel-generate`).
+# (see `build/bazelutil/bazel-generate.sh`).
 #
 # gazelle:repository_macro DEPS.bzl%go_deps
 load("//:DEPS.bzl", "go_deps")
