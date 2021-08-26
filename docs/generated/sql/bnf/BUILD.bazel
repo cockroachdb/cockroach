@@ -166,6 +166,7 @@ genrule(
         "set_cluster_setting.bnf",
         "set_csetting_stmt.bnf",
         "set_exprs_internal.bnf",
+        "set_local_stmt.bnf",
         "set_operation.bnf",
         "set_rest.bnf",
         "set_rest_more.bnf",
