@@ -468,12 +468,13 @@ func (p *planner) setRole(ctx context.Context, s security.SQLUsername) error {
 	}
 	m.paramStatusUpdater.BufferParamStatusUpdate("is_superuser", updateStr)
 
-	// The "none" user does resets the SessionUserProto in a SET ROLE.
+	// The "none" user resets the SessionUserProto in a SET ROLE.
 	if becomeUser.IsNoneRole() {
 		if m.data.SessionUserProto.Decode().Normalized() != "" {
 			m.data.UserProto = m.data.SessionUserProto
 			m.data.SessionUserProto = ""
 		}
+		m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 		return nil
 	}
 
@@ -483,6 +484,7 @@ func (p *planner) setRole(ctx context.Context, s security.SQLUsername) error {
 		m.data.SessionUserProto = m.data.UserProto
 	}
 	m.data.UserProto = becomeUser.EncodeProto()
+	m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 	return nil
 }
 
