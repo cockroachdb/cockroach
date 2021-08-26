@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,7 +31,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var _ spanconfig.ReconciliationDependencies = &Manager{}
+// checkAndStartReconciliationJobInterval is a cluster setting to control how
+// often the existence of the automatic span config reconciliation job will be
+// checked. If the check concludes that the job doesn't exist it will be started.
+var checkAndStartReconciliationJobInterval = settings.RegisterDurationSetting(
+	"spanconfig.reconciliation_job.check_interval",
+	"the frequency at which to check if the span config reconciliation job exists (and to start it if not)",
+	10*time.Minute,
+	settings.NonNegativeDuration,
+)
 
 // Manager is the coordinator of the span config subsystem. It is responsible
 // for the following tasks:
@@ -46,7 +55,11 @@ type Manager struct {
 	stopper  *stop.Stopper
 	settings *cluster.Settings
 	knobs    *spanconfig.TestingKnobs
+
+	spanconfig.KVAccessor
 }
+
+var _ spanconfig.ReconciliationDependencies = &Manager{}
 
 // New constructs a new Manager.
 func New(
@@ -55,18 +68,20 @@ func New(
 	ie sqlutil.InternalExecutor,
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
+	kvAccessor spanconfig.KVAccessor,
 	knobs *spanconfig.TestingKnobs,
 ) *Manager {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &Manager{
-		db:       db,
-		jr:       jr,
-		ie:       ie,
-		stopper:  stopper,
-		settings: settings,
-		knobs:    knobs,
+		db:         db,
+		jr:         jr,
+		ie:         ie,
+		stopper:    stopper,
+		settings:   settings,
+		knobs:      knobs,
+		KVAccessor: kvAccessor,
 	}
 }
 
@@ -83,7 +98,7 @@ func (m *Manager) Start(ctx context.Context) error {
 
 func (m *Manager) run(ctx context.Context) {
 	reconciliationIntervalChanged := make(chan struct{}, 1)
-	spanconfig.CheckAndStartReconciliationJobInterval.SetOnChange(
+	checkAndStartReconciliationJobInterval.SetOnChange(
 		&m.settings.SV, func(ctx context.Context) {
 			select {
 			case reconciliationIntervalChanged <- struct{}{}:
@@ -98,7 +113,7 @@ func (m *Manager) run(ctx context.Context) {
 	// if for some reason it does not.
 	for {
 		timer.Reset(timeutil.Until(
-			lastChecked.Add(spanconfig.CheckAndStartReconciliationJobInterval.Get(&m.settings.SV)),
+			lastChecked.Add(checkAndStartReconciliationJobInterval.Get(&m.settings.SV)),
 		))
 		select {
 		case <-timer.C:
