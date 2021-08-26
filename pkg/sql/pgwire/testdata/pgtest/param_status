@@ -129,6 +129,17 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
+Query {"String": "DROP ROLE IF EXISTS testuser"}
+----
+
+# Ignore the notice, as the user might exist.
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP ROLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
 Query {"String": "CREATE ROLE testuser"}
 ----
 

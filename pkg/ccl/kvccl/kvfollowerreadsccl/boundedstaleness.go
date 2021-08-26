@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -21,8 +22,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func checkEnterpriseEnabledForBoundedStaleness(ctx *tree.EvalContext) error {
+func checkBoundedStalenessEnabled(ctx *tree.EvalContext) error {
 	st := ctx.Settings
+	if !st.Version.IsActive(ctx.Ctx(), clusterversion.BoundedStaleness) {
+		return pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			`bounded staleness reads requires all nodes to be upgraded to %s`,
+			clusterversion.ByKey(clusterversion.BoundedStaleness),
+		)
+	}
 	return utilccl.CheckEnterpriseEnabled(
 		st,
 		ctx.ClusterID,
@@ -32,7 +40,7 @@ func checkEnterpriseEnabledForBoundedStaleness(ctx *tree.EvalContext) error {
 }
 
 func evalMaxStaleness(ctx *tree.EvalContext, d duration.Duration) (time.Time, error) {
-	if err := checkEnterpriseEnabledForBoundedStaleness(ctx); err != nil {
+	if err := checkBoundedStalenessEnabled(ctx); err != nil {
 		return time.Time{}, err
 	}
 	if d.Compare(duration.FromInt64(0)) < 0 {
@@ -46,7 +54,7 @@ func evalMaxStaleness(ctx *tree.EvalContext, d duration.Duration) (time.Time, er
 }
 
 func evalMinTimestamp(ctx *tree.EvalContext, t time.Time) (time.Time, error) {
-	if err := checkEnterpriseEnabledForBoundedStaleness(ctx); err != nil {
+	if err := checkBoundedStalenessEnabled(ctx); err != nil {
 		return time.Time{}, err
 	}
 	t = t.Round(time.Microsecond)
