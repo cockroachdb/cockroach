@@ -309,7 +309,7 @@ func (f *kvFeed) scanIfShould(
 				}
 			}
 			if !scanTime.Equal(ev.After.GetModificationTime()) {
-				log.Fatalf(ctx, "found event in shouldScan which did not occur at the scan time %v: %v",
+				return errors.AssertionFailedf("found event in shouldScan which did not occur at the scan time %v: %v",
 					scanTime, ev)
 			}
 		}
@@ -368,8 +368,8 @@ func (f *kvFeed) runUntilTableEvent(
 	// recreate the rangefeeds.
 	err = g.Wait()
 	if err == nil {
-		log.Fatalf(ctx, "feed exited with no error and no scan boundary")
-		return hlc.Timestamp{}, nil // unreachable
+		return hlc.Timestamp{},
+			errors.AssertionFailedf("feed exited with no error and no scan boundary")
 	} else if tErr := (*errBoundaryReached)(nil); errors.As(err, &tErr) {
 		// TODO(ajwerner): iterate the spans and add a Resolved timestamp.
 		// We'll need to do this to ensure that a resolved timestamp propagates
@@ -386,6 +386,14 @@ type errBoundaryReached struct {
 
 func (e *errBoundaryReached) Error() string {
 	return "scan boundary reached: " + e.String()
+}
+
+type errUnknownEvent struct {
+	Event
+}
+
+func (e *errUnknownEvent) Error() string {
+	return "unknown event type"
 }
 
 // copyFromSourceToSinkUntilTableEvents will pull read entries from source and
@@ -421,27 +429,26 @@ func copyFromSourceToSinkUntilTableEvent(
 			}
 			return nil
 		}
-		applyScanBoundary = func(e Event) (skipEvent, reachedBoundary bool) {
+		applyScanBoundary = func(e Event) (skipEvent, reachedBoundary bool, err error) {
 			if scanBoundary == nil {
-				return false, false
+				return false, false, nil
 			}
 			if e.Timestamp().Less(scanBoundary.Timestamp()) {
-				return false, false
+				return false, false, nil
 			}
 			switch e.Type() {
 			case KVEvent:
-				return true, false
+				return true, false, nil
 			case ResolvedEvent:
 				boundaryResolvedTimestamp := scanBoundary.Timestamp().Prev()
 				resolved := e.Resolved()
 				if resolved.Timestamp.LessEq(boundaryResolvedTimestamp) {
-					return false, false
+					return false, false, nil
 				}
 				frontier.Forward(resolved.Span, boundaryResolvedTimestamp)
-				return true, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp)
+				return true, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp), nil
 			default:
-				log.Fatal(ctx, "unknown event type")
-				return false, false
+				return false, false, &errUnknownEvent{e}
 			}
 		}
 		addEntry = func(e Event) error {
@@ -457,8 +464,7 @@ func copyFromSourceToSinkUntilTableEvent(
 				frontier.Forward(resolved.Span, resolved.Timestamp)
 				return sink.AddResolved(ctx, resolved.Span, resolved.Timestamp, jobspb.ResolvedSpan_NONE)
 			default:
-				log.Fatal(ctx, "unknown event type")
-				return nil
+				return &errUnknownEvent{e}
 			}
 		}
 	)
@@ -470,7 +476,10 @@ func copyFromSourceToSinkUntilTableEvent(
 		if err := checkForScanBoundary(e.Timestamp()); err != nil {
 			return err
 		}
-		skipEntry, scanBoundaryReached := applyScanBoundary(e)
+		skipEntry, scanBoundaryReached, err := applyScanBoundary(e)
+		if err != nil {
+			return err
+		}
 		if scanBoundaryReached {
 			// All component rangefeeds are now at the boundary.
 			// Break out of the ctxgroup by returning the sentinel error.
