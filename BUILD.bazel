@@ -90,7 +90,13 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude _bazel
 # gazelle:exclude c-deps/krb5
 # gazelle:exclude artifacts
+# gazelle:exclude bin
+# gazelle:exclude build/builder_home
+# gazelle:exclude lib
 # gazelle:exclude pkg/ccl/gssapiccl
+# gazelle:exclude pkg/ui/node_modules
+# gazelle:exclude pkg/ui/workspaces/cluster-ui/node_modules
+# gazelle:exclude pkg/ui/workspaces/db-console/node_modules
 # gazelle:exclude vendor
 # gazelle:exclude .vendor.tmp.*
 # gazelle:exclude **/zcgo_flags.go
