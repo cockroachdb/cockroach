@@ -34,7 +34,7 @@ func TestMinVersion(t *testing.T) {
 	require.NoError(t, mem.MkdirAll(dir, os.ModeDir))
 
 	// Expect nil version when min version file doesn't exist.
-	v, err := GetMinVersion(mem, dir)
+	v, err := getMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.Nil(t, v)
 
@@ -52,7 +52,7 @@ func TestMinVersion(t *testing.T) {
 	require.NoError(t, WriteMinVersionFile(mem, dir, v))
 
 	// Expect min version to be version1.
-	v, err = GetMinVersion(mem, dir)
+	v, err = getMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, version1.Equal(v))
 
@@ -78,7 +78,7 @@ func TestMinVersion(t *testing.T) {
 	require.True(t, ok)
 
 	// Expect min version to be version2.
-	v, err = GetMinVersion(mem, dir)
+	v, err = getMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, version2.Equal(v))
 
@@ -86,7 +86,7 @@ func TestMinVersion(t *testing.T) {
 	v = &roachpb.Version{}
 	proto.Merge(v, version1)
 	require.NoError(t, WriteMinVersionFile(mem, dir, v))
-	v, err = GetMinVersion(mem, dir)
+	v, err = getMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, version2.Equal(v))
 }
