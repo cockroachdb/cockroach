@@ -2785,25 +2785,25 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		if err != nil {
 			continue
 		}
-		anonSQL := truncateSQL(anonymizeStmt(ast))
+		sqlNoConstants := truncateSQL(formatStatementHideConstants(ast))
 		sql := truncateSQL(ast.String())
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
-			TxnID:         query.txnID,
-			ID:            id.String(),
-			Start:         query.start.UTC(),
-			Sql:           sql,
-			SqlAnon:       anonSQL,
-			IsDistributed: query.isDistributed,
-			Phase:         (serverpb.ActiveQuery_Phase)(query.phase),
-			Progress:      float32(progress),
+			TxnID:          query.txnID,
+			ID:             id.String(),
+			Start:          query.start.UTC(),
+			Sql:            sql,
+			SqlNoConstants: sqlNoConstants,
+			IsDistributed:  query.isDistributed,
+			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
+			Progress:       float32(progress),
 		})
 	}
 	lastActiveQuery := ""
-	lastActiveQueryAnon := ""
+	lastActiveQueryNoConstants := ""
 	if ex.mu.LastActiveQuery != nil {
 		lastActiveQuery = truncateSQL(ex.mu.LastActiveQuery.String())
-		lastActiveQueryAnon = truncateSQL(anonymizeStmt(ex.mu.LastActiveQuery))
+		lastActiveQueryNoConstants = truncateSQL(formatStatementHideConstants(ex.mu.LastActiveQuery))
 	}
 
 	remoteStr := "<admin>"
@@ -2812,18 +2812,17 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	}
 
 	return serverpb.Session{
-		Username:        ex.sessionData().User().Normalized(),
-		ClientAddress:   remoteStr,
-		ApplicationName: ex.applicationName.Load().(string),
-		Start:           ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
-		ActiveQueries:   activeQueries,
-		ActiveTxn:       activeTxnInfo,
-		LastActiveQuery: lastActiveQuery,
-		ID:              ex.sessionID.GetBytes(),
-		AllocBytes:      ex.mon.AllocBytes(),
-		MaxAllocBytes:   ex.mon.MaximumBytes(),
-
-		LastActiveQueryAnon: lastActiveQueryAnon,
+		Username:                   ex.sessionData().User().Normalized(),
+		ClientAddress:              remoteStr,
+		ApplicationName:            ex.applicationName.Load().(string),
+		Start:                      ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
+		ActiveQueries:              activeQueries,
+		ActiveTxn:                  activeTxnInfo,
+		LastActiveQuery:            lastActiveQuery,
+		ID:                         ex.sessionID.GetBytes(),
+		AllocBytes:                 ex.mon.AllocBytes(),
+		MaxAllocBytes:              ex.mon.MaximumBytes(),
+		LastActiveQueryNoConstants: lastActiveQueryNoConstants,
 	}
 }
 

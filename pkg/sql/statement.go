@@ -19,8 +19,8 @@ import (
 type Statement struct {
 	parser.Statement
 
-	AnonymizedStr string
-	QueryID       ClusterWideID
+	StmtNoConstants string
+	QueryID         ClusterWideID
 
 	ExpectedTypes colinfo.ResultColumns
 
@@ -39,19 +39,19 @@ type Statement struct {
 
 func makeStatement(parserStmt parser.Statement, queryID ClusterWideID) Statement {
 	return Statement{
-		Statement:     parserStmt,
-		AnonymizedStr: anonymizeStmt(parserStmt.AST),
-		QueryID:       queryID,
+		Statement:       parserStmt,
+		StmtNoConstants: formatStatementHideConstants(parserStmt.AST),
+		QueryID:         queryID,
 	}
 }
 
 func makeStatementFromPrepared(prepared *PreparedStatement, queryID ClusterWideID) Statement {
 	return Statement{
-		Statement:     prepared.Statement,
-		Prepared:      prepared,
-		ExpectedTypes: prepared.Columns,
-		AnonymizedStr: prepared.AnonymizedStr,
-		QueryID:       queryID,
+		Statement:       prepared.Statement,
+		Prepared:        prepared,
+		ExpectedTypes:   prepared.Columns,
+		StmtNoConstants: prepared.StatementNoConstants,
+		QueryID:         queryID,
 	}
 }
 

@@ -164,11 +164,12 @@ export function makeSessionsColumns(
           return "N/A";
         }
         const stmt = session.session.active_queries[0].sql;
-        const anonStmt = session.session.active_queries[0].sql_anon;
+        const stmtNoConstants =
+          session.session.active_queries[0].sql_no_constants;
         return (
           <StatementLink
             statement={stmt}
-            anonStatement={anonStmt}
+            statementNoConstants={stmtNoConstants}
             implicitTxn={session.session.active_txn?.implicit}
             search={""}
             app={""}

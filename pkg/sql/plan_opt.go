@@ -104,7 +104,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 				if !isStale {
 					opc.log(ctx, "query cache hit (prepare)")
 					opc.flags.Set(planFlagOptCacheHit)
-					stmt.Prepared.AnonymizedStr = pm.AnonymizedStr
+					stmt.Prepared.StatementNoConstants = pm.StatementNoConstants
 					stmt.Prepared.Columns = pm.Columns
 					stmt.Prepared.Types = pm.Types
 					stmt.Prepared.Memo = cachedData.Memo

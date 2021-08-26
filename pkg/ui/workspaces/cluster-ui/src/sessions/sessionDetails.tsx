@@ -310,7 +310,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 <Link
                   to={StatementLinkTarget({
                     statement: stmt.sql,
-                    anonStatement: stmt.sql_anon,
+                    statementNoConstants: stmt.sql_no_constants,
                     implicitTxn: session.active_txn?.implicit,
                     app: "",
                     search: "",
