@@ -197,6 +197,9 @@ message LocalOnlySessionData {
   // AutoRehomingEnabled indicates whether or not REGIONAL BY ROW tables should
   // have a rehoming ON UPDATE clause added to them.
   bool auto_rehoming_enabled = 51;
+  // IsSuperuser returns whether the user is a "superuser", which is defined
+  // to be a user with an admin role.
+  bool is_superuser = 52;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

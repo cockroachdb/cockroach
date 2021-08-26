@@ -679,6 +679,7 @@ func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 		},
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 			ResultsBufferSize: args.ConnResultsBufferSize,
+			IsSuperuser:       args.IsSuperuser,
 		},
 	}
 	s.populateMinimalSessionData(sd)
