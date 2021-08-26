@@ -1196,10 +1196,9 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 				return true // done
 			})
 		}
-
-		if r.mu.tenantID != (roachpb.TenantID{}) {
-			ri.TenantID = r.mu.tenantID.ToUint64()
-		}
+	}
+	if r.mu.tenantID != (roachpb.TenantID{}) {
+		ri.TenantID = r.mu.tenantID.ToUint64()
 	}
 	ri.ClosedTimestampPolicy = r.closedTimestampPolicyRLocked()
 	r.sideTransportClosedTimestamp.mu.Lock()
