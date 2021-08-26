@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -476,6 +477,17 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// registered.
 	reportConfiguration(ctx)
 
+	computeURL := func() (*pgurl.URL, error) {
+		sCtx := rpc.MakeSecurityContext(
+			serverCfg.Config.SSLCertsDir,
+			serverCfg.Config.Insecure,
+			security.RootUserName(),
+			rpc.ServerSecurityConfig{}, // No server cfg needed just to compute a URL.
+			security.ClusterTLSSettings(serverCfg.Settings),
+			roachpb.SystemTenantID)
+		return sCtx.PGURL(url.User(security.RootUser))
+	}
+
 	// ReadyFn will be called when the server has started listening on
 	// its network sockets, but perhaps before it has done bootstrapping
 	// and thus before Start() completes.
@@ -508,8 +520,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			sCtx := rpc.MakeSecurityContext(serverCfg.Config, security.ClusterTLSSettings(serverCfg.Settings), roachpb.SystemTenantID)
-			pgURL, err := sCtx.PGURL(url.User(security.RootUser))
+			pgURL, err := computeURL()
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
 				return
@@ -672,8 +683,7 @@ If problems persist, please see %s.`
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			sCtx := rpc.MakeSecurityContext(serverCfg.Config, security.ClusterTLSSettings(serverCfg.Settings), roachpb.SystemTenantID)
-			pgURL, err := sCtx.PGURL(url.User(security.RootUser))
+			pgURL, err := computeURL()
 			if err != nil {
 				log.Ops.Errorf(ctx, "failed computing the URL: %v", err)
 				return err

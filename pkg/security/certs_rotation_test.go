@@ -107,9 +107,13 @@ func TestRotateCerts(t *testing.T) {
 	const kBadCertificate = "tls: bad certificate"
 
 	// Test client with the same certs.
-	clientContext := testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
-	firstSCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	firstSCtx := rpc.MakeSecurityContext(
+		certsDir,
+		false, /* insecure */
+		security.NodeUserName(),
+		rpc.ServerSecurityConfig{},
+		security.CommandTLSSettings{},
+		roachpb.SystemTenantID)
 	firstClient, err := firstSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
@@ -138,10 +142,13 @@ func TestRotateCerts(t *testing.T) {
 	// Setup a second http client. It will load the new certs.
 	// We need to use a new context as it keeps the certificate manager around.
 	// Fails on crypto errors.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
-
-	secondSCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	secondSCtx := rpc.MakeSecurityContext(
+		certsDir,
+		false, /* insecure */
+		security.NodeUserName(),
+		rpc.ServerSecurityConfig{},
+		security.CommandTLSSettings{},
+		roachpb.SystemTenantID)
 	secondClient, err := secondSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
@@ -246,9 +253,13 @@ func TestRotateCerts(t *testing.T) {
 	// Setup a third http client. It will load the new certs.
 	// We need to use a new context as it keeps the certificate manager around.
 	// This is HTTP and succeeds because we do not ask for or verify client certificates.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
-	thirdSCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	thirdSCtx := rpc.MakeSecurityContext(
+		certsDir,
+		false, /* insecure */
+		security.NodeUserName(),
+		rpc.ServerSecurityConfig{},
+		security.CommandTLSSettings{},
+		roachpb.SystemTenantID)
 	thirdClient, err := thirdSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)

@@ -24,7 +24,7 @@ import (
 // the given server config.
 func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.SQLUsername) error {
 	u.WithUsername(username.Normalized())
-	if ctx.config.Insecure {
+	if ctx.insecure {
 		u.WithInsecure()
 	} else if net, _, _ := u.GetNetworking(); net == pgurl.ProtoTCP {
 		tlsUsed, tlsMode, caCertPath := u.GetTLSOptions()
@@ -76,7 +76,7 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.
 // PGURL constructs a URL for the postgres endpoint, given a server
 // config. There is no default database set.
 func (ctx *SecurityContext) PGURL(user *url.Userinfo) (*pgurl.URL, error) {
-	host, port, _ := addr.SplitHostPort(ctx.config.SQLAdvertiseAddr, base.DefaultPort)
+	host, port, _ := addr.SplitHostPort(ctx.serverCfg.SQLAdvertiseAddr(), base.DefaultPort)
 	u := pgurl.New().
 		WithNet(pgurl.NetTCP(host, port)).
 		WithDatabase(catalogkeys.DefaultDatabaseName)

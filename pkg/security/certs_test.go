@@ -350,9 +350,13 @@ func TestUseCerts(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Insecure mode.
-	clientContext := testutils.NewNodeTestBaseContext()
-	clientContext.Insecure = true
-	sCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	sCtx := rpc.MakeSecurityContext(
+		"",   /* certsDir */
+		true, /* insecure */
+		security.NodeUserName(),
+		rpc.ServerSecurityConfig{},
+		security.CommandTLSSettings{},
+		roachpb.SystemTenantID)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -369,10 +373,14 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// New client. With certs this time.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
 	{
-		secondSCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+		secondSCtx := rpc.MakeSecurityContext(
+			certsDir,
+			false, /* insecure */
+			security.NodeUserName(),
+			rpc.ServerSecurityConfig{},
+			security.CommandTLSSettings{},
+			roachpb.SystemTenantID)
 		httpClient, err = secondSCtx.GetHTTPClient()
 	}
 	if err != nil {
@@ -440,9 +448,13 @@ func TestUseSplitCACerts(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Insecure mode.
-	clientContext := testutils.NewNodeTestBaseContext()
-	clientContext.Insecure = true
-	sCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	sCtx := rpc.MakeSecurityContext(
+		"",   /* certsDir */
+		true, /* insecure */
+		security.NodeUserName(),
+		rpc.ServerSecurityConfig{},
+		security.CommandTLSSettings{},
+		roachpb.SystemTenantID)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -459,10 +471,14 @@ func TestUseSplitCACerts(t *testing.T) {
 	}
 
 	// New client. With certs this time.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
 	{
-		secondSCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+		secondSCtx := rpc.MakeSecurityContext(
+			certsDir, /* certsDir */
+			false,    /* insecure */
+			security.NodeUserName(),
+			rpc.ServerSecurityConfig{},
+			security.CommandTLSSettings{},
+			roachpb.SystemTenantID)
 		httpClient, err = secondSCtx.GetHTTPClient()
 	}
 	if err != nil {
@@ -564,9 +580,13 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Insecure mode.
-	clientContext := testutils.NewNodeTestBaseContext()
-	clientContext.Insecure = true
-	sCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	sCtx := rpc.MakeSecurityContext(
+		"",   /* certsDir */
+		true, /* insecure */
+		security.NodeUserName(),
+		rpc.ServerSecurityConfig{},
+		security.CommandTLSSettings{},
+		roachpb.SystemTenantID)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -583,10 +603,14 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	}
 
 	// New client with certs, but the UI CA is gone, we have no way to verify the Admin UI cert.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
 	{
-		secondCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+		secondCtx := rpc.MakeSecurityContext(
+			certsDir, /* certsDir */
+			false,    /* insecure */
+			security.NodeUserName(),
+			rpc.ServerSecurityConfig{},
+			security.CommandTLSSettings{},
+			roachpb.SystemTenantID)
 		httpClient, err = secondCtx.GetHTTPClient()
 	}
 	if err != nil {
