@@ -459,6 +459,8 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return nil
 	})
 	m.Wait()
+	// DO NOT MERGE: force test to fail to confirm logs are collected
+	t.Fatal("something real bad happened")
 }
 
 // This test verifies that the changefeed avro + confluent schema registry works
