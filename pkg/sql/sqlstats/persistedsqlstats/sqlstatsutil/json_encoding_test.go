@@ -11,12 +11,10 @@
 package sqlstatsutil
 
 import (
-	"math/rand"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
-	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -33,94 +31,6 @@ func jsonTestHelper(t *testing.T, expectedStr string, actual json.JSON) {
 	require.NoError(t, err)
 	require.True(t, cmp == 0, "expected %s\nbut found %s", expected.String(), actual.String())
 }
-
-type randomData struct {
-	Bool   bool
-	String string
-	Int64  int64
-	Float  float64
-}
-
-var alphabet = []rune("abcdefghijklmkopqrstuvwxyz")
-
-func genRandomData() randomData {
-	r := randomData{}
-	r.Bool = rand.Float64() > 0.5
-
-	// Randomly generating 20-character string.
-	b := strings.Builder{}
-	for i := 0; i < 20; i++ {
-		b.WriteRune(alphabet[rand.Intn(26)])
-	}
-	r.String = b.String()
-
-	r.Int64 = rand.Int63()
-	r.Float = rand.Float64()
-
-	return r
-}
-
-func fillTemplate(t *testing.T, tmplStr string, data randomData) string {
-	tmpl, err := template.New("").Parse(tmplStr)
-	require.NoError(t, err)
-
-	b := strings.Builder{}
-	err = tmpl.Execute(&b, data)
-	require.NoError(t, err)
-
-	return b.String()
-}
-
-var fieldBlacklist = map[string]struct{}{
-	"App":                     {},
-	"SensitiveInfo":           {},
-	"LegacyLastErr":           {},
-	"LegacyLastErrRedacted":   {},
-	"LastExecTimestamp":       {},
-	"StatementFingerprintIDs": {},
-	"AggregatedTs":            {},
-}
-
-func fillObject(t *testing.T, val reflect.Value, data *randomData) {
-	// Do not set the fields that are not being encoded as json.
-	if val.Kind() != reflect.Ptr {
-		t.Fatal("not a pointer type")
-	}
-
-	val = reflect.Indirect(val)
-
-	switch val.Kind() {
-	case reflect.Uint64:
-		val.SetUint(uint64(0))
-	case reflect.Int64:
-		val.SetInt(data.Int64)
-	case reflect.String:
-		val.SetString(data.String)
-	case reflect.Float64:
-		val.SetFloat(data.Float)
-	case reflect.Bool:
-		val.SetBool(data.Bool)
-	case reflect.Slice:
-		numElem := val.Len()
-		for i := 0; i < numElem; i++ {
-			fillObject(t, val.Index(i).Addr(), data)
-		}
-	case reflect.Struct:
-		numFields := val.NumField()
-		for i := 0; i < numFields; i++ {
-			fieldName := val.Type().Field(i).Name
-			fieldAddr := val.Field(i).Addr()
-			if _, ok := fieldBlacklist[fieldName]; ok {
-				continue
-			}
-
-			fillObject(t, fieldAddr, data)
-		}
-	default:
-		t.Fatalf("unsupported type: %s", val.Kind().String())
-	}
-}
-
 func TestSQLStatsJsonEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

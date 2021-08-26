@@ -17,10 +17,48 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSQLStatsStmtStatsTempObjectRandomMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var testData []serverpb.StatementsResponse_CollectedStatementStatistics
+
+	for i := 0; i < 50; i++ {
+		var stats serverpb.StatementsResponse_CollectedStatementStatistics
+		randomData := sqlstatsutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+		stats.Key.KeyData = randomData.Key
+		testData = append(testData, stats)
+	}
+
+	sqlStats, err := NewTempSQLStatsFromExistingStmtStats(testData)
+	require.NoError(t, err)
+
+	require.NoError(t,
+		sqlStats.IterateStatementStats(
+			context.Background(),
+			&sqlstats.IteratorOptions{},
+			func(
+				ctx context.Context,
+				statistics *roachpb.CollectedStatementStatistics,
+			) error {
+				var found bool
+				for i := range testData {
+					if testData[i].Key.KeyData == statistics.Key {
+						found = true
+						break
+					}
+				}
+				require.True(t, found, "expected metadata %+v, but not found", statistics.Key)
+				return nil
+			}))
+
+}
 
 func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -34,8 +72,9 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 		{
 			id: 0,
 			key: roachpb.StatementStatisticsKey{
-				App:   "app1",
-				Query: "SELECT 1",
+				App:      "app1",
+				Query:    "SELECT 1",
+				Database: "testdb",
 			},
 			stats: roachpb.StatementStatistics{
 				Count: 7,
@@ -44,8 +83,9 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 		{
 			id: 0,
 			key: roachpb.StatementStatisticsKey{
-				App:   "app0",
-				Query: "SELECT 1",
+				App:      "app0",
+				Query:    "SELECT 1",
+				Database: "testdb",
 			},
 			stats: roachpb.StatementStatistics{
 				Count: 2,
@@ -54,8 +94,9 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 		{
 			id: 1,
 			key: roachpb.StatementStatisticsKey{
-				App:   "app100",
-				Query: "SELECT 1,1",
+				App:      "app100",
+				Query:    "SELECT 1,1",
+				Database: "testdb",
 			},
 			stats: roachpb.StatementStatistics{
 				Count: 31,
@@ -64,8 +105,9 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 		{
 			id: 1,
 			key: roachpb.StatementStatisticsKey{
-				App:   "app0",
-				Query: "SELECT 1,1",
+				App:      "app0",
+				Query:    "SELECT 1,1",
+				Database: "testdb",
 			},
 			stats: roachpb.StatementStatistics{
 				Count: 32,
@@ -74,8 +116,9 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 		{
 			id: 0,
 			key: roachpb.StatementStatisticsKey{
-				App:   "app1",
-				Query: "SELECT 1",
+				App:      "app1",
+				Query:    "SELECT 1",
+				Database: "testdb",
 			},
 			stats: roachpb.StatementStatistics{
 				Count: 33,
@@ -84,8 +127,9 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 		{
 			id: 1,
 			key: roachpb.StatementStatisticsKey{
-				App:   "app100",
-				Query: "SELECT 1,1",
+				App:      "app100",
+				Query:    "SELECT 1,1",
+				Database: "testdb",
 			},
 			stats: roachpb.StatementStatistics{
 				Count: 2,
@@ -123,6 +167,7 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 				ctx context.Context,
 				statistics *roachpb.CollectedStatementStatistics,
 			) error {
+				require.Equal(t, "testdb", statistics.Key.Database)
 				foundStats[statistics.Key.App+statistics.Key.Query] = statistics.Stats.Count
 				return nil
 			}))
