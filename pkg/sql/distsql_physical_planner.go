@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -42,11 +43,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -108,6 +111,11 @@ type DistSQLPlanner struct {
 	// on unhealthy nodes.
 	nodeHealth distSQLNodeHealth
 
+	// parallelLocalScansSem is a node-wide semaphore on the number of
+	// additional goroutines that can be used to run concurrent TableReaders
+	// for the same stage of the fully local physical plans.
+	parallelLocalScansSem *quotapool.IntPool
+
 	// distSender is used to construct the spanResolver upon SetNodeInfo.
 	distSender *kvcoord.DistSender
 	// nodeDescs is used to construct the spanResolver upon SetNodeInfo.
@@ -164,6 +172,16 @@ func NewDistSQLPlanner(
 		nodeDescs:             nodeDescs,
 		rpcCtx:                rpcCtx,
 		metadataTestTolerance: execinfra.NoExplain,
+	}
+
+	dsp.parallelLocalScansSem = quotapool.NewIntPool("parallel local scans concurrency",
+		uint64(localScansConcurrencyLimit.Get(&st.SV)))
+	localScansConcurrencyLimit.SetOnChange(&st.SV, func(ctx context.Context) {
+		dsp.parallelLocalScansSem.UpdateCapacity(uint64(localScansConcurrencyLimit.Get(&st.SV)))
+	})
+	if rpcCtx != nil {
+		// rpcCtx might be nil in some tests.
+		rpcCtx.Stopper.AddCloser(dsp.parallelLocalScansSem.Closer("stopper"))
 	}
 
 	dsp.initRunners(ctx)
@@ -648,6 +666,19 @@ type PlanningCtx struct {
 
 	// If set, statement execution stats should be collected.
 	collectExecStats bool
+
+	// parallelizeScansIfLocal indicates whether we might want to create
+	// multiple table readers if the physical plan ends up being fully local.
+	// This value is determined based on whether there are any mutations in the
+	// plan (which prohibit all concurrency) and whether all parts of the plan
+	// are supported natively by the vectorized engine.
+	parallelizeScansIfLocal bool
+
+	// onFlowCleanup contains non-nil functions that will be called after the
+	// local flow finished running and is being cleaned up. It allows us to
+	// release the resources that are acquired during the physical planning and
+	// are being hold onto throughout the whole flow lifecycle.
+	onFlowCleanup []func()
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
@@ -750,6 +781,17 @@ func (p *PlanningCtx) flowSpecsToDiagram(
 		return nil, err
 	}
 	return diagram, nil
+}
+
+// getCleanupFunc returns a non-nil function that needs to be called after the
+// local flow finished running. This can be called only after the physical
+// planning has been completed.
+func (p *PlanningCtx) getCleanupFunc() func() {
+	return func() {
+		for _, r := range p.onFlowCleanup {
+			r()
+		}
+	}
 }
 
 // PhysicalPlan is a partial physical plan which corresponds to a planNode
@@ -1291,15 +1333,133 @@ type tableReaderPlanningInfo struct {
 	containsSystemColumns bool
 }
 
+const defaultLocalScansConcurrencyLimit = 1024
+
+// localScansConcurrencyLimit determines the number of additional goroutines
+// that can be used to run parallel TableReaders when the plans are local. By
+// "additional" we mean having more processors than one in the same stage of the
+// physical plan.
+var localScansConcurrencyLimit = settings.RegisterIntSetting(
+	"sql.local_scans.concurrency_limit",
+	"maximum number of additional goroutines for performing scans in local plans",
+	defaultLocalScansConcurrencyLimit,
+	settings.NonNegativeInt,
+)
+
+// maybeParallelizeLocalScans check whether we are planning such a TableReader
+// for the local flow that would benefit (and is safe) to parallelize.
+func (dsp *DistSQLPlanner) maybeParallelizeLocalScans(
+	planCtx *PlanningCtx, info *tableReaderPlanningInfo,
+) (spanPartitions []SpanPartition, parallelizeLocal bool, err error) {
+	if !planCtx.isLocal {
+		return spanPartitions, parallelizeLocal, errors.AssertionFailedf("maybeParallelizeLocalScans called for a distributed plan")
+	}
+	// For local plans, if:
+	// - there is no required ordering,
+	// - the scan is safe to parallelize, and
+	// - the parallelization of scans in local flows is allowed,
+	// - there is still quota for running more parallel local TableReaders,
+	// then we will split all spans according to the leaseholder boundaries and
+	// will create a separate TableReader for each node.
+	sd := planCtx.ExtendedEvalCtx.EvalContext.SessionData()
+	// If we have locality optimized search enabled and we won't use the
+	// vectorized engine, using the parallel scans might actually be
+	// significantly worse, so we prohibit it. This is the case because if we
+	// have a local region hit, we would still execute all lookups into the
+	// remote regions and would block until all come back in the row-based flow.
+	prohibitParallelScans := sd.LocalityOptimizedSearch && sd.VectorizeMode == sessiondatapb.VectorizeOff
+	if len(info.reqOrdering) == 0 &&
+		info.parallelize &&
+		planCtx.parallelizeScansIfLocal &&
+		!prohibitParallelScans &&
+		dsp.parallelLocalScansSem.ApproximateQuota() > 0 &&
+		planCtx.spanIter != nil { // This condition can only be false in tests.
+		parallelizeLocal = true
+		// Temporarily unset isLocal so that PartitionSpans divides all spans
+		// according to the respective leaseholders.
+		planCtx.isLocal = false
+		spanPartitions, err = dsp.PartitionSpans(planCtx, info.spans)
+		planCtx.isLocal = true
+		if err != nil {
+			return spanPartitions, parallelizeLocal, err
+		}
+		for i := range spanPartitions {
+			spanPartitions[i].Node = dsp.gatewayNodeID
+		}
+		if len(spanPartitions) > 1 {
+			// We're touching ranges that have leaseholders on multiple nodes,
+			// so it'd be beneficial to parallelize such a scan.
+			//
+			// Determine the desired concurrency. The concurrency is limited by
+			// the number of partitions as well as maxConcurrency constant (the
+			// upper bound). We then try acquiring the quota for all additional
+			// goroutines, and if the quota isn't available, we reduce the
+			// proposed concurrency by 1. If in the end we didn't manage to
+			// acquire the quota even for a single additional goroutine, we
+			// won't have parallel TableReaders.
+			const maxConcurrency = 64
+			actualConcurrency := len(spanPartitions)
+			if actualConcurrency > maxConcurrency {
+				actualConcurrency = maxConcurrency
+			}
+			if quota := int(dsp.parallelLocalScansSem.ApproximateQuota()); actualConcurrency > quota {
+				actualConcurrency = quota
+			}
+			// alloc will be non-nil only if actualConcurrency remains above 1.
+			var alloc *quotapool.IntAlloc
+			for actualConcurrency > 1 {
+				alloc, err = dsp.parallelLocalScansSem.TryAcquire(planCtx.ctx, uint64(actualConcurrency-1))
+				if err == nil {
+					break
+				}
+				actualConcurrency--
+			}
+
+			if actualConcurrency > 1 {
+				// We will have at least two concurrent TableReaders.
+				//
+				// Now we might need to merge some span partitions together. We
+				// will keep first actualConcurrency partitions and will append
+				// into them all "extra" span partitions in an alternating
+				// fashion.
+				for extraPartitionIdx := actualConcurrency; extraPartitionIdx < len(spanPartitions); extraPartitionIdx++ {
+					mergeIntoIdx := extraPartitionIdx % actualConcurrency
+					spanPartitions[mergeIntoIdx].Spans = append(spanPartitions[mergeIntoIdx].Spans, spanPartitions[extraPartitionIdx].Spans...)
+				}
+				spanPartitions = spanPartitions[:actualConcurrency]
+				planCtx.onFlowCleanup = append(planCtx.onFlowCleanup, alloc.Release)
+			} else {
+				// We weren't able to acquire the quota for any additional
+				// goroutines, so we will fallback to having a single
+				// TableReader.
+				spanPartitions = []SpanPartition{{dsp.gatewayNodeID, info.spans}}
+			}
+		}
+		if len(spanPartitions) == 1 {
+			// If all spans are assigned to a single partition, then there will
+			// be no parallelism, so we want to elide the redundant
+			// synchronizer.
+			parallelizeLocal = false
+		}
+	} else {
+		spanPartitions = []SpanPartition{{dsp.gatewayNodeID, info.spans}}
+	}
+	return spanPartitions, parallelizeLocal, err
+}
+
 func (dsp *DistSQLPlanner) planTableReaders(
 	planCtx *PlanningCtx, p *PhysicalPlan, info *tableReaderPlanningInfo,
 ) error {
 	var (
-		spanPartitions []SpanPartition
-		err            error
+		spanPartitions   []SpanPartition
+		parallelizeLocal bool
+		err              error
 	)
 	if planCtx.isLocal {
-		spanPartitions = []SpanPartition{{dsp.gatewayNodeID, info.spans}}
+		spanPartitions, parallelizeLocal, err = dsp.maybeParallelizeLocalScans(planCtx, info)
+		if err != nil {
+			return err
+		}
 	} else if info.post.Limit == 0 {
 		// No hard limit - plan all table readers where their data live. Note
 		// that we're ignoring soft limits for now since the TableReader will
@@ -1388,6 +1548,12 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		}
 	}
 	p.AddProjection(outCols, dsp.convertOrdering(info.reqOrdering, planToStreamColMap))
+
+	if parallelizeLocal {
+		// If we planned multiple table readers, we need to merge the streams
+		// into one.
+		p.AddSingleGroupStage(dsp.gatewayNodeID, execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}}, execinfrapb.PostProcessSpec{}, p.GetResultTypes())
+	}
 
 	p.PlanToStreamColMap = planToStreamColMap
 	return nil
@@ -2693,13 +2859,18 @@ func (dsp *DistSQLPlanner) planJoiners(
 	return p
 }
 
+// createPhysPlan creates a PhysicalPlan as well as returns a non-nil cleanup
+// function that must be called after the flow has been cleaned up.
 func (dsp *DistSQLPlanner) createPhysPlan(
 	planCtx *PlanningCtx, plan planMaybePhysical,
-) (physPlan *PhysicalPlan, err error) {
+) (physPlan *PhysicalPlan, cleanup func(), err error) {
 	if plan.isPhysicalPlan() {
-		return plan.physPlan.PhysicalPlan, nil
+		// TODO(yuzefovich): figure out how to propagate
+		// planCtx.getCleanupFunc() from the experimental DistSQL spec factory.
+		return plan.physPlan.PhysicalPlan, func() {}, nil
 	}
-	return dsp.createPhysPlanForPlanNode(planCtx, plan.planNode)
+	physPlan, err = dsp.createPhysPlanForPlanNode(planCtx, plan.planNode)
+	return physPlan, planCtx.getCleanupFunc(), err
 }
 
 func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
@@ -3442,14 +3613,12 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 						"we expect that limited UNION ALL queries do not require a specific ordering",
 					)
 				}
-				// Here we don't force the serialization so that the unordered
-				// synchronizer is used. Additionally, because the plan will be fully
-				// local, we will use the flowinfra.FuseAggressively option. As a
-				// result, the plan will end up with a serial unordered synchronizer,
-				// which has exactly the behavior that we want (in particular, it won't
-				// execute the right child if the limit is reached by the left child).
+				// Force the serialization between the two streams so that the
+				// serial unordered synchronizer is used which has exactly the
+				// behavior that we want (in particular, it won't execute the
+				// right child if the limit is reached by the left child).
 				p.EnsureSingleStreamPerNode(
-					false, /* forceSerialization */
+					true, /* forceSerialization */
 					execinfrapb.PostProcessSpec{Limit: n.hardLimit},
 				)
 			}
@@ -3705,6 +3874,100 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 	return plan, nil
 }
 
+// checkScanParallelizationIfLocal returns whether the plan contains scanNodes
+// that can be parallelized and is such that it is safe to do so.
+//
+// This method performs a walk over the plan to make sure that only planNodes
+// that allow for the scan parallelization are present (this is a limitation
+// of the vectorized engine). Namely, the plan is allowed to contain only those
+// things that are natively supported by the vectorized engine; if there is a
+// planNode that will be handled by wrapping a row-by-row processor into the
+// vectorized flow, we might get an error during the query execution because the
+// processors eagerly move into the draining state which will cancel the context
+// of parallel TableReaders which might "poison" the transaction.
+func checkScanParallelizationIfLocal(
+	ctx context.Context, plan *planComponents,
+) (prohibitParallelization, hasScanNodeToParallelize bool) {
+	if plan.main.planNode == nil || len(plan.cascades) != 0 || len(plan.checkPlans) != 0 {
+		// We either used the experimental DistSQL spec factory or have
+		// cascades/checks; both of these conditions - for now - prohibit
+		// the scan parallelization.
+		return true, false
+	}
+	o := planObserver{
+		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
+			if prohibitParallelization {
+				return false, nil
+			}
+			switch n := plan.(type) {
+			case *distinctNode:
+				return true, nil
+			case *explainPlanNode:
+				// walkPlan doesn't recurse into explainPlanNode, so we have to
+				// manually walk over the wrapped plan.
+				plan := n.plan.WrappedPlan.(*planComponents)
+				prohibit, has := checkScanParallelizationIfLocal(ctx, plan)
+				prohibitParallelization = prohibitParallelization || prohibit
+				hasScanNodeToParallelize = hasScanNodeToParallelize || has
+				return false, nil
+			case *explainVecNode:
+				return true, nil
+			case *filterNode:
+				// Some filter expressions might be handled by falling back to
+				// the wrapped processors, so we choose to be safe.
+				prohibitParallelization = true
+				return false, nil
+			case *groupNode:
+				for _, f := range n.funcs {
+					prohibitParallelization = f.hasFilter()
+				}
+				return true, nil
+			case *indexJoinNode:
+				// Vectorized index join is only supported for non-interleaved
+				// tables.
+				prohibitParallelization = n.table.desc.TableDesc().PrimaryIndex.IsInterleaved()
+				return true, nil
+			case *joinNode:
+				prohibitParallelization = n.pred.onCond != nil
+				return true, nil
+			case *limitNode:
+				return true, nil
+			case *ordinalityNode:
+				return true, nil
+			case *renderNode:
+				// Only support projections since render expressions might be
+				// handled via a wrapped row-by-row processor.
+				for _, e := range n.render {
+					if _, isIVar := e.(*tree.IndexedVar); !isIVar {
+						prohibitParallelization = true
+					}
+				}
+				return true, nil
+			case *scanNode:
+				prohibitParallelization = n.isCheck
+				if len(n.reqOrdering) == 0 && n.parallelize {
+					hasScanNodeToParallelize = true
+				}
+				return true, nil
+			case *sortNode:
+				return true, nil
+			case *unionNode:
+				return true, nil
+			case *valuesNode:
+				return true, nil
+			default:
+				prohibitParallelization = true
+				return false, nil
+			}
+		},
+	}
+	_ = walkPlan(ctx, plan.main.planNode, o)
+	for _, s := range plan.subqueryPlans {
+		_ = walkPlan(ctx, s.plan.planNode, o)
+	}
+	return prohibitParallelization, hasScanNodeToParallelize
+}
+
 // NewPlanningCtx returns a new PlanningCtx. When distribute is false, a
 // lightweight version PlanningCtx is returned that can be used when the caller
 // knows plans will only be run on one node. It is coerced to false on SQL
@@ -3723,7 +3986,22 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 		planner:         planner,
 	}
 	if !distribute {
-		return planCtx
+		if planner == nil || dsp.spanResolver == nil || planner.curPlan.flags.IsSet(planFlagContainsMutation) {
+			// Don't parallelize the scans if we have a local plan if
+			// - we don't have a planner which is the case when we are not on
+			// the main query path;
+			// - we don't have a span resolver (this can happen only in tests);
+			// - the plan contains a mutation operation - we currently don't
+			// support any parallelism when mutations are present.
+			return planCtx
+		}
+		prohibitParallelization, hasScanNodeToParallelize := checkScanParallelizationIfLocal(ctx, &planner.curPlan.planComponents)
+		if prohibitParallelization || !hasScanNodeToParallelize {
+			return planCtx
+		}
+		// We might decide to parallelize scans, and although the plan is local,
+		// we still need to instantiate a full planning context.
+		planCtx.parallelizeScansIfLocal = true
 	}
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
 	planCtx.NodeStatuses = make(map[roachpb.NodeID]NodeStatus)

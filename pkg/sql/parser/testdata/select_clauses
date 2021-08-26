@@ -33,7 +33,7 @@ SELECT e'a\'a' FROM t
 ----
 SELECT e'a\'a' FROM t
 SELECT (e'a\'a') FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT '_' FROM t -- literals removed
 SELECT e'a\'a' FROM _ -- identifiers removed
 
 parse
@@ -41,7 +41,7 @@ SELECT e'a\\\\na' FROM t
 ----
 SELECT e'a\\\\na' FROM t
 SELECT (e'a\\\\na') FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT '_' FROM t -- literals removed
 SELECT e'a\\\\na' FROM _ -- identifiers removed
 
 parse
@@ -49,7 +49,7 @@ SELECT e'\\\\n' FROM t
 ----
 SELECT e'\\\\n' FROM t
 SELECT (e'\\\\n') FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT '_' FROM t -- literals removed
 SELECT e'\\\\n' FROM _ -- identifiers removed
 
 parse
@@ -283,7 +283,7 @@ SELECT 'a' FROM t
 ----
 SELECT 'a' FROM t
 SELECT ('a') FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT '_' FROM t -- literals removed
 SELECT 'a' FROM _ -- identifiers removed
 
 parse
@@ -291,7 +291,7 @@ SELECT 'a' FROM t@bar
 ----
 SELECT 'a' FROM t@bar
 SELECT ('a') FROM t@bar -- fully parenthesized
-SELECT _ FROM t@bar -- literals removed
+SELECT '_' FROM t@bar -- literals removed
 SELECT 'a' FROM _@_ -- identifiers removed
 
 parse
@@ -299,7 +299,7 @@ SELECT 'a' FROM t@primary
 ----
 SELECT 'a' FROM t@primary
 SELECT ('a') FROM t@primary -- fully parenthesized
-SELECT _ FROM t@primary -- literals removed
+SELECT '_' FROM t@primary -- literals removed
 SELECT 'a' FROM _@_ -- identifiers removed
 
 parse
@@ -307,7 +307,7 @@ SELECT 'a' FROM t@like
 ----
 SELECT 'a' FROM t@like
 SELECT ('a') FROM t@like -- fully parenthesized
-SELECT _ FROM t@like -- literals removed
+SELECT '_' FROM t@like -- literals removed
 SELECT 'a' FROM _@_ -- identifiers removed
 
 parse
@@ -315,7 +315,7 @@ SELECT 'a' FROM t@{NO_INDEX_JOIN}
 ----
 SELECT 'a' FROM t@{NO_INDEX_JOIN}
 SELECT ('a') FROM t@{NO_INDEX_JOIN} -- fully parenthesized
-SELECT _ FROM t@{NO_INDEX_JOIN} -- literals removed
+SELECT '_' FROM t@{NO_INDEX_JOIN} -- literals removed
 SELECT 'a' FROM _@{NO_INDEX_JOIN} -- identifiers removed
 
 parse
@@ -323,7 +323,7 @@ SELECT 'a' FROM t@{NO_ZIGZAG_JOIN}
 ----
 SELECT 'a' FROM t@{NO_ZIGZAG_JOIN}
 SELECT ('a') FROM t@{NO_ZIGZAG_JOIN} -- fully parenthesized
-SELECT _ FROM t@{NO_ZIGZAG_JOIN} -- literals removed
+SELECT '_' FROM t@{NO_ZIGZAG_JOIN} -- literals removed
 SELECT 'a' FROM _@{NO_ZIGZAG_JOIN} -- identifiers removed
 
 parse
@@ -331,7 +331,7 @@ SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}
 ----
 SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}
 SELECT ('a') FROM t@{IGNORE_FOREIGN_KEYS} -- fully parenthesized
-SELECT _ FROM t@{IGNORE_FOREIGN_KEYS} -- literals removed
+SELECT '_' FROM t@{IGNORE_FOREIGN_KEYS} -- literals removed
 SELECT 'a' FROM _@{IGNORE_FOREIGN_KEYS} -- identifiers removed
 
 parse
@@ -339,7 +339,7 @@ SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}
 ----
 SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}
 SELECT ('a') FROM t@{FORCE_INDEX=idx,ASC} -- fully parenthesized
-SELECT _ FROM t@{FORCE_INDEX=idx,ASC} -- literals removed
+SELECT '_' FROM t@{FORCE_INDEX=idx,ASC} -- literals removed
 SELECT 'a' FROM _@{FORCE_INDEX=_,ASC} -- identifiers removed
 
 parse
@@ -347,7 +347,7 @@ SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS,NO_ZIGZAG_JOIN}
 ----
 SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,IGNORE_FOREIGN_KEYS} -- normalized!
 SELECT ('a') FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,IGNORE_FOREIGN_KEYS} -- fully parenthesized
-SELECT _ FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,IGNORE_FOREIGN_KEYS} -- literals removed
+SELECT '_' FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,IGNORE_FOREIGN_KEYS} -- literals removed
 SELECT 'a' FROM _@{FORCE_INDEX=_,DESC,NO_ZIGZAG_JOIN,IGNORE_FOREIGN_KEYS} -- identifiers removed
 
 error
@@ -421,7 +421,7 @@ SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'
 ----
 SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'
 SELECT (*) FROM t AS "of" AS OF SYSTEM TIME ('2016-01-01') -- fully parenthesized
-SELECT * FROM t AS "of" AS OF SYSTEM TIME _ -- literals removed
+SELECT * FROM t AS "of" AS OF SYSTEM TIME '_' -- literals removed
 SELECT * FROM _ AS _ AS OF SYSTEM TIME '2016-01-01' -- identifiers removed
 
 parse
@@ -2536,7 +2536,7 @@ SELECT a FROM t1 AS OF SYSTEM TIME '2016-01-01'
 ----
 SELECT a FROM t1 AS OF SYSTEM TIME '2016-01-01'
 SELECT (a) FROM t1 AS OF SYSTEM TIME ('2016-01-01') -- fully parenthesized
-SELECT a FROM t1 AS OF SYSTEM TIME _ -- literals removed
+SELECT a FROM t1 AS OF SYSTEM TIME '_' -- literals removed
 SELECT _ FROM _ AS OF SYSTEM TIME '2016-01-01' -- identifiers removed
 
 parse
@@ -2544,7 +2544,7 @@ SELECT a FROM t1, t2 AS OF SYSTEM TIME '2016-01-01'
 ----
 SELECT a FROM t1, t2 AS OF SYSTEM TIME '2016-01-01'
 SELECT (a) FROM t1, t2 AS OF SYSTEM TIME ('2016-01-01') -- fully parenthesized
-SELECT a FROM t1, t2 AS OF SYSTEM TIME _ -- literals removed
+SELECT a FROM t1, t2 AS OF SYSTEM TIME '_' -- literals removed
 SELECT _ FROM _, _ AS OF SYSTEM TIME '2016-01-01' -- identifiers removed
 
 parse
@@ -2552,7 +2552,7 @@ SELECT a FROM t1 AS OF SYSTEM TIME -('a' || 'b')::INTERVAL
 ----
 SELECT a FROM t1 AS OF SYSTEM TIME -('a' || 'b')::INTERVAL
 SELECT (a) FROM t1 AS OF SYSTEM TIME (-((((('a') || ('b'))))::INTERVAL)) -- fully parenthesized
-SELECT a FROM t1 AS OF SYSTEM TIME -(_ || _)::INTERVAL -- literals removed
+SELECT a FROM t1 AS OF SYSTEM TIME -('_' || '_')::INTERVAL -- literals removed
 SELECT _ FROM _ AS OF SYSTEM TIME -('a' || 'b')::INTERVAL -- identifiers removed
 
 parse
@@ -2754,7 +2754,7 @@ SELECT 'a' FROM t@{FORCE_INDEX=bar}
 ----
 SELECT 'a' FROM t@bar -- normalized!
 SELECT ('a') FROM t@bar -- fully parenthesized
-SELECT _ FROM t@bar -- literals removed
+SELECT '_' FROM t@bar -- literals removed
 SELECT 'a' FROM _@_ -- identifiers removed
 
 parse
@@ -2762,7 +2762,7 @@ SELECT 'a' FROM t@{ASC,FORCE_INDEX=idx}
 ----
 SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC} -- normalized!
 SELECT ('a') FROM t@{FORCE_INDEX=idx,ASC} -- fully parenthesized
-SELECT _ FROM t@{FORCE_INDEX=idx,ASC} -- literals removed
+SELECT '_' FROM t@{FORCE_INDEX=idx,ASC} -- literals removed
 SELECT 'a' FROM _@{FORCE_INDEX=_,ASC} -- identifiers removed
 
 

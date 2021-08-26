@@ -44,7 +44,7 @@ SET a = '3'
 ----
 SET a = '3'
 SET a = ('3') -- fully parenthesized
-SET a = _ -- literals removed
+SET a = '_' -- literals removed
 SET a = '3' -- identifiers removed
 
 parse
@@ -165,7 +165,7 @@ SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME '
 ----
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME '-1s', NOT DEFERRABLE
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME ('-1s'), NOT DEFERRABLE -- fully parenthesized
-SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME _, NOT DEFERRABLE -- literals removed
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME '_', NOT DEFERRABLE -- literals removed
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME '-1s', NOT DEFERRABLE -- identifiers removed
 
 parse
@@ -197,7 +197,7 @@ SET TRACING = 'cluster', 'kv'
 ----
 SET TRACING = 'cluster', 'kv'
 SET TRACING = ('cluster'), ('kv') -- fully parenthesized
-SET TRACING = _, _ -- literals removed
+SET TRACING = '_', '_' -- literals removed
 SET TRACING = 'cluster', 'kv' -- identifiers removed
 
 parse
@@ -229,7 +229,7 @@ SET CLUSTER SETTING a = '3s'
 ----
 SET CLUSTER SETTING a = '3s'
 SET CLUSTER SETTING a = ('3s') -- fully parenthesized
-SET CLUSTER SETTING a = _ -- literals removed
+SET CLUSTER SETTING a = '_' -- literals removed
 SET CLUSTER SETTING a = '3s' -- identifiers removed
 
 parse
@@ -237,7 +237,7 @@ SET CLUSTER SETTING a = '3'
 ----
 SET CLUSTER SETTING a = '3'
 SET CLUSTER SETTING a = ('3') -- fully parenthesized
-SET CLUSTER SETTING a = _ -- literals removed
+SET CLUSTER SETTING a = '_' -- literals removed
 SET CLUSTER SETTING a = '3' -- identifiers removed
 
 parse
@@ -305,7 +305,7 @@ SET SCHEMA 'public'
 ----
 SET search_path = 'public' -- normalized!
 SET search_path = ('public') -- fully parenthesized
-SET search_path = _ -- literals removed
+SET search_path = '_' -- literals removed
 SET search_path = 'public' -- identifiers removed
 
 parse
@@ -313,7 +313,7 @@ SET TIME ZONE 'pst8pdt'
 ----
 SET timezone = 'pst8pdt' -- normalized!
 SET timezone = ('pst8pdt') -- fully parenthesized
-SET timezone = _ -- literals removed
+SET timezone = '_' -- literals removed
 SET timezone = 'pst8pdt' -- identifiers removed
 
 parse
@@ -321,7 +321,7 @@ SET TIME ZONE 'Europe/Rome'
 ----
 SET timezone = 'Europe/Rome' -- normalized!
 SET timezone = ('Europe/Rome') -- fully parenthesized
-SET timezone = _ -- literals removed
+SET timezone = '_' -- literals removed
 SET timezone = 'Europe/Rome' -- identifiers removed
 
 parse
@@ -353,7 +353,7 @@ SET TIME ZONE LOCAL
 ----
 SET timezone = 'local' -- normalized!
 SET timezone = ('local') -- fully parenthesized
-SET timezone = _ -- literals removed
+SET timezone = '_' -- literals removed
 SET timezone = 'local' -- identifiers removed
 
 parse
@@ -361,7 +361,7 @@ SET TIME ZONE pst8pdt
 ----
 SET timezone = 'pst8pdt' -- normalized!
 SET timezone = ('pst8pdt') -- fully parenthesized
-SET timezone = _ -- literals removed
+SET timezone = '_' -- literals removed
 SET timezone = 'pst8pdt' -- identifiers removed
 
 parse
@@ -369,7 +369,7 @@ SET TIME ZONE "Europe/Rome"
 ----
 SET timezone = 'Europe/Rome' -- normalized!
 SET timezone = ('Europe/Rome') -- fully parenthesized
-SET timezone = _ -- literals removed
+SET timezone = '_' -- literals removed
 SET timezone = 'Europe/Rome' -- identifiers removed
 
 parse
@@ -377,7 +377,7 @@ SET TIME ZONE INTERVAL '-7h'
 ----
 SET timezone = '-7h'::INTERVAL -- normalized!
 SET timezone = (('-7h')::INTERVAL) -- fully parenthesized
-SET timezone = _::INTERVAL -- literals removed
+SET timezone = '_'::INTERVAL -- literals removed
 SET timezone = '-7h'::INTERVAL -- identifiers removed
 
 parse
@@ -385,7 +385,7 @@ SET TIME ZONE INTERVAL(3) '-7h'
 ----
 SET timezone = '-7h'::INTERVAL(3) -- normalized!
 SET timezone = (('-7h')::INTERVAL(3)) -- fully parenthesized
-SET timezone = _::INTERVAL(3) -- literals removed
+SET timezone = '_'::INTERVAL(3) -- literals removed
 SET timezone = '-7h'::INTERVAL(3) -- identifiers removed
 
 parse
@@ -393,7 +393,7 @@ SET TIME ZONE INTERVAL '-7h0m5s' HOUR TO MINUTE
 ----
 SET timezone = '-7h0m5s'::INTERVAL HOUR TO MINUTE -- normalized!
 SET timezone = (('-7h0m5s')::INTERVAL HOUR TO MINUTE) -- fully parenthesized
-SET timezone = _::INTERVAL HOUR TO MINUTE -- literals removed
+SET timezone = '_'::INTERVAL HOUR TO MINUTE -- literals removed
 SET timezone = '-7h0m5s'::INTERVAL HOUR TO MINUTE -- identifiers removed
 
 parse
@@ -401,7 +401,7 @@ SET TIME ZONE INTERVAL 'foobar'
 ----
 SET timezone = 'foobar'::INTERVAL -- normalized!
 SET timezone = (('foobar')::INTERVAL) -- fully parenthesized
-SET timezone = _::INTERVAL -- literals removed
+SET timezone = '_'::INTERVAL -- literals removed
 SET timezone = 'foobar'::INTERVAL -- identifiers removed
 
 parse
@@ -449,7 +449,7 @@ SET NAMES 'foo'
 ----
 SET client_encoding = 'foo' -- normalized!
 SET client_encoding = ('foo') -- fully parenthesized
-SET client_encoding = _ -- literals removed
+SET client_encoding = '_' -- literals removed
 SET client_encoding = 'foo' -- identifiers removed
 
 parse
@@ -513,5 +513,5 @@ SET role to 'bob'
 ----
 SET "role" = 'bob' -- normalized!
 SET "role" = ('bob') -- fully parenthesized
-SET "role" = _ -- literals removed
+SET "role" = '_' -- literals removed
 SET "role" = 'bob' -- identifiers removed

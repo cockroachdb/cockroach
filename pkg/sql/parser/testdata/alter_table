@@ -654,7 +654,7 @@ ALTER TABLE d.a SPLIT AT VALUES ('b', 2)
 ----
 ALTER TABLE d.a SPLIT AT VALUES ('b', 2)
 ALTER TABLE d.a SPLIT AT VALUES (('b'), (2)) -- fully parenthesized
-ALTER TABLE d.a SPLIT AT VALUES (_, _) -- literals removed
+ALTER TABLE d.a SPLIT AT VALUES ('_', _) -- literals removed
 ALTER TABLE _._ SPLIT AT VALUES ('b', 2) -- identifiers removed
 
 parse
@@ -662,7 +662,7 @@ ALTER TABLE a SPLIT AT VALUES (1) WITH EXPIRATION '1 day'
 ----
 ALTER TABLE a SPLIT AT VALUES (1) WITH EXPIRATION '1 day'
 ALTER TABLE a SPLIT AT VALUES ((1)) WITH EXPIRATION ('1 day') -- fully parenthesized
-ALTER TABLE a SPLIT AT VALUES (_) WITH EXPIRATION _ -- literals removed
+ALTER TABLE a SPLIT AT VALUES (_) WITH EXPIRATION '_' -- literals removed
 ALTER TABLE _ SPLIT AT VALUES (1) WITH EXPIRATION '1 day' -- identifiers removed
 
 parse
@@ -670,7 +670,7 @@ ALTER TABLE a SPLIT AT VALUES (1) WITH EXPIRATION '1 day':::INTERVAL
 ----
 ALTER TABLE a SPLIT AT VALUES (1) WITH EXPIRATION '1 day':::INTERVAL
 ALTER TABLE a SPLIT AT VALUES ((1)) WITH EXPIRATION (('1 day'):::INTERVAL) -- fully parenthesized
-ALTER TABLE a SPLIT AT VALUES (_) WITH EXPIRATION _:::INTERVAL -- literals removed
+ALTER TABLE a SPLIT AT VALUES (_) WITH EXPIRATION '_':::INTERVAL -- literals removed
 ALTER TABLE _ SPLIT AT VALUES (1) WITH EXPIRATION '1 day':::INTERVAL -- identifiers removed
 
 parse
@@ -678,7 +678,7 @@ ALTER TABLE a SPLIT AT VALUES (1) WITH EXPIRATION '7258118400000000.0'
 ----
 ALTER TABLE a SPLIT AT VALUES (1) WITH EXPIRATION '7258118400000000.0'
 ALTER TABLE a SPLIT AT VALUES ((1)) WITH EXPIRATION ('7258118400000000.0') -- fully parenthesized
-ALTER TABLE a SPLIT AT VALUES (_) WITH EXPIRATION _ -- literals removed
+ALTER TABLE a SPLIT AT VALUES (_) WITH EXPIRATION '_' -- literals removed
 ALTER TABLE _ SPLIT AT VALUES (1) WITH EXPIRATION '7258118400000000.0' -- identifiers removed
 
 parse
@@ -686,7 +686,7 @@ ALTER TABLE a SPLIT AT VALUES (1) WITH EXPIRATION '2200-01-01 00:00:00.0'
 ----
 ALTER TABLE a SPLIT AT VALUES (1) WITH EXPIRATION '2200-01-01 00:00:00.0'
 ALTER TABLE a SPLIT AT VALUES ((1)) WITH EXPIRATION ('2200-01-01 00:00:00.0') -- fully parenthesized
-ALTER TABLE a SPLIT AT VALUES (_) WITH EXPIRATION _ -- literals removed
+ALTER TABLE a SPLIT AT VALUES (_) WITH EXPIRATION '_' -- literals removed
 ALTER TABLE _ SPLIT AT VALUES (1) WITH EXPIRATION '2200-01-01 00:00:00.0' -- identifiers removed
 
 parse
@@ -702,7 +702,7 @@ ALTER TABLE a SPLIT AT VALUES (1) WITH EXPIRATION '2200-01-01 00:00:00.0':::TIME
 ----
 ALTER TABLE a SPLIT AT VALUES (1) WITH EXPIRATION '2200-01-01 00:00:00.0':::TIMESTAMP
 ALTER TABLE a SPLIT AT VALUES ((1)) WITH EXPIRATION (('2200-01-01 00:00:00.0'):::TIMESTAMP) -- fully parenthesized
-ALTER TABLE a SPLIT AT VALUES (_) WITH EXPIRATION _:::TIMESTAMP -- literals removed
+ALTER TABLE a SPLIT AT VALUES (_) WITH EXPIRATION '_':::TIMESTAMP -- literals removed
 ALTER TABLE _ SPLIT AT VALUES (1) WITH EXPIRATION '2200-01-01 00:00:00.0':::TIMESTAMP -- identifiers removed
 
 parse
@@ -742,7 +742,7 @@ ALTER TABLE d.a UNSPLIT AT VALUES ('b', 2)
 ----
 ALTER TABLE d.a UNSPLIT AT VALUES ('b', 2)
 ALTER TABLE d.a UNSPLIT AT VALUES (('b'), (2)) -- fully parenthesized
-ALTER TABLE d.a UNSPLIT AT VALUES (_, _) -- literals removed
+ALTER TABLE d.a UNSPLIT AT VALUES ('_', _) -- literals removed
 ALTER TABLE _._ UNSPLIT AT VALUES ('b', 2) -- identifiers removed
 
 parse
@@ -774,7 +774,7 @@ ALTER TABLE d.a EXPERIMENTAL_RELOCATE VALUES (ARRAY[1, 2, 3], 'b', 2)
 ----
 ALTER TABLE d.a EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2) -- normalized!
 ALTER TABLE d.a EXPERIMENTAL_RELOCATE VOTERS VALUES ((ARRAY[(1), (2), (3)]), ('b'), (2)) -- fully parenthesized
-ALTER TABLE d.a EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[_, _, __more1__], _, _) -- literals removed
+ALTER TABLE d.a EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[_, _, __more1__], '_', _) -- literals removed
 ALTER TABLE _._ EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2) -- identifiers removed
 
 parse
@@ -806,7 +806,7 @@ ALTER TABLE d.a EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2)
 ----
 ALTER TABLE d.a EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2)
 ALTER TABLE d.a EXPERIMENTAL_RELOCATE VOTERS VALUES ((ARRAY[(1), (2), (3)]), ('b'), (2)) -- fully parenthesized
-ALTER TABLE d.a EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[_, _, __more1__], _, _) -- literals removed
+ALTER TABLE d.a EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[_, _, __more1__], '_', _) -- literals removed
 ALTER TABLE _._ EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2) -- identifiers removed
 
 parse
@@ -838,7 +838,7 @@ ALTER TABLE d.a EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2)
 ----
 ALTER TABLE d.a EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2)
 ALTER TABLE d.a EXPERIMENTAL_RELOCATE NON_VOTERS VALUES ((ARRAY[(1), (2), (3)]), ('b'), (2)) -- fully parenthesized
-ALTER TABLE d.a EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[_, _, __more1__], _, _) -- literals removed
+ALTER TABLE d.a EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[_, _, __more1__], '_', _) -- literals removed
 ALTER TABLE _._ EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2) -- identifiers removed
 
 parse
@@ -862,7 +862,7 @@ ALTER TABLE d.a EXPERIMENTAL_RELOCATE LEASE VALUES (1, 'b', 2)
 ----
 ALTER TABLE d.a EXPERIMENTAL_RELOCATE LEASE VALUES (1, 'b', 2)
 ALTER TABLE d.a EXPERIMENTAL_RELOCATE LEASE VALUES ((1), ('b'), (2)) -- fully parenthesized
-ALTER TABLE d.a EXPERIMENTAL_RELOCATE LEASE VALUES (_, _, __more1__) -- literals removed
+ALTER TABLE d.a EXPERIMENTAL_RELOCATE LEASE VALUES (_, '_', __more1__) -- literals removed
 ALTER TABLE _._ EXPERIMENTAL_RELOCATE LEASE VALUES (1, 'b', 2) -- identifiers removed
 
 parse
@@ -902,7 +902,7 @@ ALTER TABLE db.t CONFIGURE ZONE = 'foo'
 ----
 ALTER TABLE db.t CONFIGURE ZONE = 'foo'
 ALTER TABLE db.t CONFIGURE ZONE = ('foo') -- fully parenthesized
-ALTER TABLE db.t CONFIGURE ZONE = _ -- literals removed
+ALTER TABLE db.t CONFIGURE ZONE = '_' -- literals removed
 ALTER TABLE _._ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -910,7 +910,7 @@ EXPLAIN ALTER TABLE db.t CONFIGURE ZONE = 'foo'
 ----
 EXPLAIN ALTER TABLE db.t CONFIGURE ZONE = 'foo'
 EXPLAIN ALTER TABLE db.t CONFIGURE ZONE = ('foo') -- fully parenthesized
-EXPLAIN ALTER TABLE db.t CONFIGURE ZONE = _ -- literals removed
+EXPLAIN ALTER TABLE db.t CONFIGURE ZONE = '_' -- literals removed
 EXPLAIN ALTER TABLE _._ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -918,7 +918,7 @@ ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = 'foo'
 ----
 ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = 'foo'
 ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = ('foo') -- fully parenthesized
-ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = _ -- literals removed
+ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = '_' -- literals removed
 ALTER PARTITION _ OF TABLE _._ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -926,7 +926,7 @@ EXPLAIN ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = 'foo'
 ----
 EXPLAIN ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = 'foo'
 EXPLAIN ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = ('foo') -- fully parenthesized
-EXPLAIN ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = _ -- literals removed
+EXPLAIN ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = '_' -- literals removed
 EXPLAIN ALTER PARTITION _ OF TABLE _._ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -934,7 +934,7 @@ ALTER TABLE t CONFIGURE ZONE = 'foo'
 ----
 ALTER TABLE t CONFIGURE ZONE = 'foo'
 ALTER TABLE t CONFIGURE ZONE = ('foo') -- fully parenthesized
-ALTER TABLE t CONFIGURE ZONE = _ -- literals removed
+ALTER TABLE t CONFIGURE ZONE = '_' -- literals removed
 ALTER TABLE _ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -942,7 +942,7 @@ ALTER PARTITION p OF TABLE t CONFIGURE ZONE = 'foo'
 ----
 ALTER PARTITION p OF TABLE t CONFIGURE ZONE = 'foo'
 ALTER PARTITION p OF TABLE t CONFIGURE ZONE = ('foo') -- fully parenthesized
-ALTER PARTITION p OF TABLE t CONFIGURE ZONE = _ -- literals removed
+ALTER PARTITION p OF TABLE t CONFIGURE ZONE = '_' -- literals removed
 ALTER PARTITION _ OF TABLE _ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -950,7 +950,7 @@ ALTER TABLE t CONFIGURE ZONE = b'foo'
 ----
 ALTER TABLE t CONFIGURE ZONE = b'foo'
 ALTER TABLE t CONFIGURE ZONE = (b'foo') -- fully parenthesized
-ALTER TABLE t CONFIGURE ZONE = _ -- literals removed
+ALTER TABLE t CONFIGURE ZONE = '_' -- literals removed
 ALTER TABLE _ CONFIGURE ZONE = b'foo' -- identifiers removed
 
 parse
