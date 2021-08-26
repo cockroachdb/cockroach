@@ -16,7 +16,7 @@ import { FixLong } from "src/util/fixLong";
 
 export function GetLocalReplica(
   info: protos.cockroach.server.serverpb.IRangeInfo,
-) {
+): protos.cockroach.roachpb.IReplicaDescriptor {
   return _.find(
     info.state.state.desc.internal_replicas,
     rep => rep.store_id === info.source_store_id,
