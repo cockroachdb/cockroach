@@ -244,7 +244,9 @@ var varGen = map[string]sessionVar{
 		},
 		SetWithPlanner: func(
 			_ context.Context, p *planner, dbName string) error {
-			p.sessionDataMutator.SetDatabase(dbName)
+			p.forEachMutator(func(m *sessionDataMutator) {
+				m.SetDatabase(dbName)
+			})
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData().Database },
@@ -1700,11 +1702,12 @@ func CheckSessionVariableValueValid(
 			"parameter %q cannot be changed", varName)
 	}
 	fakeSessionMutator := &sessionDataMutator{
-		data:               &sessiondata.SessionData{},
-		defaults:           SessionDefaults(map[string]string{}),
-		settings:           settings,
-		paramStatusUpdater: &noopParamStatusUpdater{},
-		setCurTxnReadOnly:  func(bool) {},
+		data: &sessiondata.SessionData{},
+		sessionDataMutatorBase: sessionDataMutatorBase{
+			defaults: SessionDefaults(map[string]string{}),
+			settings: settings,
+		},
+		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
 	}
 	return sVar.Set(ctx, fakeSessionMutator, varValue)
 }
@@ -1757,5 +1760,7 @@ func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string) err
 	if v.SetWithPlanner != nil {
 		return v.SetWithPlanner(ctx, p, newVal)
 	}
-	return v.Set(ctx, p.sessionDataMutator, newVal)
+	return p.sessionDataMutatorIterator.forEachMutatorError(func(m *sessionDataMutator) error {
+		return v.Set(ctx, m, newVal)
+	})
 }
