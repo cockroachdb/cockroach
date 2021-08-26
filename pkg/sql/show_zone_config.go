@@ -175,6 +175,7 @@ func getShowZoneConfigRow(
 
 // zoneConfigToSQL pretty prints a zone configuration as a SQL string.
 func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, error) {
+	yaml.FutureLineWrap()
 	constraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
 		Constraints: zone.Constraints,
 		Inherited:   zone.InheritedConstraints})
