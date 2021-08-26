@@ -21,21 +21,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(azhng): currently we do not have the ability to compute a hash for
-//  query plan. This is currently being worked on by the SQL Queries team.
-//  Once we are able get consistent hash value from a query plan, we should
-//  update this.
-const dummyPlanHash = int64(0)
+const (
+	// TODO(azhng): currently we do not have the ability to compute a hash for
+	//  query plan. This is currently being worked on by the SQL Queries team.
+	//  Once we are able get consistent hash value from a query plan, we should
+	//  update this.
+	dummyPlanHash = int64(0)
+
+	// TODO(azhng): Gone after #59205.
+	dummyTransactionFingerprintID = roachpb.TransactionFingerprintID(0)
+)
 
 // ErrConcurrentSQLStatsCompaction is reported when two sql stats compaction
 // jobs are issued concurrently. This is a sentinel error.
@@ -105,6 +112,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			}
 		})
 
+		log.Info(ctx, "starting sql-stats-worker")
 		for timer := timeutil.NewTimer(); ; timer.Reset(s.nextFlushInterval()) {
 			select {
 			case <-timer.C:
