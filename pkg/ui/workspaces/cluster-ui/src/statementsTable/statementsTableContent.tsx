@@ -126,7 +126,7 @@ interface StatementLinkProps {
   app: string;
   implicitTxn: boolean;
   search: string;
-  anonStatement?: string;
+  statementNoConstants?: string;
   database?: string;
   onClick?: (statement: string) => void;
 }
@@ -147,8 +147,8 @@ export const StatementLinkTarget = (props: StatementLinkProps) => {
   }
 
   let linkStatement = props.statement;
-  if (props.anonStatement) {
-    linkStatement = props.anonStatement;
+  if (props.statementNoConstants) {
+    linkStatement = props.statementNoConstants;
   }
   return `${base}/${encodeURIComponent(linkStatement)}`;
 };

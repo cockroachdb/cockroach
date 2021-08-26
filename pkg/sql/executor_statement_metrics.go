@@ -147,7 +147,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	recordedStmtStatsKey := roachpb.StatementStatisticsKey{
-		Query:       stmt.AnonymizedStr,
+		Query:       stmt.StmtNoConstants,
 		DistSQL:     flags.IsDistributed(),
 		Vec:         flags.IsSet(planFlagVectorized),
 		ImplicitTxn: flags.IsSet(planFlagImplicitTxn),

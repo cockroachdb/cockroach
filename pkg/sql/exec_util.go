@@ -2986,7 +2986,10 @@ func HashForReporting(secret, appName string) string {
 	return hex.EncodeToString(hash.Sum(nil)[:4])
 }
 
-func anonymizeStmt(ast tree.Statement) string {
+// formatStatementHideConstants formats the statement using
+// tree.FmtHideConstants. It does *not* anonymize the statement, since
+// the result will still contain names and identifiers.
+func formatStatementHideConstants(ast tree.Statement) string {
 	if ast == nil {
 		return ""
 	}
