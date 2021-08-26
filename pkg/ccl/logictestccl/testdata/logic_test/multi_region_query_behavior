@@ -1,8 +1,9 @@
 # LogicTest: multiregion-9node-3region-3azs
+# TODO(#69265): enable multiregion-9node-3region-3azs-tenant.
 
 statement ok
-CREATE DATABASE tpcc PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
-USE tpcc
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
+USE multi_region_test_db
 
 # NB: This doesn't include the foreign key reference to warehouse since we
 # don't need the warehouse table for this test.
@@ -244,3 +245,96 @@ vectorized: true
                 │
                 └── • scan buffer
                       label: buffer 1
+
+# Regression test for #62269. Ensure that locality optimized search results in
+# a local plan, even when there is a lookup join or an inverted join.
+statement ok
+CREATE TABLE promos (
+  promo_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  discount DECIMAL NOT NULL,
+  info JSON,
+  INVERTED INDEX (info),
+  FAMILY (promo_id, discount, info)
+) LOCALITY GLOBAL;
+CREATE TABLE orders (
+  order_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  price    DECIMAL NOT NULL,
+  promo_id UUID REFERENCES promos,
+  info JSON,
+  FAMILY (order_id, price, promo_id, info)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO promos VALUES ('7fe2dce4-ecac-4d12-87b6-e1c1f837d835', 50, '{"some": "info"}');
+INSERT INTO orders
+  VALUES ('94e4b847-8f2f-4ac5-83f1-641d6e3df727', 100, '7fe2dce4-ecac-4d12-87b6-e1c1f837d835', '{"some": "info"}')
+
+query T nodeidx=3
+USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
+    order_id, promo_id, price AS price_without_promo, price * discount AS price_with_promo
+FROM
+    orders JOIN promos USING (promo_id)
+WHERE
+    order_id = '94e4b847-8f2f-4ac5-83f1-641d6e3df727'
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • lookup join
+    │ table: promos@primary
+    │ equality: (promo_id) = (promo_id)
+    │ equality cols are key
+    │
+    └── • union all
+        │ limit: 1
+        │
+        ├── • scan
+        │     missing stats
+        │     table: orders@primary
+        │     spans: [/'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
+        │
+        └── • scan
+              missing stats
+              table: orders@primary
+              spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykUttO20AQfe9XjOaFizZKfIEES0hGbUqD0oQmVK3UtZDxjmHbZNfdXauuUJ76bf2vyjYUghoE9MHWzuXMnHM012i_LzDC4efT8dFoAttvRvOz-YfxDsyH4-HrM9BGkDmXgkFh9FLfvGRGcDRvH-c_pLvSpTtvGm6ruyCkzXSp3Hpj2wVvZ9P37WwLJ9PRpJ1u4eN8NDmG7dtdO_Dp3XA2_MsCDmHrIKTwYhD2O4Pczzthmu11BkHudfZDT-xTIPK-399ChkoLmqRLshh9wRAThoXRGVmrTZ26bhpGosKox1CqonR1OmGYaUMYXaOTbkEY4Vl6saAZpYJMt4cMBblULpqxrYK4MHKZmp_IcF6kykbQ5Rhz7HLkvDoIOa-o_l0MjjmvBnn35PcvzqvcE5xXnlCHddDf4tjtQaoEeKDdFRlkOC1dBLHHYp_FASYrhrp0d0ytSy8JI2_FXqbGe7KamnfvRYqerMLfqOKOvCUj0wWUqqFKYo1_svqH3Inu6KLrrwsdy6V04G2k0nuOoSdaqhs_g_U17U3f83Os9beygK9aKtAqgrgGzEgJMo1BEAcMYr_-duO9jfSC59CbkS20svTAqk3CE4YkLqm13erSZHRqdNasacNpg2sSgqxrq34bjFRTag7yPtj7H7D_KDhYA_cegoNHweEDcLJ69ScAAP__fLWm2w==
+
+query T nodeidx=3
+USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
+    order_id, promos.promo_id, price AS price_without_promo, price * discount AS price_with_promo
+FROM
+    orders JOIN promos ON promos.info @> orders.info
+WHERE
+    order_id = '94e4b847-8f2f-4ac5-83f1-641d6e3df727'
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • lookup join
+    │ table: promos@primary
+    │ equality: (promo_id) = (promo_id)
+    │ equality cols are key
+    │ pred: info @> info
+    │
+    └── • inverted join
+        │ table: promos@promos_info_idx
+        │
+        └── • union all
+            │ limit: 1
+            │
+            ├── • scan
+            │     missing stats
+            │     table: orders@primary
+            │     spans: [/'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
+            │
+            └── • scan
+                  missing stats
+                  table: orders@primary
+                  spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk99uGjsQxu_PU1hzk9PIhP0XICtFctTSlohCCpFaqUZos55N3IK9tb3tVhFXfba-V7W7JCmooCS9ANvj-Zjf5xluwX5dQAz9jxfDs8GI_P9qML2cvh--INP-sP_ykmgj0MyloCQ3eqntUb2sAzJFcjZtNvPv0t3ows3rhLvbQyKkTXWh3GZik0VeT8bvmhKWnI8Ho3URMr7bHUmVacJ44XkhrjOb2Ie3_Un_Ho-ckoOTCKOrXtRt9bIga0VJetzqhZnf6kS-6GAosm7QPQAKSgscJUu0EH-CCGYUcqNTtFabKnRbJwxECbFHQaq8cFV4RiHVBiG-BSfdAiGGy-RqgRNMBJq2BxQEukQu6p9tSFlu5DIxP4DCNE-UjUmbA-PQ5sB5eRJxXmL1ddV7w3nZy9rnv35yXma-4Lz0hTqtDt0DDm2PJEoQn2h3gwYojAsXE-ZTFlAWwWxFQRfugdS65Boh9lf0eW78R7upuL1nOXq0i2Cniwd4i0YmC1KoGhXFBv9s9Re7I93SeTvYNDqUS-mIvxPFe8qDDtQ3NA7FuZYKTTvcLNXMN2uWeTXScylKoPeyfpkbwjr3w8_CrRcL9z1a-BTSinDd-WgH5V3nh1p_KXLyWUtFtIoJqwTjEWHdTdAJKoGmZiXsmBIWVJ9D1tlJHD2FeII218riVp93dW1GAcU1NjNjdWFSvDA6rcs0x3GtqwMCrWtug-YwUPVV_W_6U-z_izjYKw43xN62ONwrjvaLo73i4y3xbPXf7wAAAP__Xc4AbA==

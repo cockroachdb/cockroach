@@ -1,4 +1,4 @@
-# LogicTest: multiregion-9node-3region-3azs
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
 
 statement ok
 SET CLUSTER SETTING sql.defaults.primary_region = "invalid-region-name";

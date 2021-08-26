@@ -1143,7 +1143,7 @@ type logicTest struct {
 	nodeIdx int
 	// If this test uses a SQL tenant server, this is its address. In this case,
 	// all clients are created against this tenant.
-	tenantAddr string
+	tenantAddrs []string
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
 	clients map[string]*gosql.DB
@@ -1292,9 +1292,9 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	addr := t.tenantAddr
-	if addr == "" {
-		addr = t.cluster.Server(t.nodeIdx).ServingSQLAddr()
+	addr := t.cluster.Server(t.nodeIdx).ServingSQLAddr()
+	if len(t.tenantAddrs) > 0 {
+		addr = t.tenantAddrs[t.nodeIdx]
 	}
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(user))
 	pgURL.Path = "test"
@@ -1475,34 +1475,38 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
 	if cfg.useTenant {
-		var err error
-		tenantArgs := base.TestTenantArgs{
-			TenantID:                    serverutils.TestTenantID(),
-			AllowSettingClusterSettings: true,
-			TestingKnobs: base.TestingKnobs{
-				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DeterministicExplain: true,
+		t.tenantAddrs = make([]string, cfg.numNodes)
+		for i := 0; i < cfg.numNodes; i++ {
+			tenantArgs := base.TestTenantArgs{
+				TenantID:                    serverutils.TestTenantID(),
+				AllowSettingClusterSettings: true,
+				TestingKnobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						DeterministicExplain: true,
+					},
+					SQLStatsKnobs: &sqlstats.TestingKnobs{
+						AOSTClause: "AS OF SYSTEM TIME '-1us'",
+					},
 				},
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					AOSTClause: "AS OF SYSTEM TIME '-1us'",
-				},
-			},
-			MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
-			TempStorageConfig: &params.ServerArgs.TempStorageConfig,
+				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
+				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
+				Locality:          paramsPerNode[i].Locality,
+				Existing:          i > 0,
+			}
+
+			// Prevent a logging assertion that the server ID is initialized multiple times.
+			log.TestingClearServerIdentifiers()
+
+			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
+			if err != nil {
+				t.rootT.Fatalf("%+v", err)
+			}
+			t.tenantAddrs[i] = tenant.SQLAddr()
 		}
 
-		// Prevent a logging assertion that the server ID is initialized multiple times.
-		log.TestingClearServerIdentifiers()
-
-		tenant, err := t.cluster.Server(t.nodeIdx).StartTenant(context.Background(), tenantArgs)
-		if err != nil {
-			t.rootT.Fatalf("%+v", err)
-		}
-		t.tenantAddr = tenant.SQLAddr()
-
-		// Open a connection to this tenant to set any cluster settings specified
+		// Open a connection to a tenant to set any cluster settings specified
 		// by the test config.
-		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddr, "Tenant", url.User(security.RootUser))
+		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(security.RootUser))
 		defer cleanup()
 		if params.ServerArgs.Insecure {
 			pgURL.RawQuery = "sslmode=disable"
@@ -2621,6 +2625,9 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	db := t.db
 	if query.nodeIdx != 0 {
 		addr := t.cluster.Server(query.nodeIdx).ServingSQLAddr()
+		if len(t.tenantAddrs) > 0 {
+			addr = t.tenantAddrs[query.nodeIdx]
+		}
 		pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(t.user))
 		defer cleanupFunc()
 		pgURL.Path = "test"
