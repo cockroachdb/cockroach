@@ -3,7 +3,7 @@ ALTER RANGE default CONFIGURE ZONE = 'foo'
 ----
 ALTER RANGE default CONFIGURE ZONE = 'foo'
 ALTER RANGE default CONFIGURE ZONE = ('foo') -- fully parenthesized
-ALTER RANGE default CONFIGURE ZONE = _ -- literals removed
+ALTER RANGE default CONFIGURE ZONE = '_' -- literals removed
 ALTER RANGE _ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -11,7 +11,7 @@ EXPLAIN ALTER RANGE default CONFIGURE ZONE = 'foo'
 ----
 EXPLAIN ALTER RANGE default CONFIGURE ZONE = 'foo'
 EXPLAIN ALTER RANGE default CONFIGURE ZONE = ('foo') -- fully parenthesized
-EXPLAIN ALTER RANGE default CONFIGURE ZONE = _ -- literals removed
+EXPLAIN ALTER RANGE default CONFIGURE ZONE = '_' -- literals removed
 EXPLAIN ALTER RANGE _ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -19,7 +19,7 @@ ALTER RANGE meta CONFIGURE ZONE = 'foo'
 ----
 ALTER RANGE meta CONFIGURE ZONE = 'foo'
 ALTER RANGE meta CONFIGURE ZONE = ('foo') -- fully parenthesized
-ALTER RANGE meta CONFIGURE ZONE = _ -- literals removed
+ALTER RANGE meta CONFIGURE ZONE = '_' -- literals removed
 ALTER RANGE _ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse

@@ -99,8 +99,7 @@ PREPARE a AS BACKUP DATABASE a TO 'b'
 ----
 PREPARE a AS BACKUP DATABASE a TO 'b'
 PREPARE a AS BACKUP DATABASE a TO ('b') -- fully parenthesized
-PREPARE a AS BACKUP DATABASE a TO _ -- literals removed
-PREPARE a AS BACKUP DATABASE a TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+PREPARE a AS BACKUP DATABASE a TO '_' -- literals removed
 PREPARE _ AS BACKUP DATABASE _ TO 'b' -- identifiers removed
 
 parse
@@ -116,8 +115,7 @@ PREPARE a AS RESTORE DATABASE a FROM 'b'
 ----
 PREPARE a AS RESTORE DATABASE a FROM 'b'
 PREPARE a AS RESTORE DATABASE a FROM ('b') -- fully parenthesized
-PREPARE a AS RESTORE DATABASE a FROM _ -- literals removed
-PREPARE a AS RESTORE DATABASE a FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+PREPARE a AS RESTORE DATABASE a FROM '_' -- literals removed
 PREPARE _ AS RESTORE DATABASE _ FROM 'b' -- identifiers removed
 
 parse
@@ -245,8 +243,7 @@ PREPARE a AS IMPORT TABLE a CREATE USING 'b' CSV DATA ('c') WITH temp = 'd'
 ----
 PREPARE a AS IMPORT TABLE a CREATE USING 'b' CSV DATA ('c') WITH temp = 'd'
 PREPARE a AS IMPORT TABLE a CREATE USING ('b') CSV DATA (('c')) WITH temp = ('d') -- fully parenthesized
-PREPARE a AS IMPORT TABLE a CREATE USING _ CSV DATA (_) WITH temp = _ -- literals removed
-PREPARE a AS IMPORT TABLE a CREATE USING '_' CSV DATA ('_') WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+PREPARE a AS IMPORT TABLE a CREATE USING '_' CSV DATA ('_') WITH temp = '_' -- literals removed
 PREPARE _ AS IMPORT TABLE _ CREATE USING 'b' CSV DATA ('c') WITH _ = 'd' -- identifiers removed
 
 parse
