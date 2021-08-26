@@ -50,7 +50,6 @@ go_test(
         "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
-        "//pkg/util/syncutil",
         "@com_github_stretchr_testify//require",
     ],
 )
