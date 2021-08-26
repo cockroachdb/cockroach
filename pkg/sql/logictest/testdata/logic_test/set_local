@@ -53,7 +53,7 @@ iso_8601
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  P1DT15H16M17.123456S
+2020-08-25 15:16:17.123456 +0000 UTC  P1DT15H16M17.123456S
 
 # Do the same thing but this time commit, checking the settings are the same
 # before we do the SET.
@@ -73,7 +73,7 @@ iso_8601
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  P1DT15H16M17.123456S
+2020-08-25 15:16:17.123456 +0000 UTC  P1DT15H16M17.123456S
 
 statement ok
 SET LOCAL TIME ZONE 'America/New_York';
@@ -110,7 +110,7 @@ postgres
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 day 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
 
 # Now try commit/rollback in an aborted transaction.
 statement ok
@@ -125,7 +125,7 @@ sql_standard
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 15:16:17.123456
 
 statement error at or near "bad": syntax error
 BAD SYNTAX
@@ -144,7 +144,7 @@ postgres
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 day 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
 
 statement ok
 BEGIN;
@@ -158,7 +158,7 @@ sql_standard
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 15:16:17.123456
 
 statement error at or near "bad": syntax error
 BAD SYNTAX
@@ -177,7 +177,7 @@ postgres
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 day 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
 
 # Test savepoints succeed during COMMIT/ROLLBACK, with no releasing of
 # savepoint items.
@@ -216,7 +216,7 @@ COMMIT
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 15:16:17.123456
 
 statement ok
 BEGIN;
@@ -252,7 +252,7 @@ ROLLBACK
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 day 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
 
 # Test ROLLBACK TO SAVEPOINT without any errors.
 
@@ -262,7 +262,7 @@ BEGIN
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 day 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
 
 statement ok
 SET LOCAL TIME ZONE -1;
@@ -341,7 +341,7 @@ COMMIT
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 day 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
 
 # Test ROLLBACK TO SAVEPOINT without an aborted error.
 
@@ -384,7 +384,7 @@ COMMIT
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 day 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
 
 # Test RELEASE SAVEPOINT.
 
@@ -434,7 +434,7 @@ COMMIT
 query TT 
 SELECT * FROM tbl
 ----
-2020-08-25 15:16:17.123456 +0000 +0000  1 day 15:16:17.123456
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
 
 # Test for SET DATABASE
 
