@@ -567,7 +567,7 @@ message ActiveQuery {
   float progress = 6;
 
   // The SQL statement fingerprint, compatible with StatementStatisticsKey.
-  string sql_anon = 8;
+  string sql_no_constants = 8;
 }
 
 // Request object for ListSessions and ListLocalSessions.
@@ -612,7 +612,7 @@ message Session {
   TxnInfo active_txn = 12;
   // The SQL statement fingerprint of the last query executed on this session,
   // compatible with StatementStatisticsKey.
-  string last_active_query_anon = 13;
+  string last_active_query_no_constants = 13;
 }
 
 // An error wrapper object for ListSessionsResponse.
