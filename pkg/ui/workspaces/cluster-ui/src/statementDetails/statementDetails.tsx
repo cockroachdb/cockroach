@@ -148,6 +148,7 @@ export interface StatementDetailsStateProps {
   nodeRegions: { [nodeId: string]: string };
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
   uiConfig?: UIConfigState["pages"]["statementDetails"];
+  isTenant?: UIConfigState["isTenant"];
 }
 
 export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
@@ -318,6 +319,7 @@ export class StatementDetails extends React.Component<
     uiConfig: {
       showStatementDiagnosticsLink: true,
     },
+    isTenant: false,
   };
 
   changeSortSetting = (ss: SortSetting) => {
@@ -401,6 +403,7 @@ export class StatementDetails extends React.Component<
       dismissStatementDiagnosticsAlertMessage,
       onDiagnosticBundleDownload,
       nodeRegions,
+      isTenant,
     } = this.props;
     const { currentTab } = this.state;
 
@@ -460,7 +463,7 @@ export class StatementDetails extends React.Component<
 
     const statsByNode = this.props.statement.byNode;
     const totalWorkload = calculateTotalWorkload(statsByNode);
-    populateRegionNodeForStatements(statsByNode, nodeRegions);
+    populateRegionNodeForStatements(statsByNode, nodeRegions, isTenant);
     const nodes: string[] = unique(
       (stats.nodes || []).map(node => node.toString()),
     ).sort();
@@ -576,19 +579,24 @@ export class StatementDetails extends React.Component<
             <Col className="gutter-row" span={8}>
               <SummaryCard className={cx("summary-card")}>
                 <Heading type="h5">Statement details</Heading>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Nodes</Text>
-                  <Text>
-                    {intersperse<ReactNode>(
-                      nodes.map(n => <NodeLink node={n} key={n} />),
-                      ", ",
-                    )}
-                  </Text>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Regions</Text>
-                  <Text>{intersperse<ReactNode>(regions, ", ")}</Text>
-                </div>
+                {!isTenant && (
+                  <div>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text>Nodes</Text>
+                      <Text>
+                        {intersperse<ReactNode>(
+                          nodes.map(n => <NodeLink node={n} key={n} />),
+                          ", ",
+                        )}
+                      </Text>
+                    </div>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text>Regions</Text>
+                      <Text>{intersperse<ReactNode>(regions, ", ")}</Text>
+                    </div>
+                  </div>
+                )}
+
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Database</Text>
                   <Text>{database}</Text>
@@ -801,40 +809,42 @@ export class StatementDetails extends React.Component<
               })}
             />
           </SummaryCard>
-          <SummaryCard className={cx("fit-content-width")}>
-            <h2
-              className={classNames(
-                cx("base-heading"),
-                summaryCardStylesCx("summary--card__title"),
-              )}
-            >
-              Stats By Node
-              <div className={cx("numeric-stats-table__tooltip")}>
-                <Tooltip content="Execution statistics for this statement per gateway node.">
-                  <div
-                    className={cx("numeric-stats-table__tooltip-hover-area")}
-                  >
-                    <div className={cx("numeric-stats-table__info-icon")}>
-                      i
+          {!isTenant && (
+            <SummaryCard className={cx("fit-content-width")}>
+              <h2
+                className={classNames(
+                  cx("base-heading"),
+                  summaryCardStylesCx("summary--card__title"),
+                )}
+              >
+                Stats By Node
+                <div className={cx("numeric-stats-table__tooltip")}>
+                  <Tooltip content="Execution statistics for this statement per gateway node.">
+                    <div
+                      className={cx("numeric-stats-table__tooltip-hover-area")}
+                    >
+                      <div className={cx("numeric-stats-table__info-icon")}>
+                        i
+                      </div>
                     </div>
-                  </div>
-                </Tooltip>
-              </div>
-            </h2>
-            <StatementsSortedTable
-              className={cx("statements-table")}
-              data={statsByNode}
-              columns={makeNodesColumns(
-                statsByNode,
-                this.props.nodeNames,
-                totalWorkload,
-                nodeRegions,
-              )}
-              sortSetting={this.state.sortSetting}
-              onChangeSortSetting={this.changeSortSetting}
-              firstCellBordered
-            />
-          </SummaryCard>
+                  </Tooltip>
+                </div>
+              </h2>
+              <StatementsSortedTable
+                className={cx("statements-table")}
+                data={statsByNode}
+                columns={makeNodesColumns(
+                  statsByNode,
+                  this.props.nodeNames,
+                  totalWorkload,
+                  nodeRegions,
+                )}
+                sortSetting={this.state.sortSetting}
+                onChangeSortSetting={this.changeSortSetting}
+                firstCellBordered
+              />
+            </SummaryCard>
+          )}
         </TabPane>
       </Tabs>
     );

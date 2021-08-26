@@ -43,7 +43,6 @@ import {
 } from "../statementsTable";
 import {
   getLabel,
-  statisticsColumnLabels,
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
 import {
@@ -59,6 +58,7 @@ type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosti
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
+import { UIConfigState } from "../store/uiConfig";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -97,6 +97,7 @@ export interface StatementsPageStateProps {
   lastReset: string;
   columns: string[];
   nodeRegions: { [key: string]: string };
+  isTenant?: UIConfigState["isTenant"];
 }
 
 export interface StatementsPageState {
@@ -140,6 +141,10 @@ export class StatementsPage extends React.Component<
     this.state = merge(defaultState, stateFromHistory);
     this.activateDiagnosticsRef = React.createRef();
   }
+
+  static defaultProps: Partial<StatementsPageProps> = {
+    isTenant: false,
+  };
 
   getStateFromHistory = (): Partial<StatementsPageState> => {
     const { history } = this.props;
@@ -294,7 +299,7 @@ export class StatementsPage extends React.Component<
 
   filteredStatementsData = () => {
     const { search, filters } = this.state;
-    const { statements, nodeRegions } = this.props;
+    const { statements, nodeRegions, isTenant } = this.props;
     const timeValue = getTimeValueInSeconds(filters);
     const sqlTypes =
       filters.sqlType.length > 0
@@ -340,9 +345,12 @@ export class StatementsPage extends React.Component<
           sqlTypes.length == 0 || sqlTypes.includes(statement.stats.sql_type),
       )
       .filter(
-        // The statement must contain at least one value from the selected nodes
+        // The statement must contain at least one value from the selected regions
         // list if the list is not empty.
+        // If the cluster is a tenant cluster we don't care
+        // about regions.
         statement =>
+          isTenant ||
           regions.length == 0 ||
           (statement.stats.nodes &&
             containAny(
@@ -354,9 +362,12 @@ export class StatementsPage extends React.Component<
             )),
       )
       .filter(
-        // The statement must contain at least one value from the selected regions
+        // The statement must contain at least one value from the selected nodes
         // list if the list is not empty.
+        // If the cluster is a tenant cluster we don't care
+        // about nodes.
         statement =>
+          isTenant ||
           nodes.length == 0 ||
           (statement.stats.nodes &&
             containAny(
@@ -379,6 +390,7 @@ export class StatementsPage extends React.Component<
       columns: userSelectedColumnsToShow,
       onColumnsChange,
       nodeRegions,
+      isTenant,
     } = this.props;
     const appAttrValue = getMatchParamByName(match, appAttr);
     const selectedApp = appAttrValue || "";
@@ -388,13 +400,17 @@ export class StatementsPage extends React.Component<
     const totalWorkload = calculateTotalWorkload(data);
     const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
-    const nodes = Object.keys(nodeRegions)
-      .map(n => Number(n))
-      .sort();
-    const regions = unique(
-      nodes.map(node => nodeRegions[node.toString()]),
-    ).sort();
-    populateRegionNodeForStatements(statements, nodeRegions);
+    // If the cluster is a tenant cluster we don't show info
+    // about nodes/regions.
+    const nodes = isTenant
+      ? []
+      : Object.keys(nodeRegions)
+          .map(n => Number(n))
+          .sort();
+    const regions = isTenant
+      ? []
+      : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
+    populateRegionNodeForStatements(statements, nodeRegions, isTenant);
 
     // Creates a list of all possible columns
     const columns = makeStatementsColumns(
@@ -407,7 +423,7 @@ export class StatementsPage extends React.Component<
       this.activateDiagnosticsRef,
       onDiagnosticsReportDownload,
       onStatementClick,
-    );
+    ).filter(c => !(isTenant && c.hideIfTenant));
 
     // If it's multi-region, we want to show the Regions/Nodes column by default
     // and hide otherwise.
