@@ -1485,11 +1485,6 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		// child.
 		// TODO(rytaft): Store the limit in the expression.
 		hardLimit = uint64(set.Relational().Cardinality.Max)
-		if hardLimit > 1 {
-			panic(errors.AssertionFailedf(
-				"locality optimized search is not yet supported for more than one row at a time",
-			))
-		}
 	}
 
 	ep := execPlan{}

@@ -971,6 +971,42 @@ SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 
       table: regional_by_row_table@primary
       spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 
+# Query with more than one key.
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk IN (1, 4)] OFFSET 2
+----
+·
+• union all
+│ limit: 2
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@primary
+│     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ap-southeast-2'/4 - /'ap-southeast-2'/4]
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@primary
+      spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'ca-central-1'/4 - /'ca-central-1'/4] [/'us-east-1'/1 - /'us-east-1'/1] [/'us-east-1'/4 - /'us-east-1'/4]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ksGK2zAQhu99imFO3aJiy_FC0cmldWggTbZxoIWNCVprSEUdyZVkukvwuxc7h21KGjYJPWo0n-eb39qh_1mjwCKf5h-W8AbGi_lnuM-_3U3fT2bw-uOkWBZfpjdw2OBoo62R9frhae3sr3WQDzXB10_5IofmB_QkZ5DelDAfj4t8CQkyNFbRTG7Jo7hHjiXDxtmKvLeuL-2Ghol6RBEz1KZpQ18uGVbWEYodBh1qQoHLftqCpCIXxchQUZC6Hj57VCxrnN5K94QMi0YaLyBa4Wr1-C5eYcSjGKRRwMGG7-SQ4bwNAjLOsoRlI5alLLvFsmNo2_Ds5IPcEArescu8-RXe1f_0ftZtjXWKHKkD1bI7stnMvrVNlPzVeHx0cmlko0sjy66Oa_SCuDw5LWs4O7X0cK2p3uoAyT9V4nPiW5BvrPH0oh8T946kNrTfy9vWVXTnbDWM2R_nAzcUFPmwv032h4kZroan9SfMr4GTk3B6Gh5dA6cn4dsDOO7K7tXvAAAA__8ZxrdU
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk IN (1, 4); SET tracing = off
+
+# Both rows are found in the local region, so the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/73/1/"@"/1/0, /Table/73/1/"@"/4/0
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+output row: [1 1 2 3 '{"a": "b"}']
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/4/pk2/a/b/j -> /4/5/6/'{"c": "d"}'
+output row: [4 4 5 6 '{"c": "d"}']
+
 # Tests using locality optimized search for lookup joins (including foreign
 # key checks).
 statement ok
