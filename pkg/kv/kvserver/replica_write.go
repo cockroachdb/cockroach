@@ -401,6 +401,16 @@ func (r *Replica) canAttempt1PCEvaluation(
 	return true
 }
 
+// OnePCNotAllowedError signifies that a request had the Require1PC flag set,
+// but 1PC evaluation was not possible for one reason or another.
+type OnePCNotAllowedError struct{}
+
+var _ error = OnePCNotAllowedError{}
+
+func (OnePCNotAllowedError) Error() string {
+	return "could not commit in one phase as requested"
+}
+
 // evaluateWriteBatch evaluates the supplied batch.
 //
 // If the batch is transactional and has all the hallmarks of a 1PC commit (i.e.
@@ -437,6 +447,15 @@ func (r *Replica) evaluateWriteBatch(
 			}
 			return nil, enginepb.MVCCStats{}, nil, result.Result{}, res.pErr
 		case onePCFallbackToTransactionalEvaluation:
+		}
+	} else {
+		// Deal with the Require1PC flag here, so that lower layers don't need to
+		// care about it. Note that the point of Require1PC is that we don't want to
+		// leave locks behind in case of retriable errors, so it's better to
+		// terminate this request early.
+		arg, ok := ba.GetArg(roachpb.EndTxn)
+		if ok && arg.(*roachpb.EndTxnRequest).Require1PC {
+			return nil, enginepb.MVCCStats{}, nil, result.Result{}, roachpb.NewError(OnePCNotAllowedError{})
 		}
 	}
 
@@ -531,7 +550,10 @@ func (r *Replica) evaluate1PC(
 			log.VEventf(ctx, 2,
 				"1PC execution failed, falling back to transactional execution; the batch was pushed")
 		}
-		return onePCResult{success: onePCFallbackToTransactionalEvaluation}
+		if !etArg.Require1PC {
+			return onePCResult{success: onePCFallbackToTransactionalEvaluation}
+		}
+		return onePCResult{success: onePCFailed, pErr: pErr}
 	}
 
 	// 1PC execution was successful, let's synthesize an EndTxnResponse.
