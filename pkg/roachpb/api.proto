@@ -2483,16 +2483,40 @@ message TokenBucketRequest {
   // request originates, in light of ID reuse.
   bytes instance_lease = 4;
 
+  // RequestedRU is the number of requested tokens (RUs).
+  double requested_r_u = 5;
+
+  // TargetRequestPeriod is the approximate frequency of requests, used to limit
+  // TrickleDuration in the response.
+  google.protobuf.Duration target_request_period = 6 [(gogoproto.nullable) = false,
+                                                      (gogoproto.stdduration) = true];
+
   // TODO(radu): add remaining fields.
 }
 
 message TokenBucketResponse {
-  // TODO(radu): add fields.
-
   // If non-empty, the other fields will be empty. This field stores any error
   // that occurs on the server, allowing us to differentiate between those and
   // RPC errors.
   errorspb.EncodedError error = 1 [(gogoproto.nullable) = false];
+
+  // GrantedTokens is the amount of RUs granted. In most cases, this is equal to
+  // the requested RUs; the only exception is when TrickleDuration would
+  // otherwise exceed TargetRequestPeriod, in which case the number of granted
+  // RUs is reduced.
+  double granted_r_u = 2;
+
+  // TrickleDuration describes how the granted tokens can be consumed.
+  //
+  // If zero, the granted tokens can be used immediately, without restriction.
+  // If set, the granted tokens become available at a constant rate over the
+  // trickle time period. E.g. if we are granted 1000 tokens and the trickle
+  // duration is 10 seconds, the tokens become available at a rate of
+  // 100 tokens/sec for the next 10 seconds.
+  //
+  // TrickleDuration is at most the given TargetRequestPeriod.
+  google.protobuf.Duration trickle_duration = 3 [(gogoproto.nullable) = false,
+                                                 (gogoproto.stdduration) = true];
 }
 
 

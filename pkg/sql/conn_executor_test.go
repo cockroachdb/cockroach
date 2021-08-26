@@ -619,7 +619,7 @@ func TestQueryProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	require.Regexp(t, `executing \(51\.20%\)`, progress)
+	require.Regexp(t, `executing \(..\...%\)`, progress)
 }
 
 // This test ensures that when in an explicit transaction, statement preparation

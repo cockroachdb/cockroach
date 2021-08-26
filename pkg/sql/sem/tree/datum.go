@@ -5128,3 +5128,93 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	// TODO(jordan,justin): This seems suspicious.
 	types.AnyFamily: {unsafe.Sizeof(DString("")), variableSize},
 }
+
+// MaxDistinctCount returns the maximum number of distinct values between the
+// given datums (inclusive). This is possible if:
+//   a. the types of the datums are equivalent and countable, or
+//   b. the datums have the same value (in which case the distinct count is 1).
+//
+// If neither of these conditions hold, MaxDistinctCount returns ok=false.
+// Additionally, it must be the case that first <= last, otherwise
+// MaxDistinctCount returns ok=false.
+func MaxDistinctCount(evalCtx *EvalContext, first, last Datum) (_ int64, ok bool) {
+	if !first.ResolvedType().Equivalent(last.ResolvedType()) {
+		// The datums must be of the same type.
+		return 0, false
+	}
+	if first.Compare(evalCtx, last) == 0 {
+		// If the datums are equal, the distinct count is 1.
+		return 1, true
+	}
+
+	// If the datums are a countable type, return the distinct count between them.
+	var start, end int64
+
+	switch t := first.(type) {
+	case *DInt:
+		otherDInt, otherOk := AsDInt(last)
+		if otherOk {
+			start = int64(*t)
+			end = int64(otherDInt)
+		}
+
+	case *DOid:
+		otherDOid, otherOk := AsDOid(last)
+		if otherOk {
+			start = int64((*t).DInt)
+			end = int64(otherDOid.DInt)
+		}
+
+	case *DDate:
+		otherDDate, otherOk := last.(*DDate)
+		if otherOk {
+			if !t.IsFinite() || !otherDDate.IsFinite() {
+				// One of the DDates isn't finite, so we can't extract a distinct count.
+				return 0, false
+			}
+			start = int64((*t).PGEpochDays())
+			end = int64(otherDDate.PGEpochDays())
+		}
+
+	case *DEnum:
+		otherDEnum, otherOk := last.(*DEnum)
+		if otherOk {
+			startIdx, err := t.EnumTyp.EnumGetIdxOfPhysical(t.PhysicalRep)
+			if err != nil {
+				panic(err)
+			}
+			endIdx, err := t.EnumTyp.EnumGetIdxOfPhysical(otherDEnum.PhysicalRep)
+			if err != nil {
+				panic(err)
+			}
+			start, end = int64(startIdx), int64(endIdx)
+		}
+
+	case *DBool:
+		otherDBool, otherOk := last.(*DBool)
+		if otherOk {
+			if *t {
+				start = 1
+			}
+			if *otherDBool {
+				end = 1
+			}
+		}
+
+	default:
+		// Uncountable type.
+		return 0, false
+	}
+
+	if start > end {
+		// Incorrect ordering.
+		return 0, false
+	}
+
+	delta := end - start
+	if delta < 0 {
+		// Overflow or underflow.
+		return 0, false
+	}
+	return delta + 1, true
+}

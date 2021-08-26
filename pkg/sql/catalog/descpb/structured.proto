@@ -166,6 +166,10 @@ message ColumnDescriptor {
   // NOT_IDENTITY_COLUMN.
   optional GeneratedAsIdentityType generated_as_identity_type = 19 [(gogoproto.nullable) = false];
 
+  // Expression to specify the sequence option for a `GENERATED AS IDENTITY`
+  // column.
+  optional string generated_as_identity_sequence_option = 20;
+
   reserved 7;
   // Ids of sequences used in this column's DEFAULT and ON UPDATE expressions,
   // in calls to nextval().
