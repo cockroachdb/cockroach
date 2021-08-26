@@ -11,7 +11,6 @@ package kvevent_test
 import (
 	"context"
 	"math/rand"
-	"sync"
 	"testing"
 	"time"
 
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,15 +70,12 @@ func TestBlockingBuffer(t *testing.T) {
 	defer release()
 
 	// Arrange for mem buffer to notify us when it waits for resources.
-	var waitMu syncutil.Mutex
-	waited := sync.NewCond(&waitMu)
-	waitForBlockedBuffer := func() {
-		waitMu.Lock()
-		waited.Wait()
-		waitMu.Unlock()
-	}
+	waitCh := make(chan struct{}, 1)
 	notifyWait := func(ctx context.Context, poolName string, r quotapool.Request) {
-		waited.Signal()
+		select {
+		case waitCh <- struct{}{}:
+		default:
+		}
 	}
 	st := cluster.MakeTestingClusterSettings()
 	buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics, quotapool.OnWaitStart(notifyWait))
@@ -105,7 +100,7 @@ func TestBlockingBuffer(t *testing.T) {
 		}
 	})
 
-	waitForBlockedBuffer()
+	<-waitCh
 
 	// Keep consuming events until we get pushback metrics updated.
 	for metrics.BufferPushbackNanos.Count() == 0 {
