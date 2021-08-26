@@ -59,4 +59,13 @@ func TestStack(t *testing.T) {
 	require.Equal(t, s.Elems(), []*SessionData{initialElem})
 	s.PopAll()
 	require.Equal(t, s.Elems(), []*SessionData{initialElem})
+
+	s.Push(secondElem)
+	s.Push(thirdElem)
+	copyStack := s.Clone()
+	require.Error(t, s.PopN(3), "there must always be at least one element in the SessionData stack")
+	require.NoError(t, s.PopN(2))
+	require.Equal(t, s.Elems(), []*SessionData{initialElem})
+	s.Replace(copyStack)
+	require.Equal(t, s.Elems(), []*SessionData{initialElem, secondElem, thirdElem})
 }
