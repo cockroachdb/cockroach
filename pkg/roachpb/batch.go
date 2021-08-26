@@ -224,6 +224,14 @@ func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {
 func (ba *BatchRequest) IsSingleEndTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(EndTxn)
 }
+func (ba *BatchRequest) Require1PC() bool {
+	arg, ok := ba.GetArg(EndTxn)
+	if !ok {
+		return false
+	}
+	etArg := arg.(*EndTxnRequest)
+	return etArg.Require1PC
+}
 
 // IsSingleAbortTxnRequest returns true iff the batch contains a single request,
 // and that request is an EndTxnRequest(commit=false).

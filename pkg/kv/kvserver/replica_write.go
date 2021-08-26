@@ -401,6 +401,16 @@ func (r *Replica) canAttempt1PCEvaluation(
 	return true
 }
 
+// OnePCNotAllowedError signifies that a request had the Require1PC flag set,
+// but 1PC evaluation was not possible for one reason or another.
+type OnePCNotAllowedError struct{}
+
+var _ error = OnePCNotAllowedError{}
+
+func (OnePCNotAllowedError) Error() string {
+	return "could not commit in one phase as requested"
+}
+
 // evaluateWriteBatch evaluates the supplied batch.
 //
 // If the batch is transactional and has all the hallmarks of a 1PC commit (i.e.
@@ -437,7 +447,22 @@ func (r *Replica) evaluateWriteBatch(
 			}
 			return nil, enginepb.MVCCStats{}, nil, result.Result{}, res.pErr
 		case onePCFallbackToTransactionalEvaluation:
+			// Fallthrough to transactional evaluation.
 		}
+	} else {
+		// Deal with the Require1PC flag here, so that lower layers don't need to
+		// care about it. Note that the point of Require1PC is that we don't want to
+		// leave locks behind in case of retriable errors, so it's better to
+		// terminate this request early.
+		arg, ok := ba.GetArg(roachpb.EndTxn)
+		if ok && arg.(*roachpb.EndTxnRequest).Require1PC {
+			return nil, enginepb.MVCCStats{}, nil, result.Result{}, roachpb.NewError(OnePCNotAllowedError{})
+		}
+	}
+
+	if ba.Require1PC() {
+		log.Fatalf(ctx,
+			"Require1PC should not have gotten to transactional evaluation. ba: %s", ba.String())
 	}
 
 	ms := new(enginepb.MVCCStats)
@@ -458,6 +483,8 @@ const (
 	onePCFailed
 	// onePCFallbackToTransactionalEvaluation means that 1PC evaluation failed, but
 	// regular transactional evaluation should be attempted.
+	//
+	// Batches with the Require1PC flag set do not return this status.
 	onePCFallbackToTransactionalEvaluation
 )
 
@@ -530,6 +557,9 @@ func (r *Replica) evaluate1PC(
 		} else {
 			log.VEventf(ctx, 2,
 				"1PC execution failed, falling back to transactional execution; the batch was pushed")
+		}
+		if etArg.Require1PC {
+			return onePCResult{success: onePCFailed, pErr: pErr}
 		}
 		return onePCResult{success: onePCFallbackToTransactionalEvaluation}
 	}
