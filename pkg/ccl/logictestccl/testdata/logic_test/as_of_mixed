@@ -1,0 +1,7 @@
+# LogicTest: local-mixed-21.1-21.2
+
+statement error bounded staleness reads requires all nodes to be upgraded
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
+
+statement error bounded staleness reads requires all nodes to be upgraded
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms')
