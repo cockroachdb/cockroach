@@ -3166,8 +3166,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				unblock := waitForBlocked()
 				waitForRecord()
 				sqlDB.Exec(t, `CANCEL JOB $1`, foo.(cdctest.EnterpriseTestFeed).JobID())
-				waitForNoRecord()
 				unblock()
+				waitForNoRecord()
 			}
 		}, feedTestNoTenants, withArgsFn(func(args *base.TestServerArgs) {
 			storeKnobs := &kvserver.StoreTestingKnobs{}
