@@ -76,6 +76,7 @@ func GetUserSessionInitInfo(
 ) (
 	exists bool,
 	canLogin bool,
+	isSuperuser bool,
 	validUntil *tree.DTimestamp,
 	defaultSettings []sessioninit.SettingsCacheEntry,
 	pwRetrieveFn func(ctx context.Context) (hashedPassword []byte, err error),
@@ -92,7 +93,7 @@ func GetUserSessionInitInfo(
 
 		// Root user cannot have password expiry and must have login.
 		// It also never has default settings applied to it.
-		return true, true, nil, nil, rootFn, nil
+		return true, true, true, nil, nil, rootFn, nil
 	}
 
 	// Other users must reach for system.users no matter what, because
@@ -100,8 +101,28 @@ func GetUserSessionInitInfo(
 	authInfo, settingsEntries, err := retrieveSessionInitInfoWithCache(
 		ctx, execCfg, ie, username, databaseName,
 	)
+	if err != nil {
+		return false, false, false, nil, nil, nil, err
+	}
+
+	err = execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		memberships, err := MemberOfWithAdminOption(
+			ctx,
+			execCfg,
+			ie,
+			txn,
+			username,
+		)
+		if err != nil {
+			return err
+		}
+		_, isSuperuser = memberships[security.AdminRoleName()]
+		return nil
+	})
+
 	return authInfo.UserExists,
 		authInfo.CanLogin,
+		isSuperuser,
 		authInfo.ValidUntil,
 		settingsEntries,
 		func(ctx context.Context) ([]byte, error) {
