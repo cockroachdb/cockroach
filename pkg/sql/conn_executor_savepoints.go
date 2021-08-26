@@ -204,7 +204,7 @@ func (ex *connExecutor) execRollbackToSavepointInOpenState(
 		return ev, payload
 	}
 
-	if err := ex.popSavepointsToIdx(idx); err != nil {
+	if err := ex.popSavepointsToIdx(s, idx); err != nil {
 		return ex.makeErrEvent(err, s)
 	}
 
@@ -280,7 +280,7 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 		return ev, payload
 	}
 
-	if err := ex.popSavepointsToIdx(idx); err != nil {
+	if err := ex.popSavepointsToIdx(s, idx); err != nil {
 		return ex.makeErrEvent(err, s)
 	}
 
@@ -296,15 +296,20 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 
 // popSavepointsToIdx pops savepoints and SessionData elements related to
 // the savepoint up to the given idx.
-func (ex *connExecutor) popSavepointsToIdx(idx int) error {
-	numPoppedElems := len(ex.extraTxnState.savepoints) - idx
-	ex.extraTxnState.savepoints.popToIdx(idx)
-	if err := ex.sessionDataStack.PopN(numPoppedElems); err != nil {
+func (ex *connExecutor) popSavepointsToIdx(stmt tree.Statement, idx int) error {
+	if err := ex.reportParamStatusUpdateChanges(func() error {
+		numPoppedElems := len(ex.extraTxnState.savepoints) - idx
+		ex.extraTxnState.savepoints.popToIdx(idx)
+		if err := ex.sessionDataStack.PopN(numPoppedElems); err != nil {
+			return err
+		}
+		// We need to restore the top of the session data stack, which was the
+		// SessionData just before the the savepoint was created.
+		ex.sessionDataStack.PushTopClone()
+		return nil
+	}); err != nil {
 		return err
 	}
-	// We need to restore the top of the session data stack, which was the
-	// SessionData just before the the savepoint was created.
-	ex.sessionDataStack.PushTopClone()
 	return nil
 }
 
