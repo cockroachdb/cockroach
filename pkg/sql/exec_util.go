@@ -2400,12 +2400,11 @@ type paramStatusUpdater interface {
 type sessionDataMutatorBase struct {
 	defaults SessionDefaults
 	settings *cluster.Settings
-	sessionDataMutatorCallbacks
 }
 
 // RegisterOnSessionDataChange adds a listener to execute when a change on the
 // given key is made using the mutator object.
-func (b *sessionDataMutatorBase) RegisterOnSessionDataChange(key string, f func(val string)) {
+func (b *sessionDataMutatorIterator) RegisterOnSessionDataChange(key string, f func(val string)) {
 	if b.onSessionDataChangeListeners == nil {
 		b.onSessionDataChangeListeners = make(map[string][]func(val string))
 	}
@@ -2439,21 +2438,22 @@ type sessionDataMutatorCallbacks struct {
 type sessionDataMutatorIterator struct {
 	sessionDataMutatorBase
 	sds *sessiondata.Stack
+	sessionDataMutatorCallbacks
 }
 
 // mutator returns a mutator for the given sessionData.
 func (f *sessionDataMutatorIterator) mutator(
-	isTop bool, sd *sessiondata.SessionData,
+	applyCallbacks bool, sd *sessiondata.SessionData,
 ) *sessionDataMutator {
 	ret := &sessionDataMutator{
 		data:                   sd,
 		sessionDataMutatorBase: f.sessionDataMutatorBase,
 	}
-	// Change the sessionDataMutatorCallbacks if our SessionData element is not
-	// the top. This prevents us from calling, e.g. ParamStatusUpdate multiple
-	// times if we are nested in a transaction (it should only be called once).
-	if !isTop {
-		ret.sessionDataMutatorCallbacks = sessionDataMutatorCallbacks{}
+	// We usually apply callbacks on the first element in the stack, as the txn
+	// rollback will always reset to the first element we touch in the stack,
+	// in which case it should be up-to-date by default.
+	if applyCallbacks {
+		ret.sessionDataMutatorCallbacks = f.sessionDataMutatorCallbacks
 	}
 	return ret
 }
@@ -2472,7 +2472,7 @@ func (f *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
 func (f *sessionDataMutatorIterator) forEachMutator(applyFunc func(m *sessionDataMutator)) {
 	elems := f.sds.Elems()
 	for i, sd := range elems {
-		applyFunc(f.mutator(i == len(elems)-1, sd))
+		applyFunc(f.mutator(i == 0, sd))
 	}
 }
 
@@ -2483,7 +2483,7 @@ func (f *sessionDataMutatorIterator) forEachMutatorError(
 ) error {
 	elems := f.sds.Elems()
 	for i, sd := range elems {
-		if err := applyFunc(f.mutator(i == len(elems)-1, sd)); err != nil {
+		if err := applyFunc(f.mutator(i == 0, sd)); err != nil {
 			return err
 		}
 	}
@@ -2496,6 +2496,7 @@ func (f *sessionDataMutatorIterator) forEachMutatorError(
 type sessionDataMutator struct {
 	data *sessiondata.SessionData
 	sessionDataMutatorBase
+	sessionDataMutatorCallbacks
 }
 
 func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string) {

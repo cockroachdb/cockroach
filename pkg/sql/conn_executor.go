@@ -680,10 +680,10 @@ func (s *Server) makeSessionDataMutatorIterator(
 	return &sessionDataMutatorIterator{
 		sds: sds,
 		sessionDataMutatorBase: sessionDataMutatorBase{
-			defaults:                    defaults,
-			settings:                    s.cfg.Settings,
-			sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
+			defaults: defaults,
+			settings: s.cfg.Settings,
 		},
+		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
 	}
 }
 
