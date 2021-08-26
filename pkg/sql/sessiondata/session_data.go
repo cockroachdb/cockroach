@@ -239,6 +239,19 @@ func (s *Stack) Pop() error {
 	return nil
 }
 
+// PopN removes the top SessionData N elements from the stack.
+func (s *Stack) PopN(n int) error {
+	if len(s.stack)-n <= 0 {
+		return errors.AssertionFailedf("there must always be at least one element in the SessionData stack")
+	}
+	// Explicitly unassign each pointer.
+	for i := 0; i < n; i++ {
+		s.stack[len(s.stack)-1-i] = nil
+	}
+	s.stack = s.stack[:len(s.stack)-n]
+	return nil
+}
+
 // PopAll removes all except the base SessionData element from the stack.
 func (s *Stack) PopAll() {
 	// Explicitly unassign each pointer.
