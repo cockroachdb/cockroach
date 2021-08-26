@@ -67,7 +67,7 @@ func (c *StatsCompactor) DeleteOldestEntries(ctx context.Context) error {
 	if err := c.removeStaleRowsPerShard(ctx,
 		"system.statement_statistics",
 		systemschema.StmtStatsHashColumnName,
-		"aggregated_ts, fingerprint_id, plan_hash, app_name, node_id",
+		"aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id",
 	); err != nil {
 		return err
 	}
