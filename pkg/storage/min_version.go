@@ -28,11 +28,13 @@ const MinVersionFilename = "STORAGE_MIN_VERSION"
 
 // WriteMinVersionFile writes the provided version to disk. The caller must
 // guarantee that the version will never be downgraded below the given version.
-func WriteMinVersionFile(fs vfs.FS, dir string, version *roachpb.Version) error {
+func WriteMinVersionFile(atomicRenameFS vfs.FS, dir string, version *roachpb.Version) error {
+	// TODO(jackson): Assert that atomicRenameFS supports atomic renames
+	// once Pebble is bumped to the appropriate SHA.
 	if version == nil {
 		return errors.New("min version should not be nil")
 	}
-	ok, err := MinVersionIsAtLeastTargetVersion(fs, dir, version)
+	ok, err := MinVersionIsAtLeastTargetVersion(atomicRenameFS, dir, version)
 	if err != nil {
 		return err
 	}
@@ -43,8 +45,8 @@ func WriteMinVersionFile(fs vfs.FS, dir string, version *roachpb.Version) error 
 	if err != nil {
 		return err
 	}
-	filename := fs.PathJoin(dir, MinVersionFilename)
-	if err := SafeWriteToFile(fs, dir, filename, b); err != nil {
+	filename := atomicRenameFS.PathJoin(dir, MinVersionFilename)
+	if err := SafeWriteToFile(atomicRenameFS, dir, filename, b); err != nil {
 		return err
 	}
 	return nil
@@ -53,12 +55,14 @@ func WriteMinVersionFile(fs vfs.FS, dir string, version *roachpb.Version) error 
 // MinVersionIsAtLeastTargetVersion returns whether the min version recorded
 // on disk is at least the target version.
 func MinVersionIsAtLeastTargetVersion(
-	fs vfs.FS, dir string, target *roachpb.Version,
+	atomicRenameFS vfs.FS, dir string, target *roachpb.Version,
 ) (bool, error) {
+	// TODO(jackson): Assert that atomicRenameFS supports atomic renames
+	// once Pebble is bumped to the appropriate SHA.
 	if target == nil {
 		return false, errors.New("target version should not be nil")
 	}
-	minVersion, err := GetMinVersion(fs, dir)
+	minVersion, err := getMinVersion(atomicRenameFS, dir)
 	if err != nil {
 		return false, err
 	}
@@ -68,11 +72,14 @@ func MinVersionIsAtLeastTargetVersion(
 	return !minVersion.Less(*target), nil
 }
 
-// GetMinVersion returns the min version recorded on disk if the min version
+// getMinVersion returns the min version recorded on disk if the min version
 // file exists and nil otherwise.
-func GetMinVersion(fs vfs.FS, dir string) (*roachpb.Version, error) {
-	filename := fs.PathJoin(dir, MinVersionFilename)
-	f, err := fs.Open(filename)
+func getMinVersion(atomicRenameFS vfs.FS, dir string) (*roachpb.Version, error) {
+	// TODO(jackson): Assert that atomicRenameFS supports atomic renames
+	// once Pebble is bumped to the appropriate SHA.
+
+	filename := atomicRenameFS.PathJoin(dir, MinVersionFilename)
+	f, err := atomicRenameFS.Open(filename)
 	if oserror.IsNotExist(err) {
 		return nil, nil
 	}
