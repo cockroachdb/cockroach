@@ -73,8 +73,10 @@ type tableWriter interface {
 	flushAndStartNewBatch(context.Context) error
 
 	// finalize flushes out any remaining writes. It is called after all calls
-	// to row.
-	finalize(context.Context) error
+	// to row. If rowsWrittenLimit is non-zero, the tableWriter will use the
+	// auto commit (if it is enabled) only if rowsWritten is less than
+	// rowsWrittenLimit.
+	finalize(_ context.Context, rowsWritten int64, rowsWrittenLimit int64) error
 
 	// tableDesc returns the TableDescriptor for the table that the tableWriter
 	// will modify.
@@ -184,11 +186,20 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	return nil
 }
 
-// finalize shares the common finalize() code between tableWriters.
-func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
+// finalize shares the common finalize() code between tableWriters. rowsWritten
+// is the number of rows written by the user of this tableWriterBase.
+//
+// If rowsWrittenLimit is non-zero, the tableWriterBase will use the auto commit
+// (if it was enabled) only if rowsWritten is less than rowsWrittenLimit. This
+// behavior allows us to support transaction_rows_written_err guardrail without
+// sacrificing the auto commit optimization. Note that it is up to the optimizer
+// to ensure that only a single mutation operator is present in the plan.
+func (tb *tableWriterBase) finalize(
+	ctx context.Context, rowsWritten, rowsWrittenLimit int64,
+) (err error) {
 	// NB: unlike flushAndStartNewBatch, we don't bother with admission control
 	// for response processing when finalizing.
-	if tb.autoCommit == autoCommitEnabled {
+	if tb.autoCommit == autoCommitEnabled && (rowsWrittenLimit == 0 || rowsWritten < rowsWrittenLimit) {
 		log.Event(ctx, "autocommit enabled")
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
