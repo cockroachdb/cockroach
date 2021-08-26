@@ -146,11 +146,14 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate,
 ) {
-	// We can only generate a locality optimized scan if we know there is at
-	// most one row produced by the local spans.
-	// TODO(rytaft): We may be able to expand this to allow any number of rows,
-	// as long as there is a hard upper bound.
-	if !grp.Relational().Cardinality.IsZeroOrOne() {
+	// We can only generate a locality optimized scan if we know there is a hard
+	// upper bound on the number of rows produced by the local spans. We use
+	// a limit of 10,000 rows since that is the kv batch size, and it's probably
+	// better to use DistSQL once we're scanning multiple batches.
+	// TODO(rytaft): Revisit this when we have a more accurate cost model for data
+	// distribution.
+	const localityOptScanMaxRows = 10000
+	if grp.Relational().Cardinality.Max > localityOptScanMaxRows {
 		return
 	}
 
