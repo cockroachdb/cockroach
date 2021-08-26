@@ -64,6 +64,11 @@ type sessionVar struct {
 	// either by SHOW or in the pg_catalog table.
 	Get func(evalCtx *extendedEvalContext) string
 
+	// GetFromSessionData returns a string representation of a given variable to
+	// be used by BufferParamStatus. This is only required if the variable
+	// is expected to send updates through ParamStatusUpdate in pgwire.
+	GetFromSessionData func(sd *sessiondata.SessionData) string
+
 	// GetStringVal converts the provided Expr to a string suitable
 	// for Set() or RuntimeSet().
 	// If this method is not provided,
@@ -142,6 +147,9 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
 			return evalCtx.SessionData().ApplicationName
+		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return sd.ApplicationName
 		},
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
@@ -283,6 +291,9 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
 			return evalCtx.GetDateStyle().SQLString()
+		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return sd.GetDateStyle().SQLString()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return dateStyleEnumMap[dateStyle.Get(sv)]
@@ -867,6 +878,9 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return strings.ToLower(evalCtx.SessionData().GetIntervalStyle().String())
 		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return strings.ToLower(sd.GetIntervalStyle().String())
+		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return strings.ToLower(duration.IntervalStyle_name[int32(intervalStyle.Get(sv))])
 		},
@@ -892,6 +906,9 @@ var varGen = map[string]sessionVar{
 	`is_superuser`: {
 		Get: func(evalCtx *extendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().IsSuperuser)
+		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return formatBoolAsPostgresSetting(sd.IsSuperuser)
 		},
 		GetStringVal: makePostgresBoolGetStringValFn("is_superuser"),
 		GlobalDefault: func(sv *settings.Values) string {
@@ -995,13 +1012,8 @@ var varGen = map[string]sessionVar{
 			}
 			return evalCtx.SessionData().User().Normalized()
 		},
-		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
-			u, err := security.MakeSQLUsernameFromUserInput(s, security.UsernameValidation)
-			if err != nil {
-				return err
-			}
-			return p.setRole(ctx, local, u)
-		},
+		// SetWithPlanner is defined in init(), as otherwise there is a circular
+		// initialization loop with the planner.
 		GlobalDefault: func(sv *settings.Values) string {
 			return security.NoneRole
 		},
@@ -1162,6 +1174,9 @@ var varGen = map[string]sessionVar{
 	`timezone`: {
 		Get: func(evalCtx *extendedEvalContext) string {
 			return sessionDataTimeZoneFormat(evalCtx.SessionData().GetLocation())
+		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return sessionDataTimeZoneFormat(sd.GetLocation())
 		},
 		GetStringVal:  timeZoneVarGetStringVal,
 		Set:           timeZoneVarSet,
@@ -1622,6 +1637,27 @@ var varGen = map[string]sessionVar{
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
 
 func init() {
+	// SetWithPlanner must be initialized in init() to avoid a circular
+	// initialization loop.
+	for _, p := range []struct {
+		name string
+		fn   func(ctx context.Context, p *planner, local bool, s string) error
+	}{
+		{
+			name: `role`,
+			fn: func(ctx context.Context, p *planner, local bool, s string) error {
+				u, err := security.MakeSQLUsernameFromUserInput(s, security.UsernameValidation)
+				if err != nil {
+					return err
+				}
+				return p.setRole(ctx, local, u)
+			},
+		},
+	} {
+		v := varGen[p.name]
+		v.SetWithPlanner = p.fn
+		varGen[p.name] = v
+	}
 	for k, v := range DummyVars {
 		varGen[k] = v
 	}
