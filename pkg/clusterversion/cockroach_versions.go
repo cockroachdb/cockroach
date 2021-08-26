@@ -313,7 +313,8 @@ const (
 	// SpanConfigurationsTable adds the span configurations system table, to
 	// store all KV span configs.
 	SpanConfigurationsTable
-
+	// BoundedStaleness adds capabilities to perform bounded staleness reads.
+	BoundedStaleness
 	// Step (1): Add new versions here.
 )
 
@@ -541,7 +542,10 @@ var versionsSingleton = keyedVersions{
 		Key:     SpanConfigurationsTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 154},
 	},
-
+	{
+		Key:     BoundedStaleness,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 156},
+	},
 	// Step (2): Add new versions here.
 }
 
