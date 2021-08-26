@@ -275,4 +275,8 @@ type TestTenantArgs struct {
 
 	// Skip check for tenant existence when running the test.
 	SkipTenantCheck bool
+
+	// Locality is used to initialize the same-named field on the server.Config
+	// struct.
+	Locality roachpb.Locality
 }

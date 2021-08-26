@@ -1,4 +1,7 @@
-# LogicTest: multiregion-9node-3region-3azs
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
+
+statement ok
+SET CLUSTER SETTING sql.zone_configs.experimental_allow_for_secondary_tenant.enabled = true
 
 query TTTT
 SHOW REGIONS
@@ -9,6 +12,99 @@ us-east-1       {us-az1,us-az2,us-az3}  {}  {}
 
 statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
+
+# Test setting gc.ttlseconds and then dropping a GLOBAL table results in
+# a zone config drop.
+statement ok
+CREATE DATABASE drop_region_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2";
+USE drop_region_db
+
+statement ok
+CREATE TABLE global_table () LOCALITY GLOBAL;
+CREATE TABLE global_table_custom_gc_ttl () LOCALITY GLOBAL;
+ALTER TABLE global_table_custom_gc_ttl CONFIGURE ZONE USING gc.ttlseconds = 10
+
+statement ok
+ALTER DATABASE drop_region_db DROP REGION "ap-southeast-2"
+
+statement ok
+ALTER DATABASE drop_region_db DROP REGION "ca-central-1"
+
+query TT colnames
+SELECT table_name, locality FROM [SHOW TABLES]
+----
+table_name                  locality
+global_table                NULL
+global_table_custom_gc_ttl  NULL
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE global_table
+----
+RANGE default  ALTER RANGE default CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 90000,
+               num_replicas = 3,
+               constraints = '[]',
+               lease_preferences = '[]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE global_table_custom_gc_ttl
+----
+TABLE global_table_custom_gc_ttl  ALTER TABLE global_table_custom_gc_ttl CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 10,
+                                  num_replicas = 3,
+                                  constraints = '[]',
+                                  lease_preferences = '[]'
+
+# Test we preserve gc.ttlseconds when setting the initial primary region
+# and dropping the final primary region.
+statement ok
+CREATE DATABASE gc_ttl_predefined_db
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE gc_ttl_predefined_db
+----
+RANGE default  ALTER RANGE default CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 90000,
+               num_replicas = 3,
+               constraints = '[]',
+               lease_preferences = '[]'
+
+statement ok
+ALTER DATABASE gc_ttl_predefined_db CONFIGURE ZONE USING gc.ttlseconds = 10;
+ALTER DATABASE gc_ttl_predefined_db PRIMARY REGION "ca-central-1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE gc_ttl_predefined_db
+----
+DATABASE gc_ttl_predefined_db  ALTER DATABASE gc_ttl_predefined_db CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 10,
+                               num_replicas = 3,
+                               num_voters = 3,
+                               constraints = '{+region=ca-central-1: 1}',
+                               voter_constraints = '[+region=ca-central-1]',
+                               lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+ALTER DATABASE gc_ttl_predefined_db DROP REGION "ca-central-1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE gc_ttl_predefined_db
+----
+DATABASE gc_ttl_predefined_db  ALTER DATABASE gc_ttl_predefined_db CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 10,
+                               num_replicas = 3,
+                               constraints = '[]',
+                               lease_preferences = '[]'
 
 statement ok
 CREATE DATABASE "mr-zone-configs" primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
@@ -274,12 +370,14 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
 query TTTTT colnames
 SHOW DATABASES
 ----
-database_name    owner  primary_region  regions  survival_goal
-defaultdb        root   NULL            {}       NULL
-mr-zone-configs  root   NULL            {}       NULL
-postgres         root   NULL            {}       NULL
-system           node   NULL            {}       NULL
-test             root   NULL            {}       NULL
+database_name         owner  primary_region  regions  survival_goal
+defaultdb             root   NULL            {}       NULL
+drop_region_db        root   NULL            {}       NULL
+gc_ttl_predefined_db  root   NULL            {}       NULL
+mr-zone-configs       root   NULL            {}       NULL
+postgres              root   NULL            {}       NULL
+system                node   NULL            {}       NULL
+test                  root   NULL            {}       NULL
 
 statement ok
 ALTER DATABASE "mr-zone-configs" SET PRIMARY REGION "us-east-1"
@@ -293,12 +391,14 @@ ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2"
 query TTTTT colnames
 SHOW DATABASES
 ----
-database_name    owner  primary_region  regions                                  survival_goal
-defaultdb        root   NULL            {}                                       NULL
-mr-zone-configs  root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
-postgres         root   NULL            {}                                       NULL
-system           node   NULL            {}                                       NULL
-test             root   NULL            {}                                       NULL
+database_name         owner  primary_region  regions                                  survival_goal
+defaultdb             root   NULL            {}                                       NULL
+drop_region_db        root   NULL            {}                                       NULL
+gc_ttl_predefined_db  root   NULL            {}                                       NULL
+mr-zone-configs       root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
+postgres              root   NULL            {}                                       NULL
+system                node   NULL            {}                                       NULL
+test                  root   NULL            {}                                       NULL
 
 # Ensure that changes to the table-level zone config also require overriding.
 statement ok
