@@ -1208,9 +1208,9 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 		storeID:     storeID,
 		settings:    sgc.settings,
 		kvRequester: coord.queues[KVWork],
-		mu:          &coord.mu,
-		kvGranter:   coord.granters[KVWork].(*kvGranter),
 	}
+	coord.ioLoadListener.mu.Mutex = &coord.mu
+	coord.ioLoadListener.mu.kvGranter = coord.granters[KVWork].(*kvGranter)
 	return coord
 }
 
@@ -1379,9 +1379,12 @@ type ioLoadListener struct {
 	storeID     int32
 	settings    *cluster.Settings
 	kvRequester requester
-	// mu is used when changing state in kvGranter.
-	mu        *syncutil.Mutex
-	kvGranter granterWithIOTokens
+	mu          struct {
+		// Used when changing state in kvGranter. This is a pointer since it is
+		// the same as GrantCoordinator.mu.
+		*syncutil.Mutex
+		kvGranter granterWithIOTokens
+	}
 
 	// Cumulative stats used to compute interval stats.
 	statsInitialized bool
@@ -1459,15 +1462,28 @@ func (io *ioLoadListener) pebbleMetricsTick(m pebble.Metrics) {
 // allocateTokensTick gives out 1/adjustmentInterval of the totalTokens every
 // 1s.
 func (io *ioLoadListener) allocateTokensTick() {
-	toAllocate := int64(math.Ceil(float64(io.totalTokens) / adjustmentInterval))
-	if io.totalTokens != unlimitedTokens && toAllocate+io.tokensAllocated > io.totalTokens {
-		toAllocate = io.totalTokens - io.tokensAllocated
+	var toAllocate int64
+	if io.totalTokens == unlimitedTokens {
+		toAllocate = io.totalTokens / adjustmentInterval
+	} else {
+		// Round up so that we don't accumulate tokens to give in a burst on the
+		// last tick.
+		toAllocate = (io.totalTokens + adjustmentInterval - 1) / adjustmentInterval
+		if toAllocate < 0 {
+			panic(errors.AssertionFailedf("toAllocate is negative %d", toAllocate))
+		}
+		if toAllocate+io.tokensAllocated > io.totalTokens {
+			toAllocate = io.totalTokens - io.tokensAllocated
+		}
 	}
 	if toAllocate > 0 {
 		io.mu.Lock()
 		defer io.mu.Unlock()
 		io.tokensAllocated += toAllocate
-		io.kvGranter.setAvailableIOTokensLocked(toAllocate)
+		if io.tokensAllocated < 0 {
+			panic(errors.AssertionFailedf("tokens allocated is negative %d", io.tokensAllocated))
+		}
+		io.mu.kvGranter.setAvailableIOTokensLocked(toAllocate)
 	}
 }
 

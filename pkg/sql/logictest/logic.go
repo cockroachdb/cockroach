@@ -1341,10 +1341,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					DeterministicExplain: true,
-					// Bump to a larger timeout as multi-node tests in CI take a while longer
-					// to update.
-					// TODO(#69227): lower this timeout.
-					ClusterSettingUpdateTimeout: 30 * time.Second,
 				},
 			},
 			ClusterName:   "testclustername",
@@ -3269,9 +3265,6 @@ func RunLogicTestWithDefaultConfig(
 			if logicTestsConfigFilter != "" && cfg.name != logicTestsConfigFilter {
 				skip.IgnoreLint(t, "config does not match env var")
 			}
-			if cfg.numNodes > 3 {
-				skip.UnderBazelWithIssue(t, 69276, "multi-node tests fail")
-			}
 			for i, path := range paths {
 				path := path // Rebind range variable.
 				onlyNonMetamorphic := nonMetamorphic[i]
@@ -3289,7 +3282,13 @@ func RunLogicTestWithDefaultConfig(
 					//  - we're generating testfiles, or
 					//  - we are in race mode (where we can hit a limit on alive
 					//    goroutines).
-					if !*showSQL && !*rewriteResultsInTestfiles && !*rewriteSQL && !util.RaceEnabled && !cfg.useTenant {
+					//  - we have too many nodes (this can lead to general slowness)
+					if !*showSQL &&
+						!*rewriteResultsInTestfiles &&
+						!*rewriteSQL &&
+						!util.RaceEnabled &&
+						!cfg.useTenant &&
+						cfg.numNodes <= 3 {
 						// Skip parallelizing tests that use the kv-batch-size directive since
 						// the batch size is a global variable.
 						//
