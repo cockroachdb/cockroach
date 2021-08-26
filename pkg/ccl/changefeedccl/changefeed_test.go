@@ -3074,6 +3074,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				select {
 				case <-waitUntilClosed:
 				case <-done:
+				case <-ctx.Done():
 				}
 			default:
 			}
@@ -3183,11 +3184,10 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				// canceled.
 				waitForBlocked = requestBlockedScan()
 				sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d INT NOT NULL DEFAULT 2`)
-				unblock := waitForBlocked()
+				_ = waitForBlocked()
 				waitForRecord()
 				sqlDB.Exec(t, `CANCEL JOB $1`, foo.(cdctest.EnterpriseTestFeed).JobID())
 				waitForNoRecord()
-				unblock()
 			}
 		}, feedTestNoTenants, withArgsFn(func(args *base.TestServerArgs) {
 			storeKnobs := &kvserver.StoreTestingKnobs{}
