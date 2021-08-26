@@ -757,6 +757,10 @@ func parseClientProvidedSessionParameters(
 			// here, so that further lookups for authentication have the correct
 			// identifier.
 			args.User, _ = security.MakeSQLUsernameFromUserInput(value, security.UsernameValidation)
+			// TODO(#sql-experience): we should retrieve the admin status during
+			// authentication using the roles cache, instead of using a simple/naive
+			// username match. See #69355.
+			args.IsSuperuser = args.User.IsRootUser()
 
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
