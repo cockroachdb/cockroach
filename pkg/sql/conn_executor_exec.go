@@ -118,7 +118,7 @@ func (ex *connExecutor) execStmt(
 				"appname", ex.sessionData().ApplicationName,
 				"addr", remoteAddr,
 				"stmt.tag", ast.StatementTag(),
-				"stmt.anonymized", anonymizeStmt(ast),
+				"stmt.no.constants", formatStatementHideConstants(ast),
 			)
 			pprof.Do(ctx, labels, func(ctx context.Context) {
 				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res)
@@ -430,7 +430,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.Statement = ps.Statement
 		stmt.Prepared = ps
 		stmt.ExpectedTypes = ps.Columns
-		stmt.AnonymizedStr = ps.AnonymizedStr
+		stmt.StmtNoConstants = ps.StatementNoConstants
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
@@ -442,7 +442,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	var needFinish bool
 	ctx, needFinish = ih.Setup(
 		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectTxnExecutionStats,
+		stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectTxnExecutionStats,
 	)
 	if needFinish {
 		sql := stmt.SQL

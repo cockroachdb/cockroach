@@ -46,7 +46,7 @@ export class SessionsSortedTable extends SortedTable<SessionInfo> {}
 
 export function byteArrayToUuid(array: Uint8Array) {
   const hexDigits: string[] = [];
-  array.forEach(t => hexDigits.push(t.toString(16).padStart(2, "0")));
+  array.forEach((t) => hexDigits.push(t.toString(16).padStart(2, "0")));
   return [
     hexDigits.slice(0, 4).join(""),
     hexDigits.slice(4, 6).join(""),
@@ -106,15 +106,15 @@ export function makeSessionsColumns(
       name: "sessionAge",
       title: SessionTableTitle.sessionAge,
       className: cx("cl-table__col-session-age"),
-      cell: session =>
+      cell: (session) =>
         SessionLink({ session: session.session, onClick: onSessionClick }),
-      sort: session => TimestampToMoment(session.session.start).valueOf(),
+      sort: (session) => TimestampToMoment(session.session.start).valueOf(),
     },
     {
       name: "txnAge",
       title: SessionTableTitle.txnAge,
       className: cx("cl-table__col-session-start"),
-      cell: function(session: SessionInfo) {
+      cell: function (session: SessionInfo) {
         if (session.session.active_txn) {
           return AgeLabel({
             start: TimestampToMoment(session.session.active_txn.start),
@@ -123,13 +123,13 @@ export function makeSessionsColumns(
         }
         return "N/A";
       },
-      sort: session => session.session.active_txn?.start.seconds || 0,
+      sort: (session) => session.session.active_txn?.start.seconds || 0,
     },
     {
       name: "statementAge",
       title: SessionTableTitle.statementAge,
       className: cx("cl-table__col-session-start"),
-      cell: function(session: SessionInfo) {
+      cell: function (session: SessionInfo) {
         if (session.session.active_queries?.length > 0) {
           return AgeLabel({
             start: TimestampToMoment(session.session.active_queries[0].start),
@@ -138,7 +138,7 @@ export function makeSessionsColumns(
         }
         return "N/A";
       },
-      sort: function(session: SessionInfo): number {
+      sort: function (session: SessionInfo): number {
         if (session.session.active_queries?.length > 0) {
           return session.session.active_queries[0].start.seconds.toNumber();
         }
@@ -149,26 +149,27 @@ export function makeSessionsColumns(
       name: "memUsage",
       title: SessionTableTitle.memUsage,
       className: cx("cl-table__col-session-mem-usage"),
-      cell: session =>
+      cell: (session) =>
         BytesWithPrecision(session.session.alloc_bytes?.toNumber(), 0) +
         "/" +
         BytesWithPrecision(session.session.max_alloc_bytes?.toNumber(), 0),
-      sort: session => session.session.alloc_bytes?.toNumber(),
+      sort: (session) => session.session.alloc_bytes?.toNumber(),
     },
     {
       name: "statement",
       title: SessionTableTitle.statement,
       className: cx("cl-table__col-query-text"),
-      cell: session => {
+      cell: (session) => {
         if (!(session.session.active_queries?.length > 0)) {
           return "N/A";
         }
         const stmt = session.session.active_queries[0].sql;
-        const anonStmt = session.session.active_queries[0].sql_anon;
+        const stmtNoConstants =
+          session.session.active_queries[0].sql_no_constants;
         return (
           <StatementLink
             statement={stmt}
-            anonStatement={anonStmt}
+            statementNoConstants={stmtNoConstants}
             implicitTxn={session.session.active_txn?.implicit}
             search={""}
             app={""}
