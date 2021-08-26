@@ -12,12 +12,12 @@ package testutils
 
 import (
 	"context"
-	"runtime/debug"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // DefaultSucceedsSoonDuration is the maximum amount of time unittests
@@ -31,8 +31,7 @@ const DefaultSucceedsSoonDuration = 45 * time.Second
 func SucceedsSoon(t TB, fn func() error) {
 	t.Helper()
 	if err := SucceedsSoonError(fn); err != nil {
-		t.Fatalf("condition failed to evaluate within %s: %s\n%s",
-			DefaultSucceedsSoonDuration, err, string(debug.Stack()))
+		t.Fatal(err)
 	}
 }
 
@@ -41,13 +40,23 @@ func SucceedsSoon(t TB, fn func() error) {
 // at first and then successively with an exponential backoff starting at 1ns
 // and ending at around 1s.
 func SucceedsSoonError(fn func() error) error {
+	return RetryForDuration(DefaultSucceedsSoonDuration, fn)
+}
+
+// RetryForDuration invokes fn with backoff, until duration has passed.
+// It logs interim errors (after an initial grace period) and wraps the
+// returned error with information about the timeout.
+func RetryForDuration(duration time.Duration, fn func() error) error {
 	tBegin := timeutil.Now()
 	wrappedFn := func() error {
 		err := fn()
 		if timeutil.Since(tBegin) > 3*time.Second && err != nil {
-			log.InfofDepth(context.Background(), 4, "SucceedsSoon: %v", err)
+			log.InfofDepth(context.Background(), 1, "SucceedsSoon: %v", err)
 		}
 		return err
 	}
-	return retry.ForDuration(DefaultSucceedsSoonDuration, wrappedFn)
+	if err := retry.ForDuration(duration, wrappedFn); err != nil {
+		return errors.Wrapf(err, "condition still failed after %s", duration)
+	}
+	return nil
 }

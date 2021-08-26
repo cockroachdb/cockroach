@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -1296,12 +1297,11 @@ func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Skipping as part of test-infra-team flaky test cleanup.
-	skip.WithIssue(t, 49112)
-
 	// This test configures many sub-tests and is too slow to run under nightly
-	// race stress.
+	// race stress. We're also skipping it under nightly stress for good measure
+	// as this test is pretty resource-heavy.
 	skip.UnderStressRace(t)
+	skip.UnderStress(t)
 
 	rng, _ := randutil.NewPseudoRand()
 	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
@@ -1312,6 +1312,9 @@ func TestRepartitioning(t *testing.T) {
 	ctx := context.Background()
 	db, sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
 	defer cleanup()
+
+	// Be extra lenient with timeouts in this test as they shuffle replicas around.
+	const lenientSucceedsSoonDuration = 3 * testutils.DefaultSucceedsSoonDuration
 
 	for _, test := range testCases {
 		t.Run(fmt.Sprintf("%s/%s", test.old.name, test.new.name), func(t *testing.T) {
@@ -1325,7 +1328,7 @@ func TestRepartitioning(t *testing.T) {
 				sqlDB.Exec(t, test.old.parsed.createStmt)
 				sqlDB.Exec(t, test.old.parsed.zoneConfigStmts)
 
-				testutils.SucceedsSoon(t, test.old.verifyScansFn(ctx, t, db))
+				require.NoError(t, testutils.RetryForDuration(lenientSucceedsSoonDuration, test.old.verifyScansFn(ctx, t, db)))
 			}
 
 			{
@@ -1380,7 +1383,7 @@ func TestRepartitioning(t *testing.T) {
 				// sitting around (e.g., when a repartitioning preserves a partition but
 				// does not apply a new zone config). This is fine.
 				sqlDB.Exec(t, test.new.parsed.zoneConfigStmts)
-				testutils.SucceedsSoon(t, test.new.verifyScansFn(ctx, t, db))
+				require.NoError(t, testutils.RetryForDuration(lenientSucceedsSoonDuration, test.new.verifyScansFn(ctx, t, db)))
 			}
 		})
 	}
