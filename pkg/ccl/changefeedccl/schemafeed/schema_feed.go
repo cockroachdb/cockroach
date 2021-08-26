@@ -592,31 +592,46 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
 	start := timeutil.Now()
+
+	// TODO: This should probably process these as they're fetched instead and be
+	// memory monitored, etc.
+	var ssts [][]byte
 	span := roachpb.Span{Key: codec.TablePrefix(keys.DescriptorTableID)}
 	span.EndKey = span.Key.PrefixEnd()
-	header := roachpb.Header{Timestamp: endTS}
-	req := &roachpb.ExportRequest{
-		RequestHeader: roachpb.RequestHeaderFromSpan(span),
-		StartTime:     startTS,
-		MVCCFilter:    roachpb.MVCCFilter_All,
-		ReturnSST:     true,
-	}
-	res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
-	if log.V(2) {
-		log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS, endTS, timeutil.Since(start))
-	}
-	if pErr != nil {
-		err := pErr.GoError()
-		return nil, errors.Wrapf(err, `fetching changes for %s`, span)
+	for {
+		header := roachpb.Header{Timestamp: endTS, TargetBytes: 1}
+		req := &roachpb.ExportRequest{
+			RequestHeader:  roachpb.RequestHeaderFromSpan(span),
+			StartTime:      startTS,
+			MVCCFilter:     roachpb.MVCCFilter_All,
+			ReturnSST:      true,
+			TargetFileSize: 1 << 20,
+		}
+		res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
+		if log.V(2) {
+			log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS, endTS, timeutil.Since(start))
+		}
+		if pErr != nil {
+			err := pErr.GoError()
+			return nil, errors.Wrapf(err, `fetching changes for %s`, span)
+		}
+		resp := res.(*roachpb.ExportResponse)
+		for _, sst := range resp.Files {
+			ssts = append(ssts, sst.SST)
+		}
+		if resp.ResumeSpan == nil {
+			break
+		}
+		span.Key = resp.ResumeSpan.Key
 	}
 
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
 
 	var descs []catalog.Descriptor
-	for _, file := range res.(*roachpb.ExportResponse).Files {
+	for _, file := range ssts {
 		if err := func() error {
-			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
+			it, err := storage.NewMemSSTIterator(file, false /* verify */)
 			if err != nil {
 				return err
 			}
