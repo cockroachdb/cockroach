@@ -552,7 +552,11 @@ func (r *Replica) evaluate1PC(
 			log.VEventf(ctx, 2,
 				"1PC execution failed, falling back to transactional execution; the batch was pushed")
 		}
-		return onePCResult{success: onePCFallbackToTransactionalEvaluation}
+		if !etArg.Require1PC {
+			return onePCResult{success: onePCFallbackToTransactionalEvaluation}
+		} else {
+			return onePCResult{success: onePCFailed, pErr: pErr}
+		}
 	}
 
 	// 1PC execution was successful, let's synthesize an EndTxnResponse.

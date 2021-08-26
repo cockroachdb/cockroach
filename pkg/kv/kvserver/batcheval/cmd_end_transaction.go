@@ -192,6 +192,10 @@ func EndTxn(
 		// the batch as a 1PC. We're returning early instead of preferring a
 		// possible retriable error because we might want to leave locks behind in
 		// case of retriable errors - which Require1PC does not want.
+		//
+		// Getting here with Require1PC is possible, but not common since we don't
+		// fallback from 1PC execution to transactional execution when Require1PC is
+		// set.
 		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
 	}
 	if args.Commit && args.Poison {
