@@ -1031,6 +1031,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> savepoint_stmt
 
 %type <tree.Statement> preparable_set_stmt nonpreparable_set_stmt
+%type <tree.Statement> set_local_stmt
 %type <tree.Statement> set_session_stmt
 %type <tree.Statement> set_csetting_stmt
 %type <tree.Statement> set_transaction_stmt
@@ -4429,11 +4430,11 @@ nonpreparable_set_stmt:
   set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
 | set_exprs_internal   { /* SKIP DOC */ }
 | SET CONSTRAINTS error { return unimplemented(sqllex, "set constraints") }
-| SET LOCAL error { return unimplementedWithIssue(sqllex, 32562) }
 
-// SET SESSION / SET CLUSTER SETTING
+// SET SESSION / SET LOCAL / SET CLUSTER SETTING
 preparable_set_stmt:
   set_session_stmt     // EXTEND WITH HELP: SET SESSION
+| set_local_stmt       // EXTEND WITH HELP: SET LOCAL
 | set_csetting_stmt    // EXTEND WITH HELP: SET CLUSTER SETTING
 | use_stmt             // EXTEND WITH HELP: USE
 
@@ -4542,7 +4543,7 @@ scrub_option:
 // %Help: SET CLUSTER SETTING - change a cluster setting
 // %Category: Cfg
 // %Text: SET CLUSTER SETTING <var> { TO | = } <value>
-// %SeeAlso: SHOW CLUSTER SETTING, RESET CLUSTER SETTING, SET SESSION,
+// %SeeAlso: SHOW CLUSTER SETTING, RESET CLUSTER SETTING, SET SESSION, SET LOCAL
 // WEBDOCS/cluster-settings.html
 set_csetting_stmt:
   SET CLUSTER SETTING var_name to_or_eq var_value
@@ -4571,22 +4572,41 @@ set_exprs_internal:
 // SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
 // SET [SESSION] TRACING { TO | = } { on | off | cluster | kv | results } [,...]
 //
-// %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION,
+// %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION, SET LOCAL
 // WEBDOCS/set-vars.html
 set_session_stmt:
   SET SESSION set_rest_more
   {
     $$.val = $3.stmt()
   }
+| SET SESSION error  // SHOW HELP: SET SESSION
 | SET set_rest_more
   {
     $$.val = $2.stmt()
   }
+| SET error  // SHOW HELP: SET SESSION
 // Special form for pg compatibility:
 | SET SESSION CHARACTERISTICS AS TRANSACTION transaction_mode_list
   {
     $$.val = &tree.SetSessionCharacteristics{Modes: $6.transactionModes()}
   }
+
+// %Help: SET LOCAL - change a session variable scoped to the current transaction
+// %Category: Cfg
+// %Text:
+// SET LOCAL <var> { TO | = } <values...>
+// SET LOCAL TIME ZONE <tz>
+//
+// %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION, SET SESSION
+// WEBDOCS/set-vars.html
+set_local_stmt:
+  SET LOCAL set_rest
+  {
+    ret := $3.setVar()
+    ret.Local = true
+    $$.val = ret
+  }
+| SET LOCAL error  // SHOW HELP: SET LOCAL
 
 // %Help: SET TRANSACTION - configure the transaction settings
 // %Category: Txn
@@ -4599,7 +4619,7 @@ set_session_stmt:
 //    AS OF SYSTEM TIME <expr>
 //    [NOT] DEFERRABLE
 //
-// %SeeAlso: SHOW TRANSACTION, SET SESSION,
+// %SeeAlso: SHOW TRANSACTION, SET SESSION, SET LOCAL
 // WEBDOCS/set-transaction.html
 set_transaction_stmt:
   SET TRANSACTION transaction_mode_list
@@ -4666,7 +4686,6 @@ set_rest_more:
   }
 // See comment for the non-terminal for SET NAMES below.
 | set_names
-| error // SHOW HELP: SET SESSION
 
 // SET NAMES is the SQL standard syntax for SET client_encoding.
 // "SET NAMES value is an alias for SET client_encoding TO value."
