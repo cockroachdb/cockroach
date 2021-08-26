@@ -19,7 +19,7 @@ build/builder/mkrelease.sh amd64-linux-gnu build bin/workload bin/roachtest bin/
 
 build/teamcity-roachtest-invoke.sh \
   --cloud=gce \
-  --zones=us-central1-b,us-west1-b,europe-west2-b \
+  --zones="${GCE_ZONES-us-east4-b,us-west4-a,europe-west4-c}" \
   --debug="${DEBUG-false}" \
   --count="${COUNT-16}" \
   --parallelism="${PARALLELISM-16}" \
