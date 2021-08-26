@@ -11,6 +11,7 @@ go_library(
         "breaker.go",
         "clock_offset.go",
         "codec.go",
+        "config.go",
         "connection_class.go",
         "context.go",
         "context_testutils.go",
