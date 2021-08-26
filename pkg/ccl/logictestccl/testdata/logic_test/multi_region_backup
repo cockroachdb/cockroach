@@ -1,5 +1,8 @@
 # LogicTest: multiregion-9node-3region-3azs
 
+# Tests in this file assume no multi-region tenant setup as tenants have no
+# access to nodelocal.
+
 query TTTT
 SHOW REGIONS
 ----
