@@ -41,7 +41,6 @@ import statsTablePageStyles from "src/statementsTable/statementsTableContent.mod
 
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
-type CollectedTransactionStatistics = protos.cockroach.sql.ICollectedTransactionStatistics;
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 interface TransactionsTable {
@@ -55,6 +54,7 @@ interface TransactionsTable {
   pagination: ISortedTablePagination;
   statements: Statement[];
   nodeRegions: { [key: string]: string };
+  isTenant: boolean;
   search?: string;
   renderNoResult?: React.ReactNode;
 }
@@ -81,7 +81,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     },
   };
 
-  const { transactions, handleDetails, statements, search } = props;
+  const { transactions, handleDetails, statements, search, isTenant } = props;
   const countBar = transactionsCountBarChart(transactions);
   const rowsReadBar = transactionsRowsReadBarChart(
     transactions,
@@ -200,6 +200,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
         return longListWithTooltip(item.regionNodes.sort().join(", "), 50);
       },
       sort: (item: TransactionInfo) => item.regionNodes.sort().join(", "),
+      hideIfTenant: true,
     },
     {
       name: "statements",
@@ -209,7 +210,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
       sort: (item: TransactionInfo) =>
         item.stats_data.statement_fingerprint_ids.length,
     },
-  ];
+  ].filter(c => !(isTenant && c.hideIfTenant));
 
   return (
     <SortedTable
