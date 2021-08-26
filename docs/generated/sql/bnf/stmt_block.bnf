@@ -202,6 +202,7 @@ select_stmt ::=
 
 preparable_set_stmt ::=
 	set_session_stmt
+	| set_local_stmt
 	| set_csetting_stmt
 	| use_stmt
 
@@ -602,6 +603,9 @@ set_session_stmt ::=
 	'SET' 'SESSION' set_rest_more
 	| 'SET' set_rest_more
 	| 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' 'TRANSACTION' transaction_mode_list
+
+set_local_stmt ::=
+	'SET' 'LOCAL' set_rest
 
 set_csetting_stmt ::=
 	'SET' 'CLUSTER' 'SETTING' var_name to_or_eq var_value
@@ -1566,6 +1570,9 @@ opt_for_locking_clause ::=
 set_rest_more ::=
 	set_rest
 
+set_rest ::=
+	generic_set
+
 to_or_eq ::=
 	'='
 	| 'TO'
@@ -1830,9 +1837,6 @@ abbreviated_revoke_stmt ::=
 
 role_options ::=
 	( role_option ) ( ( role_option ) )*
-
-set_rest ::=
-	generic_set
 
 backup_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
@@ -2117,6 +2121,9 @@ offset_clause ::=
 	'OFFSET' a_expr
 	| 'OFFSET' select_fetch_first_value row_or_rows
 
+generic_set ::=
+	var_name to_or_eq var_list
+
 extra_var_value ::=
 	'ON'
 	| cockroachdb_extra_reserved_keyword
@@ -2330,9 +2337,6 @@ role_option ::=
 	| password_clause
 	| valid_until_clause
 
-generic_set ::=
-	var_name to_or_eq var_list
-
 d_expr ::=
 	'ICONST'
 	| 'FCONST'
@@ -2542,6 +2546,9 @@ all_or_distinct ::=
 for_locking_item ::=
 	for_locking_strength opt_locked_rels opt_nowait_or_skip
 
+var_list ::=
+	( var_value ) ( ( ',' var_value ) )*
+
 opt_ordinality ::=
 	'WITH' 'ORDINALITY'
 	| 
@@ -2681,9 +2688,6 @@ password_clause ::=
 valid_until_clause ::=
 	'VALID' 'UNTIL' string_or_placeholder
 	| 'VALID' 'UNTIL' 'NULL'
-
-var_list ::=
-	( var_value ) ( ( ',' var_value ) )*
 
 typed_literal ::=
 	func_name_no_crdb_extra 'SCONST'
