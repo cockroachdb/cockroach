@@ -84,13 +84,13 @@ type sessionVar struct {
 
 	// RuntimeSet is like Set except it can only be used in sessions
 	// that are already running (i.e. not during session
-	// initialization).  Currently only used for transaction_isolation.
-	RuntimeSet func(_ context.Context, evalCtx *extendedEvalContext, s string) error
+	// initialization). Currently only used for transaction_isolation.
+	RuntimeSet func(_ context.Context, evalCtx *extendedEvalContext, local bool, s string) error
 
 	// SetWithPlanner is like Set except it can only be used in sessions
 	// that are already running and the planner is passed in.
 	// The planner can be used to check privileges before setting.
-	SetWithPlanner func(_ context.Context, p *planner, s string) error
+	SetWithPlanner func(_ context.Context, p *planner, local bool, s string) error
 
 	// GlobalDefault is the string value to use as default for RESET or
 	// during session initialization when no default value was provided
@@ -241,13 +241,6 @@ var varGen = map[string]sessionVar{
 		},
 		Set: func(_ context.Context, m *sessionDataMutator, dbName string) error {
 			m.SetDatabase(dbName)
-			return nil
-		},
-		SetWithPlanner: func(
-			_ context.Context, p *planner, dbName string) error {
-			p.forEachMutator(func(m *sessionDataMutator) {
-				m.SetDatabase(dbName)
-			})
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData().Database },
@@ -1017,12 +1010,12 @@ var varGen = map[string]sessionVar{
 			}
 			return evalCtx.SessionData().User().Normalized()
 		},
-		SetWithPlanner: func(ctx context.Context, p *planner, s string) error {
+		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
 			u, err := security.MakeSQLUsernameFromUserInput(s, security.UsernameValidation)
 			if err != nil {
 				return err
 			}
-			return p.setRole(ctx, u)
+			return p.setRole(ctx, local, u)
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return security.NoneRole
@@ -1196,7 +1189,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return "serializable"
 		},
-		RuntimeSet: func(_ context.Context, evalCtx *extendedEvalContext, s string) error {
+		RuntimeSet: func(_ context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
 			_, ok := tree.IsolationLevelMap[s]
 			if !ok {
 				return newVarValueError(`transaction_isolation`, s, "serializable")
@@ -1891,10 +1884,10 @@ func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string) err
 		return newCannotChangeParameterError(name)
 	}
 	if v.RuntimeSet != nil {
-		return v.RuntimeSet(ctx, &p.extendedEvalCtx, newVal)
+		return v.RuntimeSet(ctx, &p.extendedEvalCtx, false /* local */, newVal)
 	}
 	if v.SetWithPlanner != nil {
-		return v.SetWithPlanner(ctx, p, newVal)
+		return v.SetWithPlanner(ctx, p, false /* local */, newVal)
 	}
 	return p.sessionDataMutatorIterator.forEachMutatorError(func(m *sessionDataMutator) error {
 		return v.Set(ctx, m, newVal)

@@ -515,10 +515,6 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.extendedEvalCtx.ExecCfg
 }
 
-func (p *planner) forEachMutator(applyFunc func(m *sessionDataMutator)) {
-	p.sessionDataMutatorIterator.forEachMutator(applyFunc)
-}
-
 func (p *planner) forEachMutatorError(applyFunc func(m *sessionDataMutator) error) error {
 	return p.sessionDataMutatorIterator.forEachMutatorError(applyFunc)
 }

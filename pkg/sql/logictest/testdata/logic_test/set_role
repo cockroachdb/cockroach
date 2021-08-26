@@ -322,3 +322,26 @@ query TT
 SELECT current_user, session_user()
 ----
 testuser  testuser
+
+
+# SET ROLE is specially cased in SET LOCAL as it uses SetWithPlanner,
+# so test it behaves as appropriate.
+
+user root
+
+statement ok
+BEGIN;
+SET LOCAL ROLE testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  root
+
+statement ok
+ROLLBACK
+
+query TT
+SELECT current_user, session_user()
+----
+root  root
