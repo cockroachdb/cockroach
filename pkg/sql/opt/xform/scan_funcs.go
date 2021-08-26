@@ -146,11 +146,11 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate,
 ) {
-	// We can only generate a locality optimized scan if we know there is at
-	// most one row produced by the local spans.
-	// TODO(rytaft): We may be able to expand this to allow any number of rows,
-	// as long as there is a hard upper bound.
-	if !grp.Relational().Cardinality.IsZeroOrOne() {
+	const localityOptScanMaxRows = 10000
+
+	// We can only generate a locality optimized scan if we know there a hard
+	// upper bound on the number of rows produced by the local spans.
+	if grp.Relational().Cardinality.Max > localityOptScanMaxRows {
 		return
 	}
 
