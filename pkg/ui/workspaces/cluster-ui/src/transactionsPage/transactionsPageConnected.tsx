@@ -24,6 +24,7 @@ import {
   selectTransactionsData,
   selectTransactionsLastError,
 } from "./transactionsPage.selectors";
+import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 
 export const TransactionsPageConnected = withRouter(
@@ -36,6 +37,7 @@ export const TransactionsPageConnected = withRouter(
       data: selectTransactionsData(state),
       nodeRegions: nodeRegionsByIDSelector(state),
       error: selectTransactionsLastError(state),
+      isTenant: selectIsTenant(state),
     }),
     (dispatch: Dispatch) => ({
       refreshData: () => dispatch(transactionsActions.refresh()),
