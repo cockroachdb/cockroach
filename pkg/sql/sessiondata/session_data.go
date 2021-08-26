@@ -210,6 +210,17 @@ func NewStack(firstElem *SessionData) *Stack {
 	return &Stack{stack: []*SessionData{firstElem}}
 }
 
+// Clone clones the current stack.
+func (s *Stack) Clone() *Stack {
+	ret := &Stack{
+		stack: make([]*SessionData, len(s.stack)),
+	}
+	for i, st := range s.stack {
+		ret.stack[i] = st.Clone()
+	}
+	return ret
+}
+
 // Top returns the top element of the stack.
 func (s *Stack) Top() *SessionData {
 	if len(s.stack) == 0 {
@@ -236,6 +247,19 @@ func (s *Stack) Pop() error {
 	idx := len(s.stack) - 1
 	s.stack[idx] = nil
 	s.stack = s.stack[:idx]
+	return nil
+}
+
+// PopN removes the top SessionData N elements from the stack.
+func (s *Stack) PopN(n int) error {
+	if len(s.stack)-n <= 0 {
+		return errors.AssertionFailedf("there must always be at least one element in the SessionData stack")
+	}
+	// Explicitly unassign each pointer.
+	for i := 0; i < n; i++ {
+		s.stack[len(s.stack)-1-i] = nil
+	}
+	s.stack = s.stack[:len(s.stack)-n]
 	return nil
 }
 
