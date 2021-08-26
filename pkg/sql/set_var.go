@@ -136,21 +136,25 @@ func (n *setVarNode) startExec(params runParams) error {
 		)
 	}
 
+	if n.v.RuntimeSet != nil {
+		return n.v.RuntimeSet(params.ctx, params.p.ExtendedEvalContext(), n.local, strVal)
+	}
+
+	if n.v.SetWithPlanner != nil {
+		return n.v.SetWithPlanner(params.ctx, params.p, n.local, strVal)
+	}
+
 	return params.p.applyOnSessionDataMutators(
 		params.ctx,
 		n.local,
 		func(m *sessionDataMutator) error {
-			if n.v.RuntimeSet != nil {
-				return n.v.RuntimeSet(params.ctx, params.p.ExtendedEvalContext(), strVal)
-			}
-			if n.v.SetWithPlanner != nil {
-				return n.v.SetWithPlanner(params.ctx, params.p, strVal)
-			}
 			return n.v.Set(params.ctx, m, strVal)
 		},
 	)
 }
 
+// applyOnSessionDataMutators applies the given function on the relevant
+// sessionDataMutators.
 func (p *planner) applyOnSessionDataMutators(
 	ctx context.Context, local bool, applyFunc func(m *sessionDataMutator) error,
 ) error {
