@@ -1053,7 +1053,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
 		) {
-			return recv.stats, recv.commErr
+			return *recv.stats, recv.commErr
 		}
 	}
 	recv.discardRows = planner.instrumentation.ShouldDiscardRows()
@@ -1066,14 +1066,14 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// need to have access to the main query tree.
 	defer cleanup()
 	if recv.commErr != nil || res.Err() != nil {
-		return recv.stats, recv.commErr
+		return *recv.stats, recv.commErr
 	}
 
 	ex.server.cfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
 		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv,
 	)
 
-	return recv.stats, recv.commErr
+	return *recv.stats, recv.commErr
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and
