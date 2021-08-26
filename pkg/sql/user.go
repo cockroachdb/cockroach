@@ -474,6 +474,7 @@ func (p *planner) setRole(ctx context.Context, s security.SQLUsername) error {
 			m.data.UserProto = m.data.SessionUserProto
 			m.data.SessionUserProto = ""
 		}
+		m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 		return nil
 	}
 
@@ -483,6 +484,7 @@ func (p *planner) setRole(ctx context.Context, s security.SQLUsername) error {
 		m.data.SessionUserProto = m.data.UserProto
 	}
 	m.data.UserProto = becomeUser.EncodeProto()
+	m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 	return nil
 }
 
