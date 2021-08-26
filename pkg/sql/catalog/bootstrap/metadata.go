@@ -268,6 +268,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.DatabaseRoleSettingsTable)
 	target.AddDescriptorForSystemTenant(systemschema.TenantUsageTable)
 	target.AddDescriptor(systemschema.SQLInstancesTable)
+	target.AddDescriptorForSystemTenant(systemschema.SpanConfigurationsTable)
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters. The includedInBootstrap

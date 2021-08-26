@@ -12,6 +12,7 @@ package zonepb
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -1151,4 +1153,110 @@ func (c *Constraint) GetValue() string {
 // TTL returns the implies TTL as a time.Duration.
 func (m *GCPolicy) TTL() time.Duration {
 	return time.Duration(m.TTLSeconds) * time.Second
+}
+
+// EnsureFullyHydrated returns an assertion error if the zone config is not
+// fully hydrated. A fully hydrated zone configuration must have all required
+// fields set, which are RangeMaxBytes, RangeMinBytes, GC, and NumReplicas.
+func (z *ZoneConfig) EnsureFullyHydrated() error {
+	var unsetFields []string
+	if z.RangeMaxBytes == nil {
+		unsetFields = append(unsetFields, "RangeMaxBytes")
+	}
+	if z.RangeMinBytes == nil {
+		unsetFields = append(unsetFields, "RangeMinBytes")
+	}
+	if z.GC == nil {
+		unsetFields = append(unsetFields, "GCPolicy")
+	}
+	if z.NumReplicas == nil {
+		unsetFields = append(unsetFields, "NumReplicas")
+	}
+
+	if len(unsetFields) > 0 {
+		return errors.AssertionFailedf("expected hydrated zone config: %s unset", strings.Join(unsetFields, ", "))
+	}
+	return nil
+}
+
+// AsSpanConfig converts a fully hydrated zone configuration to an equivalent
+// SpanConfig. It fatals if the zone config hasn't been fully hydrated (fields
+// are expected to have been cascaded through parent zone configs).
+func (z *ZoneConfig) AsSpanConfig() roachpb.SpanConfig {
+	spanConfig, err := z.toSpanConfig()
+	if err != nil {
+		log.Fatalf(context.Background(), "%v", err)
+	}
+	return spanConfig
+}
+
+func (z *ZoneConfig) toSpanConfig() (roachpb.SpanConfig, error) {
+	var sc roachpb.SpanConfig
+	var err error
+
+	if err = z.EnsureFullyHydrated(); err != nil {
+		return sc, err
+	}
+
+	// Copy over the values.
+	sc.RangeMinBytes = *z.RangeMinBytes
+	sc.RangeMaxBytes = *z.RangeMaxBytes
+	sc.GCTTL = z.GC.TTLSeconds
+
+	// GlobalReads is false by default.
+	if z.GlobalReads != nil {
+		sc.GlobalReads = *z.GlobalReads
+	}
+	sc.NumReplicas = *z.NumReplicas
+	if z.NumVoters != nil {
+		sc.NumVoters = *z.NumVoters
+	}
+
+	toSpanConfigConstraints := func(src []Constraint) ([]roachpb.Constraint, error) {
+		spanConfigConstraints := make([]roachpb.Constraint, len(src))
+		for i, c := range src {
+			switch c.Type {
+			case Constraint_REQUIRED:
+				spanConfigConstraints[i].Type = roachpb.Constraint_REQUIRED
+			case Constraint_PROHIBITED:
+				spanConfigConstraints[i].Type = roachpb.Constraint_PROHIBITED
+			default:
+				return nil, errors.AssertionFailedf("unknown constraint type: %v", c.Type)
+			}
+			spanConfigConstraints[i].Key = c.Key
+			spanConfigConstraints[i].Value = c.Value
+		}
+		return spanConfigConstraints, nil
+	}
+
+	toSpanConfigConstraintsConjunction := func(src []ConstraintsConjunction) ([]roachpb.ConstraintsConjunction, error) {
+		constraintsConjunction := make([]roachpb.ConstraintsConjunction, len(src))
+		for i, constraint := range src {
+			constraintsConjunction[i].NumReplicas = constraint.NumReplicas
+			constraintsConjunction[i].Constraints, err = toSpanConfigConstraints(constraint.Constraints)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return constraintsConjunction, nil
+	}
+
+	sc.Constraints = make([]roachpb.ConstraintsConjunction, len(z.Constraints))
+	sc.Constraints, err = toSpanConfigConstraintsConjunction(z.Constraints)
+	if err != nil {
+		return roachpb.SpanConfig{}, err
+	}
+	sc.VoterConstraints, err = toSpanConfigConstraintsConjunction(z.VoterConstraints)
+	if err != nil {
+		return roachpb.SpanConfig{}, err
+	}
+
+	sc.LeasePreferences = make([]roachpb.LeasePreference, len(z.LeasePreferences))
+	for i, leasePreference := range z.LeasePreferences {
+		sc.LeasePreferences[i].Constraints, err = toSpanConfigConstraints(leasePreference.Constraints)
+		if err != nil {
+			return roachpb.SpanConfig{}, err
+		}
+	}
+	return sc, nil
 }

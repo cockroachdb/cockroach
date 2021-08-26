@@ -220,6 +220,9 @@ type sqlServerArgs struct {
 	// Used by the executor config.
 	systemConfigProvider config.SystemConfigProvider
 
+	// Used by the span config reconciliation job.
+	spanConfigAccessor spanconfig.KVAccessor
+
 	// Used by DistSQLPlanner.
 	nodeDialer *nodedialer.Dialer
 
@@ -828,6 +831,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.circularInternalExecutor,
 		cfg.stopper,
 		cfg.Settings,
+		cfg.spanConfigAccessor,
 		knobs,
 	)
 	execCfg.SpanConfigReconciliationJobDeps = spanconfigMgr

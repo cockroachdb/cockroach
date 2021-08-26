@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -166,7 +167,7 @@ type Node struct {
 	recorder     *status.MetricsRecorder
 	startedAt    int64
 	lastUp       int64
-	initialStart bool // True if this is the first time this node has started.
+	initialStart bool // true if this is the first time this node has started
 	txnMetrics   kvcoord.TxnMetrics
 
 	// Used to signal when additional stores, if any, have been initialized.
@@ -179,6 +180,8 @@ type Node struct {
 	storeGrantCoords *admission.StoreGrantCoordinators
 
 	tenantUsage multitenant.TenantUsageServer
+
+	spanConfigAccessor spanconfig.KVAccessor // powers the span configuration RPCs
 }
 
 var _ roachpb.InternalServer = &Node{}
@@ -302,23 +305,25 @@ func NewNode(
 	kvAdmissionQ *admission.WorkQueue,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
+	spanConfigAccessor spanconfig.KVAccessor,
 ) *Node {
 	var sqlExec *sql.InternalExecutor
 	if execCfg != nil {
 		sqlExec = execCfg.InternalExecutor
 	}
 	n := &Node{
-		storeCfg:         cfg,
-		stopper:          stopper,
-		recorder:         recorder,
-		metrics:          makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:           stores,
-		txnMetrics:       txnMetrics,
-		sqlExec:          sqlExec,
-		clusterID:        clusterID,
-		kvAdmissionQ:     kvAdmissionQ,
-		storeGrantCoords: storeGrantCoords,
-		tenantUsage:      tenantUsage,
+		storeCfg:           cfg,
+		stopper:            stopper,
+		recorder:           recorder,
+		metrics:            makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:             stores,
+		txnMetrics:         txnMetrics,
+		sqlExec:            sqlExec,
+		clusterID:          clusterID,
+		kvAdmissionQ:       kvAdmissionQ,
+		storeGrantCoords:   storeGrantCoords,
+		tenantUsage:        tenantUsage,
+		spanConfigAccessor: spanConfigAccessor,
 	}
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -1440,3 +1445,29 @@ type emptyMetricStruct struct{}
 var _ metric.Struct = emptyMetricStruct{}
 
 func (emptyMetricStruct) MetricStruct() {}
+
+// GetSpanConfigs implements the roachpb.InternalServer interface.
+func (n *Node) GetSpanConfigs(
+	ctx context.Context, req *roachpb.GetSpanConfigsRequest,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	entries, err := n.spanConfigAccessor.GetSpanConfigEntriesFor(ctx, req.Spans)
+	if err != nil {
+		return nil, err
+	}
+
+	return &roachpb.GetSpanConfigsResponse{SpanConfigEntries: entries}, nil
+}
+
+// UpdateSpanConfigs implements the roachpb.InternalServer interface.
+func (n *Node) UpdateSpanConfigs(
+	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	// TODO(irfansharif): We want to protect ourselves from tenants creating
+	// outlandishly large string buffers here and OOM-ing the host cluster. Is
+	// the maximum protobuf message size enough of a safeguard?
+	err := n.spanConfigAccessor.UpdateSpanConfigEntries(ctx, req.ToDelete, req.ToUpsert)
+	if err != nil {
+		return nil, err
+	}
+	return &roachpb.UpdateSpanConfigsResponse{}, nil
+}

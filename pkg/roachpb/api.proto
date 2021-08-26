@@ -18,6 +18,7 @@ import "kv/kvserver/readsummary/rspb/summary.proto";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
+import "roachpb/span_config.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -2527,6 +2528,14 @@ service Internal {
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.
   rpc Join(JoinNodeRequest) returns (JoinNodeResponse) { }
+
+  // GetSpanConfigs is used to fetch the span configurations over a given
+  // keyspan.
+  rpc GetSpanConfigs (GetSpanConfigsRequest) returns (GetSpanConfigsResponse) { }
+
+  // UpdateSpanConfigs is used to update the span configurations over given
+  // keyspans.
+  rpc UpdateSpanConfigs (UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) { }
 }
 
 // ContentionEvent is a message that will be attached to BatchResponses

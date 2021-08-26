@@ -310,6 +310,10 @@ const (
 	// OnUpdateExpressions setting ON UPDATE column expressions is supported in
 	// this version.
 	OnUpdateExpressions
+	// SpanConfigurationsTable adds the span configurations system table, to
+	// store all KV span configs.
+	SpanConfigurationsTable
+
 	// Step (1): Add new versions here.
 )
 
@@ -533,6 +537,11 @@ var versionsSingleton = keyedVersions{
 		Key:     OnUpdateExpressions,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 152},
 	},
+	{
+		Key:     SpanConfigurationsTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 154},
+	},
+
 	// Step (2): Add new versions here.
 }
 
