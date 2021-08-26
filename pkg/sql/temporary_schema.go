@@ -476,15 +476,22 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		)
 	}
 
-	// We only want to perform the cleanup if we are holding the meta1 lease.
-	// This ensures only one server can perform the job at a time.
-	isLeaseholder, err := c.isMeta1LeaseholderFunc(ctx, c.db.Clock().NowAsClockTimestamp())
-	if err != nil {
-		return err
-	}
-	if !isLeaseholder {
-		log.Infof(ctx, "skipping temporary object cleanup run as it is not the leaseholder")
-		return nil
+	// For tenants, we will completely skip this logic since you
+	// can only have a single pod. So, we can execute the logic
+	// to clean up tables directly here without any coordination.
+	if c.codec.ForSystemTenant() {
+		// We only want to perform the cleanup if we are holding the meta1 lease.
+		// This ensures only one server can perform the job at a time.
+		isLeaseHolder, err := c.isMeta1LeaseholderFunc(ctx, c.db.Clock().NowAsClockTimestamp())
+		if err != nil {
+			return err
+		}
+		// For the system tenant we will check if the lease is held. For tenants
+		// every single POD will try to execute this clean up logic.
+		if !isLeaseHolder {
+			log.Infof(ctx, "skipping temporary object cleanup run as it is not the leaseholder")
+			return nil
+		}
 	}
 
 	c.metrics.ActiveCleaners.Inc(1)
