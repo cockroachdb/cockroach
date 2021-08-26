@@ -325,33 +325,43 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 	}
 	resumeCtx, cancel := r.makeCtx()
 
-	aj := &adoptedJob{sid: s.ID(), cancel: cancel}
-	r.addAdoptedJob(jobID, aj)
+	if alreadyAdopted := r.addAdoptedJob(jobID, s.ID(), cancel); alreadyAdopted {
+		return nil
+	}
+
 	r.metrics.ResumedJobs.Inc(1)
 	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
 		// Wait for the job to finish. No need to print the error because if there
 		// was one it's been set in the job status already.
 		_ = r.runJob(resumeCtx, resumer, job, status, job.taskName())
 	}); err != nil {
-		r.removeAdoptedJob(jobID)
+		r.unregister(jobID)
 		return err
 	}
 	return nil
 }
 
-func (r *Registry) removeAdoptedJob(jobID jobspb.JobID) {
+// addAdoptedJob adds the job to the set of currently running jobs. This set is
+// used for introspection, and, importantly, to serve as a lock to prevent
+// concurrent executions. Removal occurs in runJob or in the case that we were
+// unable to launch the goroutine to call runJob. If the returned boolean is
+// false, it means that the job is already registered as running and should not
+// be run again.
+func (r *Registry) addAdoptedJob(
+	jobID jobspb.JobID, sessionID sqlliveness.SessionID, cancel context.CancelFunc,
+) (alreadyAdopted bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.mu.adoptedJobs, jobID)
-}
 
-func (r *Registry) addAdoptedJob(jobID jobspb.JobID, aj *adoptedJob) {
-	// TODO(sajjad): We should check whether adoptedJobs already has jobID or not. If
-	// the ID exists, we should not add it again and the caller should not start
-	// another resumer.
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.adoptedJobs[jobID] = aj
+	if _, alreadyAdopted = r.mu.adoptedJobs[jobID]; alreadyAdopted {
+		return true
+	}
+
+	r.mu.adoptedJobs[jobID] = &adoptedJob{
+		sid:    sessionID,
+		cancel: cancel,
+	}
+	return false
 }
 
 func (r *Registry) runJob(
@@ -455,11 +465,11 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 			statusString := *row[1].(*tree.DString)
 			switch Status(statusString) {
 			case StatusPaused:
-				r.unregister(id)
+				r.cancelRegisteredJobContext(id)
 				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
 			case StatusReverting:
 				if err := job.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-					r.unregister(id)
+					r.cancelRegisteredJobContext(id)
 					md.Payload.Error = errJobCanceled.Error()
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)
 					md.Payload.FinalResumeError = &encodedErr

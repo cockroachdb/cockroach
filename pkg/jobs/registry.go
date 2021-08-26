@@ -652,12 +652,13 @@ func (r *Registry) CreateStartableJobWithTxn(
 		// Using a new context allows for independent lifetimes and cancellation.
 		resumerCtx, cancel = r.makeCtx()
 
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if _, alreadyRegistered := r.mu.adoptedJobs[jobID]; alreadyRegistered {
-			log.Fatalf(ctx, "job %d: was just created but found in registered adopted jobs", jobID)
+		if alreadyAdopted := r.addAdoptedJob(jobID, j.sessionID, cancel); alreadyAdopted {
+			log.Fatalf(
+				ctx,
+				"job %d: was just created but found in registered adopted jobs",
+				jobID,
+			)
 		}
-		r.mu.adoptedJobs[jobID] = &adoptedJob{sid: j.sessionID, cancel: cancel}
 		execDone = make(chan struct{})
 	}
 
@@ -1340,14 +1341,17 @@ func (r *Registry) cancelAllAdoptedJobs() {
 func (r *Registry) unregister(jobID jobspb.JobID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	aj, ok := r.mu.adoptedJobs[jobID]
-	// It is possible for a job to be double unregistered. unregister is always
-	// called at the end of resume. But it can also be called during deprecatedCancelAll
-	// and in the adopt loop under certain circumstances.
-	if ok {
+	if aj, ok := r.mu.adoptedJobs[jobID]; ok {
 		aj.cancel()
 		delete(r.mu.adoptedJobs, jobID)
+	}
+}
+
+func (r *Registry) cancelRegisteredJobContext(jobID jobspb.JobID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if aj, ok := r.mu.adoptedJobs[jobID]; ok {
+		aj.cancel()
 	}
 }
 

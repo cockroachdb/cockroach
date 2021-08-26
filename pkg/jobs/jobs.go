@@ -862,7 +862,7 @@ func (j *Job) getRunStats() (rs RunStats) {
 // and nothing will be send on errCh. Clients must not start jobs more than
 // once.
 func (sj *StartableJob) Start(ctx context.Context) (err error) {
-	if starts := atomic.AddInt64(&sj.starts, 1); starts != 1 {
+	if alreadyStarted := sj.recordStart(); alreadyStarted {
 		return errors.AssertionFailedf(
 			"StartableJob %d cannot be started more than once", sj.ID())
 	}
@@ -960,8 +960,19 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 // Cancel will mark the job as canceled and release its resources in the
 // Registry.
 func (sj *StartableJob) Cancel(ctx context.Context) error {
-	defer sj.registry.unregister(sj.ID())
+	alreadyStarted := sj.recordStart() // prevent future start attempts
+	defer func() {
+		if alreadyStarted {
+			sj.registry.cancelRegisteredJobContext(sj.ID())
+		} else {
+			sj.registry.unregister(sj.ID())
+		}
+	}()
 	return sj.registry.CancelRequested(ctx, nil, sj.ID())
+}
+
+func (sj *StartableJob) recordStart() (alreadyStarted bool) {
+	return atomic.AddInt64(&sj.starts, 1) != 1
 }
 
 // FormatRetriableExecutionErrorLogToStringArray extracts the events

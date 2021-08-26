@@ -13,7 +13,6 @@ package sql_test
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -517,18 +516,18 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 			params, _ := tests.CreateTestServerParams()
 
 			// Wait groups for synchronizing various parts of the test.
-			var typeSchemaChangeStarted sync.WaitGroup
-			typeSchemaChangeStarted.Add(1)
-			var blockTypeSchemaChange sync.WaitGroup
-			blockTypeSchemaChange.Add(1)
-			var finishedSchemaChange sync.WaitGroup
-			finishedSchemaChange.Add(1)
+			typeSchemaChangeStarted := make(chan struct{})
+			blockTypeSchemaChange := make(chan struct{})
+			finishedSchemaChange := make(chan struct{})
 
 			params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 			params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
-				RunBeforeEnumMemberPromotion: func() error {
-					typeSchemaChangeStarted.Done()
-					blockTypeSchemaChange.Wait()
+				RunBeforeEnumMemberPromotion: func(ctx context.Context) error {
+					close(typeSchemaChangeStarted)
+					select {
+					case <-blockTypeSchemaChange:
+					case <-ctx.Done():
+					}
 					return nil
 				},
 			}
@@ -555,10 +554,10 @@ CREATE TYPE db.greetings AS ENUM ('hi', 'yo');
 				if !tc.cancelable && err != nil {
 					t.Error(err)
 				}
-				finishedSchemaChange.Done()
+				close(finishedSchemaChange)
 			}()
 
-			typeSchemaChangeStarted.Wait()
+			<-typeSchemaChangeStarted
 
 			_, err = sqlDB.Exec(`CANCEL JOB (
 SELECT job_id FROM [SHOW JOBS]
@@ -594,8 +593,8 @@ WHERE
 					return nil
 				})
 			}
-			blockTypeSchemaChange.Done()
-			finishedSchemaChange.Wait()
+			close(blockTypeSchemaChange)
+			<-finishedSchemaChange
 		})
 	}
 }
