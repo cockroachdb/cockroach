@@ -107,6 +107,7 @@ export const filterTransactions = (
   internalAppNamePrefix: string,
   statements: Statement[],
   nodeRegions: { [key: string]: string },
+  isTenant: boolean,
 ): { transactions: Transaction[]; activeFilters: number } => {
   if (!filters)
     return {
@@ -139,6 +140,9 @@ export const filterTransactions = (
       // The transaction must contain at least one value of the nodes
       // and regions list (if the list is not empty).
       if (regions.length == 0 && nodes.length == 0) return true;
+      // If the cluster is a tenant cluster we don't care
+      // about node/regions
+      if (isTenant) return true;
       let foundRegion: boolean = regions.length == 0;
       let foundNode: boolean = nodes.length == 0;
 
