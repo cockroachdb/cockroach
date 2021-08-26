@@ -68,6 +68,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/Statements":
 		return a.authTenant(tenID)
 
+	case "/cockroach.server.serverpb.Status/ListSessions":
+		return a.authTenant(tenID)
+
 	default:
 		return authErrorf("unknown method %q", fullMethod)
 	}

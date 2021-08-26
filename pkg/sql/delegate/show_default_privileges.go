@@ -52,6 +52,6 @@ func (d *delegator) delegateShowDefaultPrivileges(
 		query = fmt.Sprintf("%s AND for_all_roles=false AND role = '%s'",
 			query, d.evalCtx.SessionData().User())
 	}
-	query += " ORDER BY 1,2,3,4"
+	query += " ORDER BY 1,2,3,4,5"
 	return parse(query)
 }
