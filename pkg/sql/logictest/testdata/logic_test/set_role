@@ -1,9 +1,15 @@
 statement ok
 CREATE TABLE priv_t (pk INT PRIMARY KEY);
-CREATE TABLE no_priv_t (pk INT PRIMARY KEY)
+CREATE TABLE no_priv_t (pk INT PRIMARY KEY);
+GRANT SELECT ON priv_t TO testuser
 
 statement ok
-GRANT SELECT ON priv_t TO testuser
+CREATE SCHEMA root;
+CREATE TABLE root.root_table ();
+CREATE SCHEMA testuser;
+GRANT ALL ON SCHEMA testuser TO testuser;
+CREATE TABLE testuser.testuser_table ();
+GRANT ALL ON TABLE testuser.testuser_table TO testuser
 
 # Cannot become node or public.
 statement error role name "public" is reserved
@@ -59,6 +65,12 @@ SHOW ROLE
 root
 
 statement ok
+SELECT * FROM root_table
+
+statement error relation "testuser_table" does not exist
+SELECT * FROM testuser_table
+
+statement ok
 SET ROLE = 'testuser'
 
 query TT
@@ -72,8 +84,20 @@ SELECT * FROM priv_t
 statement error user testuser does not have SELECT privilege on relation no_priv_t
 SELECT * FROM no_priv_t
 
+statement error relation "root_table" does not exist
+SELECT * FROM root_table
+
+statement ok
+SELECT * FROM testuser_table
+
 statement ok
 RESET ROLE
+
+statement ok
+SELECT * FROM root_table
+
+statement error relation "testuser_table" does not exist
+SELECT * FROM testuser_table
 
 # Check root can transition between testuser and testuser2.
 statement ok
