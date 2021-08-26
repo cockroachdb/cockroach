@@ -614,11 +614,19 @@ func (t *RaftTransport) startProcessNewQueue(
 		}
 		defer cleanup(ch)
 		defer t.queues[class].Delete(int64(toNodeID))
-		conn, err := t.dialer.Dial(ctx, toNodeID, class)
+		// NB: we dial without a breaker here because the caller has already
+		// checked the breaker. Checking it again can cause livelock, see:
+		// https://github.com/cockroachdb/cockroach/issues/68419
+		conn, err := t.dialer.DialNoBreaker(ctx, toNodeID, class)
+		// Because we are bypassing the breaker, provide manual feedback here.
+		breaker := t.dialer.GetCircuitBreaker(toNodeID, class)
 		if err != nil {
+			breaker.Fail(err)
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
+		breaker.Success()
+
 		client := NewMultiRaftClient(conn)
 		batchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
