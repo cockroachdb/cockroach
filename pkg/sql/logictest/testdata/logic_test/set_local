@@ -435,3 +435,25 @@ query TT
 SELECT * FROM tbl
 ----
 2020-08-25 15:16:17.123456 +0000 +0000  1 day 15:16:17.123456
+
+# Test for SET DATABASE
+
+statement ok
+CREATE DATABASE alt_db
+
+statement ok
+BEGIN;
+SET LOCAL database = 'alt_db'
+
+query T
+SHOW DATABASE
+----
+alt_db
+
+statement ok
+ROLLBACK
+
+query T
+SHOW DATABASE
+----
+test
