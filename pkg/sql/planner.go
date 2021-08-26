@@ -352,9 +352,9 @@ func newInternalPlanner(
 				"application_name": "crdb-internal",
 				"database":         "system",
 			}),
-			settings:                    execCfg.Settings,
-			sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
+			settings: execCfg.Settings,
 		},
+		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
 	}
 
 	p.extendedEvalCtx = internalExtendedEvalCtx(

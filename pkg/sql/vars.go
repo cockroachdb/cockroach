@@ -1704,10 +1704,10 @@ func CheckSessionVariableValueValid(
 	fakeSessionMutator := &sessionDataMutator{
 		data: &sessiondata.SessionData{},
 		sessionDataMutatorBase: sessionDataMutatorBase{
-			defaults:                    SessionDefaults(map[string]string{}),
-			settings:                    settings,
-			sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
+			defaults: SessionDefaults(map[string]string{}),
+			settings: settings,
 		},
+		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
 	}
 	return sVar.Set(ctx, fakeSessionMutator, varValue)
 }
