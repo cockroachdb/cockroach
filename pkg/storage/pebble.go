@@ -1362,11 +1362,6 @@ func (p *Pebble) MkdirAll(name string) error {
 	return p.fs.MkdirAll(name, 0755)
 }
 
-// RemoveDir implements the FS interface.
-func (p *Pebble) RemoveDir(name string) error {
-	return p.fs.Remove(name)
-}
-
 // List implements the FS interface.
 func (p *Pebble) List(name string) ([]string, error) {
 	dirents, err := p.fs.List(name)
