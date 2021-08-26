@@ -608,7 +608,7 @@ type DistSQLReceiver struct {
 	// this node's clock.
 	clockUpdater clockUpdater
 
-	stats topLevelQueryStats
+	stats *topLevelQueryStats
 
 	expectedRowsRead int64
 	progressAtomic   *uint64
@@ -753,6 +753,7 @@ func MakeDistSQLReceiver(
 		rangeCache:         rangeCache,
 		txn:                txn,
 		clockUpdater:       clockUpdater,
+		stats:              &topLevelQueryStats{},
 		stmtType:           stmtType,
 		tracing:            tracing,
 		contentionRegistry: contentionRegistry,
@@ -778,6 +779,7 @@ func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 		rangeCache:         r.rangeCache,
 		txn:                r.txn,
 		clockUpdater:       r.clockUpdater,
+		stats:              r.stats,
 		stmtType:           tree.Rows,
 		tracing:            r.tracing,
 		contentionRegistry: r.contentionRegistry,
