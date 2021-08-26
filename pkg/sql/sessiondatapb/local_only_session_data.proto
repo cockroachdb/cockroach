@@ -194,6 +194,9 @@ message LocalOnlySessionData {
   // trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
   // means disabled.
   int64 txn_rows_read_err = 50;
+  // IsSuperuser returns whether the user is a "superuser", which is defined
+  // to be a user with an admin role.
+  bool is_superuser = 51;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
