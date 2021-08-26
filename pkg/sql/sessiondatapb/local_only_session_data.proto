@@ -176,7 +176,10 @@ message LocalOnlySessionData {
   // This is only populated when SET ROLE is used, otherwise the session_user
   // is the same as the UserProto in SessionData.
   string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
-
+  // IsSuperuser returns whether the user is a "superuser", which is defined
+  // to be a user with an admin role.
+  bool is_superuser = 47;
+  
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
