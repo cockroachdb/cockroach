@@ -132,18 +132,18 @@ func StartTenant(
 	pgLAddr := pgL.Addr().String()
 	httpLAddr := httpL.Addr().String()
 	args.advertiseAddr = baseCfg.AdvertiseAddr
+	tenantStatusServer := newTenantStatusServer(
+		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
+		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, nil,
+		args.rpcContext, args.stopper,
+	)
+	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
+	tenantStatusServer.sqlServer = s
+
 	if err != nil {
 		return nil, "", "", err
 	}
-
-	tenantStatusServer := newTenantStatusServer(
-		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
-		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, s,
-		args.rpcContext, args.stopper,
-	)
-
-	s.execCfg.SQLStatusServer = tenantStatusServer
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
