@@ -1,5 +1,10 @@
 # LogicTest: local 3node-tenant
 
+query T
+SHOW is_superuser
+----
+on
+
 query TTT colnames
 SHOW USERS
 ----
@@ -156,6 +161,11 @@ user4     NOLOGIN     NULL
 user5     NOLOGIN     NULL
 
 user testuser
+
+query T
+SHOW is_superuser
+----
+off
 
 statement ok
 DROP ROLE user4

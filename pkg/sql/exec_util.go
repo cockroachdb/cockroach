@@ -1631,6 +1631,7 @@ type SessionDefaults map[string]string
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
 	User            security.SQLUsername
+	IsSuperuser     bool
 	SessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
 	// client.
