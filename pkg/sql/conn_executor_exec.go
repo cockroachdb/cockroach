@@ -816,8 +816,44 @@ func (ex *connExecutor) commitSQLTransaction(
 		return ex.makeErrEvent(err, ast)
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndTransactionCommit, timeutil.Now())
-	ex.sessionDataStack.PopAll()
+	if err := ex.reportParamStatusUpdateChanges(func() error {
+		ex.sessionDataStack.PopAll()
+		return nil
+	}); err != nil {
+		return ex.makeErrEvent(err, ast)
+	}
 	return eventTxnFinishCommitted{}, nil
+}
+
+// reportParamStatusUpdateChanges reports param status update changes after the
+// given fn has been executed.
+func (ex *connExecutor) reportParamStatusUpdateChanges(fn func() error) error {
+	before := ex.sessionDataStack.Top()
+	if err := fn(); err != nil {
+		return err
+	}
+	if ex.dataMutatorIterator.paramStatusUpdater == nil {
+		return nil
+	}
+	after := ex.sessionDataStack.Top()
+	for _, param := range bufferableParamStatusUpdates {
+		_, v, err := getSessionVar(param.lowerName, false /* missingOk */)
+		if err != nil {
+			return err
+		}
+		if v.GetFromSessionData == nil {
+			return errors.AssertionFailedf("GetFromSessionData for %s must be set", param.name)
+		}
+		beforeVal := v.GetFromSessionData(before)
+		afterVal := v.GetFromSessionData(after)
+		if beforeVal != afterVal {
+			ex.dataMutatorIterator.paramStatusUpdater.BufferParamStatusUpdate(
+				param.name,
+				afterVal,
+			)
+		}
+	}
+	return nil
 }
 
 func (ex *connExecutor) commitSQLTransactionInternal(
@@ -880,7 +916,12 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
-	ex.sessionDataStack.PopAll()
+	if err := ex.reportParamStatusUpdateChanges(func() error {
+		ex.sessionDataStack.PopAll()
+		return nil
+	}); err != nil {
+		return ex.makeErrEvent(err, stmt)
+	}
 	// We're done with this txn.
 	return eventTxnFinishAborted{}, nil
 }
