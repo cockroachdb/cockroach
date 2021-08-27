@@ -65,6 +65,11 @@ type sessionVar struct {
 	// either by SHOW or in the pg_catalog table.
 	Get func(evalCtx *extendedEvalContext) string
 
+	// GetFromSessionData returns a string representation of a given variable to
+	// be used by BufferParamStatus. This is only required if the variable
+	// is expected to send updates through ParamStatusUpdate in pgwire.
+	GetFromSessionData func(sd *sessiondata.SessionData) string
+
 	// GetStringVal converts the provided Expr to a string suitable
 	// for Set() or RuntimeSet().
 	// If this method is not provided,
@@ -84,13 +89,13 @@ type sessionVar struct {
 
 	// RuntimeSet is like Set except it can only be used in sessions
 	// that are already running (i.e. not during session
-	// initialization).  Currently only used for transaction_isolation.
-	RuntimeSet func(_ context.Context, evalCtx *extendedEvalContext, s string) error
+	// initialization). Currently only used for transaction_isolation.
+	RuntimeSet func(_ context.Context, evalCtx *extendedEvalContext, local bool, s string) error
 
 	// SetWithPlanner is like Set except it can only be used in sessions
 	// that are already running and the planner is passed in.
 	// The planner can be used to check privileges before setting.
-	SetWithPlanner func(_ context.Context, p *planner, s string) error
+	SetWithPlanner func(_ context.Context, p *planner, local bool, s string) error
 
 	// GlobalDefault is the string value to use as default for RESET or
 	// during session initialization when no default value was provided
@@ -143,6 +148,9 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
 			return evalCtx.SessionData().ApplicationName
+		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return sd.ApplicationName
 		},
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
@@ -243,13 +251,6 @@ var varGen = map[string]sessionVar{
 			m.SetDatabase(dbName)
 			return nil
 		},
-		SetWithPlanner: func(
-			_ context.Context, p *planner, dbName string) error {
-			p.forEachMutator(func(m *sessionDataMutator) {
-				m.SetDatabase(dbName)
-			})
-			return nil
-		},
 		Get: func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData().Database },
 		GlobalDefault: func(_ *settings.Values) string {
 			// The "defaultdb" value is set as session default in the pgwire
@@ -291,6 +292,9 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
 			return evalCtx.GetDateStyle().SQLString()
+		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return sd.GetDateStyle().SQLString()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return dateStyleEnumMap[dateStyle.Get(sv)]
@@ -882,6 +886,9 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return strings.ToLower(evalCtx.SessionData().GetIntervalStyle().String())
 		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return strings.ToLower(sd.GetIntervalStyle().String())
+		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return strings.ToLower(duration.IntervalStyle_name[int32(intervalStyle.Get(sv))])
 		},
@@ -908,6 +915,19 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return formatBoolAsPostgresSetting(intervalStyleEnabled.Get(sv))
+		},
+	},
+
+	`is_superuser`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().IsSuperuser)
+		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return formatBoolAsPostgresSetting(sd.IsSuperuser)
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("is_superuser"),
+		GlobalDefault: func(sv *settings.Values) string {
+			return "off"
 		},
 	},
 
@@ -1007,13 +1027,8 @@ var varGen = map[string]sessionVar{
 			}
 			return evalCtx.SessionData().User().Normalized()
 		},
-		SetWithPlanner: func(ctx context.Context, p *planner, s string) error {
-			u, err := security.MakeSQLUsernameFromUserInput(s, security.UsernameValidation)
-			if err != nil {
-				return err
-			}
-			return p.setRole(ctx, u)
-		},
+		// SetWithPlanner is defined in init(), as otherwise there is a circular
+		// initialization loop with the planner.
 		GlobalDefault: func(sv *settings.Values) string {
 			return security.NoneRole
 		},
@@ -1175,6 +1190,9 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return sessionDataTimeZoneFormat(evalCtx.SessionData().GetLocation())
 		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return sessionDataTimeZoneFormat(sd.GetLocation())
+		},
 		GetStringVal:  timeZoneVarGetStringVal,
 		Set:           timeZoneVarSet,
 		GlobalDefault: func(_ *settings.Values) string { return "UTC" },
@@ -1186,7 +1204,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return "serializable"
 		},
-		RuntimeSet: func(_ context.Context, evalCtx *extendedEvalContext, s string) error {
+		RuntimeSet: func(_ context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
 			_, ok := tree.IsolationLevelMap[s]
 			if !ok {
 				return newVarValueError(`transaction_isolation`, s, "serializable")
@@ -1653,6 +1671,27 @@ var varGen = map[string]sessionVar{
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
 
 func init() {
+	// SetWithPlanner must be initialized in init() to avoid a circular
+	// initialization loop.
+	for _, p := range []struct {
+		name string
+		fn   func(ctx context.Context, p *planner, local bool, s string) error
+	}{
+		{
+			name: `role`,
+			fn: func(ctx context.Context, p *planner, local bool, s string) error {
+				u, err := security.MakeSQLUsernameFromUserInput(s, security.UsernameValidation)
+				if err != nil {
+					return err
+				}
+				return p.setRole(ctx, local, u)
+			},
+		},
+	} {
+		v := varGen[p.name]
+		v.SetWithPlanner = p.fn
+		varGen[p.name] = v
+	}
 	for k, v := range DummyVars {
 		varGen[k] = v
 	}
@@ -1881,12 +1920,12 @@ func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string) err
 		return newCannotChangeParameterError(name)
 	}
 	if v.RuntimeSet != nil {
-		return v.RuntimeSet(ctx, &p.extendedEvalCtx, newVal)
+		return v.RuntimeSet(ctx, &p.extendedEvalCtx, false /* local */, newVal)
 	}
 	if v.SetWithPlanner != nil {
-		return v.SetWithPlanner(ctx, p, newVal)
+		return v.SetWithPlanner(ctx, p, false /* local */, newVal)
 	}
-	return p.sessionDataMutatorIterator.forEachMutatorError(func(m *sessionDataMutator) error {
+	return p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m *sessionDataMutator) error {
 		return v.Set(ctx, m, newVal)
 	})
 }

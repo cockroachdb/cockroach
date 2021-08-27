@@ -22,6 +22,7 @@ package tree
 // SetVar represents a SET or RESET statement.
 type SetVar struct {
 	Name     string
+	Local    bool
 	Values   Exprs
 	Reset    bool
 	ResetAll bool
@@ -43,6 +44,9 @@ func (node *SetVar) Format(ctx *FmtCtx) {
 		return
 	}
 	ctx.WriteString("SET ")
+	if node.Local {
+		ctx.WriteString("LOCAL ")
+	}
 	if node.Name == "" {
 		ctx.WriteString("ROW (")
 		ctx.FormatNode(&node.Values)

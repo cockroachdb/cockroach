@@ -107,6 +107,7 @@ func (ex *connExecutor) execSavepointInOpenState(
 		numDDL:          ex.extraTxnState.numDDL,
 	}
 	savepoints.push(sp)
+	ex.sessionDataStack.PushTopClone()
 
 	return nil, nil, nil
 }
@@ -124,9 +125,23 @@ func (ex *connExecutor) execRelease(
 		return ev, payload
 	}
 
+	// When doing RELEASE SAVEPOINT, all LOCAL session parameters are preserved.
+	currSessionData := ex.sessionDataStack.Top()
+
 	// Discard our savepoint and all further ones. Depending on what happens with
 	// the release below, we might add this savepoint back.
 	env.popToIdx(idx - 1)
+
+	// Pop all the savepoint SessionData objects, and then an extra element.
+	// We will restore the currSessionData on to the stack, as releasing still
+	// preserves the current SessionData in the transaction.
+	// We do not have to report param status updates as the SessionData
+	// remains the same after this transformation!
+	numPoppedElems := (len(ex.extraTxnState.savepoints) - idx) + 1
+	if err := ex.sessionDataStack.PopN(numPoppedElems); err != nil {
+		return ex.makeErrEvent(err, s)
+	}
+	ex.sessionDataStack.Push(currSessionData)
 
 	if entry.commitOnRelease {
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
@@ -140,6 +155,7 @@ func (ex *connExecutor) execRelease(
 			// Add the savepoint back. We want to allow a ROLLBACK TO SAVEPOINT
 			// cockroach_restart (that's the whole point of commitOnRelease).
 			env.push(*entry)
+			ex.sessionDataStack.PushTopClone()
 
 			rc, canAutoRetry := ex.getRewindTxnCapability()
 			ev := eventRetriableErr{
@@ -153,7 +169,7 @@ func (ex *connExecutor) execRelease(
 		// Non-retriable error. The transaction might have committed (i.e. the
 		// error might be ambiguous). We can't allow a ROLLBACK TO SAVEPOINT to
 		// recover the transaction, so we're not adding the savepoint back.
-		ex.rollbackSQLTransaction(ctx)
+		ex.rollbackSQLTransaction(ctx, s)
 		ev := eventNonRetriableErr{IsCommit: fsm.FromBool(false)}
 		payload := eventNonRetriableErrPayload{err: err}
 		return ev, payload
@@ -188,7 +204,9 @@ func (ex *connExecutor) execRollbackToSavepointInOpenState(
 		return ev, payload
 	}
 
-	ex.extraTxnState.savepoints.popToIdx(idx)
+	if err := ex.popSavepointsToIdx(s, idx); err != nil {
+		return ex.makeErrEvent(err, s)
+	}
 
 	if entry.kvToken.Initial() {
 		return eventTxnRestart{}, nil
@@ -262,7 +280,9 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 		return ev, payload
 	}
 
-	ex.extraTxnState.savepoints.popToIdx(idx)
+	if err := ex.popSavepointsToIdx(s, idx); err != nil {
+		return ex.makeErrEvent(err, s)
+	}
 
 	if err := ex.state.mu.txn.RollbackToSavepoint(ctx, entry.kvToken); err != nil {
 		return ex.makeErrEvent(err, s)
@@ -272,6 +292,25 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 		return eventTxnRestart{}, nil
 	}
 	return eventSavepointRollback{}, nil
+}
+
+// popSavepointsToIdx pops savepoints and SessionData elements related to
+// the savepoint up to the given idx.
+func (ex *connExecutor) popSavepointsToIdx(stmt tree.Statement, idx int) error {
+	if err := ex.reportParamStatusUpdateChanges(func() error {
+		numPoppedElems := len(ex.extraTxnState.savepoints) - idx
+		ex.extraTxnState.savepoints.popToIdx(idx)
+		if err := ex.sessionDataStack.PopN(numPoppedElems); err != nil {
+			return err
+		}
+		// We need to restore the top of the session data stack, which was the
+		// SessionData just before the the savepoint was created.
+		ex.sessionDataStack.PushTopClone()
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 // isCommitOnReleaseSavepoint returns true if the savepoint name implies special

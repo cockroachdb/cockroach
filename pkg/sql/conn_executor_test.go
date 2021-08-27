@@ -905,13 +905,14 @@ func TestTrimSuspendedPortals(t *testing.T) {
 
 	// setup the portal
 	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
-	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Parse {"Query": "%s"}`, selectStmt)))
-	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Bind {"DestinationPortal": "%s"}`, portalName)))
 
 	// wait for ready
 	until := pgtest.ParseMessages("ReadyForQuery")
 	_, err = p.Until(false /* keepErrMsg */, until...)
 	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Parse {"Query": "%s"}`, selectStmt)))
+	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Bind {"DestinationPortal": "%s"}`, portalName)))
 
 	// Execute the portal 10 times
 	for i := 1; i <= 10; i++ {

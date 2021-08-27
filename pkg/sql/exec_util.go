@@ -1698,6 +1698,7 @@ type SessionDefaults map[string]string
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
 	User            security.SQLUsername
+	IsSuperuser     bool
 	SessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
 	// client.
@@ -2453,10 +2454,35 @@ type spanWithIndex struct {
 }
 
 // paramStatusUpdater is a subset of RestrictedCommandResult which allows sending
-// status updates.
+// status updates. Ensure all updatable settings are in bufferableParamStatusUpdates.
 type paramStatusUpdater interface {
 	BufferParamStatusUpdate(string, string)
 }
+
+type bufferableParamStatusUpdate struct {
+	name      string
+	lowerName string
+}
+
+// bufferableParamStatusUpdates contains all vars which can be sent through
+// ParamStatusUpdates.
+var bufferableParamStatusUpdates = func() []bufferableParamStatusUpdate {
+	params := []string{
+		"application_name",
+		"DateStyle",
+		"IntervalStyle",
+		"is_superuser",
+		"TimeZone",
+	}
+	ret := make([]bufferableParamStatusUpdate, len(params))
+	for i, param := range params {
+		ret[i] = bufferableParamStatusUpdate{
+			name:      param,
+			lowerName: strings.ToLower(param),
+		}
+	}
+	return ret
+}()
 
 // sessionDataMutatorBase contains elements in a sessionDataMutator
 // which is the same across all SessionData elements in the sessiondata.Stack.
@@ -2524,24 +2550,32 @@ func (it *sessionDataMutatorIterator) mutator(
 // SetSessionDefaultIntSize sets the default int size for the session.
 // It is exported for use in import which is a CCL package.
 func (it *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
-	it.forEachMutator(func(m *sessionDataMutator) {
+	it.applyForEachMutator(func(m *sessionDataMutator) {
 		m.SetDefaultIntSize(size)
 	})
 }
 
-// forEachMutator iterates over each mutator over all SessionData elements
+// applyOnTopMutator applies the given function on the mutator for the top
+// element on the sessiondata Stack only.
+func (it *sessionDataMutatorIterator) applyOnTopMutator(
+	applyFunc func(m *sessionDataMutator) error,
+) error {
+	return applyFunc(it.mutator(true /* applyCallbacks */, it.sds.Top()))
+}
+
+// applyForEachMutator iterates over each mutator over all SessionData elements
 // in the stack and applies the given function to them.
 // It is the equivalent of SET SESSION x = y.
-func (it *sessionDataMutatorIterator) forEachMutator(applyFunc func(m *sessionDataMutator)) {
+func (it *sessionDataMutatorIterator) applyForEachMutator(applyFunc func(m *sessionDataMutator)) {
 	elems := it.sds.Elems()
 	for i, sd := range elems {
 		applyFunc(it.mutator(i == 0, sd))
 	}
 }
 
-// forEachMutatorError is the same as forEachMutator, but takes in a function
+// applyOnEachMutatorError is the same as applyForEachMutator, but takes in a function
 // that can return an error, erroring if any of applications error.
-func (it *sessionDataMutatorIterator) forEachMutatorError(
+func (it *sessionDataMutatorIterator) applyOnEachMutatorError(
 	applyFunc func(m *sessionDataMutator) error,
 ) error {
 	elems := it.sds.Elems()

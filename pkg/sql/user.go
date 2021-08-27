@@ -430,7 +430,7 @@ func (p *planner) bumpDatabaseRoleSettingsTableVersion(ctx context.Context) erro
 	)
 }
 
-func (p *planner) setRole(ctx context.Context, s security.SQLUsername) error {
+func (p *planner) setRole(ctx context.Context, local bool, s security.SQLUsername) error {
 	sessionUser := p.SessionData().SessionUser()
 	becomeUser := sessionUser
 	// Check the role exists - if so, populate becomeUser.
@@ -465,28 +465,34 @@ func (p *planner) setRole(ctx context.Context, s security.SQLUsername) error {
 		updateStr = "on"
 	}
 
-	p.forEachMutator(func(m *sessionDataMutator) {
-		m.bufferParamStatusUpdate("is_superuser", updateStr)
+	return p.applyOnSessionDataMutators(
+		ctx,
+		local,
+		func(m *sessionDataMutator) error {
+			m.data.IsSuperuser = willBecomeAdmin
+			m.bufferParamStatusUpdate("is_superuser", updateStr)
 
-		// The "none" user does resets the SessionUserProto in a SET ROLE.
-		if becomeUser.IsNoneRole() {
-			if m.data.SessionUserProto.Decode().Normalized() != "" {
-				m.data.UserProto = m.data.SessionUserProto
-				m.data.SessionUserProto = ""
+			// The "none" user does resets the SessionUserProto in a SET ROLE.
+			if becomeUser.IsNoneRole() {
+				if m.data.SessionUserProto.Decode().Normalized() != "" {
+					m.data.UserProto = m.data.SessionUserProto
+					m.data.SessionUserProto = ""
+				}
+				m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
+				return nil
 			}
-			m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
-			return
-		}
 
-		// Only update session_user when we are transitioning from the current_user
-		// being the session_user.
-		if m.data.SessionUserProto == "" {
-			m.data.SessionUserProto = m.data.UserProto
-		}
-		m.data.UserProto = becomeUser.EncodeProto()
-		m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
-	})
-	return nil
+			// Only update session_user when we are transitioning from the current_user
+			// being the session_user.
+			if m.data.SessionUserProto == "" {
+				m.data.SessionUserProto = m.data.UserProto
+			}
+			m.data.UserProto = becomeUser.EncodeProto()
+			m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
+			return nil
+		},
+	)
+
 }
 
 func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQLUsername) error {

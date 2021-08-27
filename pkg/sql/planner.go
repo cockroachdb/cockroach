@@ -515,12 +515,8 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.extendedEvalCtx.ExecCfg
 }
 
-func (p *planner) forEachMutator(applyFunc func(m *sessionDataMutator)) {
-	p.sessionDataMutatorIterator.forEachMutator(applyFunc)
-}
-
-func (p *planner) forEachMutatorError(applyFunc func(m *sessionDataMutator) error) error {
-	return p.sessionDataMutatorIterator.forEachMutatorError(applyFunc)
+func (p *planner) applyOnEachMutatorError(applyFunc func(m *sessionDataMutator) error) error {
+	return p.sessionDataMutatorIterator.applyOnEachMutatorError(applyFunc)
 }
 
 // GetOrInitSequenceCache returns the sequence cache for the session.
@@ -528,7 +524,7 @@ func (p *planner) forEachMutatorError(applyFunc func(m *sessionDataMutator) erro
 // inside the session data.
 func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 	if p.SessionData().SequenceCache == nil {
-		p.ExtendedEvalContext().SessionMutatorIterator.forEachMutator(
+		p.ExtendedEvalContext().SessionMutatorIterator.applyForEachMutator(
 			func(m *sessionDataMutator) {
 				m.initSequenceCache()
 			},

@@ -29,10 +29,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// setVarNode represents a SET SESSION statement.
+// setVarNode represents a SET {SESSION | LOCAL} statement.
 type setVarNode struct {
-	name string
-	v    sessionVar
+	name  string
+	local bool
+	v     sessionVar
 	// typedValues == nil means RESET.
 	typedValues []tree.TypedExpr
 }
@@ -95,7 +96,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 		}
 	}
 
-	return &setVarNode{name: name, v: v, typedValues: typedValues}, nil
+	return &setVarNode{name: name, local: n.Local, v: v, typedValues: typedValues}, nil
 }
 
 func (n *setVarNode) startExec(params runParams) error {
@@ -135,16 +136,50 @@ func (n *setVarNode) startExec(params runParams) error {
 		)
 	}
 
-	applyFunc := func(m *sessionDataMutator) error {
-		if n.v.RuntimeSet != nil {
-			return n.v.RuntimeSet(params.ctx, params.p.ExtendedEvalContext(), strVal)
-		}
-		if n.v.SetWithPlanner != nil {
-			return n.v.SetWithPlanner(params.ctx, params.p, strVal)
-		}
-		return n.v.Set(params.ctx, m, strVal)
+	// Note for RuntimeSet and SetWithPlanner we do not use the sessionDataMutator
+	// as the callers need items that are only accessible by higher level
+	// objects - and some of the computation potentially expensive so should be
+	// batched instead of performing the computation on each mutator.
+	// It is their responsibility to set LOCAL or SESSION after
+	// doing the computation.
+	if n.v.RuntimeSet != nil {
+		return n.v.RuntimeSet(params.ctx, params.p.ExtendedEvalContext(), n.local, strVal)
 	}
-	return params.p.sessionDataMutatorIterator.forEachMutatorError(applyFunc)
+
+	if n.v.SetWithPlanner != nil {
+		return n.v.SetWithPlanner(params.ctx, params.p, n.local, strVal)
+	}
+
+	return params.p.applyOnSessionDataMutators(
+		params.ctx,
+		n.local,
+		func(m *sessionDataMutator) error {
+			return n.v.Set(params.ctx, m, strVal)
+		},
+	)
+}
+
+// applyOnSessionDataMutators applies the given function on the relevant
+// sessionDataMutators.
+func (p *planner) applyOnSessionDataMutators(
+	ctx context.Context, local bool, applyFunc func(m *sessionDataMutator) error,
+) error {
+	if local {
+		// We don't allocate a new SessionData object on implicit transactions.
+		// This no-ops in postgres with a warning, so copy accordingly.
+		if p.EvalContext().TxnImplicit {
+			p.BufferClientNotice(
+				ctx,
+				pgnotice.NewWithSeverityf(
+					"WARNING",
+					"SET LOCAL can only be used in transaction blocks",
+				),
+			)
+			return nil
+		}
+		return p.sessionDataMutatorIterator.applyOnTopMutator(applyFunc)
+	}
+	return p.sessionDataMutatorIterator.applyOnEachMutatorError(applyFunc)
 }
 
 // getSessionVarDefaultString retrieves a string suitable to pass to a
