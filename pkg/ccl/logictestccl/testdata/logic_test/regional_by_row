@@ -916,15 +916,15 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 10; SET tracing = off
 
 # If the row is not found in the local region, the other regions are searched
-# in parallel.
-query T rowsort
+# in parallel. Note that if the row is quickly found in one remote region, the
+# other remote region might not be read from at all.
+query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
- OR message LIKE 'Scan%'
+ OR message LIKE 'Scan%' AND message NOT LIKE 'Scan%"\\xc0"%'
  ORDER BY ordinality ASC
 ----
 Scan /Table/73/1/"@"/10/0
-Scan /Table/73/1/"\xc0"/10/0
 Scan /Table/73/1/"\x80"/10/0
 fetched: /regional_by_row_table/primary/'ca-central-1'/10/pk2/a/b -> /10/11/12
 output row: [10 10 11 12 NULL]
