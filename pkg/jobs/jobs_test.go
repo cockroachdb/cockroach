@@ -19,7 +19,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -40,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -3395,4 +3398,139 @@ func TestJobsRetry(t *testing.T) {
 		close(rts.failOrCancelCheckCh)
 		rts.check(t, jobs.StatusFailed)
 	})
+}
+
+// TestPauseJobQueryIsBlocking tests that a PAUSE JOB(S) request blocks until the job(s) transition(s)
+// to 'paused' state(s).
+func TestPauseJobQueryIsBlocking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// - Create and start a number of jobs.
+	// - Intercept and block the jobs in Resume().
+	// - Run PAUSE JOBS query and wait until the query is executed.
+	// - Unblock intercepted jobs.
+	// - Wait until the jobs' statuses in jobs table are paused.
+	// - Before marking a job paused or failed, ensure that PAUSE JOB query is not finished.
+	// - Ensure that each job has finished with status paused.
+
+	for _, test := range []struct {
+		name        string
+		failResumer bool
+	}{
+		{
+			"pause running",
+			false,
+		},
+		{
+			"pause reverting",
+			true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			// Number of jobs to create.
+			const nJobs = 2
+			numJobs := strconv.Itoa(nJobs)
+			// Sets to true when PAUSE JOB(S) query finishes.
+			var queryFinished atomic.Value
+			queryFinished.Store(false)
+			// To wait until all jobs are pause-requested.
+			waitToResumeWG := sync.WaitGroup{}
+			waitToResumeWG.Add(nJobs)
+			unblockJobs := make(chan struct{})
+			pauseRequsetWait := make(chan struct{})
+
+			// Ensure that PAUSE JOB query is not finished before the jobs are paused.
+			beforeUpdateFn := func(_, updated jobs.JobMetadata) error {
+				if updated.Status == jobs.StatusPaused {
+					assert.False(t, queryFinished.Load().(bool))
+				}
+				return nil
+			}
+
+			// Block jobs until all jobs are pause-requested.
+			onResumeFn := func(_ context.Context) error {
+				waitToResumeWG.Done()
+				<-unblockJobs
+				if test.failResumer {
+					return errors.New("failing resumer to revert")
+				}
+				return nil
+			}
+
+			// Registry adopt and cancel loops interval.
+			interval := 2 * time.Millisecond
+			args := base.TestServerArgs{Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					StatementFilter: func(ctx context.Context, data *sessiondata.SessionData, stmt string, err error) {
+						if strings.HasPrefix(stmt, "PAUSE JOB") {
+							<-pauseRequsetWait
+						}
+					},
+				},
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					BeforeUpdate: beforeUpdateFn,
+					IntervalOverrides: jobs.TestingIntervalOverrides{
+						Adopt:  &interval,
+						Cancel: &interval,
+					},
+				},
+			}}
+
+			s, sqlDB, kvDB := serverutils.StartServer(t, args)
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+			tdb := sqlutils.MakeSQLRunner(sqlDB)
+			registry := s.JobRegistry().(*jobs.Registry)
+
+			jobs.RegisterConstructor(
+				jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+					return jobs.FakeResumer{
+						OnResume: onResumeFn,
+					}
+				})
+
+			var createdJobs [nJobs]*jobs.StartableJob
+			for i := range createdJobs {
+				record := jobs.Record{
+					Username: security.RootUserName(),
+					Details:  jobspb.ImportDetails{},
+					Progress: jobspb.ImportProgress{},
+				}
+				sj, err := jobs.TestingCreateAndStartJob(ctx, registry, kvDB, record)
+				require.NoError(t, err)
+				createdJobs[i] = sj
+			}
+
+			// Wait until all jobs have resumed.
+			waitToResumeWG.Wait()
+
+			go func() {
+				// This query must not finish until all jobs are paused.
+				tdb.Exec(t, "PAUSE JOBS (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT')")
+				queryFinished.Store(true)
+			}()
+
+			// Wait until PAUSE JOB query is executed.
+			pauseRequsetWait <- struct{}{}
+			close(pauseRequsetWait)
+
+			// Unblock jobs.
+			close(unblockJobs)
+
+			// Wait until all jobs are paused.
+			tdb.CheckQueryResultsRetry(t,
+				"SELECT count(*) FROM crdb_internal.jobs WHERE status = 'paused' AND job_type = 'IMPORT'",
+				[][]string{{numJobs}},
+			)
+
+			// Wait until PAUSE JOB query is finished.
+			testutils.SucceedsSoon(t, func() error {
+				if queryFinished.Load().(bool) {
+					return nil
+				}
+				return errors.New("waiting for PAUSE JOBS to complete")
+			})
+		})
+	}
 }

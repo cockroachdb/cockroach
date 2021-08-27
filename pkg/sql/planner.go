@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -101,6 +102,9 @@ type extendedEvalContext struct {
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
 	SchemaChangerState *SchemaChangerState
+
+	// pauseRequestedJobs refers to pauseRequestedJobs in extraTxnState.
+	pauseRequestedJobs *[]jobspb.JobID
 }
 
 // copy returns a deep copy of ctx.
@@ -127,6 +131,12 @@ func (evalCtx *extendedEvalContext) QueueJob(
 	}
 	*evalCtx.Jobs = append(*evalCtx.Jobs, jobID)
 	return job, nil
+}
+
+// addPauseRequestedJob adds the given job in a list, which a transaction uses
+// to wait for these jobs until they have status paused or failed.
+func (evalCtx *extendedEvalContext) addPauseRequestedJob(jobID jobspb.JobID) {
+	*evalCtx.pauseRequestedJobs = append(*evalCtx.pauseRequestedJobs, jobID)
 }
 
 // planner is the centerpiece of SQL statement execution combining session

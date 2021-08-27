@@ -81,7 +81,7 @@ type Job struct {
 	}
 }
 
-// CreatedByInfo encapsulates they type and the ID of the system which created
+// CreatedByInfo encapsulates the type and the ID of the system which created
 // this job.
 type CreatedByInfo struct {
 	Name string
@@ -595,9 +595,6 @@ func (j *Job) failed(
 				return err
 			}
 		}
-		// TODO (sajjad): We don't have any checks for state transitions here. Consequently,
-		// a pause-requested job can transition to failed, which may or may not be
-		// acceptable depending on the job.
 		ju.UpdateStatus(StatusFailed)
 		md.Payload.Error = err.Error()
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())

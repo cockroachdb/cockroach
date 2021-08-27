@@ -266,23 +266,61 @@ func (r *Registry) NotifyToAdoptJobs(ctx context.Context) error {
 func (r *Registry) WaitForJobs(
 	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
 ) error {
-	if len(jobs) == 0 {
+	return r.WaitForStates(ctx, ex, jobs, r.terminalStates())
+}
+
+// WaitUntilPausedOrFailed waits until all given jobs reach the status paused or
+// failed.
+func (r *Registry) WaitUntilPausedOrFailed(
+	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
+) error {
+	// A pause-requested job can transition only to either paused or failed status.
+	states := []Status{StatusPaused, StatusFailed}
+	for _, jobID := range jobs {
+		if err := r.WaitForStates(ctx, ex, []jobspb.JobID{jobID}, states); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WaitForStates waits until the given jobs have any of the given statuses in
+// system.jobs table.
+func (r *Registry) WaitForStates(
+	ctx context.Context, ex sqlutil.InternalExecutor, jobIDs []jobspb.JobID, statuses []Status,
+) error {
+	if len(jobIDs) == 0 {
 		return nil
 	}
+	if len(statuses) == 0 {
+		return errors.New("Cannot wait for an empty list of statuses")
+	}
+
 	buf := bytes.Buffer{}
-	for i, id := range jobs {
+	for i, jobID := range jobIDs {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		buf.WriteString(fmt.Sprintf(" %d", id))
+		buf.WriteString(fmt.Sprintf(" %d", jobID))
 	}
+	jobIDsStr := buf.String()
+
+	buf = bytes.Buffer{}
+	for i, status := range statuses {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		buf.WriteString(fmt.Sprintf(" '%s'", status))
+	}
+	statesStr := buf.String()
+
 	// Manually retry instead of using SHOW JOBS WHEN COMPLETE so we have greater
 	// control over retries. Also, avoiding SHOW JOBS prevents us from having to
 	// populate the crdb_internal.jobs vtable.
 	query := fmt.Sprintf(
-		`SELECT count(*) FROM system.jobs WHERE id IN (%s)
-       AND (status != $1 AND status != $2 AND status != $3 AND status != $4)`,
-		buf.String())
+		"SELECT count(*) FROM system.jobs WHERE id IN (%s) AND status NOT IN (%s)",
+		jobIDsStr, statesStr,
+	)
 	for r := retry.StartWithCtx(ctx, retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
@@ -297,10 +335,6 @@ func (r *Registry) WaitForJobs(
 			nil, /* txn */
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query,
-			StatusSucceeded,
-			StatusFailed,
-			StatusCanceled,
-			StatusRevertFailed,
 		)
 		if err != nil {
 			return errors.Wrap(err, "polling for queued jobs to complete")
@@ -316,11 +350,11 @@ func (r *Registry) WaitForJobs(
 			break
 		}
 	}
-	for i, id := range jobs {
+	for i, id := range jobIDs {
 		j, err := r.LoadJob(ctx, id)
 		if err != nil {
 			return errors.WithHint(
-				errors.Wrapf(err, "job %d could not be loaded", jobs[i]),
+				errors.Wrapf(err, "job %d could not be loaded", jobIDs[i]),
 				"The job may not have succeeded.")
 		}
 		if j.Payload().FinalResumeError != nil {
@@ -328,14 +362,20 @@ func (r *Registry) WaitForJobs(
 			return decodedErr
 		}
 		if j.Payload().Error != "" {
-			return errors.Newf("job %d failed with error: %s", jobs[i], j.Payload().Error)
+			return errors.Newf("job %d failed with error: %s", jobIDs[i], j.Payload().Error)
 		}
 	}
 	return nil
 }
 
+// terminalStates return a slice of terminal states in jobs state machines.
+func (r *Registry) terminalStates() []Status {
+	return []Status{StatusSucceeded, StatusFailed, StatusCanceled, StatusRevertFailed}
+}
+
 // Run starts previously unstarted jobs from a list of scheduled
-// jobs. Canceling ctx interrupts the waiting but doesn't cancel the jobs.
+// jobs and waits until they reach a terminal state. Canceling ctx
+// interrupts the waiting but doesn't cancel the jobs.
 func (r *Registry) Run(
 	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
 ) error {
@@ -1039,7 +1079,7 @@ func (r *Registry) PauseRequested(
 	if pr, ok := resumer.(PauseRequester); ok {
 		onPauseRequested = pr.OnPauseRequest
 	}
-	return job.PauseRequested(ctx, txn, onPauseRequested, reason)
+	return job.PauseRequested(ctx, nil, onPauseRequested, reason)
 }
 
 // Succeeded marks the job with id as succeeded.

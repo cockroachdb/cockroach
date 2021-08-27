@@ -1265,6 +1265,12 @@ type connExecutor struct {
 		// has admin privilege. hasAdminRoleCache is set for the first statement
 		// in a transaction.
 		hasAdminRoleCache HasAdminRoleCache
+
+		// pauseRequestedJobs is a collection of jobs that are being paused in a
+		// PAUSE JOB statement. It is populated in addPauseRequestedJob. After commit,
+		// the transaction waits for these jobs to have status paused or failed before
+		// returning.
+		pauseRequestedJobs []jobspb.JobID
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -1487,6 +1493,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 	ex.extraTxnState.schemaChangerState = SchemaChangerState{
 		mode: ex.sessionData().NewSchemaChangerMode,
 	}
+	ex.extraTxnState.pauseRequestedJobs = nil
 
 	for k := range ex.extraTxnState.schemaChangeJobRecords {
 		delete(ex.extraTxnState.schemaChangeJobRecords, k)
@@ -2472,6 +2479,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
 		statsProvider:          ex.server.sqlStats,
 		indexUsageStats:        ex.indexUsageStats,
+		pauseRequestedJobs:     &ex.extraTxnState.pauseRequestedJobs,
 	}
 }
 
@@ -2704,6 +2712,13 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			ex.ctxHolder.connCtx,
 			ex.server.cfg.InternalExecutor,
 			ex.extraTxnState.jobs); err != nil {
+			handleErr(err)
+		}
+		if err := ex.server.cfg.JobRegistry.WaitUntilPausedOrFailed(
+			ex.ctxHolder.connCtx,
+			ex.server.cfg.InternalExecutor,
+			ex.extraTxnState.pauseRequestedJobs,
+		); err != nil {
 			handleErr(err)
 		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
