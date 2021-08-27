@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -563,28 +564,6 @@ func (rf *Fetcher) GetTables() []catalog.Descriptor {
 	return ret
 }
 
-// RowLimit represents a response limit expressed in terms of number of result
-// rows. RowLimits get ultimately converted to KeyLimits and are translated into
-// BatchRequest.MaxSpanRequestKeys.
-type RowLimit uint64
-
-// KeyLimit represents a response limit expressed in terms of number of keys.
-type KeyLimit int64
-
-// BytesLimit represents a response limit expressed in terms of the size of the
-// results. A BytesLimit ultimately translates into BatchRequest.TargetBytes.
-type BytesLimit uint64
-
-// NoRowLimit can be passed to Fetcher.StartScan to signify that the caller
-// doesn't want to limit the number of result rows for each scan request.
-const NoRowLimit RowLimit = 0
-
-// NoBytesLimit can be passed to Fetcher.StartScan to signify that the caller
-// doesn't want to limit the size of results for each scan request.
-//
-// See also DefaultBatchBytesLimit.
-const NoBytesLimit BytesLimit = 0
-
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 //
@@ -606,8 +585,8 @@ func (rf *Fetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
-	batchBytesLimit BytesLimit,
-	rowLimitHint RowLimit,
+	batchBytesLimit rowinfra.BytesLimit,
+	rowLimitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
@@ -658,8 +637,8 @@ func (rf *Fetcher) StartInconsistentScan(
 	initialTimestamp hlc.Timestamp,
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,
-	batchBytesLimit BytesLimit,
-	rowLimitHint RowLimit,
+	batchBytesLimit rowinfra.BytesLimit,
+	rowLimitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
@@ -736,7 +715,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	return rf.StartScanFrom(ctx, &f)
 }
 
-func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint RowLimit) KeyLimit {
+func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.KeyLimit {
 	if rowLimitHint == 0 {
 		return 0
 	}
@@ -748,7 +727,7 @@ func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint RowLimit) KeyLimit {
 	// rows we could potentially scan over.
 	//
 	// We add an extra key to make sure we form the last row.
-	return KeyLimit(int64(rowLimitHint)*int64(rf.maxKeysPerRow) + 1)
+	return rowinfra.KeyLimit(int64(rowLimitHint)*int64(rf.maxKeysPerRow) + 1)
 }
 
 // StartScanFrom initializes and starts a scan from the given kvBatchFetcher. Can be

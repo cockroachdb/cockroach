@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -49,8 +50,8 @@ func NewKVFetcher(
 	spans roachpb.Spans,
 	bsHeader *roachpb.BoundedStalenessHeader,
 	reverse bool,
-	batchBytesLimit BytesLimit,
-	firstBatchLimit KeyLimit,
+	batchBytesLimit rowinfra.BytesLimit,
+	firstBatchLimit rowinfra.KeyLimit,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,

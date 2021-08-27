@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -176,7 +177,7 @@ type joinReader struct {
 	// lookupBatchBytesLimit controls the TargetBytes of lookup requests. If 0, a
 	// default will be used. Regardless of this value, bytes limits aren't always
 	// used.
-	lookupBatchBytesLimit row.BytesLimit
+	lookupBatchBytesLimit rowinfra.BytesLimit
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -253,7 +254,7 @@ func newJoinReader(
 		// cases, we use limits.
 		shouldLimitBatches:    !spec.LookupColumnsAreKey && readerType == lookupJoinReaderType,
 		readerType:            readerType,
-		lookupBatchBytesLimit: row.BytesLimit(spec.LookupBatchBytesLimit),
+		lookupBatchBytesLimit: rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
@@ -748,17 +749,17 @@ func (jr *joinReader) readInput() (
 	}
 
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
-	var bytesLimit row.BytesLimit
+	var bytesLimit rowinfra.BytesLimit
 	if !jr.shouldLimitBatches {
-		bytesLimit = row.NoBytesLimit
+		bytesLimit = rowinfra.NoBytesLimit
 	} else {
 		bytesLimit = jr.lookupBatchBytesLimit
 		if jr.lookupBatchBytesLimit == 0 {
-			bytesLimit = row.DefaultBatchBytesLimit
+			bytesLimit = rowinfra.DefaultBatchBytesLimit
 		}
 	}
 	if err := jr.fetcher.StartScan(
-		jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, row.NoRowLimit,
+		jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
 		jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		jr.MoveToDraining(err)
@@ -827,12 +828,12 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			sort.Sort(spans)
 
 			log.VEventf(jr.Ctx, 1, "scanning %d remote spans", len(spans))
-			bytesLimit := row.DefaultBatchBytesLimit
+			bytesLimit := rowinfra.DefaultBatchBytesLimit
 			if !jr.shouldLimitBatches {
-				bytesLimit = row.NoBytesLimit
+				bytesLimit = rowinfra.NoBytesLimit
 			}
 			if err := jr.fetcher.StartScan(
-				jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, row.NoRowLimit,
+				jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
 				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 			); err != nil {
 				jr.MoveToDraining(err)
