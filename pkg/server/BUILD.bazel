@@ -361,6 +361,7 @@ go_test(
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
         "@com_github_kr_pretty//:pretty",
         "@com_github_lib_pq//:pq",
+        "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//:go_default_library",
