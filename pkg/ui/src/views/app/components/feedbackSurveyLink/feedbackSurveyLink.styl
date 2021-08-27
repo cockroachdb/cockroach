@@ -10,16 +10,20 @@
 
 @require '~src/components/core/index.styl'
 
-.global-navigation
+.feedback-survey-link
   display flex
   flex-direction row
-  justify-content space-between
+  font-family $font-family--base
   align-items center
-  height 100%
-
-.left-side-panel
-  order 1
-
-.right-side-panel
-  display flex
-  order 2
+  border-right 1px solid #C0C6D9
+  margin-right $spacing-smaller
+  cursor pointer
+  &__title
+    margin-right $spacing-x-small
+  .image-container
+    width 32px
+    height 32px
+    display flex
+    justify-content center
+    align-items center
+    border-radius 16px
