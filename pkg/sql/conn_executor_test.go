@@ -1370,3 +1370,61 @@ func setupTestSQLLiveness(
 	sqlLiveness.Start(ctx)
 	return sqlLiveness, stopper
 }
+
+func TestUnqualifiedIntSizeRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	const (
+		// select generates 10 rows of results which the test retrieves using ExecPortal
+		selectStmt = "SELECT generate_series(1, 10)"
+
+		// stmtBufMaxLen is the maximum length the statement buffer should be during
+		// execution
+		stmtBufMaxLen = 2
+
+		// The name of the portal, used to get a handle on the statement buffer
+		portalName = "C_1"
+	)
+
+	// This buffer is necessary for some reason.
+	var stmtBuff *sql.StmtBuf
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				// get a handle to the statement buffer during the Bind phase
+				AfterExecCmd: func(_ context.Context, cmd sql.Command, buf *sql.StmtBuf) {
+					switch tcmd := cmd.(type) {
+					case sql.BindStmt:
+						if tcmd.PortalName == "C_1" {
+							stmtBuff = buf
+						}
+					default:
+					}
+				},
+			},
+		},
+		Insecure: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Connect to the cluster via the PGWire client.
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), security.RootUser)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "SET default_int_size = 8"}`))
+	require.NoError(t, p.SendOneLine(`Query {"String": "SET default_int_size = 4"}`))
+	require.NoError(t, p.SendOneLine(`Parse {"Query": "SELECT generate_series(1, 10)"}`))
+	require.NoError(t, p.SendOneLine(`Bind {"DestinationPortal": "C_1"}`))
+
+	// wait for ready
+	for i := 0; i < 2; i++ {
+		until := pgtest.ParseMessages("ReadyForQuery")
+		_, err = p.Until(false /* keepErrMsg */, until...)
+		require.NoError(t, err)
+	}
+
+	_ = stmtBuff
+}
