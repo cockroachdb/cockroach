@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -353,7 +353,7 @@ var _ = (*buildContext)(nil).alterTableDropColumn
 func (b *buildContext) maybeAddSequenceReferenceDependencies(
 	ctx context.Context, tableID descpb.ID, col *descpb.ColumnDescriptor, defaultExpr tree.TypedExpr,
 ) {
-	seqIdentifiers, err := sequence.GetUsedSequences(defaultExpr)
+	seqIdentifiers, err := seqexpr.GetUsedSequences(defaultExpr)
 	if err != nil {
 		panic(err)
 	}
@@ -391,7 +391,7 @@ func (b *buildContext) maybeAddSequenceReferenceDependencies(
 	}
 
 	if len(seqIdentifiers) > 0 {
-		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(defaultExpr, seqNameToID)
+		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(defaultExpr, seqNameToID)
 		if err != nil {
 			panic(err)
 		}

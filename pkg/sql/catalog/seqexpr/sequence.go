@@ -8,7 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sequence
+// Package seqexpr provides functionality to find usages of sequences in
+// expressions.
+//
+// The logic here would fit nicely into schemaexpr if it weren't for the
+// dependency on builtins, which itself depends on schemaexpr.
+package seqexpr
 
 import (
 	"go/constant"
