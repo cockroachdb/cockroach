@@ -99,9 +99,47 @@ func newTenantStatusServer(
 }
 
 func (t *tenantStatusServer) ListSessions(
-	ctx context.Context, request *serverpb.ListSessionsRequest,
+	ctx context.Context, req *serverpb.ListSessionsRequest,
 ) (*serverpb.ListSessionsResponse, error) {
-	return t.ListLocalSessions(ctx, request)
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	response, err := t.ListLocalSessions(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	dialFn := func(ctx context.Context, instanceID base.SQLInstanceID, addr string) (interface{}, error) {
+		client, err := t.dialPod(ctx, instanceID, addr)
+		return client, err
+	}
+	nodeStatement := func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.ListLocalSessions(ctx, req)
+	}
+	if err := t.iteratePods(ctx, fmt.Sprintf("sessions for nodes"),
+		dialFn,
+		nodeStatement,
+		func(instanceID base.SQLInstanceID, resp interface{}) {
+			sessionResp := resp.(*serverpb.ListSessionsResponse)
+			response.Sessions = append(response.Sessions, sessionResp.Sessions...)
+			response.Errors = append(response.Errors, sessionResp.Errors...)
+		},
+		func(instanceID base.SQLInstanceID, err error) {
+			// We log warnings when fanout returns error, but proceed with
+			// constructing a response from whoever returns a good one.
+			log.Warningf(ctx, "fan out statements request recorded error from node %d: %v", instanceID, err)
+		},
+	); err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (t *tenantStatusServer) ListLocalSessions(
