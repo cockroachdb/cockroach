@@ -48,6 +48,7 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/sql",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
