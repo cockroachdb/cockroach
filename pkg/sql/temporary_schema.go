@@ -476,9 +476,9 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		)
 	}
 
-	// For tenants, we will completely skip this logic since you
-	// can only have a single pod. So, we can execute the logic
-	// to clean up tables directly here without any coordination.
+	// For tenants, we will completely skip this logic since listing
+	// sessions will fan out to all pods in the tenant case. So, there
+	// is no harm in executing this logic without any type of coordination.
 	if c.codec.ForSystemTenant() {
 		// We only want to perform the cleanup if we are holding the meta1 lease.
 		// This ensures only one server can perform the job at a time.

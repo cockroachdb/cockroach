@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -99,9 +100,58 @@ func newTenantStatusServer(
 }
 
 func (t *tenantStatusServer) ListSessions(
-	ctx context.Context, request *serverpb.ListSessionsRequest,
+	ctx context.Context, req *serverpb.ListSessionsRequest,
 ) (*serverpb.ListSessionsResponse, error) {
-	return t.ListLocalSessions(ctx, request)
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	response, err := t.ListLocalSessions(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	dialFn := func(ctx context.Context, instanceID base.SQLInstanceID, addr string) (interface{}, error) {
+		client, err := t.dialPod(ctx, instanceID, addr)
+		if client == nil {
+			log.Errorf(ctx, "dialing node  (%s, %d) for list session returned nil",
+				addr, instanceID)
+		}
+		return client, err
+	}
+	nodeStatement := func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		if statusClient == nil {
+			log.Error(ctx, "unexpected nil client for list session")
+		}
+		return statusClient.ListLocalSessions(ctx, req)
+	}
+	lastErr := err
+	if err := t.iteratePods(ctx, fmt.Sprintf("sessions for nodes"),
+		dialFn,
+		nodeStatement,
+		func(instanceID base.SQLInstanceID, resp interface{}) {
+			sessionResp := resp.(*serverpb.ListSessionsResponse)
+			response.Sessions = append(response.Sessions, sessionResp.Sessions...)
+			response.Errors = append(response.Errors, sessionResp.Errors...)
+		},
+		func(instanceID base.SQLInstanceID, err error) {
+			// Fail the entire RPC, since missing responses will lead
+			// to wrong objects getting dropped
+			log.Warningf(ctx, "fan out statements request recorded error from node %d: %v", instanceID, err)
+			if !errors.HasType(err, netutil.NewInitialHeartBeatFailedError(errors.New("Compare"))) {
+				lastErr = err
+			}
+		},
+	); err != nil {
+		return nil, err
+	}
+	return response, lastErr
 }
 
 func (t *tenantStatusServer) ListLocalSessions(
