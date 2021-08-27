@@ -2239,13 +2239,13 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 	if minTSErr := (*roachpb.MinTimestampBoundUnsatisfiableError)(nil); errors.As(err, &minTSErr) {
 		aost := ex.planner.EvalContext().AsOfSystemTime
 		if aost != nil && aost.BoundedStaleness {
-			if !aost.MaxTimestampBound.IsEmpty() && aost.MaxTimestampBound.Less(minTSErr.MinTimestampBound) {
+			if !aost.MaxTimestampBound.IsEmpty() && aost.MaxTimestampBound.LessEq(minTSErr.MinTimestampBound) {
 				// If this occurs, we have a strange logic bug where we resolved
 				// a minimum timestamp during a bounded staleness read to be greater
-				// than the maximum staleness bound we put up.
+				// than or equal to the maximum staleness bound we put up.
 				err = errors.CombineErrors(
 					errors.AssertionFailedf(
-						"unexpected MaxTimestampBound > txn MinTimestampBound: %s > %s",
+						"unexpected MaxTimestampBound >= txn MinTimestampBound: %s >= %s",
 						aost.MaxTimestampBound,
 						minTSErr.MinTimestampBound,
 					),
@@ -2460,9 +2460,9 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	// data which may be after the schema change when we retry.
 	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
 	if err := ex.extraTxnState.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
-		bound := minTSErr.MinTimestampBound.Prev()
-		ex.extraTxnState.descCollection.SetMaxTimestampBound(bound)
-		evalCtx.AsOfSystemTime.MaxTimestampBound = bound
+		nextMax := minTSErr.MinTimestampBound
+		ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)
+		evalCtx.AsOfSystemTime.MaxTimestampBound = nextMax
 	} else {
 		ex.extraTxnState.descCollection.ResetMaxTimestampBound()
 		evalCtx.AsOfSystemTime = nil

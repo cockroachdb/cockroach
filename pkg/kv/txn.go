@@ -1135,8 +1135,8 @@ func (txn *Txn) checkNegotiateAndSendPreconditions(
 		assert(false, "bounded_staleness configuration must be set")
 	} else {
 		assert(!cfg.MinTimestampBound.IsEmpty(), "min_timestamp_bound must be set")
-		assert(cfg.MaxTimestampBound.IsEmpty() || cfg.MinTimestampBound.LessEq(cfg.MaxTimestampBound),
-			"max_timestamp_bound, if set, must be equal to or greater than min_timestamp_bound")
+		assert(cfg.MaxTimestampBound.IsEmpty() || cfg.MinTimestampBound.Less(cfg.MaxTimestampBound),
+			"max_timestamp_bound, if set, must be greater than min_timestamp_bound")
 	}
 	assert(ba.Timestamp.IsEmpty(), "timestamp must not be set")
 	assert(ba.Txn == nil, "txn must not be set")
