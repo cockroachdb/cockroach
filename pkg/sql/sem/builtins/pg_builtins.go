@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -1794,7 +1793,7 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return getSessionVar(ctx, string(tree.MustBeDString(args[0])), false /* missingOk */)
 			},
-			Info:       notUsableInfo,
+			Info:       categorySystemInfo,
 			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
@@ -1803,7 +1802,7 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return getSessionVar(ctx, string(tree.MustBeDString(args[0])), bool(tree.MustBeDBool(args[1])))
 			},
-			Info:       notUsableInfo,
+			Info:       categorySystemInfo,
 			Volatility: tree.VolatilityStable,
 		},
 	),
@@ -1819,13 +1818,14 @@ SELECT description
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				varName := string(tree.MustBeDString(args[0]))
-				err := setSessionVar(ctx, varName, string(tree.MustBeDString(args[1])), bool(tree.MustBeDBool(args[2])))
+				newValue := string(tree.MustBeDString(args[1]))
+				err := setSessionVar(ctx, varName, newValue, bool(tree.MustBeDBool(args[2])))
 				if err != nil {
 					return nil, err
 				}
 				return getSessionVar(ctx, varName, false /* missingOk */)
 			},
-			Info:       notUsableInfo,
+			Info:       categorySystemInfo,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -1933,10 +1933,7 @@ func setSessionVar(ctx *tree.EvalContext, settingName, newVal string, isLocal bo
 	if ctx.SessionAccessor == nil {
 		return errors.AssertionFailedf("session accessor not set")
 	}
-	if isLocal {
-		return unimplemented.NewWithIssuef(32562, "transaction-scoped settings are not supported")
-	}
-	return ctx.SessionAccessor.SetSessionVar(ctx.Context, settingName, newVal)
+	return ctx.SessionAccessor.SetSessionVar(ctx.Context, settingName, newVal, isLocal)
 }
 
 // getCatalogOidForComments returns the "catalog table oid" (the oid of a

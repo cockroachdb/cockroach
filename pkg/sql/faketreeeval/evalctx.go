@@ -374,7 +374,9 @@ func (ep *DummySessionAccessor) GetSessionVar(
 }
 
 // SetSessionVar is part of the tree.EvalSessionAccessor interface.
-func (ep *DummySessionAccessor) SetSessionVar(_ context.Context, _, _ string) error {
+func (ep *DummySessionAccessor) SetSessionVar(
+	ctx context.Context, settingName, newValue string, isLocal bool,
+) error {
 	return errors.WithStack(errEvalSessionVar)
 }
 
