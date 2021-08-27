@@ -802,6 +802,7 @@ func TruncateInterleavedIndexes(
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				rd := row.MakeDeleter(
 					codec, table, nil /* requestedCols */, &execCfg.Settings.SV, true, /* internal */
+					execCfg.GetRowMetrics(true /* internal */),
 				)
 				td := tableDeleter{rd: rd, alloc: alloc}
 				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
@@ -883,7 +884,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 				rd := row.MakeDeleter(
 					sc.execCfg.Codec, tableDesc, nil /* requestedCols */, &sc.settings.SV,
-					true, /* internal */
+					true /* internal */, sc.execCfg.GetRowMetrics(true /* internal */),
 				)
 				td := tableDeleter{rd: rd, alloc: alloc}
 				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
@@ -2044,7 +2045,10 @@ func runSchemaChangesInTxn(
 				return AlterColTypeInTxnNotSupportedErr
 			} else if col := m.AsColumn(); col != nil {
 				if !doneColumnBackfill && catalog.ColumnNeedsBackfill(col) {
-					if err := columnBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
+					if err := columnBackfillInTxn(
+						ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), planner.SemaCtx(),
+						immutDesc, traceKV,
+					); err != nil {
 						return err
 					}
 					doneColumnBackfill = true
@@ -2065,7 +2069,8 @@ func runSchemaChangesInTxn(
 			if col := m.AsColumn(); col != nil {
 				if !doneColumnBackfill && catalog.ColumnNeedsBackfill(col) {
 					if err := columnBackfillInTxn(
-						ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV,
+						ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), planner.SemaCtx(),
+						immutDesc, traceKV,
 					); err != nil {
 						return err
 					}
@@ -2399,6 +2404,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 func columnBackfillInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
+	execCfg *ExecutorConfig,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 	tableDesc catalog.TableDescriptor,
@@ -2414,8 +2420,11 @@ func columnBackfillInTxn(
 		columnBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Mon, "local-column-backfill-mon")
 	}
 
+	rowMetrics := execCfg.GetRowMetrics(evalCtx.SessionData().Internal)
 	var backfiller backfill.ColumnBackfiller
-	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc, columnBackfillerMon); err != nil {
+	if err := backfiller.InitForLocalUse(
+		ctx, evalCtx, semaCtx, tableDesc, columnBackfillerMon, rowMetrics,
+	); err != nil {
 		return err
 	}
 	defer backfiller.Close(ctx)
@@ -2453,7 +2462,9 @@ func indexBackfillInTxn(
 	}
 
 	var backfiller backfill.IndexBackfiller
-	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc, indexBackfillerMon); err != nil {
+	if err := backfiller.InitForLocalUse(
+		ctx, evalCtx, semaCtx, tableDesc, indexBackfillerMon,
+	); err != nil {
 		return err
 	}
 	defer backfiller.Close(ctx)
@@ -2485,9 +2496,10 @@ func indexTruncateInTxn(
 	alloc := &rowenc.DatumAlloc{}
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
+		internal := evalCtx.SessionData().Internal
 		rd := row.MakeDeleter(
-			execCfg.Codec, tableDesc, nil /* requestedCols */, &execCfg.Settings.SV,
-			evalCtx.SessionData().Internal,
+			execCfg.Codec, tableDesc, nil /* requestedCols */, &execCfg.Settings.SV, internal,
+			execCfg.GetRowMetrics(internal),
 		)
 		td := tableDeleter{rd: rd, alloc: alloc}
 		if err := td.init(ctx, txn, evalCtx); err != nil {

@@ -447,7 +447,7 @@ func makeDatumConverter(
 ) (*row.DatumRowConverter, error) {
 	conv, err := row.NewDatumRowConverter(
 		ctx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx, importCtx.kvCh,
-		importCtx.seqChunkProvider)
+		importCtx.seqChunkProvider, nil /* metrics */)
 	if err == nil {
 		conv.KvBatch.Source = fileCtx.source
 	}
