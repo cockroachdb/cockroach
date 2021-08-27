@@ -194,10 +194,15 @@ func (fs *encryptedFS) Remove(name string) error {
 
 // Rename implements vfs.FS.Rename.
 func (fs *encryptedFS) Rename(oldname, newname string) error {
+	// First copy the metadata from the old name to the new name.
+	if err := fs.fileRegistry.MaybeCopyEntry(oldname, newname); err != nil {
+		return err
+	}
 	if err := fs.FS.Rename(oldname, newname); err != nil {
 		return err
 	}
-	return fs.fileRegistry.MaybeRenameEntry(oldname, newname)
+	// Remove the old name's metadata.
+	return r.MaybeDeleteEntry(oldname)
 }
 
 // ReuseForWrite implements vfs.FS.ReuseForWrite.
