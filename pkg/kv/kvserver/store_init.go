@@ -28,6 +28,10 @@ import (
 // FirstNodeID is the NodeID assigned to the node bootstrapping a new cluster.
 const FirstNodeID = roachpb.NodeID(1)
 
+// FirstStoreID is the StoreID assigned to the first store on the node with ID
+// FirstNodeID.
+const FirstStoreID = roachpb.StoreID(1)
+
 // InitEngine writes a new store ident to the underlying engine. To
 // ensure that no crufty data already exists in the engine, it scans
 // the engine contents before writing the new store ident. The engine
@@ -104,8 +108,8 @@ func WriteInitialClusterData(
 	var nodeIDVal, storeIDVal, rangeIDVal, livenessVal roachpb.Value
 
 	nodeIDVal.SetInt(int64(FirstNodeID))
-	// The caller will initialize the stores with ids 1..numStores.
-	storeIDVal.SetInt(int64(numStores))
+	// The caller will initialize the stores with ids FirstStoreID, ..., FirstStoreID+numStores-1.
+	storeIDVal.SetInt(int64(FirstStoreID) + int64(numStores) - 1)
 	// The last range has id = len(splits) + 1
 	rangeIDVal.SetInt(int64(len(splits) + 1))
 
@@ -172,7 +176,7 @@ func WriteInitialClusterData(
 		replicas := []roachpb.ReplicaDescriptor{
 			{
 				NodeID:    FirstNodeID,
-				StoreID:   1,
+				StoreID:   FirstStoreID,
 				ReplicaID: 1,
 			},
 		}
