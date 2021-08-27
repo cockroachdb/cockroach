@@ -103,7 +103,23 @@ SELECT current_user, current_user(), session_user, session_user(), user
 ----
 root  root  root  root  root
 
+statement ok
+CREATE USER testuser2;
+GRANT admin TO testuser2
+
+user testuser2
+
+query T
+SHOW is_superuser
+----
+on
+
 user testuser
+
+query T
+SHOW is_superuser
+----
+off
 
 statement error pq: user testuser does not have CREATEROLE privilege
 CREATE USER user4
