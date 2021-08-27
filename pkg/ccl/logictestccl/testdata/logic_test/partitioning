@@ -97,13 +97,19 @@ CREATE TABLE interleave_root (a INT PRIMARY KEY) PARTITION BY LIST (a) (
     PARTITION p0 VALUES IN (0)
 )
 
-statement error pq: creation of new interleaved tables and interleaved indexes is no longer supported. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
+statement notice ERROR: creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
 CREATE TABLE interleave_child (a INT PRIMARY KEY) INTERLEAVE IN PARENT interleave_root (a)
 
-statement error pq: creation of new interleaved tables and interleaved indexes is no longer supported. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
+statement notice ERROR: creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
 CREATE TABLE t (a INT PRIMARY KEY) INTERLEAVE IN PARENT interleave_root (a) PARTITION BY LIST (a) (
     PARTITION p0 VALUES IN (0)
 )
+
+statement ok
+DROP TABLE interleave_child
+
+statement ok
+DROP TABLE t;
 
 statement error PARTITION p1: partition has 1 columns but 2 values were supplied
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (

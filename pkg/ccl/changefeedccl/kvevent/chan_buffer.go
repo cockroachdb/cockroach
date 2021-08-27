@@ -50,7 +50,12 @@ func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
 	select {
 	case <-ctx.Done():
 		return Event{}, ctx.Err()
-	case e := <-b.entriesCh:
+	case e, ok := <-b.entriesCh:
+		if !ok {
+			// Our channel has been closed by the
+			// Writer. No more events will be returned.
+			return e, ErrBufferClosed
+		}
 		e.bufferGetTimestamp = timeutil.Now()
 		return e, nil
 	}
