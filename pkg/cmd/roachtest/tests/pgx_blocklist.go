@@ -30,6 +30,7 @@ var pgxIgnorelist21_2 = pgxIgnorelist21_1
 var pgxIgnorelist21_1 = pgxIgnorelist20_2
 
 var pgxIgnorelist20_2 = blocklist{
-	"v4.TestBeginIsoLevels":   "We don't support isolation levels",
-	"v4.TestQueryEncodeError": "This test checks the exact error message",
+	"v4.TestBeginIsoLevels": "We don't support isolation levels",
+	"v4.TestConnCopyFromFailServerSideMidwayAbortsWithoutWaiting": "https://github.com/cockroachdb/cockroach/issues/69291#issuecomment-906898940",
+	"v4.TestQueryEncodeError":                                     "This test checks the exact error message",
 }
