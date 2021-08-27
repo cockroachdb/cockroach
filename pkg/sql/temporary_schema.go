@@ -55,6 +55,14 @@ var TempObjectCleanupInterval = settings.RegisterDurationSetting(
 	30*time.Minute,
 ).WithPublic()
 
+// TempObjectWaitInterval is a ClusterSetting controlling how long
+// after a creation a temporary object will be cleaned up.
+var TempObjectWaitInterval = settings.RegisterDurationSetting(
+	"sql.temp_object_cleaner.wait_interval",
+	"how long after creation a temporary object will be cleaned up.",
+	30*time.Minute,
+).WithPublic()
+
 var (
 	temporaryObjectCleanerActiveCleanersMetric = metric.Metadata{
 		Name:        "sql.temp_object_cleaner.active_cleaners",
@@ -476,9 +484,9 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		)
 	}
 
-	// For tenants, we will completely skip this logic since you
-	// can only have a single pod. So, we can execute the logic
-	// to clean up tables directly here without any coordination.
+	// For tenants, we will completely skip this logic since listing
+	// sessions will fan out to all pods in the tenant case. So, there
+	// is no harm in executing this logic without any type of coordination.
 	if c.codec.ForSystemTenant() {
 		// We only want to perform the cleanup if we are holding the meta1 lease.
 		// This ensures only one server can perform the job at a time.
@@ -501,7 +509,10 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	// TODO(sumeer): this is not using NewTxnWithSteppingEnabled and so won't be
 	// classified as FROM_SQL for purposes of admission control. Fix.
 	txn := kv.NewTxn(ctx, c.db, 0)
-
+	// Only see temporary schemas after some delay as safety
+	// mechanism.
+	waitTimeForCreation := TempObjectCleanupInterval.Get(&c.settings.SV)
+	txn.SetFixedTimestamp(ctx, txn.ReadTimestamp().Add(-waitTimeForCreation.Nanoseconds(), 0))
 	// Build a set of all session IDs with temporary objects.
 	var dbIDs []descpb.ID
 	if err := retryFunc(ctx, func() error {
@@ -549,6 +560,9 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 			ctx,
 			&serverpb.ListSessionsRequest{},
 		)
+		if len(response.Errors) > 0 && err == nil {
+			return errors.Newf("fan out rpc failed with %s on node %d", response.Errors[0].Message, response.Errors[0].NodeID)
+		}
 		return err
 	}); err != nil {
 		return err
