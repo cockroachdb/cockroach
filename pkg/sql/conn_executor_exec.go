@@ -187,7 +187,7 @@ func (ex *connExecutor) recordFailure() {
 // method that is performing additional work to track portal's state.
 func (ex *connExecutor) execPortal(
 	ctx context.Context,
-	portal PreparedPortal,
+	portal *PreparedPortal,
 	portalName string,
 	stmtRes CommandResult,
 	pinfo *tree.PlaceholderInfo,

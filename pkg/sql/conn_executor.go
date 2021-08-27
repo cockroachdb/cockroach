@@ -816,11 +816,11 @@ func (s *Server) newConnExecutor(
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]PreparedPortal),
+		portals:   make(map[string]*PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]PreparedPortal),
+		portals:   make(map[string]*PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(sd)
@@ -1398,7 +1398,7 @@ type prepStmtNamespace struct {
 	// session.
 	prepStmts map[string]*PreparedStatement
 	// portals contains the portals currently available on the session.
-	portals map[string]PreparedPortal
+	portals map[string]*PreparedPortal
 }
 
 // HasPrepared returns true if there are prepared statements or portals
@@ -1465,6 +1465,10 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
 		p.decRef(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
+	}
+	for name, p := range ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals {
+		p.decRef(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
+		delete(ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals, name)
 	}
 
 	switch ev {
@@ -3130,15 +3134,9 @@ func (ps connExPrepStmtsAccessor) List() map[string]*PreparedStatement {
 	return ret
 }
 
-// Get is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) Get(name string) (*PreparedStatement, bool) {
-	s, ok := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
-	return s, ok
-}
-
 // Delete is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool {
-	_, ok := ps.Get(name)
+	_, ok := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 	if !ok {
 		return false
 	}

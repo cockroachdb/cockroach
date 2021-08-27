@@ -454,7 +454,7 @@ func (ex *connExecutor) addPortal(
 		panic(errors.AssertionFailedf("portal already exists: %q", portalName))
 	}
 
-	portal, err := ex.makePreparedPortal(ctx, portalName, stmt, qargs, outFormats)
+	portal, err := ex.newPreparedPortal(ctx, portalName, stmt, qargs, outFormats)
 	if err != nil {
 		return err
 	}
