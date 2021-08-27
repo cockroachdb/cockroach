@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -32,8 +33,8 @@ import (
 // collector wrapper can be plugged in.
 type rowFetcher interface {
 	StartScan(
-		_ context.Context, _ *kv.Txn, _ roachpb.Spans, batchBytesLimit row.BytesLimit,
-		rowLimitHint row.RowLimit, traceKV bool, forceProductionKVBatchSize bool,
+		_ context.Context, _ *kv.Txn, _ roachpb.Spans, batchBytesLimit rowinfra.BytesLimit,
+		rowLimitHint rowinfra.RowLimit, traceKV bool, forceProductionKVBatchSize bool,
 	) error
 	StartInconsistentScan(
 		_ context.Context,
@@ -41,8 +42,8 @@ type rowFetcher interface {
 		initialTimestamp hlc.Timestamp,
 		maxTimestampAge time.Duration,
 		spans roachpb.Spans,
-		batchBytesLimit row.BytesLimit,
-		rowLimitHint row.RowLimit,
+		batchBytesLimit rowinfra.BytesLimit,
+		rowLimitHint rowinfra.RowLimit,
 		traceKV bool,
 		forceProductionKVBatchSize bool,
 	) error

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
@@ -35,9 +36,9 @@ type tableReader struct {
 	execinfra.ProcessorBase
 
 	spans           roachpb.Spans
-	limitHint       row.RowLimit
+	limitHint       rowinfra.RowLimit
 	parallelize     bool
-	batchBytesLimit row.BytesLimit
+	batchBytesLimit rowinfra.BytesLimit
 
 	scanStarted bool
 
@@ -86,17 +87,17 @@ func newTableReader(
 		// just in case.
 		spec.Parallelize = false
 	}
-	var batchBytesLimit row.BytesLimit
+	var batchBytesLimit rowinfra.BytesLimit
 	if !spec.Parallelize {
-		batchBytesLimit = row.BytesLimit(spec.BatchBytesLimit)
+		batchBytesLimit = rowinfra.BytesLimit(spec.BatchBytesLimit)
 		if batchBytesLimit == 0 {
-			batchBytesLimit = row.DefaultBatchBytesLimit
+			batchBytesLimit = rowinfra.DefaultBatchBytesLimit
 		}
 	}
 
 	tr := trPool.Get().(*tableReader)
 
-	tr.limitHint = row.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
+	tr.limitHint = rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 	tr.parallelize = spec.Parallelize
 	tr.batchBytesLimit = batchBytesLimit
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
@@ -204,9 +205,9 @@ func (tr *tableReader) Start(ctx context.Context) {
 
 func (tr *tableReader) startScan(ctx context.Context) error {
 	limitBatches := !tr.parallelize
-	var bytesLimit row.BytesLimit
+	var bytesLimit rowinfra.BytesLimit
 	if !limitBatches {
-		bytesLimit = row.NoBytesLimit
+		bytesLimit = rowinfra.NoBytesLimit
 	} else {
 		bytesLimit = tr.batchBytesLimit
 	}

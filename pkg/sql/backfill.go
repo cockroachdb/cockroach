@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -2422,7 +2423,7 @@ func columnBackfillInTxn(
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx,
-			txn, tableDesc, sp, row.RowLimit(columnBackfillBatchSize.Get(&evalCtx.Settings.SV)),
+			txn, tableDesc, sp, rowinfra.RowLimit(columnBackfillBatchSize.Get(&evalCtx.Settings.SV)),
 			false /*alsoCommit*/, traceKV)
 		if err != nil {
 			return err

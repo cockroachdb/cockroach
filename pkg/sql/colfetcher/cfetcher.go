@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -664,15 +665,15 @@ func (rf *cFetcher) StartScan(
 	spans roachpb.Spans,
 	bsHeader *roachpb.BoundedStalenessHeader,
 	limitBatches bool,
-	batchBytesLimit row.BytesLimit,
-	limitHint row.RowLimit,
+	batchBytesLimit rowinfra.BytesLimit,
+	limitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
 	}
-	if !limitBatches && batchBytesLimit != row.NoBytesLimit {
+	if !limitBatches && batchBytesLimit != rowinfra.NoBytesLimit {
 		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
 	}
 
@@ -681,13 +682,13 @@ func (rf *cFetcher) StartScan(
 	// If we have a limit hint, we limit the first batch size. Subsequent
 	// batches get larger to avoid making things too slow (e.g. in case we have
 	// a very restrictive filter and actually have to retrieve a lot of rows).
-	firstBatchLimit := row.KeyLimit(limitHint)
+	firstBatchLimit := rowinfra.KeyLimit(limitHint)
 	if firstBatchLimit != 0 {
 		// The limitHint is a row limit, but each row could be made up
 		// of more than one key. We take the maximum possible keys
 		// per row out of all the table rows we could potentially
 		// scan over.
-		firstBatchLimit = row.KeyLimit(int(limitHint) * rf.maxKeysPerRow)
+		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * rf.maxKeysPerRow)
 		// We need an extra key to make sure we form the last row.
 		firstBatchLimit++
 	}
