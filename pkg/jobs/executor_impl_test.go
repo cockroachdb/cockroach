@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/gorhill/cronexpr"
@@ -25,6 +26,7 @@ import (
 
 func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 69455, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	argsFn := func(args *base.TestServerArgs) {
