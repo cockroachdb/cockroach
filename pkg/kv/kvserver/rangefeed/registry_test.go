@@ -142,7 +142,7 @@ func TestRegistrationBasic(t *testing.T) {
 	noCatchupReg.publish(ev1)
 	noCatchupReg.publish(ev2)
 	require.Equal(t, len(noCatchupReg.buf), 2)
-	go noCatchupReg.runOutputLoop(context.Background())
+	go noCatchupReg.runOutputLoop(context.Background(), 0)
 	require.NoError(t, noCatchupReg.waitForCaughtUp())
 	require.Equal(t, []*roachpb.RangeFeedEvent{ev1, ev2}, noCatchupReg.stream.Events())
 	noCatchupReg.disconnect(nil)
@@ -158,7 +158,7 @@ func TestRegistrationBasic(t *testing.T) {
 	catchupReg.publish(ev1)
 	catchupReg.publish(ev2)
 	require.Equal(t, len(catchupReg.buf), 2)
-	go catchupReg.runOutputLoop(context.Background())
+	go catchupReg.runOutputLoop(context.Background(), 0)
 	require.NoError(t, catchupReg.waitForCaughtUp())
 	events := catchupReg.stream.Events()
 	require.Equal(t, 6, len(events))
@@ -171,19 +171,30 @@ func TestRegistrationBasic(t *testing.T) {
 	disconnectReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, false)
 	disconnectReg.publish(ev1)
 	disconnectReg.publish(ev2)
-	go disconnectReg.runOutputLoop(context.Background())
+	go disconnectReg.runOutputLoop(context.Background(), 0)
 	require.NoError(t, disconnectReg.waitForCaughtUp())
 	discErr := roachpb.NewError(fmt.Errorf("disconnection error"))
 	disconnectReg.disconnect(discErr)
 	err := <-disconnectReg.errC
 	require.Equal(t, discErr, err)
+	require.Equal(t, 2, len(disconnectReg.stream.Events()))
+
+	// External Disconnect before output loop.
+	disconnectEarlyReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, false)
+	disconnectEarlyReg.publish(ev1)
+	disconnectEarlyReg.publish(ev2)
+	disconnectEarlyReg.disconnect(discErr)
+	go disconnectEarlyReg.runOutputLoop(context.Background(), 0)
+	err = <-disconnectEarlyReg.errC
+	require.Equal(t, discErr, err)
+	require.Equal(t, 0, len(disconnectEarlyReg.stream.Events()))
 
 	// Overflow.
 	overflowReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, false)
 	for i := 0; i < cap(overflowReg.buf)+3; i++ {
 		overflowReg.publish(ev1)
 	}
-	go overflowReg.runOutputLoop(context.Background())
+	go overflowReg.runOutputLoop(context.Background(), 0)
 	err = <-overflowReg.errC
 	require.Equal(t, newErrBufferCapacityExceeded(), err)
 	require.Equal(t, cap(overflowReg.buf), len(overflowReg.Events()))
@@ -192,7 +203,7 @@ func TestRegistrationBasic(t *testing.T) {
 	streamErrReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, false)
 	streamErr := fmt.Errorf("stream error")
 	streamErrReg.stream.SetSendErr(streamErr)
-	go streamErrReg.runOutputLoop(context.Background())
+	go streamErrReg.runOutputLoop(context.Background(), 0)
 	streamErrReg.publish(ev1)
 	err = <-streamErrReg.errC
 	require.Equal(t, streamErr.Error(), err.GoError().Error())
@@ -200,7 +211,7 @@ func TestRegistrationBasic(t *testing.T) {
 	// Stream Context Canceled.
 	streamCancelReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, false)
 	streamCancelReg.stream.Cancel()
-	go streamCancelReg.runOutputLoop(context.Background())
+	go streamCancelReg.runOutputLoop(context.Background(), 0)
 	require.NoError(t, streamCancelReg.waitForCaughtUp())
 	err = <-streamCancelReg.errC
 	require.Equal(t, streamCancelReg.stream.Context().Err().Error(), err.GoError().Error())
@@ -337,10 +348,10 @@ func TestRegistryBasic(t *testing.T) {
 	rBC := newTestRegistration(spBC, hlc.Timestamp{}, nil, true /* withDiff */)
 	rCD := newTestRegistration(spCD, hlc.Timestamp{}, nil, true /* withDiff */)
 	rAC := newTestRegistration(spAC, hlc.Timestamp{}, nil, false /* withDiff */)
-	go rAB.runOutputLoop(context.Background())
-	go rBC.runOutputLoop(context.Background())
-	go rCD.runOutputLoop(context.Background())
-	go rAC.runOutputLoop(context.Background())
+	go rAB.runOutputLoop(context.Background(), 0)
+	go rBC.runOutputLoop(context.Background(), 0)
+	go rCD.runOutputLoop(context.Background(), 0)
+	go rAC.runOutputLoop(context.Background(), 0)
 	defer rAB.disconnect(nil)
 	defer rBC.disconnect(nil)
 	defer rCD.disconnect(nil)
@@ -446,11 +457,11 @@ func TestRegistryPublishAssertsPopulatedInformation(t *testing.T) {
 	reg := makeRegistry()
 
 	rNoDiff := newTestRegistration(spAB, hlc.Timestamp{}, nil, false /* withDiff */)
-	go rNoDiff.runOutputLoop(context.Background())
+	go rNoDiff.runOutputLoop(context.Background(), 0)
 	reg.Register(&rNoDiff.registration)
 
 	rWithDiff := newTestRegistration(spCD, hlc.Timestamp{}, nil, true /* withDiff */)
-	go rWithDiff.runOutputLoop(context.Background())
+	go rWithDiff.runOutputLoop(context.Background(), 0)
 	reg.Register(&rWithDiff.registration)
 
 	key := roachpb.Key("a")
@@ -498,7 +509,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	reg := makeRegistry()
 
 	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, false)
-	go r.runOutputLoop(context.Background())
+	go r.runOutputLoop(context.Background(), 0)
 	reg.Register(&r.registration)
 
 	// Publish a value with a timestamp beneath the registration's start

@@ -264,8 +264,13 @@ func (r *registration) outputLoop(ctx context.Context) error {
 	}
 }
 
-func (r *registration) runOutputLoop(ctx context.Context) {
+func (r *registration) runOutputLoop(ctx context.Context, _forStacks roachpb.RangeID) {
 	r.mu.Lock()
+	if r.mu.disconnected {
+		// The registration has already been disconnected.
+		r.mu.Unlock()
+		return
+	}
 	ctx, r.mu.outputLoopCancelFn = context.WithCancel(ctx)
 	r.mu.Unlock()
 	err := r.outputLoop(ctx)

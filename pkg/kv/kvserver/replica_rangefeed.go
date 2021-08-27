@@ -141,6 +141,14 @@ func (i iteratorWithCloser) Close() {
 func (r *Replica) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) *roachpb.Error {
+	return r.rangeFeedWithRangeID(r.RangeID, args, stream)
+}
+
+func (r *Replica) rangeFeedWithRangeID(
+	_forStacks roachpb.RangeID,
+	args *roachpb.RangeFeedRequest,
+	stream roachpb.Internal_RangeFeedServer,
+) *roachpb.Error {
 	if !r.isSystemRange() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
@@ -353,6 +361,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	cfg := rangefeed.Config{
 		AmbientContext:   r.AmbientContext,
 		Clock:            r.Clock(),
+		RangeID:          r.RangeID,
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
 		PushTxnsInterval: r.store.TestingKnobs().RangeFeedPushTxnsInterval,
