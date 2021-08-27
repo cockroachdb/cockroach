@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,6 +39,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	httpClient := httputil.NewClientWithTimeout(15 * time.Second)
 
 	serverParams, _ := tests.CreateTestServerParams()
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
@@ -77,7 +79,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	})
 
 	t.Run("gRPC Gateway is running", func(t *testing.T) {
-		resp, err := httputil.Get(ctx, "http://"+tenant.HTTPAddr()+"/_status/statements")
+		resp, err := httpClient.Get(ctx, "http://"+tenant.HTTPAddr()+"/_status/statements")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -98,7 +100,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	defer connTenant2.Close()
 
 	t.Run("statements endpoint fans out request to multiple pods", func(t *testing.T) {
-		resp, err := httputil.Get(ctx, "http://"+tenant2.HTTPAddr()+"/_status/statements")
+		resp, err := httpClient.Get(ctx, "http://"+tenant2.HTTPAddr()+"/_status/statements")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -115,7 +117,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	defer connTenant3.Close()
 
 	t.Run("fanout of statements endpoint is segregated by tenant", func(t *testing.T) {
-		resp, err := httputil.Get(ctx, "http://"+tenant3.HTTPAddr()+"/_status/statements")
+		resp, err := httpClient.Get(ctx, "http://"+tenant3.HTTPAddr()+"/_status/statements")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -160,7 +162,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	})
 
 	t.Run("sessions endpoint is available", func(t *testing.T) {
-		resp, err := httputil.Get(ctx, "http://"+tenant.HTTPAddr()+"/_status/sessions")
+		resp, err := httpClient.Get(ctx, "http://"+tenant.HTTPAddr()+"/_status/sessions")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
 		require.Equal(t, 200, resp.StatusCode)
