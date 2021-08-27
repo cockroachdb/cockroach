@@ -295,9 +295,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())
 
-	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
-	cfg.registry.AddMetricStruct(distSQLMetrics)
-
 	// Set up Lease Manager
 	var lmKnobs lease.ManagerTestingKnobs
 	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
@@ -378,6 +375,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 	}))
 
+	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(distSQLMetrics)
+	rowMetrics := sql.NewRowMetrics(false /* internal */)
+	cfg.registry.AddMetricStruct(rowMetrics)
+	internalRowMetrics := sql.NewRowMetrics(true /* internal */)
+	cfg.registry.AddMetricStruct(internalRowMetrics)
+
 	hydratedTablesCache := hydratedtables.NewCache(cfg.Settings)
 	cfg.registry.AddMetricStruct(hydratedTablesCache.Metrics())
 
@@ -422,7 +426,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon)
 		},
 
-		Metrics: &distSQLMetrics,
+		Metrics:            &distSQLMetrics,
+		RowMetrics:         &rowMetrics,
+		InternalRowMetrics: &internalRowMetrics,
 
 		SQLLivenessReader: cfg.sqlLivenessProvider,
 		JobRegistry:       jobRegistry,
@@ -542,6 +548,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
+		RowMetrics:                 &rowMetrics,
+		InternalRowMetrics:         &internalRowMetrics,
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
 		ExternalIODirConfig:        cfg.ExternalIODirConfig,
 		HydratedTables:             hydratedTablesCache,

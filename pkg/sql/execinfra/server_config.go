@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -112,7 +113,9 @@ type ServerConfig struct {
 	// because of RocksDB space amplification.
 	ParentDiskMonitor *mon.BytesMonitor
 
-	Metrics *DistSQLMetrics
+	Metrics            *DistSQLMetrics
+	RowMetrics         *row.Metrics
+	InternalRowMetrics *row.Metrics
 
 	// SQLLivenessReader provides access to reading the liveness of sessions.
 	SQLLivenessReader sqlliveness.Reader
@@ -271,4 +274,13 @@ func GetWorkMemLimit(config *ServerConfig) int64 {
 		return config.TestingKnobs.MemoryLimitBytes
 	}
 	return SettingWorkMemBytes.Get(&config.Settings.SV)
+}
+
+// GetRowMetrics returns the proper RowMetrics for either internal or user
+// queries.
+func (flowCtx *FlowCtx) GetRowMetrics() *row.Metrics {
+	if flowCtx.EvalCtx.SessionData.Internal {
+		return flowCtx.Cfg.InternalRowMetrics
+	}
+	return flowCtx.Cfg.RowMetrics
 }

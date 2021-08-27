@@ -1188,6 +1188,7 @@ func (ef *execFactory) ConstructInsert(
 	}
 
 	// Create the table inserter, which does the bulk of the work.
+	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
 		ctx,
 		ef.planner.txn,
@@ -1196,7 +1197,8 @@ func (ef *execFactory) ConstructInsert(
 		colDescs,
 		ef.planner.alloc,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1261,6 +1263,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	}
 
 	// Create the table inserter, which does the bulk of the work.
+	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
 		ctx,
 		ef.planner.txn,
@@ -1269,7 +1272,8 @@ func (ef *execFactory) ConstructInsertFastPath(
 		colDescs,
 		ef.planner.alloc,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1365,6 +1369,7 @@ func (ef *execFactory) ConstructUpdate(
 	}
 
 	// Create the table updater, which does the bulk of the work.
+	internal := ef.planner.SessionData().Internal
 	ru, err := row.MakeUpdater(
 		ctx,
 		ef.planner.txn,
@@ -1375,7 +1380,8 @@ func (ef *execFactory) ConstructUpdate(
 		row.UpdaterDefault,
 		ef.planner.alloc,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1469,6 +1475,7 @@ func (ef *execFactory) ConstructUpsert(
 	}
 
 	// Create the table inserter, which does the bulk of the insert-related work.
+	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
 		ctx,
 		ef.planner.txn,
@@ -1477,7 +1484,8 @@ func (ef *execFactory) ConstructUpsert(
 		insertColDescs,
 		ef.planner.alloc,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1494,7 +1502,8 @@ func (ef *execFactory) ConstructUpsert(
 		row.UpdaterDefault,
 		ef.planner.alloc,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1566,12 +1575,14 @@ func (ef *execFactory) ConstructDelete(
 	// the deleter derives the columns that need to be fetched. By contrast, the
 	// CBO will have already determined the set of fetch columns, and passes
 	// those sets into the deleter (which will basically be a no-op).
+	internal := ef.planner.SessionData().Internal
 	rd := row.MakeDeleter(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		fetchColDescs,
 		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.SessionData().Internal,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 
 	// Now make a delete node. We use a pool.

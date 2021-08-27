@@ -52,6 +52,7 @@ func MakeInserter(
 	alloc *rowenc.DatumAlloc,
 	sv *settings.Values,
 	internal bool,
+	metrics *Metrics,
 ) (Inserter, error) {
 	writableIndexes := tableDesc.WritableNonPrimaryIndexes()
 	writableIndexDescs := make([]descpb.IndexDescriptor, len(writableIndexes))
@@ -60,7 +61,7 @@ func MakeInserter(
 	}
 
 	ri := Inserter{
-		Helper: newRowHelper(codec, tableDesc, writableIndexDescs, sv, internal),
+		Helper: newRowHelper(codec, tableDesc, writableIndexDescs, sv, internal, metrics),
 
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
