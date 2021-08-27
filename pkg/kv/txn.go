@@ -1066,6 +1066,9 @@ func (txn *Txn) NegotiateAndSend(
 	if err := txn.checkNegotiateAndSendPreconditions(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
+	if err := txn.applyDeadlineToBoundedStaleness(ctx, ba.BoundedStaleness); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	// Attempt to hit the server-side negotiation fast-path. This fast-path
 	// allows a bounded staleness read request that lands on a single range
@@ -1146,6 +1149,28 @@ func (txn *Txn) checkNegotiateAndSendPreconditions(
 	assert(txn.typ == RootTxn, "txn must be root")
 	assert(!txn.CommitTimestampFixed(), "txn commit timestamp must not be fixed")
 	return err
+}
+
+// applyDeadlineToBoundedStaleness modifies the bounded staleness header to
+// ensure that the negotiated timestamp respects the transaction deadline.
+func (txn *Txn) applyDeadlineToBoundedStaleness(
+	ctx context.Context, bs *roachpb.BoundedStalenessHeader,
+) error {
+	d := txn.deadline()
+	if d == nil {
+		return nil
+	}
+	if d.LessEq(bs.MinTimestampBound) {
+		return errors.WithContextTags(errors.AssertionFailedf(
+			"transaction deadline %s equal to or below min_timestamp_bound %s",
+			*d, bs.MinTimestampBound), ctx)
+	}
+	if bs.MaxTimestampBound.IsEmpty() {
+		bs.MaxTimestampBound = *d
+	} else {
+		bs.MaxTimestampBound.Backward(*d)
+	}
+	return nil
 }
 
 // GetLeafTxnInputState returns the LeafTxnInputState information for this

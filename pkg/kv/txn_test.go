@@ -552,12 +552,18 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	testutils.RunTrueAndFalse(t, "fast-path", func(t *testing.T, fastPath bool) {
+		ts10 := hlc.Timestamp{WallTime: 10}
 		ts20 := hlc.Timestamp{WallTime: 20}
 		mc := hlc.NewManualClock(1)
 		clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
 			_ context.Context, ba roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
+			require.NotNil(t, ba.BoundedStaleness)
+			require.Equal(t, ts10, ba.BoundedStaleness.MinTimestampBound)
+			require.False(t, ba.BoundedStaleness.MinTimestampBoundStrict)
+			require.Zero(t, ba.BoundedStaleness.MaxTimestampBound)
+
 			if !fastPath {
 				return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
 			}
@@ -570,7 +576,7 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 
 		var ba roachpb.BatchRequest
 		ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
-			MinTimestampBound: hlc.Timestamp{WallTime: 10},
+			MinTimestampBound: ts10,
 		}
 		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
 		ba.Add(roachpb.NewGet(roachpb.Key("a"), false))
@@ -586,6 +592,120 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 			require.Nil(t, br)
 			require.NotNil(t, pErr)
 			require.Regexp(t, "unimplemented: cross-range bounded staleness reads not yet implemented", pErr)
+			require.False(t, txn.CommitTimestampFixed())
 		}
 	})
+}
+
+// TestTxnNegotiateAndSendWithDeadline tests the behavior of NegotiateAndSend
+// when the transaction has a deadline.
+func TestTxnNegotiateAndSendWithDeadline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	ts10 := hlc.Timestamp{WallTime: 10}
+	ts20 := hlc.Timestamp{WallTime: 20}
+	ts30 := hlc.Timestamp{WallTime: 30}
+	ts40 := hlc.Timestamp{WallTime: 40}
+	minTSBound := ts20
+
+	for _, test := range []struct {
+		name        string
+		txnDeadline hlc.Timestamp
+		maxTSBound  hlc.Timestamp
+
+		expMaxTS hlc.Timestamp
+		expErr   string
+	}{
+		{
+			name:        "no max timestamp bound",
+			txnDeadline: ts30,
+			expMaxTS:    ts30,
+		},
+		{
+			name:        "earlier max timestamp bound",
+			txnDeadline: ts40,
+			maxTSBound:  ts30,
+			expMaxTS:    ts30,
+		},
+		{
+			name:        "equal max timestamp bound",
+			txnDeadline: ts40,
+			maxTSBound:  ts40,
+			expMaxTS:    ts40,
+		},
+		{
+			name:        "later max timestamp bound",
+			txnDeadline: ts30,
+			maxTSBound:  ts40,
+			expMaxTS:    ts30,
+		},
+		{
+			name:        "txn deadline equal to min timestamp bound",
+			txnDeadline: ts20,
+			expErr:      "transaction deadline .* equal to or below min_timestamp_bound .*",
+		},
+		{
+			name:        "txn deadline less than min timestamp bound",
+			txnDeadline: ts10,
+			expErr:      "transaction deadline .* equal to or below min_timestamp_bound .*",
+		},
+		{
+			name:        "max timestamp bound equal to min timestamp bound",
+			txnDeadline: ts30,
+			maxTSBound:  ts20,
+			expErr:      "max_timestamp_bound, if set, must be greater than min_timestamp_bound",
+		},
+		{
+			name:        "max timestamp bound less than min timestamp bound",
+			txnDeadline: ts30,
+			maxTSBound:  ts10,
+			expErr:      "max_timestamp_bound, if set, must be greater than min_timestamp_bound",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			mc := hlc.NewManualClock(1)
+			clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+			txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
+				_ context.Context, ba roachpb.BatchRequest,
+			) (*roachpb.BatchResponse, *roachpb.Error) {
+				require.NotNil(t, ba.BoundedStaleness)
+				require.Equal(t, minTSBound, ba.BoundedStaleness.MinTimestampBound)
+				require.False(t, ba.BoundedStaleness.MinTimestampBoundStrict)
+				require.Equal(t, test.expMaxTS, ba.BoundedStaleness.MaxTimestampBound)
+
+				br := ba.CreateReply()
+				br.Timestamp = minTSBound
+				return br, nil
+			})
+			db := NewDB(testutils.MakeAmbientCtx(), txnSender, clock, stopper)
+			txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
+			require.NoError(t, txn.UpdateDeadline(ctx, test.txnDeadline))
+
+			var ba roachpb.BatchRequest
+			ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+				MinTimestampBound: minTSBound,
+				MaxTimestampBound: test.maxTSBound,
+			}
+			ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+			ba.Add(roachpb.NewGet(roachpb.Key("a"), false))
+			br, pErr := txn.NegotiateAndSend(ctx, ba)
+
+			if test.expErr == "" {
+				require.Nil(t, pErr)
+				require.NotNil(t, br)
+				require.Equal(t, minTSBound, br.Timestamp)
+				require.True(t, txn.CommitTimestampFixed())
+				require.Equal(t, minTSBound, txn.CommitTimestamp())
+			} else {
+				require.Nil(t, br)
+				require.NotNil(t, pErr)
+				require.Regexp(t, test.expErr, pErr)
+				require.False(t, txn.CommitTimestampFixed())
+			}
+		})
+	}
 }
