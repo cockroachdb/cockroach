@@ -769,7 +769,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			},
 			expectedClusterName: "happy-koala",
 			expectedTenantID:    7,
-			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedParams: map[string]string{
+				"database": "defaultdb",
+				"options":  "-c  -c -c -c",
+			},
 		},
 		{
 			name: "short option: cluster name in options param",
@@ -799,7 +802,23 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			},
 			expectedClusterName: "happy-koala",
 			expectedTenantID:    7,
-			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedParams: map[string]string{
+				"database": "defaultdb",
+				"options":  "--foo=test",
+			},
+		},
+		{
+			name: "long option: cluster name in options param with other options",
+			params: map[string]string{
+				"database": "defaultdb",
+				"options":  "-csearch_path=public --cluster=happy-koala-7\t--foo=test",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams: map[string]string{
+				"database": "defaultdb",
+				"options":  "-csearch_path=public \t--foo=test",
+			},
 		},
 		{
 			name:                "leading 0s are ok",
