@@ -250,8 +250,17 @@ func (ds *ServerImpl) setupFlow(
 
 	var evalCtx *tree.EvalContext
 	var leafTxn *kv.Txn
+	var onFlowCleanup func()
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
+		// We're about to mutate the evalCtx and we want to restore its original
+		// state once the flow cleans up. Note that we could have made a copy of
+		// the whole evalContext, but that isn't free, so we choose to restore
+		// the original state in order to avoid performance regressions.
+		origMon := evalCtx.Mon
+		onFlowCleanup = func() {
+			evalCtx.Mon = origMon
+		}
 		evalCtx.Mon = monitor
 	} else {
 		if localState.IsLocal {
@@ -353,7 +362,7 @@ func (ds *ServerImpl) setupFlow(
 	// itself when the vectorize mode needs to be changed because we would need
 	// to restore the original value which can have data races under stress.
 	isVectorized := sessiondata.VectorizeExecMode(req.EvalContext.Vectorize) != sessiondata.VectorizeOff
-	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized)
+	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized, onFlowCleanup)
 	opt := flowinfra.FuseNormally
 	if localState.IsLocal {
 		// If there's no remote flows, fuse everything. This is needed in order for
@@ -370,6 +379,9 @@ func (ds *ServerImpl) setupFlow(
 		// and finish the span manually.
 		monitor.Stop(ctx)
 		tracing.FinishSpan(sp)
+		if onFlowCleanup != nil {
+			onFlowCleanup()
+		}
 		ctx = opentracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, err
 	}
@@ -463,8 +475,9 @@ func newFlow(
 	syncFlowConsumer execinfra.RowReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	isVectorized bool,
+	onFlowCleanup func(),
 ) flowinfra.Flow {
-	base := flowinfra.NewFlowBase(flowCtx, flowReg, syncFlowConsumer, localProcessors)
+	base := flowinfra.NewFlowBase(flowCtx, flowReg, syncFlowConsumer, localProcessors, onFlowCleanup)
 	if isVectorized {
 		return colflow.NewVectorizedFlow(base)
 	}
