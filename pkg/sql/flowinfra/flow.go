@@ -173,6 +173,8 @@ type FlowBase struct {
 	//  - outboxes
 	waitGroup sync.WaitGroup
 
+	onFlowCleanup func()
+
 	doneFn func()
 
 	status flowStatus
@@ -227,6 +229,7 @@ func NewFlowBase(
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
+	onFlowCleanup func(),
 ) *FlowBase {
 	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
 	// cluster, where the SQL node is single tenant. The tenant below is used
@@ -248,6 +251,7 @@ func NewFlowBase(
 		batchSyncFlowConsumer: batchSyncFlowConsumer,
 		localProcessors:       localProcessors,
 		admissionInfo:         admissionInfo,
+		onFlowCleanup:         onFlowCleanup,
 	}
 	base.status = FlowNotStarted
 	return base
@@ -499,6 +503,9 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	}
 	f.status = FlowFinished
 	f.ctxCancel()
+	if f.onFlowCleanup != nil {
+		f.onFlowCleanup()
+	}
 	if f.doneFn != nil {
 		f.doneFn()
 	}
