@@ -597,7 +597,7 @@ func (s *Server) SetupConn(
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
 	sdMutIterator := s.makeSessionDataMutatorIterator(sds, args.SessionDefaults)
-	if err := sdMutIterator.forEachMutatorError(func(m *sessionDataMutator) error {
+	if err := sdMutIterator.applyOnEachMutatorError(func(m *sessionDataMutator) error {
 		return resetSessionVars(ctx, m)
 	}); err != nil {
 		log.Errorf(ctx, "error setting up client session: %s", err)
@@ -868,7 +868,7 @@ func (s *Server) newConnExecutorWithTxn(
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
-		ex.dataMutatorIterator.forEachMutator(func(m *sessionDataMutator) {
+		ex.dataMutatorIterator.applyForEachMutator(func(m *sessionDataMutator) {
 			m.SetReadOnly(true)
 		})
 	}

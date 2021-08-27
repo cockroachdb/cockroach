@@ -179,7 +179,7 @@ func (p *planner) applyOnSessionDataMutators(
 		}
 		return p.sessionDataMutatorIterator.applyOnTopMutator(applyFunc)
 	}
-	return p.sessionDataMutatorIterator.forEachMutatorError(applyFunc)
+	return p.sessionDataMutatorIterator.applyOnEachMutatorError(applyFunc)
 }
 
 // getSessionVarDefaultString retrieves a string suitable to pass to a

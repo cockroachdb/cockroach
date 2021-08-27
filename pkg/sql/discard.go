@@ -30,7 +30,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 		}
 
 		// RESET ALL
-		if err := p.sessionDataMutatorIterator.forEachMutatorError(
+		if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(
 			func(m *sessionDataMutator) error {
 				return resetSessionVars(ctx, m)
 			},

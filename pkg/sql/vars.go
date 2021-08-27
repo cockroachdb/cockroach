@@ -1925,7 +1925,7 @@ func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string) err
 	if v.SetWithPlanner != nil {
 		return v.SetWithPlanner(ctx, p, false /* local */, newVal)
 	}
-	return p.sessionDataMutatorIterator.forEachMutatorError(func(m *sessionDataMutator) error {
+	return p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m *sessionDataMutator) error {
 		return v.Set(ctx, m, newVal)
 	})
 }
