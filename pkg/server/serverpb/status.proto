@@ -866,6 +866,10 @@ service Status {
       get : "/_status/nodes"
     };
   }
+  rpc ListNodesInternal(NodesRequest) returns (NodesResponse) {
+    // Note: this service is not meant to be a RPC. It is
+    // removed in a later version of CockroachDB.
+  }
   rpc Node(NodeRequest) returns (server.status.statuspb.NodeStatus) {
     option (google.api.http) = {
       get : "/_status/nodes/{node_id}"
