@@ -153,6 +153,7 @@ sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement
 sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job
 sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel
 sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects
+sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up
 sql.trace.log_statement_execute	boolean	false	set to true to enable logging of executed statements
 sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing. Note that enabling this may have a non-trivial negative performance impact.
 sql.trace.stmt.enable_threshold	duration	0s	duration beyond which all statements are traced (set to 0 to disable). This applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold.
