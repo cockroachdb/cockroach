@@ -1044,6 +1044,14 @@ func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
 // successfully, the transaction will have been given a fixed timestamp equal to
 // the timestamp that the read-only request was evaluated at.
 //
+// If the read-only request hits a key or byte limit and returns a resume span,
+// meaning that it was paginated and did not return all desired results, the
+// transaction's timestamp will have still been fixed to a timestamp that was
+// negotiated over the entire set of read spans in the provided batch. As such,
+// it is safe for callers to resume reading at the bounded-staleness timestamp
+// by using Send. Future calls to Send must not include a BoundedStaleness
+// header, but may still specify the same routing policy.
+//
 // The method accepts requests with min_timestamp_bound_strict set to either
 // true or false, which dictates whether a bounded staleness read whose
 // min_timestamp_bound cannot be satisfied by the first replica it visits
