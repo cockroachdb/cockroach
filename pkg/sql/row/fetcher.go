@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -167,7 +166,7 @@ func (fta *FetcherTableArgs) InitCols(
 	virtualColumn catalog.Column,
 ) {
 	cols := make([]catalog.Column, 0, len(desc.AllColumns()))
-	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
+	if scanVisibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
 		cols = append(cols, desc.ReadableColumns()...)
 	} else {
 		cols = append(cols, desc.PublicColumns()...)
@@ -342,7 +341,8 @@ func (rf *Fetcher) Init(
 	rf.isCheck = isCheck
 
 	if memMonitor != nil {
-		rf.mon = execinfra.NewMonitor(ctx, memMonitor, "fetcher-mem")
+		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, memMonitor)
+		rf.mon.Start(ctx, memMonitor, mon.BoundAccount{})
 	}
 
 	// We must always decode the index key if we need to distinguish between
