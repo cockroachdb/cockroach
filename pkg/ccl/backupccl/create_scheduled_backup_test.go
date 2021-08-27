@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/cronexpr"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/gorhill/cronexpr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -916,8 +916,10 @@ INSERT INTO t values (1), (10), (100);
 		// to the next scheduled recurrence.
 		for _, id := range []int64{fullID, incID} {
 			s := th.loadSchedule(t, id)
+			nextRun, err := cronexpr.Parse(s.ScheduleExpr())
+			require.NoError(t, err)
 			require.EqualValues(t,
-				cronexpr.MustParse(s.ScheduleExpr()).Next(th.env.Now()).Round(time.Microsecond),
+				nextRun.Next(th.env.Now()).Round(time.Microsecond),
 				s.NextRun())
 		}
 

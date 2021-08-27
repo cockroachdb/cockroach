@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cronexpr",
+    srcs = ["cron.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/scheduledjobs/cronexpr",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "@com_github_gorhill_cronexpr//:cronexpr",
+    ],
+)
