@@ -151,8 +151,13 @@ func rowToStmtStats(row tree.Datums) (*roachpb.CollectedStatementStatistics, err
 	if err != nil {
 		return nil, err
 	}
+
 	stats.ID = roachpb.StmtFingerprintID(stmtFingerprintID)
-	stats.Key.PlanHash = uint64(tree.MustBeDInt(row[2]))
+	stats.Key.PlanHash, err = sqlstatsutil.DatumToUint64(row[2])
+	if err != nil {
+		return nil, err
+	}
+
 	stats.Key.App = string(tree.MustBeDString(row[3]))
 
 	metadata := tree.MustBeDJSON(row[4]).JSON
