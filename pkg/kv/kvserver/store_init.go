@@ -25,6 +25,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// FirstNodeID is the NodeID assigned to the node bootstrapping a new cluster.
+const FirstNodeID = roachpb.NodeID(1)
+
 // InitEngine writes a new store ident to the underlying engine. To
 // ensure that no crufty data already exists in the engine, it scans
 // the engine contents before writing the new store ident. The engine
@@ -100,8 +103,7 @@ func WriteInitialClusterData(
 	// Initialize various sequence generators.
 	var nodeIDVal, storeIDVal, rangeIDVal, livenessVal roachpb.Value
 
-	const firstNodeID = 1 // This node has id 1.
-	nodeIDVal.SetInt(firstNodeID)
+	nodeIDVal.SetInt(int64(FirstNodeID))
 	// The caller will initialize the stores with ids 1..numStores.
 	storeIDVal.SetInt(int64(numStores))
 	// The last range has id = len(splits) + 1
@@ -117,7 +119,7 @@ func WriteInitialClusterData(
 	//
 	// [1]: See `(*NodeLiveness).CreateLivenessRecord` and usages for where that happens.
 	// [2]: See `(*NodeLiveness).Start` for where that happens.
-	livenessRecord := livenesspb.Liveness{NodeID: 1, Epoch: 0}
+	livenessRecord := livenesspb.Liveness{NodeID: FirstNodeID, Epoch: 0}
 	if err := livenessVal.SetProto(&livenessRecord); err != nil {
 		return err
 	}
@@ -125,7 +127,7 @@ func WriteInitialClusterData(
 		roachpb.KeyValue{Key: keys.NodeIDGenerator, Value: nodeIDVal},
 		roachpb.KeyValue{Key: keys.StoreIDGenerator, Value: storeIDVal},
 		roachpb.KeyValue{Key: keys.RangeIDGenerator, Value: rangeIDVal},
-		roachpb.KeyValue{Key: keys.NodeLivenessKey(firstNodeID), Value: livenessVal})
+		roachpb.KeyValue{Key: keys.NodeLivenessKey(FirstNodeID), Value: livenessVal})
 
 	// firstRangeMS is going to accumulate the stats for the first range, as we
 	// write the meta records for all the other ranges.
@@ -169,7 +171,7 @@ func WriteInitialClusterData(
 		}
 		replicas := []roachpb.ReplicaDescriptor{
 			{
-				NodeID:    1,
+				NodeID:    FirstNodeID,
 				StoreID:   1,
 				ReplicaID: 1,
 			},

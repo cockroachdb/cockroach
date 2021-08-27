@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -716,7 +717,7 @@ If problems persist, please see %s.`
 			buf.Printf("storage engine: \t%s\n", &serverCfg.StorageEngine)
 			nodeID := s.NodeID()
 			if initialStart {
-				if nodeID == server.FirstNodeID {
+				if nodeID == kvserver.FirstNodeID {
 					buf.Printf("status:\tinitialized new cluster\n")
 				} else {
 					buf.Printf("status:\tinitialized new node, joined pre-existing cluster\n")

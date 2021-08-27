@@ -65,8 +65,6 @@ const (
 	// gossipStatusInterval is the interval for logging gossip status.
 	gossipStatusInterval = 1 * time.Minute
 
-	// FirstNodeID is the node ID of the first node in a new cluster.
-	FirstNodeID         = 1
 	graphiteIntervalKey = "external.graphite.interval"
 	maxGraphiteInterval = 15 * time.Minute
 )
@@ -250,7 +248,7 @@ func bootstrapCluster(
 
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
-			NodeID:    FirstNodeID,
+			NodeID:    kvserver.FirstNodeID,
 			StoreID:   roachpb.StoreID(i + firstStoreID),
 		}
 
