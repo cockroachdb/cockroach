@@ -1815,8 +1815,8 @@ def go_deps():
         name = "com_github_gorhill_cronexpr",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/gorhill/cronexpr",
-        sum = "h1:Spo+4PFAGDqULAsZ7J69MOxq4/fwgZ0zvmDTBqpq7yU=",
-        version = "v0.0.0-20140423231348-a557574d6c02",
+        sum = "h1:f0n1xnMSmBLzVfsMMvriDyA75NB/oBgILX2GcHXIQzY=",
+        version = "v0.0.0-20180427100037-88b0669f7d75",
     )
     go_repository(
         name = "com_github_gorilla_handlers",
