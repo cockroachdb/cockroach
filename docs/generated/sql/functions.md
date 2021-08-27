@@ -945,6 +945,9 @@ This will error if the current database is not a multi-region database.</p>
 </span></td></tr>
 <tr><td><a name="gateway_region"></a><code>gateway_region() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the region of the connection’s current node as defined by
 the locality flag on node startup. Returns an error if no region is set.</p>
+</span></td></tr>
+<tr><td><a name="rehome_row"></a><code>rehome_row() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the region of the connection’s current node as defined by
+the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td></tr></tbody>
 </table>
 

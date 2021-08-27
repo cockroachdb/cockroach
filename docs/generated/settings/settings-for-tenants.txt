@@ -83,6 +83,7 @@ sql.defaults.disallow_full_table_scans.enabled	boolean	false	setting to true rej
 sql.defaults.distsql	enumeration	auto	default distributed SQL execution mode [off = 0, auto = 1, on = 2]
 sql.defaults.drop_enum_value.enabled	boolean	false	default value for enable_drop_enum_value; allows for dropping enum values
 sql.defaults.experimental_alter_column_type.enabled	boolean	false	default value for experimental_alter_column_type session setting; enables the use of ALTER COLUMN TYPE for general conversions
+sql.defaults.experimental_auto_rehoming.enabled	boolean	false	default value for experimental_enable_auto_rehoming; allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE
 sql.defaults.experimental_distsql_planning	enumeration	off	default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning [off = 0, on = 1]
 sql.defaults.experimental_enable_unique_without_index_constraints.enabled	boolean	false	default value for experimental_enable_unique_without_index_constraints session setting;disables unique without index constraints by default
 sql.defaults.experimental_hash_sharded_indexes.enabled	boolean	false	default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default
@@ -161,4 +162,4 @@ trace.datadog.project	string	CockroachDB	the project under which traces will be 
 trace.debug.enable	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests
 trace.lightstep.token	string		if set, traces go to Lightstep using this token
 trace.zipkin.collector	string		if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'). Only one tracer can be configured at a time.
-version	version	21.1-158	set the active cluster version in the format '<major>.<minor>'
+version	version	21.1-160	set the active cluster version in the format '<major>.<minor>'

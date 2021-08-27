@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -300,10 +301,17 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().DateStyleEnabled)
 		},
 		GetStringVal: makePostgresBoolGetStringValFn("datestyle_enabled"),
-		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+		Set: func(ctx context.Context, m *sessionDataMutator, s string) error {
 			b, err := paramparse.ParseBoolVar(`datestyle_enabled`, s)
 			if err != nil {
 				return err
+			}
+			if b && !m.settings.Version.IsActive(ctx, clusterversion.DateAndIntervalStyle) {
+				return pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					`DateStyle changes requires all nodes to be upgraded to %s`,
+					clusterversion.ByKey(clusterversion.DateAndIntervalStyle),
+				)
 			}
 			m.SetDateStyleEnabled(b)
 			return nil
@@ -883,10 +891,17 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().IntervalStyleEnabled)
 		},
 		GetStringVal: makePostgresBoolGetStringValFn("intervalstyle_enabled"),
-		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+		Set: func(ctx context.Context, m *sessionDataMutator, s string) error {
 			b, err := paramparse.ParseBoolVar(`intervalstyle_enabled`, s)
 			if err != nil {
 				return err
+			}
+			if b && !m.settings.Version.IsActive(ctx, clusterversion.DateAndIntervalStyle) {
+				return pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					`IntervalStyle changes requires all nodes to be upgraded to %s`,
+					clusterversion.ByKey(clusterversion.DateAndIntervalStyle),
+				)
 			}
 			m.SetIntervalStyleEnabled(b)
 			return nil
@@ -1293,6 +1308,25 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return formatBoolAsPostgresSetting(placementEnabledClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
+	`experimental_enable_auto_rehoming`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_auto_rehoming`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("experimental_enable_auto_rehoming", s)
+			if err != nil {
+				return err
+			}
+			m.SetAutoRehomingEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AutoRehomingEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(autoRehomingEnabledClusterMode.Get(sv))
 		},
 	},
 

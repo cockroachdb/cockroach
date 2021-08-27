@@ -319,7 +319,8 @@ const (
 	// compaction on cluster startup and ensures that there is only one entry for
 	// the schedule.
 	SQLStatsCompactionScheduledJob
-
+	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
+	DateAndIntervalStyle
 	// Step (1): Add new versions here.
 )
 
@@ -555,7 +556,10 @@ var versionsSingleton = keyedVersions{
 		Key:     SQLStatsCompactionScheduledJob,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 158},
 	},
-
+	{
+		Key:     DateAndIntervalStyle,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 160},
+	},
 	// Step (2): Add new versions here.
 }
 
