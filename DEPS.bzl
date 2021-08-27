@@ -4419,8 +4419,8 @@ def go_deps():
         build_file_proto_mode = "disable_global",
         importpath = "gopkg.in/yaml.v2",
         replace = "github.com/cockroachdb/yaml",
-        sum = "h1:EqoCicA1pbWWDGniFxhTElh2hvui7E7tEvuBNJSDn3A=",
-        version = "v0.0.0-20180705215940-0e2822948641",
+        sum = "h1:vVVz+IAeHhYPxGW9EC8j6HR7uZl/1wSP0Wijaxs4frw=",
+        version = "v0.0.0-20210825132133-2d6955c8edbc",
     )
     go_repository(
         name = "in_gopkg_yaml_v3",
