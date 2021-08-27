@@ -557,7 +557,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
 			if grpcutil.IsContextCanceled(err) {
-				return jobs.NewRetryJobError("node failure")
+				return jobs.MarkAsRetryJobError(err)
 			}
 
 			// We can't re-use the txn from above since it has a fixed timestamp set on

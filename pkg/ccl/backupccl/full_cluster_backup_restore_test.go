@@ -636,7 +636,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 							r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
 								if !alreadyErrored && systemTableName == customRestoreSystemTable {
 									alreadyErrored = true
-									return jobs.NewRetryJobError("injected error")
+									return jobs.MarkAsRetryJobError(errors.New("injected error"))
 								}
 								return nil
 							}
@@ -645,7 +645,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 					}
 				}
 				// The initial restore will return an error, and restart.
-				sqlDBRestore.ExpectErr(t, `injected error: restarting in background`, `RESTORE FROM $1`, LocalFoo)
+				sqlDBRestore.ExpectErr(t, `running execution from '.*' to '.*' on \d+ failed: injected error`, `RESTORE FROM $1`, LocalFoo)
 				// Reduce retry delays.
 				sqlDBRestore.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.initial_delay = '1ms'")
 				// Expect the restore to succeed.

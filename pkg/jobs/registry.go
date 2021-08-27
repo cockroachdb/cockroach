@@ -1136,39 +1136,6 @@ func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer,
 	return fn(job, settings), nil
 }
 
-type retryJobError string
-
-// retryJobErrorSentinel exists so the errors returned from NewRetryJobError can
-// be marked with it, allowing more robust detection of retry errors even if
-// they are wrapped, etc. This was originally introduced to deal with injected
-// retry errors from testing knobs.
-var retryJobErrorSentinel = retryJobError("")
-
-// NewRetryJobError creates a new error that, if returned by a Resumer,
-// indicates to the jobs registry that the job should be restarted in the
-// background.
-func NewRetryJobError(s string) error {
-	return errors.Mark(retryJobError(s), retryJobErrorSentinel)
-}
-
-func (r retryJobError) Error() string {
-	return string(r)
-}
-
-// Registry does not retry a job that fails due to a permanent error.
-var errJobPermanentSentinel = errors.New("permanent job-error")
-
-// MarkAsPermanentJobError marks an error as a permanent job error, which indicates
-// Registry to not retry the job when it fails due to this error.
-func MarkAsPermanentJobError(err error) error {
-	return errors.Mark(err, errJobPermanentSentinel)
-}
-
-// IsPermanentJobError checks whether the given error is a permanent error.
-func IsPermanentJobError(err error) bool {
-	return errors.Is(err, errJobPermanentSentinel)
-}
-
 // stepThroughStateMachine implements the state machine of the job lifecycle.
 // The job is executed with the ctx, so ctx must only be canceled if the job
 // should also be canceled. resultsCh is passed to the resumable func and should
@@ -1181,7 +1148,18 @@ func (r *Registry) stepThroughStateMachine(
 	jobType := payload.Type()
 	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
-
+	onExecutionFailed := func(cause error) error {
+		log.InfofDepth(
+			ctx, 1,
+			"job %d: %s execution encountered retriable error: %v",
+			job.ID(), status, cause,
+		)
+		start := job.getRunStats().LastRun
+		end := r.clock.Now().GoTime()
+		return newRetriableExecutionError(
+			r.nodeID.SQLInstanceID(), status, start, end, cause,
+		)
+	}
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
@@ -1214,9 +1192,9 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.
-		if errors.Is(err, retryJobErrorSentinel) {
+		if errors.Is(err, errRetryJobSentinel) {
 			jm.ResumeRetryError.Inc(1)
-			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
+			return onExecutionFailed(err)
 		}
 		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
@@ -1286,9 +1264,9 @@ func (r *Registry) stepThroughStateMachine(
 			// mark the job as failed because it can be resumed by another node.
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
-		if errors.Is(err, retryJobErrorSentinel) {
+		if errors.Is(err, errRetryJobSentinel) {
 			jm.FailOrCancelRetryError.Inc(1)
-			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
+			return onExecutionFailed(err)
 		}
 		// A non-cancelable job is always retried while reverting unless the error is marked as permanent.
 		if job.Payload().Noncancelable && !IsPermanentJobError(err) {
@@ -1389,4 +1367,39 @@ func (r *Registry) RetryMaxDelay() float64 {
 		return r.knobs.IntervalOverrides.RetryMaxDelay.Seconds()
 	}
 	return retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
+}
+
+// maybeRecordRetriableExeuctionFailure will record a
+// RetriableExecutionFailureError into the job payload.
+func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j *Job) {
+	var efe *retriableExecutionError
+	if !errors.As(err, &efe) {
+		return
+	}
+
+	updateErr := j.Update(ctx, nil, func(
+		txn *kv.Txn, md JobMetadata, ju *JobUpdater,
+	) error {
+		pl := md.Payload
+		{ // Append the entry to the log
+			maxSize := int(executionErrorsMaxEntrySize.Get(&r.settings.SV))
+			pl.RetriableExecutionFailureLog = append(pl.RetriableExecutionFailureLog,
+				efe.toRetriableExecutionFailure(ctx, maxSize))
+		}
+		{ // Maybe truncate the log.
+			maxEntries := int(executionErrorsMaxEntriesSetting.Get(&r.settings.SV))
+			log := &pl.RetriableExecutionFailureLog
+			if len(*log) > maxEntries {
+				*log = (*log)[len(*log)-maxEntries:]
+			}
+		}
+		ju.UpdatePayload(pl)
+		return nil
+	})
+	if ctx.Err() != nil {
+		return
+	}
+	if updateErr != nil {
+		log.Warningf(ctx, "failed to record error for job %d: %v: %v", j.ID(), err, err)
+	}
 }

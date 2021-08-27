@@ -844,7 +844,7 @@ func TestInternalJobsTableRetryColumns(t *testing.T) {
 SELECT last_run IS NULL,
        next_run IS NOT NULL,
        num_runs = 0,
-       execution_log IS NULL
+       execution_errors IS NULL
   FROM crdb_internal.jobs WHERE job_id = 1`,
 			[][]string{{"true", "true", "true", "true"}})
 	}))
@@ -900,7 +900,7 @@ SELECT last_run IS NULL,
 SELECT last_run IS NULL,
        next_run IS NULL,
        num_runs IS NULL,
-       execution_log IS NULL
+       execution_errors IS NULL
   FROM crdb_internal.jobs WHERE job_id = 1`,
 			[][]string{{"true", "true", "true", "true"}})
 	})
