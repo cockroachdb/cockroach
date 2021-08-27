@@ -2538,6 +2538,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{Jobs, "Schedules", "SQL Stats"}},
+		Charts: []chartDescription{
+			{
+				Title: "Counts",
+				Metrics: []string{
+					"schedules.scheduled-sql-stats-compaction-executor.started",
+					"schedules.scheduled-sql-stats-compaction-executor.succeeded",
+					"schedules.scheduled-sql-stats-compaction-executor.failed",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{Jobs, "Execution"}},
 		Charts: []chartDescription{
 			{

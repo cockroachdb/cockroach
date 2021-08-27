@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
+	"github.com/gorhill/cronexpr"
 )
 
 // SQLStatsFlushInterval is the cluster setting that controls how often the SQL
@@ -58,4 +59,18 @@ var SQLStatsMaxPersistedRows = settings.RegisterIntSetting(
 	"maximum number of rows of statement and transaction"+
 		" statistics that will be persisted in the system tables",
 	10000, /* defaultValue */
+).WithPublic()
+
+// SQLStatsCleanupRecurrence is the cron-tab string specifying the recurrence
+// for SQL Stats cleanup job.
+var SQLStatsCleanupRecurrence = settings.RegisterValidatedStringSetting(
+	"sql.stats.cleanup.recurrence",
+	"cron-tab recurrence for SQL Stats cleanup job",
+	"@hourly", /* defaultValue */
+	func(_ *settings.Values, s string) error {
+		if _, err := cronexpr.Parse(s); err != nil {
+			return errors.Wrap(err, "invalid cron expression")
+		}
+		return nil
+	},
 ).WithPublic()
