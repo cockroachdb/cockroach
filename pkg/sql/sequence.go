@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 )
 
@@ -641,7 +641,7 @@ func maybeAddSequenceDependencies(
 	expr tree.TypedExpr,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
 ) ([]*tabledesc.Mutable, error) {
-	seqIdentifiers, err := sequence.GetUsedSequences(expr)
+	seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
 	if err != nil {
 		return nil, err
 	}
@@ -684,7 +684,7 @@ func maybeAddSequenceDependencies(
 	// If sequences are present in the expr (and the cluster is the right version),
 	// walk the expr tree and replace any sequences names with their IDs.
 	if len(seqIdentifiers) > 0 {
-		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
+		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
 		if err != nil {
 			return nil, err
 		}
@@ -698,7 +698,7 @@ func maybeAddSequenceDependencies(
 // GetSequenceDescFromIdentifier resolves the sequence descriptor for the given
 // sequence identifier.
 func GetSequenceDescFromIdentifier(
-	ctx context.Context, sc resolver.SchemaResolver, seqIdentifier sequence.SeqIdentifier,
+	ctx context.Context, sc resolver.SchemaResolver, seqIdentifier seqexpr.SeqIdentifier,
 ) (*tabledesc.Mutable, error) {
 	var tn tree.TableName
 	if seqIdentifier.IsByID() {

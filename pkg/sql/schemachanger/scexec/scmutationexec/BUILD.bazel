@@ -11,13 +11,13 @@ go_library(
     deps = [
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/seqexpr",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scexec/descriptorutils",
         "//pkg/sql/schemachanger/scop",
         "//pkg/util/protoutil",
-        "//pkg/util/sequence",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
