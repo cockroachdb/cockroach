@@ -68,6 +68,8 @@ func WalkWithNewServer(
 // posrgres), then the exchange is skipped. With noncrdb_only, the inverse
 // happens.
 func RunTest(t *testing.T, path, addr, user string) {
+	skip.UnderRace(t, "See #69451")
+
 	p, err := NewPGTest(context.Background(), addr, user)
 	if err != nil {
 		t.Fatal(err)
