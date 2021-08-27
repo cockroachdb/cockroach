@@ -252,7 +252,24 @@ func NewTempContainerFromExistingStmtStats(
 		if throttled {
 			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
 		}
+
+		// This handles all the statistics fields.
 		stmtStats.mu.data.Add(&statistics[i].Stats)
+
+		// Setting all metadata fields.
+		if stmtStats.mu.data.SensitiveInfo.LastErr == "" && key.failed {
+			stmtStats.mu.data.SensitiveInfo.LastErr = statistics[i].Stats.SensitiveInfo.LastErr
+		}
+
+		if stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp.Before(statistics[i].Stats.SensitiveInfo.MostRecentPlanTimestamp) {
+			stmtStats.mu.data.SensitiveInfo.MostRecentPlanDescription = statistics[i].Stats.SensitiveInfo.MostRecentPlanDescription
+			stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = statistics[i].Stats.SensitiveInfo.MostRecentPlanTimestamp
+		}
+
+		stmtStats.mu.vectorized = statistics[i].Key.KeyData.Vec
+		stmtStats.mu.distSQLUsed = statistics[i].Key.KeyData.DistSQL
+		stmtStats.mu.fullScan = statistics[i].Key.KeyData.FullScan
+		stmtStats.mu.database = statistics[i].Key.KeyData.Database
 	}
 
 	return container, nil /* remaining */, nil /* err */
