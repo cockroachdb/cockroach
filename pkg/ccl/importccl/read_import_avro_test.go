@@ -254,7 +254,8 @@ func (th *testHelper) newRecordStream(
 
 	conv, err := row.NewDatumRowConverter(
 		context.Background(), th.schemaTable, nil, th.evalCtx.Copy(), nil,
-		nil /* seqChunkProvider */)
+		nil /* seqChunkProvider */, nil, /* metrics */
+	)
 	require.NoError(t, err)
 	return &testRecordStream{
 		producer: producer,
