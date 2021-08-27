@@ -55,8 +55,8 @@ func valueEncodePartitionTuple(
 	}
 
 	if len(tuple.Exprs) != len(cols) {
-		return nil, errors.Errorf("partition has %d columns but %d values were supplied",
-			len(cols), len(tuple.Exprs))
+		return nil, pgerror.Newf(pgcode.Syntax,
+			"partition has %d columns but %d values were supplied", len(cols), len(tuple.Exprs))
 	}
 
 	var value, scratch []byte
@@ -65,7 +65,7 @@ func valueEncodePartitionTuple(
 		switch expr.(type) {
 		case tree.DefaultVal:
 			if typ != tree.PartitionByList {
-				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
+				return nil, pgerror.Newf(pgcode.Syntax, "%s cannot be used with PARTITION BY %s", expr, typ)
 			}
 			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
@@ -73,7 +73,7 @@ func valueEncodePartitionTuple(
 			continue
 		case tree.PartitionMinVal:
 			if typ != tree.PartitionByRange {
-				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
+				return nil, pgerror.Newf(pgcode.Syntax, "%s cannot be used with PARTITION BY %s", expr, typ)
 			}
 			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
@@ -81,7 +81,7 @@ func valueEncodePartitionTuple(
 			continue
 		case tree.PartitionMaxVal:
 			if typ != tree.PartitionByRange {
-				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
+				return nil, pgerror.Newf(pgcode.Syntax, "%s cannot be used with PARTITION BY %s", expr, typ)
 			}
 			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
@@ -238,7 +238,6 @@ func createPartitioningImpl(
 		}
 		partDesc.List = append(partDesc.List, p)
 	}
-
 	for _, r := range partBy.Range {
 		p := descpb.PartitioningDescriptor_Range{
 			Name: string(r.Name),
@@ -255,7 +254,8 @@ func createPartitioningImpl(
 			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		if r.Subpartition != nil {
-			return partDesc, errors.Newf("PARTITION %s: cannot subpartition a range partition", p.Name)
+			return partDesc, pgerror.Newf(pgcode.Syntax,
+				"PARTITION %s: cannot subpartition a range partition", p.Name)
 		}
 		partDesc.Range = append(partDesc.Range, p)
 	}
