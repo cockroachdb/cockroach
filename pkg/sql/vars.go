@@ -1909,7 +1909,7 @@ func (p *planner) GetSessionVar(
 }
 
 // SetSessionVar implements the EvalSessionAccessor interface.
-func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string) error {
+func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string, isLocal bool) error {
 	name := strings.ToLower(varName)
 	_, v, err := getSessionVar(name, false /* missingOk */)
 	if err != nil {
@@ -1919,13 +1919,24 @@ func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string) err
 	if v.Set == nil && v.RuntimeSet == nil && v.SetWithPlanner == nil {
 		return newCannotChangeParameterError(name)
 	}
+
+	// Note for RuntimeSet and SetWithPlanner we do not use the sessionDataMutator
+	// as the callers need items that are only accessible by higher level
+	// objects - and some of the computation potentially expensive so should be
+	// batched instead of performing the computation on each mutator.
+	// It is their responsibility to set LOCAL or SESSION after
+	// doing the computation.
 	if v.RuntimeSet != nil {
-		return v.RuntimeSet(ctx, &p.extendedEvalCtx, false /* local */, newVal)
+		return v.RuntimeSet(ctx, p.ExtendedEvalContext(), isLocal, newVal)
 	}
 	if v.SetWithPlanner != nil {
-		return v.SetWithPlanner(ctx, p, false /* local */, newVal)
+		return v.SetWithPlanner(ctx, p, isLocal, newVal)
 	}
-	return p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m *sessionDataMutator) error {
-		return v.Set(ctx, m, newVal)
-	})
+	return p.applyOnSessionDataMutators(
+		ctx,
+		isLocal,
+		func(m *sessionDataMutator) error {
+			return v.Set(ctx, m, newVal)
+		},
+	)
 }
