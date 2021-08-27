@@ -141,6 +141,7 @@ sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enable
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode
 sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh
 sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh
+sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job
 sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk
 sql.stats.flush.interval	duration	1h0m0s	the interval at which SQL execution statistics are flushed to disk
 sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode
@@ -160,4 +161,4 @@ trace.datadog.project	string	CockroachDB	the project under which traces will be 
 trace.debug.enable	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests
 trace.lightstep.token	string		if set, traces go to Lightstep using this token
 trace.zipkin.collector	string		if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'). Only one tracer can be configured at a time.
-version	version	21.1-156	set the active cluster version in the format '<major>.<minor>'
+version	version	21.1-158	set the active cluster version in the format '<major>.<minor>'

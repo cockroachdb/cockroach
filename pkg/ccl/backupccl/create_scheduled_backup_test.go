@@ -500,7 +500,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, len(tc.expectedSchedules), len(schedules))
 
-			shown := th.sqlDB.QueryStr(t, `SELECT id, command->'backup_statement' FROM [SHOW SCHEDULES]`)
+			shown := th.sqlDB.QueryStr(t, `SELECT id, command->'backup_statement' FROM [SHOW SCHEDULES] WHERE command->>'backup_statement' LIKE 'BACKUP%'`)
 			require.Equal(t, len(tc.expectedSchedules), len(shown))
 			shownByID := map[int64]string{}
 			for _, i := range shown {
@@ -743,7 +743,7 @@ func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
-	res := th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
+	res := th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE 'BACKUP%';")
 	require.False(t, res.Next())
 	require.NoError(t, res.Err())
 
@@ -751,7 +751,7 @@ func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/collection' RECURRING '@daily';")
 	th.sqlDB.Exec(t, "ROLLBACK;")
 
-	res = th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
+	res = th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE 'BACKUP%';")
 	require.False(t, res.Next())
 	require.NoError(t, res.Err())
 }
@@ -1060,7 +1060,7 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 				tc.fullBackupAlways, tc.fullRecurrence, tc.recurrence)
 
 			t.Run("show-create-all-schedules", func(t *testing.T) {
-				rows := th.sqlDB.QueryStr(t, "SHOW CREATE ALL SCHEDULES")
+				rows := th.sqlDB.QueryStr(t, "SELECT * FROM [ SHOW CREATE ALL SCHEDULES ] WHERE create_statement LIKE '%FOR BACKUP%'")
 				cols, err := th.sqlDB.Query(t, "SHOW CREATE ALL SCHEDULES").Columns()
 				require.NoError(t, err)
 				// The number of rows returned should be equal to the number of schedules created

@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -26,8 +25,6 @@ type Controller struct {
 	sqlStats     *SQLStats
 	statusServer serverpb.SQLStatusServer
 }
-
-var _ tree.SQLStatsController = &Controller{}
 
 // NewController returns a new instance of sqlstats.Controller.
 func NewController(sqlStats *SQLStats, status serverpb.SQLStatusServer) *Controller {
