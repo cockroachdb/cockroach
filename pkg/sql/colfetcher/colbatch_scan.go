@@ -242,9 +242,7 @@ func NewColBatchScan(
 		bsHeader = &roachpb.BoundedStalenessHeader{
 			MinTimestampBound:       ts,
 			MinTimestampBoundStrict: aost.NearestOnly,
-		}
-		if !evalCtx.AsOfSystemTime.MaxTimestampBound.IsEmpty() {
-			bsHeader.MaxTimestampBound = evalCtx.AsOfSystemTime.MaxTimestampBound
+			MaxTimestampBound:       evalCtx.AsOfSystemTime.MaxTimestampBound, // may be empty
 		}
 	}
 

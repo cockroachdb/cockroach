@@ -359,6 +359,15 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 	if ba.BoundedStaleness == nil {
 		log.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
 	}
+	cfg := ba.BoundedStaleness
+	if cfg.MinTimestampBound.IsEmpty() {
+		return ba, roachpb.NewError(errors.AssertionFailedf(
+			"MinTimestampBound must be set in batch"))
+	}
+	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(cfg.MinTimestampBound) {
+		return ba, roachpb.NewError(errors.AssertionFailedf(
+			"MaxTimestampBound, if set in batch, must be greater than MinTimestampBound"))
+	}
 	if !ba.Timestamp.IsEmpty() {
 		return ba, roachpb.NewError(errors.AssertionFailedf(
 			"MinTimestampBound and Timestamp cannot both be set in batch"))
@@ -403,7 +412,6 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 			resTS.Backward(ts)
 		}
 	}
-	cfg := ba.BoundedStaleness
 	if resTS.Less(cfg.MinTimestampBound) {
 		// The local resolved timestamp was below the request's minimum timestamp
 		// bound. If the minimum timestamp bound should be strictly obeyed, reject
@@ -419,10 +427,10 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 		}
 		resTS = cfg.MinTimestampBound
 	}
-	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.Less(resTS) {
+	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(resTS) {
 		// The local resolved timestamp was above the request's maximum timestamp
 		// bound. Drop the request timestamp to the maximum timestamp bound.
-		resTS = cfg.MaxTimestampBound
+		resTS = cfg.MaxTimestampBound.Prev()
 	}
 
 	ba.Timestamp = resTS

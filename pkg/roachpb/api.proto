@@ -2176,12 +2176,12 @@ message Header {
 // BoundedStalenessHeader contains configuration values pertaining to bounded
 // staleness read requests.
 message BoundedStalenessHeader {
-  // min_timestamp_bound places a lower bound on the dynamically chosen
-  // timestamp during a bounded staleness read. During such reads, a resolved
-  // timestamp over the request's key span will initially be computed on the
-  // target replica. If the resolved timestamp is equal to or greater than the
-  // minimum timestamp bound, then the batch timestamp will be set to the
-  // resolved timestamp, the batch will be evaluated, and the negotiated
+  // min_timestamp_bound places an (inclusive) lower bound on the dynamically
+  // chosen timestamp during a bounded staleness read. During such reads, a
+  // resolved timestamp over the request's key span will initially be computed
+  // on the target replica. If the resolved timestamp is equal to or greater
+  // than the minimum timestamp bound, then the batch timestamp will be set to
+  // the resolved timestamp, the batch will be evaluated, and the negotiated
   // timestamp will be recorded in the BatchResponse Header. If the resolved
   // timestamp is less than the minimum timestamp bound, then the request will
   // either be rejected with a MinTimestampBoundUnsatisfiableError or will be
@@ -2200,15 +2200,16 @@ message BoundedStalenessHeader {
   // blocking is permitted and MinTimestampBoundUnsatisfiableErrors will never
   // be returned.
   bool min_timestamp_bound_strict = 2;
-  // max_timestamp_bound places an upper bound on the dynamically chosen
-  // timestamp during a bounded staleness read. If the field is set and a
+  // max_timestamp_bound places an (exclusive) upper bound on the dynamically
+  // chosen timestamp during a bounded staleness read. If the field is set and a
   // resolved timestamp over the request's key span is computed to be greater
-  // than the maximum timestamp bound, the batch timestamp will be set to the
-  // maximum timestamp bound instead, then the batch will be evaluated at this
-  // timestamp, and it will be recorded in the BatchResponse Header.
+  // than or equal to the maximum timestamp bound, the batch timestamp will be
+  // set to the timestamp preceding the maximum timestamp bound instead, then
+  // the batch will be evaluated at this timestamp, and it will be recorded in
+  // the BatchResponse Header.
   //
   // This field is optional when a BoundedStalenessHeader is set in a Header.
-  // If the field is set, max_timestamp_bound must be equal to or greater than
+  // However, if the field is set, max_timestamp_bound must be greater than
   // min_timestamp_bound.
   util.hlc.Timestamp max_timestamp_bound = 3 [(gogoproto.nullable) = false];
 }
