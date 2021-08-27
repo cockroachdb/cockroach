@@ -47,6 +47,7 @@ func MakeDeleter(
 	requestedCols []descpb.ColumnDescriptor,
 	sv *settings.Values,
 	internal bool,
+	metrics *Metrics,
 ) Deleter {
 	indexes := tableDesc.DeletableNonPrimaryIndexes()
 	indexDescs := make([]descpb.IndexDescriptor, len(indexes))
@@ -95,7 +96,7 @@ func MakeDeleter(
 	}
 
 	rd := Deleter{
-		Helper:               newRowHelper(codec, tableDesc, indexDescs, sv, internal),
+		Helper:               newRowHelper(codec, tableDesc, indexDescs, sv, internal, metrics),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}

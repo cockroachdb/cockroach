@@ -102,6 +102,7 @@ type rowHelper struct {
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
 	internal                     bool
+	metrics                      *Metrics
 }
 
 func newRowHelper(
@@ -110,8 +111,15 @@ func newRowHelper(
 	indexes []descpb.IndexDescriptor,
 	sv *settings.Values,
 	internal bool,
+	metrics *Metrics,
 ) rowHelper {
-	rh := rowHelper{Codec: codec, TableDesc: desc, Indexes: indexes, internal: internal}
+	rh := rowHelper{
+		Codec:     codec,
+		TableDesc: desc,
+		Indexes:   indexes,
+		internal:  internal,
+		metrics:   metrics,
+	}
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
@@ -263,6 +271,9 @@ func (rh *rowHelper) checkRowSize(
 		shouldLog = true
 	}
 	if shouldLog {
+		if rh.metrics != nil {
+			rh.metrics.MaxRowSizeLogCount.Inc(1)
+		}
 		var event eventpb.EventPayload
 		if rh.internal {
 			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
@@ -272,6 +283,9 @@ func (rh *rowHelper) checkRowSize(
 		log.StructuredEvent(ctx, event)
 	}
 	if shouldErr {
+		if rh.metrics != nil {
+			rh.metrics.MaxRowSizeErrCount.Inc(1)
+		}
 		return pgerror.WithCandidateCode(&details, pgcode.ProgramLimitExceeded)
 	}
 	return nil

@@ -298,6 +298,7 @@ func NewDatumRowConverter(
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,
 	seqChunkProvider *SeqChunkProvider,
+	metrics *Metrics,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,
@@ -348,6 +349,7 @@ func NewDatumRowConverter(
 		&rowenc.DatumAlloc{},
 		&evalCtx.Settings.SV,
 		evalCtx.SessionData.Internal,
+		metrics,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")

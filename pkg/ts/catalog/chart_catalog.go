@@ -2153,6 +2153,21 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Guardrails"}},
+		Charts: []chartDescription{
+			{
+				Title: "Maximum Row Size Violations",
+				Metrics: []string{
+					"sql.guardrails.max_row_size_log.count",
+					"sql.guardrails.max_row_size_log.count.internal",
+					"sql.guardrails.max_row_size_err.count",
+					"sql.guardrails.max_row_size_err.count.internal",
+				},
+				AxisLabel: "Rows",
+			},
+		},
+	},
+	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Block Cache"}},
 		Charts: []chartDescription{
 			{
