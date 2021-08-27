@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -79,7 +80,7 @@ func newScrubTableReader(
 	}
 
 	tr.tableDesc = spec.BuildTableDescriptor()
-	tr.limitHint = row.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
+	tr.limitHint = rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 
 	if err := tr.Init(
 		tr,
@@ -218,7 +219,7 @@ func (tr *scrubTableReader) Start(ctx context.Context) {
 	log.VEventf(ctx, 1, "starting")
 
 	if err := tr.fetcher.StartScan(
-		ctx, tr.FlowCtx.Txn, tr.spans, row.DefaultBatchBytesLimit, tr.limitHint,
+		ctx, tr.FlowCtx.Txn, tr.spans, rowinfra.DefaultBatchBytesLimit, tr.limitHint,
 		tr.FlowCtx.TraceKV, tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		tr.MoveToDraining(err)

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -147,7 +148,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 		return resume, err
 	}
 	if err := rf.StartScan(
-		ctx, td.txn, roachpb.Spans{resume}, row.DefaultBatchBytesLimit, row.NoRowLimit, traceKV, td.forceProductionBatchSizes,
+		ctx, td.txn, roachpb.Spans{resume}, rowinfra.DefaultBatchBytesLimit, rowinfra.NoRowLimit, traceKV, td.forceProductionBatchSizes,
 	); err != nil {
 		return resume, err
 	}
@@ -284,7 +285,7 @@ func (td *tableDeleter) deleteIndexScan(
 		return resume, err
 	}
 	if err := rf.StartScan(
-		ctx, td.txn, roachpb.Spans{resume}, row.DefaultBatchBytesLimit, row.NoRowLimit, traceKV, td.forceProductionBatchSizes,
+		ctx, td.txn, roachpb.Spans{resume}, rowinfra.DefaultBatchBytesLimit, rowinfra.NoRowLimit, traceKV, td.forceProductionBatchSizes,
 	); err != nil {
 		return resume, err
 	}
