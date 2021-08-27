@@ -27,7 +27,7 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 			"unsupported default isolation level: %s", n.Modes.Isolation)
 	}
 
-	if err := p.forEachMutatorError(func(m *sessionDataMutator) error {
+	if err := p.applyOnEachMutatorError(func(m *sessionDataMutator) error {
 		// Note: We also support SET DEFAULT_TRANSACTION_PRIORITY TO ' .... '.
 		switch n.Modes.UserPriority {
 		case tree.UnspecifiedUserPriority:

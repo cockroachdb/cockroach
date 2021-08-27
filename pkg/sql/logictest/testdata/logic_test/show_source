@@ -69,6 +69,7 @@ idle_in_transaction_session_timeout                    0
 integer_datetimes                                      on
 intervalstyle                                          postgres
 intervalstyle_enabled                                  off
+is_superuser                                           on
 locality                                               region=test,dc=dc1
 locality_optimized_partitioned_index_scan              on
 lock_timeout                                           0

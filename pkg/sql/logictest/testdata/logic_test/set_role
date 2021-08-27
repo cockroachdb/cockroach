@@ -78,6 +78,11 @@ SELECT current_user, session_user()
 ----
 testuser  root
 
+query T
+SHOW is_superuser
+----
+off
+
 statement ok
 SELECT * FROM priv_t
 
@@ -111,6 +116,11 @@ SELECT current_user, session_user()
 ----
 testuser2  root
 
+query T
+SHOW is_superuser
+----
+off
+
 statement ok
 SET ROLE = 'NoNe'
 
@@ -118,6 +128,11 @@ query TT
 SELECT current_user, session_user()
 ----
 root  root
+
+query T
+SHOW is_superuser
+----
+on
 
 # Check testuser cannot transition to other users as it has no privileges.
 user testuser
@@ -173,6 +188,11 @@ SELECT current_user, session_user()
 ----
 testuser2  testuser
 
+query T
+SHOW is_superuser
+----
+off
+
 statement error pgcode 42501 user testuser2 does not have SELECT privilege on relation priv_t
 SELECT * FROM priv_t
 
@@ -186,6 +206,11 @@ query TT
 SELECT current_user, session_user()
 ----
 testuser  testuser
+
+query T
+SHOW is_superuser
+----
+on
 
 # testuser2 cannot become anyone.
 
@@ -297,3 +322,26 @@ query TT
 SELECT current_user, session_user()
 ----
 testuser  testuser
+
+
+# SET ROLE is specially cased in SET LOCAL as it uses SetWithPlanner,
+# so test it behaves as appropriate.
+
+user root
+
+statement ok
+BEGIN;
+SET LOCAL ROLE testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  root
+
+statement ok
+ROLLBACK
+
+query TT
+SELECT current_user, session_user()
+----
+root  root

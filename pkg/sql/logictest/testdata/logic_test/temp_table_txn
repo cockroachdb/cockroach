@@ -1,0 +1,14 @@
+# Tests creating temp tables in an explicit transaction.
+# This tests the stack behavior with SET LOCAL and must be done on a
+# new connection.
+
+statement ok
+SET experimental_enable_temp_tables=true
+
+statement ok
+BEGIN;
+CREATE TEMP TABLE tbl (a int);
+COMMIT
+
+statement ok
+SELECT * FROM tbl

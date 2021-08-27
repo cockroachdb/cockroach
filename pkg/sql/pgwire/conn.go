@@ -697,17 +697,6 @@ func (c *conn) sendInitialConnData(
 		return sql.ConnectionHandler{}, err
 	}
 
-	// TODO(knz): this should retrieve the admin status during
-	// authentication using the roles table, instead of using a
-	// simple/naive username match.
-	isSuperUser := c.sessionArgs.User.IsRootUser()
-	superUserVal := "off"
-	if isSuperUser {
-		superUserVal = "on"
-	}
-	if err := c.sendParamStatus("is_superuser", superUserVal); err != nil {
-		return sql.ConnectionHandler{}, err
-	}
 	if err := c.sendReadyForQuery(); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
@@ -1689,10 +1678,10 @@ var statusReportParams = []string{
 	"server_encoding",
 	"client_encoding",
 	"application_name",
-	// Note: is_superuser and session_authorization are handled
-	// specially in serveImpl().
+	// Note: session_authorization is handled specially in serveImpl().
 	"DateStyle",
 	"IntervalStyle",
+	"is_superuser",
 	"TimeZone",
 	"integer_datetimes",
 	"standard_conforming_strings",
