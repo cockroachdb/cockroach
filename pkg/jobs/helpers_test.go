@@ -89,36 +89,26 @@ func (j *Job) Succeeded(ctx context.Context) error {
 	return j.succeeded(ctx, nil /* txn */, nil /* fn */)
 }
 
+const (
+	AdoptQuery                     = claimQuery
+	CancelQuery                    = pauseAndCancelUpdate
+	GcQuery                        = expiredJobsQuery
+	RemoveClaimsQuery              = removeClaimsQuery
+	ProcessJobsQuery               = processQueryWithBackoff
+	IntervalBaseSettingKey         = intervalBaseSettingKey
+	AdoptIntervalSettingKey        = adoptIntervalSettingKey
+	CancelIntervalSettingKey       = cancelIntervalSettingKey
+	GcIntervalSettingKey           = gcIntervalSettingKey
+	RetentionTimeSettingKey        = retentionTimeSettingKey
+	DefaultAdoptInterval           = defaultAdoptInterval
+	ExecutionErrorsMaxEntriesKey   = executionErrorsMaxEntriesKey
+	ExecutionErrorsMaxEntrySizeKey = executionErrorsMaxEntrySizeKey
+)
+
 var (
-	AdoptQuery = claimQuery
-
-	CancelQuery = pauseAndCancelUpdate
-
-	GcQuery = expiredJobsQuery
-
-	RemoveClaimsQuery = removeClaimsQuery
-
-	ProcessJobsQuery = processQueryWithBackoff
-
-	IntervalBaseSettingKey = intervalBaseSettingKey
-
-	AdoptIntervalSettingKey = adoptIntervalSettingKey
-
-	CancelIntervalSettingKey = cancelIntervalSettingKey
-
-	GcIntervalSettingKey = gcIntervalSettingKey
-
-	RetentionTimeSettingKey = retentionTimeSettingKey
-
-	AdoptIntervalSetting = adoptIntervalSetting
-
-	CancelIntervalSetting = cancelIntervalSetting
-
+	AdoptIntervalSetting            = adoptIntervalSetting
+	CancelIntervalSetting           = cancelIntervalSetting
 	CancellationsUpdateLimitSetting = cancellationsUpdateLimitSetting
-
-	GcIntervalSetting = gcIntervalSetting
-
-	RetentionTimeSetting = retentionTimeSetting
-
-	DefaultAdoptInterval = defaultAdoptInterval
+	GcIntervalSetting               = gcIntervalSetting
+	RetentionTimeSetting            = retentionTimeSetting
 )

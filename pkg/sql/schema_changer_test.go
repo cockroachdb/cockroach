@@ -6136,7 +6136,7 @@ func TestMultipleRevert(t *testing.T) {
 					ranCancelCommand = true
 				}
 				// Keep returning a retryable error until the job was actually canceled.
-				return jobs.NewRetryJobError("retry until cancel")
+				return jobs.MarkAsRetryJobError(errors.New("retry until cancel"))
 			},
 			RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
 				// Allow the backfill to proceed normally once the job was actually
@@ -6152,7 +6152,7 @@ func TestMultipleRevert(t *testing.T) {
 				}
 				shouldRetryAfterReversingMutations = false
 				// After cancelation, the job should get one more retryable error.
-				return jobs.NewRetryJobError("retry once after cancel")
+				return jobs.MarkAsRetryJobError(errors.New("retry once after cancel"))
 			},
 		},
 	}
@@ -6323,7 +6323,7 @@ func TestDropTableWhileSchemaChangeReverting(t *testing.T) {
 				// Return a retry error, so that we can be sure to test the path where
 				// the job is marked as failed by the DROP TABLE instead of running to
 				// completion and ending up in the failed state on its own.
-				return jobs.NewRetryJobError("injected retry error")
+				return jobs.MarkAsRetryJobError(errors.New("injected retry error"))
 			},
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.

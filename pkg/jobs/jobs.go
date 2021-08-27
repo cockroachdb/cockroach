@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -76,6 +77,7 @@ type Job struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
 		progress jobspb.Progress
+		runStats *RunStats
 	}
 }
 
@@ -230,31 +232,6 @@ func deprecatedIsOldSchemaChangeJob(payload *jobspb.Payload) bool {
 // after which the job should never be updated again.
 func (s Status) Terminal() bool {
 	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled || s == StatusRevertFailed
-}
-
-// InvalidStatusError is the error returned when the desired operation is
-// invalid given the job's current status.
-type InvalidStatusError struct {
-	id     jobspb.JobID
-	status Status
-	op     string
-	err    string
-}
-
-func (e *InvalidStatusError) Error() string {
-	if e.err != "" {
-		return fmt.Sprintf("cannot %s %s job (id %d, err: %q)", e.op, e.status, e.id, e.err)
-	}
-	return fmt.Sprintf("cannot %s %s job (id %d)", e.op, e.status, e.id)
-}
-
-// SimplifyInvalidStatusError unwraps an *InvalidStatusError into an error
-// message suitable for users. Other errors are returned as passed.
-func SimplifyInvalidStatusError(err error) error {
-	if ierr := (*InvalidStatusError)(nil); errors.As(err, &ierr) {
-		return errors.Errorf("job %s", ierr.status)
-	}
-	return err
 }
 
 // ID returns the ID of the job.
@@ -831,7 +808,7 @@ func UnmarshalProgress(datum tree.Datum) (*jobspb.Progress, error) {
 	return progress, nil
 }
 
-// unnarshalCreatedBy unrmarshals and returns created_by_type and created_by_id datums
+// unmarshalCreatedBy unmarshals and returns created_by_type and created_by_id datums
 // which may be tree.DNull, or tree.DString and tree.DInt respectively.
 func unmarshalCreatedBy(createdByType, createdByID tree.Datum) (*CreatedByInfo, error) {
 	if createdByType == tree.DNull || createdByID == tree.DNull {
@@ -867,6 +844,17 @@ func (j *Job) CurrentStatus(ctx context.Context, txn *kv.Txn) (Status, error) {
 		return "", err
 	}
 	return Status(statusString), nil
+}
+
+// getRunStats returns the RunStats for a job. If they are not set, it will
+// return a zero-value.
+func (j *Job) getRunStats() (rs RunStats) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.mu.runStats != nil {
+		rs = *j.mu.runStats
+	}
+	return rs
 }
 
 // Start will resume the job. The transaction used to create the StartableJob
@@ -974,4 +962,35 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 func (sj *StartableJob) Cancel(ctx context.Context) error {
 	defer sj.registry.unregister(sj.ID())
 	return sj.registry.CancelRequested(ctx, nil, sj.ID())
+}
+
+// FormatRetriableExecutionErrorLogToStringArray extracts the events
+// stored in the payload, formats them into strings and returns them as an
+// array of strings. This function is intended for use with crdb_internal.jobs.
+func FormatRetriableExecutionErrorLogToStringArray(
+	ctx context.Context, pl *jobspb.Payload,
+) *tree.DArray {
+	arr := tree.NewDArray(types.String)
+	for _, ev := range pl.RetriableExecutionFailureLog {
+		if ev == nil { // no reason this should happen, but be defensive
+			continue
+		}
+		var cause error
+		if ev.Error != nil {
+			cause = errors.DecodeError(ctx, *ev.Error)
+		} else {
+			cause = fmt.Errorf("(truncated) %s", ev.TruncatedError)
+		}
+		msg := formatRetriableExecutionFailure(
+			ev.InstanceID,
+			Status(ev.Status),
+			timeutil.FromUnixMicros(ev.ExecutionStartMicros),
+			timeutil.FromUnixMicros(ev.ExecutionEndMicros),
+			cause,
+		)
+		// We really don't care about errors here. I'd much rather see nothing
+		// in my log than crash.
+		_ = arr.Append(tree.NewDString(msg))
+	}
+	return arr
 }

@@ -568,7 +568,7 @@ func validateJobRetries(t *testing.T, tdb *sqlutils.SQLRunner, eventCh chan upda
 				continue
 			}
 			failed.Store(true)
-			ev.errChan <- jobs.NewRetryJobError("failing job to retry")
+			ev.errChan <- jobs.MarkAsRetryJobError(errors.New("failing job to retry"))
 		}
 	}()
 	runGcJob(t, tdb)

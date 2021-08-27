@@ -2318,7 +2318,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 		case !IsPermanentSchemaChangeError(rollbackErr):
 			// Check if the error is on a allowlist of errors we should retry on, and
 			// have the job registry retry.
-			return jobs.NewRetryJobError(rollbackErr.Error())
+			return jobs.MarkAsRetryJobError(rollbackErr)
 		default:
 			// All other errors lead to a failed job.
 			//

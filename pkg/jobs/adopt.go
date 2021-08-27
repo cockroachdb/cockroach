@@ -411,6 +411,7 @@ func (r *Registry) runJob(
 	}
 
 	r.maybeDumpTrace(ctx, resumer, int64(job.ID()), int64(span.TraceID()), err)
+	r.maybeRecordExecutionFailure(ctx, err, job)
 	if r.knobs.AfterJobStateMachine != nil {
 		r.knobs.AfterJobStateMachine()
 	}

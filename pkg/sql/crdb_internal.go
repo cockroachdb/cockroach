@@ -675,7 +675,7 @@ CREATE TABLE crdb_internal.jobs (
   last_run              TIMESTAMP,
   next_run              TIMESTAMP,
   num_runs              INT,
-  execution_log         JSON
+  execution_errors      STRING[]
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -744,7 +744,7 @@ CREATE TABLE crdb_internal.jobs (
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
 					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, coordinatorID,
-					traceID, lastRun, nextRun, numRuns, executionLog = tree.DNull, tree.DNull, tree.DNull,
+					traceID, lastRun, nextRun, numRuns, executionErrors = tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull
@@ -846,12 +846,9 @@ CREATE TABLE crdb_internal.jobs (
 
 				if backoffIsEnabled {
 					lastRun, numRuns, nextRun = r[7], r[8], r[9]
-					if payload != nil && payload.ExecutionLog != nil && len(payload.ExecutionLog) > 0 {
-						execLogJSON, err := jobspb.ExecutionLogToJSON(payload.ExecutionLog)
-						if err != nil {
-							return nil, err
-						}
-						executionLog = tree.NewDJSON(execLogJSON)
+					if payload != nil {
+						executionErrors = jobs.
+							FormatRetriableExecutionErrorLogToStringArray(ctx, payload)
 					}
 				}
 
@@ -877,7 +874,7 @@ CREATE TABLE crdb_internal.jobs (
 					lastRun,
 					nextRun,
 					numRuns,
-					executionLog,
+					executionErrors,
 				)
 				return container, nil
 			}

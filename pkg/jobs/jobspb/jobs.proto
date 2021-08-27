@@ -705,41 +705,6 @@ message MigrationDetails {
 }
 
 message MigrationProgress {
-
-}
-
-// ExecutionEvent holds information about a job when it starts or
-// ends an execution. It contains information about the event time,
-// the node on which the job is executed, the status of the job,and
-// any errors occurred during execution.
-message ExecutionEvent {
-  enum EventType {
-    option (gogoproto.goproto_enum_prefix) = false;
-
-    // JobEventUnspecified is the zero value for EventType and should be used.
-    UNSPECIFIED = 0 [(gogoproto.enumvalue_customname) = "JobEventUnspecified"];
-
-    // JobStartEvent indicates that this event was created at the beginning of
-    // job execution.
-    START = 1 [(gogoproto.enumvalue_customname) = "JobStartEvent"];
-
-    // JobEndEvent indicates that this event was created at the end of job
-    // execution.
-    END = 2 [(gogoproto.enumvalue_customname) = "JobEndEvent"];
-  }
-  // Type of event, start or end of execution when this event is created.
-  EventType type = 1;
-  // ID of the node on which the job is executed.
-  int32 instance_id = 2;
-  // Status of the job in this execution. It should be a jobs.Status.
-  string status = 3;
-  // Event timestamp when the event is created, represented as the number
-  // of microseconds elapsed since UnixEpoch. See timeutil.ToUnixMicros
-  // for more information about conversion to micros.
-  int64 event_time_micros = 4;
-  // Errors during execution: it is empty for a JobStartEvent. For a JobEndEvent,
-  // it consists of errors encountered during the current job execution.
-  string execution_error = 5;
 }
 
 message SQLStatsCompactionDetails {
@@ -798,17 +763,13 @@ message Payload {
   // PauseReason is used to describe the reason that the job is currently paused
   // or has been requested to be paused.
   string pause_reason = 28;
+  // RetriableExecutionFailureLog stores a history of retriable execution
+  // failures. These failures may occur in either the RUNNING or REVERTING
+  // status. A finite number of these entries will be kept, as governed by
+  // the jobs.execution_errors.max_entries cluster setting.
+  repeated RetriableExecutionFailure retriable_execution_failure_log = 32;
 
-  // An ExecutionEvent is created whenever a job's Resumer starts and ends
-  // an execution. At the beginning of the execution of a job's Resumer,
-  // a EventType.START event is created and appended to executionLog in
-  // job's payload. When the Resumer completes execution, which can be with
-  // or without an error, an EventType.END event is created and appended to
-  // job's executionLog. The sequence of events in this log show the lifecycle
-  // of a job and the errors encountered during job execution.
-  repeated ExecutionEvent executionLog = 29;
-
-  // NEXT ID: 31.
+  // NEXT ID: 33.
 }
 
 message Progress {
@@ -867,4 +828,24 @@ message Job {
   // running job.
   Progress progress = 2;
   Payload payload = 3;
+}
+
+// RetriableExecutionFailure is used in Payload.RetriableExecutionFailureLog
+// to store a history of executions which failed.
+message RetriableExecutionFailure {
+  // Status is the status of the job when this failure occurred.
+  string status = 1;
+  // ExecutionStartMicros is the timestamp at which this execution occurred.
+  int64 execution_start_micros = 2;
+  // ExecutionEndMicros is the timestamp at which this execution concluded.
+  int64 execution_end_micros = 3;
+  // InstanceID is the instance which coordinated the execution.
+  int32 instance_id = 4 [(gogoproto.customname) = "InstanceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID", (gogoproto.nullable) = false];
+  // Error stores the structured error which occurred. It might be nil if it
+  // was too large. In that case, the TruncatedError will be populated.
+  errorspb.EncodedError error = 5;
+  // TruncatedError is a fragment of a error message populated in the case
+  // that the error was too large. While the structure may be lost, at least
+  // some information will be preserved.
+  string truncated_error = 6;
 }

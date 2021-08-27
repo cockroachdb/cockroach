@@ -89,7 +89,7 @@ func performGC(
 func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) (err error) {
 	defer func() {
 		if err != nil && !r.isPermanentGCError(err) {
-			err = errors.Mark(err, jobs.NewRetryJobError("gc"))
+			err = jobs.MarkAsRetryJobError(err)
 		}
 	}()
 	p := execCtx.(sql.JobExecContext)
