@@ -275,8 +275,17 @@ func (ds *ServerImpl) setupFlow(
 
 	var evalCtx *tree.EvalContext
 	var leafTxn *kv.Txn
+	var onFlowCleanup func()
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
+		// We're about to mutate the evalCtx and we want to restore its original
+		// state once the flow cleans up. Note that we could have made a copy of
+		// the whole evalContext, but that isn't free, so we choose to restore
+		// the original state in order to avoid performance regressions.
+		origMon := evalCtx.Mon
+		onFlowCleanup = func() {
+			evalCtx.Mon = origMon
+		}
 		evalCtx.Mon = monitor
 		if localState.HasConcurrency {
 			var err error
@@ -349,7 +358,7 @@ func (ds *ServerImpl) setupFlow(
 	isVectorized := req.EvalContext.SessionData.VectorizeMode != sessiondatapb.VectorizeOff
 	f := newFlow(
 		flowCtx, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
-		localState.LocalProcs, isVectorized,
+		localState.LocalProcs, isVectorized, onFlowCleanup,
 	)
 	opt := flowinfra.FuseNormally
 	if !localState.MustUseLeafTxn() {
@@ -370,6 +379,9 @@ func (ds *ServerImpl) setupFlow(
 		// and finish the span manually.
 		monitor.Stop(ctx)
 		sp.Finish()
+		if onFlowCleanup != nil {
+			onFlowCleanup()
+		}
 		ctx = tracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, nil, err
 	}
@@ -471,8 +483,9 @@ func newFlow(
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	isVectorized bool,
+	onFlowCleanup func(),
 ) flowinfra.Flow {
-	base := flowinfra.NewFlowBase(flowCtx, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors)
+	base := flowinfra.NewFlowBase(flowCtx, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors, onFlowCleanup)
 	if isVectorized {
 		return colflow.NewVectorizedFlow(base)
 	}
