@@ -41,6 +41,7 @@ import (
 // the new cluster. Ensures that all the moving pieces are working together.
 func TestFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 69466, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
