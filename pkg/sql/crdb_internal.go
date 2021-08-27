@@ -5069,7 +5069,7 @@ var crdbInternalStmtStatsTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.statement_statistics (
     aggregated_ts  TIMESTAMPTZ NOT NULL,
     fingerprint_id BYTES NOT NULL,
-    plan_hash      INT8 NOT NULL,
+    plan_hash      BYTES NOT NULL,
     app_name       STRING NOT NULL,
     metadata       JSONB NOT NULL,
     statistics     JSONB NOT NULL,
