@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -144,6 +145,8 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 			},
 		},
 	}
+	settings := cluster.MakeTestingClusterSettings()
+	TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Microsecond)
 	tc := serverutils.StartNewTestCluster(
 		t,
 		numNodes,
@@ -151,6 +154,7 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "defaultdb",
 				Knobs:       knobs,
+				Settings:    settings,
 			},
 		},
 	)
