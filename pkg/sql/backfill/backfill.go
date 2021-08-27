@@ -66,6 +66,8 @@ type ColumnBackfiller struct {
 
 	// mon is a memory monitor linked with the ColumnBackfiller on creation.
 	mon *mon.BytesMonitor
+
+	rowMetrics *row.RowMetrics
 }
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
@@ -90,6 +92,7 @@ func (cb *ColumnBackfiller) init(
 	computedExprs []tree.TypedExpr,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
+	rowMetrics *row.RowMetrics,
 ) error {
 	cb.evalCtx = evalCtx
 	cb.updateCols = append(cb.added, cb.dropped...)
@@ -129,6 +132,7 @@ func (cb *ColumnBackfiller) init(
 		return errors.AssertionFailedf("no memory monitor linked to ColumnBackfiller during init")
 	}
 	cb.mon = mon
+	cb.rowMetrics = rowMetrics
 
 	return cb.fetcher.Init(
 		evalCtx.Context,
@@ -153,6 +157,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
+	rowMetrics *row.RowMetrics,
 ) error {
 	cb.initCols(desc)
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(
@@ -173,7 +178,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	if err != nil {
 		return err
 	}
-	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon)
+	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics)
 }
 
 // InitForDistributedUse initializes a ColumnBackfiller for use as part of a
@@ -229,7 +234,8 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	// entire backfill process.
 	flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
 
-	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon)
+	rowMetrics := flowCtx.GetRowMetrics(evalCtx.SessionData().Internal)
+	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics)
 }
 
 // Close frees the resources used by the ColumnBackfiller.
@@ -268,6 +274,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		&cb.alloc,
 		&cb.evalCtx.Settings.SV,
 		cb.evalCtx.SessionData().Internal,
+		cb.rowMetrics,
 	)
 	if err != nil {
 		return roachpb.Key{}, err

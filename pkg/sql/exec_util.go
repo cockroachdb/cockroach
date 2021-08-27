@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1051,6 +1052,8 @@ type ExecutorConfig struct {
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
+	RowMetrics           *row.RowMetrics
+	InternalRowMetrics   *row.RowMetrics
 
 	TestingKnobs                  ExecutorTestingKnobs
 	MigrationTestingKnobs         *migration.TestingKnobs
@@ -2967,4 +2970,20 @@ func DescsTxn(
 	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
 ) error {
 	return execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, f)
+}
+
+func NewRowMetrics(internal bool) row.RowMetrics {
+	return row.RowMetrics{
+		MaxRowSizeLogCount: metric.NewCounter(getMetricMeta(row.MetaMaxRowSizeLog, internal)),
+		MaxRowSizeErrCount: metric.NewCounter(getMetricMeta(row.MetaMaxRowSizeErr, internal)),
+	}
+}
+
+// GetRowMetrics returns the proper RowMetrics for either internal or user
+// queries.
+func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *row.RowMetrics {
+	if internal {
+		return cfg.InternalRowMetrics
+	}
+	return cfg.RowMetrics
 }
