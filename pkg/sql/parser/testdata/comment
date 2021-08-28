@@ -36,8 +36,7 @@ COMMENT ON DATABASE foo IS 'a'
 ----
 COMMENT ON DATABASE foo IS 'a'
 COMMENT ON DATABASE foo IS 'a' -- fully parenthesized
-COMMENT ON DATABASE foo IS _ -- literals removed
-REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+COMMENT ON DATABASE foo IS '_' -- literals removed
 COMMENT ON DATABASE _ IS 'a' -- identifiers removed
 
 parse
@@ -53,8 +52,7 @@ COMMENT ON INDEX foo IS 'a'
 ----
 COMMENT ON INDEX foo IS 'a'
 COMMENT ON INDEX foo IS 'a' -- fully parenthesized
-COMMENT ON INDEX foo IS _ -- literals removed
-REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+COMMENT ON INDEX foo IS '_' -- literals removed
 COMMENT ON INDEX _ IS 'a' -- identifiers removed
 
 parse
@@ -70,8 +68,7 @@ COMMENT ON TABLE foo IS 'a'
 ----
 COMMENT ON TABLE foo IS 'a'
 COMMENT ON TABLE foo IS 'a' -- fully parenthesized
-COMMENT ON TABLE foo IS _ -- literals removed
-REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+COMMENT ON TABLE foo IS '_' -- literals removed
 COMMENT ON TABLE _ IS 'a' -- identifiers removed
 
 parse

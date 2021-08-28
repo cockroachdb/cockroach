@@ -19,11 +19,11 @@ ALTER USER 'foo' WITH PASSWORD 'bar' -- passwords exposed
 parse
 ALTER USER foo WITH PASSWORD NULL
 ----
-ALTER USER 'foo' WITH PASSWORD NULL -- normalized!
-ALTER USER ('foo') WITH PASSWORD (NULL) -- fully parenthesized
-ALTER USER '_' WITH PASSWORD _ -- literals removed
-ALTER USER '_' WITH PASSWORD '*****' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
-ALTER USER 'foo' WITH PASSWORD NULL -- identifiers removed
+ALTER USER 'foo' WITH PASSWORD '*****' -- normalized!
+ALTER USER ('foo') WITH PASSWORD '*****' -- fully parenthesized
+ALTER USER '_' WITH PASSWORD '*****' -- literals removed
+ALTER USER 'foo' WITH PASSWORD '*****' -- identifiers removed
+ALTER USER 'foo' WITH PASSWORD NULL -- passwords exposed
 
 parse
 ALTER ROLE foo WITH CREATEDB
