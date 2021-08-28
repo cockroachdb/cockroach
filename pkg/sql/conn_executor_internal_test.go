@@ -320,7 +320,8 @@ func startConnExecutor(
 	}
 	sqlMetrics := MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 
-	conn, err := s.SetupConn(ctx, SessionArgs{}, buf, cc, sqlMetrics)
+	onDefaultIntSizeChange := func(int32) {}
+	conn, err := s.SetupConn(ctx, SessionArgs{}, buf, cc, sqlMetrics, onDefaultIntSizeChange)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
@@ -355,7 +356,8 @@ func TestSessionCloseWithPendingTempTableInTxn(t *testing.T) {
 			flushed <- res
 		},
 	}
-	connHandler, err := srv.SetupConn(ctx, SessionArgs{User: security.RootUserName()}, stmtBuf, clientComm, MemoryMetrics{})
+	onDefaultIntSizeChange := func(int32) {}
+	connHandler, err := srv.SetupConn(ctx, SessionArgs{User: security.RootUserName()}, stmtBuf, clientComm, MemoryMetrics{}, onDefaultIntSizeChange)
 	require.NoError(t, err)
 
 	stmts, err := parser.Parse(`

@@ -272,10 +272,7 @@ type authenticatorIO interface {
 	// authResult blocks for an authentication decision. This call also informs
 	// the authenticator that no more auth data is coming from the client;
 	// noMorePwdData() is called internally.
-	//
-	// The auth result is either an unqualifiedIntSizer (in case the auth
-	// succeeded) or an auth error.
-	authResult() (unqualifiedIntSizer, error)
+	authResult() error
 }
 
 // AuthConn is the interface used by the authenticator for interacting with the
@@ -294,7 +291,7 @@ type AuthConn interface {
 	// AuthOK declares that authentication succeeded and provides a
 	// unqualifiedIntSizer, to be returned by authenticator.authResult(). Future
 	// authenticator.sendPwdData() calls fail.
-	AuthOK(context.Context, unqualifiedIntSizer)
+	AuthOK(context.Context)
 	// AuthFail declares that authentication has failed and provides an error to
 	// be returned by authenticator.authResult(). Future
 	// authenticator.sendPwdData() calls fail. The error has already been written
@@ -332,8 +329,7 @@ type authPipe struct {
 }
 
 type authRes struct {
-	intSizer unqualifiedIntSizer
-	err      error
+	err error
 }
 
 func newAuthPipe(c *conn, logAuthn bool, authOpt authOptions, user security.SQLUsername) *authPipe {
@@ -384,8 +380,8 @@ func (p *authPipe) GetPwdData() ([]byte, error) {
 }
 
 // AuthOK is part of the AuthConn interface.
-func (p *authPipe) AuthOK(ctx context.Context, intSizer unqualifiedIntSizer) {
-	p.readerDone <- authRes{intSizer: intSizer}
+func (p *authPipe) AuthOK(ctx context.Context) {
+	p.readerDone <- authRes{err: nil}
 }
 
 func (p *authPipe) AuthFail(err error) {
@@ -439,10 +435,10 @@ func (p *authPipe) LogAuthFailed(
 }
 
 // authResult is part of the authenticator interface.
-func (p *authPipe) authResult() (unqualifiedIntSizer, error) {
+func (p *authPipe) authResult() error {
 	p.noMorePwdData()
 	res := <-p.readerDone
-	return res.intSizer, res.err
+	return res.err
 }
 
 // SendAuthRequest is part of the AuthConn interface.

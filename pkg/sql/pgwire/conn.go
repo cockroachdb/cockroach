@@ -290,12 +290,29 @@ func (c *conn) serveImpl(
 	// the command processor.
 	var procCh <-chan error
 
+	// We need a value for the unqualified int size here, but it is controlled
+	// by a session variable, and this layer doesn't have access to the session
+	// data. The callback below is called whenever default_int_size changes.
+	// It happens in a different goroutine, so it has to be changed atomically.
+	var atomicUnqualifiedIntSize = new(int32)
+	onDefaultIntSizeChange := func(newSize int32) {
+		atomic.StoreInt32(atomicUnqualifiedIntSize, newSize)
+	}
+
 	if sqlServer != nil {
 		// Spawn the command processing goroutine, which also handles connection
 		// authentication). It will notify us when it's done through procCh, and
 		// we'll also interact with the authentication process through ac.
 		var ac AuthConn = authPipe
-		procCh = c.processCommandsAsync(ctx, authOpt, ac, sqlServer, reserved, cancelConn)
+		procCh = c.processCommandsAsync(
+			ctx,
+			authOpt,
+			ac,
+			sqlServer,
+			reserved,
+			cancelConn,
+			onDefaultIntSizeChange,
+		)
 	} else {
 		// sqlServer == nil means we are in a local test. In this case
 		// we only need the minimum to make pgx happy.
@@ -312,7 +329,7 @@ func (c *conn) serveImpl(
 		}
 		var ac AuthConn = authPipe
 		// Simulate auth succeeding.
-		ac.AuthOK(ctx, fixedIntSizer{size: types.Int})
+		ac.AuthOK(ctx)
 		dummyCh := make(chan error)
 		close(dummyCh)
 		procCh = dummyCh
@@ -325,14 +342,6 @@ func (c *conn) serveImpl(
 
 	var terminateSeen bool
 
-	// We need an intSizer, which we're ultimately going to get from the
-	// authenticator once authentication succeeds (because it will actually be a
-	// ConnectionHandler). Until then, we unfortunately still need some intSizer
-	// because we technically might enqueue parsed statements in the statement
-	// buffer even before authentication succeeds (because we need this go routine
-	// to keep reading from the network connection while authentication is in
-	// progress in order to react to the connection closing).
-	var intSizer unqualifiedIntSizer = fixedIntSizer{size: types.Int}
 	var authDone, ignoreUntilSync bool
 	for {
 		breakLoop, err := func() (bool, error) {
@@ -400,7 +409,7 @@ func (c *conn) serveImpl(
 					return false, nil
 				}
 				// Wait for the auth result.
-				if intSizer, err = authenticator.authResult(); err != nil {
+				if err = authenticator.authResult(); err != nil {
 					// The error has already been sent to the client.
 					return true, nil //nolint:returnerrcheck
 				}
@@ -421,7 +430,7 @@ func (c *conn) serveImpl(
 					&c.msgBuilder, &c.writerState.buf)
 			case pgwirebase.ClientMsgSimpleQuery:
 				if err = c.handleSimpleQuery(
-					ctx, &c.readBuf, timeReceived, intSizer.GetUnqualifiedIntSize(),
+					ctx, &c.readBuf, timeReceived, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)),
 				); err != nil {
 					return false, err
 				}
@@ -431,7 +440,7 @@ func (c *conn) serveImpl(
 				return false, c.handleExecute(ctx, &c.readBuf, timeReceived)
 
 			case pgwirebase.ClientMsgParse:
-				return false, c.handleParse(ctx, &c.readBuf, intSizer.GetUnqualifiedIntSize())
+				return false, c.handleParse(ctx, &c.readBuf, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
 
 			case pgwirebase.ClientMsgDescribe:
 				return false, c.handleDescribe(ctx, &c.readBuf)
@@ -523,24 +532,6 @@ func (c *conn) serveImpl(
 	}
 }
 
-// unqualifiedIntSizer is used by a conn to get the SQL session's current int size
-// setting.
-//
-// It's a restriction on the ConnectionHandler type.
-type unqualifiedIntSizer interface {
-	// GetUnqualifiedIntSize returns the size that the parser should consider for an
-	// unqualified INT.
-	GetUnqualifiedIntSize() *types.T
-}
-
-type fixedIntSizer struct {
-	size *types.T
-}
-
-func (f fixedIntSizer) GetUnqualifiedIntSize() *types.T {
-	return f.size
-}
-
 // processCommandsAsync spawns a goroutine that authenticates the connection and
 // then processes commands from c.stmtBuf.
 //
@@ -567,6 +558,7 @@ func (c *conn) processCommandsAsync(
 	sqlServer *sql.Server,
 	reserved mon.BoundAccount,
 	cancelConn func(),
+	onDefaultIntSizeChange func(newSize int32),
 ) <-chan error {
 	// reservedOwned is true while we own reserved, false when we pass ownership
 	// away.
@@ -631,12 +623,12 @@ func (c *conn) processCommandsAsync(
 		}
 
 		// Inform the client of the default session settings.
-		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer)
+		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange)
 		if retErr != nil {
 			return
 		}
 		// Signal the connection was established to the authenticator.
-		ac.AuthOK(ctx, connHandler)
+		ac.AuthOK(ctx)
 		// Mark the authentication as succeeded in case a panic
 		// is thrown below and we need to report to the client
 		// using the defer above.
@@ -669,10 +661,16 @@ func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) erro
 }
 
 func (c *conn) sendInitialConnData(
-	ctx context.Context, sqlServer *sql.Server,
+	ctx context.Context, sqlServer *sql.Server, onDefaultIntSizeChange func(newSize int32),
 ) (sql.ConnectionHandler, error) {
 	connHandler, err := sqlServer.SetupConn(
-		ctx, c.sessionArgs, &c.stmtBuf, c, c.metrics.SQLMemMetrics)
+		ctx,
+		c.sessionArgs,
+		&c.stmtBuf,
+		c,
+		c.metrics.SQLMemMetrics,
+		onDefaultIntSizeChange,
+	)
 	if err != nil {
 		_ /* err */ = writeErr(
 			ctx, &sqlServer.GetExecutorConfig().Settings.SV, err, &c.msgBuilder, c.conn)
