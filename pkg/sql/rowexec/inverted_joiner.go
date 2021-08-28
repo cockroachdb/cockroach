@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -493,7 +494,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 
 	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(indexSpans))
 	if err = ij.fetcher.StartScan(
-		ij.Ctx, ij.FlowCtx.Txn, indexSpans, row.NoBytesLimit, row.NoRowLimit,
+		ij.Ctx, ij.FlowCtx.Txn, indexSpans, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
 		ij.FlowCtx.TraceKV, ij.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		ij.MoveToDraining(err)

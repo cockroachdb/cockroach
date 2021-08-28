@@ -971,6 +971,40 @@ SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 
       table: regional_by_row_table@primary
       spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 
+# Query with more than one key.
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk IN (1, 4)] OFFSET 2
+----
+·
+• union all
+│ limit: 2
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@primary
+│     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ap-southeast-2'/4 - /'ap-southeast-2'/4]
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@primary
+      spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'ca-central-1'/4 - /'ca-central-1'/4] [/'us-east-1'/1 - /'us-east-1'/1] [/'us-east-1'/4 - /'us-east-1'/4]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk IN (1, 4); SET tracing = off
+
+# Both rows are found in the local region, so the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/73/1/"@"/1/0, /Table/73/1/"@"/4/0
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+output row: [1 1 2 3 '{"a": "b"}']
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/4/pk2/a/b/j -> /4/5/6/'{"c": "d"}'
+output row: [4 4 5 6 '{"c": "d"}']
+
 # Tests using locality optimized search for lookup joins (including foreign
 # key checks).
 statement ok

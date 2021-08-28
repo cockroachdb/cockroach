@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -148,7 +147,7 @@ func rowToStmtStats(row tree.Datums) (*roachpb.CollectedStatementStatistics, err
 	var stats roachpb.CollectedStatementStatistics
 	stats.AggregatedTs = tree.MustBeDTimestampTZ(row[0]).Time
 
-	stmtFingerprintID, err := datumToUint64(row[1])
+	stmtFingerprintID, err := sqlstatsutil.DatumToUint64(row[1])
 	if err != nil {
 		return nil, err
 	}
@@ -174,15 +173,4 @@ func rowToStmtStats(row tree.Datums) (*roachpb.CollectedStatementStatistics, err
 	stats.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
 	return &stats, nil
-}
-
-func datumToUint64(d tree.Datum) (uint64, error) {
-	b := []byte(tree.MustBeDBytes(d))
-
-	_, val, err := encoding.DecodeUint64Ascending(b)
-	if err != nil {
-		return 0, err
-	}
-
-	return val, nil
 }

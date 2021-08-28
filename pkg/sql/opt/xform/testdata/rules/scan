@@ -725,23 +725,62 @@ index-join abc_part
            ├── key: ()
            └── fd: ()-->(17-19,21)
 
-# b is not constrained to a single value.
-opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+# b is constrained to multiple values.
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
 SELECT a FROM abc_part WHERE b IN (1, 2)
 ----
 project
  ├── columns: a:3!null
  ├── cardinality: [0 - 2]
  ├── key: (3)
- └── scan abc_part@b_idx
+ └── locality-optimized-search
       ├── columns: a:3!null b:4!null
-      ├── constraint: /1/4
-      │    ├── [/'central'/1 - /'central'/2]
-      │    ├── [/'east'/1 - /'east'/2]
-      │    └── [/'west'/1 - /'west'/2]
+      ├── left columns: a:11 b:12
+      ├── right columns: a:19 b:20
       ├── cardinality: [0 - 2]
       ├── key: (3)
-      └── fd: (3)-->(4), (4)-->(3)
+      ├── fd: (3)-->(4), (4)-->(3)
+      ├── scan abc_part@b_idx
+      │    ├── columns: a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'east'/1 - /'east'/2]
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (11)
+      │    └── fd: (11)-->(12), (12)-->(11)
+      └── scan abc_part@b_idx
+           ├── columns: a:19!null b:20!null
+           ├── constraint: /17/20
+           │    ├── [/'central'/1 - /'central'/2]
+           │    └── [/'west'/1 - /'west'/2]
+           ├── cardinality: [0 - 4]
+           ├── key: (19)
+           └── fd: (19)-->(20), (20)-->(19)
+
+# b is constrained to more than 100000 values (the kv batch size).
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b >= 0 AND b < 100001
+----
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 100001]
+ ├── key: (3)
+ └── select
+      ├── columns: a:3!null b:4!null
+      ├── cardinality: [0 - 100001]
+      ├── key: (3)
+      ├── fd: (3)-->(4), (4)-->(3)
+      ├── index-join abc_part
+      │    ├── columns: a:3!null b:4
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4), (4)~~>(3)
+      │    └── scan abc_part@c_idx
+      │         ├── columns: a:3!null
+      │         ├── constraint: /1/2/5
+      │         │    ├── [/'central'/1 - /'central'/3]
+      │         │    ├── [/'east'/1 - /'east'/3]
+      │         │    └── [/'west'/1 - /'west'/3]
+      │         └── key: (3)
+      └── filters
+           └── (b:4 >= 0) AND (b:4 < 100001) [outer=(4), constraints=(/4: [/0 - /100000]; tight)]
 
 # The spans target all remote partitions.
 opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan

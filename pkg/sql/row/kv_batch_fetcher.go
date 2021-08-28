@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,24 +37,18 @@ import (
 // only be used by tests the output of which differs if defaultKVBatchSize is
 // randomized.
 // TODO(radu): parameters like this should be configurable
-func getKVBatchSize(forceProductionKVBatchSize bool) KeyLimit {
+func getKVBatchSize(forceProductionKVBatchSize bool) rowinfra.KeyLimit {
 	if forceProductionKVBatchSize {
-		return productionKVBatchSize
+		return rowinfra.ProductionKVBatchSize
 	}
 	return defaultKVBatchSize
 }
 
-var defaultKVBatchSize = KeyLimit(util.ConstantWithMetamorphicTestValue(
+var defaultKVBatchSize = rowinfra.KeyLimit(util.ConstantWithMetamorphicTestValue(
 	"kv-batch-size",
-	int(productionKVBatchSize), /* defaultValue */
-	1,                          /* metamorphicValue */
+	int(rowinfra.ProductionKVBatchSize), /* defaultValue */
+	1,                                   /* metamorphicValue */
 ))
-
-const productionKVBatchSize KeyLimit = 100000
-
-// DefaultBatchBytesLimit is the maximum number of bytes a scan request can
-// return.
-const DefaultBatchBytesLimit BytesLimit = 10 << 20 // 10 MB
 
 // sendFunc is the function used to execute a KV batch; normally
 // wraps (*client.Txn).Send.
@@ -74,7 +69,7 @@ type txnKVFetcher struct {
 	// to this value and subsequent batches are larger (up to a limit, see
 	// getKVBatchSize()). If not set, batches do not have a key limit (they might
 	// still have a bytes limit as per batchBytesLimit).
-	firstBatchKeyLimit KeyLimit
+	firstBatchKeyLimit rowinfra.KeyLimit
 	// If batchBytesLimit is set, the batches are limited in response size. This
 	// protects from OOMs, but comes at the cost of inhibiting DistSender-level
 	// parallelism within a batch.
@@ -83,7 +78,7 @@ type txnKVFetcher struct {
 	// there is only a "small" amount of data to be read (i.e. scanning `spans`
 	// doesn't result in too much data), and wants to preserve concurrency for
 	// this scans inside of DistSender.
-	batchBytesLimit BytesLimit
+	batchBytesLimit rowinfra.BytesLimit
 
 	reverse bool
 	// lockStrength represents the locking mode to use when fetching KVs.
@@ -122,11 +117,11 @@ var _ kvBatchFetcher = &txnKVFetcher{}
 // getBatchKeyLimit returns the max size of the next batch. The size is
 // expressed in number of result keys (i.e. this size will be used for
 // MaxSpanRequestKeys).
-func (f *txnKVFetcher) getBatchKeyLimit() KeyLimit {
+func (f *txnKVFetcher) getBatchKeyLimit() rowinfra.KeyLimit {
 	return f.getBatchKeyLimitForIdx(f.batchIdx)
 }
 
-func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) KeyLimit {
+func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) rowinfra.KeyLimit {
 	if f.firstBatchKeyLimit == 0 {
 		return 0
 	}
@@ -232,15 +227,15 @@ func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
 // makeKVBatchFetcher initializes a kvBatchFetcher for the given spans. If
 // useBatchLimit is true, the number of result keys per batch is limited; the
 // limit grows between subsequent batches, starting at firstBatchKeyLimit (if not
-// 0) to productionKVBatchSize.
+// 0) to ProductionKVBatchSize.
 //
 // Batch limits can only be used if the spans are ordered.
 func makeKVBatchFetcher(
 	sendFn sendFunc,
 	spans roachpb.Spans,
 	reverse bool,
-	batchBytesLimit BytesLimit,
-	firstBatchKeyLimit KeyLimit,
+	batchBytesLimit rowinfra.BytesLimit,
+	firstBatchKeyLimit rowinfra.KeyLimit,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,

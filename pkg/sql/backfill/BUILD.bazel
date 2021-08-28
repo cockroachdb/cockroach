@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowinfra",
         "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",

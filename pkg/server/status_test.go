@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -930,6 +931,17 @@ func TestChartCatalogGen(t *testing.T) {
 	}
 }
 
+// walkAllSections invokes the visitor on each of the ChartSections nestled under
+// the input one.
+func walkAllSections(chartCatalog []catalog.ChartSection, visit func(c *catalog.ChartSection)) {
+	for _, c := range chartCatalog {
+		visit(&c)
+		for _, ic := range c.Subsections {
+			visit(ic)
+		}
+	}
+}
+
 // findUndefinedMetrics finds metrics listed in pkg/ts/catalog/chart_catalog.go
 // that are not defined. This is most likely caused by a metric being removed.
 func findUndefinedMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata) []string {
@@ -1016,9 +1028,35 @@ func TestChartCatalogMetrics(t *testing.T) {
 			metricNames = append(metricNames, metricName)
 		}
 		sort.Strings(metricNames)
-		t.Fatalf(`The following metrics need to be added to the chart catalog
+		t.Errorf(`The following metrics need to be added to the chart catalog
 		    (pkg/ts/catalog/chart_catalog.go): %v`, metricNames)
 	}
+
+	internalTSDBMetricNamesWithoutPrefix := map[string]struct{}{}
+	for _, name := range catalog.AllInternalTimeseriesMetricNames() {
+		name = strings.TrimPrefix(name, "cr.node.")
+		name = strings.TrimPrefix(name, "cr.store.")
+		internalTSDBMetricNamesWithoutPrefix[name] = struct{}{}
+	}
+	walkAllSections(chartCatalog, func(cs *catalog.ChartSection) {
+		for _, chart := range cs.Charts {
+			for _, metric := range chart.Metrics {
+				if *metric.MetricType.Enum() != io_prometheus_client.MetricType_HISTOGRAM {
+					continue
+				}
+				// We have a histogram. Make sure that it is properly represented in
+				// AllInternalTimeseriesMetricNames(). It's not a complete check but good enough in
+				// practice. Ideally we wouldn't require `histogramMetricsNames` and
+				// the associated manual step when adding a histogram. See:
+				// https://github.com/cockroachdb/cockroach/issues/64373
+				_, ok := internalTSDBMetricNamesWithoutPrefix[metric.Name+"-p50"]
+				if !ok {
+					t.Errorf("histogram %s needs to be added to `catalog.histogramMetricsNames` manually",
+						metric.Name)
+				}
+			}
+		}
+	})
 }
 
 func TestHotRangesResponse(t *testing.T) {
@@ -1437,6 +1475,144 @@ func TestRangeResponse(t *testing.T) {
 	}
 }
 
+func TestStatusAPICombinedTransactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	thirdServer := testCluster.Server(2)
+	pgURL, cleanupGoDB := sqlutils.PGUrl(
+		t, thirdServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
+	defer cleanupGoDB()
+	firstServerProto := testCluster.Server(0)
+
+	type testCase struct {
+		query         string
+		fingerprinted string
+		count         int
+		shouldRetry   bool
+		numRows       int
+	}
+
+	testCases := []testCase{
+		{query: `CREATE DATABASE roachblog`, count: 1, numRows: 0},
+		{query: `SET database = roachblog`, count: 1, numRows: 0},
+		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1, numRows: 0},
+		{
+			query:         `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+			count:         1,
+			numRows:       1,
+		},
+		{query: `SELECT * FROM posts`, count: 2, numRows: 1},
+		{query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`, count: 3, numRows: 2},
+		{
+			query:         `BEGIN; SELECT crdb_internal.force_retry('2s'); SELECT * FROM posts; COMMIT;`,
+			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
+			shouldRetry:   true,
+			count:         1,
+			numRows:       2,
+		},
+		{
+			query:         `BEGIN; SELECT crdb_internal.force_retry('5s'); SELECT * FROM posts; COMMIT;`,
+			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
+			shouldRetry:   true,
+			count:         1,
+			numRows:       2,
+		},
+	}
+
+	appNameToTestCase := make(map[string]testCase)
+
+	for i, tc := range testCases {
+		appName := fmt.Sprintf("app%d", i)
+		appNameToTestCase[appName] = tc
+
+		// Create a brand new connection for each app, so that we don't pollute
+		// transaction stats collection with `SET application_name` queries.
+		sqlDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec(fmt.Sprintf(`SET application_name = "%s"`, appName)); err != nil {
+			t.Fatal(err)
+		}
+		for c := 0; c < tc.count; c++ {
+			if _, err := sqlDB.Exec(tc.query); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := sqlDB.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Hit query endpoint.
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(firstServerProto, "combinedstmts", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Construct a map of all the statement fingerprint IDs.
+	statementFingerprintIDs := make(map[roachpb.StmtFingerprintID]bool, len(resp.Statements))
+	for _, respStatement := range resp.Statements {
+		statementFingerprintIDs[respStatement.ID] = true
+	}
+
+	respAppNames := make(map[string]bool)
+	for _, respTransaction := range resp.Transactions {
+		appName := respTransaction.StatsData.App
+		tc, found := appNameToTestCase[appName]
+		if !found {
+			// Ignore internal queries, they aren't relevant to this test.
+			continue
+		}
+		respAppNames[appName] = true
+		// Ensure all statementFingerprintIDs comprised by the Transaction Response can be
+		// linked to StatementFingerprintIDs for statements in the response.
+		for _, stmtFingerprintID := range respTransaction.StatsData.StatementFingerprintIDs {
+			if _, found := statementFingerprintIDs[stmtFingerprintID]; !found {
+				t.Fatalf("app: %s, expected stmtFingerprintID: %d not found in StatementResponse.", appName, stmtFingerprintID)
+			}
+		}
+		stats := respTransaction.StatsData.Stats
+		if tc.count != int(stats.Count) {
+			t.Fatalf("app: %s, expected count %d, got %d", appName, tc.count, stats.Count)
+		}
+		if tc.shouldRetry && respTransaction.StatsData.Stats.MaxRetries == 0 {
+			t.Fatalf("app: %s, expected retries, got none\n", appName)
+		}
+
+		// Sanity check numeric stat values
+		if respTransaction.StatsData.Stats.CommitLat.Mean <= 0 {
+			t.Fatalf("app: %s, unexpected mean for commit latency\n", appName)
+		}
+		if respTransaction.StatsData.Stats.RetryLat.Mean <= 0 && tc.shouldRetry {
+			t.Fatalf("app: %s, expected retry latency mean to be non-zero as retries were involved\n", appName)
+		}
+		if respTransaction.StatsData.Stats.ServiceLat.Mean <= 0 {
+			t.Fatalf("app: %s, unexpected mean for service latency\n", appName)
+		}
+		if respTransaction.StatsData.Stats.NumRows.Mean != float64(tc.numRows) {
+			t.Fatalf("app: %s, unexpected number of rows observed. expected: %d, got %d\n",
+				appName, tc.numRows, int(respTransaction.StatsData.Stats.NumRows.Mean))
+		}
+	}
+
+	// Ensure we got transaction statistics for all the queries we sent.
+	for appName := range appNameToTestCase {
+		if _, found := respAppNames[appName]; !found {
+			t.Fatalf("app: %s did not appear in the response\n", appName)
+		}
+	}
+}
+
 func TestStatusAPITransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1674,12 +1850,41 @@ func TestStatusAPIStatements(t *testing.T) {
 	// Grant VIEWACTIVITY.
 	thirdServerSQL.Exec(t, "ALTER USER $1 VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized())
 
-	// Hit query endpoint.
-	if err := getStatusJSONProtoWithAdminOption(firstServerProto, "statements", &resp, false); err != nil {
-		t.Fatal(err)
+	testPath := func(path string, expectedStmts []string) {
+		// Hit query endpoint.
+		if err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
+			t.Fatal(err)
+		}
+
+		// See if the statements returned are what we executed.
+		var statementsInResponse []string
+		for _, respStatement := range resp.Statements {
+			if respStatement.Key.KeyData.Failed {
+				// We ignore failed statements here as the INSERT statement can fail and
+				// be automatically retried, confusing the test success check.
+				continue
+			}
+			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
+				// We ignore internal queries, these are not relevant for the
+				// validity of this test.
+				continue
+			}
+			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
+				// Ignore the ALTER USER ... VIEWACTIVITY statement.
+				continue
+			}
+			statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
+		}
+
+		sort.Strings(expectedStmts)
+		sort.Strings(statementsInResponse)
+
+		if !reflect.DeepEqual(expectedStmts, statementsInResponse) {
+			t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s",
+				expectedStmts, statementsInResponse, pretty.Sprint(resp))
+		}
 	}
 
-	// See if the statements returned are what we executed.
 	var expectedStatements []string
 	for _, stmt := range statements {
 		var expectedStmt = stmt.stmt
@@ -1689,32 +1894,108 @@ func TestStatusAPIStatements(t *testing.T) {
 		expectedStatements = append(expectedStatements, expectedStmt)
 	}
 
-	var statementsInResponse []string
-	for _, respStatement := range resp.Statements {
-		if respStatement.Key.KeyData.Failed {
-			// We ignore failed statements here as the INSERT statement can fail and
-			// be automatically retried, confusing the test success check.
-			continue
-		}
-		if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-			// We ignore internal queries, these are not relevant for the
-			// validity of this test.
-			continue
-		}
-		if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
-			// Ignore the ALTER USER ... VIEWACTIVITY statement.
-			continue
-		}
-		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
+	// Test no params
+	testPath("statements", expectedStatements)
+	// Test combined=true forwards to CombinedStatements
+	nowInSecs := timeutil.Now().Unix()
+	testPath(fmt.Sprintf("statements?combined=true&start=%d", nowInSecs), nil)
+}
+
+func TestStatusAPICombinedStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	statements := []struct {
+		stmt          string
+		fingerprinted string
+	}{
+		{stmt: `CREATE DATABASE roachblog`},
+		{stmt: `SET database = roachblog`},
+		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
+		{
+			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+		},
+		{stmt: `SELECT * FROM posts`},
 	}
 
-	sort.Strings(expectedStatements)
-	sort.Strings(statementsInResponse)
-
-	if !reflect.DeepEqual(expectedStatements, statementsInResponse) {
-		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s",
-			expectedStatements, statementsInResponse, pretty.Sprint(resp))
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt.stmt)
 	}
+
+	var resp serverpb.StatementsResponse
+	// Test that non-admin without VIEWACTIVITY privileges cannot access.
+	err := getStatusJSONProtoWithAdminOption(firstServerProto, "combinedstmts", &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	// Grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, "ALTER USER $1 VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized())
+
+	testPath := func(path string, expectedStmts []string) {
+		// Hit query endpoint.
+		if err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
+			t.Fatal(err)
+		}
+
+		// See if the statements returned are what we executed.
+		var statementsInResponse []string
+		for _, respStatement := range resp.Statements {
+			if respStatement.Key.KeyData.Failed {
+				// We ignore failed statements here as the INSERT statement can fail and
+				// be automatically retried, confusing the test success check.
+				continue
+			}
+			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
+				// We ignore internal queries, these are not relevant for the
+				// validity of this test.
+				continue
+			}
+			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
+				// Ignore the ALTER USER ... VIEWACTIVITY statement.
+				continue
+			}
+			statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
+		}
+
+		sort.Strings(expectedStmts)
+		sort.Strings(statementsInResponse)
+
+		if !reflect.DeepEqual(expectedStmts, statementsInResponse) {
+			t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s",
+				expectedStmts, statementsInResponse, pretty.Sprint(resp))
+		}
+	}
+
+	var expectedStatements []string
+	for _, stmt := range statements {
+		var expectedStmt = stmt.stmt
+		if stmt.fingerprinted != "" {
+			expectedStmt = stmt.fingerprinted
+		}
+		expectedStatements = append(expectedStatements, expectedStmt)
+	}
+
+	// Test with no query params
+	testPath("combinedstmts", expectedStatements)
+
+	nowInSecs := timeutil.Now().Unix()
+	// Test with end = now; should give the same results as get all.
+	testPath(fmt.Sprintf("combinedstmts?end=%d", nowInSecs), expectedStatements)
+	// Test with start = 1 hour ago end = now; should give the same results as get all.
+	testPath(fmt.Sprintf("combinedstmts?start=%d&end=%d", nowInSecs-3600, nowInSecs), expectedStatements)
+	// Test with start = now; should give no results.
+	testPath(fmt.Sprintf("combinedstmts?start=%d", nowInSecs), nil)
 }
 
 func TestListSessionsSecurity(t *testing.T) {
