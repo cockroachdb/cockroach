@@ -12,9 +12,9 @@ set -euo pipefail
 
 
 # Read user input.
-read -r -e -i "${TEST-}" -p "Test regexp: " TEST
-read -r -e -i "${COUNT-10}" -p "Count: " COUNT
-read -r -e -i "${LOCAL-n}" -p "Local: " LOCAL
+if [ -z "${TEST-}" ]; then read -r -e -p "Test regexp: " TEST; fi
+if [ -z "${COUNT-}" ]; then read -r -e -i "10" -p "Count: " COUNT; fi
+if [ -z "${LOCAL-}" ]; then read -r -e -i "n" -p "Local: " LOCAL; fi
 case $LOCAL in
   [Nn]* | false | "") LOCAL="";;
   *) LOCAL=".local";;
@@ -50,8 +50,8 @@ a="${abase}/$(date '+%H%M%S')"
 
 short="short"
 if [ ! -f "${cr}" ]; then
-  yn=""
-  read -r -e -i "${SHORT-y}" -p "Build cockroach without the UI: " yn
+  yn="${SHORT-}"
+  if [ -z "${yn}" ]; then read -r -e -i "y" -p "Build cockroach without the UI: " yn; fi
   case $yn in
     [Nn]* | false | "") short=""
   esac
