@@ -74,8 +74,16 @@ import (
 // node throwaway clusters and consequently this variable is only used for
 // the start-single-node command.
 //
+// To be able to visualize the timeseries data properly, a mapping file must be
+// provided as well. This maps StoreIDs to the owning NodeID, i.e. the file
+// looks like this (if s1 is on n3 and s2 is on n4):
+// 1: 3
+// 2: 4
+// [...]
+//
 // See #64329 for details.
 var debugTSImportFile = envutil.EnvOrDefaultString("COCKROACH_DEBUG_TS_IMPORT_FILE", "")
+var debugTSImportMappingFile = envutil.EnvOrDefaultString("COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE", debugTSImportFile+".yaml")
 
 // startCmd starts a node by initializing the stores and joining
 // the cluster.
@@ -288,7 +296,10 @@ func runStartSingleNode(cmd *cobra.Command, args []string) error {
 
 	// Allow passing in a timeseries file.
 	if debugTSImportFile != "" {
-		serverCfg.TestingKnobs.Server = &server.TestingKnobs{ImportTimeseriesFile: debugTSImportFile}
+		serverCfg.TestingKnobs.Server = &server.TestingKnobs{
+			ImportTimeseriesFile:        debugTSImportFile,
+			ImportTimeseriesMappingFile: debugTSImportMappingFile,
+		}
 	}
 
 	return runStart(cmd, args, true /*startSingleNode*/)
