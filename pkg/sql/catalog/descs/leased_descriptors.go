@@ -51,7 +51,8 @@ type maxTimestampBoundDeadlineHolder struct {
 
 // ReadTimestamp implements the deadlineHolder interface.
 func (m maxTimestampBoundDeadlineHolder) ReadTimestamp() hlc.Timestamp {
-	return m.maxTimestampBound
+	// We return .Prev() because maxTimestampBound is an exclusive upper bound.
+	return m.maxTimestampBound.Prev()
 }
 
 // UpdateDeadline implements the deadlineHolder interface.
