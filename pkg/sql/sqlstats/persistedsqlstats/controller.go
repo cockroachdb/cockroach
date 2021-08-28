@@ -14,8 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
@@ -53,4 +55,33 @@ func (s *Controller) CreateSQLStatsCompactionSchedule(ctx context.Context) error
 		_, err := CreateSQLStatsCompactionScheduleIfNotYetExist(ctx, s.ie, txn, s.st)
 		return err
 	})
+}
+
+// ResetClusterSQLStats implements the tree.SQLStatsController interface. This
+// method resets both the cluster-wide in-memory stats (via RPC fanout) and
+// persisted stats (via TRUNCATE SQL statement)
+func (s *Controller) ResetClusterSQLStats(ctx context.Context) error {
+	if err := s.Controller.ResetClusterSQLStats(ctx); err != nil {
+		return err
+	}
+
+	resetSysTableStats := func(tableName string) error {
+		if _, err := s.ie.ExecEx(
+			ctx,
+			"reset-sql-stats",
+			nil, /* txn */
+			sessiondata.InternalExecutorOverride{
+				User: security.NodeUserName(),
+			},
+			"TRUNCATE "+tableName); err != nil {
+			return err
+		}
+
+		return nil
+	}
+	if err := resetSysTableStats("system.statement_statistics"); err != nil {
+		return err
+	}
+
+	return resetSysTableStats("system.transaction_statistics")
 }

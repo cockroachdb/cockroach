@@ -76,6 +76,8 @@ func TestFullClusterBackup(t *testing.T) {
 SELECT id, status, created, payload, progress, created_by_type, created_by_id, claim_instance_id
 FROM system.jobs
 	`
+	// Pause SQL Stats compaction job to ensure the test is deterministic.
+	sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS]`)
 
 	// Disable automatic stats collection on the backup and restoring clusters to ensure
 	// the test is deterministic.
