@@ -486,6 +486,7 @@ type Pebble struct {
 
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
+	unencryptedFS vfs.FS
 	logger        pebble.Logger
 	eventListener *pebble.EventListener
 
@@ -581,6 +582,15 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	}
 	ballastPath := base.EmergencyBallastFile(cfg.Opts.FS.PathJoin, cfg.Dir)
 
+	// For some purposes, we want to always use an unecrypted
+	// filesystem. The call below to ResolveEncryptedEnvOptions will
+	// replace cfg.Opts.FS with a VFS wrapped with encryption-at-rest if
+	// necessary. Before we do that, save a handle on the unencrypted
+	// FS for those that need it. Some call sites need the unencrypted
+	// FS for the purpose of atomic renames.
+	unencryptedFS := cfg.Opts.FS
+	// TODO(jackson): Assert that unencryptedFS provides atomic renames.
+
 	fileRegistry, statsHandler, err := ResolveEncryptedEnvOptions(&cfg)
 	if err != nil {
 		return nil, err
@@ -606,13 +616,13 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	// disk space, the ballast will be reestablished from Capacity when the
 	// store's capacity is queried periodically.
 	if !cfg.Opts.ReadOnly {
-		du, err := cfg.Opts.FS.GetDiskUsage(cfg.Dir)
+		du, err := unencryptedFS.GetDiskUsage(cfg.Dir)
 		// If the FS is an in-memory FS, GetDiskUsage returns
 		// vfs.ErrUnsupported and we skip ballast creation.
 		if err != nil && !errors.Is(err, vfs.ErrUnsupported) {
 			return nil, errors.Wrap(err, "retrieving disk usage")
 		} else if err == nil {
-			resized, err := maybeEstablishBallast(cfg.Opts.FS, ballastPath, cfg.BallastSize, du)
+			resized, err := maybeEstablishBallast(unencryptedFS, ballastPath, cfg.BallastSize, du)
 			if err != nil {
 				return nil, errors.Wrap(err, "resizing ballast")
 			}
@@ -635,6 +645,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		statsHandler:            statsHandler,
 		fileRegistry:            fileRegistry,
 		fs:                      cfg.Opts.FS,
+		unencryptedFS:           unencryptedFS,
 		logger:                  cfg.Opts.Logger,
 		storeIDPebbleLog:        storeIDContainer,
 		disableSeparatedIntents: cfg.DisableSeparatedIntents,
@@ -1007,7 +1018,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 			return roachpb.StoreCapacity{}, err
 		}
 	}
-	du, err := p.fs.GetDiskUsage(dir)
+	du, err := p.unencryptedFS.GetDiskUsage(dir)
 	if errors.Is(err, vfs.ErrUnsupported) {
 		// This is an in-memory instance. Pretend we're empty since we
 		// don't know better and only use this for testing. Using any
@@ -1037,14 +1048,14 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// enough available capacity to resize it. Capacity is called periodically
 	// by the kvserver, and that drives the automatic resizing of the ballast.
 	if !p.readOnly {
-		resized, err := maybeEstablishBallast(p.fs, p.ballastPath, p.ballastSize, du)
+		resized, err := maybeEstablishBallast(p.unencryptedFS, p.ballastPath, p.ballastSize, du)
 		if err != nil {
 			return roachpb.StoreCapacity{}, errors.Wrap(err, "resizing ballast")
 		}
 		if resized {
 			p.logger.Infof("resized ballast %s to size %s",
 				p.ballastPath, humanizeutil.IBytes(p.ballastSize))
-			du, err = p.fs.GetDiskUsage(dir)
+			du, err = p.unencryptedFS.GetDiskUsage(dir)
 			if err != nil {
 				return roachpb.StoreCapacity{}, err
 			}
@@ -1381,7 +1392,7 @@ func (p *Pebble) CreateCheckpoint(dir string) error {
 
 // DeprecateBaseEncryptionRegistry implements the Engine interface.
 func (p *Pebble) DeprecateBaseEncryptionRegistry(version *roachpb.Version) error {
-	if err := WriteMinVersionFile(p.fs, p.path, version); err != nil {
+	if err := WriteMinVersionFile(p.unencryptedFS, p.path, version); err != nil {
 		return err
 	}
 	if p.fileRegistry != nil {
@@ -1402,7 +1413,7 @@ func (p *Pebble) UsingRecordsEncryptionRegistry() (bool, error) {
 
 // MinVersionIsAtLeastTargetVersion implements the Engine interface.
 func (p *Pebble) MinVersionIsAtLeastTargetVersion(target *roachpb.Version) (bool, error) {
-	return MinVersionIsAtLeastTargetVersion(p.fs, p.path, target)
+	return MinVersionIsAtLeastTargetVersion(p.unencryptedFS, p.path, target)
 }
 
 type pebbleReadOnly struct {
