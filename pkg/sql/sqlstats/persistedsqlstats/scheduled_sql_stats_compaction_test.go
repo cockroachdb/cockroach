@@ -196,7 +196,7 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 
 	t.Run("warn_schedule_long_run_interval", func(t *testing.T) {
 		t.Run("via cluster setting", func(t *testing.T) {
-			helper.sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = '@weekly'")
+			helper.sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = '0 59 23 24 12 ? 2099'")
 
 			var err error
 			testutils.SucceedsSoon(t, func() error {
@@ -206,7 +206,7 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 				if err == nil {
 					return errors.Newf("retry: next_run=%s, schedule_expr=%s", sj.NextRun(), sj.ScheduleExpr())
 				}
-				require.Equal(t, "@weekly", sj.ScheduleExpr())
+				require.Equal(t, "0 59 23 24 12 ? 2099", sj.ScheduleExpr())
 				return nil
 			})
 			require.True(t, errors.Is(
