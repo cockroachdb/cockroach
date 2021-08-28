@@ -29,12 +29,8 @@ import { aggregateStatements } from "../transactionsPage/utils";
 import Long from "long";
 import { Loading } from "../loading";
 import { SummaryCard } from "../summaryCard";
-import {
-  Bytes,
-  Duration,
-  formatNumberForDisplay,
-  calculateTotalWorkload,
-} from "src/util";
+import { Bytes, Duration, formatNumberForDisplay } from "src/util";
+import { UIConfigState } from "../store/uiConfig";
 
 import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
 import transactionDetailsStyles from "./transactionDetails.modules.scss";
@@ -68,6 +64,7 @@ interface TransactionDetailsProps {
   ) => void;
   error?: Error | null;
   resetSQLStats: () => void;
+  isTenant: UIConfigState["isTenant"];
 }
 
 interface TState {
@@ -89,6 +86,10 @@ export class TransactionDetails extends React.Component<
       pageSize: 10,
       current: 1,
     },
+  };
+
+  static defaultProps: Partial<TransactionDetailsProps> = {
+    isTenant: false,
   };
 
   onChangeSortSetting = (ss: SortSetting) => {
@@ -130,11 +131,19 @@ export class TransactionDetails extends React.Component<
           error={error}
           loading={!statements || !transactionStats}
           render={() => {
-            const { statements, transactionStats, lastReset } = this.props;
+            const {
+              statements,
+              transactionStats,
+              lastReset,
+              isTenant,
+            } = this.props;
             const { sortSetting, pagination } = this.state;
             const aggregatedStatements = aggregateStatements(statements);
-            const totalWorkload = calculateTotalWorkload(statements);
-            populateRegionNodeForStatements(aggregatedStatements, nodeRegions);
+            populateRegionNodeForStatements(
+              aggregatedStatements,
+              nodeRegions,
+              isTenant,
+            );
             const duration = (v: number) => Duration(v * 1e9);
             return (
               <React.Fragment>

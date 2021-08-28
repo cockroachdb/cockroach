@@ -55,6 +55,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       11,
     );
@@ -75,6 +76,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       3,
     );
@@ -95,6 +97,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       1,
     );
@@ -115,6 +118,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       7,
     );
@@ -135,6 +139,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       8,
     );
@@ -155,6 +160,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       6,
     );
@@ -175,6 +181,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       8,
     );
@@ -195,6 +202,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       4,
     );
@@ -215,6 +223,7 @@ describe("Filter transactions", () => {
         "$ internal",
         data.statements,
         nodeRegions,
+        false,
       ).transactions.length,
       9,
     );

@@ -217,4 +217,5 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   uiConfig: {
     showStatementDiagnosticsLink: true,
   },
+  isTenant: false,
 });

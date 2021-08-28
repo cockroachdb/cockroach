@@ -174,6 +174,7 @@ function makeCommonColumns(
       },
       sort: (stmt: AggregateStatistics) => stmt.regionNodes.sort().join(", "),
       showByDefault: false,
+      hideIfTenant: true,
     },
   ];
   return columns;
@@ -311,8 +312,13 @@ export function makeNodesColumns(
 export function populateRegionNodeForStatements(
   statements: AggregateStatistics[],
   nodeRegions: { [p: string]: string },
+  isTenant: boolean,
 ) {
   statements.forEach(stmt => {
+    if (isTenant) {
+      stmt.regionNodes = [];
+      return;
+    }
     const regions: { [region: string]: Set<number> } = {};
     // For each region, populate a list of all nodes where the statement was executed.
     // E.g. {"gcp-us-east1" : [1,3,4]}
