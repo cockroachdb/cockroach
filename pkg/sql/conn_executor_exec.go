@@ -852,6 +852,9 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 			)
 		}
 	}
+	if before.DefaultIntSize != after.DefaultIntSize && ex.dataMutatorIterator.onDefaultIntSizeChange != nil {
+		ex.dataMutatorIterator.onDefaultIntSizeChange(after.DefaultIntSize)
+	}
 	if before.ApplicationName != after.ApplicationName && ex.dataMutatorIterator.onApplicationNameChange != nil {
 		ex.dataMutatorIterator.onApplicationNameChange(after.ApplicationName)
 	}

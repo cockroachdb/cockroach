@@ -2524,7 +2524,14 @@ type sessionDataMutatorCallbacks struct {
 	// on the search path (the first and only time).
 	// It can be nil, in which case nothing triggers on execution.
 	onTempSchemaCreation func()
-	// onApplicationName is called when the application name changes.
+	// onDefaultIntSizeChange is called when default_int_size changes. It is
+	// needed because the pgwire connection's read buffer needs to be aware
+	// of the default int size in order to be able to parse the unqualified
+	// INT type correctly.
+	onDefaultIntSizeChange func(int32)
+	// onApplicationName is called when the application_name changes. It is
+	// needed because the stats writer needs to be notified of changes to the
+	// application name.
 	onApplicationNameChange func(string)
 }
 
@@ -2645,6 +2652,9 @@ func (m *sessionDataMutator) SetTemporarySchemaIDForDatabase(dbID uint32, tempSc
 
 func (m *sessionDataMutator) SetDefaultIntSize(size int32) {
 	m.data.DefaultIntSize = size
+	if m.onDefaultIntSizeChange != nil {
+		m.onDefaultIntSizeChange(size)
+	}
 }
 
 func (m *sessionDataMutator) SetDefaultTransactionPriority(val tree.UserPriority) {
