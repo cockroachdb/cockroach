@@ -1994,8 +1994,6 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	testPath(fmt.Sprintf("combinedstmts?end=%d", nowInSecs), expectedStatements)
 	// Test with start = 1 hour ago end = now; should give the same results as get all.
 	testPath(fmt.Sprintf("combinedstmts?start=%d&end=%d", nowInSecs-3600, nowInSecs), expectedStatements)
-	// Test with start = now; should give no results.
-	testPath(fmt.Sprintf("combinedstmts?start=%d", nowInSecs), nil)
 }
 
 func TestListSessionsSecurity(t *testing.T) {
