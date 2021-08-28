@@ -16,6 +16,8 @@ import (
 )
 
 func (r *Registry) findMetricByName(name string) Iterable {
+	r.Lock()
+	defer r.Unlock()
 	for _, metric := range r.tracked {
 		if metric.GetName() == name {
 			return metric
