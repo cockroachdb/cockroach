@@ -558,11 +558,6 @@ func (ef *execFactory) ConstructStreamingSetOp(
 func (ef *execFactory) ConstructUnionAll(
 	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64,
 ) (exec.Node, error) {
-	if hardLimit > 1 {
-		return nil, errors.AssertionFailedf(
-			"locality optimized search is not yet supported for more than one row at a time",
-		)
-	}
 	return ef.planner.newUnionNode(
 		tree.UnionOp,
 		true, /* all */

@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -172,8 +172,8 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				spans,
 				nil,   /* bsHeader */
 				false, /* limitBatches */
-				row.NoBytesLimit,
-				row.NoRowLimit,
+				rowinfra.NoBytesLimit,
+				rowinfra.NoRowLimit,
 				s.flowCtx.TraceKV,
 				s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 			); err != nil {

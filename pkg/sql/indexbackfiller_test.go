@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -400,7 +401,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		))
 
 		require.NoError(t, fetcher.StartScan(
-			ctx, txn, spans, row.NoBytesLimit, 0, true, false, /* forceProductionBatchSize */
+			ctx, txn, spans, rowinfra.NoBytesLimit, 0, true, false, /* forceProductionBatchSize */
 		))
 		var rows []tree.Datums
 		for {

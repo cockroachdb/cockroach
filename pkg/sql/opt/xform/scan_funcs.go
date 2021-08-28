@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -146,11 +147,13 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate,
 ) {
-	// We can only generate a locality optimized scan if we know there is at
-	// most one row produced by the local spans.
-	// TODO(rytaft): We may be able to expand this to allow any number of rows,
-	// as long as there is a hard upper bound.
-	if !grp.Relational().Cardinality.IsZeroOrOne() {
+	// We can only generate a locality optimized scan if we know there is a hard
+	// upper bound on the number of rows produced by the local spans. We use the
+	// kv batch size as the limit, since it's probably better to use DistSQL once
+	// we're scanning multiple batches.
+	// TODO(rytaft): Revisit this when we have a more accurate cost model for data
+	// distribution.
+	if rowinfra.KeyLimit(grp.Relational().Cardinality.Max) > rowinfra.ProductionKVBatchSize {
 		return
 	}
 
