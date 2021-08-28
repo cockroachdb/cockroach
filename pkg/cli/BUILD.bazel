@@ -337,6 +337,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect",
+        "//pkg/sql/tests",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/buildutil",
