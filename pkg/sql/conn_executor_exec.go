@@ -835,22 +835,27 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 		return err
 	}
 	after := ex.sessionDataStack.Top()
-	for _, param := range bufferableParamStatusUpdates {
-		_, v, err := getSessionVar(param.lowerName, false /* missingOk */)
-		if err != nil {
-			return err
+	if ex.dataMutatorIterator.paramStatusUpdater != nil {
+		for _, param := range bufferableParamStatusUpdates {
+			_, v, err := getSessionVar(param.lowerName, false /* missingOk */)
+			if err != nil {
+				return err
+			}
+			if v.GetFromSessionData == nil {
+				return errors.AssertionFailedf("GetFromSessionData for %s must be set", param.name)
+			}
+			beforeVal := v.GetFromSessionData(before)
+			afterVal := v.GetFromSessionData(after)
+			if beforeVal != afterVal {
+				ex.dataMutatorIterator.paramStatusUpdater.BufferParamStatusUpdate(
+					param.name,
+					afterVal,
+				)
+			}
 		}
-		if v.GetFromSessionData == nil {
-			return errors.AssertionFailedf("GetFromSessionData for %s must be set", param.name)
-		}
-		beforeVal := v.GetFromSessionData(before)
-		afterVal := v.GetFromSessionData(after)
-		if beforeVal != afterVal {
-			ex.dataMutatorIterator.paramStatusUpdater.BufferParamStatusUpdate(
-				param.name,
-				afterVal,
-			)
-		}
+	}
+	if before.DefaultIntSize != after.DefaultIntSize && ex.dataMutatorIterator.onDefaultIntSizeChange != nil {
+		ex.dataMutatorIterator.onDefaultIntSizeChange(after.DefaultIntSize)
 	}
 	if before.ApplicationName != after.ApplicationName && ex.dataMutatorIterator.onApplicationNameChange != nil {
 		ex.dataMutatorIterator.onApplicationNameChange(after.ApplicationName)

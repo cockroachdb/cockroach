@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -52,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -591,12 +589,14 @@ func (s *Server) SetupConn(
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
+	onDefaultIntSizeChange func(newSize int32),
 ) (ConnectionHandler, error) {
 	sd := s.newSessionData(args)
 	sds := sessiondata.NewStack(sd)
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
 	sdMutIterator := s.makeSessionDataMutatorIterator(sds, args.SessionDefaults)
+	sdMutIterator.onDefaultIntSizeChange = onDefaultIntSizeChange
 	if err := sdMutIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
 		return resetSessionVars(ctx, m)
 	}); err != nil {
@@ -616,18 +616,6 @@ func (s *Server) SetupConn(
 // it away from other packages.
 type ConnectionHandler struct {
 	ex *connExecutor
-}
-
-// GetUnqualifiedIntSize implements pgwire.sessionDataProvider and returns
-// the type that INT should be parsed as.
-func (h ConnectionHandler) GetUnqualifiedIntSize() *types.T {
-	var size int32
-	if h.ex != nil {
-		// The executor will be nil in certain testing situations where
-		// no server is actually present.
-		size = h.ex.sessionData().DefaultIntSize
-	}
-	return parser.NakedIntTypeFromDefaultIntSize(size)
 }
 
 // GetParamStatus retrieves the configured value of the session
