@@ -82,9 +82,9 @@ type AsOfSystemTime struct {
 	// Timestamp is the HLC timestamp evaluated from the AS OF SYSTEM TIME clause.
 	Timestamp hlc.Timestamp
 	// BoundedStaleness is true if the AS OF SYSTEM TIME clause specifies bounded
-	// staleness should be used. If true, Timestamp specifies a minimum bound
-	// to read from - data can be read from a time later than Timestamp.
-	// If false, data is returned at the exact Timestamp specified.
+	// staleness should be used. If true, Timestamp specifies an (inclusive) lower
+	// bound to read from - data can be read from a time later than Timestamp. If
+	// false, data is returned at the exact Timestamp specified.
 	BoundedStaleness bool
 	// If this is a bounded staleness read, ensures we only read from the nearest
 	// replica. The query will error if this constraint could not be satisfied.
@@ -93,7 +93,7 @@ type AsOfSystemTime struct {
 	// we failed to satisfy a bounded staleness read with a nearby replica as we
 	// have no followers with an up-to-date schema.
 	// This is be zero if there is no maximum bound.
-	// In non-zero, we want a read t where Timestamp <= t <= MaxTimestampBound.
+	// In non-zero, we want a read t where Timestamp <= t < MaxTimestampBound.
 	MaxTimestampBound hlc.Timestamp
 }
 
