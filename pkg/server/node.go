@@ -169,7 +169,8 @@ type Node struct {
 	// Used to signal when additional stores, if any, have been initialized.
 	additionalStoreInitCh chan struct{}
 
-	perReplicaServer kvserver.Server
+	perReplicaServer   kvserver.Server
+	suppressNodeStatus syncutil.AtomicBool
 }
 
 var _ roachpb.InternalServer = &Node{}
@@ -748,6 +749,9 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 // If mustExist is true the status key must already exist and must
 // not change during writing -- if false, the status is always written.
 func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, mustExist bool) error {
+	if n.suppressNodeStatus.Get() {
+		return nil
+	}
 	var err error
 	if runErr := n.stopper.RunTask(ctx, "node.Node: writing summary", func(ctx context.Context) {
 		nodeStatus := n.recorder.GenerateNodeStatus(ctx)
