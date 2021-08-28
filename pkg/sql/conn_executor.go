@@ -1471,6 +1471,10 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 
 	switch ev {
 	case txnCommit, txnRollback:
+		for name, p := range ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals {
+			p.decRef(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
+			delete(ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals, name)
+		}
 		ex.extraTxnState.savepoints.clear()
 		// After txn is finished, we need to call onTxnFinish (if it's non-nil).
 		if ex.extraTxnState.onTxnFinish != nil {
@@ -3132,15 +3136,9 @@ func (ps connExPrepStmtsAccessor) List() map[string]*PreparedStatement {
 	return ret
 }
 
-// Get is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) Get(name string) (*PreparedStatement, bool) {
-	s, ok := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
-	return s, ok
-}
-
 // Delete is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool {
-	_, ok := ps.Get(name)
+	_, ok := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 	if !ok {
 		return false
 	}

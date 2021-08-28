@@ -103,13 +103,9 @@ type preparedStatementsAccessor interface {
 	// List returns all prepared statements as a map keyed by name.
 	// The map itself is a copy of the prepared statements.
 	List() map[string]*PreparedStatement
-	// Get returns the prepared statement with the given name. The returned bool
-	// is false if a statement with the given name doesn't exist.
-	Get(name string) (*PreparedStatement, bool)
 	// Delete removes the PreparedStatement with the provided name from the
-	// collection. If a portal exists for that statement, it is also removed.
-	// The method returns true if statement with that name was found and removed,
-	// false otherwise.
+	// collection. The method returns true if statement with that name was found
+	// and removed, false otherwise.
 	Delete(ctx context.Context, name string) bool
 	// DeleteAll removes all prepared statements and portals from the collection.
 	DeleteAll(ctx context.Context)
@@ -127,16 +123,22 @@ type PreparedPortal struct {
 	// OutFormats contains the requested formats for the output columns.
 	OutFormats []pgwirebase.FormatCode
 
-	// refCount keeps track of the number of references to this PreparedStatement.
-	// New references are registered through incRef().
-	// Most references are being held by portals created from this prepared
-	// statement.
-	refCount int
-
 	// exhausted tracks whether this portal has already been fully exhausted,
 	// meaning that any additional attempts to execute it should return no
 	// rows.
 	exhausted bool
+
+	// mutablePreparedPortalState keeps track of the reference counter. This
+	// needs to be mutable and is, thus, shared among all references.
+	*mutablePreparedPortalState
+}
+
+type mutablePreparedPortalState struct {
+	// refCount keeps track of the number of references to the PreparedStatement.
+	// New references are registered through incRef().
+	// Most references are being held by portals created from this prepared
+	// statement.
+	refCount int
 }
 
 // makePreparedPortal creates a new PreparedPortal.
@@ -151,10 +153,10 @@ func (ex *connExecutor) makePreparedPortal(
 	outFormats []pgwirebase.FormatCode,
 ) (PreparedPortal, error) {
 	portal := PreparedPortal{
-		Stmt:       stmt,
-		Qargs:      qargs,
-		OutFormats: outFormats,
-		refCount:   1,
+		Stmt:                       stmt,
+		Qargs:                      qargs,
+		OutFormats:                 outFormats,
+		mutablePreparedPortalState: &mutablePreparedPortalState{refCount: 1},
 	}
 	if err := ex.extraTxnState.prepStmtsNamespaceMemAcc.Grow(ctx, portal.size(name)); err != nil {
 		return PreparedPortal{}, err
