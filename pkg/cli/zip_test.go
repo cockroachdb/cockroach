@@ -348,6 +348,7 @@ func eraseNonDeterministicZipOutput(out string) string {
 // need the SSL certs dir to run a CLI test securely.
 func TestPartialZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 69450, "flaky test")
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	// We want a low timeout so that the test doesn't take forever;
