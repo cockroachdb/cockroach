@@ -2008,6 +2008,10 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 		return errors.New("cannot import timeseries into an existing cluster or a multi-{store,node} cluster")
 	}
 
+	// Also do a best effort at disabling the timeseries of the local node to cause
+	// confusion.
+	ts.TimeseriesStorageEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+
 	f, err := os.Open(tsImport)
 	if err != nil {
 		return err
@@ -2090,7 +2094,7 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 				return err
 			}
 			ss = append(ss, statuspb.StoreStatus{Desc: roachpb.StoreDescriptor{StoreID: roachpb.StoreID(sid)}})
-			delete(storeIDs, nodeString)
+			delete(storeIDs, storeString)
 		}
 
 		ns := statuspb.NodeStatus{

@@ -65,8 +65,6 @@ const (
 	// gossipStatusInterval is the interval for logging gossip status.
 	gossipStatusInterval = 1 * time.Minute
 
-	// FirstNodeID is the node ID of the first node in a new cluster.
-	FirstNodeID         = 1
 	graphiteIntervalKey = "external.graphite.interval"
 	maxGraphiteInterval = 15 * time.Minute
 )
@@ -232,7 +230,6 @@ func bootstrapCluster(
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
 	// other than the first one, and let regular node startup code deal with them.
 	var bootstrapVersion clusterversion.ClusterVersion
-	const firstStoreID = 1
 	for i, eng := range engines {
 		cv, err := kvserver.ReadClusterVersion(ctx, eng)
 		if err != nil {
@@ -250,8 +247,8 @@ func bootstrapCluster(
 
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
-			NodeID:    FirstNodeID,
-			StoreID:   roachpb.StoreID(i + firstStoreID),
+			NodeID:    kvserver.FirstNodeID,
+			StoreID:   kvserver.FirstStoreID + roachpb.StoreID(i),
 		}
 
 		// Initialize the engine backing the store with the store ident and cluster
