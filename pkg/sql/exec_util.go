@@ -2516,7 +2516,8 @@ type sessionDataMutatorCallbacks struct {
 	// onTempSchemaCreation is called when the temporary schema is set
 	// on the search path (the first and only time).
 	// It can be nil, in which case nothing triggers on execution.
-	onTempSchemaCreation func()
+	onTempSchemaCreation   func()
+	onDefaultIntSizeChange func(int32)
 	// onSessionDataChangeListeners stores all the observers to execute when
 	// session data is modified, keyed by the value to change on.
 	onSessionDataChangeListeners map[string][]func(val string)
@@ -2643,6 +2644,7 @@ func (m *sessionDataMutator) SetTemporarySchemaIDForDatabase(dbID uint32, tempSc
 
 func (m *sessionDataMutator) SetDefaultIntSize(size int32) {
 	m.data.DefaultIntSize = size
+	m.onDefaultIntSizeChange(size)
 }
 
 func (m *sessionDataMutator) SetDefaultTransactionPriority(val tree.UserPriority) {

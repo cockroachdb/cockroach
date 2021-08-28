@@ -861,6 +861,37 @@ func TestTrimFlushedStatements(t *testing.T) {
 	require.NoError(t, tx.Commit())
 }
 
+// TestUnqualifiedIntSizeRace makes sure there is no data race using the
+// default_int_size session variable during statement parsing.
+// Regression test for https://github.com/cockroachdb/cockroach/issues/69451.
+func TestUnqualifiedIntSizeRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Connect to the cluster via the PGWire client.
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), security.RootUser)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "SET default_int_size = 8"}`))
+	require.NoError(t, p.SendOneLine(`Query {"String": "SET default_int_size = 4"}`))
+	require.NoError(t, p.SendOneLine(`Parse {"Query": "SELECT generate_series(1, 10)"}`))
+	require.NoError(t, p.SendOneLine(`Bind {"DestinationPortal": "C_1"}`))
+
+	// wait for ready
+	for i := 0; i < 2; i++ {
+		until := pgtest.ParseMessages("ReadyForQuery")
+		_, err = p.Until(false /* keepErrMsg */, until...)
+		require.NoError(t, err)
+	}
+}
+
 func TestTrimSuspendedPortals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -906,13 +937,13 @@ func TestTrimSuspendedPortals(t *testing.T) {
 	// setup the portal
 	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
 
+	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Parse {"Query": "%s"}`, selectStmt)))
+	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Bind {"DestinationPortal": "%s"}`, portalName)))
+
 	// wait for ready
 	until := pgtest.ParseMessages("ReadyForQuery")
 	_, err = p.Until(false /* keepErrMsg */, until...)
 	require.NoError(t, err)
-
-	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Parse {"Query": "%s"}`, selectStmt)))
-	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Bind {"DestinationPortal": "%s"}`, portalName)))
 
 	// Execute the portal 10 times
 	for i := 1; i <= 10; i++ {
@@ -942,7 +973,6 @@ func TestTrimSuspendedPortals(t *testing.T) {
 	msg, _ := p.Until(false /* keepErrMsg */, until...)
 	received := pgtest.MsgsToJSONWithIgnore(msg, &datadriven.TestData{})
 	require.Equal(t, 1, strings.Count(received, `"Type":"CommandComplete","CommandTag":"COMMIT"`))
-
 }
 
 func TestShowLastQueryStatisticsUnknown(t *testing.T) {
