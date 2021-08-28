@@ -56,6 +56,7 @@ go_test(
     name = "persistedsqlstats_test",
     srcs = [
         "compaction_test.go",
+        "controller_test.go",
         "flush_test.go",
         "main_test.go",
         "reader_test.go",
