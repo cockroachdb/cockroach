@@ -204,7 +204,7 @@ func (ex *connExecutor) prepare(
 			},
 		}
 		prepared.Statement = stmt.Statement
-		prepared.AnonymizedStr = stmt.AnonymizedStr
+		prepared.StatementNoConstants = stmt.StmtNoConstants
 
 		// Point to the prepared state, which can be further populated during query
 		// preparation.

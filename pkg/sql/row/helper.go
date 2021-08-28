@@ -33,27 +33,27 @@ import (
 )
 
 const (
-	// maxRowSizeFloor is the lower bound for sql.mutations.max_row_size.{log|err}.
+	// maxRowSizeFloor is the lower bound for sql.guardrails.max_row_size_{log|err}.
 	maxRowSizeFloor = 1 << 10
-	// maxRowSizeCeil is the upper bound for sql.mutations.max_row_size.{log|err}.
+	// maxRowSizeCeil is the upper bound for sql.guardrails.max_row_size_{log|err}.
 	maxRowSizeCeil = 1 << 30
 )
 
 var maxRowSizeLog = settings.RegisterByteSizeSetting(
-	"sql.mutations.max_row_size.log",
+	"sql.guardrails.max_row_size_log",
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF "+
-		"if the mutating statement was internal); setting to 0 disables large row logging",
+		"if the mutating statement was internal); use 0 to disable",
 	kvserver.MaxCommandSizeDefault,
 	func(size int64) error {
 		if size != 0 && size < maxRowSizeFloor {
 			return errors.Newf(
-				"cannot set sql.mutations.max_row_size.log to %v, must be 0 or >= %v",
+				"cannot set sql.guardrails.max_row_size_log to %v, must be 0 or >= %v",
 				size, maxRowSizeFloor,
 			)
 		} else if size > maxRowSizeCeil {
 			return errors.Newf(
-				"cannot set sql.mutations.max_row_size.log to %v, must be <= %v",
+				"cannot set sql.guardrails.max_row_size_log to %v, must be <= %v",
 				size, maxRowSizeCeil,
 			)
 		}
@@ -62,20 +62,19 @@ var maxRowSizeLog = settings.RegisterByteSizeSetting(
 ).WithPublic()
 
 var maxRowSizeErr = settings.RegisterByteSizeSetting(
-	"sql.mutations.max_row_size.err",
+	"sql.guardrails.max_row_size_err",
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
-		"write to the database, above which an error is returned; setting to 0 disables large row "+
-		"errors",
+		"write to the database, above which an error is returned; use 0 to disable",
 	512<<20, /* 512 MiB */
 	func(size int64) error {
 		if size != 0 && size < maxRowSizeFloor {
 			return errors.Newf(
-				"cannot set sql.mutations.max_row_size.err to %v, must be 0 or >= %v",
+				"cannot set sql.guardrails.max_row_size_err to %v, must be 0 or >= %v",
 				size, maxRowSizeFloor,
 			)
 		} else if size > maxRowSizeCeil {
 			return errors.Newf(
-				"cannot set sql.mutations.max_row_size.err to %v, must be <= %v",
+				"cannot set sql.guardrails.max_row_size_err to %v, must be <= %v",
 				size, maxRowSizeCeil,
 			)
 		}
@@ -105,6 +104,7 @@ type rowHelper struct {
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
 	internal                     bool
+	metrics                      *Metrics
 }
 
 func newRowHelper(
@@ -113,8 +113,15 @@ func newRowHelper(
 	indexes []catalog.Index,
 	sv *settings.Values,
 	internal bool,
+	metrics *Metrics,
 ) rowHelper {
-	rh := rowHelper{Codec: codec, TableDesc: desc, Indexes: indexes, internal: internal}
+	rh := rowHelper{
+		Codec:     codec,
+		TableDesc: desc,
+		Indexes:   indexes,
+		internal:  internal,
+		metrics:   metrics,
+	}
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
@@ -242,38 +249,45 @@ func (rh *rowHelper) sortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnI
 }
 
 // checkRowSize compares the size of a primary key column family against the
-// max_row_size limit.
+// max_row_size limits.
 func (rh *rowHelper) checkRowSize(
 	ctx context.Context, key *roachpb.Key, value *roachpb.Value, family descpb.FamilyID,
 ) error {
 	size := uint32(len(*key)) + uint32(len(value.RawBytes))
 	shouldLog := rh.maxRowSizeLog != 0 && size > rh.maxRowSizeLog
 	shouldErr := rh.maxRowSizeErr != 0 && size > rh.maxRowSizeErr
-	if shouldLog || shouldErr {
-		details := eventpb.CommonLargeRowDetails{
-			RowSize:               size,
-			TableID:               uint32(rh.TableDesc.GetID()),
-			FamilyID:              uint32(family),
-			PrimaryKey:            keys.PrettyPrint(rh.primIndexValDirs, *key),
-			ViolatesMaxRowSizeErr: shouldErr,
+	if !shouldLog && !shouldErr {
+		return nil
+	}
+	details := eventpb.CommonLargeRowDetails{
+		RowSize:               size,
+		TableID:               uint32(rh.TableDesc.GetID()),
+		FamilyID:              uint32(family),
+		PrimaryKey:            keys.PrettyPrint(rh.primIndexValDirs, *key),
+		ViolatesMaxRowSizeErr: shouldErr,
+	}
+	if rh.internal && shouldErr {
+		// Internal work should never err and always log if violating either limit.
+		shouldErr = false
+		shouldLog = true
+	}
+	if shouldLog {
+		if rh.metrics != nil {
+			rh.metrics.MaxRowSizeLogCount.Inc(1)
 		}
-		if rh.internal && shouldErr {
-			// Internal work should never err and always log if violating either limit.
-			shouldErr = false
-			shouldLog = true
+		var event eventpb.EventPayload
+		if rh.internal {
+			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
+		} else {
+			event = &eventpb.LargeRow{CommonLargeRowDetails: details}
 		}
-		if shouldLog {
-			var event eventpb.EventPayload
-			if rh.internal {
-				event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
-			} else {
-				event = &eventpb.LargeRow{CommonLargeRowDetails: details}
-			}
-			log.StructuredEvent(ctx, event)
+		log.StructuredEvent(ctx, event)
+	}
+	if shouldErr {
+		if rh.metrics != nil {
+			rh.metrics.MaxRowSizeErrCount.Inc(1)
 		}
-		if shouldErr {
-			return pgerror.WithCandidateCode(&details, pgcode.ProgramLimitExceeded)
-		}
+		return pgerror.WithCandidateCode(&details, pgcode.ProgramLimitExceeded)
 	}
 	return nil
 }

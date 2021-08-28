@@ -2277,6 +2277,16 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Transactions",
 			},
+			{
+				Title: "Maximum Row Size Violations",
+				Metrics: []string{
+					"sql.guardrails.max_row_size_log.count",
+					"sql.guardrails.max_row_size_log.count.internal",
+					"sql.guardrails.max_row_size_err.count",
+					"sql.guardrails.max_row_size_err.count.internal",
+				},
+				AxisLabel: "Rows",
+			},
 		},
 	},
 	{

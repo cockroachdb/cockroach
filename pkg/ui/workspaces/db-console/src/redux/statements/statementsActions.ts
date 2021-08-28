@@ -10,6 +10,7 @@
 
 import { Action } from "redux";
 import { PayloadAction } from "src/interfaces/action";
+import { Moment } from "moment";
 
 export const CREATE_STATEMENT_DIAGNOSTICS_REPORT =
   "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_REPORT";
@@ -54,6 +55,31 @@ export function createOpenDiagnosticsModalAction(
     type: OPEN_STATEMENT_DIAGNOSTICS_MODAL,
     payload: {
       statementFingerprint,
+    },
+  };
+}
+
+/***************************************
+        Combined Stats Actions
+****************************************/
+
+export const SET_COMBINED_STATEMENTS_RANGE =
+  "cockroachui/statements/SET_COMBINED_STATEMENTS_RANGE";
+
+export type CombinedStatementsPayload = {
+  start: Moment;
+  end: Moment;
+};
+
+export function setCombinedStatementsDateRangeAction(
+  start: Moment,
+  end: Moment,
+): PayloadAction<CombinedStatementsPayload> {
+  return {
+    type: SET_COMBINED_STATEMENTS_RANGE,
+    payload: {
+      start,
+      end,
     },
   };
 }

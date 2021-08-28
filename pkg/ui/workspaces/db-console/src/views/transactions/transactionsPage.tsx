@@ -11,6 +11,7 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter } from "react-router-dom";
+import moment from "moment";
 import { refreshStatements } from "src/redux/apiReducers";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -22,6 +23,8 @@ import { PrintTime } from "src/views/reports/containers/range/print";
 
 import { TransactionsPage } from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
+import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
+import { setCombinedStatementsDateRangeAction } from "src/redux/statements";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
@@ -50,11 +53,19 @@ const selectLastError = createSelector(
   (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
 );
 
+export const selectDateRange = createSelector(
+  statementsDateRangeLocalSetting.selector,
+  (state: { start: number; end: number }): [moment.Moment, moment.Moment] => {
+    return [moment.unix(state.start), moment.unix(state.end)];
+  },
+);
+
 const TransactionsPageConnected = withRouter(
   connect(
     (state: AdminUIState) => ({
       data: selectData(state),
       statementsError: state.cachedData.statements.lastError,
+      dateRange: selectDateRange(state),
       lastReset: selectLastReset(state),
       error: selectLastError(state),
       nodeRegions: nodeRegionsByIDSelector(state),
@@ -62,6 +73,7 @@ const TransactionsPageConnected = withRouter(
     {
       refreshData: refreshStatements,
       resetSQLStats: resetSQLStatsAction,
+      onDateRangeChange: setCombinedStatementsDateRangeAction,
     },
   )(TransactionsPage),
 );

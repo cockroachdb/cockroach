@@ -56,6 +56,7 @@ import {
   trackDownloadDiagnosticsBundleAction,
   trackStatementDetailsSubnavSelectionAction,
 } from "src/redux/analyticsActions";
+import { selectDateRange } from "src/views/statements/statementsPage";
 
 interface Fraction {
   numerator: number;
@@ -154,6 +155,7 @@ export const selectStatement = createSelector(
   (_state: AdminUIState, props: RouteComponentProps) => props,
   (statementsState, props) => {
     const statements = statementsState.data?.statements;
+
     if (!statements) {
       return null;
     }
@@ -192,6 +194,7 @@ const mapStateToProps = (
   return {
     statement,
     statementsError: state.cachedData.statements.lastError,
+    dateRange: selectDateRange(state),
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(

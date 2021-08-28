@@ -693,8 +693,11 @@ func TestPerfLogging(t *testing.T) {
 
 	// Enable slow query logging and large row logging.
 	db.Exec(t, `SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '128ms'`)
-	db.Exec(t, `SET CLUSTER SETTING sql.mutations.max_row_size.log = '1KiB'`)
-	db.Exec(t, `SET CLUSTER SETTING sql.mutations.max_row_size.err = '2KiB'`)
+	db.Exec(t, `SET CLUSTER SETTING sql.guardrails.max_row_size_log = '1KiB'`)
+	db.Exec(t, `SET CLUSTER SETTING sql.guardrails.max_row_size_err = '2KiB'`)
+	defer db.Exec(t, `SET CLUSTER SETTING sql.guardrails.max_row_size_err = DEFAULT`)
+	defer db.Exec(t, `SET CLUSTER SETTING sql.guardrails.max_row_size_log = DEFAULT`)
+	defer db.Exec(t, `SET CLUSTER SETTING sql.log.slow_query.latency_threshold = DEFAULT`)
 
 	// Test schema.
 	db.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY, b BOOL, s STRING)`)
