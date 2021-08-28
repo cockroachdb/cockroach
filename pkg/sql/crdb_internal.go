@@ -5069,7 +5069,7 @@ var crdbInternalStmtStatsTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.statement_statistics (
     aggregated_ts  TIMESTAMPTZ NOT NULL,
     fingerprint_id BYTES NOT NULL,
-    plan_hash      INT8 NOT NULL,
+    plan_hash      BYTES NOT NULL,
     app_name       STRING NOT NULL,
     metadata       JSONB NOT NULL,
     statistics     JSONB NOT NULL,
@@ -5122,6 +5122,11 @@ CREATE TABLE crdb_internal.statement_statistics (
 				fingerprintID := tree.NewDBytes(
 					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.ID))))
 
+				// TODO(azhng): properly update plan_hash value once we can expose it
+				//  from the optimizer.
+				planHash := tree.NewDBytes(
+					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(0)))
+
 				metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(statistics)
 				if err != nil {
 					return err
@@ -5134,11 +5139,9 @@ CREATE TABLE crdb_internal.statement_statistics (
 
 				row = row[:0]
 				row = append(row,
-					aggregatedTs,  // aggregated_ts
-					fingerprintID, // fingerprint_id
-					// TODO(azhng): properly update plan_hash value once we can expose it
-					//  from the optimizer.
-					tree.NewDInt(tree.DInt(0)),          // plan_hash
+					aggregatedTs,                        // aggregated_ts
+					fingerprintID,                       // fingerprint_id
+					planHash,                            // plan_hash
 					tree.NewDString(statistics.Key.App), // app_name
 					tree.NewDJSON(metadataJSON),         // metadata
 					tree.NewDJSON(statisticsJSON),       // statistics
