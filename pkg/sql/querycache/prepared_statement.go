@@ -26,9 +26,9 @@ type PrepareMetadata struct {
 	// Note that AST may be nil if the prepared statement is empty.
 	parser.Statement
 
-	// AnonymizedStr is the anonymized statement string suitable for recording
-	// in statement statistics.
-	AnonymizedStr string
+	// StatementNoConstants is the statement string formatted without constants,
+	// suitable for recording in statement statistics.
+	StatementNoConstants string
 
 	// Provides TypeHints and Types fields which contain placeholder typing
 	// information.
@@ -51,7 +51,7 @@ func (pm *PrepareMetadata) MemoryEstimate() int64 {
 	// it's a small multiple of the string length.
 	res += 2 * int64(len(pm.SQL))
 
-	res += int64(len(pm.AnonymizedStr))
+	res += int64(len(pm.StatementNoConstants))
 
 	res += int64(len(pm.TypeHints)+len(pm.Types)) *
 		int64(unsafe.Sizeof(tree.PlaceholderIdx(0))+unsafe.Sizeof((*types.T)(nil)))

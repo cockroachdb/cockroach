@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+import moment, { Moment } from "moment";
 import {
   aggregateStatementStats,
   appAttr,
@@ -203,4 +204,18 @@ export const selectColumns = createSelector(
     localStorage["showColumns/StatementsPage"]
       ? localStorage["showColumns/StatementsPage"].split(",")
       : null,
+);
+
+export const selectLocalStorageDateRange = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["dateRange/StatementsPage"],
+);
+
+export const selectDateRange = createSelector(
+  selectLocalStorageDateRange,
+  dateRange =>
+    [moment.unix(dateRange.start).utc(), moment.unix(dateRange.end).utc()] as [
+      Moment,
+      Moment,
+    ],
 );

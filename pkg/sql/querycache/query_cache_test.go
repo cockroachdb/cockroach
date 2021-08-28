@@ -55,7 +55,7 @@ func data(sql string, mem *memo.Memo, memEstimate int64) *CachedData {
 	for i := range s {
 		s[i] = 'x'
 	}
-	cd.PrepareMetadata.AnonymizedStr = string(s)
+	cd.PrepareMetadata.StatementNoConstants = string(s)
 	if cd.memoryEstimate() != memEstimate {
 		panic(errors.AssertionFailedf("failed to create CachedData of size %d", memEstimate))
 	}

@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1051,6 +1052,8 @@ type ExecutorConfig struct {
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
+	RowMetrics           *row.Metrics
+	InternalRowMetrics   *row.Metrics
 
 	TestingKnobs                  ExecutorTestingKnobs
 	MigrationTestingKnobs         *migration.TestingKnobs
@@ -2986,7 +2989,10 @@ func HashForReporting(secret, appName string) string {
 	return hex.EncodeToString(hash.Sum(nil)[:4])
 }
 
-func anonymizeStmt(ast tree.Statement) string {
+// formatStatementHideConstants formats the statement using
+// tree.FmtHideConstants. It does *not* anonymize the statement, since
+// the result will still contain names and identifiers.
+func formatStatementHideConstants(ast tree.Statement) string {
 	if ast == nil {
 		return ""
 	}
@@ -3001,4 +3007,22 @@ func DescsTxn(
 	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
 ) error {
 	return execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, f)
+}
+
+// NewRowMetrics creates a row.Metrics struct for either internal or user
+// queries.
+func NewRowMetrics(internal bool) row.Metrics {
+	return row.Metrics{
+		MaxRowSizeLogCount: metric.NewCounter(getMetricMeta(row.MetaMaxRowSizeLog, internal)),
+		MaxRowSizeErrCount: metric.NewCounter(getMetricMeta(row.MetaMaxRowSizeErr, internal)),
+	}
+}
+
+// GetRowMetrics returns the proper RowMetrics for either internal or user
+// queries.
+func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *row.Metrics {
+	if internal {
+		return cfg.InternalRowMetrics
+	}
+	return cfg.RowMetrics
 }

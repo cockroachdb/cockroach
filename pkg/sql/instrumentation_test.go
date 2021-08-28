@@ -138,4 +138,26 @@ func TestSampledStatsCollection(t *testing.T) {
 		)
 		require.Greater(t, txStats.Stats.ExecStats.MaxMemUsage.Mean, float64(0), "expected MaxMemUsage to be set on the txn")
 	})
+
+	t.Run("deallocate", func(t *testing.T) {
+		toggleSampling(false)
+		queryDB(t, db, "PREPARE abc AS SELECT 1")
+		queryDB(t, db, "PREPARE xyz AS SELECT 2 ORDER BY 1")
+		queryDB(t, db, "DEALLOCATE xyz")
+		queryDB(t, db, "DEALLOCATE abc")
+
+		// Make sure DEALLOCATE statements are grouped together rather than having
+		// one key per prepared statement name.
+		stats := getStmtStats(t, s, "DEALLOCATE _", true /* implicitTxn */, "defaultdb")
+
+		require.Equal(t, int64(2), stats.Stats.Count, "expected to have collected two sets of general stats")
+		require.Equal(t, int64(0), stats.Stats.ExecStats.Count, "expected to have collected zero execution stats")
+		require.Equal(t, stats.Stats.RowsRead.Mean, float64(0), "expected statement to have read zero rows")
+
+		// TODO(sql-observability): The PREPARE statements do not appear in the
+		// statement stats because tree.Prepare has a special case in the
+		// (*connExecutor).execStmtInOpenState function that short-circuits before
+		// stats are collected. Should we make DEALLOCATE similar to that, or
+		// should we change PREPARE so that stats are collected?
+	})
 }

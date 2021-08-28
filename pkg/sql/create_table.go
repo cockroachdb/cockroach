@@ -456,6 +456,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 			// Instantiate a row inserter and table writer. It has a 1-1
 			// mapping to the definitions in the descriptor.
+			internal := params.p.SessionData().Internal
 			ri, err := row.MakeInserter(
 				params.ctx,
 				params.p.txn,
@@ -464,7 +465,8 @@ func (n *createTableNode) startExec(params runParams) error {
 				desc.PublicColumns(),
 				params.p.alloc,
 				&params.ExecCfg().Settings.SV,
-				params.p.SessionData().Internal,
+				internal,
+				params.ExecCfg().GetRowMetrics(internal),
 			)
 			if err != nil {
 				return err

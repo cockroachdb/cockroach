@@ -29,7 +29,6 @@ export function* sagas(cacheInvalidationPeriod?: number) {
     fork(nodesSaga, cacheInvalidationPeriod),
     fork(livenessSaga, cacheInvalidationPeriod),
     fork(sessionsSaga),
-    fork(terminateSaga),
     fork(transactionsSaga),
     fork(notifificationsSaga),
     fork(sqlStatsSaga),
