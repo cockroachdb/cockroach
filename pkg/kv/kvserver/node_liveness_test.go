@@ -1020,12 +1020,8 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 		return nil
 	}
 	ctx := context.Background()
-	manualClock := hlc.NewHybridManualClock()
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				ClockSource: manualClock.UnixNano,
-			},
 			Store: &kvserver.StoreTestingKnobs{
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 					TestingEvalFilter: testingEvalFilter,
