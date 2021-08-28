@@ -42,4 +42,5 @@ type TestingKnobs struct {
 	SQLStatsKnobs           ModuleTestingKnobs
 	SpanConfig              ModuleTestingKnobs
 	SQLLivenessKnobs        ModuleTestingKnobs
+	DialerKnobs             ModuleTestingKnobs
 }

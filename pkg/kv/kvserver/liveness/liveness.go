@@ -1227,11 +1227,6 @@ func (nl *NodeLiveness) updateLiveness(
 	ctx context.Context, update livenessUpdate, handleCondFailed func(actual Record) error,
 ) (Record, error) {
 	for {
-		// Before each attempt, ensure that the context has not expired.
-		if err := ctx.Err(); err != nil {
-			return Record{}, err
-		}
-
 		nl.mu.RLock()
 		engines := nl.mu.engines
 		nl.mu.RUnlock()
@@ -1324,6 +1319,13 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			}
 			return Record{}, handleCondFailed(Record{Liveness: actualLiveness, raw: tErr.ActualValue.TagAndDataBytes()})
 		} else if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
+			// We generally want to retry ambiguous errors immediately, except if the
+			// ctx is canceled - in which case the ambiguous error is probably caused
+			// by the cancellation (and in any case it's pointless to retry with a
+			// canceled ctx).
+			if ctx.Err() != nil {
+				return Record{}, err
+			}
 			return Record{}, &errRetryLiveness{err}
 		}
 		return Record{}, err
