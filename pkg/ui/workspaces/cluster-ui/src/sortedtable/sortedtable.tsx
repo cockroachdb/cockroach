@@ -56,6 +56,8 @@ export interface ColumnDescriptor<T> {
   showByDefault?: boolean;
   // If true, the user can't overwrite the setting for this column. False if not defined.
   alwaysShow?: boolean;
+  // If true, hide this column for tenant clusters. False if not defined.
+  hideIfTenant?: boolean;
 }
 
 /**

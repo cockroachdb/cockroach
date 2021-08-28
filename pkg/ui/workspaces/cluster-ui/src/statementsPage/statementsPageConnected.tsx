@@ -33,6 +33,7 @@ import {
   selectTotalFingerprints,
   selectColumns,
 } from "./statementsPage.selectors";
+import { selectIsTenant } from "../store/uiConfig";
 import { AggregateStatistics } from "../statementsTable";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 
@@ -51,6 +52,7 @@ export const ConnectedStatementsPage = withRouter(
       lastReset: selectLastReset(state),
       columns: selectColumns(state),
       nodeRegions: nodeRegionsByIDSelector(state),
+      isTenant: selectIsTenant(state),
     }),
     (dispatch: Dispatch) => ({
       refreshStatements: () => dispatch(statementActions.refresh()),

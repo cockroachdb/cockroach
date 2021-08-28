@@ -46,6 +46,7 @@ import {
   defaultFilters,
   getFiltersFromQueryString,
 } from "../queryFilter";
+import { UIConfigState } from "../store/uiConfig";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
@@ -66,6 +67,7 @@ export interface TransactionsPageStateProps {
   nodeRegions: { [nodeId: string]: string };
   error?: Error | null;
   pageSize?: number;
+  isTenant?: UIConfigState["isTenant"];
 }
 
 export interface TransactionsPageDispatchProps {
@@ -81,6 +83,10 @@ export class TransactionsPage extends React.Component<
   TransactionsPageProps,
   TState
 > {
+  static defaultProps: Partial<TransactionsPageProps> = {
+    isTenant: false,
+  };
+
   trxSearchParams = getSearchParams(this.props.history.location.search);
   filters = getFiltersFromQueryString(this.props.history.location.search);
   state: TState = {
@@ -220,19 +226,23 @@ export class TransactionsPage extends React.Component<
           loading={!this.props?.data}
           error={this.props?.error}
           render={() => {
-            const { data, resetSQLStats, nodeRegions } = this.props;
+            const { data, resetSQLStats, nodeRegions, isTenant } = this.props;
             const { pagination, search, filters } = this.state;
             const { statements, internal_app_name_prefix } = data;
             const appNames = getTrxAppFilterOptions(
               data.transactions,
               internal_app_name_prefix,
             );
-            const nodes = Object.keys(nodeRegions)
-              .map(n => Number(n))
-              .sort();
-            const regions = unique(
-              nodes.map(node => nodeRegions[node.toString()]),
-            ).sort();
+            // If the cluster is a tenant cluster we don't show info
+            // about nodes/regions.
+            const nodes = isTenant
+              ? []
+              : Object.keys(nodeRegions)
+                  .map(n => Number(n))
+                  .sort();
+            const regions = isTenant
+              ? []
+              : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
             // We apply the search filters and app name filters prior to aggregating across Node IDs
             // in order to match what's done on the Statements Page.
             //
@@ -247,6 +257,7 @@ export class TransactionsPage extends React.Component<
               internal_app_name_prefix,
               statements,
               nodeRegions,
+              isTenant,
             );
             const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
               filteredTransactions,
@@ -254,7 +265,9 @@ export class TransactionsPage extends React.Component<
             ).map(t => ({
               stats_data: t.stats_data,
               node_id: t.node_id,
-              regionNodes: generateRegionNode(t, statements, nodeRegions),
+              regionNodes: isTenant
+                ? []
+                : generateRegionNode(t, statements, nodeRegions),
             }));
             const { current, pageSize } = pagination;
             const hasData = data.transactions?.length > 0;
@@ -298,6 +311,7 @@ export class TransactionsPage extends React.Component<
                     transactions={transactionsToDisplay}
                     statements={statements}
                     nodeRegions={nodeRegions}
+                    isTenant={isTenant}
                     sortSetting={this.state.sortSetting}
                     onChangeSortSetting={this.onChangeSortSetting}
                     handleDetails={this.handleDetails}
@@ -344,6 +358,7 @@ export class TransactionsPage extends React.Component<
         handleDetails={this.handleDetails}
         error={this.props.error}
         resetSQLStats={this.props.resetSQLStats}
+        isTenant={this.props.isTenant}
       />
     );
   }
