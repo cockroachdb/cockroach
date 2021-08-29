@@ -736,6 +736,48 @@ func TestCreateBackupScheduleCollectionOverwrite(t *testing.T) {
 		"RECURRING '@daily' WITH SCHEDULE OPTIONS ignore_existing_backups;")
 }
 
+// TestCreateBackupScheduleIfNotExists: checks if adding IF NOT EXISTS will
+// create the schedule only if the schedule label doesn't already exist.
+func TestCreateBackupScheduleIfNotExists(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	const collectionLocation = "nodelocal://1/collection"
+	const scheduleLabel = "foo"
+	const createQuery = "CREATE SCHEDULE IF NOT EXISTS '%s' FOR BACKUP INTO '%s' RECURRING '@daily' FULL BACKUP ALWAYS;"
+
+	th.sqlDB.Exec(t, fmt.Sprintf(createQuery, scheduleLabel, collectionLocation))
+
+	// no op expected
+	th.sqlDB.Exec(t, fmt.Sprintf(createQuery, scheduleLabel, collectionLocation))
+
+	const selectQuery = "SELECT label FROM [SHOW SCHEDULES] WHERE command->>'backup_statement' LIKE 'BACKUP%';"
+
+	rows, err := th.cfg.InternalExecutor.QueryBufferedEx(
+		context.Background(), "check-sched", nil,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		selectQuery)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, len(rows))
+
+	// the 'bar' schedule should get scheduled
+	const newScheduleLabel = "bar"
+
+	th.sqlDB.Exec(t, fmt.Sprintf(createQuery, newScheduleLabel, collectionLocation))
+
+	rows, err = th.cfg.InternalExecutor.QueryBufferedEx(
+		context.Background(), "check-sched2", nil,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		selectQuery)
+
+	require.NoError(t, err)
+	require.Equal(t, 2, len(rows))
+}
+
 func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -987,8 +1029,10 @@ func constructExpectedScheduledBackupNode(
 		},
 	}
 	sb := &tree.ScheduledBackup{
-		ScheduleLabel: tree.NewDString(sj.ScheduleLabel()),
-		Recurrence:    tree.NewDString(recurrence),
+		ScheduleLabelSpec: tree.ScheduleLabelSpec{
+			IfNotExists: false,
+			Label:       tree.NewDString(sj.ScheduleLabel())},
+		Recurrence: tree.NewDString(recurrence),
 		FullBackup: &tree.FullBackupClause{
 			AlwaysFull: fullBackupAlways,
 		},
