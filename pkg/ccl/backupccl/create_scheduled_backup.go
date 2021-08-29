@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
@@ -273,6 +275,26 @@ func doCreateBackupSchedules(
 	if err := p.RequireAdminRole(ctx, scheduleBackupOp); err != nil {
 		return err
 	}
+
+	if eval.ScheduleLabelSpec.IfNotExists {
+		scheduleLabel, err := eval.scheduleLabel()
+		if err != nil {
+			return err
+		}
+
+		exists, err := checkScheduleAlreadyExists(ctx, p, scheduleLabel)
+		if err != nil {
+			return err
+		}
+
+		if exists {
+			p.BufferClientNotice(ctx,
+				pgnotice.Newf("schedule %q already exists, skipping", scheduleLabel),
+			)
+			return nil
+		}
+	}
+
 	env := scheduledjobs.ProdJobSchedulerEnv
 	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
@@ -632,6 +654,23 @@ func emitSchedule(
 	return nil
 }
 
+// checkScheduleAlreadyExists returns true if a schedule with the same label already exists,
+// regardless of backup destination.
+func checkScheduleAlreadyExists(
+	ctx context.Context, p sql.PlanHookState, scheduleLabel string,
+) (bool, error) {
+
+	row, err := p.ExecCfg().InternalExecutor.QueryRowEx(ctx, "check-sched",
+		p.ExtendedEvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		fmt.Sprintf("SELECT count(schedule_name) FROM %s WHERE schedule_name = '%s'",
+			scheduledjobs.ProdJobSchedulerEnv.ScheduledJobsTableName(), scheduleLabel))
+
+	if err != nil {
+		return false, err
+	}
+	return int64(tree.MustBeDInt(row[0])) != 0, nil
+}
+
 // dryRunBackup executes backup in dry-run mode: we simply execute backup
 // under transaction savepoint, and then rollback to that save point.
 func dryRunBackup(ctx context.Context, p sql.PlanHookState, backupNode *tree.Backup) error {
@@ -662,8 +701,8 @@ func makeScheduledBackupEval(
 	eval := &scheduledBackupEval{ScheduledBackup: schedule}
 	var err error
 
-	if schedule.ScheduleLabel != nil {
-		eval.scheduleLabel, err = p.TypeAsString(ctx, schedule.ScheduleLabel, scheduleBackupOp)
+	if schedule.ScheduleLabelSpec.Label != nil {
+		eval.scheduleLabel, err = p.TypeAsString(ctx, schedule.ScheduleLabelSpec.Label, scheduleBackupOp)
 		if err != nil {
 			return nil, err
 		}
@@ -785,6 +824,7 @@ func createBackupScheduleHook(
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
+
 	eval, err := makeScheduledBackupEval(ctx, p, schedule)
 	if err != nil {
 		return nil, nil, nil, false, err

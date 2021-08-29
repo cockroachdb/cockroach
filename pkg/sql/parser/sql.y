@@ -675,6 +675,11 @@ func (u *sqlSymUnion) listOfStringOrPlaceholderOptList() []tree.StringOrPlacehol
 func (u *sqlSymUnion) fullBackupClause() *tree.FullBackupClause {
     return u.val.(*tree.FullBackupClause)
 }
+
+func (u *sqlSymUnion) scheduleLabelSpec() *tree.ScheduleLabelSpec {
+    return u.val.(*tree.ScheduleLabelSpec)
+}
+
 func (u *sqlSymUnion) geoShapeType() geopb.ShapeType {
   return u.val.(geopb.ShapeType)
 }
@@ -1383,6 +1388,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Persistence> opt_persistence_temp_table
 %type <bool> role_or_group_or_user
 
+%type <*tree.ScheduleLabelSpec> schedule_label_spec
 %type <tree.Expr>  cron_expr opt_description sconst_or_placeholder
 %type <*tree.FullBackupClause> opt_full_backup_clause
 %type <tree.ScheduleState> schedule_state
@@ -2689,7 +2695,8 @@ backup_options:
 // %Help: CREATE SCHEDULE FOR BACKUP - backup data periodically
 // %Category: CCL
 // %Text:
-// CREATE SCHEDULE [<description>]
+// CREATE SCHEDULE [IF NOT EXISTS]
+// [<description>]
 // FOR BACKUP [<targets>] INTO <location...>
 // [WITH <backup_option>[=<value>] [, ...]]
 // RECURRING [crontab|NEVER] [FULL BACKUP <crontab|ALWAYS>]
@@ -2759,21 +2766,21 @@ backup_options:
 //
 // %SeeAlso: BACKUP
 create_schedule_for_backup_stmt:
-  CREATE SCHEDULE /*$3=*/opt_description FOR BACKUP /*$6=*/opt_backup_targets INTO
+ CREATE SCHEDULE /*$3=*/schedule_label_spec FOR BACKUP /*$6=*/opt_backup_targets INTO
   /*$8=*/string_or_placeholder_opt_list /*$9=*/opt_with_backup_options
   /*$10=*/cron_expr /*$11=*/opt_full_backup_clause /*$12=*/opt_with_schedule_options
   {
-    $$.val = &tree.ScheduledBackup{
-      ScheduleLabel:    $3.expr(),
-      Recurrence:       $10.expr(),
-      FullBackup:       $11.fullBackupClause(),
-      To:               $8.stringOrPlaceholderOptList(),
-      Targets:          $6.targetListPtr(),
-      BackupOptions:    *($9.backupOptions()),
-      ScheduleOptions:  $12.kvOptions(),
-    }
+  $$.val = &tree.ScheduledBackup{
+        ScheduleLabelSpec:    *($3.scheduleLabelSpec()),
+        Recurrence:           $10.expr(),
+        FullBackup:           $11.fullBackupClause(),
+        To:                   $8.stringOrPlaceholderOptList(),
+        Targets:              $6.targetListPtr(),
+        BackupOptions:        *($9.backupOptions()),
+        ScheduleOptions:      $12.kvOptions(),
+      }
   }
-| CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE FOR BACKUP
+ | CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE FOR BACKUP
 
 opt_description:
   string_or_placeholder
@@ -2803,6 +2810,21 @@ cron_expr:
   {
     $$.val = $2.expr()
   }
+
+schedule_label_spec:
+  string_or_placeholder
+  {
+      $$.val = &tree.ScheduleLabelSpec{Label: $1.expr(), IfNotExists: false}
+  }
+| IF NOT EXISTS string_or_placeholder
+  {
+      $$.val = &tree.ScheduleLabelSpec{Label: $4.expr(), IfNotExists: true}
+  }
+| /* EMPTY */
+  {
+      $$.val = &tree.ScheduleLabelSpec{IfNotExists: false}
+  }
+
 
 opt_full_backup_clause:
   FULL BACKUP sconst_or_placeholder
