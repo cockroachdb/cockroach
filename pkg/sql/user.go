@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -76,47 +77,12 @@ func GetUserSessionInitInfo(
 ) (
 	exists bool,
 	canLogin bool,
+	isSuperuser bool,
 	validUntil *tree.DTimestamp,
 	defaultSettings []sessioninit.SettingsCacheEntry,
 	pwRetrieveFn func(ctx context.Context) (hashedPassword []byte, err error),
 	err error,
 ) {
-	if username.IsRootUser() {
-		// As explained above, for root we report that the user exists
-		// immediately, and delay retrieving the password until strictly
-		// necessary.
-		rootFn := func(ctx context.Context) ([]byte, error) {
-			authInfo, _, err := retrieveSessionInitInfoWithCache(ctx, execCfg, ie, username, databaseName)
-			return authInfo.HashedPassword, err
-		}
-
-		// Root user cannot have password expiry and must have login.
-		// It also never has default settings applied to it.
-		return true, true, nil, nil, rootFn, nil
-	}
-
-	// Other users must reach for system.users no matter what, because
-	// only that contains the truth about whether the user exists.
-	authInfo, settingsEntries, err := retrieveSessionInitInfoWithCache(
-		ctx, execCfg, ie, username, databaseName,
-	)
-	return authInfo.UserExists,
-		authInfo.CanLogin,
-		authInfo.ValidUntil,
-		settingsEntries,
-		func(ctx context.Context) ([]byte, error) {
-			return authInfo.HashedPassword, nil
-		},
-		err
-}
-
-func retrieveSessionInitInfoWithCache(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	ie *InternalExecutor,
-	username security.SQLUsername,
-	databaseName string,
-) (aInfo sessioninit.AuthInfo, settingsEntries []sessioninit.SettingsCacheEntry, err error) {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
 	// We don't like long timeouts for root.
@@ -132,7 +98,89 @@ func retrieveSessionInitInfoWithCache(
 			return contextutil.RunWithTimeout(ctx, "get-user-timeout", timeout, fn)
 		}
 	}
-	err = runFn(func(ctx context.Context) (retErr error) {
+
+	if username.IsRootUser() {
+		// As explained above, for root we report that the user exists
+		// immediately, and delay retrieving the password until strictly
+		// necessary.
+		rootFn := func(ctx context.Context) ([]byte, error) {
+			var ret []byte
+			if err := runFn(func(ctx context.Context) error {
+				authInfo, _, err := retrieveSessionInitInfoWithCache(ctx, execCfg, ie, username, databaseName)
+				if err != nil {
+					return err
+				}
+				ret = authInfo.HashedPassword
+				return nil
+			}); err != nil {
+				return nil, err
+			}
+			return ret, nil
+		}
+
+		// Root user cannot have password expiry and must have login.
+		// It also never has default settings applied to it.
+		return true, true, true, nil, nil, rootFn, nil
+	}
+
+	var authInfo sessioninit.AuthInfo
+	var settingsEntries []sessioninit.SettingsCacheEntry
+
+	if err = runFn(func(ctx context.Context) error {
+		// Other users must reach for system.users no matter what, because
+		// only that contains the truth about whether the user exists.
+		authInfo, settingsEntries, err = retrieveSessionInitInfoWithCache(
+			ctx, execCfg, ie, username, databaseName,
+		)
+		if err != nil {
+			return err
+		}
+
+		// Find whether the user is an admin.
+		return execCfg.CollectionFactory.Txn(
+			ctx,
+			ie,
+			execCfg.DB,
+			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+				memberships, err := MemberOfWithAdminOption(
+					ctx,
+					execCfg,
+					ie,
+					descsCol,
+					txn,
+					username,
+				)
+				if err != nil {
+					return err
+				}
+				_, isSuperuser = memberships[security.AdminRoleName()]
+				return nil
+			},
+		)
+	}); err != nil {
+		log.Warningf(ctx, "user membership lookup for %q failed: %v", username, err)
+		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account memberships")
+	}
+
+	return authInfo.UserExists,
+		authInfo.CanLogin,
+		isSuperuser,
+		authInfo.ValidUntil,
+		settingsEntries,
+		func(ctx context.Context) ([]byte, error) {
+			return authInfo.HashedPassword, nil
+		},
+		err
+}
+
+func retrieveSessionInitInfoWithCache(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	ie *InternalExecutor,
+	username security.SQLUsername,
+	databaseName string,
+) (aInfo sessioninit.AuthInfo, settingsEntries []sessioninit.SettingsCacheEntry, err error) {
+	if err = func() (retErr error) {
 		aInfo, retErr = execCfg.SessionInitCache.GetAuthInfo(
 			ctx,
 			execCfg.Settings,
@@ -160,9 +208,7 @@ func retrieveSessionInitInfoWithCache(
 			retrieveDefaultSettings,
 		)
 		return retErr
-	})
-
-	if err != nil {
+	}(); err != nil {
 		// Failed to retrieve the user account. Report in logs for later investigation.
 		log.Warningf(ctx, "user lookup for %q failed: %v", username, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account")
