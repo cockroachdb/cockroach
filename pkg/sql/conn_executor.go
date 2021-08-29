@@ -605,7 +605,7 @@ func (s *Server) SetupConn(
 	}
 
 	ex := s.newConnExecutor(
-		ctx, sd, args.SessionDefaults, stmtBuf, clientComm, memMetrics, &s.Metrics,
+		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
 		s.sqlStats.GetWriterForApplication(sd.ApplicationName),
 	)
 	return ConnectionHandler{ex}, nil
@@ -721,8 +721,7 @@ func (s *Server) populateMinimalSessionData(sd *sessiondata.SessionData) {
 // RESET statements.
 func (s *Server) newConnExecutor(
 	ctx context.Context,
-	sd *sessiondata.SessionData,
-	sdDefaults SessionDefaults,
+	sdMutIterator *sessionDataMutatorIterator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
@@ -756,13 +755,14 @@ func (s *Server) newConnExecutor(
 
 	nodeIDOrZero, _ := s.cfg.NodeID.OptionalNodeID()
 	ex := &connExecutor{
-		server:           s,
-		metrics:          srvMetrics,
-		stmtBuf:          stmtBuf,
-		clientComm:       clientComm,
-		mon:              sessionRootMon,
-		sessionMon:       sessionMon,
-		sessionDataStack: sessiondata.NewStack(sd),
+		server:              s,
+		metrics:             srvMetrics,
+		stmtBuf:             stmtBuf,
+		clientComm:          clientComm,
+		mon:                 sessionRootMon,
+		sessionMon:          sessionMon,
+		sessionDataStack:    sdMutIterator.sds,
+		dataMutatorIterator: sdMutIterator,
 		state: txnState{
 			mon:                          txnMon,
 			connCtx:                      ctx,
@@ -794,10 +794,6 @@ func (s *Server) newConnExecutor(
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
 
-	ex.dataMutatorIterator = s.makeSessionDataMutatorIterator(
-		ex.sessionDataStack,
-		sdDefaults,
-	)
 	// The transaction_read_only variable is special; its updates need to be
 	// hooked-up to the executor.
 	ex.dataMutatorIterator.setCurTxnReadOnly = func(val bool) {
@@ -825,7 +821,7 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(sd)
+	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(sdMutIterator.sds.Top())
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
@@ -853,8 +849,7 @@ func (s *Server) newConnExecutor(
 // to release resources.
 func (s *Server) newConnExecutorWithTxn(
 	ctx context.Context,
-	sd *sessiondata.SessionData,
-	sdDefaults SessionDefaults,
+	sdMutIterator *sessionDataMutatorIterator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	parentMon *mon.BytesMonitor,
@@ -864,7 +859,15 @@ func (s *Server) newConnExecutorWithTxn(
 	syntheticDescs []catalog.Descriptor,
 	statsWriter sqlstats.Writer,
 ) *connExecutor {
-	ex := s.newConnExecutor(ctx, sd, sdDefaults, stmtBuf, clientComm, memMetrics, srvMetrics, statsWriter)
+	ex := s.newConnExecutor(
+		ctx,
+		sdMutIterator,
+		stmtBuf,
+		clientComm,
+		memMetrics,
+		srvMetrics,
+		statsWriter,
+	)
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
