@@ -488,7 +488,7 @@ func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
 	if !ok {
 		return
 	}
-	portal.decRef(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
+	portal.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 	delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 }
 
