@@ -169,12 +169,13 @@ func (ie *InternalExecutor) initConnEx(
 	}
 	statsWriter := ie.s.sqlStats.GetWriterForApplication(appStatsBucketName)
 
+	sds := sessiondata.NewStack(sd)
+	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
 	var ex *connExecutor
 	if txn == nil {
 		ex = ie.s.newConnExecutor(
 			ctx,
-			sd,
-			nil, /* sdDefaults */
+			sdMutIterator,
 			stmtBuf,
 			clientComm,
 			ie.memMetrics,
@@ -184,8 +185,7 @@ func (ie *InternalExecutor) initConnEx(
 	} else {
 		ex = ie.s.newConnExecutorWithTxn(
 			ctx,
-			sd,
-			nil, /* sdDefaults */
+			sdMutIterator,
 			stmtBuf,
 			clientComm,
 			ie.mon,
