@@ -43,14 +43,14 @@ func NewCollectionFactory(
 }
 
 // MakeCollection constructs a Collection for the purposes of embedding.
-func (cf *CollectionFactory) MakeCollection(sd *sessiondata.SessionData) Collection {
+func (cf *CollectionFactory) MakeCollection(sessionDataStack *sessiondata.Stack) Collection {
 	return makeCollection(
-		cf.leaseMgr, cf.settings, cf.hydratedTables, cf.virtualSchemas, sd,
+		cf.leaseMgr, cf.settings, cf.hydratedTables, cf.virtualSchemas, sessionDataStack,
 	)
 }
 
 // NewCollection constructs a new Collection.
-func (cf *CollectionFactory) NewCollection(sd *sessiondata.SessionData) *Collection {
-	c := cf.MakeCollection(sd)
+func (cf *CollectionFactory) NewCollection(sessionDataStack *sessiondata.Stack) *Collection {
+	c := cf.MakeCollection(sessionDataStack)
 	return &c
 }

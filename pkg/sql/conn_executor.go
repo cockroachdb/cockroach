@@ -821,7 +821,7 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(sdMutIterator.sds.Top())
+	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(sdMutIterator.sds)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
@@ -2387,7 +2387,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		ex.memMetrics,
 		ex.server.cfg.Settings,
 	)
-	ie.SetSessionData(ex.sessionData())
+	ie.SetSessionDataStack(ex.sessionDataStack)
 
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{

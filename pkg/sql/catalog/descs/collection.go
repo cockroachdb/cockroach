@@ -41,7 +41,7 @@ func makeCollection(
 	settings *cluster.Settings,
 	hydratedTables *hydratedtables.Cache,
 	virtualSchemas catalog.VirtualSchemas,
-	sessionData *sessiondata.SessionData,
+	sessionDataStack *sessiondata.Stack,
 ) Collection {
 	codec := keys.SystemSQLCodec
 	if leaseMgr != nil { // permitted for testing
@@ -55,7 +55,7 @@ func makeCollection(
 		synthetic:      makeSyntheticDescriptors(),
 		uncommitted:    makeUncommittedDescriptors(),
 		kv:             makeKVDescriptors(codec),
-		temporary:      makeTemporaryDescriptors(codec, sessionData),
+		temporary:      makeTemporaryDescriptors(codec, sessionDataStack),
 	}
 }
 
