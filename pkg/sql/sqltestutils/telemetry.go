@@ -212,37 +212,49 @@ func (tt *telemetryTest) RunTest(
 		// Report diagnostics once to reset the counters.
 		reportDiags(ctx)
 		_, err := db.Exec(td.Input)
-		var buf bytes.Buffer
+		var errorStr = ""
 		if err != nil {
-			fmt.Fprintf(&buf, "error: %v\n", err)
+			// This test can be used to check telemetry counters even when a statement
+			// fails (in which case the output contains the error as well).
+			errorStr = fmt.Sprintf("error: %v\n", err)
 		}
-		reportDiags(ctx)
-		last := tt.diagSrv.LastRequestData()
-		usage := last.FeatureUsage
-		keys := make([]string, 0, len(usage))
-		for k, v := range usage {
-			if v == 0 {
-				// Ignore zero values (shouldn't happen in practice)
-				continue
+		// Internal background queries can set telemetry counters. Retry for a few
+		// times and stop when we get the expected result.
+		const retries = 10
+		expected := strings.TrimSpace(td.Expected)
+		var result string
+		for attempt := 0; attempt < retries && result != expected; attempt++ {
+			reportDiags(ctx)
+			last := tt.diagSrv.LastRequestData()
+			usage := last.FeatureUsage
+			keys := make([]string, 0, len(usage))
+			for k, v := range usage {
+				if v == 0 {
+					// Ignore zero values (shouldn't happen in practice)
+					continue
+				}
+				if !tt.allowlist.Match(k) {
+					// Feature key not in allowlist.
+					continue
+				}
+				keys = append(keys, k)
 			}
-			if !tt.allowlist.Match(k) {
-				// Feature key not in allowlist.
-				continue
+			sort.Strings(keys)
+			var buf bytes.Buffer
+			buf.WriteString(errorStr)
+			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+			for _, k := range keys {
+				// Report either just the key or the key and the count.
+				if td.Cmd == "feature-counters" {
+					fmt.Fprintf(tw, "%s\t%d\n", k, usage[k])
+				} else {
+					fmt.Fprintf(tw, "%s\n", k)
+				}
 			}
-			keys = append(keys, k)
+			_ = tw.Flush()
+			result = buf.String()
 		}
-		sort.Strings(keys)
-		tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-		for _, k := range keys {
-			// Report either just the key or the key and the count.
-			if td.Cmd == "feature-counters" {
-				fmt.Fprintf(tw, "%s\t%d\n", k, usage[k])
-			} else {
-				fmt.Fprintf(tw, "%s\n", k)
-			}
-		}
-		_ = tw.Flush()
-		return buf.String()
+		return result
 
 	case "sql-stats":
 		// Report diagnostics once to reset the stats.
