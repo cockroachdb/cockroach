@@ -42,9 +42,9 @@ import (
 )
 
 func registerFollowerReads(r registry.Registry) {
-	register := func(survival survivalGoal, locality localitySetting) {
+	register := func(survival survivalGoal, locality localitySetting, rc readConsistency) {
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
+			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s/reads=%s", survival, locality, rc),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -53,13 +53,19 @@ func registerFollowerReads(r registry.Registry) {
 				c.Start(ctx)
 				topology := topologySpec{multiRegion: true, locality: locality, survival: survival}
 				data := initFollowerReadsDB(ctx, t, c, topology)
-				runFollowerReadsTest(ctx, t, c, topology, data)
+				runFollowerReadsTest(ctx, t, c, topology, rc, data)
 			},
 		})
 	}
 	for _, survival := range []survivalGoal{zone, region} {
 		for _, locality := range []localitySetting{regional, global} {
-			register(survival, locality)
+			for _, rc := range []readConsistency{strong, exactStaleness, boundedStaleness} {
+				if rc == strong && locality != global {
+					// Only GLOBAL tables can perform strongly consistent reads off followers.
+					continue
+				}
+				register(survival, locality, rc)
+			}
 		}
 	}
 
@@ -82,12 +88,19 @@ type survivalGoal string
 // The locality setting of a multi-region table: REGIONAL or GLOBAL.
 type localitySetting string
 
+// The type of read to perform: strongly consistent, exact staleness, or bounded staleness.
+type readConsistency string
+
 const (
 	zone   survivalGoal = "zone"
 	region survivalGoal = "region"
 
 	regional localitySetting = "regional"
 	global   localitySetting = "global"
+
+	strong           readConsistency = "strong"
+	exactStaleness   readConsistency = "exact-staleness"
+	boundedStaleness readConsistency = "bounded-staleness"
 )
 
 // topologySpec defines the settings of a follower-reads test.
@@ -121,7 +134,12 @@ type topologySpec struct {
 //    time are under 10ms which implies that no WAN RPCs occurred.
 //
 func runFollowerReadsTest(
-	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec, data map[int]int64,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	topology topologySpec,
+	rc readConsistency,
+	data map[int]int64,
 ) {
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
@@ -140,14 +158,15 @@ func runFollowerReadsTest(
 	}
 
 	var aost string
-	if topology.locality != global {
-		// For non-multi-region or REGIONAL tables, only stale reads can be
-		// served off followers.
-		aost = "AS OF SYSTEM TIME follower_read_timestamp()"
-	} else {
-		// For GLOBAL tables, we can perform consistent reads and expect them to
-		// be served off followers.
+	switch rc {
+	case strong:
 		aost = ""
+	case exactStaleness:
+		aost = "AS OF SYSTEM TIME follower_read_timestamp()"
+	case boundedStaleness:
+		aost = "AS OF SYSTEM TIME with_max_staleness('10s')"
+	default:
+		t.Fatalf("unexpected readConsistency %s", rc)
 	}
 
 	verifySelect := func(ctx context.Context, node, k int, expectedVal int64) func() error {
@@ -188,11 +207,9 @@ func runFollowerReadsTest(
 		}
 	}
 
-	if topology.locality != global {
-		// For non-multi-region and for REGIONAL tables, wait for
-		// follower_read_timestamp() historical reads to have data. For GLOBAL
-		// tables, this isn't needed, because we will be reading consistently
-		// (non-stale).
+	if rc != strong {
+		// For stale reads, wait for follower_read_timestamp() historical reads to
+		// have data. For strongly consistent reads tables, this isn't needed.
 		followerReadDuration, err := computeFollowerReadDuration(ctx, db)
 		if err != nil {
 			t.Fatalf("failed to compute follower read duration: %v", err)
@@ -764,7 +781,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	t.L().Printf("upgrading n%d to current version", randNode)
 	nodeToUpgrade := c.Node(randNode)
 	upgradeNodes(ctx, nodeToUpgrade, curVersion, t, c)
-	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, data)
+	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 
 	// Upgrade the remaining nodes to the new version and run the test.
 	var remainingNodes option.NodeListOption
@@ -776,5 +793,5 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	}
 	t.L().Printf("upgrading nodes %s to current version", remainingNodes)
 	upgradeNodes(ctx, remainingNodes, curVersion, t, c)
-	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, data)
+	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 }

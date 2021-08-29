@@ -709,3 +709,82 @@ func TestTxnNegotiateAndSendWithDeadline(t *testing.T) {
 		})
 	}
 }
+
+// TestTxnNegotiateAndSendWithResumeSpan tests that a bounded staleness read
+// request performed using NegotiateAndSend negotiates a timestamp over the
+// provided batch's entire set of read spans even if it only performs reads and
+// returns results from part of them due to a key/byte limit. It then uses this
+// negotiated timestamp to fix its transaction's commit timestamp.
+func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	testutils.RunTrueAndFalse(t, "fast-path", func(t *testing.T, fastPath bool) {
+		ts10 := hlc.Timestamp{WallTime: 10}
+		ts20 := hlc.Timestamp{WallTime: 20}
+		mc := hlc.NewManualClock(1)
+		clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
+			_ context.Context, ba roachpb.BatchRequest,
+		) (*roachpb.BatchResponse, *roachpb.Error) {
+			require.NotNil(t, ba.BoundedStaleness)
+			require.Equal(t, ts10, ba.BoundedStaleness.MinTimestampBound)
+			require.False(t, ba.BoundedStaleness.MinTimestampBoundStrict)
+			require.Zero(t, ba.BoundedStaleness.MaxTimestampBound)
+			require.Equal(t, int64(2), ba.MaxSpanRequestKeys)
+
+			if !fastPath {
+				return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
+			}
+			br := ba.CreateReply()
+			br.Timestamp = ts20
+			scanResp := br.Responses[0].GetScan()
+			scanResp.Rows = []roachpb.KeyValue{
+				{Key: roachpb.Key("a")},
+				{Key: roachpb.Key("b")},
+			}
+			scanResp.ResumeSpan = &roachpb.Span{
+				Key:    roachpb.Key("c"),
+				EndKey: roachpb.Key("d"),
+			}
+			scanResp.ResumeReason = roachpb.RESUME_KEY_LIMIT
+			return br, nil
+		})
+		db := NewDB(testutils.MakeAmbientCtx(), txnSender, clock, stopper)
+		txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
+
+		var ba roachpb.BatchRequest
+		ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+			MinTimestampBound: ts10,
+		}
+		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+		ba.MaxSpanRequestKeys = 2
+		ba.Add(roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false /* forUpdate */))
+		br, pErr := txn.NegotiateAndSend(ctx, ba)
+
+		if fastPath {
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+			// The negotiated timestamp should be returned and fixed.
+			require.Equal(t, ts20, br.Timestamp)
+			require.True(t, txn.CommitTimestampFixed())
+			require.Equal(t, ts20, txn.CommitTimestamp())
+			// Even though the response is paginated and carries a resume span.
+			require.Len(t, br.Responses, 1)
+			scanResp := br.Responses[0].GetScan()
+			require.Len(t, scanResp.Rows, 2)
+			require.NotNil(t, scanResp.ResumeSpan)
+			require.Equal(t, roachpb.Key("c"), scanResp.ResumeSpan.Key)
+			require.Equal(t, roachpb.Key("d"), scanResp.ResumeSpan.EndKey)
+			require.Equal(t, roachpb.RESUME_KEY_LIMIT, scanResp.ResumeReason)
+		} else {
+			require.Nil(t, br)
+			require.NotNil(t, pErr)
+			require.Regexp(t, "unimplemented: cross-range bounded staleness reads not yet implemented", pErr)
+			require.False(t, txn.CommitTimestampFixed())
+		}
+	})
+}
