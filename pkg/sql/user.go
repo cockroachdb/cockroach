@@ -514,7 +514,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s security.SQLUsernam
 	return p.applyOnSessionDataMutators(
 		ctx,
 		local,
-		func(m *sessionDataMutator) error {
+		func(m sessionDataMutator) error {
 			m.data.IsSuperuser = willBecomeAdmin
 			m.bufferParamStatusUpdate("is_superuser", updateStr)
 
