@@ -24,17 +24,26 @@ import (
 )
 
 type temporaryDescriptors struct {
-	codec       keys.SQLCodec
-	sessionData *sessiondata.SessionData
+	codec            keys.SQLCodec
+	sessionDataStack *sessiondata.Stack
 }
 
 func makeTemporaryDescriptors(
-	codec keys.SQLCodec, data *sessiondata.SessionData,
+	codec keys.SQLCodec, sessionDataStack *sessiondata.Stack,
 ) temporaryDescriptors {
 	return temporaryDescriptors{
-		codec:       codec,
-		sessionData: data,
+		codec:            codec,
+		sessionDataStack: sessionDataStack,
 	}
+}
+
+// sessionData returns the top element of the sessionDataStack used by
+// the current session.
+func (td *temporaryDescriptors) sessionData() *sessiondata.SessionData {
+	if td.sessionDataStack == nil {
+		return nil
+	}
+	return td.sessionDataStack.Top()
 }
 
 // getSchemaByName assumes that the schema name carries the `pg_temp` prefix.
@@ -50,13 +59,13 @@ func (td *temporaryDescriptors) getSchemaByName(
 ) (refuseFurtherLookup bool, _ catalog.SchemaDescriptor, _ error) {
 	// If a temp schema is requested, check if it's for the current session, or
 	// else fall back to reading from the store.
-	if td.sessionData != nil {
+	if sd := td.sessionData(); sd != nil {
 		if schemaName == catconstants.PgTempSchemaName ||
-			schemaName == td.sessionData.SearchPath.GetTemporarySchemaName() {
-			schemaID, found := td.sessionData.GetTemporarySchemaIDForDb(uint32(dbID))
+			schemaName == sd.SearchPath.GetTemporarySchemaName() {
+			schemaID, found := sd.GetTemporarySchemaIDForDb(uint32(dbID))
 			if found {
 				return true, schemadesc.NewTemporarySchema(
-					td.sessionData.SearchPath.GetTemporarySchemaName(),
+					sd.SearchPath.GetTemporarySchemaName(),
 					descpb.ID(schemaID),
 					dbID,
 				), nil
@@ -79,14 +88,15 @@ func (td *temporaryDescriptors) getSchemaByName(
 func (td *temporaryDescriptors) getSchemaByID(
 	ctx context.Context, schemaID descpb.ID,
 ) catalog.SchemaDescriptor {
-	if td.sessionData == nil {
+	sd := td.sessionData()
+	if sd == nil {
 		return nil
 	}
-	if dbID, exists := td.sessionData.MaybeGetDatabaseForTemporarySchemaID(
+	if dbID, exists := sd.MaybeGetDatabaseForTemporarySchemaID(
 		uint32(schemaID),
 	); exists {
 		return schemadesc.NewTemporarySchema(
-			td.sessionData.SearchPath.GetTemporarySchemaName(),
+			sd.SearchPath.GetTemporarySchemaName(),
 			schemaID,
 			descpb.ID(dbID),
 		)
