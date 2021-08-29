@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
@@ -95,14 +97,6 @@ type streamIngestionProcessor struct {
 	// and have attempted to flush them with `internalDrained`.
 	internalDrained bool
 
-	// ingestionErr stores any error that is returned from the worker goroutine so
-	// that it can be forwarded through the DistSQL flow.
-	ingestionErr error
-
-	// pollingErr stores any error that is returned from the poller checking for a
-	// cutover signal so that it can be forwarded through the DistSQL flow.
-	pollingErr error
-
 	// pollingWaitGroup registers the polling goroutine and waits for it to return
 	// when the processor is being drained.
 	pollingWaitGroup sync.WaitGroup
@@ -117,6 +111,20 @@ type streamIngestionProcessor struct {
 	// closePoller is used to shutdown the poller that checks the job for a
 	// cutover signal.
 	closePoller chan struct{}
+
+	// mu is used to provide thread-safe read-write operations to ingestionErr
+	// and pollingErr.
+	mu struct {
+		syncutil.Mutex
+
+		// ingestionErr stores any error that is returned from the worker goroutine so
+		// that it can be forwarded through the DistSQL flow.
+		ingestionErr error
+
+		// pollingErr stores any error that is returned from the poller checking for a
+		// cutover signal so that it can be forwarded through the DistSQL flow.
+		pollingErr error
+	}
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -190,7 +198,9 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		defer sip.pollingWaitGroup.Done()
 		err := sip.checkForCutoverSignal(ctx, sip.closePoller)
 		if err != nil {
-			sip.pollingErr = errors.Wrap(err, "error while polling job for cutover signal")
+			sip.mu.Lock()
+			sip.mu.pollingErr = errors.Wrap(err, "error while polling job for cutover signal")
+			sip.mu.Unlock()
 		}
 	}()
 
@@ -220,8 +230,11 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, sip.DrainHelper()
 	}
 
-	if sip.pollingErr != nil {
-		sip.MoveToDraining(sip.pollingErr)
+	sip.mu.Lock()
+	err := sip.mu.pollingErr
+	sip.mu.Unlock()
+	if err != nil {
+		sip.MoveToDraining(err)
 		return nil, sip.DrainHelper()
 	}
 
@@ -243,8 +256,11 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return row, nil
 	}
 
-	if sip.ingestionErr != nil {
-		sip.MoveToDraining(sip.ingestionErr)
+	sip.mu.Lock()
+	err = sip.mu.ingestionErr
+	sip.mu.Unlock()
+	if err != nil {
+		sip.MoveToDraining(err)
 		return nil, sip.DrainHelper()
 	}
 
@@ -372,7 +388,10 @@ func (sip *streamIngestionProcessor) merge(
 		})
 	}
 	go func() {
-		sip.ingestionErr = g.Wait()
+		err := g.Wait()
+		sip.mu.Lock()
+		defer sip.mu.Unlock()
+		sip.mu.ingestionErr = err
 		close(merged)
 	}()
 
@@ -405,6 +424,14 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 				return sip.flush()
 			}
 
+			if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+				if streamingKnobs != nil {
+					if streamingKnobs.RunAfterReceivingEvent != nil {
+						streamingKnobs.RunAfterReceivingEvent(sip.Ctx)
+					}
+				}
+			}
+
 			switch event.Type() {
 			case streamingccl.KVEvent:
 				if err := sip.bufferKV(event); err != nil {
@@ -426,6 +453,15 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 				}
 
 				return sip.flush()
+			case streamingccl.GenerationEvent:
+				log.Info(sip.Ctx, "GenerationEvent received")
+				select {
+				case <-sip.cutoverCh:
+					sip.internalDrained = true
+					return nil, nil
+				case <-sip.Ctx.Done():
+					return nil, sip.Ctx.Err()
+				}
 			default:
 				return nil, errors.Newf("unknown streaming event type %v", event.Type())
 			}

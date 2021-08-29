@@ -246,6 +246,9 @@ type TestingKnobs struct {
 
 	// BackupRestoreTestingKnobs are backup and restore specific testing knobs.
 	BackupRestoreTestingKnobs base.ModuleTestingKnobs
+
+	// StreamingTestingKnobs are backup and restore specific testing knobs.
+	StreamingTestingKnobs base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test

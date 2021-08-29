@@ -53,6 +53,14 @@ func ResolvedAtLeast(lo hlc.Timestamp) FeedPredicate {
 	}
 }
 
+// ReceivedNewGeneration makes a FeedPredicate that matches when a GenerationEvent has
+// been received.
+func ReceivedNewGeneration() FeedPredicate {
+	return func(msg streamingccl.Event) bool {
+		return msg.Type() == streamingccl.GenerationEvent
+	}
+}
+
 // FeedSource is a source of events for a ReplicationFeed.
 type FeedSource interface {
 	// Next returns the next event, and a flag indicating if there are more events
@@ -90,6 +98,12 @@ func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roac
 func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp) hlc.Timestamp {
 	require.NoError(rf.t, rf.consumeUntil(ctx, ResolvedAtLeast(lo)))
 	return *rf.msg.GetResolved()
+}
+
+// ObserveGeneration consumes the feed until we received a GenerationEvent. Returns true.
+func (rf *ReplicationFeed) ObserveGeneration(ctx context.Context) bool {
+	require.NoError(rf.t, rf.consumeUntil(ctx, ReceivedNewGeneration()))
+	return true
 }
 
 // Close cleans up any resources.

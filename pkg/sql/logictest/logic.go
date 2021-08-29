@@ -684,6 +684,28 @@ var logicTestConfigs = []testClusterConfig{
 		},
 	},
 	{
+		name:              "multiregion-3node-3superlongregions",
+		numNodes:          3,
+		overrideAutoStats: "false",
+		localities: map[int]roachpb.Locality{
+			1: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "veryveryveryveryveryveryverylongregion1"},
+				},
+			},
+			2: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "veryveryveryveryveryveryverylongregion2"},
+				},
+			},
+			3: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "veryveryveryveryveryveryverylongregion3"},
+				},
+			},
+		},
+	},
+	{
 		name:              "multiregion-9node-3region-3azs",
 		numNodes:          9,
 		overrideAutoStats: "false",
