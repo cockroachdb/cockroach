@@ -300,8 +300,8 @@ github.com/cockroachdb/ttycolor v0.0.0-20210717002733-a2a538deeb8c h1:S2vg+TZySZ
 github.com/cockroachdb/ttycolor v0.0.0-20210717002733-a2a538deeb8c/go.mod h1:NltwFG0VBANi1jHKpn5KL9AbsHTE+8fPaAHT0TzL20k=
 github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82 h1:8htEd1lLILqfjKardWfKKGgXVCs0WmcgEj9cXnmcuos=
 github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82/go.mod h1:+bhevpN4bd6bstiRREkJDaMWZR3lTe5ypydTtXgf7GU=
-github.com/cockroachdb/yaml v0.0.0-20180705215940-0e2822948641 h1:EqoCicA1pbWWDGniFxhTElh2hvui7E7tEvuBNJSDn3A=
-github.com/cockroachdb/yaml v0.0.0-20180705215940-0e2822948641/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+github.com/cockroachdb/yaml v0.0.0-20210825132133-2d6955c8edbc h1:vVVz+IAeHhYPxGW9EC8j6HR7uZl/1wSP0Wijaxs4frw=
+github.com/cockroachdb/yaml v0.0.0-20210825132133-2d6955c8edbc/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd h1:qMd81Ts1T2OTKmB4acZcyKaMtRnY5Y44NuXGX2GFJ1w=
 github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd/go.mod h1:sE/e/2PUdi/liOCUjSTXgM1o87ZssimdTWN964YiIeI=
 github.com/codegangsta/cli v1.20.0/go.mod h1:/qJNoX69yVSKu5o4jLyXAENLRyk1uhi7zkbQ3slBdOA=

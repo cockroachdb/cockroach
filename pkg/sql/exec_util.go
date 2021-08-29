@@ -1066,6 +1066,7 @@ type ExecutorConfig struct {
 	EvalContextTestingKnobs       tree.EvalContextTestingKnobs
 	TenantTestingKnobs            *TenantTestingKnobs
 	BackupRestoreTestingKnobs     *BackupRestoreTestingKnobs
+	StreamingTestingKnobs         *StreamingTestingKnobs
 	IndexUsageStatsTestingKnobs   *idxusage.TestingKnobs
 	SQLStatsTestingKnobs          *sqlstats.TestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
@@ -1341,6 +1342,18 @@ var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*BackupRestoreTestingKnobs) ModuleTestingKnobs() {}
+
+// StreamingTestingKnobs contains knobs for streaming behavior.
+type StreamingTestingKnobs struct {
+	// RunAfterReceivingEvent allows blocking the stream ingestion processor after
+	// a single event has been received.
+	RunAfterReceivingEvent func(ctx context.Context)
+}
+
+var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*StreamingTestingKnobs) ModuleTestingKnobs() {}
 
 func shouldDistributeGivenRecAndMode(
 	rec distRecommendation, mode sessiondatapb.DistSQLExecMode,
