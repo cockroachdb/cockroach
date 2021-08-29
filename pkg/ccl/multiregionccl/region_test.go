@@ -9,6 +9,7 @@
 package multiregionccl_test
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"testing"
@@ -119,7 +120,7 @@ func TestConcurrentAddDropRegions(t *testing.T) {
 
 			knobs := base.TestingKnobs{
 				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-					RunBeforeEnumMemberPromotion: func() error {
+					RunBeforeEnumMemberPromotion: func(context.Context) error {
 						mu.Lock()
 						if firstOp {
 							firstOp = false
@@ -258,7 +259,7 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 
 				knobs := base.TestingKnobs{
 					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-						RunBeforeEnumMemberPromotion: func() error {
+						RunBeforeEnumMemberPromotion: func(ctx context.Context) error {
 							mu.Lock()
 							defer mu.Unlock()
 							close(typeChangeStarted)
@@ -383,7 +384,7 @@ ALTER TABLE db.public.global CONFIGURE ZONE USING
 
 			knobs := base.TestingKnobs{
 				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-					RunBeforeEnumMemberPromotion: func() error {
+					RunBeforeEnumMemberPromotion: func(context.Context) error {
 						close(regionOpStarted)
 						<-placementOpFinished
 						return nil
@@ -444,7 +445,7 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	dropRegionFinished := make(chan struct{})
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-			RunBeforeEnumMemberPromotion: func() error {
+			RunBeforeEnumMemberPromotion: func(context.Context) error {
 				mu.Lock()
 				defer mu.Unlock()
 				if dropRegionStarted != nil {
@@ -845,7 +846,7 @@ func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 
 				backupKnobs := base.TestingKnobs{
 					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-						RunBeforeEnumMemberPromotion: func() error {
+						RunBeforeEnumMemberPromotion: func(ctx context.Context) error {
 							mu.Lock()
 							defer mu.Unlock()
 							if waitInTypeSchemaChangerDuringBackup {
@@ -902,7 +903,7 @@ INSERT INTO db.rbr VALUES (1,1),(2,2),(3,3);
 
 				restoreKnobs := base.TestingKnobs{
 					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-						RunBeforeEnumMemberPromotion: func() error {
+						RunBeforeEnumMemberPromotion: func(context.Context) error {
 							mu.Lock()
 							defer mu.Unlock()
 							if !regionAlterCmd.shouldSucceed {
