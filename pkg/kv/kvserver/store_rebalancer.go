@@ -615,9 +615,6 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 	finalVoterTargets = rbCtx.rangeDesc.Replicas().VoterDescriptors()
 	finalNonVoterTargets = rbCtx.rangeDesc.Replicas().NonVoterDescriptors()
 	for i := 0; i < len(finalVoterTargets); i++ {
-		// TODO DURING REVIEW(aayush): We should only consider non-suspect stores
-		// here. Rebase on top of Alex's change.
-		//
 		// TODO(aayush): Figure out a way to plumb the `details` here into
 		// `AdminRelocateRange` so that these decisions show up in system.rangelog
 		add, remove, _, shouldRebalance := sr.rq.allocator.rebalanceTarget(
@@ -626,7 +623,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 			rbCtx.replWithStats.repl.RaftStatus(),
 			finalVoterTargets, finalNonVoterTargets,
 			rangeUsageInfoForRepl(rbCtx.replWithStats.repl),
-			storeFilterThrottled,
+			storeFilterSuspect,
 			voterTarget,
 			options,
 		)
@@ -685,7 +682,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 			rbCtx.replWithStats.repl.RaftStatus(),
 			finalVoterTargets, finalNonVoterTargets,
 			rangeUsageInfoForRepl(rbCtx.replWithStats.repl),
-			storeFilterThrottled,
+			storeFilterSuspect,
 			nonVoterTarget,
 			options,
 		)
