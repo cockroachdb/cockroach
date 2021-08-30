@@ -639,6 +639,16 @@ func FindPriorBackups(
 	return prev, nil
 }
 
+// IsCollectionRoot checks whether the directory pointed by store contains the latestFileName
+//pointer directory, indicating that the directory is the root of a backup collection
+func IsCollectionRoot(ctx context.Context, store cloud.ExternalStorage) (bool, error) {
+	_, err := store.ReadFile(ctx, latestFileName)
+	if errors.Is(err, cloud.ErrFileDoesNotExist) {
+		return false, nil
+	}
+	return true, nil
+}
+
 // resolveBackupManifests resolves a list of list of URIs that point to the
 // incremental layers (each of which can be partitioned) of backups into the
 // actual backup manifests and metadata required to RESTORE. If only one layer

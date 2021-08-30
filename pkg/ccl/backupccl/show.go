@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -227,6 +228,21 @@ func showBackupPlanHook(
 		}
 		defer store.Close()
 
+		isRoot, err := IsCollectionRoot(ctx, store)
+		if err != nil {
+			return err
+		}
+		if isRoot {
+			p.BufferClientNotice(ctx,
+				pgnotice.Newf("Your path %q is the root of a backup collection. You must specify a"+
+					" specific backup path. Call \n \n \t SHOW BACKUPS IN '%s' \n\nto"+
+					" list the specific backup subdirectories in the collection, "+
+					"then retry and append the desired backup subdirectory to your path: \n\n\t"+
+					" SHOW BACKUP IN '%s/[backup_subdirectory]' \n", str, str, str),
+			)
+			return nil
+		}
+
 		var encryption *jobspb.BackupEncryptionOptions
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
 			opts, err := readEncryptionOptions(ctx, store)
@@ -254,6 +270,7 @@ func showBackupPlanHook(
 		}
 
 		incPaths, err := FindPriorBackups(ctx, store, IncludeManifest)
+
 		if err != nil {
 			if errors.Is(err, cloud.ErrListingUnsupported) {
 				// If we do not support listing, we have to just assume there are none
