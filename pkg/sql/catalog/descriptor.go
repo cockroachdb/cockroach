@@ -326,7 +326,7 @@ type TableDescriptor interface {
 	GetReplacementOf() descpb.TableDescriptor_Replacement
 	GetAllReferencedTypeIDs(
 		databaseDesc DatabaseDescriptor, getType func(descpb.ID) (TypeDescriptor, error),
-	) (descpb.IDs, error)
+	) (referencedAnywhere, referencedInColumns descpb.IDs, _ error)
 
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
 	GetDependedOnBy() []descpb.TableDescriptor_Reference

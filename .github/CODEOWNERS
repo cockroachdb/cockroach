@@ -48,6 +48,7 @@
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-experience
 
 /pkg/sql/catalog/            @cockroachdb/sql-schema
+/pkg/sql/catalog/multiregion @cockroachdb/multiregion
 /pkg/sql/doctor/             @cockroachdb/sql-schema
 /pkg/sql/gcjob/              @cockroachdb/sql-schema
 /pkg/sql/gcjob_test/         @cockroachdb/sql-schema
