@@ -205,6 +205,7 @@ func MakeSimpleTableDescriptor(
 	evalCtx := tree.EvalContext{
 		Context:            ctx,
 		Sequence:           &importSequenceOperators{},
+		Regions:            &importRegionOperator{},
 		SessionDataStack:   sessiondata.NewStack(&sessiondata.SessionData{}),
 		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
 		Settings:           st,
@@ -258,29 +259,22 @@ func fixDescriptorFKState(tableDesc *tabledesc.Mutable) error {
 
 var (
 	errSequenceOperators = errors.New("sequence operations unsupported")
+	errRegionOperator    = errors.New("region operations unsupported")
 	errSchemaResolver    = errors.New("schema resolver unsupported")
 )
 
-// Implements the tree.SequenceOperators interface.
-type importSequenceOperators struct {
-}
-
-// GetSerialSequenceNameFromColumn is part of the tree.SequenceOperators interface.
-func (so *importSequenceOperators) GetSerialSequenceNameFromColumn(
-	ctx context.Context, tn *tree.TableName, columnName tree.Name,
-) (*tree.TableName, error) {
-	return nil, errors.WithStack(errSequenceOperators)
-}
+// Implements the tree.RegionOperator interface.
+type importRegionOperator struct{}
 
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
-func (so *importSequenceOperators) CurrentDatabaseRegionConfig(
+func (so *importRegionOperator) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (tree.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
 // ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
-func (so *importSequenceOperators) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
+func (so *importRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 	_ context.Context,
 ) error {
 	return errors.WithStack(errSequenceOperators)
@@ -288,7 +282,7 @@ func (so *importSequenceOperators) ValidateAllMultiRegionZoneConfigsInCurrentDat
 
 // ResetMultiRegionZoneConfigsForTable is part of the tree.EvalDatabase
 // interface.
-func (so *importSequenceOperators) ResetMultiRegionZoneConfigsForTable(
+func (so *importRegionOperator) ResetMultiRegionZoneConfigsForTable(
 	_ context.Context, _ int64,
 ) error {
 	return errors.WithStack(errSequenceOperators)
@@ -296,10 +290,20 @@ func (so *importSequenceOperators) ResetMultiRegionZoneConfigsForTable(
 
 // ResetMultiRegionZoneConfigsForDatabase is part of the tree.EvalDatabase
 // interface.
-func (so *importSequenceOperators) ResetMultiRegionZoneConfigsForDatabase(
+func (so *importRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
 	_ context.Context, _ int64,
 ) error {
 	return errors.WithStack(errSequenceOperators)
+}
+
+// Implements the tree.SequenceOperators interface.
+type importSequenceOperators struct{}
+
+// GetSerialSequenceNameFromColumn is part of the tree.SequenceOperators interface.
+func (so *importSequenceOperators) GetSerialSequenceNameFromColumn(
+	ctx context.Context, tn *tree.TableName, columnName tree.Name,
+) (*tree.TableName, error) {
+	return nil, errors.WithStack(errSequenceOperators)
 }
 
 // ParseQualifiedTableName implements the tree.EvalDatabase interface.

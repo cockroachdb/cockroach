@@ -5774,7 +5774,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		tree.FunctionProperties{Category: categoryMultiRegion},
 		stringOverload1(
 			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
-				regionConfig, err := evalCtx.Sequence.CurrentDatabaseRegionConfig(evalCtx.Context)
+				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
 				if err != nil {
 					return nil, err
 				}
@@ -5804,7 +5804,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, arg tree.Datums) (tree.Datum, error) {
-				regionConfig, err := evalCtx.Sequence.CurrentDatabaseRegionConfig(evalCtx.Context)
+				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
 				if err != nil {
 					return nil, err
 				}
@@ -5839,7 +5839,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.Sequence.ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
+				if err := evalCtx.Regions.ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 					evalCtx.Context,
 				); err != nil {
 					return nil, err
@@ -5861,7 +5861,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
 
-				if err := evalCtx.Sequence.ResetMultiRegionZoneConfigsForTable(
+				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForTable(
 					evalCtx.Context,
 					id,
 				); err != nil {
@@ -5883,7 +5883,7 @@ table.`,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
 
-				if err := evalCtx.Sequence.ResetMultiRegionZoneConfigsForDatabase(
+				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForDatabase(
 					evalCtx.Context,
 					id,
 				); err != nil {
