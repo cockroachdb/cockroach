@@ -138,9 +138,13 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			schedule.Pause()
 			err = updateSchedule(params, schedule)
 		case tree.ResumeSchedule:
-			err = schedule.ScheduleNextRun()
-			if err == nil {
-				err = updateSchedule(params, schedule)
+			// Only schedule the next run time on PAUSED schedules, since ACTIVE
+			// schedules may have a custom next run time set by first_run.
+			if schedule.IsPaused() {
+				err = schedule.ScheduleNextRun()
+				if err == nil {
+					err = updateSchedule(params, schedule)
+				}
 			}
 		case tree.DropSchedule:
 			var ex jobs.ScheduledJobExecutor
