@@ -82,6 +82,8 @@ func (m manifestInfoReader) header() colinfo.ResultColumns {
 	return m.shower.header
 }
 
+//showBackup reads backup info from the manifest, populates the manifestInfoReader,
+//and pipes the information to the user's sql console via the results channel
 func (m manifestInfoReader) showBackup(
 	ctx context.Context,
 	store cloud.ExternalStorage,
@@ -92,7 +94,21 @@ func (m manifestInfoReader) showBackup(
 	var err error
 	manifests := make([]BackupManifest, len(incPaths)+1)
 	manifests[0], err = ReadBackupManifestFromStore(ctx, store, enc)
+
 	if err != nil {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			latestFileExists, errLatestFile := checkForLatestFileInCollection(ctx, store)
+
+			if errLatestFile == nil && latestFileExists {
+				return errors.WithHintf(err, "Your path is the root of a backup collection. You must specify a"+
+					" specific backup path. Call \n \n \t SHOW BACKUPS IN [the path you just used] \n\nto"+
+					" list the specific backup subdirectories in the collection, "+
+					"then retry and append the desired backup subdirectory to your path: \n\n\t"+
+					" SHOW BACKUP '[the path you just used]/[backup_subdirectory]' \n")
+			}
+			return errLatestFile // SHOULD WE ALSO RETURN `err`,
+			// suggesting that the BACKUPMANIFEST DOES NOT EXIST AS WELL???
+		}
 		return err
 	}
 
@@ -271,11 +287,16 @@ func showBackupPlanHook(
 	return fn, infoReader.header(), nil, false, nil
 }
 
+//backupShower specifies the table that SHOW BACKUP will print to the user's sql console.
+//header contains the schema of the table and fn organizes info from the unmarshalled
+//backup manifest into datums that the results channel can cleanly pipe, row wise,
+//to the console. The plan hook specifies the function, while showBackup calls the function.
 type backupShower struct {
 	header colinfo.ResultColumns
 	fn     func([]BackupManifest) ([]tree.Datums, error)
 }
 
+// backupShowerHeaders: defines the schema for the table presented to the user
 func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.ResultColumns {
 	baseHeaders := colinfo.ResultColumns{
 		{Name: "database_name", Typ: types.String},
