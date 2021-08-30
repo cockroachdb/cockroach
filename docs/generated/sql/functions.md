@@ -2954,6 +2954,10 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><a name="current_setting"></a><code>current_setting(setting_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
+</span></td></tr>
+<tr><td><a name="current_setting"></a><code>current_setting(setting_name: <a href="string.html">string</a>, missing_ok: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
+</span></td></tr>
 <tr><td><a name="format_type"></a><code>format_type(type_oid: oid, typemod: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the SQL name of a data type that is identified by its type OID and possibly a type modifier. Currently, the type modifier is ignored.</p>
 </span></td></tr>
 <tr><td><a name="getdatabaseencoding"></a><code>getdatabaseencoding() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current encoding name used by the database.</p>
@@ -3127,6 +3131,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="pg_table_is_visible"></a><code>pg_table_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the table with the given OID belongs to one of the schemas on the search path.</p>
 </span></td></tr>
 <tr><td><a name="pg_type_is_visible"></a><code>pg_type_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the type with the given OID belongs to one of the schemas on the search path.</p>
+</span></td></tr>
+<tr><td><a name="set_config"></a><code>set_config(setting_name: <a href="string.html">string</a>, new_value: <a href="string.html">string</a>, is_local: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
 </span></td></tr></tbody>
 </table>
 

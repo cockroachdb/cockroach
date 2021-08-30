@@ -136,27 +136,7 @@ func (n *setVarNode) startExec(params runParams) error {
 		)
 	}
 
-	// Note for RuntimeSet and SetWithPlanner we do not use the sessionDataMutator
-	// as the callers need items that are only accessible by higher level
-	// objects - and some of the computation potentially expensive so should be
-	// batched instead of performing the computation on each mutator.
-	// It is their responsibility to set LOCAL or SESSION after
-	// doing the computation.
-	if n.v.RuntimeSet != nil {
-		return n.v.RuntimeSet(params.ctx, params.p.ExtendedEvalContext(), n.local, strVal)
-	}
-
-	if n.v.SetWithPlanner != nil {
-		return n.v.SetWithPlanner(params.ctx, params.p, n.local, strVal)
-	}
-
-	return params.p.applyOnSessionDataMutators(
-		params.ctx,
-		n.local,
-		func(m *sessionDataMutator) error {
-			return n.v.Set(params.ctx, m, strVal)
-		},
-	)
+	return params.p.SetSessionVar(params.ctx, n.name, strVal, n.local)
 }
 
 // applyOnSessionDataMutators applies the given function on the relevant
