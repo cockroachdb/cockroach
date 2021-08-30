@@ -60,7 +60,7 @@ type BufferingAdder struct {
 	bulkMon *mon.BytesMonitor
 	memAcc  mon.BoundAccount
 
-	onFlush func()
+	onFlush func(summary roachpb.BulkOpSummary)
 }
 
 var _ kvserverbase.BulkAdder = &BufferingAdder{}
@@ -140,7 +140,7 @@ func MakeBulkAdder(
 }
 
 // SetOnFlush sets a callback to run after the buffering adder flushes.
-func (b *BufferingAdder) SetOnFlush(fn func()) {
+func (b *BufferingAdder) SetOnFlush(fn func(summary roachpb.BulkOpSummary)) {
 	b.onFlush = fn
 }
 
@@ -208,7 +208,7 @@ func (b *BufferingAdder) IsEmpty() bool {
 func (b *BufferingAdder) Flush(ctx context.Context) error {
 	if b.curBuf.Len() == 0 {
 		if b.onFlush != nil {
-			b.onFlush()
+			b.onFlush(b.sink.GetBatchSummary())
 		}
 		return nil
 	}
@@ -266,7 +266,7 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 		)
 	}
 	if b.onFlush != nil {
-		b.onFlush()
+		b.onFlush(b.sink.GetBatchSummary())
 	}
 	b.curBuf.Reset()
 	return nil

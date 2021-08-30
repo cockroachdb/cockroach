@@ -192,7 +192,7 @@ func (r *errorReportingRowReceiver) ProducerDone() {}
 // A do nothing bulk adder implementation.
 type doNothingKeyAdder struct {
 	onKeyAdd func(key roachpb.Key)
-	onFlush  func()
+	onFlush  func(summary roachpb.BulkOpSummary)
 }
 
 var _ kvserverbase.BulkAdder = &doNothingKeyAdder{}
@@ -205,16 +205,16 @@ func (a *doNothingKeyAdder) Add(_ context.Context, k roachpb.Key, _ []byte) erro
 }
 func (a *doNothingKeyAdder) Flush(_ context.Context) error {
 	if a.onFlush != nil {
-		a.onFlush()
+		a.onFlush(roachpb.BulkOpSummary{})
 	}
 	return nil
 }
 
-func (*doNothingKeyAdder) IsEmpty() bool                     { return true }
-func (*doNothingKeyAdder) CurrentBufferFill() float32        { return 0 }
-func (*doNothingKeyAdder) GetSummary() roachpb.BulkOpSummary { return roachpb.BulkOpSummary{} }
-func (*doNothingKeyAdder) Close(_ context.Context)           {}
-func (a *doNothingKeyAdder) SetOnFlush(f func())             { a.onFlush = f }
+func (*doNothingKeyAdder) IsEmpty() bool                                { return true }
+func (*doNothingKeyAdder) CurrentBufferFill() float32                   { return 0 }
+func (*doNothingKeyAdder) GetSummary() roachpb.BulkOpSummary            { return roachpb.BulkOpSummary{} }
+func (*doNothingKeyAdder) Close(_ context.Context)                      {}
+func (a *doNothingKeyAdder) SetOnFlush(f func(_ roachpb.BulkOpSummary)) { a.onFlush = f }
 
 var eofOffset int64 = math.MaxInt64
 

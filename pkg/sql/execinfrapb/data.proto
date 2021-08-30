@@ -285,6 +285,7 @@ message RemoteProducerMetadata {
     map<int32, int64> resume_pos = 3;
     // Used to stream back progress to the coordinator of a bulk job.
     optional google.protobuf.Any progress_details = 4 [(gogoproto.nullable) = false];
+    optional roachpb.BulkOpSummary bulk_summary = 5 [(gogoproto.nullable) = false];
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
