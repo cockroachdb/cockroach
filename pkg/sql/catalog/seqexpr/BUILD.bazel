@@ -1,9 +1,9 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "sequence",
+    name = "seqexpr",
     srcs = ["sequence.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/util/sequence",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/pgwire/pgcode",
@@ -16,9 +16,9 @@ go_library(
 )
 
 go_test(
-    name = "sequence_test",
+    name = "seqexpr_test",
     srcs = ["sequence_test.go"],
-    embed = [":sequence"],
+    embed = [":seqexpr"],
     deps = [
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",

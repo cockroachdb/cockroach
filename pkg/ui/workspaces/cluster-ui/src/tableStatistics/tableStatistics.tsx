@@ -16,13 +16,15 @@ import { ISortedTablePagination } from "../sortedtable";
 import { Button } from "src/button";
 import { ResultsPerPageLabel } from "src/pagination";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import statementStyles from "src/statementDetails/statementDetails.module.scss";
 import tableStatsStyles from "./tableStatistics.module.scss";
 import classNames from "classnames/bind";
 import { Icon } from "@cockroachlabs/ui-components";
+import {
+  contentModifiers,
+  StatisticType,
+} from "../statsTableUtil/statsTableUtil";
 
 const { statistic, countTitle, lastCleared } = statisticsClasses;
-const cxStmt = classNames.bind(statementStyles);
 const cxStats = classNames.bind(tableStatsStyles);
 
 interface TableStatistics {
@@ -30,14 +32,12 @@ interface TableStatistics {
   totalCount: number;
   lastReset: Date | string;
   arrayItemName: string;
+  tooltipType: StatisticType;
   activeFilters: number;
   search?: string;
   onClearFilters?: () => void;
   resetSQLStats: () => void;
 }
-
-const toolTipText = `Statement history is cleared once an hour by default, which can be configured with the cluster setting
- diagnostics.reporting.interval. Clicking ‘Clear SQL stats’ will reset SQL stats on the statements and transactions pages.`;
 
 const renderLastCleared = (lastReset: string | Date) => {
   return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
@@ -49,6 +49,7 @@ export const TableStatistics: React.FC<TableStatistics> = ({
   lastReset,
   search,
   arrayItemName,
+  tooltipType,
   onClearFilters,
   activeFilters,
   resetSQLStats,
@@ -70,6 +71,24 @@ export const TableStatistics: React.FC<TableStatistics> = ({
       </Button>
     </>
   );
+
+  let toolTipText = ` history is cleared once an hour by default, which can be configured with 
+  the cluster setting diagnostics.sql_stat_reset.interval. Clicking ‘Clear SQL stats’ will reset SQL stats 
+  on the statements and transactions pages.`;
+
+  switch (tooltipType) {
+    case "transaction":
+      toolTipText = contentModifiers.transactionCapital + toolTipText;
+      break;
+    case "statement":
+      toolTipText = contentModifiers.statementCapital + toolTipText;
+      break;
+    case "transactionDetails":
+      toolTipText = contentModifiers.statementCapital + toolTipText;
+      break;
+    default:
+      break;
+  }
 
   return (
     <div className={statistic}>

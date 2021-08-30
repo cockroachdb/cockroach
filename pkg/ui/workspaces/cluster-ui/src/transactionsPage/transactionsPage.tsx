@@ -356,6 +356,7 @@ export class TransactionsPage extends React.Component<
                     search={search}
                     totalCount={transactionsToDisplay.length}
                     arrayItemName="transactions"
+                    tooltipType="transaction"
                     activeFilters={activeFilters}
                     onClearFilters={this.onClearFilters}
                     resetSQLStats={resetSQLStats}

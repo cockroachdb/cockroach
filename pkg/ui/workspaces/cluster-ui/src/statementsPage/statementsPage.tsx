@@ -547,6 +547,7 @@ export class StatementsPage extends React.Component<
               search={search}
               totalCount={totalCount}
               arrayItemName="statements"
+              tooltipType="statement"
               activeFilters={activeFilters}
               onClearFilters={this.onClearFilters}
               resetSQLStats={resetSQLStats}
