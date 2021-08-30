@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -101,7 +102,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 ) error {
 	if !n.tableDesc.IsLocalityGlobal() {
 		f := params.p.EvalContext().FmtCtx(tree.FmtSimple)
-		if err := tabledesc.FormatTableLocalityConfig(n.tableDesc.LocalityConfig, f); err != nil {
+		if err := multiregion.FormatTableLocalityConfig(n.tableDesc.LocalityConfig, f); err != nil {
 			// While we're in an error path and generally it's bad to return a
 			// different error in an error path, we will only get an error here if the
 			// locality is corrupted, in which case, it's probably the right error

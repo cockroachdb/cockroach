@@ -459,18 +459,23 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 // with the desired ID.
 func (desc *wrapper) GetAllReferencedTypeIDs(
 	dbDesc catalog.DatabaseDescriptor, getType func(descpb.ID) (catalog.TypeDescriptor, error),
-) (descpb.IDs, error) {
+) (referencedAnywhere, referencedInColumns descpb.IDs, _ error) {
 	ids, err := desc.getAllReferencedTypesInTableColumns(getType)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	referencedInColumns = make(descpb.IDs, 0, len(ids))
+	for id := range ids {
+		referencedInColumns = append(referencedInColumns, id)
+	}
+	sort.Sort(referencedInColumns)
 
 	// REGIONAL BY TABLE tables may have a dependency with the multi-region enum.
 	exists := desc.GetMultiRegionEnumDependencyIfExists()
 	if exists {
 		regionEnumID, err := dbDesc.MultiRegionEnumID()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		ids[regionEnumID] = struct{}{}
 	}
@@ -489,7 +494,7 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 
 	// Sort the output so that the order is deterministic.
 	sort.Sort(result)
-	return result, nil
+	return result, referencedInColumns, nil
 }
 
 // getAllReferencedTypesInTableColumns returns a map of all user defined
@@ -981,32 +986,6 @@ func (desc *Mutable) OriginalID() descpb.ID {
 // OriginalVersion implements the MutableDescriptor interface.
 func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	return desc.ClusterVersion.Version
-}
-
-// FormatTableLocalityConfig formats the table locality.
-func FormatTableLocalityConfig(c *descpb.TableDescriptor_LocalityConfig, f *tree.FmtCtx) error {
-	switch v := c.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_Global_:
-		f.WriteString("GLOBAL")
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-		f.WriteString("REGIONAL BY TABLE IN ")
-		if v.RegionalByTable.Region != nil {
-			region := tree.Name(*v.RegionalByTable.Region)
-			f.FormatNode(&region)
-		} else {
-			f.WriteString("PRIMARY REGION")
-		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
-		f.WriteString("REGIONAL BY ROW")
-		if v.RegionalByRow.As != nil {
-			f.WriteString(" AS ")
-			col := tree.Name(*v.RegionalByRow.As)
-			f.FormatNode(&col)
-		}
-	default:
-		return errors.Newf("unknown locality: %T", v)
-	}
-	return nil
 }
 
 // ValidateIndexNameIsUnique validates that the index name does not exist.
