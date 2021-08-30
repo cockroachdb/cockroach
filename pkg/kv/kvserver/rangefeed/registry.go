@@ -53,11 +53,22 @@ type Stream interface {
 // has finished.
 type registration struct {
 	// Input.
-	span                   roachpb.Span
-	catchupTimestamp       hlc.Timestamp
+	span             roachpb.Span
+	catchupTimestamp hlc.Timestamp
+	withDiff         bool
+	metrics          *Metrics
+
+	// catchupIterConstructor is used to construct the catchupIter if necessary.
+	// The reason this constructor is plumbed down is to make sure that the
+	// iterator does not get constructed too late in server shutdown. However,
+	// it must also be stored in the struct to ensure that it is not constructed
+	// too late, after the raftMu has been dropped. Thus, this function, if
+	// non-nil, will be used to populated catchupIter while the registration
+	// is being registered by the processor.
 	catchupIterConstructor func() storage.SimpleMVCCIterator
-	withDiff               bool
-	metrics                *Metrics
+	// catchupIter is populated on the Processor's goroutine while the
+	// Replica.raftMu is still held.
+	catchupIter storage.SimpleMVCCIterator
 
 	// Output.
 	stream Stream
@@ -285,11 +296,10 @@ func (r *registration) runOutputLoop(ctx context.Context, _forStacks roachpb.Ran
 // If the registration does not have a catchUpIteratorConstructor, this method
 // is a no-op.
 func (r *registration) maybeRunCatchupScan() error {
-	if r.catchupIterConstructor == nil {
+	if r.catchupIter == nil {
 		return nil
 	}
-	catchupIter := r.catchupIterConstructor()
-	r.catchupIterConstructor = nil
+	catchupIter := r.catchupIter
 	start := timeutil.Now()
 	defer func() {
 		catchupIter.Close()

@@ -225,7 +225,9 @@ func (r *Replica) rangeFeedWithRangeID(
 	var catchUpIterFunc rangefeed.IteratorConstructor
 	if usingCatchupIter {
 		catchUpIterFunc = func() storage.SimpleMVCCIterator {
-
+			// Assert that we still hold the raftMu when this is called to ensure
+			// that the catchUpIter reads from the current snapshot.
+			r.raftMu.AssertHeld()
 			innerIter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				UpperBound: args.Span.EndKey,
 				// RangeFeed originally intended to use the time-bound iterator
@@ -373,6 +375,11 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	// Start it with an iterator to initialize the resolved timestamp.
 	rtsIter := func() storage.SimpleMVCCIterator {
+		// Assert that we still hold the raftMu when this is called to ensure
+		// that the catchUpIter reads from the current snapshot. The replica
+		// synchronizes with the rangefeed Processor calling this function by
+		// waiting for the Register call below to return.
+		r.raftMu.AssertHeld()
 		return r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: desc.EndKey.AsRawKey(),
 			// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed

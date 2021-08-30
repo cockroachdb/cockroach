@@ -247,6 +247,13 @@ func (p *Processor) run(
 				log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 			}
 
+			// Construct the catchupIter before notifying the registration that it
+			// has been registered.
+			if r.catchupIterConstructor != nil {
+				r.catchupIter = r.catchupIterConstructor()
+				r.catchupIterConstructor = nil
+			}
+
 			// Add the new registration to the registry.
 			p.reg.Register(&r)
 
