@@ -1685,6 +1685,68 @@ intersect-all
       ├── fd: ()-->(2)
       └── (1,)
 
+# Regression test for #69497. Ensure streaming set ops specify all columns in
+# the ordering.
+exec-ddl
+CREATE TABLE t69497_abc (a INT, b INT, c INT, INDEX (a, b, c DESC))
+----
+
+exec-ddl
+CREATE TABLE t69497_def (d INT PRIMARY KEY, e INT, f INT)
+----
+
+opt
+SELECT d, e, f FROM t69497_def EXCEPT SELECT a, b, c FROM t69497_abc ORDER by d, e
+----
+except-all
+ ├── columns: d:1 e:2 f:3
+ ├── left columns: d:1 e:2 f:3
+ ├── right columns: a:6 b:7 c:8
+ ├── internal-ordering: +1,+2,-3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +1
+ ├── scan t69497_def
+ │    ├── columns: d:1!null e:2 f:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +1
+ └── scan t69497_abc@secondary
+      ├── columns: a:6 b:7 c:8
+      └── ordering: +6,+7,-8
+
+# Example where the interesting orderings do not include all columns.
+exec-ddl
+CREATE TABLE t69497_abcd (a INT, b INT, c INT, d INT, INDEX (a, b, c DESC) STORING (d))
+----
+
+exec-ddl
+CREATE TABLE t69497_efgh (e INT PRIMARY KEY, f INT, g INT, h INT)
+----
+
+opt
+SELECT e, f, g, h FROM t69497_efgh EXCEPT SELECT a, b, c, d FROM t69497_abcd ORDER by e, f
+----
+except-all
+ ├── columns: e:1 f:2 g:3 h:4
+ ├── left columns: e:1 f:2 g:3 h:4
+ ├── right columns: a:7 b:8 c:9 d:10
+ ├── internal-ordering: +1,+2,-3,+4
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +1
+ ├── scan t69497_efgh
+ │    ├── columns: e:1!null f:2 g:3 h:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── ordering: +1
+ └── sort (segmented)
+      ├── columns: a:7 b:8 c:9 d:10
+      ├── ordering: +7,+8,-9,+10
+      └── scan t69497_abcd@secondary
+           ├── columns: a:7 b:8 c:9 d:10
+           └── ordering: +7,+8,-9
+
 # --------------------------------------------------
 # Insert operator.
 # --------------------------------------------------
