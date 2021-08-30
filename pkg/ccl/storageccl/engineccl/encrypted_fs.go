@@ -194,10 +194,16 @@ func (fs *encryptedFS) Remove(name string) error {
 
 // Rename implements vfs.FS.Rename.
 func (fs *encryptedFS) Rename(oldname, newname string) error {
-	if err := fs.FS.Rename(oldname, newname); err != nil {
+	if err := fs.fileRegistry.MaybeRenameEntry(oldname, newname); err != nil {
 		return err
 	}
-	return fs.fileRegistry.MaybeRenameEntry(oldname, newname)
+	// The subsequent filesystem rename must succeed to ensure Renames
+	// are atomic operations. On crash, if the last operation written to
+	// the registry is a Rename, we'll attempt the rename again on load.
+	if err := fs.FS.Rename(oldname, newname); err != nil {
+		panic(err)
+	}
+	return nil
 }
 
 // ReuseForWrite implements vfs.FS.ReuseForWrite.
