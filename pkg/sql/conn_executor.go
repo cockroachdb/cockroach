@@ -806,10 +806,10 @@ func (s *Server) newConnExecutor(
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
 	ex.statsWriter = statsWriter
 	ex.statsCollector = sslocal.NewStatsCollector(statsWriter, ex.phaseTimes)
-	ex.dataMutatorIterator.RegisterOnSessionDataChange("application_name", func(newName string) {
+	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
 		ex.statsWriter = ex.server.sqlStats.GetWriterForApplication(newName)
-	})
+	}
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{

@@ -436,6 +436,37 @@ SELECT * FROM tbl
 ----
 2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
 
+# Test SET LOCAL is correctly resets application_name.
+
+statement ok
+BEGIN;
+SET LOCAL application_name = 'my name is sasha fierce'
+
+query T
+SHOW application_name
+----
+my name is sasha fierce
+
+query T
+SELECT application_name FROM crdb_internal.node_sessions
+WHERE active_queries LIKE 'SELECT application_name%'
+----
+my name is sasha fierce
+
+statement ok
+ROLLBACK
+
+query T
+SHOW application_name
+----
+·
+
+query T
+SELECT application_name FROM crdb_internal.node_sessions
+WHERE active_queries LIKE 'SELECT application_name%'
+----
+·
+
 # Test for SET DATABASE
 
 statement ok
