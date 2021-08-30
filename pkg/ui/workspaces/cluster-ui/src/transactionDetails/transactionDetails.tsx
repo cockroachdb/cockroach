@@ -248,6 +248,7 @@ export class TransactionDetails extends React.Component<
                     arrayItemName={
                       "statement fingerprints for this transaction"
                     }
+                    tooltipType="transactionDetails"
                     activeFilters={0}
                     resetSQLStats={resetSQLStats}
                   />
