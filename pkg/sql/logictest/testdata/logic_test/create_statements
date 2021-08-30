@@ -5849,7 +5849,7 @@ CREATE TABLE pg_catalog.pg_user (
    userepl BOOL NULL,
    usebypassrls BOOL NULL,
    passwd STRING NULL,
-   valuntil TIMESTAMP NULL,
+   valuntil TIMESTAMPTZ NULL,
    useconfig STRING[] NULL
 )  CREATE TABLE pg_catalog.pg_user (
    usename NAME NULL,
@@ -5859,7 +5859,7 @@ CREATE TABLE pg_catalog.pg_user (
    userepl BOOL NULL,
    usebypassrls BOOL NULL,
    passwd STRING NULL,
-   valuntil TIMESTAMP NULL,
+   valuntil TIMESTAMPTZ NULL,
    useconfig STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_user_mapping (
