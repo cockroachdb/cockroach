@@ -640,6 +640,21 @@ func FindPriorBackups(
 	return prev, nil
 }
 
+// checkForLatestFileInCollection checks whether the directory pointed by store contains the
+// latestFileName pointer directory.
+func checkForLatestFileInCollection(
+	ctx context.Context, store cloud.ExternalStorage,
+) (bool, error) {
+	_, err := store.ReadFile(ctx, latestFileName)
+	if err != nil {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, nil
+		}
+		return false, pgerror.WithCandidateCode(err, pgcode.Io)
+	}
+	return true, nil
+}
+
 // resolveBackupManifests resolves a list of list of URIs that point to the
 // incremental layers (each of which can be partitioned) of backups into the
 // actual backup manifests and metadata required to RESTORE. If only one layer
