@@ -203,11 +203,15 @@ func (s *SessionData) GetTemporarySchemaIDForDb(dbID uint32) (uint32, bool) {
 type Stack struct {
 	// Use an internal variable to prevent abstraction leakage.
 	stack []*SessionData
+	// base is a pointer to the first element of the stack.
+	// This avoids a race with stack being reassigned, as the first element
+	// is *always* set.
+	base *SessionData
 }
 
 // NewStack creates a new tack.
 func NewStack(firstElem *SessionData) *Stack {
-	return &Stack{stack: []*SessionData{firstElem}}
+	return &Stack{stack: []*SessionData{firstElem}, base: firstElem}
 }
 
 // Clone clones the current stack.
@@ -227,6 +231,12 @@ func (s *Stack) Top() *SessionData {
 		return nil
 	}
 	return s.stack[len(s.stack)-1]
+}
+
+// Base returns the bottom element of the stack.
+// This is a non-racy structure, as the bottom element is always constant.
+func (s *Stack) Base() *SessionData {
+	return s.base
 }
 
 // Push pushes a SessionData element to the stack.

@@ -2809,13 +2809,17 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		lastActiveQueryNoConstants = truncateSQL(formatStatementHideConstants(ex.mu.LastActiveQuery))
 	}
 
+	// We always use base here as the fields from the SessionData should always
+	// be that of the root session.
+	sd := ex.sessionDataStack.Base()
+
 	remoteStr := "<admin>"
-	if ex.sessionData().RemoteAddr != nil {
-		remoteStr = ex.sessionData().RemoteAddr.String()
+	if sd.RemoteAddr != nil {
+		remoteStr = sd.RemoteAddr.String()
 	}
 
 	return serverpb.Session{
-		Username:                   ex.sessionData().User().Normalized(),
+		Username:                   sd.SessionUser().Normalized(),
 		ClientAddress:              remoteStr,
 		ApplicationName:            ex.applicationName.Load().(string),
 		Start:                      ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
