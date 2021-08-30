@@ -75,6 +75,11 @@ type PebbleFileRegistry struct {
 		registryFile vfs.File
 		// registryWriter is a record.Writer for registryFile.
 		registryWriter *record.Writer
+		// lastLoadedUpdate is the last update loaded from the previous
+		// registry during Load. Initialized by Load, and then does not
+		// change. Only initialized if the previous process ran using a
+		// records-based registry.
+		lastLoadedUpdate *enginepb.RegistryUpdate
 	}
 }
 
@@ -135,6 +140,23 @@ func (r *PebbleFileRegistry) Load() error {
 
 	if err := r.loadRegistryFromFile(); err != nil {
 		return err
+	}
+
+	// Atomicity of rename operations is important for several use
+	// cases. If the last operation recorded in the previous registry
+	// log was a rename, it's possible the corresponding filesystem
+	// rename operation didn't finish. Do it now.
+	// TODO(jackson): This is temporary fix; The filesystem operations
+	// are the responsibility of the encryptedFS. There are ideas for
+	// handling this in a cleaner way, but we can defer them until 22.1.
+	if !r.ReadOnly && r.mu.lastLoadedUpdate != nil {
+		if v, ok := r.mu.lastLoadedUpdate.Operation.(*enginepb.RegistryUpdate_Rename); ok {
+			srcPath := r.FS.PathJoin(r.DBDir, v.Rename.SrcFilename)
+			dstPath := r.FS.PathJoin(r.DBDir, v.Rename.DstFilename)
+			if err := r.FS.Rename(srcPath, dstPath); err != nil && !oserror.IsNotExist(err) {
+				return errors.Wrap(err, "completing unfinished rename")
+			}
+		}
 	}
 
 	// Delete all unnecessary entries to reduce registry size.
@@ -243,11 +265,12 @@ func (r *PebbleFileRegistry) maybeLoadNewRecordsRegistry() (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		batch := &enginepb.RegistryUpdateBatch{}
-		if err := protoutil.Unmarshal(b, batch); err != nil {
+		update := &enginepb.RegistryUpdate{}
+		if err := protoutil.Unmarshal(b, update); err != nil {
 			return false, err
 		}
-		r.mu.currProto.ProcessBatch(batch)
+		r.mu.currProto.Apply(update)
+		r.mu.lastLoadedUpdate = update
 	}
 	if err := records.Close(); err != nil {
 		return false, err
@@ -276,12 +299,12 @@ func (r *PebbleFileRegistry) maybeElideEntries() error {
 	if r.ReadOnly {
 		return nil
 	}
-	batch := &enginepb.RegistryUpdateBatch{}
+	var removeUpdate enginepb.RegistryOpRemove
 	for filename, entry := range r.mu.currProto.Files {
 		// Some entries may be elided. This is used within
 		// ccl/storageccl/engineccl to elide plaintext file entries.
 		if CanRegistryElideFunc != nil && CanRegistryElideFunc(entry) {
-			batch.DeleteEntry(filename)
+			removeUpdate.Filenames = append(removeUpdate.Filenames, filename)
 			continue
 		}
 
@@ -296,10 +319,17 @@ func (r *PebbleFileRegistry) maybeElideEntries() error {
 			path = r.FS.PathJoin(r.DBDir, filename)
 		}
 		if _, err := r.FS.Stat(path); oserror.IsNotExist(err) {
-			batch.DeleteEntry(filename)
+			removeUpdate.Filenames = append(removeUpdate.Filenames, filename)
 		}
 	}
-	return r.processBatchLocked(batch)
+	if len(removeUpdate.Filenames) == 0 {
+		return nil
+	}
+	return r.processUpdateLocked(&enginepb.RegistryUpdate{
+		Operation: &enginepb.RegistryUpdate_Remove{
+			Remove: &removeUpdate,
+		},
+	})
 }
 
 // GetFileEntry gets the file entry corresponding to filename, if there is one, else returns nil.
@@ -310,11 +340,12 @@ func (r *PebbleFileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
 	return r.mu.currProto.Files[filename]
 }
 
-// SetFileEntry sets filename => entry in the registry map and persists the registry.
-// It should not be called for entries corresponding to unencrypted files since the
-// absence of a file in the file registry implies that it is unencrypted.
+// SetFileEntry sets filename => entry in the registry map and persists
+// the registry.  It should not be called for entries corresponding to
+// unencrypted files since the absence of a file in the file registry
+// implies that it is unencrypted.
 func (r *PebbleFileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) error {
-	// We don't need to store nil entries since that's the default zero value.
+	// We don't need to store nil zero-value entries.
 	if entry == nil {
 		return r.MaybeDeleteEntry(filename)
 	}
@@ -323,12 +354,11 @@ func (r *PebbleFileRegistry) SetFileEntry(filename string, entry *enginepb.FileE
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	batch := &enginepb.RegistryUpdateBatch{}
-	batch.PutEntry(filename, entry)
-	return r.processBatchLocked(batch)
+	return r.processUpdateLocked(enginepb.SetOp(filename, entry))
 }
 
-// MaybeDeleteEntry deletes the entry for filename, if it exists, and persists the registry, if changed.
+// MaybeDeleteEntry deletes the entry for filename, if it exists, and
+// persists the registry, if changed.
 func (r *PebbleFileRegistry) MaybeDeleteEntry(filename string) error {
 	filename = r.tryMakeRelativePath(filename)
 
@@ -337,13 +367,12 @@ func (r *PebbleFileRegistry) MaybeDeleteEntry(filename string) error {
 	if r.mu.currProto.Files[filename] == nil {
 		return nil
 	}
-	batch := &enginepb.RegistryUpdateBatch{}
-	batch.DeleteEntry(filename)
-	return r.processBatchLocked(batch)
+	return r.processUpdateLocked(enginepb.RemoveOp(filename))
 }
 
-// MaybeRenameEntry moves the entry under src to dst, if src exists. If src does not exist, but dst
-// exists, dst is deleted. Persists the registry if changed.
+// MaybeRenameEntry moves the entry under src to dst, if src exists. If
+// src does not exist, MaybeRenameEntry deletes any entry under the path
+// dst.
 func (r *PebbleFileRegistry) MaybeRenameEntry(src, dst string) error {
 	src = r.tryMakeRelativePath(src)
 	dst = r.tryMakeRelativePath(dst)
@@ -353,34 +382,22 @@ func (r *PebbleFileRegistry) MaybeRenameEntry(src, dst string) error {
 	if r.mu.currProto.Files[src] == nil && r.mu.currProto.Files[dst] == nil {
 		return nil
 	}
-	batch := &enginepb.RegistryUpdateBatch{}
-	if r.mu.currProto.Files[src] == nil {
-		batch.DeleteEntry(dst)
-	} else {
-		batch.PutEntry(dst, r.mu.currProto.Files[src])
-		batch.DeleteEntry(src)
-	}
-	return r.processBatchLocked(batch)
+	return r.processUpdateLocked(enginepb.RenameOp(src, dst))
 }
 
-// MaybeLinkEntry copies the entry under src to dst, if src exists. If src does not exist, but dst
-// exists, dst is deleted. Persists the registry if changed.
+// MaybeLinkEntry copies the entry under src to dst, if src exists. If
+// src does not exist, MaybeLinkEntry removes any entry under the path
+// dst.
 func (r *PebbleFileRegistry) MaybeLinkEntry(src, dst string) error {
 	src = r.tryMakeRelativePath(src)
 	dst = r.tryMakeRelativePath(dst)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.currProto.Files[src] == nil && r.mu.currProto.Files[dst] == nil {
+	if r.mu.currProtos.Files[src] == nil && r.mu.currProtos.Files[dst] == nil {
 		return nil
 	}
-	batch := &enginepb.RegistryUpdateBatch{}
-	if r.mu.currProto.Files[src] == nil {
-		batch.DeleteEntry(dst)
-	} else {
-		batch.PutEntry(dst, r.mu.currProto.Files[src])
-	}
-	return r.processBatchLocked(batch)
+	return r.processUpdateLocked(enginepb.SetOp(dst, r.mu.currProto.Files[src]))
 }
 
 func (r *PebbleFileRegistry) tryMakeRelativePath(filename string) string {
@@ -426,27 +443,24 @@ func (r *PebbleFileRegistry) upgradeToRecordsVersion() error {
 	return r.FS.Remove(r.oldRegistryPath)
 }
 
-func (r *PebbleFileRegistry) processBatchLocked(batch *enginepb.RegistryUpdateBatch) error {
+func (r *PebbleFileRegistry) processUpdateLocked(update *enginepb.RegistryUpdate) error {
 	if r.ReadOnly {
 		return errors.New("cannot write file registry since db is read-only")
-	}
-	if batch.Empty() {
-		return nil
 	}
 	// For durability reasons, we persist the changes to disk first before we
 	// update the in-memory registry. Any error during persisting is fatal.
 	if r.mu.currProto.Version == enginepb.RegistryVersion_Base {
 		newProto := &enginepb.FileRegistry{}
 		proto.Merge(newProto, r.mu.currProto)
-		newProto.ProcessBatch(batch)
+		newProto.Apply(update)
 		if err := r.rewriteOldRegistry(newProto); err != nil {
 			panic(err)
 		}
 	}
-	if err := r.writeToRegistryFile(batch); err != nil {
+	if err := r.writeToRegistryFile(update); err != nil {
 		panic(err)
 	}
-	r.mu.currProto.ProcessBatch(batch)
+	r.mu.currProto.Apply(update)
 	return nil
 }
 
@@ -462,7 +476,7 @@ func (r *PebbleFileRegistry) rewriteOldRegistry(newProto *enginepb.FileRegistry)
 	return nil
 }
 
-func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) error {
+func (r *PebbleFileRegistry) writeToRegistryFile(update *enginepb.RegistryUpdate) error {
 	// Create a new file registry file if one doesn't exist yet.
 	if r.mu.registryWriter == nil {
 		if err := r.createNewRegistryFile(); err != nil {
@@ -473,7 +487,7 @@ func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateB
 	if err != nil {
 		return err
 	}
-	b, err := protoutil.Marshal(batch)
+	b, err := protoutil.Marshal(update)
 	if err != nil {
 		return err
 	}
@@ -527,12 +541,10 @@ func (r *PebbleFileRegistry) createNewRegistryFile() error {
 		return errFunc(err)
 	}
 
-	// Write a RegistryUpdateBatch containing the current state of the registry.
-	batch := &enginepb.RegistryUpdateBatch{}
-	for filename, entry := range r.mu.currProto.Files {
-		batch.PutEntry(filename, entry)
-	}
-	b, err = protoutil.Marshal(batch)
+	// Write a RegistryUpdate snapshot containing the current state of
+	// the registry.
+	snapshot := enginepb.SnapshotOp(r.mu.currProto.Files)
+	b, err = protoutil.Marshal(snapshot)
 	if err != nil {
 		return errFunc(err)
 	}

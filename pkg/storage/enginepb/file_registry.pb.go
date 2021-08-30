@@ -206,52 +206,20 @@ func (m *RegistryHeader) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RegistryHeader proto.InternalMessageInfo
 
-type RegistryUpdateBatch struct {
-	// An ordered list of updates to the registry.
-	Updates []*RegistryUpdate `protobuf:"bytes,1,rep,name=updates,proto3" json:"updates,omitempty"`
-}
-
-func (m *RegistryUpdateBatch) Reset()         { *m = RegistryUpdateBatch{} }
-func (m *RegistryUpdateBatch) String() string { return proto.CompactTextString(m) }
-func (*RegistryUpdateBatch) ProtoMessage()    {}
-func (*RegistryUpdateBatch) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1c23ce5e71079250, []int{3}
-}
-func (m *RegistryUpdateBatch) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *RegistryUpdateBatch) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	b = b[:cap(b)]
-	n, err := m.MarshalToSizedBuffer(b)
-	if err != nil {
-		return nil, err
-	}
-	return b[:n], nil
-}
-func (m *RegistryUpdateBatch) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RegistryUpdateBatch.Merge(m, src)
-}
-func (m *RegistryUpdateBatch) XXX_Size() int {
-	return m.Size()
-}
-func (m *RegistryUpdateBatch) XXX_DiscardUnknown() {
-	xxx_messageInfo_RegistryUpdateBatch.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_RegistryUpdateBatch proto.InternalMessageInfo
-
 type RegistryUpdate struct {
-	// Name of the file.
-	Filename string `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
-	// Corresponding file entry. A nil entry indicates a file was deleted.
-	Entry *FileEntry `protobuf:"bytes,2,opt,name=entry,proto3" json:"entry,omitempty"`
+	// Types that are valid to be assigned to Operation:
+	//	*RegistryUpdate_Set
+	//	*RegistryUpdate_Remove
+	//	*RegistryUpdate_Rename
+	//	*RegistryUpdate_Snapshot
+	Operation isRegistryUpdate_Operation `protobuf_oneof:"operation"`
 }
 
 func (m *RegistryUpdate) Reset()         { *m = RegistryUpdate{} }
 func (m *RegistryUpdate) String() string { return proto.CompactTextString(m) }
 func (*RegistryUpdate) ProtoMessage()    {}
 func (*RegistryUpdate) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1c23ce5e71079250, []int{4}
+	return fileDescriptor_1c23ce5e71079250, []int{3}
 }
 func (m *RegistryUpdate) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -276,6 +244,214 @@ func (m *RegistryUpdate) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RegistryUpdate proto.InternalMessageInfo
 
+type isRegistryUpdate_Operation interface {
+	isRegistryUpdate_Operation()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type RegistryUpdate_Set struct {
+	Set *RegistryOpSet `protobuf:"bytes,1,opt,name=set,proto3,oneof" json:"set,omitempty"`
+}
+type RegistryUpdate_Remove struct {
+	Remove *RegistryOpRemove `protobuf:"bytes,2,opt,name=remove,proto3,oneof" json:"remove,omitempty"`
+}
+type RegistryUpdate_Rename struct {
+	Rename *RegistryOpRename `protobuf:"bytes,3,opt,name=rename,proto3,oneof" json:"rename,omitempty"`
+}
+type RegistryUpdate_Snapshot struct {
+	Snapshot *RegistryOpSnapshot `protobuf:"bytes,4,opt,name=snapshot,proto3,oneof" json:"snapshot,omitempty"`
+}
+
+func (*RegistryUpdate_Set) isRegistryUpdate_Operation()      {}
+func (*RegistryUpdate_Remove) isRegistryUpdate_Operation()   {}
+func (*RegistryUpdate_Rename) isRegistryUpdate_Operation()   {}
+func (*RegistryUpdate_Snapshot) isRegistryUpdate_Operation() {}
+
+func (m *RegistryUpdate) GetOperation() isRegistryUpdate_Operation {
+	if m != nil {
+		return m.Operation
+	}
+	return nil
+}
+
+func (m *RegistryUpdate) GetSet() *RegistryOpSet {
+	if x, ok := m.GetOperation().(*RegistryUpdate_Set); ok {
+		return x.Set
+	}
+	return nil
+}
+
+func (m *RegistryUpdate) GetRemove() *RegistryOpRemove {
+	if x, ok := m.GetOperation().(*RegistryUpdate_Remove); ok {
+		return x.Remove
+	}
+	return nil
+}
+
+func (m *RegistryUpdate) GetRename() *RegistryOpRename {
+	if x, ok := m.GetOperation().(*RegistryUpdate_Rename); ok {
+		return x.Rename
+	}
+	return nil
+}
+
+func (m *RegistryUpdate) GetSnapshot() *RegistryOpSnapshot {
+	if x, ok := m.GetOperation().(*RegistryUpdate_Snapshot); ok {
+		return x.Snapshot
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*RegistryUpdate) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*RegistryUpdate_Set)(nil),
+		(*RegistryUpdate_Remove)(nil),
+		(*RegistryUpdate_Rename)(nil),
+		(*RegistryUpdate_Snapshot)(nil),
+	}
+}
+
+type RegistryOpSet struct {
+	// Name of the file.
+	Filename string `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	// Corresponding file entry.
+	Entry *FileEntry `protobuf:"bytes,2,opt,name=entry,proto3" json:"entry,omitempty"`
+}
+
+func (m *RegistryOpSet) Reset()         { *m = RegistryOpSet{} }
+func (m *RegistryOpSet) String() string { return proto.CompactTextString(m) }
+func (*RegistryOpSet) ProtoMessage()    {}
+func (*RegistryOpSet) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1c23ce5e71079250, []int{4}
+}
+func (m *RegistryOpSet) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RegistryOpSet) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *RegistryOpSet) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RegistryOpSet.Merge(m, src)
+}
+func (m *RegistryOpSet) XXX_Size() int {
+	return m.Size()
+}
+func (m *RegistryOpSet) XXX_DiscardUnknown() {
+	xxx_messageInfo_RegistryOpSet.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RegistryOpSet proto.InternalMessageInfo
+
+type RegistryOpRemove struct {
+	// Name of the file(s).
+	Filenames []string `protobuf:"bytes,1,rep,name=filenames,proto3" json:"filenames,omitempty"`
+}
+
+func (m *RegistryOpRemove) Reset()         { *m = RegistryOpRemove{} }
+func (m *RegistryOpRemove) String() string { return proto.CompactTextString(m) }
+func (*RegistryOpRemove) ProtoMessage()    {}
+func (*RegistryOpRemove) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1c23ce5e71079250, []int{5}
+}
+func (m *RegistryOpRemove) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RegistryOpRemove) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *RegistryOpRemove) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RegistryOpRemove.Merge(m, src)
+}
+func (m *RegistryOpRemove) XXX_Size() int {
+	return m.Size()
+}
+func (m *RegistryOpRemove) XXX_DiscardUnknown() {
+	xxx_messageInfo_RegistryOpRemove.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RegistryOpRemove proto.InternalMessageInfo
+
+type RegistryOpRename struct {
+	// Name of the source file.
+	SrcFilename string `protobuf:"bytes,1,opt,name=src_filename,json=srcFilename,proto3" json:"src_filename,omitempty"`
+	// Name of the destination file.
+	DstFilename string `protobuf:"bytes,2,opt,name=dst_filename,json=dstFilename,proto3" json:"dst_filename,omitempty"`
+}
+
+func (m *RegistryOpRename) Reset()         { *m = RegistryOpRename{} }
+func (m *RegistryOpRename) String() string { return proto.CompactTextString(m) }
+func (*RegistryOpRename) ProtoMessage()    {}
+func (*RegistryOpRename) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1c23ce5e71079250, []int{6}
+}
+func (m *RegistryOpRename) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RegistryOpRename) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *RegistryOpRename) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RegistryOpRename.Merge(m, src)
+}
+func (m *RegistryOpRename) XXX_Size() int {
+	return m.Size()
+}
+func (m *RegistryOpRename) XXX_DiscardUnknown() {
+	xxx_messageInfo_RegistryOpRename.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RegistryOpRename proto.InternalMessageInfo
+
+type RegistryOpSnapshot struct {
+	Files map[string]*FileEntry `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+}
+
+func (m *RegistryOpSnapshot) Reset()         { *m = RegistryOpSnapshot{} }
+func (m *RegistryOpSnapshot) String() string { return proto.CompactTextString(m) }
+func (*RegistryOpSnapshot) ProtoMessage()    {}
+func (*RegistryOpSnapshot) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1c23ce5e71079250, []int{7}
+}
+func (m *RegistryOpSnapshot) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RegistryOpSnapshot) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *RegistryOpSnapshot) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RegistryOpSnapshot.Merge(m, src)
+}
+func (m *RegistryOpSnapshot) XXX_Size() int {
+	return m.Size()
+}
+func (m *RegistryOpSnapshot) XXX_DiscardUnknown() {
+	xxx_messageInfo_RegistryOpSnapshot.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RegistryOpSnapshot proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterEnum("cockroach.storage.enginepb.RegistryVersion", RegistryVersion_name, RegistryVersion_value)
 	proto.RegisterEnum("cockroach.storage.enginepb.EnvType", EnvType_name, EnvType_value)
@@ -283,8 +459,12 @@ func init() {
 	proto.RegisterMapType((map[string]*FileEntry)(nil), "cockroach.storage.enginepb.FileRegistry.FilesEntry")
 	proto.RegisterType((*FileEntry)(nil), "cockroach.storage.enginepb.FileEntry")
 	proto.RegisterType((*RegistryHeader)(nil), "cockroach.storage.enginepb.RegistryHeader")
-	proto.RegisterType((*RegistryUpdateBatch)(nil), "cockroach.storage.enginepb.RegistryUpdateBatch")
 	proto.RegisterType((*RegistryUpdate)(nil), "cockroach.storage.enginepb.RegistryUpdate")
+	proto.RegisterType((*RegistryOpSet)(nil), "cockroach.storage.enginepb.RegistryOpSet")
+	proto.RegisterType((*RegistryOpRemove)(nil), "cockroach.storage.enginepb.RegistryOpRemove")
+	proto.RegisterType((*RegistryOpRename)(nil), "cockroach.storage.enginepb.RegistryOpRename")
+	proto.RegisterType((*RegistryOpSnapshot)(nil), "cockroach.storage.enginepb.RegistryOpSnapshot")
+	proto.RegisterMapType((map[string]*FileEntry)(nil), "cockroach.storage.enginepb.RegistryOpSnapshot.FilesEntry")
 }
 
 func init() {
@@ -292,36 +472,45 @@ func init() {
 }
 
 var fileDescriptor_1c23ce5e71079250 = []byte{
-	// 457 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x53, 0xcf, 0x6b, 0x13, 0x41,
-	0x14, 0xde, 0xd9, 0x1a, 0x37, 0x79, 0xa9, 0x75, 0x99, 0x7a, 0x08, 0x39, 0x2c, 0x61, 0x55, 0x08,
-	0x11, 0x37, 0x90, 0x5e, 0x44, 0xc1, 0x43, 0x68, 0x44, 0x6f, 0x32, 0xf5, 0x07, 0xe8, 0x21, 0x4c,
-	0x37, 0xcf, 0xed, 0xd0, 0x38, 0xb3, 0xcc, 0x4c, 0x83, 0x0b, 0x5e, 0xfc, 0x0f, 0xfc, 0xb3, 0x7a,
-	0xec, 0xb1, 0x47, 0x4d, 0xfe, 0x11, 0xd9, 0xd9, 0xdd, 0x46, 0x04, 0xab, 0x82, 0xb7, 0xf7, 0xe6,
-	0x7b, 0xdf, 0x37, 0xdf, 0xbc, 0x8f, 0x81, 0x7b, 0xc6, 0x2a, 0xcd, 0x33, 0x1c, 0xa3, 0xcc, 0x84,
-	0xc4, 0xfc, 0x78, 0xfc, 0x41, 0x2c, 0x71, 0xae, 0x31, 0x13, 0xc6, 0xea, 0x22, 0xc9, 0xb5, 0xb2,
-	0x8a, 0xf6, 0x53, 0x95, 0x9e, 0x6a, 0xc5, 0xd3, 0x93, 0xa4, 0x9e, 0x4f, 0x9a, 0xf9, 0xfe, 0x9d,
-	0x4c, 0x65, 0xca, 0x8d, 0x8d, 0xcb, 0xaa, 0x62, 0xc4, 0x5f, 0x7c, 0xd8, 0x7d, 0x26, 0x96, 0xc8,
-	0x6a, 0x21, 0x3a, 0x83, 0x60, 0x85, 0xda, 0x08, 0x25, 0x7b, 0x64, 0x40, 0x86, 0x7b, 0x93, 0x07,
-	0xc9, 0xef, 0x45, 0x93, 0x86, 0xf6, 0xa6, 0xa2, 0xb0, 0x86, 0x4b, 0x5f, 0x40, 0xab, 0x34, 0x68,
-	0x7a, 0xfe, 0x60, 0x67, 0xd8, 0x9d, 0x1c, 0x5c, 0x27, 0xf2, 0xf3, 0xfd, 0xae, 0x31, 0x33, 0x69,
-	0x75, 0xc1, 0x2a, 0x85, 0xfe, 0x1c, 0x60, 0x7b, 0x48, 0x43, 0xd8, 0x39, 0xc5, 0xc2, 0x79, 0xeb,
-	0xb0, 0xb2, 0xa4, 0x4f, 0xa0, 0xb5, 0xe2, 0xcb, 0x33, 0xec, 0xf9, 0x03, 0x32, 0xec, 0x4e, 0xee,
-	0xff, 0xe9, 0xaa, 0x5a, 0xdc, 0x71, 0x1e, 0xfb, 0x8f, 0x48, 0xfc, 0x19, 0x3a, 0x57, 0xe7, 0xf4,
-	0x29, 0xb4, 0x51, 0xae, 0xe6, 0xb6, 0xc8, 0xb1, 0x5e, 0xc0, 0xdd, 0xeb, 0x04, 0x67, 0x72, 0xf5,
-	0xaa, 0xc8, 0x91, 0x05, 0x58, 0x15, 0x74, 0x0c, 0xfb, 0x28, 0x53, 0x5d, 0xe4, 0x56, 0x28, 0x39,
-	0x37, 0x68, 0xad, 0x90, 0x99, 0x71, 0xde, 0x76, 0x19, 0xdd, 0x42, 0x47, 0x35, 0x12, 0xbf, 0x85,
-	0xbd, 0xe6, 0xf1, 0xcf, 0x91, 0x2f, 0x50, 0xff, 0xa7, 0x08, 0xe2, 0xf7, 0xb0, 0xdf, 0x60, 0xaf,
-	0xf3, 0x05, 0xb7, 0x38, 0xe5, 0x36, 0x3d, 0xa1, 0x87, 0x10, 0x9c, 0xb9, 0xd6, 0xf4, 0x88, 0xcb,
-	0x66, 0xf4, 0x37, 0xea, 0x95, 0x02, 0x6b, 0xa8, 0xb1, 0xd8, 0xba, 0xae, 0x20, 0xda, 0x87, 0x76,
-	0x99, 0x97, 0xe4, 0x1f, 0xb1, 0x4e, 0xe7, 0xaa, 0x2f, 0x23, 0xc2, 0x72, 0xbb, 0xff, 0x18, 0x91,
-	0xe3, 0x8c, 0x86, 0x70, 0xfb, 0x97, 0x37, 0xd2, 0x36, 0xdc, 0x98, 0x72, 0x83, 0xa1, 0x47, 0xbb,
-	0x10, 0x30, 0x4c, 0x95, 0x5e, 0x98, 0x90, 0x8c, 0x1e, 0x42, 0x50, 0xe7, 0x41, 0x6f, 0x41, 0xe7,
-	0xe5, 0x92, 0x0b, 0x69, 0xf1, 0x93, 0x0d, 0x3d, 0xda, 0x81, 0xd6, 0x91, 0x55, 0x1a, 0x43, 0x52,
-	0x72, 0x0f, 0xb9, 0xe5, 0xa1, 0x3f, 0x1d, 0x9d, 0x7f, 0x8f, 0xbc, 0xf3, 0x75, 0x44, 0x2e, 0xd6,
-	0x11, 0xb9, 0x5c, 0x47, 0xe4, 0xdb, 0x3a, 0x22, 0x5f, 0x37, 0x91, 0x77, 0xb1, 0x89, 0xbc, 0xcb,
-	0x4d, 0xe4, 0xbd, 0x6b, 0x37, 0xae, 0x8e, 0x6f, 0xba, 0xef, 0x72, 0xf0, 0x23, 0x00, 0x00, 0xff,
-	0xff, 0x1e, 0xaa, 0xdd, 0xa2, 0x88, 0x03, 0x00, 0x00,
+	// 599 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x94, 0xcf, 0x6e, 0xd3, 0x4e,
+	0x10, 0xc7, 0xbd, 0x4e, 0xdb, 0xc4, 0x93, 0xb4, 0x3f, 0x6b, 0x7f, 0x1c, 0xa2, 0x08, 0x59, 0xa9,
+	0x01, 0x29, 0x14, 0x48, 0x50, 0x7a, 0xe1, 0x8f, 0xe0, 0x50, 0xd1, 0x2a, 0x48, 0x48, 0x45, 0x5b,
+	0xfe, 0x89, 0x4b, 0xb4, 0x75, 0x86, 0xd4, 0x6a, 0xba, 0x6b, 0xed, 0x2e, 0x11, 0x91, 0xb8, 0xf0,
+	0x06, 0x3c, 0x0f, 0x0f, 0x80, 0x7a, 0xec, 0xb1, 0x47, 0x48, 0x5f, 0x04, 0x79, 0x6d, 0x37, 0xb4,
+	0x88, 0xd2, 0x48, 0x48, 0xdc, 0xc6, 0xbb, 0xf3, 0xfd, 0xec, 0x77, 0x67, 0x67, 0x0c, 0xd7, 0xb5,
+	0x91, 0x8a, 0x0f, 0xb1, 0x83, 0x62, 0x18, 0x0b, 0x4c, 0x76, 0x3b, 0xef, 0xe2, 0x11, 0xf6, 0x15,
+	0x0e, 0x63, 0x6d, 0xd4, 0xa4, 0x9d, 0x28, 0x69, 0x24, 0x6d, 0x44, 0x32, 0xda, 0x57, 0x92, 0x47,
+	0x7b, 0xed, 0x3c, 0xbf, 0x5d, 0xe4, 0x37, 0xae, 0x0c, 0xe5, 0x50, 0xda, 0xb4, 0x4e, 0x1a, 0x65,
+	0x8a, 0xf0, 0x93, 0x0b, 0xb5, 0xad, 0x78, 0x84, 0x2c, 0x07, 0xd1, 0x4d, 0x28, 0x8f, 0x51, 0xe9,
+	0x58, 0x8a, 0x3a, 0x69, 0x92, 0xd6, 0x4a, 0xf7, 0x56, 0xfb, 0xf7, 0xd0, 0x76, 0x21, 0x7b, 0x95,
+	0x49, 0x58, 0xa1, 0xa5, 0x4f, 0x61, 0x31, 0x35, 0xa8, 0xeb, 0x6e, 0xb3, 0xd4, 0xaa, 0x76, 0xd7,
+	0x2f, 0x82, 0xfc, 0x7c, 0xbe, 0xfd, 0xd0, 0x9b, 0xc2, 0xa8, 0x09, 0xcb, 0x08, 0x8d, 0x3e, 0xc0,
+	0x6c, 0x91, 0xfa, 0x50, 0xda, 0xc7, 0x89, 0xf5, 0xe6, 0xb1, 0x34, 0xa4, 0x0f, 0x61, 0x71, 0xcc,
+	0x47, 0xef, 0xb1, 0xee, 0x36, 0x49, 0xab, 0xda, 0xbd, 0xf1, 0xa7, 0xa3, 0x72, 0xb8, 0xd5, 0x3c,
+	0x70, 0xef, 0x91, 0xf0, 0x23, 0x78, 0xa7, 0xeb, 0xf4, 0x31, 0x54, 0x50, 0x8c, 0xfb, 0x66, 0x92,
+	0x60, 0x5e, 0x80, 0x6b, 0x17, 0x01, 0x37, 0xc5, 0xf8, 0xc5, 0x24, 0x41, 0x56, 0xc6, 0x2c, 0xa0,
+	0x1d, 0xf8, 0x1f, 0x45, 0xa4, 0x26, 0x89, 0x89, 0xa5, 0xe8, 0x6b, 0x34, 0x26, 0x16, 0x43, 0x6d,
+	0xbd, 0xd5, 0x18, 0x9d, 0x6d, 0xed, 0xe4, 0x3b, 0xe1, 0x6b, 0x58, 0x29, 0x2e, 0xdf, 0x43, 0x3e,
+	0x40, 0xf5, 0x97, 0x9e, 0x20, 0xfc, 0xe2, 0xce, 0xc8, 0x2f, 0x93, 0x01, 0x37, 0x48, 0x1f, 0x41,
+	0x49, 0xa3, 0xb1, 0xd4, 0x6a, 0xf7, 0xe6, 0x65, 0xa8, 0xdb, 0xc9, 0x0e, 0x9a, 0x9e, 0xc3, 0x52,
+	0x1d, 0xdd, 0x82, 0x25, 0x85, 0x07, 0x72, 0x5c, 0x94, 0xfa, 0xf6, 0xe5, 0x08, 0xcc, 0x6a, 0x7a,
+	0x0e, 0xcb, 0xd5, 0x19, 0x47, 0xf0, 0x03, 0xac, 0x97, 0xe6, 0xe3, 0xa4, 0x9a, 0x8c, 0x93, 0x46,
+	0xf4, 0x19, 0x54, 0xb4, 0xe0, 0x89, 0xde, 0x93, 0xa6, 0xbe, 0x60, 0x49, 0xed, 0x4b, 0xde, 0x29,
+	0x57, 0xf5, 0x1c, 0x76, 0x4a, 0xd8, 0xa8, 0x82, 0x27, 0x13, 0x54, 0x3c, 0x7d, 0x9d, 0x70, 0x0f,
+	0x96, 0xcf, 0x94, 0x80, 0x36, 0xa0, 0x92, 0xb6, 0xa3, 0x75, 0x9d, 0x35, 0xdf, 0xe9, 0x77, 0xda,
+	0x81, 0x98, 0x36, 0xcf, 0x9c, 0x1d, 0x68, 0x35, 0xe1, 0x5d, 0xf0, 0xcf, 0x97, 0x8a, 0x5e, 0x05,
+	0xaf, 0x80, 0xeb, 0x3a, 0x69, 0x96, 0x5a, 0x1e, 0x9b, 0x2d, 0x84, 0x6f, 0xce, 0x2a, 0xac, 0x85,
+	0x55, 0xa8, 0x69, 0x15, 0xf5, 0xcf, 0x59, 0xac, 0x6a, 0x15, 0x6d, 0x15, 0x2e, 0x57, 0xa1, 0x36,
+	0xd0, 0x66, 0x96, 0xe2, 0x66, 0x29, 0x03, 0x6d, 0x8a, 0x94, 0xf0, 0x2b, 0x01, 0xfa, 0x6b, 0x95,
+	0xe8, 0x76, 0x31, 0xcc, 0xc4, 0x0e, 0xf3, 0xfd, 0xf9, 0x8a, 0xfc, 0x0f, 0x46, 0x7a, 0xad, 0x05,
+	0xff, 0x9d, 0x9b, 0x0b, 0x5a, 0x81, 0x85, 0x0d, 0xae, 0xd1, 0x77, 0x68, 0x15, 0xca, 0x0c, 0x23,
+	0xa9, 0x06, 0xda, 0x27, 0x6b, 0x77, 0xa0, 0x9c, 0xcf, 0x30, 0x5d, 0x06, 0xef, 0xf9, 0x88, 0xc7,
+	0xc2, 0xe0, 0x07, 0xe3, 0x3b, 0xd4, 0x83, 0xc5, 0x1d, 0x23, 0x15, 0xfa, 0x24, 0xd5, 0x3e, 0xe1,
+	0x86, 0xfb, 0xee, 0xc6, 0xda, 0xe1, 0xf7, 0xc0, 0x39, 0x9c, 0x06, 0xe4, 0x68, 0x1a, 0x90, 0xe3,
+	0x69, 0x40, 0xbe, 0x4d, 0x03, 0xf2, 0xf9, 0x24, 0x70, 0x8e, 0x4e, 0x02, 0xe7, 0xf8, 0x24, 0x70,
+	0xde, 0x56, 0x0a, 0x67, 0xbb, 0x4b, 0xf6, 0x17, 0xbb, 0xfe, 0x23, 0x00, 0x00, 0xff, 0xff, 0x07,
+	0xee, 0x36, 0x5d, 0xbc, 0x05, 0x00, 0x00,
 }
 
 func (m *FileRegistry) Marshal() (dAtA []byte, err error) {
@@ -446,43 +635,6 @@ func (m *RegistryHeader) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *RegistryUpdateBatch) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *RegistryUpdateBatch) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *RegistryUpdateBatch) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.Updates) > 0 {
-		for iNdEx := len(m.Updates) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.Updates[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintFileRegistry(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0xa
-		}
-	}
-	return len(dAtA) - i, nil
-}
-
 func (m *RegistryUpdate) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -499,6 +651,122 @@ func (m *RegistryUpdate) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RegistryUpdate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Operation != nil {
+		{
+			size := m.Operation.Size()
+			i -= size
+			if _, err := m.Operation.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RegistryUpdate_Set) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryUpdate_Set) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Set != nil {
+		{
+			size, err := m.Set.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintFileRegistry(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+func (m *RegistryUpdate_Remove) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryUpdate_Remove) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Remove != nil {
+		{
+			size, err := m.Remove.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintFileRegistry(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	return len(dAtA) - i, nil
+}
+func (m *RegistryUpdate_Rename) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryUpdate_Rename) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Rename != nil {
+		{
+			size, err := m.Rename.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintFileRegistry(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	return len(dAtA) - i, nil
+}
+func (m *RegistryUpdate_Snapshot) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryUpdate_Snapshot) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Snapshot != nil {
+		{
+			size, err := m.Snapshot.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintFileRegistry(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	return len(dAtA) - i, nil
+}
+func (m *RegistryOpSet) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RegistryOpSet) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryOpSet) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -521,6 +789,129 @@ func (m *RegistryUpdate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i = encodeVarintFileRegistry(dAtA, i, uint64(len(m.Filename)))
 		i--
 		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RegistryOpRemove) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RegistryOpRemove) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryOpRemove) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Filenames) > 0 {
+		for iNdEx := len(m.Filenames) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Filenames[iNdEx])
+			copy(dAtA[i:], m.Filenames[iNdEx])
+			i = encodeVarintFileRegistry(dAtA, i, uint64(len(m.Filenames[iNdEx])))
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RegistryOpRename) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RegistryOpRename) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryOpRename) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.DstFilename) > 0 {
+		i -= len(m.DstFilename)
+		copy(dAtA[i:], m.DstFilename)
+		i = encodeVarintFileRegistry(dAtA, i, uint64(len(m.DstFilename)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.SrcFilename) > 0 {
+		i -= len(m.SrcFilename)
+		copy(dAtA[i:], m.SrcFilename)
+		i = encodeVarintFileRegistry(dAtA, i, uint64(len(m.SrcFilename)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RegistryOpSnapshot) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RegistryOpSnapshot) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RegistryOpSnapshot) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Files) > 0 {
+		keysForFiles := make([]string, 0, len(m.Files))
+		for k := range m.Files {
+			keysForFiles = append(keysForFiles, string(k))
+		}
+		github_com_gogo_protobuf_sortkeys.Strings(keysForFiles)
+		for iNdEx := len(keysForFiles) - 1; iNdEx >= 0; iNdEx-- {
+			v := m.Files[string(keysForFiles[iNdEx])]
+			baseI := i
+			if v != nil {
+				{
+					size, err := v.MarshalToSizedBuffer(dAtA[:i])
+					if err != nil {
+						return 0, err
+					}
+					i -= size
+					i = encodeVarintFileRegistry(dAtA, i, uint64(size))
+				}
+				i--
+				dAtA[i] = 0x12
+			}
+			i -= len(keysForFiles[iNdEx])
+			copy(dAtA[i:], keysForFiles[iNdEx])
+			i = encodeVarintFileRegistry(dAtA, i, uint64(len(keysForFiles[iNdEx])))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintFileRegistry(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0xa
+		}
 	}
 	return len(dAtA) - i, nil
 }
@@ -589,22 +980,67 @@ func (m *RegistryHeader) Size() (n int) {
 	return n
 }
 
-func (m *RegistryUpdateBatch) Size() (n int) {
+func (m *RegistryUpdate) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if len(m.Updates) > 0 {
-		for _, e := range m.Updates {
-			l = e.Size()
-			n += 1 + l + sovFileRegistry(uint64(l))
-		}
+	if m.Operation != nil {
+		n += m.Operation.Size()
 	}
 	return n
 }
 
-func (m *RegistryUpdate) Size() (n int) {
+func (m *RegistryUpdate_Set) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Set != nil {
+		l = m.Set.Size()
+		n += 1 + l + sovFileRegistry(uint64(l))
+	}
+	return n
+}
+func (m *RegistryUpdate_Remove) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Remove != nil {
+		l = m.Remove.Size()
+		n += 1 + l + sovFileRegistry(uint64(l))
+	}
+	return n
+}
+func (m *RegistryUpdate_Rename) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Rename != nil {
+		l = m.Rename.Size()
+		n += 1 + l + sovFileRegistry(uint64(l))
+	}
+	return n
+}
+func (m *RegistryUpdate_Snapshot) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Snapshot != nil {
+		l = m.Snapshot.Size()
+		n += 1 + l + sovFileRegistry(uint64(l))
+	}
+	return n
+}
+func (m *RegistryOpSet) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -617,6 +1053,60 @@ func (m *RegistryUpdate) Size() (n int) {
 	if m.Entry != nil {
 		l = m.Entry.Size()
 		n += 1 + l + sovFileRegistry(uint64(l))
+	}
+	return n
+}
+
+func (m *RegistryOpRemove) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Filenames) > 0 {
+		for _, s := range m.Filenames {
+			l = len(s)
+			n += 1 + l + sovFileRegistry(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *RegistryOpRename) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.SrcFilename)
+	if l > 0 {
+		n += 1 + l + sovFileRegistry(uint64(l))
+	}
+	l = len(m.DstFilename)
+	if l > 0 {
+		n += 1 + l + sovFileRegistry(uint64(l))
+	}
+	return n
+}
+
+func (m *RegistryOpSnapshot) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Files) > 0 {
+		for k, v := range m.Files {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+				l += 1 + sovFileRegistry(uint64(l))
+			}
+			mapEntrySize := 1 + len(k) + sovFileRegistry(uint64(len(k))) + l
+			n += mapEntrySize + 1 + sovFileRegistry(uint64(mapEntrySize))
+		}
 	}
 	return n
 }
@@ -997,90 +1487,6 @@ func (m *RegistryHeader) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *RegistryUpdateBatch) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowFileRegistry
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: RegistryUpdateBatch: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RegistryUpdateBatch: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Updates", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFileRegistry
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthFileRegistry
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthFileRegistry
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Updates = append(m.Updates, &RegistryUpdate{})
-			if err := m.Updates[len(m.Updates)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipFileRegistry(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthFileRegistry
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func (m *RegistryUpdate) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1108,6 +1514,196 @@ func (m *RegistryUpdate) Unmarshal(dAtA []byte) error {
 		}
 		if fieldNum <= 0 {
 			return fmt.Errorf("proto: RegistryUpdate: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Set", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &RegistryOpSet{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Operation = &RegistryUpdate_Set{v}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Remove", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &RegistryOpRemove{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Operation = &RegistryUpdate_Remove{v}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Rename", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &RegistryOpRename{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Operation = &RegistryUpdate_Rename{v}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Snapshot", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &RegistryOpSnapshot{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Operation = &RegistryUpdate_Snapshot{v}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipFileRegistry(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RegistryOpSet) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowFileRegistry
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RegistryOpSet: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RegistryOpSet: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1177,6 +1773,381 @@ func (m *RegistryUpdate) Unmarshal(dAtA []byte) error {
 			if err := m.Entry.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipFileRegistry(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RegistryOpRemove) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowFileRegistry
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RegistryOpRemove: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RegistryOpRemove: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Filenames", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Filenames = append(m.Filenames, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipFileRegistry(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RegistryOpRename) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowFileRegistry
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RegistryOpRename: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RegistryOpRename: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SrcFilename", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SrcFilename = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DstFilename", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DstFilename = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipFileRegistry(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RegistryOpSnapshot) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowFileRegistry
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RegistryOpSnapshot: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RegistryOpSnapshot: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Files", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Files == nil {
+				m.Files = make(map[string]*FileEntry)
+			}
+			var mapkey string
+			var mapvalue *FileEntry
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowFileRegistry
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowFileRegistry
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthFileRegistry
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthFileRegistry
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var mapmsglen int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowFileRegistry
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapmsglen |= int(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					if mapmsglen < 0 {
+						return ErrInvalidLengthFileRegistry
+					}
+					postmsgIndex := iNdEx + mapmsglen
+					if postmsgIndex < 0 {
+						return ErrInvalidLengthFileRegistry
+					}
+					if postmsgIndex > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = &FileEntry{}
+					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+						return err
+					}
+					iNdEx = postmsgIndex
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipFileRegistry(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
+						return ErrInvalidLengthFileRegistry
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.Files[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
