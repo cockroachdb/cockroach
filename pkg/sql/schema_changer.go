@@ -1062,7 +1062,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		referencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(dbDesc,
+		referencedTypeIDs, _, err := scTable.GetAllReferencedTypeIDs(dbDesc,
 			func(id descpb.ID) (catalog.TypeDescriptor, error) {
 				desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
@@ -1314,7 +1314,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// type descriptors. If this table has been dropped in the mean time, then
 		// don't install any backreferences.
 		if !scTable.Dropped() {
-			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(dbDesc,
+			newReferencedTypeIDs, _, err := scTable.GetAllReferencedTypeIDs(dbDesc,
 				func(id descpb.ID) (catalog.TypeDescriptor, error) {
 					typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
 					if err != nil {
