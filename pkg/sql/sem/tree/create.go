@@ -1853,7 +1853,7 @@ func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
 		)
 
 		// Password is a special case.
-		if strings.ToUpper(option.Key.String()) == "PASSWORD" && option.Value != DNull {
+		if strings.ToUpper(option.Key.String()) == "PASSWORD" {
 			ctx.WriteString(" ")
 			if ctx.flags.HasFlags(FmtShowPasswords) {
 				ctx.FormatNode(option.Value)
@@ -1862,7 +1862,11 @@ func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
 			}
 		} else if option.Value != nil {
 			ctx.WriteString(" ")
-			ctx.FormatNode(option.Value)
+			if ctx.HasFlags(FmtHideConstants) {
+				ctx.WriteString("'_'")
+			} else {
+				ctx.FormatNode(option.Value)
+			}
 		}
 	}
 }
