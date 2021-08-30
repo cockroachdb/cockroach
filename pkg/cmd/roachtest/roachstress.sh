@@ -69,7 +69,7 @@ if [ ! -f "${cr}" ]; then
   fi
 fi
 
-if [ ! -f "${rt}" ]; then
+if [ ! -f "${wl}" ]; then
   if [ -z "${LOCAL}" ]; then
     ./build/builder.sh mkrelease amd64-linux-gnu bin/workload
     cp bin.docker_amd64/workload "${wl}"
