@@ -34,7 +34,7 @@ import (
 // returning errors.
 type DummySequenceOperators struct{}
 
-var _ tree.EvalDatabase = &DummySequenceOperators{}
+var _ tree.SequenceOperators = &DummySequenceOperators{}
 
 var errSequenceOperators = unimplemented.NewWithIssue(42508,
 	"cannot evaluate scalar expressions containing sequence operations in this context")
@@ -44,36 +44,6 @@ func (so *DummySequenceOperators) GetSerialSequenceNameFromColumn(
 	ctx context.Context, tn *tree.TableName, columnName tree.Name,
 ) (*tree.TableName, error) {
 	return nil, errors.WithStack(errSequenceOperators)
-}
-
-// CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
-func (so *DummySequenceOperators) CurrentDatabaseRegionConfig(
-	_ context.Context,
-) (tree.DatabaseRegionConfig, error) {
-	return nil, errors.WithStack(errSequenceOperators)
-}
-
-// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
-func (so *DummySequenceOperators) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
-	_ context.Context,
-) error {
-	return errors.WithStack(errSequenceOperators)
-}
-
-// ResetMultiRegionZoneConfigsForTable is part of the tree.EvalDatabase
-// interface.
-func (so *DummySequenceOperators) ResetMultiRegionZoneConfigsForTable(
-	_ context.Context, id int64,
-) error {
-	return errors.WithStack(errSequenceOperators)
-}
-
-// ResetMultiRegionZoneConfigsForDatabase is part of the tree.EvalDatabase
-// interface.
-func (so *DummySequenceOperators) ResetMultiRegionZoneConfigsForDatabase(
-	_ context.Context, id int64,
-) error {
-	return errors.WithStack(errSequenceOperators)
 }
 
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
@@ -162,6 +132,45 @@ func (so *DummySequenceOperators) SetSequenceValueByID(
 	ctx context.Context, seqID int64, newVal int64, isCalled bool,
 ) error {
 	return errors.WithStack(errSequenceOperators)
+}
+
+// DummyRegionOperator implements the tree.RegionOperator interface by
+// returning errors.
+type DummyRegionOperator struct{}
+
+var _ tree.RegionOperator = &DummyRegionOperator{}
+
+var errRegionOperator = unimplemented.NewWithIssue(42508,
+	"cannot evaluate scalar expressions containing region operations in this context")
+
+// CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
+func (so *DummyRegionOperator) CurrentDatabaseRegionConfig(
+	_ context.Context,
+) (tree.DatabaseRegionConfig, error) {
+	return nil, errors.WithStack(errRegionOperator)
+}
+
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
+func (so *DummyRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
+	_ context.Context,
+) error {
+	return errors.WithStack(errRegionOperator)
+}
+
+// ResetMultiRegionZoneConfigsForTable is part of the tree.EvalDatabase
+// interface.
+func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForTable(
+	_ context.Context, id int64,
+) error {
+	return errors.WithStack(errRegionOperator)
+}
+
+// ResetMultiRegionZoneConfigsForDatabase is part of the tree.EvalDatabase
+// interface.
+func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
+	_ context.Context, id int64,
+) error {
+	return errors.WithStack(errRegionOperator)
 }
 
 // DummyEvalPlanner implements the tree.EvalPlanner interface by returning

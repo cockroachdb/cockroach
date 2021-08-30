@@ -353,6 +353,7 @@ func (ds *ServerImpl) setupFlow(
 			ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
 			Sequence:           &faketreeeval.DummySequenceOperators{},
 			Tenant:             &faketreeeval.DummyTenantOperator{},
+			Regions:            &faketreeeval.DummyRegionOperator{},
 			InternalExecutor:   ie,
 			Txn:                leafTxn,
 			SQLLivenessReader:  ds.ServerConfig.SQLLivenessReader,
