@@ -834,9 +834,6 @@ func (ex *connExecutor) reportParamStatusUpdateChanges(fn func() error) error {
 	if err := fn(); err != nil {
 		return err
 	}
-	if ex.dataMutatorIterator.paramStatusUpdater == nil {
-		return nil
-	}
 	after := ex.sessionDataStack.Top()
 	for _, param := range bufferableParamStatusUpdates {
 		_, v, err := getSessionVar(param.lowerName, false /* missingOk */)

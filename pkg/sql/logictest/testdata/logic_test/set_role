@@ -325,11 +325,13 @@ testuser  testuser
 
 
 # SET ROLE is specially cased in SET LOCAL as it uses SetWithPlanner,
-# so test it behaves as appropriate.
+# so test it behaves as appropriate. Also ensure that the node_sessions
+# is correctly attributed to root instead of testuser.
 
 user root
 
 statement ok
+GRANT ADMIN TO testuser;
 BEGIN;
 SET LOCAL ROLE testuser
 
@@ -338,6 +340,12 @@ SELECT current_user, session_user()
 ----
 testuser  root
 
+query T
+SELECT user_name FROM crdb_internal.node_sessions
+WHERE active_queries LIKE 'SELECT user_name%'
+----
+root
+
 statement ok
 ROLLBACK
 
@@ -345,3 +353,15 @@ query TT
 SELECT current_user, session_user()
 ----
 root  root
+
+statement ok
+SET ROLE testuser
+
+query T
+SELECT user_name FROM crdb_internal.node_sessions
+WHERE active_queries LIKE 'SELECT user_name%'
+----
+root
+
+statement ok
+RESET ROLE
