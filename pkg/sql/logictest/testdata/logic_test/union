@@ -624,3 +624,32 @@ e  a
 e  b
 e  c
 e  d
+
+# Regression test for #69497. Ensure streaming set ops return correct results
+# when some input columns are in descending order.
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX (a, b, c DESC));
+INSERT INTO abc VALUES (1, 1, 1), (1, 2, 2), (1, 2, 3), (2, 2, 2), (2, 2, 3);
+CREATE TABLE def (d INT PRIMARY KEY, e INT, f INT);
+INSERT INTO def VALUES (1, 1, 1), (2, 2, 2), (3, 2, 3), (4, 2, 2), (5, 2, 3);
+
+query III
+SELECT d, e, f FROM def EXCEPT SELECT a, b, c FROM abc ORDER by d, e
+----
+3  2  3
+4  2  2
+5  2  3
+
+# Example where the interesting orderings do not include all columns.
+statement ok
+CREATE TABLE abcd (a INT, b INT, c INT, d INT, INDEX (a, b, c DESC) STORING (d));
+INSERT INTO abcd VALUES (1, 1, 1, 1), (1, 2, 2, 2), (1, 2, 3, 3), (2, 2, 2, 2), (2, 2, 3, 3);
+CREATE TABLE efgh (e INT PRIMARY KEY, f INT, g INT, h INT);
+INSERT INTO efgh VALUES (1, 1, 1, 1), (2, 2, 2, 2), (3, 2, 3, 3), (4, 2, 2, 2), (5, 2, 3, 3);
+
+query IIII
+SELECT e, f, g, h FROM efgh EXCEPT SELECT a, b, c, d FROM abcd ORDER by e, f
+----
+3  2  3  3
+4  2  2  2
+5  2  3  3

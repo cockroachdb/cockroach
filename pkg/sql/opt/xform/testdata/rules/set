@@ -59,9 +59,9 @@ memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw INTERSECT SELECT * FROM kuvw
 ----
 memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,w:4])
- ├── G1: (intersect-all G2 G3) (intersect-all G2 G3 ordering=+1) (intersect-all G2 G3 ordering=+2,+3,+4,+1) (intersect-all G2 G3 ordering=+4,+3,+2,+1) (intersect-all G2 G3 ordering=+3,+4,+1) (intersect-all G2 G3 ordering=+4,+1)
+ ├── G1: (intersect-all G2 G3) (intersect-all G2 G3 ordering=+1,+2,+3,+4) (intersect-all G2 G3 ordering=+2,+3,+4,+1) (intersect-all G2 G3 ordering=+4,+3,+2,+1) (intersect-all G2 G3 ordering=+3,+4,+1,+2) (intersect-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
- │         ├── best: (intersect-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1)
+ │         ├── best: (intersect-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
  │         └── cost: 2219.63
  ├── G2: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    ├── [ordering: +1]
@@ -106,9 +106,9 @@ memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw INTERSECT ALL SELECT * FROM kuvw
 ----
 memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,w:4])
- ├── G1: (intersect-all G2 G3) (intersect-all G2 G3 ordering=+1) (intersect-all G2 G3 ordering=+2,+3,+4,+1) (intersect-all G2 G3 ordering=+4,+3,+2,+1) (intersect-all G2 G3 ordering=+3,+4,+1) (intersect-all G2 G3 ordering=+4,+1)
+ ├── G1: (intersect-all G2 G3) (intersect-all G2 G3 ordering=+1,+2,+3,+4) (intersect-all G2 G3 ordering=+2,+3,+4,+1) (intersect-all G2 G3 ordering=+4,+3,+2,+1) (intersect-all G2 G3 ordering=+3,+4,+1,+2) (intersect-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
- │         ├── best: (intersect-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1)
+ │         ├── best: (intersect-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
  │         └── cost: 2219.63
  ├── G2: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    ├── [ordering: +1]
@@ -153,9 +153,9 @@ memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw EXCEPT SELECT * FROM kuvw
 ----
 memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,w:4])
- ├── G1: (except-all G2 G3) (except-all G2 G3 ordering=+1) (except-all G2 G3 ordering=+2,+3,+4,+1) (except-all G2 G3 ordering=+4,+3,+2,+1) (except-all G2 G3 ordering=+3,+4,+1) (except-all G2 G3 ordering=+4,+1)
+ ├── G1: (except-all G2 G3) (except-all G2 G3 ordering=+1,+2,+3,+4) (except-all G2 G3 ordering=+2,+3,+4,+1) (except-all G2 G3 ordering=+4,+3,+2,+1) (except-all G2 G3 ordering=+3,+4,+1,+2) (except-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
- │         ├── best: (except-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1)
+ │         ├── best: (except-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
  │         └── cost: 2219.63
  ├── G2: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    ├── [ordering: +1]
@@ -200,9 +200,9 @@ memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw EXCEPT ALL SELECT * FROM kuvw
 ----
 memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,w:4])
- ├── G1: (except-all G2 G3) (except-all G2 G3 ordering=+1) (except-all G2 G3 ordering=+2,+3,+4,+1) (except-all G2 G3 ordering=+4,+3,+2,+1) (except-all G2 G3 ordering=+3,+4,+1) (except-all G2 G3 ordering=+4,+1)
+ ├── G1: (except-all G2 G3) (except-all G2 G3 ordering=+1,+2,+3,+4) (except-all G2 G3 ordering=+2,+3,+4,+1) (except-all G2 G3 ordering=+4,+3,+2,+1) (except-all G2 G3 ordering=+3,+4,+1,+2) (except-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
- │         ├── best: (except-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1)
+ │         ├── best: (except-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
  │         └── cost: 2219.63
  ├── G2: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    ├── [ordering: +1]

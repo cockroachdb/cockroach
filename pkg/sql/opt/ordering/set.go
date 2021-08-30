@@ -73,14 +73,14 @@ func setOpBuildRequired(expr memo.RelExpr, required *props.OrderingChoice) *prop
 	}
 
 	result := required.Intersection(&private.Ordering)
-	fds := &expr.Relational().FuncDeps
-	if result.CanSimplify(fds) {
-		result.Simplify(fds)
-	}
 
 	// UNION ALL is implemented with only an ordered synchronizer, so there is no
 	// need to add extra ordering columns.
 	if expr.Op() == opt.UnionAllOp {
+		fds := &expr.Relational().FuncDeps
+		if result.CanSimplify(fds) {
+			result.Simplify(fds)
+		}
 		return &result
 	}
 
@@ -91,9 +91,6 @@ func setOpBuildRequired(expr memo.RelExpr, required *props.OrderingChoice) *prop
 		missing.ForEach(func(col opt.ColumnID) {
 			result.AppendCol(col, false /* descending */)
 		})
-		if result.CanSimplify(fds) {
-			result.Simplify(fds)
-		}
 	}
 
 	return &result

@@ -848,6 +848,11 @@ define SetPrivate {
     # The ordering can be mapped to the input columns using the LeftCols and
     # RightCols ColLists.
     #
+    # Note that for all operations except UnionAll, this ordering must include
+    # all output columns, and therefore it may not be simplified according to
+    # the FDs. All columns are needed to ensure correct execution of the
+    # streaming set operation.
+    #
     # This field cannot be set for LocalityOptimizedSearch.
     Ordering OrderingChoice
 }

@@ -1308,7 +1308,7 @@ except-all
  ├── columns: o_w_id:3!null o_d_id:2!null o_id:1!null o_ol_cnt:7
  ├── left columns: o_w_id:3!null o_d_id:2!null o_id:1!null o_ol_cnt:7
  ├── right columns: ol_w_id:13 ol_d_id:12 ol_o_id:11 count_rows:23
- ├── internal-ordering: +3,+2,-1
+ ├── internal-ordering: +3,+2,-1,+7
  ├── key: (1-3)
  ├── fd: (1-3)-->(7)
  ├── scan order
@@ -1346,7 +1346,7 @@ except-all
  ├── columns: ol_w_id:3!null ol_d_id:2!null ol_o_id:1!null count:13
  ├── left columns: ol_w_id:3!null ol_d_id:2!null ol_o_id:1!null count_rows:13
  ├── right columns: o_w_id:16 o_d_id:15 o_id:14 o_ol_cnt:20
- ├── internal-ordering: +3,+2,-1
+ ├── internal-ordering: +3,+2,-1,+13
  ├── key: (1-3)
  ├── fd: (1-3)-->(13)
  ├── group-by
