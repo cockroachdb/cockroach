@@ -262,7 +262,7 @@ func TestRunSeparatedIntentsMigration(t *testing.T) {
 				errorPerNCalls, err = strconv.Atoi(d.Input)
 				require.NoError(t, err)
 			case "run-migration":
-				err := runSeparatedIntentsMigration(ctx, hlcClock, stopper, db, ri, ir)
+				err := runSeparatedIntentsMigration(ctx, hlcClock, stopper, db, ri, ir, 1)
 				if err == nil {
 					return "ok"
 				}
