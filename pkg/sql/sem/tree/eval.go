@@ -3072,22 +3072,6 @@ type DatabaseRegionConfig interface {
 // EvalDatabase consists of functions that reference the session database
 // and is to be used from EvalContext.
 type EvalDatabase interface {
-	// CurrentDatabaseRegionConfig returns the RegionConfig of the current
-	// session database.
-	CurrentDatabaseRegionConfig(ctx context.Context) (DatabaseRegionConfig, error)
-
-	// ValidateAllMultiRegionZoneConfigsInCurrentDatabase validates whether the current
-	// database's multi-region zone configs are correctly setup. This includes
-	// all tables within the database.
-	ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error
-
-	// ResetMultiRegionZoneConfigsForTable resets the given table's zone
-	// configuration to its multi-region default.
-	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error
-
-	// ResetMultiRegionZoneConfigsForDatabase resets the given database's zone
-	// configuration to its multi-region default.
-	ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error
 
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
@@ -3315,10 +3299,32 @@ type PrivilegedAccessor interface {
 	LookupZoneConfigByNamespaceID(ctx context.Context, id int64) (DBytes, bool, error)
 }
 
+// RegionOperator gives access to the current region, validation for all
+// regions, and the ability to reset the zone configurations for tables
+// or databases.
+type RegionOperator interface {
+
+	// CurrentDatabaseRegionConfig returns the RegionConfig of the current
+	// session database.
+	CurrentDatabaseRegionConfig(ctx context.Context) (DatabaseRegionConfig, error)
+
+	// ValidateAllMultiRegionZoneConfigsInCurrentDatabase validates whether the current
+	// database's multi-region zone configs are correctly setup. This includes
+	// all tables within the database.
+	ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error
+
+	// ResetMultiRegionZoneConfigsForTable resets the given table's zone
+	// configuration to its multi-region default.
+	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error
+
+	// ResetMultiRegionZoneConfigsForDatabase resets the given database's zone
+	// configuration to its multi-region default.
+	ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error
+}
+
 // SequenceOperators is used for various sql related functions that can
 // be used from EvalContext.
 type SequenceOperators interface {
-	EvalDatabase
 
 	// GetSerialSequenceNameFromColumn returns the sequence name for a given table and column
 	// provided it is part of a SERIAL sequence.
@@ -3537,6 +3543,9 @@ type EvalContext struct {
 	Sequence SequenceOperators
 
 	Tenant TenantOperator
+
+	// Regions stores information about regions.
+	Regions RegionOperator
 
 	JoinTokenCreator JoinTokenCreator
 
