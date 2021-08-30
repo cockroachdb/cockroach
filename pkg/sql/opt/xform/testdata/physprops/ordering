@@ -1685,6 +1685,37 @@ intersect-all
       ├── fd: ()-->(2)
       └── (1,)
 
+# Regression test for #69497. Ensure streaming set ops specify all columns in
+# the ordering.
+exec-ddl
+CREATE TABLE t69497_abc (a INT, b INT, c INT, INDEX (a, b, c DESC))
+----
+
+exec-ddl
+CREATE TABLE t69497_def (d INT PRIMARY KEY, e INT, f INT)
+----
+
+opt
+SELECT d, e, f FROM t69497_def EXCEPT SELECT a, b, c FROM t69497_abc ORDER by d, e
+----
+except-all
+ ├── columns: d:1 e:2 f:3
+ ├── left columns: d:1 e:2 f:3
+ ├── right columns: a:6 b:7 c:8
+ ├── internal-ordering: +1,+2,-3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +1
+ ├── scan t69497_def
+ │    ├── columns: d:1!null e:2 f:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +1
+ └── scan t69497_abc@secondary
+      ├── columns: a:6 b:7 c:8
+      └── ordering: +6,+7,-8
+
+
 # --------------------------------------------------
 # Insert operator.
 # --------------------------------------------------
