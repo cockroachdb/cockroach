@@ -68,15 +68,36 @@ message RegistryHeader {
   RegistryVersion version = 1;
 }
 
-message RegistryUpdateBatch {
-  // An ordered list of updates to the registry.
-  repeated RegistryUpdate updates = 1;
+message RegistryUpdate {
+  oneof operation {
+    RegistryOpSet      set      = 1;
+    RegistryOpRemove   remove   = 2;
+    RegistryOpRename   rename   = 3;
+    RegistryOpSnapshot snapshot = 4;
+  }
 }
 
-message RegistryUpdate {
+message RegistryOpSet {
   // Name of the file.
   string filename = 1;
 
-  // Corresponding file entry. A nil entry indicates a file was deleted.
+  // Corresponding file entry.
   FileEntry entry = 2;
+}
+
+message RegistryOpRemove {
+  // Name of the file(s).
+  repeated string filenames = 1;
+}
+
+message RegistryOpRename {
+  // Name of the source file.
+  string src_filename = 1;
+
+  // Name of the destination file.
+  string dst_filename = 2;
+}
+
+message RegistryOpSnapshot {
+  map<string, FileEntry> files = 1;
 }
