@@ -169,3 +169,9 @@ The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 feature usage within CockroachDB and anonymizes any application-
 specific data.
 
+### `KVPROBER`
+
+The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+kvprober probes the KV layer and is one useful signal of the health
+of CRDB.
+

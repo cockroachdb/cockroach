@@ -134,3 +134,8 @@ const SQL_INTERNAL_PERF = logpb.Channel_SQL_INTERNAL_PERF
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 const TELEMETRY = logpb.Channel_TELEMETRY
+
+// KVPROBER reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+const KVPROBER = logpb.Channel_KVPROBER

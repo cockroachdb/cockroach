@@ -5561,3 +5561,293 @@ func (loggerTelemetry) Shout(ctx context.Context, sev Severity, msg string) {
 func (loggerTelemetry) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.TELEMETRY, format, args...)
 }
+
+// loggerKvprober is the logger type for the KVPROBER channel.
+type loggerKvprober struct{}
+
+// Kvprober is a logger that logs to the KVPROBER channel.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+var Kvprober loggerKvprober
+
+// Kvprober and loggerKvprober implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = Kvprober
+
+// Infof logs to the KVPROBER channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvprober) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.KVPROBER, format, args...)
+}
+
+// VInfof logs to the KVPROBER channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvprober) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.KVPROBER, format, args...)
+	}
+}
+
+// Info logs to the KVPROBER channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvprober) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.KVPROBER, msg)
+}
+
+// InfofDepth logs to the KVPROBER channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvprober) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.KVPROBER, format, args...)
+}
+
+// Warningf logs to the KVPROBER channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvprober) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.KVPROBER, format, args...)
+}
+
+// VWarningf logs to the KVPROBER channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvprober) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.KVPROBER, format, args...)
+	}
+}
+
+// Warning logs to the KVPROBER channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvprober) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.KVPROBER, msg)
+}
+
+// WarningfDepth logs to the KVPROBER channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvprober) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.KVPROBER, format, args...)
+}
+
+// Errorf logs to the KVPROBER channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvprober) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.KVPROBER, format, args...)
+}
+
+// VErrorf logs to the KVPROBER channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvprober) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.KVPROBER, format, args...)
+	}
+}
+
+// Error logs to the KVPROBER channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvprober) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.KVPROBER, msg)
+}
+
+// ErrorfDepth logs to the KVPROBER channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvprober) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.KVPROBER, format, args...)
+}
+
+// Fatalf logs to the KVPROBER channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvprober) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.KVPROBER, format, args...)
+}
+
+// VFatalf logs to the KVPROBER channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvprober) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.KVPROBER, format, args...)
+	}
+}
+
+// Fatal logs to the KVPROBER channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvprober) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.KVPROBER, msg)
+}
+
+// FatalfDepth logs to the KVPROBER channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvprober) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.KVPROBER, format, args...)
+}
+
+// Shout logs to channel KVPROBER, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+func (loggerKvprober) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.KVPROBER, msg)
+}
+
+// Shoutf logs to channel KVPROBER, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The `KVPROBER` channel reports the status of probes sent by the kvprober. The
+// kvprober probes the KV layer and is one useful signal of the health
+// of CRDB.
+func (loggerKvprober) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.KVPROBER, format, args...)
+}

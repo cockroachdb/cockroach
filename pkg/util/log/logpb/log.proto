@@ -184,6 +184,11 @@ enum Channel {
   // feature usage within CockroachDB and anonymizes any application-
   // specific data.
   TELEMETRY = 12;
+
+  // KVPROBER reports the status of probes sent by the kvprober. The
+  // kvprober probes the KV layer and is one useful signal of the health
+  // of CRDB.
+  KVPROBER = 13;
 }
 
 // Entry represents a cockroach log entry in the following two cases:
