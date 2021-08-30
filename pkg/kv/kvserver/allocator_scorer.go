@@ -106,9 +106,17 @@ type scorerOptions interface {
 	// the store represented by `sc` classifies as underfull, lessThanEqualToMean,
 	// moreThanMean or overfull relative to all the stores in `sl`.
 	balanceScore(sl StoreList, sc roachpb.StoreCapacity) balanceStatus
-
+	// rebalanceFromConvergenceScore assigns a convergence score to the store
+	// referred to by `sc` based on whether moving a replica away from this store
+	// would converge its stats towards the mean. If moving the replica away from
+	// `sc` would not converge its stats towards the mean, a high convergence
+	// score is assigned, which would make it less likely for us to pick this
+	// store's replica to move away.
 	rebalanceFromConvergesScore(sl StoreList, sc roachpb.StoreCapacity) int
-
+	// rebalanceToConvergesScore is similar to `rebalanceFromConvergesScore` but
+	// it assigns a high convergence score iff moving a replica to the store
+	// referred to by `sc` will converge its stats towards the mean. This makes it
+	// more likely for us to pick this store as the rebalance target.
 	rebalanceToConvergesScore(sl StoreList, sc roachpb.StoreCapacity) int
 }
 
