@@ -227,6 +227,7 @@ func (f *vectorizedFlow) Setup(
 	f.batchFlowCoordinator = batchFlowCoordinator
 	f.testingInfo.numClosers = f.creator.numClosers
 	f.testingInfo.numClosed = &f.creator.numClosed
+	f.SetStartedGoroutines(f.creator.operatorConcurrency)
 	log.VEventf(ctx, 2, "vectorized flow setup succeeded")
 	if !f.IsLocal() {
 		// For distributed flows set opChains to nil, per the contract of
