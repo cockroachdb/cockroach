@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -74,10 +75,11 @@ type meta2Planner struct {
 	getRateLimit func(interval time.Duration, settings *cluster.Settings) time.Duration
 	getNMeta2KVs func(
 		ctx context.Context,
-		db dbScan,
+		db *kv.DB,
 		n int64,
 		cursor roachpb.Key,
-		timeout time.Duration) ([]kv.KeyValue, roachpb.Key, error)
+		timeout time.Duration,
+		scanThisFarInPast time.Duration) ([]kv.KeyValue, roachpb.Key, error)
 	meta2KVsToPlan func(kvs []kv.KeyValue) ([]Step, error)
 }
 
@@ -161,8 +163,9 @@ func (p *meta2Planner) next(ctx context.Context) (Step, error) {
 		p.lastPlanTime = p.now()
 
 		timeout := scanMeta2Timeout.Get(&p.settings.SV)
+		scanThisFarInPast := scanMeta2ThisFarInPast.Get(&p.settings.SV)
 		kvs, cursor, err := p.getNMeta2KVs(
-			ctx, p.db, numStepsToPlanAtOnce.Get(&p.settings.SV), p.cursor, timeout)
+			ctx, p.db, numStepsToPlanAtOnce.Get(&p.settings.SV), p.cursor, timeout, scanThisFarInPast)
 		if err != nil {
 			return Step{}, errors.Wrapf(err, "failed to get meta2 rows")
 		}
@@ -204,22 +207,38 @@ func getRateLimitImpl(interval time.Duration, settings *cluster.Settings) time.D
 			numStepsToPlanAtOnce.Get(sv)/happyPathIntervalToRateLimitIntervalRatio) * time.Nanosecond
 }
 
-type dbScan interface {
-	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]kv.KeyValue, error)
-}
-
 func getNMeta2KVsImpl(
-	ctx context.Context, db dbScan, n int64, cursor roachpb.Key, timeout time.Duration,
+	ctx context.Context,
+	db *kv.DB,
+	n int64,
+	cursor roachpb.Key,
+	timeout time.Duration,
+	scanThisFarInPast time.Duration,
 ) ([]kv.KeyValue, roachpb.Key, error) {
 	var kvs []kv.KeyValue
 
 	for n > 0 {
 		var newkvs []kv.KeyValue
 		if err := contextutil.RunWithTimeout(ctx, "db.Scan", timeout, func(ctx context.Context) error {
-			// NB: keys.Meta2KeyMax stores a descriptor, so we want to include it.
-			var err error
-			newkvs, err = db.Scan(ctx, cursor, keys.Meta2KeyMax.Next(), n /*maxRows*/)
-			return err
+			return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				// Scan meta2 N seconds in the past via a historical read. There is no need for
+				// very fresh data, as the worst case result is planner believing it is probing range
+				// X when actually it is probing range Y. Also, planner caches plans, so this already
+				// happens during normal operation. Scanning via a historical read may reduce
+				// the chances of kvprober causing or contributing to some kind of production issue
+				// affecting meta2, tho we don't think such a situation is likely even if the read
+				// is done at the current time.
+				// TODO(josh): Should I get hlc.Clock from server? Or is it okay to construct a clock like this?
+				if err := txn.SetFixedTimestamp(
+					ctx,
+					hlc.NewClock(timeutil.Now().Add(scanThisFarInPast).UnixNano, 0).Now()); err != nil {
+					return err
+				}
+				// NB: keys.Meta2KeyMax stores a descriptor, so we want to include it.
+				var err error
+				newkvs, err = txn.Scan(ctx, cursor, keys.Meta2KeyMax.Next(), n /*maxRows*/)
+				return err
+			})
 		}); err != nil {
 			return nil, nil, err
 		}

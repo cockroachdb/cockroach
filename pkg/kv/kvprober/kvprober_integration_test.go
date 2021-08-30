@@ -314,8 +314,11 @@ func initTestProber(
 		Settings:                s.ClusterSettings(),
 	})
 
+	ctx := context.Background()
 	// Given small test cluster, this better exercises the planning logic.
-	kvprober.NumStepsToPlanAtOnce.Override(context.Background(), &s.ClusterSettings().SV, 10)
+	kvprober.NumStepsToPlanAtOnce.Override(ctx, &s.ClusterSettings().SV, 10)
+	// Test cluster lifetime implies need to scan meta2 closer to current time than the default.
+	kvprober.ScanMeta2ThisFarInPast.Override(ctx, &s.ClusterSettings().SV, -1*time.Millisecond)
 	// Want these tests to run as fast as possible; see planner_test.go for a
 	// unit test of the rate limiting.
 	p.SetPlanningRateLimits(0)

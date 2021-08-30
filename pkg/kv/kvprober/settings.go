@@ -92,6 +92,17 @@ var scanMeta2Timeout = settings.RegisterDurationSetting(
 		return nil
 	})
 
+var scanMeta2ThisFarInPast = settings.RegisterDurationSetting(
+	"kv.prober.planner.scan_meta2.this_far_in_past",
+	"how far in the past to scan meta2 at via a historical read; do not"+
+		"change this setting unless you know what you are doing",
+	-10*time.Second, func(d time.Duration) error {
+		if d > 0 {
+			return errors.New("param must be <=0, as reads in the future are not allowed")
+		}
+		return nil
+	})
+
 var numStepsToPlanAtOnce = settings.RegisterIntSetting(
 	"kv.prober.planner.num_steps_to_plan_at_once",
 	"the number of Steps to plan at once, where a Step is a decision on "+

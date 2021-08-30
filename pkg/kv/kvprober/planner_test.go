@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -36,7 +37,7 @@ func TestPlannerEnforcesRateLimit(t *testing.T) {
 	}
 	p.now = fakeNow
 
-	p.getNMeta2KVs = func(context.Context, dbScan, int64, roachpb.Key, time.Duration) (values []kv.KeyValue, keys roachpb.Key, e error) {
+	p.getNMeta2KVs = func(context.Context, *kv.DB, int64, roachpb.Key, time.Duration, time.Duration) (values []kv.KeyValue, keys roachpb.Key, e error) {
 		return nil, nil, nil
 	}
 	p.meta2KVsToPlan = func([]kv.KeyValue) (steps []Step, e error) {
@@ -122,4 +123,27 @@ func TestGetRateLimit(t *testing.T) {
 
 	got := getRateLimitImpl(time.Second, s)
 	require.Equal(t, 30*time.Second, got)
+}
+
+func TestMeta2KVsToPlan(t *testing.T) {
+	kvs := []kv.KeyValue{{Value: &roachpb.Value{}}, {Value: &roachpb.Value{}}}
+	kvs[0].Value.SetProto(&roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("foo"),
+	})
+	kvs[1].Value.SetProto(&roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: roachpb.RKey("bar"),
+	})
+
+	steps, err := meta2KVsToPlanImpl(kvs)
+	require.NoError(t, err)
+	require.Len(t, steps, 2)
+
+	require.Equal(t, roachpb.RangeID(1), steps[0].RangeID)
+	// See the implementation for a special value is returned for range with ID 1.
+	require.Equal(t, keys.RangeProbeKey(keys.MustAddr(keys.LocalMax)), steps[0].Key)
+
+	require.Equal(t, steps[1].RangeID, roachpb.RangeID(2))
+	require.Equal(t, steps[1].Key, keys.RangeProbeKey(roachpb.RKey("bar")))
 }

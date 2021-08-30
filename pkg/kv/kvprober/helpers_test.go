@@ -21,11 +21,12 @@ import (
 // Below are exported to enable testing from kvprober_test.
 
 var (
-	ReadEnabled          = readEnabled
-	ReadInterval         = readInterval
-	WriteEnabled         = writeEnabled
-	WriteInterval        = writeInterval
-	NumStepsToPlanAtOnce = numStepsToPlanAtOnce
+	ReadEnabled            = readEnabled
+	ReadInterval           = readInterval
+	WriteEnabled           = writeEnabled
+	WriteInterval          = writeInterval
+	NumStepsToPlanAtOnce   = numStepsToPlanAtOnce
+	ScanMeta2ThisFarInPast = scanMeta2ThisFarInPast
 )
 
 func (p *Prober) ReadProbe(ctx context.Context, db *kv.DB) {
