@@ -297,7 +297,7 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 // popSavepointsToIdx pops savepoints and SessionData elements related to
 // the savepoint up to the given idx.
 func (ex *connExecutor) popSavepointsToIdx(stmt tree.Statement, idx int) error {
-	if err := ex.reportParamStatusUpdateChanges(func() error {
+	if err := ex.reportSessionDataChanges(func() error {
 		numPoppedElems := len(ex.extraTxnState.savepoints) - idx
 		ex.extraTxnState.savepoints.popToIdx(idx)
 		if err := ex.sessionDataStack.PopN(numPoppedElems); err != nil {
