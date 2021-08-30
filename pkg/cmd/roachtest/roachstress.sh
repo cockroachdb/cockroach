@@ -12,9 +12,9 @@ set -euo pipefail
 
 
 # Read user input.
-read -r -e -i "${TEST-}" -p "Test regexp: " TEST
-read -r -e -i "${COUNT-10}" -p "Count: " COUNT
-read -r -e -i "${LOCAL-n}" -p "Local: " LOCAL
+if [ ! -v TEST ]; then read -r -e -p "Test regexp: " TEST; fi
+if [ ! -v COUNT ]; then read -r -e -i "10" -p "Count: " COUNT; fi
+if [ ! -v LOCAL ]; then read -r -e -i "n" -p "Local: " LOCAL; fi
 case $LOCAL in
   [Nn]* | false | "") LOCAL="";;
   *) LOCAL=".local";;
@@ -50,8 +50,8 @@ a="${abase}/$(date '+%H%M%S')"
 
 short="short"
 if [ ! -f "${cr}" ]; then
-  yn=""
-  read -r -e -i "${SHORT-y}" -p "Build cockroach without the UI: " yn
+  yn="${SHORT-}"
+  if [ -z "${yn}" ]; then read -r -e -i "y" -p "Build cockroach without the UI: " yn; fi
   case $yn in
     [Nn]* | false | "") short=""
   esac
@@ -69,7 +69,7 @@ if [ ! -f "${cr}" ]; then
   fi
 fi
 
-if [ ! -f "${rt}" ]; then
+if [ ! -f "${wl}" ]; then
   if [ -z "${LOCAL}" ]; then
     ./build/builder.sh mkrelease amd64-linux-gnu bin/workload
     cp bin.docker_amd64/workload "${wl}"

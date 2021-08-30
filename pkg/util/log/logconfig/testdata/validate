@@ -5,22 +5,10 @@ sinks:
   file-groups:
     default:
       channels: all
-      dir: /default-dir
-      max-file-size: 10MiB
-      max-group-size: 100MiB
-      buffered-writes: true
       filter: INFO
-      format: crdb-v2
-      redact: false
-      redactable: true
-      exit-on-error: true
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v2-tty
-    redact: false
-    redactable: true
-    exit-on-error: true
 capture-stray-errors:
   enable: true
   dir: /default-dir
@@ -37,22 +25,10 @@ sinks:
   file-groups:
     custom:
       channels: all
-      dir: /default-dir
-      max-file-size: 10MiB
-      max-group-size: 100MiB
-      buffered-writes: true
       filter: INFO
-      format: crdb-v2
-      redact: false
-      redactable: true
-      exit-on-error: true
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v2-tty
-    redact: false
-    redactable: true
-    exit-on-error: true
 capture-stray-errors:
   enable: true
   dir: /default-dir
@@ -72,21 +48,10 @@ sinks:
     custom:
       channels: all
       dir: /custom
-      max-file-size: 10MiB
-      max-group-size: 100MiB
-      buffered-writes: true
       filter: INFO
-      format: crdb-v2
-      redact: false
-      redactable: true
-      exit-on-error: true
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v2-tty
-    redact: false
-    redactable: true
-    exit-on-error: true
 capture-stray-errors:
   enable: true
   dir: /custom
@@ -106,22 +71,10 @@ sinks:
   file-groups:
     custom:
       channels: all
-      dir: /default-dir
-      max-file-size: 10MiB
-      max-group-size: 100MiB
-      buffered-writes: true
       filter: WARNING
-      format: crdb-v2
-      redact: false
-      redactable: true
-      exit-on-error: true
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v2-tty
-    redact: false
-    redactable: true
-    exit-on-error: true
 capture-stray-errors:
   enable: true
   dir: /default-dir
@@ -139,15 +92,7 @@ sinks:
   file-groups:
     default:
       channels: all
-      dir: /default-dir
-      max-file-size: 10MiB
-      max-group-size: 100MiB
-      buffered-writes: true
       filter: INFO
-      format: crdb-v2
-      redact: false
-      redactable: true
-      exit-on-error: true
   fluent-servers:
     custom:
       channels: [DEV]
@@ -161,10 +106,6 @@ sinks:
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v2-tty
-    redact: false
-    redactable: true
-    exit-on-error: true
 capture-stray-errors:
   enable: true
   dir: /default-dir
@@ -181,22 +122,10 @@ sinks:
   file-groups:
     custom:
       channels: all
-      dir: /default-dir
-      max-file-size: 10MiB
-      max-group-size: 100MiB
-      buffered-writes: true
       filter: INFO
-      format: crdb-v2
-      redact: false
-      redactable: true
-      exit-on-error: true
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v2-tty
-    redact: false
-    redactable: true
-    exit-on-error: true
 capture-stray-errors:
   enable: true
   dir: /default-dir
@@ -214,22 +143,11 @@ sinks:
   file-groups:
     custom:
       channels: all
-      dir: /default-dir
-      max-file-size: 10MiB
-      max-group-size: 100MiB
       buffered-writes: false
       filter: INFO
-      format: crdb-v2
-      redact: false
-      redactable: true
-      exit-on-error: true
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v2-tty
-    redact: false
-    redactable: true
-    exit-on-error: true
 capture-stray-errors:
   enable: true
   dir: /default-dir
@@ -248,15 +166,7 @@ sinks:
   file-groups:
     default:
       channels: all
-      dir: /default-dir
-      max-file-size: 10MiB
-      max-group-size: 100MiB
-      buffered-writes: true
       filter: INFO
-      format: crdb-v2
-      redact: false
-      redactable: true
-      exit-on-error: true
   fluent-servers:
     custom:
       channels: [DEV]
@@ -270,10 +180,6 @@ sinks:
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v2-tty
-    redact: false
-    redactable: true
-    exit-on-error: true
 capture-stray-errors:
   enable: true
   dir: /default-dir
@@ -291,22 +197,10 @@ sinks:
   file-groups:
     default:
       channels: all
-      dir: /default-dir
-      max-file-size: 10MiB
-      max-group-size: 100MiB
-      buffered-writes: true
       filter: INFO
-      format: crdb-v2
-      redact: false
-      redactable: true
-      exit-on-error: true
   stderr:
     channels: [DEV]
     filter: NONE
-    format: crdb-v2-tty
-    redact: false
-    redactable: true
-    exit-on-error: true
 capture-stray-errors:
   enable: true
   dir: /default-dir
@@ -320,10 +214,6 @@ sinks:
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v2-tty
-    redact: false
-    redactable: true
-    exit-on-error: true
 capture-stray-errors:
   enable: true
   dir: /default-dir

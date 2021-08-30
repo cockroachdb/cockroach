@@ -53,6 +53,7 @@ func MakeFileInfo(details logpb.FileDetails, info os.FileInfo) logpb.FileInfo {
 		SizeBytes:    info.Size(),
 		ModTimeNanos: info.ModTime().UnixNano(),
 		Details:      details,
+		FileMode:     uint32(info.Mode()),
 	}
 }
 
