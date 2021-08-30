@@ -267,6 +267,12 @@ func (ba *BatchRequest) IsSingleCheckConsistencyRequest() bool {
 	return ba.isSingleRequestWithMethod(CheckConsistency)
 }
 
+// IsSingleScanInterleavedIntentsRequest returns true iff the batch contains a
+// single ScanInterleavedIntents request
+func (ba *BatchRequest) IsSingleScanInterleavedIntentsRequest() bool {
+	return ba.isSingleRequestWithMethod(ScanInterleavedIntents)
+}
+
 // RequiresConsensus returns true iff the batch contains a request that should
 // always force replication and proposal through raft, even if evaluation is
 // a no-op. The Barrier request requires consensus even though its evaluation

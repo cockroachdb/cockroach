@@ -127,6 +127,11 @@ func NewTenantCluster(db *kv.DB) *TenantCluster {
 	return &TenantCluster{db: db}
 }
 
+// NumNodes is part of the migration.Cluster interface.
+func (t *TenantCluster) NumNodes(ctx context.Context) (int, error) {
+	return 0, errors.AssertionFailedf("non-system tenants cannot iterate nodes")
+}
+
 // ForEveryNode is part of the migration.Cluster interface.
 func (t *TenantCluster) ForEveryNode(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
