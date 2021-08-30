@@ -163,7 +163,8 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 
 	// 2.5.1.2: 85% chance of paying through home warehouse, otherwise
 	// remote.
-	if rng.Intn(100) < 85 {
+	// NOTE: If regionLocal is set, keep all transactions local.
+	if p.config.regionLocal || rng.Intn(100) < 85 {
 		d.cWID = wID
 		d.cDID = d.dID
 	} else {
@@ -193,14 +194,14 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 			var wName, dName string
 			// Update warehouse with payment
 			if err := p.updateWarehouse.QueryRowTx(
-				ctx, tx, d.hAmount, wID,
+				ctx, tx, d.hAmount, d.cWID,
 			).Scan(&wName, &d.wStreet1, &d.wStreet2, &d.wCity, &d.wState, &d.wZip); err != nil {
 				return err
 			}
 
 			// Update district with payment
 			if err := p.updateDistrict.QueryRowTx(
-				ctx, tx, d.hAmount, wID, d.dID,
+				ctx, tx, d.hAmount, d.cWID, d.dID,
 			).Scan(&dName, &d.dStreet1, &d.dStreet2, &d.dCity, &d.dState, &d.dZip); err != nil {
 				return err
 			}
