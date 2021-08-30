@@ -277,6 +277,23 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 	}
 }
 
+func (r *Replica) maybeThrottleRequestPreLatch(ctx context.Context, ba *roachpb.BatchRequest) bool {
+	switch {
+	case ba.IsSingleScanInterleavedIntentsRequest():
+		batcheval.ThrottleScanInterleavedIntents(ctx, r.StoreID())
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *Replica) cleanupRequestThrottling(_ context.Context, ba *roachpb.BatchRequest) {
+	if !ba.IsSingleScanInterleavedIntentsRequest() {
+		panic("no throttling cleanup for a non-ScanInterleavedIntents request")
+	}
+	batcheval.ReleaseScanInterleavedIntentsThrottle(r.StoreID())
+}
+
 // batchExecutionFn is a method on Replica that executes a BatchRequest. It is
 // called with the batch, along with a guard for the latches protecting the
 // request.
@@ -334,6 +351,11 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 
 	// Handle load-based splitting.
 	r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
+
+	// Handle any request-specific pre-latch throttles.
+	if r.maybeThrottleRequestPreLatch(ctx, ba) {
+		defer r.cleanupRequestThrottling(ctx, ba)
+	}
 
 	// Try to execute command; exit retry loop on success.
 	var g *concurrency.Guard

@@ -20,10 +20,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/marusama/semaphore"
 )
 
+// scanInterleavedIntentsPerStore is the number of concurrent
+// ScanInterleavedIntents requests that will be run on a store. Used as part
+// of pre-evaluation throttling.
+const scanInterleavedIntentsPerStore = 1
+
+var perStoreSems storeSemRegistry
+
 func init() {
+	perStoreSems.init()
 	RegisterReadOnlyCommand(roachpb.ScanInterleavedIntents, declareKeysScanInterleavedIntents, ScanInterleavedIntents)
 }
 
@@ -31,6 +41,37 @@ func declareKeysScanInterleavedIntents(
 	rs ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+}
+
+type storeSemRegistry struct {
+	syncutil.Mutex
+
+	sems map[roachpb.StoreID]semaphore.Semaphore
+}
+
+func (s *storeSemRegistry) init() {
+	s.sems = make(map[roachpb.StoreID]semaphore.Semaphore)
+}
+
+func (s *storeSemRegistry) getOrCreate(store roachpb.StoreID) semaphore.Semaphore {
+	s.Lock()
+	defer s.Unlock()
+	sem, ok := s.sems[store]
+	if !ok {
+		sem = semaphore.New(scanInterleavedIntentsPerStore)
+		s.sems[store] = sem
+	}
+	return sem
+}
+
+func ThrottleScanInterleavedIntents(ctx context.Context, store roachpb.StoreID) {
+	sem := perStoreSems.getOrCreate(store)
+	_ = sem.Acquire(ctx, 1)
+}
+
+func ReleaseScanInterleavedIntentsThrottle(store roachpb.StoreID) {
+	sem := perStoreSems.getOrCreate(store)
+	sem.Release(1)
 }
 
 // ScanInterleavedIntents returns intents encountered in the provided span.
