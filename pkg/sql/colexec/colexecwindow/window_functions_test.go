@@ -13,7 +13,6 @@ package colexecwindow
 import (
 	"context"
 	"fmt"
-	"math"
 	"testing"
 
 	"github.com/cockroachdb/apd/v2"
@@ -1233,30 +1232,26 @@ func BenchmarkWindowFunctions(b *testing.B) {
 		return op
 	}
 
-	var batch coldata.Batch
-	batchCreator := func(batchLength int) coldata.Batch {
+	inputCreator := func(length int) []coldata.Vec {
 		const arg1Offset, arg1Range = 5, 10
-		batch, _ = testAllocator.ResetMaybeReallocate(sourceTypes, batch, batchLength, math.MaxInt64)
-		argCol1 := batch.ColVec(arg1ColIdx).Int64()
-		argCol2 := batch.ColVec(arg2ColIdx).Int64()
-		partitionCol := batch.ColVec(partitionColIdx).Bool()
-		orderCol := batch.ColVec(orderColIdx).Int64()
-		peersCol := batch.ColVec(peersColIdx).Bool()
-		for i := 0; i < batchLength; i++ {
+		vecs := make([]coldata.Vec, len(sourceTypes))
+		for i := range vecs {
+			vecs[i] = testAllocator.NewMemColumn(sourceTypes[i], length)
+		}
+		argCol1 := vecs[arg1ColIdx].Int64()
+		argCol2 := vecs[arg2ColIdx].Int64()
+		partitionCol := vecs[partitionColIdx].Bool()
+		orderCol := vecs[orderColIdx].Int64()
+		peersCol := vecs[peersColIdx].Bool()
+		for i := 0; i < length; i++ {
 			argCol1[i] = int64(1 + (i+arg1Offset)%arg1Range)
 			argCol2[i] = 1
 			partitionCol[i] = i%partitionSize == 0
 			orderCol[i] = int64(i / peerGroupSize)
 			peersCol[i] = i%peerGroupSize == 0
 		}
-		batch.ColVec(arg1ColIdx).Nulls().UnsetNulls()
-		batch.ColVec(arg2ColIdx).Nulls().UnsetNulls()
-		batch.ColVec(arg3ColIdx).Nulls().SetNulls()
-		batch.ColVec(partitionColIdx).Nulls().UnsetNulls()
-		batch.ColVec(orderColIdx).Nulls().UnsetNulls()
-		batch.ColVec(peersColIdx).Nulls().UnsetNulls()
-		batch.SetLength(batchLength)
-		return batch
+		vecs[arg3ColIdx].Nulls().SetNulls()
+		return vecs
 	}
 
 	// The number of rows should be a multiple of coldata.BatchSize().
@@ -1273,8 +1268,7 @@ func BenchmarkWindowFunctions(b *testing.B) {
 					continue
 				}
 				b.Run(fmt.Sprintf("rows=%d", nRows), func(b *testing.B) {
-					nBatches := nRows / coldata.BatchSize()
-					batch := batchCreator(coldata.BatchSize())
+					vecs := inputCreator(nRows)
 					for _, partitionInput := range []bool{true, false} {
 						b.Run(fmt.Sprintf("partition=%v", partitionInput), func(b *testing.B) {
 							for _, orderInput := range []bool{true, false} {
@@ -1287,8 +1281,8 @@ func BenchmarkWindowFunctions(b *testing.B) {
 									b.SetBytes(int64(nRows * 8 * (numArgs + 1)))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
-										source := colexectestutils.NewFiniteChunksSource(
-											testAllocator, batch, sourceTypes, nBatches, 1,
+										source := colexectestutils.NewChunkingBatchSource(
+											testAllocator, sourceTypes, vecs, nRows,
 										)
 										s := getWindowFn(fun, source, partitionInput, orderInput)
 										s.Init(ctx)
