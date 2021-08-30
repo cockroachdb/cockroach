@@ -651,3 +651,21 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 	require.Equal(t, expectedObjects, res)
 
 }
+
+func TestShowBackupPathIsCollectionRoot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+
+	// Create test database with bank table.
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// Make an initial backup.
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, LocalFoo)
+
+	// Ensure proper error gets returned from back SHOW BACKUP Path
+	sqlDB.ExpectErr(t, "The specified path is the root of a backup collection.",
+		"SHOW BACKUP $1", LocalFoo)
+}
