@@ -53,11 +53,19 @@ type Stream interface {
 // has finished.
 type registration struct {
 	// Input.
-	span                   roachpb.Span
-	catchupTimestamp       hlc.Timestamp
+	span             roachpb.Span
+	catchupTimestamp hlc.Timestamp
+	withDiff         bool
+	metrics          *Metrics
+
+	// catchupIterConstructor is used to construct the catchupIter if necessary.
+	// The reason this constructor is plumbed down is to make sure that the
+	// iterator does not get constructed too late in server shutdown. However,
+	// it must also be stored in the struct to ensure that it is not constructed
+	// too late, after the raftMu has been dropped. Thus, this function, if
+	// non-nil, will be used to populate mu.catchupIter while the registration
+	// is being registered by the processor.
 	catchupIterConstructor func() storage.SimpleMVCCIterator
-	withDiff               bool
-	metrics                *Metrics
 
 	// Output.
 	stream Stream
@@ -80,6 +88,11 @@ type registration struct {
 		// Management of the output loop goroutine, used to ensure proper teardown.
 		outputLoopCancelFn func()
 		disconnected       bool
+
+		// catchupIter is populated on the Processor's goroutine while the
+		// Replica.raftMu is still held. If it is non-nil at the time that
+		// disconnect is called, it is closed by disconnect.
+		catchupIter storage.SimpleMVCCIterator
 	}
 }
 
@@ -210,6 +223,10 @@ func (r *registration) disconnect(pErr *roachpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.mu.disconnected {
+		if r.mu.catchupIter != nil {
+			r.mu.catchupIter.Close()
+			r.mu.catchupIter = nil
+		}
 		if r.mu.outputLoopCancelFn != nil {
 			r.mu.outputLoopCancelFn()
 		}
@@ -285,11 +302,10 @@ func (r *registration) runOutputLoop(ctx context.Context, _forStacks roachpb.Ran
 // If the registration does not have a catchUpIteratorConstructor, this method
 // is a no-op.
 func (r *registration) maybeRunCatchupScan() error {
-	if r.catchupIterConstructor == nil {
+	catchupIter := r.detachCatchUpIter()
+	if catchupIter == nil {
 		return nil
 	}
-	catchupIter := r.catchupIterConstructor()
-	r.catchupIterConstructor = nil
 	start := timeutil.Now()
 	defer func() {
 		catchupIter.Close()
@@ -585,6 +601,22 @@ func (r *registration) waitForCaughtUp() error {
 		}
 	}
 	return errors.Errorf("registration %v failed to empty in time", r.Range())
+}
+
+// attachCatchUpIter attaches a catchupIter to be detached later.
+func (r *registration) attachCatchUpIter(catchupIter storage.SimpleMVCCIterator) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.catchupIter = catchupIter
+}
+
+// detachCatchUpIter detaches the catchupIter that was previously attached.
+func (r *registration) detachCatchUpIter() storage.SimpleMVCCIterator {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	catchupIter := r.mu.catchupIter
+	r.mu.catchupIter = nil
+	return catchupIter
 }
 
 // waitForCaughtUp waits for all registrations overlapping the given span to
