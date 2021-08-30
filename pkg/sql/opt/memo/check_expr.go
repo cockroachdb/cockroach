@@ -370,8 +370,20 @@ func checkExprOrdering(e opt.Expr) {
 		ordering = t.Ordering
 	case GroupingPrivate:
 		ordering = t.Ordering
-	case SetPrivate:
+	case *SetPrivate:
 		ordering = t.Ordering
+		switch e.Op() {
+		case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp, opt.UnionOp:
+			// For these operators, the ordering must include all output columns.
+			if !ordering.Any() {
+				if outCols := e.(RelExpr).Relational().OutputCols; !outCols.SubsetOf(ordering.ColSet()) {
+					panic(errors.AssertionFailedf(
+						"ordering for streaming set ops must include all output columns %v (op: %s, outcols: %v)",
+						log.Safe(ordering), log.Safe(e.Op()), log.Safe(outCols),
+					))
+				}
+			}
+		}
 	default:
 		return
 	}
