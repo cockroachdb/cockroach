@@ -5235,3 +5235,48 @@ datname     rolname   deptype
 sh_db       sh_owner  o
 sh_db       sh_role   a
 sh_db_root  sh_role   a
+
+# Testing settings and createDB from forEachRoles
+statement ok
+CREATE USER settings1;
+CREATE USER settings2;
+CREATE ROLE settings3;
+CREATE DATABASE foreachroles;
+ALTER USER settings1 WITH CREATEDB;
+ALTER USER settings1 SET TimeZone = 'America/Los_Angeles';
+ALTER USER settings1 SET application_name = 'a';
+ALTER USER settings1 IN DATABASE foreachroles SET application_name = 'b';
+ALTER USER settings2 WITH CREATEROLE;
+
+query TBT colnames
+SELECT usename, usecreatedb, useconfig
+FROM pg_user
+WHERE usename IN ('settings1', 'settings2')
+ORDER BY usename
+----
+usename    usecreatedb  useconfig
+settings1  true         {timezone=America/Los_Angeles,application_name=a}
+settings2  false        NULL
+
+query TBTBBT colnames
+SELECT rolname, rolcreatedb, rolconfig, rolinherit, rolcanlogin, rolvaliduntil
+FROM pg_roles
+WHERE rolname IN ('settings1', 'settings2', 'settings3')
+ORDER BY rolname
+----
+rolname    rolcreatedb  rolconfig                                          rolinherit  rolcanlogin  rolvaliduntil
+settings1  true         {timezone=America/Los_Angeles,application_name=a}  false       true         NULL
+settings2  false        NULL                                               false       true         NULL
+settings3  false        NULL                                               true        false        NULL
+
+query TBB colnames
+SELECT rolname, rolcreatedb, rolcreaterole
+FROM pg_authid
+WHERE rolname IN ('settings1', 'settings2', 'settings3', 'root')
+ORDER BY rolname
+----
+rolname    rolcreatedb  rolcreaterole
+root       true         true
+settings1  true         false
+settings2  false        true
+settings3  false        false
