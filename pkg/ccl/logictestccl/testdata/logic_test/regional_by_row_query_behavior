@@ -1,0 +1,2261 @@
+# LogicTest: multiregion-9node-3region-3azs
+# TODO(#69265): enable multiregion-9node-3region-3azs-tenant and/or revert
+# the commit that split these changes out.
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE;
+USE multi_region_test_db
+
+statement ok
+CREATE TABLE regional_by_row_table (
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  a int NOT NULL,
+  b int NOT NULL,
+  j JSON,
+  INDEX (a),
+  UNIQUE (b),
+  INVERTED INDEX (j),
+  FAMILY (pk, pk2, a, b)
+) LOCALITY REGIONAL BY ROW
+
+# Do a REGEXP replace of the enums as these may not be static.
+query T
+SELECT regexp_replace(info, '@\d+', '@<enum_val>', 'g') FROM
+[EXPLAIN (OPT, CATALOG) SELECT * FROM regional_by_row_table]
+----
+TABLE regional_by_row_table
+ ├── pk int not null
+ ├── pk2 int not null
+ ├── a int not null
+ ├── b int not null
+ ├── j jsonb
+ ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── j_inverted_key bytes not null [inverted]
+ ├── FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
+ ├── CHECK (crdb_region IN (x'40':::@<enum_val>, x'80':::@<enum_val>, x'c0':::@<enum_val>))
+ ├── PRIMARY INDEX primary
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
+ │    ├── pk int not null
+ │    ├── ZONE
+ │    │    ├── replica constraints
+ │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
+ │    │    │    ├── 1 replicas: [+region=ca-central-1]
+ │    │    │    ├── 1 replicas: [+region=us-east-1]
+ │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    └── lease preference: [+region=ca-central-1]
+ │    └── partitions
+ │         ├── ap-southeast-2
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ap-southeast-2')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         └── lease preference: [+region=ap-southeast-2]
+ │         ├── ca-central-1
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ca-central-1')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         └── lease preference: [+region=ca-central-1]
+ │         └── us-east-1
+ │              ├── partition by list prefixes
+ │              │    └── ('us-east-1')
+ │              └── ZONE
+ │                   ├── replica constraints
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ca-central-1]
+ │                   │    ├── 1 replicas: [+region=us-east-1]
+ │                   │    └── voter constraints: [+region=us-east-1]
+ │                   └── lease preference: [+region=us-east-1]
+ ├── INDEX regional_by_row_table_a_idx
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
+ │    ├── a int not null
+ │    ├── pk int not null
+ │    ├── ZONE
+ │    │    ├── replica constraints
+ │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
+ │    │    │    ├── 1 replicas: [+region=ca-central-1]
+ │    │    │    ├── 1 replicas: [+region=us-east-1]
+ │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    └── lease preference: [+region=ca-central-1]
+ │    └── partitions
+ │         ├── ap-southeast-2
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ap-southeast-2')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         └── lease preference: [+region=ap-southeast-2]
+ │         ├── ca-central-1
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ca-central-1')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         └── lease preference: [+region=ca-central-1]
+ │         └── us-east-1
+ │              ├── partition by list prefixes
+ │              │    └── ('us-east-1')
+ │              └── ZONE
+ │                   ├── replica constraints
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ca-central-1]
+ │                   │    ├── 1 replicas: [+region=us-east-1]
+ │                   │    └── voter constraints: [+region=us-east-1]
+ │                   └── lease preference: [+region=us-east-1]
+ ├── UNIQUE INDEX regional_by_row_table_b_key
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
+ │    ├── b int not null
+ │    ├── pk int not null (storing)
+ │    ├── ZONE
+ │    │    ├── replica constraints
+ │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
+ │    │    │    ├── 1 replicas: [+region=ca-central-1]
+ │    │    │    ├── 1 replicas: [+region=us-east-1]
+ │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    └── lease preference: [+region=ca-central-1]
+ │    └── partitions
+ │         ├── ap-southeast-2
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ap-southeast-2')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         └── lease preference: [+region=ap-southeast-2]
+ │         ├── ca-central-1
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ca-central-1')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         └── lease preference: [+region=ca-central-1]
+ │         └── us-east-1
+ │              ├── partition by list prefixes
+ │              │    └── ('us-east-1')
+ │              └── ZONE
+ │                   ├── replica constraints
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ca-central-1]
+ │                   │    ├── 1 replicas: [+region=us-east-1]
+ │                   │    └── voter constraints: [+region=us-east-1]
+ │                   └── lease preference: [+region=us-east-1]
+ ├── INVERTED INDEX regional_by_row_table_j_idx
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
+ │    ├── j_inverted_key bytes not null [inverted]
+ │    ├── pk int not null
+ │    ├── ZONE
+ │    │    ├── replica constraints
+ │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
+ │    │    │    ├── 1 replicas: [+region=ca-central-1]
+ │    │    │    ├── 1 replicas: [+region=us-east-1]
+ │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    └── lease preference: [+region=ca-central-1]
+ │    └── partitions
+ │         ├── ap-southeast-2
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ap-southeast-2')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         └── lease preference: [+region=ap-southeast-2]
+ │         ├── ca-central-1
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ca-central-1')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         └── lease preference: [+region=ca-central-1]
+ │         └── us-east-1
+ │              ├── partition by list prefixes
+ │              │    └── ('us-east-1')
+ │              └── ZONE
+ │                   ├── replica constraints
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ca-central-1]
+ │                   │    ├── 1 replicas: [+region=us-east-1]
+ │                   │    └── voter constraints: [+region=us-east-1]
+ │                   └── lease preference: [+region=us-east-1]
+ ├── UNIQUE WITHOUT INDEX (pk)
+ └── UNIQUE WITHOUT INDEX (b)
+scan regional_by_row_table
+ └── check constraint expressions
+      └── crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+
+
+statement ok
+INSERT INTO regional_by_row_table (pk, pk2, a, b, j) VALUES
+  (1, 1, 2, 3, '{"a": "b"}'),
+  (4, 4, 5, 6, '{"c": "d"}');
+INSERT INTO multi_region_test_db.regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES
+  ('ca-central-1', 6, 6, 5, -5)
+
+statement ok
+CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a) WHERE b > 0
+
+query TI
+INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES
+('ca-central-1', 7, 7, 8, 9)
+RETURNING crdb_region, pk
+----
+ca-central-1  7
+
+query TI nodeidx=3
+USE multi_region_test_db; INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES
+(10, 10, 11, 12)
+RETURNING crdb_region, pk
+----
+ca-central-1  10
+
+query TI nodeidx=6
+USE multi_region_test_db; INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES
+(20, 20, 21, 22)
+RETURNING crdb_region, pk
+----
+us-east-1  20
+
+query TI
+INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES
+(gateway_region()::crdb_internal_region, 23, 23, 24, 25)
+RETURNING crdb_region, pk
+----
+ap-southeast-2  23
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE regional_by_row_table FOR ROW ('ap-southeast-2', 1)]
+----
+NULL  NULL
+
+query TIIII
+SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
+ORDER BY pk
+----
+ap-southeast-2  1   1   2   3
+ap-southeast-2  4   4   5   6
+ca-central-1    6   6   5   -5
+ca-central-1    7   7   8   9
+ca-central-1    10  10  11  12
+us-east-1       20  20  21  22
+ap-southeast-2  23  23  24  25
+
+query IIIIT colnames
+SELECT * FROM regional_by_row_table ORDER BY pk
+----
+pk  pk2  a   b   j
+1   1    2   3   {"a": "b"}
+4   4    5   6   {"c": "d"}
+6   6    5   -5  NULL
+7   7    8   9   NULL
+10  10   11  12  NULL
+20  20   21  22  NULL
+23  23   24  25  NULL
+
+
+# Test that a limited, ordered scan is efficient.
+query T
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT * FROM regional_by_row_table
+ORDER BY pk LIMIT 5] OFFSET 2
+----
+·
+• limit
+│ columns: (pk, pk2, a, b, j)
+│ estimated row count: 5 (missing stats)
+│ count: 5
+│
+└── • union all
+    │ columns: (pk, pk2, a, b, j)
+    │ ordering: +pk
+    │ estimated row count: 15 (missing stats)
+    │
+    ├── • union all
+    │   │ columns: (pk, pk2, a, b, j)
+    │   │ ordering: +pk
+    │   │ estimated row count: 10 (missing stats)
+    │   │
+    │   ├── • scan
+    │   │     columns: (pk, pk2, a, b, j)
+    │   │     ordering: +pk
+    │   │     estimated row count: 5 (missing stats)
+    │   │     table: regional_by_row_table@primary
+    │   │     spans: /"@"-/"@"/PrefixEnd
+    │   │     limit: 5
+    │   │
+    │   └── • scan
+    │         columns: (pk, pk2, a, b, j)
+    │         ordering: +pk
+    │         estimated row count: 5 (missing stats)
+    │         table: regional_by_row_table@primary
+    │         spans: /"\x80"-/"\x80"/PrefixEnd
+    │         limit: 5
+    │
+    └── • scan
+          columns: (pk, pk2, a, b, j)
+          ordering: +pk
+          estimated row count: 5 (missing stats)
+          table: regional_by_row_table@primary
+          spans: /"\xc0"-/"\xc0"/PrefixEnd
+          limit: 5
+
+# Tests for locality optimized search.
+
+# Split the table into 3 regions and change the leaseholders to be "local"
+# according to the crdb_region column.
+statement ok
+ALTER TABLE regional_by_row_table SPLIT AT VALUES ('ca-central-1', 0), ('us-east-1', 0);
+ALTER TABLE regional_by_row_table EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 0), (ARRAY[4], 'ca-central-1', 0), (ARRAY[7], 'us-east-1', 0);
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE regional_by_row_table]
+----
+start_key  end_key    replicas  lease_holder
+NULL       /"\x80"/0  {1}       1
+/"\x80"/0  /"\xc0"/0  {4}       4
+/"\xc0"/0  NULL       {7}       7
+
+statement ok
+SET locality_optimized_partitioned_index_scan = false
+
+# Query with locality optimized search disabled.
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
+----
+·
+• scan
+  missing stats
+  table: regional_by_row_table@primary
+  spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kN2q00AQgO99imWuVFbyV0EWhIimGKhNTQIKTSjb7FCCaTbubrCl5N0lm4taKYdz2sO5nJ9v5ps5gf7dAIMsWkSfc_KWzNPkG1lHP1eLT_GSvP4SZ3n2ffGGXDYo3NWy5c1me9wo-Wdj-LZB8uNrlEak-0U-Eq8kyXyeRTnxgUIrBS75HjWwNXhQUuiUrFBrqcbUyTbE4gDMpVC3XW_GdEmhkgqBncDUpkFgkI97UuQCleMCBYGG140de1Up7FS95-oIFLKOt5oRp4CwAMezeNIbRkKPhj4NAxrOaPgeyoGC7M3ZQRu-Q2DeQG_z9G71LIrDB_dlXf07XKvndj0r9q1UAhWKC71yuHLNUr6TnRP813h9tf-UN6WoO9lqfNRkd1RDscPpDi17VeFKycqumcLEcjYhUJupGkxB3NqS_c2_sHcP7N8DBw_CswvYHcrh1d8AAAD__97CZ-c=
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
+----
+│
+└ Node 1
+  └ *colexec.ParallelUnorderedSynchronizer
+    ├ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+statement ok
+RESET vectorize
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
+
+# All rows are scanned at once without the optimization.
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/56/1/"\xc0"/1/0
+Scan /Table/56/1/"@"/1/0
+Scan /Table/56/1/"\x80"/1/0
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+output row: [1 1 2 3 '{"a": "b"}']
+
+statement ok
+SET locality_optimized_partitioned_index_scan = true
+
+# Same query with locality optimized search enabled.
+
+# First check the plan with the vectorized engine.
+statement ok
+SET vectorize=on
+
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
+----
+·
+• union all
+│ limit: 1
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@primary
+│     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@primary
+      spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysklFr2zAQx9_3KcQ9bUMjlpPCEAw8NocFsqSzDRvUJqjWEcQcy5Nk1hL83Yflh84jC43TR53up_vd3z6C_VUBhzRex58y8pYsk-1Xchf_uF1_XG3I68-rNEu_rd-QcYPBvdK1qHb3jzujf--cuK-QfP8SJzFpfpIPhBVku1ymcUZCoFBriRtxQAv8DhgUFBqjS7RWm7509A0r-QA8oKDqpnV9uaBQaoPAj-CUqxA4ZP2cBIVEMwuAgkQnVOWfPakUNUYdhHkECmkjasvJLIc8f3gf5DBj_olt6ziJGI1CGs1ptKDRDRQdBd26Jw_rxB6Bs45Oc2VXuJYv7fqk2NbaSDQoR3pFd2KbjX6nm1n4T-Pp0eHUmOZTY4omRTR_RkQWjRIVuTipxXiVtTooR9h_VYJLIkvQNrq2-KyPEfSOKPc47GV1a0q8Nbr0Y4bj1nO-ING64TYcDqvaX_nf6W-YXQOHZ-HFeXh-Dbw4C9-M4KAruld_AgAA__9L0Kp2
+
+query T
+EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
+----
+│
+└ Node 1
+  └ *colexec.limitOp
+    └ *colexec.SerialUnorderedSynchronizer
+      ├ *colfetcher.ColBatchScan
+      └ *colexec.ParallelUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchScan
+
+# Now check the physical plan for the row-by-row engine.
+statement ok
+SET vectorize=off
+
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] AS temp(a) WHERE a LIKE '%Diagram%'
+----
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkXFr1EAQxf_3UwwDpa2sJJsqSEBIsRGD8a5eDhR64djeDudisrvubrDlyHeXS4Qa6Qm9_jnvzZv8XnaH_meDKVZ5mb9fwkv4sJh_hpv823V5Wczg7KqoltWX8hymC462ymjRrG_v1878Wgdx2xB8_ZgvcrA_4B3wGi4rCNRaOBPnfxwBZfEph9OTKyW2TrQnp8hQG0kz0ZLH9AY51gytMxvy3ri9tBsWCnmHacxQaduFvVwz3BhHmO4wqNAQprjcMyxISHJRjAwlBaGa4eyjuJl1qhXuHhlWVmifQrTC1erubbzCiEcxCC2BgwnfySHDeRdSyDjLEpZdsOw1y95g3TM0XXhg8kFsCVPes-O4-bHc2cj8RM7kIOcDnienRAOdNk6SIzkhrPtHCs3MK2OjZFqlVK0KwA-ixE_5ZQvy1mhP_7AculwzJLmlsZc3ndvQtTOb4TPjOB9ygyDJh9FNxqHQgzW86d9h_pxw8t_wxSQc93X_4ncAAAD___VzLXM=
+
+statement ok
+RESET vectorize
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
+
+# If the row is found in the local region, the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/56/1/"@"/1/0
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+output row: [1 1 2 3 '{"a": "b"}']
+
+statement ok
+SET vectorize=on
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 10; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched
+# in parallel.
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/56/1/"@"/10/0
+Scan /Table/56/1/"\xc0"/10/0
+Scan /Table/56/1/"\x80"/10/0
+fetched: /regional_by_row_table/primary/'ca-central-1'/10/pk2/a/b -> /10/11/12
+output row: [10 10 11 12 NULL]
+
+statement ok
+SET vectorize=off
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 10; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched
+# in parallel.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/56/1/"@"/10/0
+Scan /Table/56/1/"\x80"/10/0, /Table/56/1/"\xc0"/10/0
+fetched: /regional_by_row_table/primary/'ca-central-1'/10/pk2/a/b -> /10/11/12
+output row: [10 10 11 12 NULL]
+
+statement ok
+RESET vectorize
+
+# The local region for this query is ca-central-1, so that span should be
+# scanned in the first child of the limited union all.
+query T nodeidx=3
+USE multi_region_test_db; SET locality_optimized_partitioned_index_scan = true;
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
+----
+·
+• union all
+│ limit: 1
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@primary
+│     spans: [/'ca-central-1'/1 - /'ca-central-1'/1]
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@primary
+      spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+
+
+# Query with more than one key.
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk IN (1, 4)] OFFSET 2
+----
+·
+• union all
+│ limit: 2
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@primary
+│     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ap-southeast-2'/4 - /'ap-southeast-2'/4]
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@primary
+      spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'ca-central-1'/4 - /'ca-central-1'/4] [/'us-east-1'/1 - /'us-east-1'/1] [/'us-east-1'/4 - /'us-east-1'/4]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk IN (1, 4); SET tracing = off
+
+# Both rows are found in the local region, so the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/56/1/"@"/1/0, /Table/56/1/"@"/4/0
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+output row: [1 1 2 3 '{"a": "b"}']
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/4/pk2/a/b/j -> /4/5/6/'{"c": "d"}'
+output row: [4 4 5 6 '{"c": "d"}']
+
+# Tests using locality optimized search for lookup joins (including foreign
+# key checks).
+statement ok
+CREATE TABLE parent (
+  p_id INT PRIMARY KEY,
+  FAMILY (p_id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE child (
+  c_id INT PRIMARY KEY,
+  c_p_id INT REFERENCES parent (p_id),
+  INDEX (c_p_id),
+  FAMILY (c_id, c_p_id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO parent (crdb_region, p_id)
+VALUES ('ap-southeast-2', 10), ('ca-central-1', 20), ('us-east-1', 30)
+
+statement ok
+INSERT INTO child (crdb_region, c_id, c_p_id)
+VALUES ('ap-southeast-2', 10, 10), ('ca-central-1', 20, 20), ('us-east-1', 30, 30)
+
+# Split the child table into 3 regions and change the leaseholders to be "local"
+# according to the crdb_region column.
+statement ok
+ALTER TABLE child SPLIT AT VALUES ('ca-central-1', 0), ('us-east-1', 0);
+ALTER TABLE child EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 0), (ARRAY[4], 'ca-central-1', 0), (ARRAY[7], 'us-east-1', 0);
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE child]
+----
+start_key  end_key    replicas  lease_holder
+NULL       /"\x80"/0  {1}       1
+/"\x80"/0  /"\xc0"/0  {4}       4
+/"\xc0"/0  NULL       {7}       7
+
+statement ok
+SET locality_optimized_partitioned_index_scan = false
+
+# Anti join with locality optimized search disabled.
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
+----
+·
+• lookup join (anti)
+│ table: parent@primary
+│ equality cols are key
+│ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│
+└── • scan
+      missing stats
+      table: child@primary
+      spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10] [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
+
+# All regions are scanned without the optimization.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/10/0, /Table/58/1/"\x80"/10/0, /Table/58/1/"\xc0"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/57/1/"@"/10/0, /Table/57/1/"\x80"/10/0, /Table/57/1/"\xc0"/10/0
+fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
+
+# Semi join with locality optimized search disabled.
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
+----
+·
+• lookup join (semi)
+│ table: parent@primary
+│ equality cols are key
+│ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│
+└── • scan
+      missing stats
+      table: child@primary
+      spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10] [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
+
+# All regions are scanned without the optimization.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/10/0, /Table/58/1/"\x80"/10/0, /Table/58/1/"\xc0"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/57/1/"@"/10/0, /Table/57/1/"\x80"/10/0, /Table/57/1/"\xc0"/10/0
+fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
+output row: [10 10]
+
+# Inner join with locality optimized search disabled.
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
+----
+·
+• lookup join
+│ table: parent@primary
+│ equality cols are key
+│ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│
+└── • scan
+      missing stats
+      table: child@primary
+      spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10] [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
+
+# All regions are scanned without the optimization.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/10/0, /Table/58/1/"\x80"/10/0, /Table/58/1/"\xc0"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/57/1/"@"/10/0, /Table/57/1/"\x80"/10/0, /Table/57/1/"\xc0"/10/0
+fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
+output row: [10 10 10]
+
+# Left join with locality optimized search disabled.
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
+----
+·
+• lookup join (left outer)
+│ table: parent@primary
+│ equality cols are key
+│ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│
+└── • scan
+      missing stats
+      table: child@primary
+      spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10] [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
+
+# All regions are scanned without the optimization.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/10/0, /Table/58/1/"\x80"/10/0, /Table/58/1/"\xc0"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/57/1/"@"/10/0, /Table/57/1/"\x80"/10/0, /Table/57/1/"\xc0"/10/0
+fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
+output row: [10 10 10]
+
+statement ok
+SET locality_optimized_partitioned_index_scan = true
+
+# Anti join with locality optimized search enabled.
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
+----
+·
+• lookup join (anti)
+│ table: parent@primary
+│ equality cols are key
+│ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│
+└── • lookup join (anti)
+    │ table: parent@primary
+    │ equality cols are key
+    │ lookup condition: (p_id = c_p_id) AND (crdb_region = 'ap-southeast-2')
+    │
+    └── • union all
+        │ limit: 1
+        │
+        ├── • scan
+        │     missing stats
+        │     table: child@primary
+        │     spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10]
+        │
+        └── • scan
+              missing stats
+              table: child@primary
+              spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k9Fr2zAQxt_3Vxz3kmRoRHZcKIKCy-owF8_uEsMKjSmefbTeHMuTZEgJ-d9H7EDjsIS0Y2_R6ftyv-98WqP-XaLAuRd4n2P4CNNZ9BUevPu74NoPYXjjz-P5t2AEfUH2XJQ5fP_izTwYhlEM3v1WCMO-rE4VVWanqx-LHK4ge9z-GI3gOryBYdYVLT5KIJpO514MNjKsZE5huiSN4gEtTBjWSmaktVTb0roV-PkKBWdYVHVjtuWEYSYVoVijKUxJKDBOf5Q0ozQnNebIMCeTFmX7t20Gt1bFMlUvyHBep5UWMF7gYrG65AscW3zMIa1ysECaZ1LIMGqMANdiro3JhqFszGtvbdInQmFt2Pv4rHP53B3beTz2UZ5XDE2qSEtoKqlyUpT3SJLNX8BD-UnWY7uPHBTLwoB1FIW_ZTS3sqh2k5n028QvNQkIvGkM12Hsw23kh8iw27a9iQVS_mpq-CmLCmQlYOhO4Apce7d7rgNXsBo4fCCEcC3O-YUzOm-mk3cGcf5XkO1bXQ0u96MwWA2yXrYzwzlvCTcjXctK08HGHPv-CUPKn6jbPi0bldGdklnbpjtGra8t5KRNd2t3B79qr9oXtm-2_sVsnzRPemZ-aJ6cNDunzc5J88WBOdl8-BMAAP__98_FSA==
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN (VEC) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *rowexec.joinReader
+      └ *colexec.limitOp
+        └ *colexec.SerialUnorderedSynchronizer
+          ├ *colfetcher.ColBatchScan
+          └ *colfetcher.ColBatchScan
+
+statement ok
+RESET vectorize
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
+
+# If the row is found in the local region, the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/57/1/"@"/10/0
+fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 20; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched in
+# parallel.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/20/0
+Scan /Table/58/1/"\x80"/20/0, /Table/58/1/"\xc0"/20/0
+fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
+Scan /Table/57/1/"@"/20/0
+Scan /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
+fetched: /parent/primary/'ca-central-1'/20 -> NULL
+
+# Semi join with locality optimized search enabled.
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
+----
+·
+• lookup join (semi)
+│ table: parent@primary
+│ equality cols are key
+│ lookup condition: (p_id = c_p_id) AND (crdb_region = 'ap-southeast-2')
+│ remote lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│
+└── • union all
+    │ limit: 1
+    │
+    ├── • scan
+    │     missing stats
+    │     table: child@primary
+    │     spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10]
+    │
+    └── • scan
+          missing stats
+          table: child@primary
+          spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fr2zAQgN_3K457STI0IjsZFEHAZXWYi5t0sWGFxhTPPlpvjuRJMqSE_PcRO9A4LF26vlmn-3Qfd-cNmt8lCoz80P8Sw0eYLuY3cO_f3YaXwQz6V0EUR9_CAXQTsqeizOH7V3_hg3-3y4F-N6NKNUm7T6keihwmkD3sPgZwObuCftbGHD5IYD6dRn4MLjKUKqdZuiKD4h4dTBhWWmVkjNK70KZJCPI1Cs6wkFVtd-GEYaY0odigLWxJKDBOf5S0oDQnPeTIMCebFmXzbGPvVbpYpfoZGUZVKo2A4RKXy_UFX-LQ4UMOqczBAWWfSCPDeW0FeA7zXEy2DFVtX2obmz4SCmfL_s_POdfP27ud5-Oe9HnRMKSLtIRaKp2Tprxjkmz_Ij5Tn1Q1dLvKYbEqLDgnVfhbWnOtCrnvzKhbJn6uSEDoT2OI_JsArufBDBm2y3bQsVCpX3UFP1UhQUkBfW8EE_Dc_e55Y5jAujfmPSGE53DOP48HyHBBK2UJyn_Su19j3bs45Bmse1nnwcF5Uxq9pTULMpWSho7GdKrpCUPKH6kduVG1zuhWq6wp0x7nDdcEcjK2vXXbQyCbq2atD2HnPbD7KjzqwPwYHr0Kj4_gZPvhTwAAAP__xPiDsw==
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN (VEC) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colexec.limitOp
+      └ *colexec.SerialUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchScan
+
+statement ok
+RESET vectorize
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
+
+# If the row is found in the local region, the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/57/1/"@"/10/0
+fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
+output row: [10 10]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 20; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched in
+# parallel.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/20/0
+Scan /Table/58/1/"\x80"/20/0, /Table/58/1/"\xc0"/20/0
+fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
+Scan /Table/57/1/"@"/20/0
+Scan /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
+fetched: /parent/primary/'ca-central-1'/20 -> NULL
+output row: [20 20]
+
+# Inner join with locality optimized search enabled.
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
+----
+·
+• lookup join
+│ table: parent@primary
+│ equality cols are key
+│ lookup condition: (p_id = c_p_id) AND (crdb_region = 'ap-southeast-2')
+│ remote lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│
+└── • union all
+    │ limit: 1
+    │
+    ├── • scan
+    │     missing stats
+    │     table: child@primary
+    │     spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10]
+    │
+    └── • scan
+          missing stats
+          table: child@primary
+          spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr2zAQx9_3KY57STM0ItsZFEHBZXWYS2Z3TmCDxhTPPlptjuRJMmSEfPcRu9A4LF27vdkn_XQ__ndbtD9rFLiI5tGHJbyFWZZ-gtvo6838Mk7g7CpeLBef52MYXigfZF1BnCRRBtdpnEBTGFIO0gSaO1nBBZR33ceXj1EWQdnXPJ5DOpstoiX4yFDpipJiTRbFLXqYM2yMLslabfalbXchrjYoOEOpmtbtyznDUhtCsUUnXU0ocFl8qymjoiIz4ciwIlfIunu2Ew0bI9eF-YUMF02hrIDJClerzTlf4cTjEw6FqsAD7R7IIMO0dQJCj4U-5juGunVPva0r7gmFt2P_5ue91C98dHuZj3_S50nDkpFFDa3SpiJD1cAk3_1BPNHvdDPxh8pzuZYOvJMq_DXRXGupHpMJhm36jTqIZq71j7aB71oq0ErAWRjABYT-GC6TKzgLp3ABm9GUj4QQocc5fz8dI8OM1toR1H-l9-u-GZ0f8gw2o3Lw4HgwDhYGJ2MIXhNDRrbRytLRSE4FnDOk6p768VrdmpJujC67Nv1v2nFdoSLr-lO__4lVd9St8CHs_Q_sPwsHA5gfw8Gz8PQIzndvfgcAAP___at5GA==
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN (VEC) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colexec.limitOp
+      └ *colexec.SerialUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchScan
+
+statement ok
+RESET vectorize
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
+
+# If the row is found in the local region, the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/57/1/"@"/10/0
+fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
+output row: [10 10 10]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 20; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched in
+# parallel.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/20/0
+Scan /Table/58/1/"\x80"/20/0, /Table/58/1/"\xc0"/20/0
+fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
+Scan /Table/57/1/"@"/20/0
+Scan /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
+fetched: /parent/primary/'ca-central-1'/20 -> NULL
+output row: [20 20 20]
+
+# Left join with locality optimized search enabled.
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
+----
+·
+• lookup join (left outer)
+│ table: parent@primary
+│ equality cols are key
+│ lookup condition: (p_id = c_p_id) AND (crdb_region = 'ap-southeast-2')
+│ remote lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│
+└── • union all
+    │ limit: 1
+    │
+    ├── • scan
+    │     missing stats
+    │     table: child@primary
+    │     spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10]
+    │
+    └── • scan
+          missing stats
+          table: child@primary
+          spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fr2zAQx9_3KY57STM0ItsZFEHAZXVYimd3jscGjSmefbTeHMmTZEgJ-e4jdqFxWLp2e7NO-kk__nfeovlVo8BlEAYfUngL8yT-BDfBt-vwYhHB2eVimS4_h2MYHijuq7qEMJincBUvImhyTdJCHEFzW5Uwg-K2-_j6MUgCKPqawzOI5_NlkIKLDKUqKcrXZFDcoIMZw0argoxRel_adgcW5QYFZ1jJprX7csawUJpQbNFWtiYUmObfa0ooL0lPODIsyeZV3V3befqNrta5fkCGyyaXRsBkhavV5pyvcOLwCYdcluCAsvekkWHcWgG-w3wXsx1D1dqnt43N7wiFs2P_5ue81M9_dHuZj3vS50nDkK7yGlqpdEmayoFJtvuDeKTeqWbiDpXDal1ZcE6q8NdEc6Uq-ZiMN3wmfWhI9BMWf0mDpJszZNhP2kFkoVI_2wZ-qEqCkgLOfA9m4LtjuIgu4cyfwgw2oykfCSF8h3P-fjpGhgmtlSWo_0rv_4LN6PyQZ7AZFYMLx4M2Md87GY_3mngSMo2Sho5adSr4jCGVd9S33ahWF3StVdE90y_jjusKJRnb77r9YiG7rW60D2Hnf2D3WdgbwPwY9p6Fp0dwtnvzOwAA__9DX39d
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN (VEC) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colexec.limitOp
+      └ *colexec.SerialUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchScan
+
+statement ok
+RESET vectorize
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
+
+# If the row is found in the local region, the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/57/1/"@"/10/0
+fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
+output row: [10 10 10]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 20; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched in
+# parallel.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/58/1/"@"/20/0
+Scan /Table/58/1/"\x80"/20/0, /Table/58/1/"\xc0"/20/0
+fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
+Scan /Table/57/1/"@"/20/0
+Scan /Table/57/1/"\x80"/20/0, /Table/57/1/"\xc0"/20/0
+fetched: /parent/primary/'ca-central-1'/20 -> NULL
+output row: [20 20 20]
+
+query T
+SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • insert
+│   │ into: child(c_id, c_p_id, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 4 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: child@primary
+│           │ lookup condition: (column1 = c_id) AND (crdb_region = 'ap-southeast-2')
+│           │ remote lookup condition: (column1 = c_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ pred: crdb_region_default != crdb_region
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@primary
+            │ equality cols are key
+            │ lookup condition: (column2 = p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │
+            └── • lookup join (anti)
+                │ table: parent@primary
+                │ equality cols are key
+                │ lookup condition: (column2 = p_id) AND (crdb_region = 'ap-southeast-2')
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+query T
+SELECT * FROM [EXPLAIN UPSERT INTO child VALUES (1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • upsert
+│   │ into: child(c_id, c_p_id, crdb_region)
+│   │ arbiter constraints: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • cross join (left outer)
+│               │
+│               ├── • values
+│               │     size: 3 columns, 1 row
+│               │
+│               └── • union all
+│                   │ limit: 1
+│                   │
+│                   ├── • scan
+│                   │     missing stats
+│                   │     table: child@primary
+│                   │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: child@primary
+│                         spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@primary
+            │ equality cols are key
+            │ lookup condition: (column2 = p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │
+            └── • lookup join (anti)
+                │ table: parent@primary
+                │ equality cols are key
+                │ lookup condition: (column2 = p_id) AND (crdb_region = 'ap-southeast-2')
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+query T
+SELECT * FROM [EXPLAIN DELETE FROM parent WHERE p_id = 1] OFFSET 2
+----
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • union all
+│           │ limit: 1
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: parent@primary
+│           │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: parent@primary
+│                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: child@child_c_p_id_idx
+            │ lookup condition: (p_id = c_p_id) AND (crdb_region = 'ap-southeast-2')
+            │ remote lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Tests creating a index and a unique constraint on a REGIONAL BY ROW table.
+statement ok
+CREATE INDEX new_idx ON regional_by_row_table(a, b)
+
+# The validation query to create the unique constraint should be efficient (see
+# #56201).
+statement ok
+CREATE TABLE t56201 (a INT, b STRING, c STRING NOT NULL) LOCALITY REGIONAL BY ROW;
+ALTER TABLE t56201 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "distinct_count": 3,
+    "row_count": 1000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["b"],
+    "distinct_count": 999900,
+    "null_count": 5,
+    "row_count": 1000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c"],
+    "distinct_count": 999999,
+    "row_count": 1000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  }
+]';
+ALTER TABLE t56201 ADD CONSTRAINT key_a_b UNIQUE (a, b);
+
+query T
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT a, b
+FROM t56201
+WHERE a IS NOT NULL AND b IS NOT NULL
+GROUP BY a, b
+HAVING count(*) > 1
+LIMIT 1] OFFSET 2
+----
+·
+• project
+│ columns: (a, b)
+│ estimated row count: 1
+│
+└── • limit
+    │ columns: (a, b, count_rows)
+    │ estimated row count: 1
+    │ count: 1
+    │
+    └── • filter
+        │ columns: (a, b, count_rows)
+        │ estimated row count: 333,300
+        │ filter: count_rows > 1
+        │
+        └── • group
+            │ columns: (a, b, count_rows)
+            │ estimated row count: 999,900
+            │ aggregate 0: count_rows()
+            │ group by: a, b
+            │ ordered: +a,+b
+            │
+            └── • union all
+                │ columns: (a, b)
+                │ ordering: +a,+b
+                │ estimated row count: 999,995
+                │
+                ├── • union all
+                │   │ columns: (a, b)
+                │   │ ordering: +a,+b
+                │   │ estimated row count: 666,663
+                │   │
+                │   ├── • filter
+                │   │   │ columns: (a, b)
+                │   │   │ ordering: +a,+b
+                │   │   │ estimated row count: 333,332
+                │   │   │ filter: b IS NOT NULL
+                │   │   │
+                │   │   └── • scan
+                │   │         columns: (a, b)
+                │   │         ordering: +a,+b
+                │   │         estimated row count: 333,333 (33% of the table; stats collected <hidden> ago)
+                │   │         table: t56201@key_a_b
+                │   │         spans: /"@"/!NULL-/"@"/PrefixEnd
+                │   │
+                │   └── • filter
+                │       │ columns: (a, b)
+                │       │ ordering: +a,+b
+                │       │ estimated row count: 333,332
+                │       │ filter: b IS NOT NULL
+                │       │
+                │       └── • scan
+                │             columns: (a, b)
+                │             ordering: +a,+b
+                │             estimated row count: 333,333 (33% of the table; stats collected <hidden> ago)
+                │             table: t56201@key_a_b
+                │             spans: /"\x80"/!NULL-/"\x80"/PrefixEnd
+                │
+                └── • filter
+                    │ columns: (a, b)
+                    │ ordering: +a,+b
+                    │ estimated row count: 333,332
+                    │ filter: b IS NOT NULL
+                    │
+                    └── • scan
+                          columns: (a, b)
+                          ordering: +a,+b
+                          estimated row count: 333,333 (33% of the table; stats collected <hidden> ago)
+                          table: t56201@key_a_b
+                          spans: /"\xc0"/!NULL-/"\xc0"/PrefixEnd
+
+statement ok
+CREATE UNIQUE INDEX key_b_partial ON t56201 (b) WHERE a > 0;
+
+query T
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT b
+FROM t56201@key_b_partial
+WHERE b IS NOT NULL AND a > 0
+GROUP BY b
+HAVING count(*) > 1
+LIMIT 1] OFFSET 2
+----
+·
+• project
+│ columns: (b)
+│ estimated row count: 1
+│
+└── • limit
+    │ columns: (b, count_rows)
+    │ estimated row count: 1
+    │ count: 1
+    │
+    └── • filter
+        │ columns: (b, count_rows)
+        │ estimated row count: 111,111
+        │ filter: count_rows > 1
+        │
+        └── • group
+            │ columns: (b, count_rows)
+            │ estimated row count: 333,333
+            │ aggregate 0: count_rows()
+            │ group by: b
+            │ ordered: +b
+            │
+            └── • project
+                │ columns: (b)
+                │ ordering: +b
+                │
+                └── • union all
+                    │ columns: (b, crdb_region, rowid)
+                    │ ordering: +b
+                    │ estimated row count: 333,333
+                    │
+                    ├── • union all
+                    │   │ columns: (b, crdb_region, rowid)
+                    │   │ ordering: +b
+                    │   │ estimated row count: 222,222
+                    │   │
+                    │   ├── • scan
+                    │   │     columns: (b, crdb_region, rowid)
+                    │   │     ordering: +b
+                    │   │     estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                    │   │     table: t56201@key_b_partial (partial index)
+                    │   │     spans: /"@"/!NULL-/"@"/PrefixEnd
+                    │   │
+                    │   └── • scan
+                    │         columns: (b, crdb_region, rowid)
+                    │         ordering: +b
+                    │         estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                    │         table: t56201@key_b_partial (partial index)
+                    │         spans: /"\x80"/!NULL-/"\x80"/PrefixEnd
+                    │
+                    └── • scan
+                          columns: (b, crdb_region, rowid)
+                          ordering: +b
+                          estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                          table: t56201@key_b_partial (partial index)
+                          spans: /"\xc0"/!NULL-/"\xc0"/PrefixEnd
+
+statement ok
+CREATE UNIQUE INDEX key_c_partial ON t56201 (c) WHERE a = 1;
+
+query T
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT c
+FROM t56201
+WHERE c IS NOT NULL AND a = 1
+GROUP BY c
+HAVING count(*) > 1
+LIMIT 1] OFFSET 2
+----
+·
+• project
+│ columns: (c)
+│ estimated row count: 1
+│
+└── • limit
+    │ columns: (c, count_rows)
+    │ estimated row count: 1
+    │ count: 1
+    │
+    └── • filter
+        │ columns: (c, count_rows)
+        │ estimated row count: 111,111
+        │ filter: count_rows > 1
+        │
+        └── • group
+            │ columns: (c, count_rows)
+            │ estimated row count: 333,333
+            │ aggregate 0: count_rows()
+            │ group by: c
+            │ ordered: +c
+            │
+            └── • union all
+                │ columns: (c)
+                │ ordering: +c
+                │ estimated row count: 333,333
+                │
+                ├── • union all
+                │   │ columns: (c)
+                │   │ ordering: +c
+                │   │ estimated row count: 222,222
+                │   │
+                │   ├── • scan
+                │   │     columns: (c)
+                │   │     ordering: +c
+                │   │     estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                │   │     table: t56201@key_c_partial (partial index)
+                │   │     spans: /"@"-/"@"/PrefixEnd
+                │   │
+                │   └── • scan
+                │         columns: (c)
+                │         ordering: +c
+                │         estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                │         table: t56201@key_c_partial (partial index)
+                │         spans: /"\x80"-/"\x80"/PrefixEnd
+                │
+                └── • scan
+                      columns: (c)
+                      ordering: +c
+                      estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                      table: t56201@key_c_partial (partial index)
+                      spans: /"\xc0"-/"\xc0"/PrefixEnd
+
+statement ok
+ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
+
+# We should plan uniqueness checks for all unique indexes in
+# REGIONAL BY ROW tables.
+# TODO(treilly): The constraint check for uniq_idx should use uniq_idx but due
+# to stats issues w/ empty stats, partial indexes and multicol stats its not.
+# Hopefully fixing #67583 (and possibly #67479) will resolve this.
+query T
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • insert
+│   │ into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 8 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@primary
+│           │ lookup condition: (column1 = pk) AND (crdb_region = 'ap-southeast-2')
+│           │ remote lookup condition: (column1 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ pred: crdb_region_default != crdb_region
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@regional_by_row_table_b_key
+│           │ lookup condition: (column4 = b) AND (crdb_region = 'ap-southeast-2')
+│           │ remote lookup condition: (column4 = b) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@new_idx
+│           │ lookup condition: ((column3 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
+│           │ remote lookup condition: ((column3 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
+│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│           │
+│           └── • filter
+│               │ estimated row count: 1
+│               │ filter: column4 > 0
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: regional_by_row_table@new_idx
+            │ lookup condition: ((column3 = a) AND (column4 = b)) AND (crdb_region = 'ap-southeast-2')
+            │ remote lookup condition: ((column3 = a) AND (column4 = b)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_b_key"\nDETAIL: Key \(b\)=\(3\) already exists\.
+INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)
+
+# The conflict columns in an upsert should only include the primary key,
+# not the region column.
+# TODO(treilly): The constraint check for uniq_idx should use uniq_idx but due
+# to stats issues w/ empty stats, partial indexes and multicol stats its not.
+# Hopefully fixing #67583 (and possibly #67479) will resolve this.
+query T
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)] OFFSET 2
+----
+·
+• root
+│
+├── • upsert
+│   │ into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
+│   │ arbiter constraints: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • cross join (left outer)
+│               │
+│               ├── • values
+│               │     size: 6 columns, 1 row
+│               │
+│               └── • union all
+│                   │ limit: 1
+│                   │
+│                   ├── • scan
+│                   │     missing stats
+│                   │     table: regional_by_row_table@primary
+│                   │     spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2]
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: regional_by_row_table@primary
+│                         spans: [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@regional_by_row_table_b_key
+│           │ lookup condition: (column5 = b) AND (crdb_region = 'ap-southeast-2')
+│           │ remote lookup condition: (column5 = b) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@new_idx
+│           │ lookup condition: ((column4 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
+│           │ remote lookup condition: ((column4 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
+│           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+│           │
+│           └── • filter
+│               │ filter: column5 > 0
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: regional_by_row_table@new_idx
+            │ lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region = 'ap-southeast-2')
+            │ remote lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# TODO(treilly): The constraint check for uniq_idx should use uniq_idx but due
+# to stats issues w/ empty stats, partial indexes and multicol stats its not.
+# Hopefully fixing #67583 (and possibly #67479) will resolve this.
+query T
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
+VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
+----
+·
+• root
+│
+├── • upsert
+│   │ into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
+│   │ arbiter constraints: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • lookup join (left outer)
+│               │ table: regional_by_row_table@primary
+│               │ equality cols are key
+│               │ lookup condition: (column2 = pk) AND (crdb_region = 'ap-southeast-2')
+│               │ remote lookup condition: (column2 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│               │ locking strength: for update
+│               │
+│               └── • render
+│                   │ estimated row count: 2
+│                   │
+│                   └── • values
+│                         size: 5 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@regional_by_row_table_b_key
+│           │ lookup condition: (column5 = b) AND (crdb_region = 'ap-southeast-2')
+│           │ remote lookup condition: (column5 = b) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@new_idx
+│           │ lookup condition: ((column4 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
+│           │ remote lookup condition: ((column4 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
+│           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+│           │
+│           └── • filter
+│               │ filter: column5 > 0
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: regional_by_row_table@new_idx
+            │ lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region = 'ap-southeast-2')
+            │ remote lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+query TIIIIIIIIT colnames
+SELECT * FROM (VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)) AS v(crdb_region, pk, pk2, a, b)
+LEFT JOIN regional_by_row_table t ON v.pk = t.pk;
+----
+crdb_region   pk  pk2  a   b   pk    pk2   a     b     j
+us-east-1     23  24   25  26  23    23    24    25    NULL
+ca-central-1  30  30   31  32  NULL  NULL  NULL  NULL  NULL
+
+# One row already exists, one row is new.
+statement ok
+UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
+VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)
+
+query TIIII colnames
+SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
+ORDER BY pk
+----
+crdb_region     pk  pk2  a   b
+ap-southeast-2  1   1    2   3
+ap-southeast-2  4   4    5   6
+ca-central-1    6   6    5   -5
+ca-central-1    7   7    8   9
+ca-central-1    10  10   11  12
+us-east-1       20  20   21  22
+us-east-1       23  24   25  26
+ca-central-1    30  30   31  32
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
+----
+CREATE TABLE public.regional_by_row_table (
+                            pk INT8 NOT NULL,
+                            pk2 INT8 NOT NULL,
+                            a INT8 NOT NULL,
+                            b INT8 NOT NULL,
+                            j JSONB NULL,
+                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                            INDEX regional_by_row_table_a_idx (a ASC),
+                            UNIQUE INDEX regional_by_row_table_b_key (b ASC),
+                            INVERTED INDEX regional_by_row_table_j_idx (j),
+                            UNIQUE INDEX uniq_idx (a ASC) WHERE b > 0:::INT8,
+                            INDEX new_idx (a ASC, b ASC),
+                            UNIQUE INDEX unique_b_a (b ASC, a ASC),
+                            FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 'regional_by_row_table' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name                   column_name  implicit
+new_idx                      a            false
+new_idx                      b            false
+new_idx                      crdb_region  true
+primary                      crdb_region  true
+primary                      pk           false
+regional_by_row_table_a_idx  a            false
+regional_by_row_table_a_idx  crdb_region  true
+regional_by_row_table_b_key  b            false
+regional_by_row_table_b_key  crdb_region  true
+regional_by_row_table_j_idx  crdb_region  true
+regional_by_row_table_j_idx  j            false
+uniq_idx                     a            false
+uniq_idx                     crdb_region  true
+unique_b_a                   a            false
+unique_b_a                   b            false
+unique_b_a                   crdb_region  true
+
+# REGIONAL BY ROW AS
+
+statement ok
+CREATE TABLE regional_by_row_table_as (
+  pk int PRIMARY KEY,
+  a int,
+  b int,
+  crdb_region_col crdb_internal_region AS (
+    CASE
+      WHEN pk <= 10 THEN 'us-east-1'
+      ELSE 'ap-southeast-2'
+    END
+  ) STORED,
+  INDEX (a),
+  UNIQUE (b),
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW AS crdb_region_col
+
+query TI
+INSERT INTO regional_by_row_table_as (pk) VALUES (1), (10), (20)
+RETURNING crdb_region_col, pk
+----
+us-east-1       1
+us-east-1       10
+ap-southeast-2  20
+
+query IIIT colnames
+SELECT * FROM regional_by_row_table_as ORDER BY pk
+----
+pk  a     b     crdb_region_col
+1   NULL  NULL  us-east-1
+10  NULL  NULL  us-east-1
+20  NULL  NULL  ap-southeast-2
+
+
+# We do not need uniqueness checks on pk since uniqueness can be inferred
+# through the functional dependency between pk and the computed region column.
+query T
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • insert
+│   │ into: regional_by_row_table_as(pk, a, b, crdb_region_col)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 5 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: regional_by_row_table_as@regional_by_row_table_as_b_key
+            │ lookup condition: (column3 = b) AND (crdb_region_col = 'ap-southeast-2')
+            │ remote lookup condition: (column3 = b) AND (crdb_region_col IN ('ca-central-1', 'us-east-1'))
+            │ pred: (column1 != pk) OR (crdb_region_col_comp != crdb_region_col)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement error pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(pk\)=\(1\) already exists\.
+INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)
+
+statement ok
+INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (30, 1, 1)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_as_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
+INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (2, 1, 1)
+
+# Verify that we plan single-region scans for REGIONAL BY ROW tables with a computed region.
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as WHERE pk = 10] OFFSET 2
+----
+·
+• scan
+  missing stats
+  table: regional_by_row_table_as@primary
+  spans: [/'us-east-1'/10 - /'us-east-1'/10]
+
+subtest virtual_columns
+
+statement ok
+CREATE TABLE regional_by_row_table_virt (
+  pk int PRIMARY KEY,
+  a int NOT NULL,
+  b int NOT NULL,
+  v INT AS (a + b) VIRTUAL,
+  UNIQUE (v),
+  UNIQUE INDEX ((a + 10)),
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW
+
+# Uniqueness checks for virtual columns should be efficient.
+query T
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • insert
+│   │ into: regional_by_row_table_virt(pk, a, b, v, crdb_region, crdb_internal_idx_expr)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 7 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table_virt@primary
+│           │ lookup condition: (column1 = pk) AND (crdb_region = 'ap-southeast-2')
+│           │ remote lookup condition: (column1 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ pred: crdb_region_default != crdb_region
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • lookup join
+│               │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
+│               │ equality: (lookup_join_const_col_@34, v_comp) = (crdb_region,v)
+│               │ equality cols are key
+│               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│               │
+│               └── • cross join
+│                   │ estimated row count: 3
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • lookup join
+                │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
+                │ equality: (lookup_join_const_col_@48, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
+                │ equality cols are key
+                │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+                │
+                └── • cross join
+                    │ estimated row count: 3
+                    │
+                    ├── • values
+                    │     size: 1 column, 3 rows
+                    │
+                    └── • scan buffer
+                          label: buffer 1
+
+query T
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • upsert
+│   │ into: regional_by_row_table_virt(pk, a, b, v, crdb_region, crdb_internal_idx_expr)
+│   │ arbiter constraints: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • render
+│               │
+│               └── • cross join (left outer)
+│                   │
+│                   ├── • values
+│                   │     size: 6 columns, 1 row
+│                   │
+│                   └── • render
+│                       │
+│                       └── • union all
+│                           │ limit: 1
+│                           │
+│                           ├── • scan
+│                           │     missing stats
+│                           │     table: regional_by_row_table_virt@primary
+│                           │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│                           │
+│                           └── • scan
+│                                 missing stats
+│                                 table: regional_by_row_table_virt@primary
+│                                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • lookup join
+│               │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
+│               │ equality: (lookup_join_const_col_@30, v_comp) = (crdb_region,v)
+│               │ equality cols are key
+│               │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+│               │
+│               └── • cross join
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • lookup join
+                │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
+                │ equality: (lookup_join_const_col_@44, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
+                │ equality cols are key
+                │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+                │
+                └── • cross join
+                    │
+                    ├── • values
+                    │     size: 1 column, 3 rows
+                    │
+                    └── • scan buffer
+                          label: buffer 1
+
+statement ok
+INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_v_key"\nDETAIL: Key \(v\)=\(2\) already exists\.
+INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 2, 0)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_v_key"\nDETAIL: Key \(v\)=\(2\) already exists\.
+UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 2, 0)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_expr_key"\nDETAIL: Key \(a \+ 10:::INT8\)=\(11\) already exists\.
+INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 1, 3)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_expr_key"\nDETAIL: Key \(a \+ 10:::INT8\)=\(11\) already exists\.
+UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 1, 3)
+
+statement ok
+CREATE TABLE regional_by_row_table_virt_partial (
+  pk int PRIMARY KEY,
+  a int NOT NULL,
+  b int NOT NULL,
+  v INT AS (a + b) VIRTUAL,
+  UNIQUE INDEX v_a_gt_0 (v) WHERE a > 0,
+  UNIQUE INDEX v_v_gt_0 (v) WHERE v > 0,
+  UNIQUE INDEX a_plus_10_v_gt_0 ((a + 10)) WHERE v > 0,
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW
+
+# Uniqueness checks for virtual columns should be efficient.
+query T
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • insert
+│   │ into: regional_by_row_table_virt_partial(pk, a, b, v, crdb_region, crdb_internal_idx_expr)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 9 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table_virt_partial@primary
+│           │ lookup condition: (column1 = pk) AND (crdb_region = 'ap-southeast-2')
+│           │ remote lookup condition: (column1 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ pred: crdb_region_default != crdb_region
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • lookup join
+│               │ table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
+│               │ equality: (lookup_join_const_col_@36, v_comp) = (crdb_region,v)
+│               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│               │
+│               └── • cross join
+│                   │ estimated row count: 3
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • filter
+│                       │ estimated row count: 1
+│                       │ filter: column2 > 0
+│                       │
+│                       └── • scan buffer
+│                             label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • lookup join
+│               │ table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
+│               │ equality: (lookup_join_const_col_@50, v_comp) = (crdb_region,v)
+│               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│               │
+│               └── • cross join
+│                   │ estimated row count: 3
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • filter
+│                       │ estimated row count: 1
+│                       │ filter: v_comp > 0
+│                       │
+│                       └── • scan buffer
+│                             label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • lookup join
+                │ table: regional_by_row_table_virt_partial@a_plus_10_v_gt_0 (partial index)
+                │ equality: (lookup_join_const_col_@64, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
+                │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+                │
+                └── • cross join
+                    │ estimated row count: 3
+                    │
+                    ├── • values
+                    │     size: 1 column, 3 rows
+                    │
+                    └── • filter
+                        │ estimated row count: 1
+                        │ filter: v_comp > 0
+                        │
+                        └── • scan buffer
+                              label: buffer 1
+
+query T
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • upsert
+│   │ into: regional_by_row_table_virt_partial(pk, a, b, v, crdb_region, crdb_internal_idx_expr)
+│   │ arbiter constraints: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • render
+│               │
+│               └── • cross join (left outer)
+│                   │
+│                   ├── • values
+│                   │     size: 6 columns, 1 row
+│                   │
+│                   └── • render
+│                       │
+│                       └── • union all
+│                           │ limit: 1
+│                           │
+│                           ├── • scan
+│                           │     missing stats
+│                           │     table: regional_by_row_table_virt_partial@primary
+│                           │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│                           │
+│                           └── • scan
+│                                 missing stats
+│                                 table: regional_by_row_table_virt_partial@primary
+│                                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • lookup join
+│               │ table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
+│               │ equality: (lookup_join_const_col_@34, v_comp) = (crdb_region,v)
+│               │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+│               │
+│               └── • cross join
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • filter
+│                       │ filter: column2 > 0
+│                       │
+│                       └── • scan buffer
+│                             label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • lookup join
+│               │ table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
+│               │ equality: (lookup_join_const_col_@48, v_comp) = (crdb_region,v)
+│               │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+│               │
+│               └── • cross join
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • filter
+│                       │ filter: v_comp > 0
+│                       │
+│                       └── • scan buffer
+│                             label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • lookup join
+                │ table: regional_by_row_table_virt_partial@a_plus_10_v_gt_0 (partial index)
+                │ equality: (lookup_join_const_col_@62, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
+                │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+                │
+                └── • cross join
+                    │
+                    ├── • values
+                    │     size: 1 column, 3 rows
+                    │
+                    └── • filter
+                        │ filter: v_comp > 0
+                        │
+                        └── • scan buffer
+                              label: buffer 1
+
+statement ok
+INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)
+
+statement error pq: duplicate key value violates unique constraint "v_a_gt_0"\nDETAIL: Key \(v\)=\(2\) already exists\.
+INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (2, 3, -1)
+
+statement error pq: duplicate key value violates unique constraint "v_v_gt_0"\nDETAIL: Key \(v\)=\(2\) already exists\.
+INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (2, -1, 3)
+
+statement ok
+INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (3, -2, -2)
+
+# No conflict because a <= 0 and v <= 0.
+statement ok
+INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (4, -3, -1)
+
+subtest regressions
+
+# Regression test for #63109. UPSERT should not cause the error
+# ERROR: missing "crdb_region" primary key column.
+statement ok
+CREATE DATABASE single_region_test_db PRIMARY REGION "ap-southeast-2";
+USE single_region_test_db;
+CREATE TABLE t63109 (a INT, b STRING);
+ALTER TABLE t63109 SET LOCALITY REGIONAL BY ROW;
+INSERT INTO t63109 VALUES (1, 'one');
+UPSERT INTO t63109 VALUES (1, 'two');
+UPSERT INTO t63109 (crdb_region, a, b) VALUES ('ap-southeast-2', 1, 'three');
+UPSERT INTO t63109 (a, b) VALUES (1, 'four');
+
+# Regression test for #65064. We should always choose locality optimized scan
+# even if the stats show zero rows.
+statement ok
+CREATE DATABASE db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
+USE db;
+CREATE TABLE t65064 (username STRING NOT NULL UNIQUE) LOCALITY REGIONAL BY ROW;
+ALTER TABLE t65064 INJECT STATISTICS '[
+  {
+    "columns": ["username"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 0,
+    "distinct_count": 0
+  }
+]';
+
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM t65064 WHERE username = 'kharris'] OFFSET 2
+----
+·
+• union all
+│ estimated row count: 1
+│ limit: 1
+│
+├── • scan
+│     estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+│     table: t65064@t65064_username_key
+│     spans: [/'ap-southeast-2'/'kharris' - /'ap-southeast-2'/'kharris']
+│
+└── • scan
+      estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+      table: t65064@t65064_username_key
+      spans: [/'ca-central-1'/'kharris' - /'ca-central-1'/'kharris'] [/'us-east-1'/'kharris' - /'us-east-1'/'kharris']
