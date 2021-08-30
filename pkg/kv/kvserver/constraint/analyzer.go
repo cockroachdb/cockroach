@@ -13,7 +13,6 @@ package constraint
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -21,7 +20,7 @@ import (
 // combines a zone's constraints with information about which stores satisfy
 // what term of the constraints disjunction.
 type AnalyzedConstraints struct {
-	Constraints []zonepb.ConstraintsConjunction
+	Constraints []roachpb.ConstraintsConjunction
 	// True if the per-replica constraints don't fully cover all the desired
 	// replicas in the range (sum(constraints.NumReplicas) < zone.NumReplicas).
 	// In such cases, we allow replicas that don't match any of the per-replica
@@ -49,7 +48,7 @@ func AnalyzeConstraints(
 	getStoreDescFn func(roachpb.StoreID) (roachpb.StoreDescriptor, bool),
 	existing []roachpb.ReplicaDescriptor,
 	numReplicas int32,
-	constraints []zonepb.ConstraintsConjunction,
+	constraints []roachpb.ConstraintsConjunction,
 ) AnalyzedConstraints {
 	result := AnalyzedConstraints{
 		Constraints: constraints,
@@ -85,12 +84,12 @@ func AnalyzeConstraints(
 // the possibly numerous sets that apply to a range), returning true iff the
 // store matches the constraints. The contraints are AND'ed together; a store
 // matches the conjunction if it matches all of them.
-func ConjunctionsCheck(store roachpb.StoreDescriptor, constraints []zonepb.Constraint) bool {
+func ConjunctionsCheck(store roachpb.StoreDescriptor, constraints []roachpb.Constraint) bool {
 	for _, constraint := range constraints {
 		// StoreMatchesConstraint returns whether a store matches the given constraint.
-		hasConstraint := zonepb.StoreMatchesConstraint(store, constraint)
-		if (constraint.Type == zonepb.Constraint_REQUIRED && !hasConstraint) ||
-			(constraint.Type == zonepb.Constraint_PROHIBITED && hasConstraint) {
+		hasConstraint := roachpb.StoreMatchesConstraint(store, constraint)
+		if (constraint.Type == roachpb.Constraint_REQUIRED && !hasConstraint) ||
+			(constraint.Type == roachpb.Constraint_PROHIBITED && hasConstraint) {
 			return false
 		}
 	}

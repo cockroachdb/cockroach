@@ -156,7 +156,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 // verifyStoreList ensures that the returned list of stores is correct.
 func verifyStoreList(
 	sp *StorePool,
-	constraints []zonepb.ConstraintsConjunction,
+	constraints []roachpb.ConstraintsConjunction,
 	storeIDs roachpb.StoreIDSlice, // optional
 	filter storeFilter,
 	expected []int,
@@ -205,11 +205,11 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
-	constraints := []zonepb.ConstraintsConjunction{
+	constraints := []roachpb.ConstraintsConjunction{
 		{
-			Constraints: []zonepb.Constraint{
-				{Type: zonepb.Constraint_REQUIRED, Value: "ssd"},
-				{Type: zonepb.Constraint_REQUIRED, Value: "dc"},
+			Constraints: []roachpb.Constraint{
+				{Type: roachpb.Constraint_REQUIRED, Value: "ssd"},
+				{Type: roachpb.Constraint_REQUIRED, Value: "dc"},
 			},
 		},
 	}
@@ -403,13 +403,12 @@ func TestStoreListFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	constraints := []zonepb.ConstraintsConjunction{
+	constraints := []roachpb.ConstraintsConjunction{
 		{
-			Constraints: []zonepb.Constraint{
-				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "us-west"},
-				{Type: zonepb.Constraint_REQUIRED, Value: "MustMatch"},
-				{Type: zonepb.Constraint_DEPRECATED_POSITIVE, Value: "MatchingOptional"},
-				{Type: zonepb.Constraint_PROHIBITED, Value: "MustNotMatch"},
+			Constraints: []roachpb.Constraint{
+				{Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "us-west"},
+				{Type: roachpb.Constraint_REQUIRED, Value: "MustMatch"},
+				{Type: roachpb.Constraint_PROHIBITED, Value: "MustNotMatch"},
 			},
 		},
 	}

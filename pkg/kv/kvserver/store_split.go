@@ -341,7 +341,7 @@ func (s *Store) SplitRange(
 		// Update the replica's cached byte thresholds. This is a no-op if the system
 		// config is not available, in which case we rely on the next gossip update
 		// to perform the update.
-		if err := rightRepl.updateRangeInfo(rightRepl.Desc()); err != nil {
+		if err := rightRepl.updateRangeInfo(ctx, rightRepl.Desc()); err != nil {
 			return err
 		}
 		// Add the range to metrics and maybe gossip on capacity change.

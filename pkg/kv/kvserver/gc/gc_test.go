@@ -13,13 +13,11 @@ package gc
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -27,22 +25,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCalculateThreshold(t *testing.T) {
 	for _, c := range []struct {
-		ttlSeconds int32
-		ts         hlc.Timestamp
+		gcTTL time.Duration
+		ts    hlc.Timestamp
 	}{
 		{
-			ts:         hlc.Timestamp{WallTime: time.Hour.Nanoseconds(), Logical: 0},
-			ttlSeconds: 1,
+			ts:    hlc.Timestamp{WallTime: time.Hour.Nanoseconds(), Logical: 0},
+			gcTTL: time.Second,
 		},
 	} {
-		policy := zonepb.GCPolicy{TTLSeconds: c.ttlSeconds}
-		require.Equal(t, c.ts, TimestampForThreshold(CalculateThreshold(c.ts, policy), policy))
+		require.Equal(t, c.ts, TimestampForThreshold(CalculateThreshold(c.ts, c.gcTTL), c.gcTTL))
 	}
 }
 
@@ -130,7 +128,7 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 		StartKey: roachpb.RKey(key),
 		EndKey:   roachpb.RKey("b"),
 	}
-	policy := zonepb.GCPolicy{TTLSeconds: 1}
+	gcTTL := time.Second
 	snap := eng.NewSnapshot()
 	nowTs := hlc.Timestamp{
 		WallTime: now.Nanoseconds(),
@@ -138,13 +136,13 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	fakeGCer := makeFakeGCer()
 
 	// Test GC desired behavior.
-	info, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold}, policy, &fakeGCer, fakeGCer.resolveIntents,
+	info, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentLongThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Zero(t, info.IntentsConsidered,
 		"Expected no intents considered by GC with default threshold")
 
-	info, err = Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentShortThreshold}, policy, &fakeGCer, fakeGCer.resolveIntents,
+	info, err = Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentShortThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Equal(t, 1, info.IntentsConsidered,
@@ -182,7 +180,7 @@ func TestIntentCleanupBatching(t *testing.T) {
 		StartKey: roachpb.RKey([]byte{txnPrefixes[0], objectKeys[0]}),
 		EndKey:   roachpb.RKey("z"),
 	}
-	policy := zonepb.GCPolicy{TTLSeconds: 1}
+	gcTTL := time.Second
 	snap := eng.NewSnapshot()
 	nowTs := hlc.Timestamp{
 		WallTime: now.Nanoseconds(),
@@ -191,7 +189,7 @@ func TestIntentCleanupBatching(t *testing.T) {
 	// Base GCer will cleanup all intents in one go and its result is used as a baseline
 	// to compare batched runs for checking completeness.
 	baseGCer := makeFakeGCer()
-	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold}, policy, &baseGCer, baseGCer.resolveIntents,
+	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold}, gcTTL, &baseGCer, baseGCer.resolveIntents,
 		baseGCer.resolveIntentsAsync)
 	if err != nil {
 		t.Fatal("Can't prepare test fixture. Non batched GC run fails.")
@@ -201,7 +199,7 @@ func TestIntentCleanupBatching(t *testing.T) {
 	var batchSize int64 = 7
 	fakeGCer := makeFakeGCer()
 	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
-		RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: batchSize}, policy,
+		RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: batchSize}, gcTTL,
 		&fakeGCer, fakeGCer.resolveIntents, fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	maxIntents := 0

@@ -354,6 +354,10 @@ type StoreTestingKnobs struct {
 	// LeaseRenewalDurationOverride replaces the timer duration for proactively
 	// renewing expiration based leases.
 	LeaseRenewalDurationOverride time.Duration
+
+	// MakeSystemConfigSpanUnavailableToQueues makes the system config span
+	// unavailable to queues that ask for it.
+	MakeSystemConfigSpanUnavailableToQueues bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
