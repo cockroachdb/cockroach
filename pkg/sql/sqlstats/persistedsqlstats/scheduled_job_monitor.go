@@ -86,6 +86,10 @@ func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
 
 func (j *jobMonitor) registerClusterSettingHook() {
 	SQLStatsCleanupRecurrence.SetOnChange(&j.st.SV, func(ctx context.Context) {
+		if !j.isVersionCompatible(ctx) {
+			return
+		}
+		j.ensureSchedule(ctx)
 		if err := j.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			sj, err := j.getSchedule(ctx, txn)
 			if err != nil {
@@ -137,9 +141,9 @@ func (j *jobMonitor) getSchedule(
 }
 
 func (j *jobMonitor) ensureSchedule(ctx context.Context) {
-	clusterVersion := j.st.Version.ActiveVersionOrEmpty(ctx)
-	if !clusterVersion.IsActive(clusterversion.SQLStatsCompactionScheduledJob) {
-		log.Warningf(ctx, "cannot create sql stats scheduled compaction job because current cluster version is too low")
+	if !j.isVersionCompatible(ctx) {
+		log.Infof(ctx, "cannot create sql stats scheduled compaction job because current cluster version is too low")
+		return
 	}
 
 	var sj *jobs.ScheduledJob
@@ -166,6 +170,11 @@ func (j *jobMonitor) ensureSchedule(ctx context.Context) {
 	if err = CheckScheduleAnomaly(sj); err != nil {
 		log.Warningf(ctx, "schedule anomaly detected: %s", err)
 	}
+}
+
+func (j *jobMonitor) isVersionCompatible(ctx context.Context) bool {
+	clusterVersion := j.st.Version.ActiveVersionOrEmpty(ctx)
+	return clusterVersion.IsActive(clusterversion.SQLStatsCompactionScheduledJob)
 }
 
 // CheckScheduleAnomaly checks a given schedule to see if it is either paused
