@@ -31,7 +31,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 
 		// RESET ALL
 		if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(
-			func(m *sessionDataMutator) error {
+			func(m sessionDataMutator) error {
 				return resetSessionVars(ctx, m)
 			},
 		); err != nil {
@@ -46,7 +46,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 	return newZeroNode(nil /* columns */), nil
 }
 
-func resetSessionVars(ctx context.Context, m *sessionDataMutator) error {
+func resetSessionVars(ctx context.Context, m sessionDataMutator) error {
 	for _, varName := range varNames {
 		v := varGen[varName]
 		if v.Set != nil {

@@ -110,7 +110,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	if err := p.CreateSchemaNamespaceEntry(ctx, catalogkeys.EncodeNameKey(p.ExecCfg().Codec, sKey), id); err != nil {
 		return nil, err
 	}
-	p.sessionDataMutatorIterator.applyForEachMutator(func(m *sessionDataMutator) {
+	p.sessionDataMutatorIterator.applyForEachMutator(func(m sessionDataMutator) {
 		m.SetTemporarySchemaName(sKey.GetName())
 		m.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
 	})
