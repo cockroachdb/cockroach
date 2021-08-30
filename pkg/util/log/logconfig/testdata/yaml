@@ -1,3 +1,5 @@
+### Used in pkg/util/log/logconfig/config_test.go
+
 # Check how the empty config pretty-prints itself.
 yaml
 ----
@@ -191,3 +193,52 @@ sinks:
       channels: DEV,DEV
 ----
 ERROR: duplicate channel name: "DEV"
+
+# Check that supported permission formats are accepted.
+yaml
+sinks:
+  file-groups:
+    decimal:
+      file-permissions: 222
+    leadingzero:
+      file-permissions: 0222
+    prefix:
+      file-permissions: 0o222
+    quoted:
+      file-permissions: "0222"
+----
+sinks:
+  file-groups:
+    decimal:
+      file-permissions: "0222"
+    leadingzero:
+      file-permissions: "0222"
+    prefix:
+      file-permissions: "0222"
+    quoted:
+      file-permissions: "0222"
+
+yaml
+file-defaults:
+  file-permissions: foobar
+----
+ERROR: file-permissions unparsable: foobar
+
+yaml
+file-defaults:
+  file-permissions: 02222
+----
+ERROR: file-permissions out-of-range: 02222
+
+yaml
+file-defaults:
+  file-permissions: -222
+----
+ERROR: file-permissions out-of-range: -222
+
+yaml
+file-defaults:
+  file-permissions: 0454
+----
+ERROR: file-permissions must not be executable: 0454
+

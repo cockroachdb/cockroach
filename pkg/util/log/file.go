@@ -16,6 +16,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"os/user"
@@ -87,6 +88,8 @@ type fileSink struct {
 	// include at the start of a log file.
 	getStartLines func(time.Time) []*buffer
 
+	filePermissions fs.FileMode
+
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize output to this file sink..
 	mu struct {
@@ -131,6 +134,7 @@ func newFileSink(
 	bufferedWrites bool,
 	fileMaxSize, combinedMaxSize int64,
 	getStartLines func(time.Time) []*buffer,
+	filePermissions fs.FileMode,
 ) *fileSink {
 	prefix := program
 	if fileNamePrefix != "" {
@@ -143,6 +147,7 @@ func newFileSink(
 		logFilesCombinedMaxSize: combinedMaxSize,
 		gcNotify:                make(chan struct{}, 1),
 		getStartLines:           getStartLines,
+		filePermissions:         filePermissions,
 	}
 	f.mu.logDir = dir
 	f.enabled.Set(dir != "")
@@ -331,7 +336,7 @@ var errDirectoryNotSet = errors.New("log: log directory not set")
 //
 // It is invalid to call this with an unset output directory.
 func create(
-	dir, prefix string, t time.Time, lastRotation int64,
+	dir, prefix string, t time.Time, lastRotation int64, fileMode fs.FileMode,
 ) (f *os.File, updatedRotation int64, filename, symlink string, err error) {
 	if dir == "" {
 		return nil, lastRotation, "", "", errDirectoryNotSet
@@ -352,7 +357,7 @@ func create(
 	fname := filepath.Join(dir, name)
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
 	// Append is almost always more efficient than O_RDRW on most modern file systems.
-	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
 	return f, updatedRotation, fname, symlink, errors.Wrapf(err, "log: cannot create output file")
 }
 

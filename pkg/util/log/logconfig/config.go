@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -329,6 +330,11 @@ type FileDefaults struct {
 	// removes files that cause the file set to grow beyond this specified
 	// size. If zero, old files are not removed.
 	MaxGroupSize *ByteSize `yaml:"max-group-size,omitempty"`
+
+	// FilePermissions is the "chmod-style" permissions the log files are
+	// created with as a 3-digit octal number. The executable bit must not
+	// be set. Defaults to 644 (readable by all, writable by owner).
+	FilePermissions *FilePermissions `yaml:"file-permissions,omitempty"`
 
 	// BufferedWrites specifies whether to buffer log entries.
 	// Setting this to false flushes log writes upon every entry.
@@ -734,6 +740,48 @@ func (x *ByteSize) UnmarshalYAML(fn func(interface{}) error) error {
 		return err
 	}
 	*x = ByteSize(i)
+	return nil
+}
+
+// FilePermissions is a 9-bit number corresponding to the fs.FileMode
+// a logfile is created with. It's written and read from the YAML as
+// an octal string, regardless of leading zero or "0o" prefix.
+type FilePermissions uint
+
+// IsZero implements the yaml.IsZeroer interface.
+func (x FilePermissions) IsZero() bool { return x == 0 }
+
+// MarshalYAML implements the yaml.Marshaler interface.
+func (x FilePermissions) MarshalYAML() (r interface{}, err error) {
+	return fmt.Sprintf("%04o", x), nil
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (x *FilePermissions) UnmarshalYAML(fn func(interface{}) error) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.WithHint(err, "This value should consist of three even digits.")
+		}
+	}()
+
+	var in string
+	if err = fn(&in); err != nil {
+		return err
+	}
+
+	in = strings.TrimPrefix(in, "0o")
+	val, err := strconv.ParseInt(in, 8, 0)
+	if err != nil {
+		return errors.Errorf("file-permissions unparsable: %v", in)
+	}
+	if val > 0o777 || val < 0 {
+		return errors.Errorf("file-permissions out-of-range: %v", in)
+	}
+	if val&0o111 != 0 {
+		return errors.Errorf("file-permissions must not be executable: %v", in)
+	}
+
+	*x = FilePermissions(val)
 	return nil
 }
 
