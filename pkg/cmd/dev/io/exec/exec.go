@@ -80,12 +80,6 @@ func WithRecording(r *recording.Recording) func(e *Exec) {
 	}
 }
 
-// CommandContext wraps around exec.CommandContext, executing the named program
-// with the given arguments.
-func (e *Exec) CommandContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return e.commandContextImpl(ctx, nil, false, name, args...)
-}
-
 // CommandContextSilent is like CommandContext, but does not take over
 // stdout/stderr. It's to be used for "internal" operations.
 func (e *Exec) CommandContextSilent(
