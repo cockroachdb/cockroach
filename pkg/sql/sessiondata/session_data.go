@@ -188,10 +188,10 @@ func (s *SessionData) MaybeGetDatabaseForTemporarySchemaID(schemaID uint32) (uin
 	return 0, false
 }
 
-// GetTemporarySchemaIDForDb returns the schemaID for the temporary schema if
+// GetTemporarySchemaIDForDB returns the schemaID for the temporary schema if
 // one exists for the DB. The second return value communicates the existence of
 // the temp schema for that DB.
-func (s *SessionData) GetTemporarySchemaIDForDb(dbID uint32) (uint32, bool) {
+func (s *SessionData) GetTemporarySchemaIDForDB(dbID uint32) (uint32, bool) {
 	schemaID, found := s.DatabaseIDToTempSchemaID[dbID]
 	return schemaID, found
 }
