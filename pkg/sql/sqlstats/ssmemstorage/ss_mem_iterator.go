@@ -86,7 +86,6 @@ func (s *StmtStatsIterator) Next() bool {
 		Key: roachpb.StatementStatisticsKey{
 			Query:       stmtKey.anonymizedStmt,
 			DistSQL:     distSQLUsed,
-			Opt:         true,
 			Vec:         vectorized,
 			ImplicitTxn: stmtKey.implicitTxn,
 			FullScan:    fullScan,
