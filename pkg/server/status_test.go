@@ -1813,9 +1813,17 @@ func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: params,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
+					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
+				},
+			},
+		},
 	})
 	defer testCluster.Stopper().Stop(context.Background())
 
@@ -1897,17 +1905,24 @@ func TestStatusAPIStatements(t *testing.T) {
 	// Test no params
 	testPath("statements", expectedStatements)
 	// Test combined=true forwards to CombinedStatements
-	nowInSecs := timeutil.Now().Unix()
-	testPath(fmt.Sprintf("statements?combined=true&start=%d", nowInSecs), nil)
+	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
 }
 
 func TestStatusAPICombinedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: params,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
+					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
+				},
+			},
+		},
 	})
 	defer testCluster.Stopper().Stop(context.Background())
 
@@ -1989,11 +2004,13 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	// Test with no query params
 	testPath("combinedstmts", expectedStatements)
 
-	nowInSecs := timeutil.Now().Unix()
-	// Test with end = now; should give the same results as get all.
-	testPath(fmt.Sprintf("combinedstmts?end=%d", nowInSecs), expectedStatements)
-	// Test with start = 1 hour ago end = now; should give the same results as get all.
-	testPath(fmt.Sprintf("combinedstmts?start=%d&end=%d", nowInSecs-3600, nowInSecs), expectedStatements)
+	oneMinAfterAggregatedTs := aggregatedTs + 60
+	// Test with end = 1 min after aggregatedTs; should give the same results as get all.
+	testPath(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements)
+	// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
+	testPath(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements)
+	// Test with start = 1 min after aggregatedTs; should give no results
+	testPath(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil)
 }
 
 func TestListSessionsSecurity(t *testing.T) {
