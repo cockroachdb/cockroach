@@ -22,7 +22,7 @@ var DummyVars = map[string]sessionVar{
 		func(evalCtx *extendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSeqScan)
 		},
-		func(m *sessionDataMutator, v bool) {
+		func(m sessionDataMutator, v bool) {
 			m.SetEnableSeqScan(v)
 		},
 		func(sv *settings.Values) string { return "on" },
@@ -32,7 +32,7 @@ var DummyVars = map[string]sessionVar{
 		func(evalCtx *extendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().SynchronousCommit)
 		},
-		func(m *sessionDataMutator, v bool) {
+		func(m sessionDataMutator, v bool) {
 			m.SetSynchronousCommit(v)
 		},
 		func(sv *settings.Values) string { return "on" },

@@ -142,7 +142,7 @@ func (n *setVarNode) startExec(params runParams) error {
 // applyOnSessionDataMutators applies the given function on the relevant
 // sessionDataMutators.
 func (p *planner) applyOnSessionDataMutators(
-	ctx context.Context, local bool, applyFunc func(m *sessionDataMutator) error,
+	ctx context.Context, local bool, applyFunc func(m sessionDataMutator) error,
 ) error {
 	if local {
 		// We don't allocate a new SessionData object on implicit transactions.
@@ -254,7 +254,7 @@ func timeZoneVarGetStringVal(
 	return loc.String(), nil
 }
 
-func timeZoneVarSet(_ context.Context, m *sessionDataMutator, s string) error {
+func timeZoneVarSet(_ context.Context, m sessionDataMutator, s string) error {
 	loc, err := timeutil.TimeZoneStringToLocation(
 		s,
 		timeutil.TimeZoneStringToLocationISO8601Standard,
@@ -326,7 +326,7 @@ func validateTimeoutVar(
 	return timeout, nil
 }
 
-func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+func stmtTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
 		s,
@@ -340,7 +340,7 @@ func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) err
 	return nil
 }
 
-func lockTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+func lockTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
 		s,
@@ -354,7 +354,7 @@ func lockTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) err
 	return nil
 }
 
-func idleInSessionTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+func idleInSessionTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
 		s,
@@ -369,7 +369,7 @@ func idleInSessionTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s st
 }
 
 func idleInTransactionSessionTimeoutVarSet(
-	ctx context.Context, m *sessionDataMutator, s string,
+	ctx context.Context, m sessionDataMutator, s string,
 ) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
