@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // CollectionFactory is used to construct a new Collection.
@@ -43,14 +42,18 @@ func NewCollectionFactory(
 }
 
 // MakeCollection constructs a Collection for the purposes of embedding.
-func (cf *CollectionFactory) MakeCollection(sessionDataStack *sessiondata.Stack) Collection {
+func (cf *CollectionFactory) MakeCollection(
+	temporarySchemaProvider TemporarySchemaProvider,
+) Collection {
 	return makeCollection(
-		cf.leaseMgr, cf.settings, cf.hydratedTables, cf.virtualSchemas, sessionDataStack,
+		cf.leaseMgr, cf.settings, cf.hydratedTables, cf.virtualSchemas, temporarySchemaProvider,
 	)
 }
 
 // NewCollection constructs a new Collection.
-func (cf *CollectionFactory) NewCollection(sessionDataStack *sessiondata.Stack) *Collection {
-	c := cf.MakeCollection(sessionDataStack)
+func (cf *CollectionFactory) NewCollection(
+	temporarySchemaProvider TemporarySchemaProvider,
+) *Collection {
+	c := cf.MakeCollection(temporarySchemaProvider)
 	return &c
 }
