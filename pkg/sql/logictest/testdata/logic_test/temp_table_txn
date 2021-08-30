@@ -1,14 +1,20 @@
-# Tests creating temp tables in an explicit transaction.
+# Tests creating temp tables in an explicit transaction and whilst retrying the
+# transactions.
 # This tests the stack behavior with SET LOCAL and must be done on a
-# new connection.
+# new connection as this will populate the temp_table structure for the
+# first time.
 
 statement ok
 SET experimental_enable_temp_tables=true
 
 statement ok
 BEGIN;
-CREATE TEMP TABLE tbl (a int);
+CREATE TEMP TABLE tbl (a int primary key);
+INSERT INTO tbl VALUES (1);
+SELECT crdb_internal.force_retry('1s');
 COMMIT
 
-statement ok
+query I
 SELECT * FROM tbl
+----
+1
