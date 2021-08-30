@@ -294,10 +294,6 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
 	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
-
-	const minQPS = 800
-	const maxQPS = 1200
-
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
 	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -354,13 +350,15 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		loadRanges(rr, s, []testRange{{voters: tc.storeIDs, qps: tc.qps}})
-		hottestRanges := rr.topQPS()
-		_, target, _ := sr.chooseLeaseToTransfer(ctx, &hottestRanges, &localDesc, storeList, storeMap)
-		if target.StoreID != tc.expectTarget {
-			t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
-				target.StoreID, tc.storeIDs, tc.qps, tc.expectTarget)
-		}
+		t.Run("", func(t *testing.T) {
+			loadRanges(rr, s, []testRange{{voters: tc.storeIDs, qps: tc.qps}})
+			hottestRanges := rr.topQPS()
+			_, target, _ := sr.chooseLeaseToTransfer(ctx, &hottestRanges, &localDesc, storeList, storeMap)
+			if target.StoreID != tc.expectTarget {
+				t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
+					target.StoreID, tc.storeIDs, tc.qps, tc.expectTarget)
+			}
+		})
 	}
 }
 
