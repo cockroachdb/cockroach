@@ -124,6 +124,8 @@ func (g *execgenTool) generate(path string, entry entry) error {
 		if err != nil {
 			return err
 		}
+		// Delete execgen_template build tag.
+		inputFileBytes = bytes.ReplaceAll(inputFileBytes, []byte("// +build execgen_template"), []byte{})
 		inputFileContents, err = execgen.Generate(string(inputFileBytes))
 		if err != nil {
 			return err
