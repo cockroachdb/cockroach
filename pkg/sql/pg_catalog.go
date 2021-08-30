@@ -468,11 +468,16 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 	schema: vtable.PGCatalogAuthID,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, noLogin bool, rolValidUntil *time.Time) error {
+		return forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, _ tree.Datum) error {
 			isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
 			isRoleDBool := tree.DBool(isRole)
-			roleCanLogin := tree.DBool(!noLogin)
+			roleCanLogin := tree.DBool(!options.noLogin())
+			createDB := tree.DBool(options.createDB())
 			roleValidUntilValue := tree.DNull
+			rolValidUntil, err := options.validUntil(p)
+			if err != nil {
+				return err
+			}
 			if rolValidUntil != nil {
 				var err error
 				roleValidUntilValue, err = tree.MakeDTimestampTZ(*rolValidUntil, time.Second)
@@ -487,7 +492,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				tree.MakeDBool(isRoot),               // rolsuper
 				tree.MakeDBool(isRoleDBool),          // rolinherit. Roles inherit by default.
 				tree.MakeDBool(isRoot),               // rolcreaterole
-				tree.MakeDBool(isRoot),               // rolcreatedb
+				tree.MakeDBool(isRoot || createDB),   // rolcreatedb
 				tree.MakeDBool(roleCanLogin),         // rolcanlogin.
 				tree.DBoolFalse,                      // rolreplication
 				tree.DBoolFalse,                      // rolbypassrls
@@ -2245,11 +2250,16 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 		// include sensitive information such as password hashes.
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username security.SQLUsername, isRole bool, noLogin bool, rolValidUntil *time.Time) error {
+			func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 				isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
 				isRoleDBool := tree.DBool(isRole)
-				roleCanLogin := tree.DBool(!noLogin)
+				roleCanLogin := tree.DBool(!options.noLogin())
+				createDB := tree.DBool(options.createDB())
 				roleValidUntilValue := tree.DNull
+				rolValidUntil, err := options.validUntil(p)
+				if err != nil {
+					return err
+				}
 				if rolValidUntil != nil {
 					var err error
 					roleValidUntilValue, err = tree.MakeDTimestampTZ(*rolValidUntil, time.Second)
@@ -2264,7 +2274,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					tree.MakeDBool(isRoot),               // rolsuper
 					tree.MakeDBool(isRoleDBool),          // rolinherit. Roles inherit by default.
 					tree.MakeDBool(isRoot),               // rolcreaterole
-					tree.MakeDBool(isRoot),               // rolcreatedb
+					tree.MakeDBool(isRoot || createDB),   // rolcreatedb
 					tree.DBoolFalse,                      // rolcatupdate
 					tree.MakeDBool(roleCanLogin),         // rolcanlogin.
 					tree.DBoolFalse,                      // rolreplication
@@ -2272,7 +2282,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					passwdStarString,                     // rolpassword
 					roleValidUntilValue,                  // rolvaliduntil
 					tree.DBoolFalse,                      // rolbypassrls
-					tree.DNull,                           // rolconfig
+					settings,                             // rolconfig
 				)
 			})
 	},
@@ -2876,21 +2886,22 @@ https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username security.SQLUsername, isRole bool, noLogin bool, rolValidUntil *time.Time) error {
+			func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 				if isRole {
 					return nil
 				}
 				isRoot := tree.DBool(username.IsRootUser())
+				createDB := tree.DBool(options.createDB())
 				return addRow(
 					tree.NewDName(username.Normalized()), // usename
 					h.UserOid(username),                  // usesysid
-					tree.MakeDBool(isRoot),               // usecreatedb
+					tree.MakeDBool(isRoot || createDB),   // usecreatedb
 					tree.MakeDBool(isRoot),               // usesuper
 					tree.DBoolFalse,                      // userepl
 					tree.DBoolFalse,                      // usebypassrls
 					passwdStarString,                     // passwd
 					tree.DNull,                           // valuntil
-					tree.DNull,                           // useconfig
+					settings,                             // useconfig
 				)
 			})
 	},

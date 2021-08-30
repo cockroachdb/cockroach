@@ -12,7 +12,9 @@ package sql
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"sort"
 	"strconv"
 	"strings"
@@ -2470,30 +2472,54 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	return nil
 }
 
+type roleOptions map[string]string
+
+func (r roleOptions) noLogin() bool {
+	_, noLogin := r["NOLOGIN"]
+	return noLogin
+}
+
+func (r roleOptions) validUntil(p *planner) (*time.Time, error) {
+	rolValidUntilStr, ok := r["VALID UNTIL"]
+	var rolValidUntil *time.Time = nil
+	if ok {
+		validUntil, _, err := pgdate.ParseTimestamp(
+			p.EvalContext().GetRelativeParseTime(),
+			p.EvalContext().GetDateStyle(),
+			rolValidUntilStr,
+		)
+		rolValidUntil = &validUntil
+		if err != nil {
+			return nil, errors.Errorf("rolValidUntil string %s could not be parsed", rolValidUntilStr)
+		}
+	}
+	return rolValidUntil, nil
+}
+
+func (r roleOptions) createDB() bool {
+	_, createDB := r["CREATEDB"]
+	return createDB
+}
+
 func forEachRole(
 	ctx context.Context,
 	p *planner,
-	fn func(username security.SQLUsername, isRole bool, noLogin bool, rolValidUntil *time.Time) error,
+	fn func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error,
 ) error {
 	query := `
 SELECT
 	u.username,
 	"isRole",
-	EXISTS(
-		SELECT
-			option
-		FROM
-			system.role_options AS r
-		WHERE
-			r.username = u.username AND option = 'NOLOGIN'
-	)
-		AS nologin,
-	ro.value::TIMESTAMPTZ AS rolvaliduntil
+  drs.settings,
+	json_object_agg(COALESCE(ro.option, 'null'), ro.value)::TEXT
 FROM
 	system.users AS u
 	LEFT JOIN system.role_options AS ro ON
 			ro.username = u.username
-			AND option = 'VALID UNTIL';
+  LEFT JOIN system.database_role_settings AS drs ON 
+			drs.role_name = u.username
+GROUP BY
+	u.username, "isRole", drs.settings;
 `
 	// For some reason, using the iterator API here causes privilege_builtins
 	// logic test fail in 3node-tenant config with 'txn already encountered an
@@ -2512,24 +2538,35 @@ FROM
 		if !ok {
 			return errors.Errorf("isRole should be a boolean value, found %s instead", row[1].ResolvedType())
 		}
-		noLogin, ok := row[2].(*tree.DBool)
+
+		drsSettings := row[2]
+		roleOptionsJson, ok := row[3].(*tree.DString)
 		if !ok {
-			return errors.Errorf("noLogin should be a boolean value, found %s instead", row[2].ResolvedType())
+			return errors.Errorf("roleOptionJson should be a string value, found % instead", row[3].ResolvedType())
 		}
-		var rolValidUntil *time.Time
-		if rolValidUntilDatum, ok := row[3].(*tree.DTimestampTZ); ok {
-			rolValidUntil = &rolValidUntilDatum.Time
-		} else if row[3] != tree.DNull {
-			return errors.Errorf("rolValidUntil should be a timestamp or null value, found %s instead", row[3].ResolvedType())
+		options, err := unmarshallRoleOption(roleOptionsJson)
+		if err != nil {
+			return errors.Errorf("roleOptionJson could not be parsed.")
 		}
+
 		// system tables already contain normalized usernames.
 		username := security.MakeSQLUsernameFromPreNormalizedString(string(usernameS))
-		if err := fn(username, bool(*isRole), bool(*noLogin), rolValidUntil); err != nil {
+		if err := fn(username, bool(*isRole), options, drsSettings); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func unmarshallRoleOption(roleOptionsJson *tree.DString) (roleOptions, error) {
+	options := roleOptions{}
+	if roleOptionsJson != nil {
+		if err := json.Unmarshal([]byte(*roleOptionsJson), &options); err != nil {
+			return nil, err
+		}
+	}
+	return options, nil
 }
 
 func forEachRoleMembership(
