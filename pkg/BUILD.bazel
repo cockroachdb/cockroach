@@ -84,6 +84,7 @@ ALL_TESTS = [
     "//pkg/cmd/roachtest/spec:spec_test",
     "//pkg/cmd/roachtest/tests:tests_test",
     "//pkg/cmd/roachtest:roachtest_test",
+    "//pkg/cmd/tag-merged-pr:tag-merged-pr_test",
     "//pkg/cmd/teamcity-trigger:teamcity-trigger_test",
     "//pkg/cmd/testfilter:testfilter_test",
     "//pkg/col/coldata:coldata_test",
