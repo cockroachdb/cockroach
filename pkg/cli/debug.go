@@ -1410,11 +1410,12 @@ var DebugCmdsForRocksDB = []*cobra.Command{
 	debugCheckStoreCmd,
 	debugCompactCmd,
 	debugGCCmd,
+	debugIntentCount,
 	debugKeysCmd,
 	debugRaftLogCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
-	debugIntentCount,
+	debugUnsafeRemoveDeadReplicasCmd,
 }
 
 // All other debug commands go here.
@@ -1428,7 +1429,6 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugTimeSeriesDumpCmd,
 	debugSyncBenchCmd,
 	debugSyncTestCmd,
-	debugUnsafeRemoveDeadReplicasCmd,
 	debugEnvCmd,
 	debugZipCmd,
 	debugMergeLogsCmd,

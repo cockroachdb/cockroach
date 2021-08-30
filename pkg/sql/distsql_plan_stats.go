@@ -44,7 +44,7 @@ const histogramSamples = 10000
 // stats collection, used when creating statistics AS OF SYSTEM TIME. The
 // timestamp is advanced during long operations as needed. See TableReaderSpec.
 //
-// The lowest TTL we recommend is 10 minutes. This value must be be lower than
+// The lowest TTL we recommend is 10 minutes. This value must be lower than
 // that.
 var maxTimestampAge = settings.RegisterDurationSetting(
 	"sql.stats.max_timestamp_age",

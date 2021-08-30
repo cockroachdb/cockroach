@@ -13,6 +13,7 @@ package admission
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"testing"
@@ -383,6 +384,26 @@ func TestIOLoadListener(t *testing.T) {
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
+}
+
+func TestIOLoadListenerOverflow(t *testing.T) {
+	req := &testRequesterForIOLL{}
+	kvGranter := &testGranterWithIOTokens{}
+	st := cluster.MakeTestingClusterSettings()
+	ioll := ioLoadListener{
+		settings:    st,
+		kvRequester: req,
+	}
+	ioll.mu.Mutex = &syncutil.Mutex{}
+	ioll.mu.kvGranter = kvGranter
+	for i := int64(0); i < adjustmentInterval; i++ {
+		// Override the totalTokens manually to trigger the overflow bug.
+		ioll.totalTokens = math.MaxInt64 - i
+		ioll.tokensAllocated = 0
+		for j := 0; j < adjustmentInterval; j++ {
+			ioll.allocateTokensTick()
+		}
+	}
 }
 
 // TODO(sumeer):
