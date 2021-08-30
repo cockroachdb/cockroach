@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { match } from "react-router-dom";
 import { storiesOf } from "@storybook/react";
+import { History, createMemoryHistory } from "history";
 import _ from "lodash";
 
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
@@ -23,6 +25,14 @@ import {
   DatabaseDetailsPageProps,
 } from "./databaseDetailsPage";
 
+const fakeHistory: History = createMemoryHistory();
+const fakeMatch: match = {
+  params: {},
+  isExact: true,
+  path: "",
+  url: "",
+};
+
 const withLoadingIndicator: DatabaseDetailsPageProps = {
   loading: true,
   loaded: false,
@@ -31,6 +41,9 @@ const withLoadingIndicator: DatabaseDetailsPageProps = {
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  history: fakeHistory,
+  location: fakeHistory.location,
+  match: fakeMatch,
 };
 
 const withoutData: DatabaseDetailsPageProps = {
@@ -41,6 +54,9 @@ const withoutData: DatabaseDetailsPageProps = {
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  history: fakeHistory,
+  location: fakeHistory.location,
+  match: fakeMatch,
 };
 
 const withData: DatabaseDetailsPageProps = {
@@ -77,6 +93,9 @@ const withData: DatabaseDetailsPageProps = {
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  history: fakeHistory,
+  location: fakeHistory.location,
+  match: fakeMatch,
 };
 
 storiesOf("Database Details Page", module)

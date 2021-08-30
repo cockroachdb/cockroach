@@ -9,12 +9,22 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { match } from "react-router-dom";
 import { storiesOf } from "@storybook/react";
+import { History, createMemoryHistory } from "history";
 import _ from "lodash";
 
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import { randomName } from "src/storybook/fixtures";
 import { DatabasesPage, DatabasesPageProps } from "./databasesPage";
+
+const fakeHistory: History = createMemoryHistory();
+const fakeMatch: match = {
+  params: {},
+  isExact: true,
+  path: "",
+  url: "",
+};
 
 const withLoadingIndicator: DatabasesPageProps = {
   loading: true,
@@ -23,6 +33,9 @@ const withLoadingIndicator: DatabasesPageProps = {
   refreshDatabases: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableStats: () => {},
+  history: fakeHistory,
+  location: fakeHistory.location,
+  match: fakeMatch,
 };
 
 const withoutData: DatabasesPageProps = {
@@ -32,6 +45,9 @@ const withoutData: DatabasesPageProps = {
   refreshDatabases: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableStats: () => {},
+  history: fakeHistory,
+  location: fakeHistory.location,
+  match: fakeMatch,
 };
 
 const withData: DatabasesPageProps = {
@@ -51,6 +67,9 @@ const withData: DatabasesPageProps = {
   refreshDatabases: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableStats: () => {},
+  history: fakeHistory,
+  location: fakeHistory.location,
+  match: fakeMatch,
 };
 
 storiesOf("Databases Page", module)

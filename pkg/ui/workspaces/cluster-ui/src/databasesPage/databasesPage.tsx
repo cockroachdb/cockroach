@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
 import _ from "lodash";
@@ -22,6 +22,7 @@ import {
   SortSetting,
   SortedTable,
 } from "src/sortedtable";
+import { QueryParams } from "src/sortedtable/queryParams";
 import * as format from "src/util/format";
 
 import styles from "./databasesPage.module.scss";
@@ -93,7 +94,9 @@ export interface DatabasesPageActions {
   refreshTableStats: (database: string, table: string) => void;
 }
 
-export type DatabasesPageProps = DatabasesPageData & DatabasesPageActions;
+export type DatabasesPageProps = DatabasesPageData &
+  DatabasesPageActions &
+  RouteComponentProps;
 
 interface DatabasesPageState {
   pagination: ISortedTablePagination;
@@ -106,18 +109,14 @@ export class DatabasesPage extends React.Component<
   DatabasesPageProps,
   DatabasesPageState
 > {
+  private queryParams: QueryParams;
+
   constructor(props: DatabasesPageProps) {
     super(props);
-
+    this.queryParams = new QueryParams(props.history);
     this.state = {
-      pagination: {
-        current: 1,
-        pageSize: 20,
-      },
-      sortSetting: {
-        ascending: true,
-        columnTitle: null,
-      },
+      pagination: this.queryParams.pagination,
+      sortSetting: this.queryParams.sortSetting,
     };
   }
 
@@ -148,10 +147,12 @@ export class DatabasesPage extends React.Component<
   }
 
   private changePage(current: number) {
-    this.setState({ pagination: { ...this.state.pagination, current } });
+    this.queryParams.pagination = { current, pageSize: 20 };
+    this.setState({ pagination: { current, pageSize: 20 } });
   }
 
   private changeSortSetting(sortSetting: SortSetting) {
+    this.queryParams.sortSetting = sortSetting;
     this.setState({ sortSetting });
   }
 
