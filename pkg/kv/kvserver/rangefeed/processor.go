@@ -247,12 +247,12 @@ func (p *Processor) run(
 				log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 			}
 
-			// Construct the catchupIter before notifying the registration that it
+			// Construct the catchUpIter before notifying the registration that it
 			// has been registered. Note that if the catchUpScan is never run, then
 			// the iterator constructed here will be closed in disconnect.
-			if r.catchupIterConstructor != nil {
-				r.attachCatchUpIter(r.catchupIterConstructor())
-				r.catchupIterConstructor = nil
+			if r.catchUpIterConstructor != nil {
+				r.attachCatchUpIter(r.catchUpIterConstructor())
+				r.catchUpIterConstructor = nil
 			}
 
 			// Add the new registration to the registry.
@@ -402,7 +402,7 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 func (p *Processor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchupIterConstructor IteratorConstructor,
+	catchUpIterConstructor IteratorConstructor,
 	withDiff bool,
 	stream Stream,
 	errC chan<- *roachpb.Error,
@@ -413,7 +413,7 @@ func (p *Processor) Register(
 	p.syncEventC()
 
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchupIterConstructor, withDiff,
+		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
 		p.Config.EventChanCap, p.Metrics, stream, errC,
 	)
 	select {
