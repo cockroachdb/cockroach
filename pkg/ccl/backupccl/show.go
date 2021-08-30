@@ -82,6 +82,8 @@ func (m manifestInfoReader) header() colinfo.ResultColumns {
 	return m.shower.header
 }
 
+// showBackup reads backup info from the manifest, populates the manifestInfoReader,
+//and pipes the information to the user's sql console via the results channel.
 func (m manifestInfoReader) showBackup(
 	ctx context.Context,
 	store cloud.ExternalStorage,
@@ -92,7 +94,19 @@ func (m manifestInfoReader) showBackup(
 	var err error
 	manifests := make([]BackupManifest, len(incPaths)+1)
 	manifests[0], err = ReadBackupManifestFromStore(ctx, store, enc)
+
 	if err != nil {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			latestFileExists, errLatestFile := checkForLatestFileInCollection(ctx, store)
+
+			if errLatestFile == nil && latestFileExists {
+				return errors.WithHintf(err, "The specified path is the root of a backup collection. "+
+					"Use SHOW BACKUPS IN with this path to list all the backup subdirectories in the"+
+					" collection. SHOW BACKUP can be used with any of these subdirectories to inspect a"+
+					" backup.")
+			}
+			return errors.CombineErrors(err, errLatestFile)
+		}
 		return err
 	}
 
@@ -271,11 +285,16 @@ func showBackupPlanHook(
 	return fn, infoReader.header(), nil, false, nil
 }
 
+//backupShower specifies the table that SHOW BACKUP will print to the user's sql console.
+//header contains the schema of the table and fn organizes info from the unmarshalled
+//backup manifest into datums that the results channel can cleanly pipe, row wise,
+//to the console. The plan hook specifies the function, while showBackup calls the function.
 type backupShower struct {
 	header colinfo.ResultColumns
 	fn     func([]BackupManifest) ([]tree.Datums, error)
 }
 
+// backupShowerHeaders: defines the schema for the table presented to the user
 func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.ResultColumns {
 	baseHeaders := colinfo.ResultColumns{
 		{Name: "database_name", Typ: types.String},
