@@ -140,7 +140,6 @@ export const selectStatement = createSelector(
       database: getMatchParamByName(props.match, databaseAttr),
       distSQL: fractionMatching(results, s => s.distSQL),
       vec: fractionMatching(results, s => s.vec),
-      opt: fractionMatching(results, s => s.opt),
       implicit_txn: fractionMatching(results, s => s.implicit_txn),
       full_scan: fractionMatching(results, s => s.full_scan),
       failed: fractionMatching(results, s => s.failed),

@@ -46,7 +46,6 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
   "db":      "{{.String}}",
   "distsql": {{.Bool}},
   "failed":  {{.Bool}},
-  "opt":     {{.Bool}},
   "implicitTxn": {{.Bool}},
   "vec":         {{.Bool}},
   "fullScan":    {{.Bool}}

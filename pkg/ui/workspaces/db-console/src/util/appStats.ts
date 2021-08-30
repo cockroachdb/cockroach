@@ -185,7 +185,6 @@ export interface ExecutionStatistics {
   database: string;
   distSQL: boolean;
   vec: boolean;
-  opt: boolean;
   implicit_txn: boolean;
   full_scan: boolean;
   failed: boolean;
@@ -202,7 +201,6 @@ export function flattenStatementStats(
     database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
     vec: stmt.key.key_data.vec,
-    opt: stmt.key.key_data.opt,
     implicit_txn: stmt.key.key_data.implicit_txn,
     full_scan: stmt.key.key_data.full_scan,
     failed: stmt.key.key_data.failed,
