@@ -224,7 +224,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, db dbGetter, pl planner) {
 
 	step, err := pl.next(ctx)
 	if err != nil {
-		log.Health.Errorf(ctx, "can't make a plan: %v", err)
+		log.Kvprober.Errorf(ctx, "can't make a plan: %v", err)
 		p.metrics.ProbePlanFailures.Inc(1)
 		return
 	}
@@ -253,13 +253,13 @@ func (p *Prober) readProbeImpl(ctx context.Context, db dbGetter, pl planner) {
 	})
 	if err != nil {
 		// TODO(josh): Write structured events with log.Structured.
-		log.Health.Errorf(ctx, "kv.Get(%s), r=%v failed with: %v", step.Key, step.RangeID, err)
+		log.Kvprober.Errorf(ctx, "kv.Get(%s), r=%v failed with: %v", step.Key, step.RangeID, err)
 		p.metrics.ReadProbeFailures.Inc(1)
 		return
 	}
 
 	d := timeutil.Since(start)
-	log.Health.Infof(ctx, "kv.Get(%s), r=%v returned success in %v", step.Key, step.RangeID, d)
+	log.Kvprober.Infof(ctx, "kv.Get(%s), r=%v returned success in %v", step.Key, step.RangeID, d)
 
 	// Latency of failures is not recorded. They are counted as failures tho.
 	p.metrics.ReadProbeLatency.RecordValue(d.Nanoseconds())
@@ -283,7 +283,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, db dbTxner, pl planner) {
 
 	step, err := pl.next(ctx)
 	if err != nil {
-		log.Health.Errorf(ctx, "can't make a plan: %v", err)
+		log.Kvprober.Errorf(ctx, "can't make a plan: %v", err)
 		p.metrics.ProbePlanFailures.Inc(1)
 		return
 	}
@@ -312,13 +312,13 @@ func (p *Prober) writeProbeImpl(ctx context.Context, db dbTxner, pl planner) {
 		})
 	})
 	if err != nil {
-		log.Health.Errorf(ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with: %v", step.Key, step.RangeID, err)
+		log.Kvprober.Errorf(ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with: %v", step.Key, step.RangeID, err)
 		p.metrics.WriteProbeFailures.Inc(1)
 		return
 	}
 
 	d := timeutil.Since(start)
-	log.Health.Infof(ctx, "kv.Txn(Put(%s); Del(-)), r=%v returned success in %v", step.Key, step.RangeID, d)
+	log.Kvprober.Infof(ctx, "kv.Txn(Put(%s); Del(-)), r=%v returned success in %v", step.Key, step.RangeID, d)
 
 	// Latency of failures is not recorded. They are counted as failures tho.
 	p.metrics.WriteProbeLatency.RecordValue(d.Nanoseconds())
