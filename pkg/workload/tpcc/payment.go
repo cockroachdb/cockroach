@@ -162,8 +162,11 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 	}
 
 	// 2.5.1.2: 85% chance of paying through home warehouse, otherwise
-	// remote.
-	if rng.Intn(100) < 85 {
+	// remote. This only applies to the customer update below, and not the
+	// warehouse and district updates.
+	// NOTE: If localWarehouses is set, keep all transactions local. This is for
+	// testing only, as it violates the spec.
+	if p.config.localWarehouses || rng.Intn(100) < 85 {
 		d.cWID = wID
 		d.cDID = d.dID
 	} else {
