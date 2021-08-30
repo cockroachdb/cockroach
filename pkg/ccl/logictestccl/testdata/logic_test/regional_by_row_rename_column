@@ -1,4 +1,4 @@
-# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant
 
 # This test seems to flake (#60717).
 # It seems to hit the codepath:
