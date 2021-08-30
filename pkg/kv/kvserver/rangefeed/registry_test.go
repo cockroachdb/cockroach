@@ -100,19 +100,21 @@ func newTestRegistration(
 ) *testRegistration {
 	s := newTestStream()
 	errC := make(chan *roachpb.Error, 1)
+	r := newRegistration(
+		span,
+		ts,
+		makeIteratorConstructor(catchup),
+		withDiff,
+		5,
+		NewMetrics(),
+		s,
+		errC,
+	)
+	r.maybeConstructCatchUpIter()
 	return &testRegistration{
-		registration: newRegistration(
-			span,
-			ts,
-			makeIteratorConstructor(catchup),
-			withDiff,
-			5,
-			NewMetrics(),
-			s,
-			errC,
-		),
-		stream: s,
-		errC:   errC,
+		registration: r,
+		stream:       s,
+		errC:         errC,
 	}
 }
 
