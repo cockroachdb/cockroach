@@ -1785,14 +1785,10 @@ fuzz: ## Run fuzz tests.
 fuzz: bin/fuzz
 	bin/fuzz $(TESTFLAGS) -tests $(TESTS) -timeout $(TESTTIMEOUT) $(PKG)
 
-# Short hand to re-generate all bazel BUILD files.
-#
-# Even with --symlink_prefix, some sub-command somewhere hardcodes the
-# creation of a "bazel-out" symlink. This bazel-out symlink can only
-# be blocked by the existence of a file before the bazel command is
-# invoked. For now, this is left as an exercise for the user.
-#
-bazel-generate: ## Generate all bazel BUILD files.
+# Short hand to re-generate all bazel BUILD files. (Does the same thing as
+# `./dev generate bazel`.)
+.PHONY: bazel-generate
+bazel-generate:
 	@echo 'Generating DEPS.bzl and BUILD files using gazelle'
 	./build/bazelutil/bazel-generate.sh
 

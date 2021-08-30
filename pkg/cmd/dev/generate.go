@@ -80,8 +80,7 @@ func (d *dev) generateBazel(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	_, err = d.exec.CommandContext(ctx, filepath.Join(workspace, "build", "bazelutil", "bazel-generate.sh"))
-	return err
+	return d.exec.CommandContextInheritingStdStreams(ctx, filepath.Join(workspace, "build", "bazelutil", "bazel-generate.sh"))
 }
 
 func (d *dev) generateDocs(cmd *cobra.Command) error {

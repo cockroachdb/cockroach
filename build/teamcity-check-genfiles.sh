@@ -30,7 +30,7 @@ rm artifacts/buildshort.log
 TEAMCITY_BAZEL_SUPPORT_GENERATE=1  # See teamcity-bazel-support.sh.
 run run_bazel build/bazelutil/bazel-generate.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
 rm artifacts/buildshort.log
-check_clean "Run \`make bazel-generate\` to automatically regenerate these."
+check_clean "Run \`./dev generate bazel\` to automatically regenerate these."
 run build/builder.sh make generate &> artifacts/generate.log || (cat artifacts/generate.log && false)
 rm artifacts/generate.log
 check_clean "Run \`make generate\` to automatically regenerate these."
