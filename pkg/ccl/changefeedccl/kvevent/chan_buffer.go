@@ -39,6 +39,12 @@ func (b *chanBuffer) Add(ctx context.Context, event Event) error {
 	}
 }
 
+// Drain implements Writer interface.
+func (b *chanBuffer) Drain(ctx context.Context) error {
+	// channel buffer is unbuffered.
+	return nil
+}
+
 func (b *chanBuffer) Close(_ context.Context) error {
 	close(b.entriesCh)
 	return nil
