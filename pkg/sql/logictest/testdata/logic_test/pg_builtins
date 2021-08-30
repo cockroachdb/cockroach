@@ -239,3 +239,104 @@ relation does not exist               0
 relation does not exist               false
 relation exists, but column does not  true
 system column                         false
+
+query T
+SELECT current_setting('statement_timeout')
+----
+0
+
+query T
+SELECT current_setting('statement_timeout', false)
+----
+0
+
+# check returns null on unsupported session var.
+query T
+SELECT IFNULL(current_setting('woo', true), 'OK')
+----
+OK
+
+# check that current_setting handles null.
+query T
+SELECT current_setting(NULL, false)
+----
+NULL
+
+# check that multiple settings can be queried at once.
+query TT
+SELECT current_setting('statement_timeout'), current_setting('search_path')
+----
+0  "$user", public
+
+# check error on nonexistent session var.
+query error unrecognized configuration parameter
+SELECT pg_catalog.current_setting('woo', false)
+
+# check error on unsupported session var.
+query error configuration setting.*not supported
+SELECT current_setting('vacuum_cost_delay', false)
+
+query T
+SHOW application_name
+----
+·
+
+query T
+SELECT set_config('application_name', 'woo', false)
+----
+woo
+
+query T
+SHOW application_name
+----
+woo
+
+# check that multiple settings can be set at once
+query TTT
+SELECT
+  set_config('application_name', 'foo', false),
+  set_config('statement_timeout', '60s', false),
+  set_config(NULL, 'foo', false)
+----
+foo  60000  NULL
+
+# check that the value doesn't change with isLocal=true outside of a
+# transaction. Note: in Postgres, set_config returns 'woo' here even though
+# the value doesn't change. This difference doesn't seem too important.
+query T
+SELECT set_config('application_name', 'woo', true)
+----
+foo
+
+query T
+SELECT current_setting('application_name')
+----
+foo
+
+# verify that the setting change is scoped to the transaction with isLocal=true.
+statement ok
+BEGIN
+
+query T
+SELECT set_config('application_name', 'woo', true)
+----
+woo
+
+query TT
+SELECT current_setting('application_name'), current_setting('statement_timeout')
+----
+woo  60000
+
+statement ok
+COMMIT
+
+query T
+SELECT current_setting('application_name')
+----
+foo
+
+query error unrecognized configuration parameter
+SELECT pg_catalog.set_config('woo', 'woo', false)
+
+query error configuration setting.*not supported
+SELECT set_config('vacuum_cost_delay', '0', false)

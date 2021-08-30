@@ -3241,11 +3241,12 @@ type CompactEngineSpanFunc func(
 
 // EvalSessionAccessor is a limited interface to access session variables.
 type EvalSessionAccessor interface {
-	// SetConfig sets a session variable to a new value.
+	// SetSessionVar sets a session variable to a new value. If isLocal is true,
+	// the setting change is scoped to the current transaction (as in SET LOCAL).
 	//
 	// This interface only supports strings as this is sufficient for
 	// pg_catalog.set_config().
-	SetSessionVar(ctx context.Context, settingName, newValue string) error
+	SetSessionVar(ctx context.Context, settingName, newValue string, isLocal bool) error
 
 	// GetSessionVar retrieves the current value of a session variable.
 	GetSessionVar(ctx context.Context, settingName string, missingOk bool) (bool, string, error)
@@ -3253,7 +3254,7 @@ type EvalSessionAccessor interface {
 	// HasAdminRole returns true iff the current session user has the admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
 
-	// HasAdminRole returns nil iff the current session user has the specified
+	// HasRoleOption returns nil iff the current session user has the specified
 	// role option.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 }

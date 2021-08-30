@@ -4597,56 +4597,6 @@ v_x_y_key   NULL
 statement ok
 DROP DATABASE d34862 CASCADE; SET database=test
 
-subtest regression_35108
-
-query T
-SELECT pg_catalog.current_setting('statement_timeout')
-----
-0
-
-query T
-SELECT pg_catalog.current_setting('statement_timeout', false)
-----
-0
-
-# check returns null on unsupported session var.
-query T
-SELECT IFNULL(pg_catalog.current_setting('woo', true), 'OK')
-----
-OK
-
-# check error on nonexistent session var.
-query error unrecognized configuration parameter
-SELECT pg_catalog.current_setting('woo', false)
-
-# check error on unsupported session var.
-query error configuration setting.*not supported
-SELECT pg_catalog.current_setting('vacuum_cost_delay', false)
-
-query T
-SHOW application_name
-----
-·
-
-query T
-SELECT pg_catalog.set_config('application_name', 'woo', false)
-----
-woo
-
-query T
-SHOW application_name
-----
-woo
-
-query error transaction-scoped settings are not supported
-SELECT  pg_catalog.set_config('application_name', 'woo', true)
-
-query error unrecognized configuration parameter
-SELECT  pg_catalog.set_config('woo', 'woo', false)
-
-query error configuration setting.*not supported
-SELECT  pg_catalog.set_config('vacuum_cost_delay', '0', false)
-
 subtest regression_46450
 
 statement ok
