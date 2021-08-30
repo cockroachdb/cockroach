@@ -76,8 +76,15 @@ type tpcc struct {
 	clientPartitions   int
 	affinityPartitions []int
 	wPart              *partitioner
+	wMRPart            *partitioner
 	zoneCfg            zoneConfig
 	multiRegionCfg     multiRegionConfig
+
+	// regionLocal determines whether or not we should keep the entire workload
+	// local to a given region. This is only used for multi-region
+	// configurations and is in violation of the TPC-C spec, so it should only
+	// be used for internal testing purposes.
+	regionLocal bool
 
 	usePostgres  bool
 	serializable bool
@@ -169,6 +176,7 @@ var tpccMeta = workload.Meta{
 			`conns`:              {RuntimeOnly: true},
 			`idle-conns`:         {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`region-local`:       {RuntimeOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -211,6 +219,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		g.flags.BoolVar(&g.separateColumnFamilies, `families`, false, `Use separate column families for dynamic and static columns`)
 		g.flags.BoolVar(&g.replicateStaticColumns, `replicate-static-columns`, false, "Create duplicate indexes for all static columns in district, items and warehouse tables, such that each zone or rack has them locally.")
+		g.flags.BoolVar(&g.regionLocal, `region-local`, false, `Force all transactions to be region-local (in violation of the TPC-C specification)`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
 		// Hardcode this since it doesn't seem like anyone will want to change
@@ -322,8 +331,10 @@ func (w *tpcc) Hooks() workload.Hooks {
 				// This partitioner will not actually be used to partiton the data, but instead
 				// is only used to limit the warehouses the client attempts to manipulate.
 				w.wPart, err = makePartitioner(w.warehouses, w.activeWarehouses, w.clientPartitions)
+				w.wMRPart, err = makeMRPartitioner(w.warehouses, w.activeWarehouses, w.clientPartitions)
 			} else {
 				w.wPart, err = makePartitioner(w.warehouses, w.activeWarehouses, w.partitions)
+				w.wMRPart, err = makeMRPartitioner(w.warehouses, w.activeWarehouses, w.partitions)
 			}
 			if err != nil {
 				return errors.Wrap(err, "error creating partitioner")
@@ -459,7 +470,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			return w.partitionAndScatterWithDB(db)
 		},
 		PostRun: func(startElapsed time.Duration) error {
-			w.auditor.runChecks()
+			w.auditor.runChecks(w.regionLocal)
 			const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader)
 
@@ -792,8 +803,8 @@ func (w *tpcc) Ops(
 
 	} else {
 		// This is making some assumptions about how racks are handed out.
-		// If we have more than one affinityPartion then we assume that the URLs
-		// are mapped to partitions in a round-robin fashion.
+		// If we have more than one affinityPartition then we assume that the
+		// URLs are mapped to partitions in a round-robin fashion.
 		// Imagine there are 5 partitions and 15 urls, this code assumes that urls
 		// 0, 5, and 10 correspond to the 0th partition.
 		for i, db := range dbs {
@@ -844,8 +855,16 @@ func (w *tpcc) Ops(
 	sem := make(chan struct{}, 100)
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
 		workerIdx := workerIdx
-		warehouse := w.wPart.totalElems[workerIdx%len(w.wPart.totalElems)]
-		p := w.wPart.partElemsMap[warehouse]
+		var warehouse int
+		var p int
+		if len(w.multiRegionCfg.regions) == 0 {
+			warehouse = w.wPart.totalElems[workerIdx%len(w.wPart.totalElems)]
+			p = w.wPart.partElemsMap[warehouse]
+		} else {
+			// For multi-region workloads, use the multi-region partitioning.
+			warehouse = w.wMRPart.totalElems[workerIdx%len(w.wMRPart.totalElems)]
+			p = w.wMRPart.partElemsMap[warehouse]
+		}
 
 		// This isn't part of our local partition.
 		if !isMyPart(p) {
