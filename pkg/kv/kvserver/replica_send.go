@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -277,6 +278,19 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 	}
 }
 
+func (r *Replica) maybeThrottleRequestPreLatch(ctx context.Context, ba *roachpb.BatchRequest) limit.Reservation {
+	switch {
+	case ba.IsSingleScanInterleavedIntentsRequest():
+		reservation, err := batcheval.ThrottleScanInterleavedIntents(ctx, r.StoreID())
+		if err != nil {
+			return nil
+		}
+		return reservation
+	default:
+		return nil
+	}
+}
+
 // batchExecutionFn is a method on Replica that executes a BatchRequest. It is
 // called with the batch, along with a guard for the latches protecting the
 // request.
@@ -334,6 +348,11 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 
 	// Handle load-based splitting.
 	r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
+
+	// Handle any request-specific pre-latch throttles.
+	if res := r.maybeThrottleRequestPreLatch(ctx, ba); res != nil {
+		defer res.Release()
+	}
 
 	// Try to execute command; exit retry loop on success.
 	var g *concurrency.Guard
