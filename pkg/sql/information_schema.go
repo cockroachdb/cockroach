@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/collate"
 )
@@ -2470,30 +2471,101 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	return nil
 }
 
+type roleOptions struct {
+	*tree.DJSON
+}
+
+func (r roleOptions) noLogin() (tree.DBool, error) {
+	nologin, err := r.Exists("NOLOGIN")
+	return tree.DBool(nologin), err
+}
+
+func (r roleOptions) validUntil(
+	p *planner, tsFunction func(*time.Time) (tree.Datum, error),
+) (tree.Datum, error) {
+	const validUntilKey = "VALID UNTIL"
+	exists, err := r.Exists(validUntilKey)
+	if err != nil {
+		return nil, err
+	}
+
+	var rolValidUntil *time.Time = nil
+	if exists {
+		val, err := r.FetchValKey(validUntilKey)
+		if err != nil {
+			return nil, err
+		}
+		valStr, err := val.AsText()
+		if err != nil {
+			return nil, err
+		}
+
+		validUntil, _, err := pgdate.ParseTimestamp(
+			p.EvalContext().GetRelativeParseTime(),
+			pgdate.DefaultDateStyle(),
+			*valStr,
+		)
+		if err != nil {
+			return nil, errors.Errorf("rolValidUntil string %s could not be parsed with datestyle %s", valStr, p.EvalContext().GetDateStyle())
+		}
+		rolValidUntil = &validUntil
+	}
+	return tsFunction(rolValidUntil)
+}
+
+func timeToDTimestamp(ts *time.Time) (tree.Datum, error) {
+	var err error
+	value := tree.DNull
+	if ts != nil {
+		value, err = tree.MakeDTimestamp(*ts, time.Second)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return value, nil
+}
+
+func timeToDTimestampTZ(ts *time.Time) (tree.Datum, error) {
+	var err error
+	value := tree.DNull
+	if ts != nil {
+		value, err = tree.MakeDTimestampTZ(*ts, time.Second)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return value, nil
+}
+
+func (r roleOptions) createDB() (tree.DBool, error) {
+	createDB, err := r.Exists("CREATEDB")
+	return tree.DBool(createDB), err
+}
+
+func (r roleOptions) createRole() (tree.DBool, error) {
+	createRole, err := r.Exists("CREATEROLE")
+	return tree.DBool(createRole), err
+}
+
 func forEachRole(
 	ctx context.Context,
 	p *planner,
-	fn func(username security.SQLUsername, isRole bool, noLogin bool, rolValidUntil *time.Time) error,
+	fn func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error,
 ) error {
 	query := `
 SELECT
 	u.username,
 	"isRole",
-	EXISTS(
-		SELECT
-			option
-		FROM
-			system.role_options AS r
-		WHERE
-			r.username = u.username AND option = 'NOLOGIN'
-	)
-		AS nologin,
-	ro.value::TIMESTAMPTZ AS rolvaliduntil
+  drs.settings,
+	json_object_agg(COALESCE(ro.option, 'null'), ro.value)
 FROM
 	system.users AS u
 	LEFT JOIN system.role_options AS ro ON
 			ro.username = u.username
-			AND option = 'VALID UNTIL';
+  LEFT JOIN system.database_role_settings AS drs ON 
+			drs.role_name = u.username
+GROUP BY
+	u.username, "isRole", drs.settings;
 `
 	// For some reason, using the iterator API here causes privilege_builtins
 	// logic test fail in 3node-tenant config with 'txn already encountered an
@@ -2512,19 +2584,17 @@ FROM
 		if !ok {
 			return errors.Errorf("isRole should be a boolean value, found %s instead", row[1].ResolvedType())
 		}
-		noLogin, ok := row[2].(*tree.DBool)
+
+		defaultSettings := row[2]
+		roleOptionsJSON, ok := row[3].(*tree.DJSON)
 		if !ok {
-			return errors.Errorf("noLogin should be a boolean value, found %s instead", row[2].ResolvedType())
+			return errors.Errorf("roleOptionJson should be a JSON value, found % instead", row[3].ResolvedType())
 		}
-		var rolValidUntil *time.Time
-		if rolValidUntilDatum, ok := row[3].(*tree.DTimestampTZ); ok {
-			rolValidUntil = &rolValidUntilDatum.Time
-		} else if row[3] != tree.DNull {
-			return errors.Errorf("rolValidUntil should be a timestamp or null value, found %s instead", row[3].ResolvedType())
-		}
+		options := roleOptions{roleOptionsJSON}
+
 		// system tables already contain normalized usernames.
 		username := security.MakeSQLUsernameFromPreNormalizedString(string(usernameS))
-		if err := fn(username, bool(*isRole), bool(*noLogin), rolValidUntil); err != nil {
+		if err := fn(username, bool(*isRole), options, defaultSettings); err != nil {
 			return err
 		}
 	}
