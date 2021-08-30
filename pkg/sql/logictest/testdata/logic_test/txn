@@ -1095,3 +1095,50 @@ SET SESSION CHARACTERISTICS AS TRANSACTION NOT DEFERRABLE
 
 statement error pq: unimplemented: DEFERRABLE transactions
 SET SESSION CHARACTERISTICS AS TRANSACTION DEFERRABLE
+
+# Test retry rewinds correctly.
+
+statement ok
+SET intervalstyle_enabled = on;
+SET intervalstyle = 'postgres';
+CREATE TABLE rewind_session_test (s string primary key);
+
+statement ok
+BEGIN;
+INSERT INTO rewind_session_test VALUES ('1 day 01:02:03'::interval::string);
+SET intervalstyle = 'iso_8601';
+INSERT INTO rewind_session_test VALUES ('1 day 01:02:04'::interval::string);
+SELECT crdb_internal.force_retry('10ms');
+COMMIT
+
+query T
+SELECT s FROM rewind_session_test ORDER BY s
+----
+1 day 01:02:03
+P1DT1H2M4S
+
+query T
+SHOW intervalstyle
+----
+iso_8601
+
+statement ok
+TRUNCATE rewind_session_test;
+SET intervalstyle = 'postgres';
+BEGIN;
+INSERT INTO rewind_session_test VALUES ('1 day 01:02:03'::interval::string);
+SET LOCAL intervalstyle = 'iso_8601';
+INSERT INTO rewind_session_test VALUES ('1 day 01:02:04'::interval::string);
+SELECT crdb_internal.force_retry('10ms');
+COMMIT
+
+query T
+SELECT s FROM rewind_session_test ORDER BY s
+----
+1 day 01:02:03
+P1DT1H2M4S
+
+query T
+SHOW intervalstyle
+----
+postgres

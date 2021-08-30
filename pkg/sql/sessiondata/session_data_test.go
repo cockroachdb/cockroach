@@ -33,26 +33,26 @@ func TestStack(t *testing.T) {
 			ApplicationName: "t-marts",
 		},
 	}
-	s := NewStack(initialElem)
+	s := NewStack(initialElem.Clone())
 	require.Equal(t, s.Top(), initialElem)
 	require.EqualError(t, s.Pop(), "there must always be at least one element in the SessionData stack")
 	require.Equal(t, s.Elems(), []*SessionData{initialElem})
 
-	s.Push(secondElem)
-	require.Equal(t, s.Top(), secondElem)
-	s.Push(thirdElem)
-	require.Equal(t, s.Top(), thirdElem)
+	s.Push(secondElem.Clone())
+	require.Equal(t, s.Top(), secondElem.Clone())
+	s.Push(thirdElem.Clone())
+	require.Equal(t, s.Top(), thirdElem.Clone())
 	require.Equal(t, s.Elems(), []*SessionData{initialElem, secondElem, thirdElem})
 
 	require.NoError(t, s.Pop())
-	require.Equal(t, s.Top(), secondElem)
+	require.Equal(t, s.Top(), secondElem.Clone())
 	require.NoError(t, s.Pop())
-	require.Equal(t, s.Top(), initialElem)
+	require.Equal(t, s.Top(), initialElem.Clone())
 	require.EqualError(t, s.Pop(), "there must always be at least one element in the SessionData stack")
 	require.Equal(t, s.Elems(), []*SessionData{initialElem})
 
-	s.Push(secondElem)
-	s.Push(thirdElem)
+	s.Push(secondElem.Clone())
+	s.Push(thirdElem.Clone())
 	s.PushTopClone()
 	require.Equal(t, s.Elems(), []*SessionData{initialElem, secondElem, thirdElem, thirdElem})
 	c := s.Clone()
@@ -62,11 +62,24 @@ func TestStack(t *testing.T) {
 	require.Equal(t, s.Elems(), []*SessionData{initialElem})
 	require.Equal(t, c.Elems(), []*SessionData{initialElem, secondElem, thirdElem, thirdElem})
 
-	s.Push(secondElem)
-	s.Push(thirdElem)
+	s.Push(secondElem.Clone())
+	s.Push(thirdElem.Clone())
+	copyStack := s.Clone()
 	require.Error(t, s.PopN(3), "there must always be at least one element in the SessionData stack")
 	require.NoError(t, s.PopN(2))
 	require.Equal(t, s.Elems(), []*SessionData{initialElem})
 
+	require.Equal(t, s.Base(), initialElem)
+
+	s.Top().Database = "some other value"
+	s.Replace(copyStack)
+	require.Equal(t, s.Elems(), []*SessionData{initialElem, secondElem, thirdElem})
+	require.Equal(t, s.Base(), initialElem)
+
+	copyStack.Top().Database = "some other value"
+	s.Replace(copyStack)
+	copiedElem := thirdElem
+	copiedElem.Database = "some other value"
+	require.Equal(t, s.Elems(), []*SessionData{initialElem, secondElem, copiedElem})
 	require.Equal(t, s.Base(), initialElem)
 }

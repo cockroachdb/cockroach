@@ -222,7 +222,14 @@ func (s *Stack) Clone() *Stack {
 	for i, st := range s.stack {
 		ret.stack[i] = st.Clone()
 	}
+	ret.base = ret.stack[0]
 	return ret
+}
+
+// Replace replaces the current stack with the provided stack.
+func (s *Stack) Replace(repl *Stack) {
+	// Replace with a clone, as the same stack savepoint can be re-used.
+	*s = *repl.Clone()
 }
 
 // Top returns the top element of the stack.
