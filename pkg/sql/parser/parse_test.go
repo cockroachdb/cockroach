@@ -63,16 +63,16 @@ func TestParseDatadriven(t *testing.T) {
 				// first the literals are removed from statement to form a stat key,
 				// then the stat key is re-parsed, to undergo the anonymization stage.
 				// We also want to check the re-parsing is fine.
-				//
-				// TODO(knz,rafiss): Turn the following two cases into proper test
-				// errors once the bugs are fixed.
 				reparsedStmts, err := parser.Parse(constantsHidden)
 				if err != nil {
-					fmt.Fprintln(&buf, "REPARSE WITHOUT LITERALS FAILS:", err)
+					d.Fatalf(t, "unexpected error when reparsing without literals: %+v", err)
 				} else {
 					reparsedStmtsS := reparsedStmts.String()
 					if reparsedStmtsS != constantsHidden {
-						fmt.Fprintln(&buf, reparsedStmtsS, "-- UNEXPECTED REPARSED AST WITHOUT LITERALS")
+						d.Fatalf(t,
+							"mismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
+							d.Input, constantsHidden, reparsedStmtsS,
+						)
 					}
 				}
 

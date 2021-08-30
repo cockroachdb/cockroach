@@ -503,11 +503,15 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 	opStr := node.Operator.String()
 	// IS and IS NOT are equivalent to IS NOT DISTINCT FROM and IS DISTINCT
 	// FROM, respectively, when the RHS is true or false. We prefer the less
-	// verbose IS and IS NOT in those cases.
-	if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
-		opStr = "IS NOT"
-	} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
-		opStr = "IS"
+	// verbose IS and IS NOT in those cases, unless we are in FmtHideConstants
+	// mode. In that mode we need the more verbose form in order to be able
+	// to re-parse the statement when reporting telemetry.
+	if !ctx.HasFlags(FmtHideConstants) {
+		if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+			opStr = "IS NOT"
+		} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+			opStr = "IS"
+		}
 	}
 	if node.Operator.Symbol.HasSubOperator() {
 		binExprFmtWithParenAndSubOp(ctx, node.Left, node.SubOperator.String(), opStr, node.Right)
