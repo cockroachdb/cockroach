@@ -766,7 +766,15 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 				// Re-write the intent with a higher timestamp.
 				txn.WriteTimestamp = ts3
 				txn.Sequence = 2
-				return MVCCPut(ctx, e, nil, kA, ts1, vA2, txn)
+				// Use a batch since MVCCPut is not atomic when using an Engine and we
+				// are not using latches to prevent a concurrent read in the other
+				// goroutine. A non-atomic Put can cause the strict invariant checking
+				// in intentInterleavingIter to be violated.
+				b := e.NewBatch()
+				if err := MVCCPut(ctx, b, nil, kA, ts1, vA2, txn); err != nil {
+					return err
+				}
+				return b.Commit(false)
 			})
 			g.Go(func() error {
 				// Iterate with a time range that includes the initial intent but does
