@@ -58,7 +58,7 @@ func newRowFetcherCache(
 	return &rowFetcherCache{
 		codec:      codec,
 		leaseMgr:   leaseMgr,
-		collection: cf.NewCollection(nil /* sessionDataStack */),
+		collection: cf.NewCollection(nil /* TemporarySchemaProvider */),
 		db:         db,
 		fetchers:   make(map[idVersion]*row.Fetcher),
 	}
