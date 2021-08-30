@@ -78,6 +78,7 @@ go_library(
         "//pkg/util/tracing",
         "@com_github_cockroachdb_apd_v2//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_marusama_semaphore//:semaphore",
     ],
 )
