@@ -823,7 +823,7 @@ CREATE TABLE pg_catalog.pg_user (
 	userepl  BOOL,
 	usebypassrls BOOL,
 	passwd TEXT,
-	valuntil TIMESTAMP,
+	valuntil TIMESTAMPTZ,
 	useconfig TEXT[]
 )`
 
