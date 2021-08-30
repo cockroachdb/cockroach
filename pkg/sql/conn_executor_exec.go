@@ -818,7 +818,7 @@ func (ex *connExecutor) commitSQLTransaction(
 		return ex.makeErrEvent(err, ast)
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndTransactionCommit, timeutil.Now())
-	if err := ex.reportParamStatusUpdateChanges(func() error {
+	if err := ex.reportSessionDataChanges(func() error {
 		ex.sessionDataStack.PopAll()
 		return nil
 	}); err != nil {
@@ -827,15 +827,12 @@ func (ex *connExecutor) commitSQLTransaction(
 	return eventTxnFinishCommitted{}, nil
 }
 
-// reportParamStatusUpdateChanges reports param status update changes after the
-// given fn has been executed.
-func (ex *connExecutor) reportParamStatusUpdateChanges(fn func() error) error {
+// reportSessionDataChanges reports ParamStatusUpdate changes and re-calls
+// and relevant session data callbacks after the given fn has been executed.
+func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 	before := ex.sessionDataStack.Top()
 	if err := fn(); err != nil {
 		return err
-	}
-	if ex.dataMutatorIterator.paramStatusUpdater == nil {
-		return nil
 	}
 	after := ex.sessionDataStack.Top()
 	for _, param := range bufferableParamStatusUpdates {
@@ -854,6 +851,9 @@ func (ex *connExecutor) reportParamStatusUpdateChanges(fn func() error) error {
 				afterVal,
 			)
 		}
+	}
+	if before.ApplicationName != after.ApplicationName && ex.dataMutatorIterator.onApplicationNameChange != nil {
+		ex.dataMutatorIterator.onApplicationNameChange(after.ApplicationName)
 	}
 	return nil
 }
@@ -918,7 +918,7 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
-	if err := ex.reportParamStatusUpdateChanges(func() error {
+	if err := ex.reportSessionDataChanges(func() error {
 		ex.sessionDataStack.PopAll()
 		return nil
 	}); err != nil {

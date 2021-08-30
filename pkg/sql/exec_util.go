@@ -2507,15 +2507,6 @@ type sessionDataMutatorBase struct {
 	settings *cluster.Settings
 }
 
-// RegisterOnSessionDataChange adds a listener to execute when a change on the
-// given key is made using the mutator object.
-func (it *sessionDataMutatorIterator) RegisterOnSessionDataChange(key string, f func(val string)) {
-	if it.onSessionDataChangeListeners == nil {
-		it.onSessionDataChangeListeners = make(map[string][]func(val string))
-	}
-	it.onSessionDataChangeListeners[key] = append(it.onSessionDataChangeListeners[key], f)
-}
-
 // sessionDataMutatorCallbacks contains elements in a sessionDataMutator
 // which are only populated when mutating the "top" sessionData element.
 // It is intended for functions which should only be called once per SET
@@ -2533,9 +2524,8 @@ type sessionDataMutatorCallbacks struct {
 	// on the search path (the first and only time).
 	// It can be nil, in which case nothing triggers on execution.
 	onTempSchemaCreation func()
-	// onSessionDataChangeListeners stores all the observers to execute when
-	// session data is modified, keyed by the value to change on.
-	onSessionDataChangeListeners map[string][]func(val string)
+	// onApplicationName is called when the application name changes.
+	onApplicationNameChange func(string)
 }
 
 // sessionDataMutatorIterator generates sessionDataMutators which allow
@@ -2612,12 +2602,6 @@ type sessionDataMutator struct {
 	sessionDataMutatorCallbacks
 }
 
-func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string) {
-	for _, f := range m.onSessionDataChangeListeners[key] {
-		f(val)
-	}
-}
-
 func (m *sessionDataMutator) bufferParamStatusUpdate(param string, status string) {
 	if m.paramStatusUpdater != nil {
 		m.paramStatusUpdater.BufferParamStatusUpdate(param, status)
@@ -2627,7 +2611,9 @@ func (m *sessionDataMutator) bufferParamStatusUpdate(param string, status string
 // SetApplicationName sets the application name.
 func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.data.ApplicationName = appName
-	m.notifyOnDataChangeListeners("application_name", appName)
+	if m.onApplicationNameChange != nil {
+		m.onApplicationNameChange(appName)
+	}
 	m.bufferParamStatusUpdate("application_name", appName)
 }
 
