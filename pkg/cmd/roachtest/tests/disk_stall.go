@@ -106,7 +106,10 @@ func runDiskStalledDetection(
 	go func() {
 		t.WorkerStatus("running server")
 		out, err := c.RunWithBuffer(ctx, l, n,
-			fmt.Sprintf("timeout --signal 9 %ds env COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT=%s COCKROACH_LOG_MAX_SYNC_DURATION=%s "+
+			fmt.Sprintf("timeout --signal 9 %ds env "+
+				"COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT=%s "+
+				"COCKROACH_LOG_MAX_SYNC_DURATION=%s "+
+				"COCKROACH_AUTO_BALLAST=false "+
 				"./cockroach start-single-node --insecure --store {store-dir}/%s --log '{sinks: {stderr: {filter: INFO}}, file-defaults: {dir: \"{store-dir}/%s\"}}'",
 				int(dur.Seconds()), maxDataSync, maxLogSync, dataDir, logDir,
 			),

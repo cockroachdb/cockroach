@@ -1488,7 +1488,9 @@ func (io *ioLoadListener) pebbleMetricsTick(m pebble.Metrics) {
 // 1s.
 func (io *ioLoadListener) allocateTokensTick() {
 	var toAllocate int64
-	if io.totalTokens == unlimitedTokens {
+	// unlimitedTokens==MaxInt64, so avoid overflow in the rounding up
+	// calculation.
+	if io.totalTokens >= unlimitedTokens-(adjustmentInterval-1) {
 		toAllocate = io.totalTokens / adjustmentInterval
 	} else {
 		// Round up so that we don't accumulate tokens to give in a burst on the
