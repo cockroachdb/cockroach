@@ -2152,9 +2152,21 @@ func ingestWithRetry(
 		}
 
 		if utilccl.IsPermanentBulkJobError(err) {
-			return roachpb.BulkOpSummary{}, err
+			return res, err
 		}
 
+		// Re-load the job in order to update our progress object, which may have
+		// been updated by the changeFrontier processor since the flow started.
+		reloadedJob, reloadErr := execCtx.ExecCfg().JobRegistry.LoadJob(ctx, job.ID())
+		if reloadErr != nil {
+			if ctx.Err() != nil {
+				return res, ctx.Err()
+			}
+			log.Warningf(ctx, `IMPORT job %d could not reload job progress when retrying: %+v`,
+				int64(job.ID()), reloadErr)
+		} else {
+			job = reloadedJob
+		}
 		log.Warningf(ctx, `encountered retryable error: %+v`, err)
 	}
 

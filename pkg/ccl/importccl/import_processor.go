@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -369,12 +370,20 @@ func ingestKvs(
 	pkFlushedRow := make([]int64, len(spec.Uri))
 	idxFlushedRow := make([]int64, len(spec.Uri))
 
+	bulkSummaryMu := &struct {
+		syncutil.Mutex
+		summary roachpb.BulkOpSummary
+	}{}
+
 	// When the PK adder flushes, everything written has been flushed, so we set
 	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
 	// can treat it as flushed as well (in case we're not adding anything to it).
-	pkIndexAdder.SetOnFlush(func() {
+	pkIndexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&pkFlushedRow[i], emitted)
+			bulkSummaryMu.Lock()
+			bulkSummaryMu.summary.Add(summary)
+			bulkSummaryMu.Unlock()
 		}
 		if indexAdder.IsEmpty() {
 			for i, emitted := range writtenRow {
@@ -382,9 +391,12 @@ func ingestKvs(
 			}
 		}
 	})
-	indexAdder.SetOnFlush(func() {
+	indexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&idxFlushedRow[i], emitted)
+			bulkSummaryMu.Lock()
+			bulkSummaryMu.summary.Add(summary)
+			bulkSummaryMu.Unlock()
 		}
 	})
 
@@ -411,6 +423,11 @@ func ingestKvs(
 				prog.ResumePos[file] = idx
 			}
 			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
+			// Write down the summary of how much we've ingested since the last update.
+			bulkSummaryMu.Lock()
+			prog.BulkSummary = bulkSummaryMu.summary
+			bulkSummaryMu.summary.Reset()
+			bulkSummaryMu.Unlock()
 		}
 		progCh <- prog
 	}

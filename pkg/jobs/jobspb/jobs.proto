@@ -14,6 +14,7 @@ option go_package = "jobspb";
 
 import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";
+import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
@@ -360,6 +361,8 @@ message ImportProgress {
   // Holds metadata related to sequences for every file processed during an
   // IMPORT.
   repeated SequenceDetails sequence_details = 6;
+
+  roachpb.BulkOpSummary summary = 7 [(gogoproto.nullable) = false];
 }
 
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.
