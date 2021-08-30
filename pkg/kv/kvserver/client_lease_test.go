@@ -627,12 +627,12 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		for _, i := range []int{2, 3} {
-			suspect, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.IsSuspect(tc.Target(1).StoreID)
+			suspect, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.IsUnknown(tc.Target(1).StoreID)
 			if err != nil {
 				return err
 			}
 			if !suspect {
-				return errors.Errorf("Expected server 1 to be suspect on server %d", i)
+				return errors.Errorf("Expected server 1 to be in `storeStatusUnknown` on server %d", i)
 			}
 		}
 		return nil
