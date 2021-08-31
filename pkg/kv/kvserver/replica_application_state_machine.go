@@ -929,11 +929,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	tenantID := r.mu.tenantID
 	r.mu.Unlock()
 	if closedTimestampUpdated {
-		// TODO(andrei): Pass in the new closed timestamp to
-		// r.handleClosedTimestampUpdateRaftMuLocked directly after the old closed
-		// ts tracker goes away. Until then we can't do it; we have to let the
-		// method consult r.maxClosed().
-		r.handleClosedTimestampUpdateRaftMuLocked(ctx)
+		r.handleClosedTimestampUpdateRaftMuLocked(ctx, b.state.RaftClosedTimestamp)
 	}
 
 	// Record the stats delta in the StoreMetrics.

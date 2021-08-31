@@ -2144,8 +2144,8 @@ func TestStoreRangeMergeLHSLeaseTransfersAfterFreezeTime(t *testing.T) {
 		}
 		return nil
 	})
-	lhsClosedTS, ok := lhsLeaseholder.MaxClosed(ctx)
-	require.True(t, ok)
+	lhsClosedTS := lhsLeaseholder.GetClosedTimestamp(ctx)
+	require.NotEmpty(t, lhsClosedTS)
 
 	// Finally, allow the merge to complete. It should complete successfully.
 	close(finishSubsume)

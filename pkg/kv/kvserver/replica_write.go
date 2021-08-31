@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -89,9 +88,6 @@ func (r *Replica) executeWriteBatch(
 	// timestamps, which can help avoid uncertainty restarts.
 	localUncertaintyLimit := observedts.ComputeLocalUncertaintyLimit(ba.Txn, st)
 
-	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-	defer untrack(ctx, 0, 0, 0) // covers all error returns below
-
 	// Start tracking this request if it is an MVCC write (i.e. if it's the kind
 	// of request that needs to obey the closed timestamp). The act of tracking
 	// also gives us a closed timestamp, which we must ensure to evaluate above
@@ -99,17 +95,15 @@ func (r *Replica) executeWriteBatch(
 	// accordingly if necessary. We need to start tracking this request before we
 	// know the final write timestamp at which this request will evaluate because
 	// we need to atomically read the closed timestamp and start to be tracked.
-	// TODO(andrei): The timestamp cache (and also the "old closed timestamp
-	// mechanism" in the form of minTS) might bump us above the timestamp at which
+	// TODO(andrei): The timestamp cache might bump us above the timestamp at which
 	// we're registering with the proposalBuf. In that case, this request will be
 	// tracked at an unnecessarily low timestamp which can block the closing of
 	// this low timestamp for no reason. We should refactor such that the request
 	// starts being tracked after we apply the timestamp cache.
+	var minTS hlc.Timestamp
 	var tok TrackedRequestToken
 	if ba.IsIntentWrite() {
-		var minTS2 hlc.Timestamp
-		minTS2, tok = r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
-		minTS.Forward(minTS2)
+		minTS, tok = r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
 	}
 	defer tok.DoneIfNotMoved(ctx)
 
@@ -146,7 +140,7 @@ func (r *Replica) executeWriteBatch(
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
-	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, ba, g, st, localUncertaintyLimit, tok.Move(ctx))
+	ch, abandon, _, pErr := r.evalAndPropose(ctx, ba, g, st, localUncertaintyLimit, tok.Move(ctx))
 	if pErr != nil {
 		r.readOnlyCmdMu.RUnlock()
 		if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
@@ -155,24 +149,9 @@ func (r *Replica) executeWriteBatch(
 			// This exits with a fatal error, but returns in tests.
 			return nil, g, r.setCorruptRaftMuLocked(ctx, cErr)
 		}
-		if maxLeaseIndex != 0 {
-			log.Fatalf(
-				ctx, "unexpected max lease index %d assigned to failed proposal: %s, error %s",
-				maxLeaseIndex, ba, pErr,
-			)
-		}
 		return nil, g, pErr
 	}
 	g = nil // ownership passed to Raft, prevent misuse
-
-	// A max lease index of zero is returned when no proposal was made or a lease
-	// was proposed. In case no proposal was made or a lease was proposed, we
-	// don't need to communicate a MLAI. Furthermore, for lease proposals we
-	// cannot communicate under the lease's epoch. Instead the code calls EmitMLAI
-	// explicitly as a side effect of stepping up as leaseholder.
-	if maxLeaseIndex != 0 {
-		untrack(ctx, ctpb.Epoch(st.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
-	}
 
 	// We are done with pre-Raft evaluation at this point, and have to release the
 	// read-only command lock to avoid deadlocks during Raft evaluation.
