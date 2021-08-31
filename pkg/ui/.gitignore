@@ -8,10 +8,13 @@ yarn.opt.installed
 yarn.cluster-ui.installed
 yarn.protobuf.installed
 yarn-error.log
+assets.ccl.installed
+assets.oss.installed
 
 # Generated intermediates
 .cache-loader
 dist*/**
+!dist*/index.html
 !distccl/distccl.go
 !distoss/distoss.go
 *manifest.json
