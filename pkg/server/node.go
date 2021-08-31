@@ -1451,6 +1451,10 @@ func (emptyMetricStruct) MetricStruct() {}
 func (n *Node) GetSpanConfigs(
 	ctx context.Context, req *roachpb.GetSpanConfigsRequest,
 ) (*roachpb.GetSpanConfigsResponse, error) {
+	if !n.storeCfg.SpanConfigsEnabled {
+		return nil, errors.New("use of span configs disabled")
+	}
+
 	entries, err := n.spanConfigAccessor.GetSpanConfigEntriesFor(ctx, req.Spans)
 	if err != nil {
 		return nil, err
@@ -1463,6 +1467,9 @@ func (n *Node) GetSpanConfigs(
 func (n *Node) UpdateSpanConfigs(
 	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
+	if !n.storeCfg.SpanConfigsEnabled {
+		return nil, errors.New("use of span configs disabled")
+	}
 	// TODO(irfansharif): We want to protect ourselves from tenants creating
 	// outlandishly large string buffers here and OOM-ing the host cluster. Is
 	// the maximum protobuf message size enough of a safeguard?
