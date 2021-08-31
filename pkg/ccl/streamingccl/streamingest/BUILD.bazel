@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "streamingest",
     srcs = [
+        "metrics.go",
         "stream_ingestion_frontier_processor.go",
         "stream_ingestion_job.go",
         "stream_ingestion_planning.go",
@@ -40,6 +41,7 @@ go_library(
         "//pkg/storage",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/span",
         "//pkg/util/syncutil",
