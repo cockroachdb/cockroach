@@ -60,6 +60,7 @@ type Manager struct {
 	knobs    *spanconfig.TestingKnobs
 
 	spanconfig.KVAccessor
+	spanconfig.SQLWatcher
 	spanconfig.SQLTranslator
 }
 
@@ -73,12 +74,10 @@ func New(
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
 	kvAccessor spanconfig.KVAccessor,
+	sqlWatcher spanconfig.SQLWatcher,
 	sqlTranslator spanconfig.SQLTranslator,
 	knobs *spanconfig.TestingKnobs,
 ) *Manager {
-	if knobs == nil {
-		knobs = &spanconfig.TestingKnobs{}
-	}
 	return &Manager{
 		db:            db,
 		jr:            jr,
@@ -86,6 +85,7 @@ func New(
 		stopper:       stopper,
 		settings:      settings,
 		KVAccessor:    kvAccessor,
+		SQLWatcher:    sqlWatcher,
 		SQLTranslator: sqlTranslator,
 		knobs:         knobs,
 	}

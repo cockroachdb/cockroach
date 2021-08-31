@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -77,6 +78,47 @@ func FullTranslate(
 	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
 }
 
+// SQLWatcher watches for events on system.zones and system.descriptors.
+type SQLWatcher interface {
+	// WatchForSQLUpdates watches for changes to zones and descriptors starting at
+	// the given timestamp (exclusive) by establishing rangefeeds over
+	// system.zones and system.descriptors.
+	//
+	// It periodically calls the handle function with a list of SQLWatcherUpdates
+	// and a checkpointTS. Invocations of handle are guaranteed to provide the
+	// following semantics:
+	// 1. Calls to handle are serial.
+	// 2. The timestamp supplied to handle is monotonically increasing.
+	// 3. The list of SQLWatcherUpdates supplied to handle includes all events
+	// in the window (prevInvocationCheckpointTS, checkpointTS].
+	// 4. No further calls to handle are made if an invocation returns an error.
+	//
+	// These guarantees allow users of this interface to safely persist the
+	// checkpointTS and use it as the startTS for WatchForSQLUpdates later without
+	// missing any updates.
+	//
+	// All rangefeeds established by the SQLWatcher will be torn down before the
+	// call to WatchForSQLUpdates returns.
+	WatchForSQLUpdates(ctx context.Context, startTS hlc.Timestamp, handle SQLWatcherHandleFunc) error
+}
+
+// SQLWatcherHandleFunc is the type of the handler function periodically invoked
+// by the SQLWatcher.
+type SQLWatcherHandleFunc func(
+	ctx context.Context, updates []SQLWatcherUpdate, checkpointTS hlc.Timestamp,
+) error
+
+// SQLWatcherUpdate captures the ID and type of a descriptor or zone that the
+// SQLWatcher has observed change.
+type SQLWatcherUpdate struct {
+	// ID of the descriptor/zone that has changed.
+	ID descpb.ID
+
+	// DescriptorType of the descriptor/zone that has changed. Could be either the
+	// specific type or catalog.Any.
+	DescriptorType catalog.DescriptorType
+}
+
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
@@ -86,11 +128,7 @@ type ReconciliationDependencies interface {
 
 	SQLTranslator
 
-	// TODO(arul): We'll also want access to a "SQLWatcher", something that
-	// watches for changes to system.{descriptors, zones} to feed IDs to the
-	// SQLTranslator. These interfaces will be used by the "Reconciler to perform
-	// full/partial reconciliation, checkpoint the span config job, and update KV
-	// with the tenants span config state.
+	SQLWatcher
 }
 
 // Store is a data structure used to store spans and their corresponding
