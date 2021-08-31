@@ -188,10 +188,10 @@ func (s *SessionData) MaybeGetDatabaseForTemporarySchemaID(schemaID uint32) (uin
 	return 0, false
 }
 
-// GetTemporarySchemaIDForDb returns the schemaID for the temporary schema if
+// GetTemporarySchemaIDForDB returns the schemaID for the temporary schema if
 // one exists for the DB. The second return value communicates the existence of
 // the temp schema for that DB.
-func (s *SessionData) GetTemporarySchemaIDForDb(dbID uint32) (uint32, bool) {
+func (s *SessionData) GetTemporarySchemaIDForDB(dbID uint32) (uint32, bool) {
 	schemaID, found := s.DatabaseIDToTempSchemaID[dbID]
 	return schemaID, found
 }
@@ -222,7 +222,14 @@ func (s *Stack) Clone() *Stack {
 	for i, st := range s.stack {
 		ret.stack[i] = st.Clone()
 	}
+	ret.base = ret.stack[0]
 	return ret
+}
+
+// Replace replaces the current stack with the provided stack.
+func (s *Stack) Replace(repl *Stack) {
+	// Replace with a clone, as the same stack savepoint can be re-used.
+	*s = *repl.Clone()
 }
 
 // Top returns the top element of the stack.

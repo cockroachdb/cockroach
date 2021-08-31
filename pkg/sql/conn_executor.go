@@ -821,7 +821,9 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(sdMutIterator.sds.Top())
+	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(
+		descs.NewTemporarySchemaProvider(sdMutIterator.sds),
+	)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
@@ -1207,10 +1209,13 @@ type connExecutor struct {
 
 		// savepoints maintains the stack of savepoints currently open.
 		savepoints savepointStack
-		// savepointsAtTxnRewindPos is a snapshot of the savepoints stack before
-		// processing the command at position txnRewindPos. When rewinding, we're
-		// going to restore this snapshot.
-		savepointsAtTxnRewindPos savepointStack
+		// rewindPosSnapshot is a snapshot of the savepoints and sessionData stack
+		// before processing the command at position txnRewindPos. When rewinding,
+		// we're going to restore this snapshot.
+		rewindPosSnapshot struct {
+			savepoints       savepointStack
+			sessionDataStack *sessiondata.Stack
+		}
 
 		// transactionStatementFingerprintIDs tracks all statement IDs that make up the current
 		// transaction. It's length is bound by the TxnStatsNumStmtFingerprintIDsToRecord
@@ -1889,7 +1894,10 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		}
 	case rewind:
 		ex.rewindPrepStmtNamespace(ctx)
-		ex.extraTxnState.savepoints = ex.extraTxnState.savepointsAtTxnRewindPos
+		ex.extraTxnState.savepoints = ex.extraTxnState.rewindPosSnapshot.savepoints
+		// Note we use the Replace function instead of reassigning, as there are
+		// copies of the ex.sessionDataStack in the iterators and extendedEvalContext.
+		ex.sessionDataStack.Replace(ex.extraTxnState.rewindPosSnapshot.sessionDataStack)
 		advInfo.rewCap.rewindAndUnlock(ctx)
 	case stayInPlace:
 		// Nothing to do. The same statement will be executed again.
@@ -2031,7 +2039,8 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
 	ex.extraTxnState.txnRewindPos = pos
 	ex.stmtBuf.Ltrim(ctx, pos)
 	ex.commitPrepStmtNamespace(ctx)
-	ex.extraTxnState.savepointsAtTxnRewindPos = ex.extraTxnState.savepoints.clone()
+	ex.extraTxnState.rewindPosSnapshot.savepoints = ex.extraTxnState.savepoints.clone()
+	ex.extraTxnState.rewindPosSnapshot.sessionDataStack = ex.sessionDataStack.Clone()
 }
 
 // stmtDoesntNeedRetry returns true if the given statement does not need to be
@@ -2387,7 +2396,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		ex.memMetrics,
 		ex.server.cfg.Settings,
 	)
-	ie.SetSessionData(ex.sessionData())
+	ie.SetSessionDataStack(ex.sessionDataStack)
 
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{

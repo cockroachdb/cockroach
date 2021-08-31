@@ -59,7 +59,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 
 	db := s0.DB()
 	descriptors := s0.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
-		NewCollection(nil /* sessionData */)
+		NewCollection(nil /* TemporarySchemaProvider */)
 
 	// Note this transaction abuses the mechanisms normally required for updating
 	// tables and is just for testing what this test intends to exercise.
