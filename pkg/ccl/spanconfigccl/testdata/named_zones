@@ -1,0 +1,90 @@
+# This test generates span configurations for various named zone IDs. No tests
+# for RANGE DEFAULT are included here as generating span configurations for
+# RANGE DEFAULT is akin to a full reconciliation.
+
+
+# ID 18 is for the time series range which is the only named zone that doesn't
+# have an entry in `system.zones` at bootstrap. It should inherit from RANGE
+# DEFAULT.
+query-sql
+SELECT COUNT(*) FROM system.zones WHERE id=18
+----
+0
+
+generate-span-configs-for-id id=18
+----
+Span: /System{/tsd-tse}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 90000
+globalreads: false
+numreplicas: 3
+numvoters: 3
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+
+# Adding an explicit zone configuration for the timeseries range should work
+# as expected.
+exec-sql
+ALTER RANGE timeseries CONFIGURE ZONE USING gc.ttlseconds=1000
+----
+
+generate-span-configs-for-id id=18
+----
+Span: /System{/tsd-tse}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 1000
+globalreads: false
+numreplicas: 3
+numvoters: 3
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+
+# Change a field on the liveness range and ensure it behaves as expected. The
+# pseudo ID for the liveness range is 22.
+exec-sql
+ALTER RANGE liveness CONFIGURE ZONE USING num_replicas=7;
+----
+
+generate-span-configs-for-id id=22
+----
+Span: /System/NodeLiveness{-Max}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 600
+globalreads: false
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+
+# We are allowed to discard the liveness range's zone configuration. The
+# generated span should have the RANGE DEFAULT config.
+exec-sql
+ALTER RANGE liveness CONFIGURE ZONE DISCARD
+----
+
+generate-span-configs-for-id id=22
+----
+Span: /System/NodeLiveness{-Max}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 90000
+globalreads: false
+numreplicas: 3
+numvoters: 3
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------

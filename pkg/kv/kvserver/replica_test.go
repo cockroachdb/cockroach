@@ -9061,6 +9061,7 @@ func TestReplicaMetrics(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			spanConfig := cfg.DefaultSpanConfig
 			spanConfig.NumReplicas = c.replicas
+			spanConfig.NumVoters = c.replicas
 
 			// Alternate between quiescent and non-quiescent replicas to test the
 			// quiescent metric.
