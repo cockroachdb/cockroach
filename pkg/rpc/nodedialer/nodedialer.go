@@ -221,7 +221,7 @@ func (n *Dialer) dial(
 		return nil, err
 	}
 
-	// TODO(bdarnell): Reconcile the different health checks and circuit breaker
+	// TODO(bdarnell): Translate the different health checks and circuit breaker
 	// behavior in this file. Note that this different behavior causes problems
 	// for higher-levels in the system. For example, DistSQL checks for
 	// ConnHealth when scheduling processors, but can then see attempts to send

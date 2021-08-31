@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/testspanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -74,6 +75,8 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		&testspanconfig.SQLWatcher{},
+		&testspanconfig.SQLTranslator{},
 		&spanconfig.TestingKnobs{
 			ManagerCreatedJobInterceptor: func(jobI interface{}) {
 				job := jobI.(*jobs.Job)
@@ -161,6 +164,8 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		&testspanconfig.SQLWatcher{},
+		&testspanconfig.SQLTranslator{},
 		&spanconfig.TestingKnobs{
 			ManagerAfterCheckedReconciliationJobExistsInterceptor: func(exists bool) {
 				require.False(t, exists)

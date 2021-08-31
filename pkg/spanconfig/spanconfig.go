@@ -14,6 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // KVAccessor mediates access to KV span configurations pertaining to a given
@@ -33,6 +36,60 @@ type KVAccessor interface {
 	UpdateSpanConfigEntries(ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry) error
 }
 
+// SQLWatcher can be used to watch for events on system.zones and
+// system.descriptors.
+type SQLWatcher interface {
+	// WatchForSQLUpdates watches for changes to zones and descriptors starting at
+	// the given timestamp (exclusive) by establishing rangefeeds over
+	// system.zones and system.descriptors. Consumption of these rangefeed events
+	// happens asynchronously.
+	//
+	// It periodically calls the handle function with a list of SQLWatcherEvents
+	// and a monotonically increasing checkpointTS. The list of SQLWatcherEvents
+	// is guaranteed to include all events on system.zones and system.descriptors
+	// in the window (previous checkpointTS, checkpointTS]. All calls to handle
+	// are executed serially.
+	//
+	// The checkpointTS can be stored and used as the startTS to subsequent calls
+	// to WatchForSQLUpdates. The previous checkpointTS above is the same as
+	// startTS the very first time handle is called.
+	WatchForSQLUpdates(ctx context.Context, startTS hlc.Timestamp, handle SQLWatcherHandleFunc) error
+
+	// Close closes the rangefeeds and asynchronous tasks created by the
+	// SQLWatcher and waits for them to shut down. Close is idempotent.
+	Close()
+}
+
+// SQLWatcherHandleFunc is the type of the handler function expected by the
+// SQLWatcher.
+type SQLWatcherHandleFunc func(ids []SQLWatcherEvent, checkpointTS hlc.Timestamp) error
+
+// SQLWatcherEvent captures the ID and type of a descriptor or zone that the
+// SQLWatcher has observed change.
+type SQLWatcherEvent struct {
+	// ID of the descriptor/zone that has changed.
+	ID descpb.ID
+
+	// DescriptorType of the descriptor/zone that has changed. Could be either the
+	// specific type or catalog.Any.
+	DescriptorType catalog.DescriptorType
+}
+
+// SQLTranslator translates SQL descriptors and their corresponding zone
+// configuration state to span configurations. It merely constructs the implied
+// span configuration state from SQL's perspective -- it is agnostic to the
+// actual span configuration state in KV.
+type SQLTranslator interface {
+	// Translate generates the implied span configuration state given a list of
+	// {descriptor, named zone} IDs. No entry is returned for an ID if it doesn't
+	// exist or has been dropped.
+	Translate(ctx context.Context, ids descpb.IDs) ([]roachpb.SpanConfigEntry, error)
+	// FullTranslate translates the entire SQL zone configuration state to the
+	// implied span configuration state. The timestamp at which such a translation
+	// is valid is al so returned.
+	FullTranslate(ctx context.Context) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error)
+}
+
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
@@ -40,11 +97,9 @@ type KVAccessor interface {
 type ReconciliationDependencies interface {
 	KVAccessor
 
-	// TODO(irfansharif): We'll also want access to a "SQLWatcher", something
-	// that watches for changes to system.{descriptor,zones} and be responsible
-	// for generating corresponding span config updates. Put together, the
-	// reconciliation job will react to these updates by installing them into KV
-	// through the KVAccessor.
+	SQLWatcher
+
+	SQLTranslator
 }
 
 // Store is a data structure used to store spans and their corresponding

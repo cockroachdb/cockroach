@@ -177,7 +177,7 @@ func (k MVCCKey) Format(f fmt.State, c rune) {
 // Len returns the size of the MVCCKey when encoded. Implements the
 // pebble.Encodeable interface.
 //
-// TODO(itsbilal): Reconcile this with EncodedSize. Would require updating MVCC
+// TODO(itsbilal): Translate this with EncodedSize. Would require updating MVCC
 // stats tests to reflect the more accurate lengths provided by this function.
 func (k MVCCKey) Len() int {
 	const (
