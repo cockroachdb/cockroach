@@ -260,7 +260,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 			update.Config = entry.Config
 		}
 
-		if err := buffer.Add(ctx, &bufferEvent{update, ev.Value.Timestamp}); err != nil {
+		if err := buffer.Add(&bufferEvent{update, ev.Value.Timestamp}); err != nil {
 			select {
 			case <-ctx.Done():
 				// The context is canceled when the rangefeed is closed by the
