@@ -79,6 +79,9 @@ func TestIPAddrParseInet(t *testing.T) {
 		{"192/10", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.0.0.0")))), Mask: 10}, ""},
 		{"192.168/23", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.0.0")))), Mask: 23}, ""},
 		{"192.168./10", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.0.0")))), Mask: 10}, ""},
+
+		// Postgres allows leading 0s, '10.0.0.017'::INET parses as 10.0.0.17
+		{"10.0.0.017", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("10.0.0.17")))), Mask: 32}, ""},
 	}
 	for i, testCase := range testCases {
 		var actual IPAddr
