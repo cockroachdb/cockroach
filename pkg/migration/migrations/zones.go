@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -25,7 +26,7 @@ import (
 // zonesTableForSecondaryTenants adds system.zones to secondary tenants and
 // seeds it.
 func zonesTableForSecondaryTenants(
-	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
 ) error {
 	if d.Codec.ForSystemTenant() {
 		// We don't need to add system.zones to the system tenant as it should
