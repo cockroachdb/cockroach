@@ -70,6 +70,14 @@ func TestSelectInInt64(t *testing.T) {
 			hasNulls:     true,
 			negate:       true,
 		},
+		{
+			desc:         "In test with unordered filterRow",
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{0}, {1}, {2}},
+			filterRow:    []int64{2, 0, 1},
+			hasNulls:     false,
+			negate:       false,
+		},
 	}
 
 	for _, c := range testCases {
@@ -210,6 +218,12 @@ func TestProjectInInt64(t *testing.T) {
 			inputTuples:  colexectestutils.Tuples{{1}, {2}},
 			outputTuples: colexectestutils.Tuples{{1, false}, {2, false}},
 			inClause:     "IN (3)",
+		},
+		{
+			desc:         "In test with unordered tuple",
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{0, true}, {1, true}, {2, true}},
+			inClause:     "IN (2, 0, 1)",
 		},
 	}
 
