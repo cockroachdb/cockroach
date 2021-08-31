@@ -52,17 +52,21 @@ func New(
 	}
 }
 
-var kvAccessorEnabled = settings.RegisterBoolSetting(
-	"spanconfig.kvaccessor_experimental.enabled",
+// enabledSetting is a hidden cluster setting that gates usage of the
+// KVAccessor. It has no effect unless COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is
+// also set.
+var enabledSetting = settings.RegisterBoolSetting(
+	"spanconfig.experimental_kvaccessor.enabled",
 	"enable the use of the kv accessor", false).WithSystemOnly()
 
 // GetSpanConfigEntriesFor is part of the KVAccessor interface.
 func (k *KVAccessor) GetSpanConfigEntriesFor(
 	ctx context.Context, spans []roachpb.Span,
 ) (resp []roachpb.SpanConfigEntry, retErr error) {
-	if kvAccessorEnabled.Get(&k.settings.SV) {
+	if !enabledSetting.Get(&k.settings.SV) {
 		return nil, errors.New("use of span configs disabled")
 	}
+
 	if len(spans) == 0 {
 		return resp, nil
 	}
@@ -111,6 +115,10 @@ func (k *KVAccessor) GetSpanConfigEntriesFor(
 func (k *KVAccessor) UpdateSpanConfigEntries(
 	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
 ) error {
+	if !enabledSetting.Get(&k.settings.SV) {
+		return errors.New("use of span configs disabled")
+	}
+
 	if err := validateUpdateArgs(toDelete, toUpsert); err != nil {
 		return err
 	}
