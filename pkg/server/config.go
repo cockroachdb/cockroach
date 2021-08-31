@@ -222,6 +222,11 @@ type KVConfig struct {
 	// The following values can only be set via environment variables and are
 	// for testing only. They are not meant to be set by the end user.
 
+	// Enables the use of the (experimental) span configs infrastructure.
+	//
+	// Environment Variable: COCKROACH_EXPERIMENTAL_SPAN_CONFIGS
+	SpanConfigsEnabled bool
+
 	// Enables linearizable behavior of operations on this node by making sure
 	// that no commit timestamp is reported back to the client until all other
 	// node clocks have necessarily passed it.
@@ -416,6 +421,9 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	if cfg.Linearizable {
 		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
+	}
+	if cfg.SpanConfigsEnabled {
+		fmt.Fprintln(w, "span configs enabled\t", cfg.SpanConfigsEnabled)
 	}
 	_ = w.Flush()
 
@@ -648,6 +656,7 @@ func (cfg *Config) RequireWebSession() bool {
 // variable based. Note that this only happens when initializing a node and not
 // when NewContext is called.
 func (cfg *Config) readEnvironmentVariables() {
+	cfg.SpanConfigsEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_SPAN_CONFIGS", cfg.SpanConfigsEnabled)
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMinIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MIN_IDLE_TIME", cfg.ScanMinIdleTime)
