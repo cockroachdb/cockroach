@@ -721,6 +721,30 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	})
 }
 
+// A regression test where dropped descriptors would appear in the set of
+// `Descriptors`.
+func TestDropDatabaseRevisionHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, LocalFoo)
+	sqlDB.Exec(t, `
+CREATE DATABASE same_name_db;
+DROP DATABASE same_name_db;
+CREATE DATABASE same_name_db;
+`)
+	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, LocalFoo)
+
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupEmptyCluster()
+	sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
+	sqlDBRestore.ExpectErr(t, `database "same_name_db" already exists`, `CREATE DATABASE same_name_db`)
+}
+
 // TestClusterRevisionHistory tests that cluster backups can be taken with
 // revision_history and correctly restore into various points in time.
 func TestClusterRevisionHistory(t *testing.T) {
@@ -732,7 +756,7 @@ func TestClusterRevisionHistory(t *testing.T) {
 		check func(t *testing.T, runner *sqlutils.SQLRunner)
 	}
 
-	testCases := make([]testCase, 0, 6)
+	testCases := make([]testCase, 0)
 	ts := make([]string, 6)
 
 	var tc testCase
