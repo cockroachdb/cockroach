@@ -923,10 +923,10 @@ build-mode = build -o $@
 
 go-install: build-mode = install
 
-$(COCKROACH) go-install generate: pkg/ui/distccl/bindata.go
+$(COCKROACH) go-install generate: pkg/ui/assets.ccl.installed
 
 $(COCKROACHOSS): BUILDTARGET = ./pkg/cmd/cockroach-oss
-$(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/distoss/bindata.go | $(C_LIBS_DYNAMIC)
+$(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/assets.oss.installed | $(C_LIBS_DYNAMIC)
 
 $(COCKROACHSHORT): BUILDTARGET = ./pkg/cmd/cockroach-short
 $(COCKROACHSHORT): TAGS += short
@@ -1120,13 +1120,12 @@ compose: ## Run compose tests.
 dupl: bin/.bootstrap
 	$(FIND_RELEVANT) \
 	       -name '*.go'             \
-	       -not -name '*.pb.go'     \
-	       -not -name '*.pb.gw.go'  \
-	       -not -name 'bindata.go' \
-	       -not -name '*_string.go' \
-	       -not -name 'sql.go'      \
-	       -not -name 'irgen.go'    \
-	       -not -name '*.ir.go'     \
+	       -not -name '*.pb.go'    	\
+	       -not -name '*.pb.gw.go' 	\
+	       -not -name '*_string.go'	\
+	       -not -name 'sql.go'     	\
+	       -not -name 'irgen.go'   	\
+	       -not -name '*.ir.go'    	\
 	| dupl -files $(DUPLFLAGS)
 
 .PHONY: generate
@@ -1184,7 +1183,7 @@ ARCHIVE_EXTRAS = \
 	$(BUILDINFO) \
 	$(SQLPARSER_TARGETS) \
 	$(OPTGEN_TARGETS) \
-	pkg/ui/distccl/bindata.go pkg/ui/distoss/bindata.go
+	pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
 
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
@@ -1319,7 +1318,7 @@ WEBPACK_DEV_SERVER := ./node_modules/.bin/webpack-dev-server
 WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 
 .PHONY: ui-generate
-ui-generate: pkg/ui/distccl/bindata.go
+ui-generate: pkg/ui/assets.ccl.installed
 
 .PHONY: ui-fonts
 ui-fonts:
@@ -1380,18 +1379,16 @@ ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
 
-pkg/ui/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/workspaces/db-console/ccl -type f)
-pkg/ui/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
-pkg/ui/dist%/bindata.go: pkg/ui/workspaces/db-console/webpack.app.js $(CLUSTER_UI_JS) $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
-	find pkg/ui/dist$* -mindepth 1 -not -name dist$*.go -delete
-	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
-	  ln -s ../workspaces/db-console/dist/$$dll pkg/ui/dist$*/$${dll/@(.ccl|.oss)}; \
+.SECONDARY: pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
+pkg/ui/assets.ccl.installed: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/workspaces/db-console/ccl -type f)
+pkg/ui/assets.oss.installed: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
+pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.app.js $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
+	find pkg/ui/dist$*/assets -mindepth 1 -not -name index.html -delete
+	for dll in $(shell find pkg/ui/workspaces/db-console/dist -name '*.dll.js' -type f); do \
+		echo $$dll | sed -E "s/.oss.dll.js|.ccl.dll.js/.dll.js/" | sed -E "s|^.*\/|pkg/ui/dist$*/assets/|" | xargs -I{} cp $$dll {};\
 	done
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) --config webpack.app.js --env.dist=$*
-	go-bindata -pkg dist$* -o $@ -prefix pkg/ui/dist$* pkg/ui/dist$*/...
-	echo 'func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }' >> $@
-	gofmt -s -w $@
-	goimports -w $@
+	touch $@
 
 pkg/ui/yarn.opt.installed:
 	$(NODE_RUN) -C pkg/ui yarn install --check-files
@@ -1415,7 +1412,9 @@ ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
-	find pkg/ui/workspaces/db-console/dist* -mindepth 1 -not -name dist*.go -delete
+	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name index.html -delete
+	rm -rf pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
+	rm -rf pkg/ui/dist/*
 	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)
 	rm -f pkg/ui/workspaces/db-console/*manifest.json
 	rm -rf pkg/ui/workspaces/cluster-ui/dist

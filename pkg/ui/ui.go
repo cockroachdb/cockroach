@@ -19,47 +19,25 @@ package ui
 import (
 	"bytes"
 	"context"
+	"embed"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"net/http"
-	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	assetfs "github.com/elazarl/go-bindata-assetfs"
 )
 
-// Asset loads and returns the asset for the given name. It returns an error if
-// the asset could not be found or could not be loaded.
-var Asset func(name string) ([]byte, error)
+// Assets is used for embedded JS assets required for UI.
+// In case the binary is built without UI, it provides single index.html file with
+// the same content as indexHTMLTemplate as a fallback.
+var Assets embed.FS
 
-// AssetDir returns the file names below a certain directory in the embedded
-// filesystem.
-//
-// For example, if the embedded filesystem contains the following hierarchy:
-//
-//     data/
-//       foo.txt
-//       img/
-//         a.png
-//         b.png
-//
-// AssetDir("") returns []string{"data"}
-// AssetDir("data") returns []string{"foo.txt", "img"}
-// AssetDir("data/img") returns []string{"a.png", "b.png"}
-// AssetDir("foo.txt") and AssetDir("notexist") return errors
-var AssetDir func(name string) ([]string, error)
-
-// AssetInfo loads and returns metadata for the asset with the given name. It
-// returns an error if the asset could not be found or could not be loaded.
-var AssetInfo func(name string) (os.FileInfo, error)
-
-// haveUI returns whether the admin UI has been linked into the binary.
-func haveUI() bool {
-	return Asset != nil && AssetDir != nil && AssetInfo != nil
-}
+// HaveUI tells whether the admin UI has been linked into the binary.
+var HaveUI = false
 
 // indexTemplate takes arguments about the current session and returns HTML
 // which includes the UI JavaScript bundles, plus a script tag which sets the
@@ -137,15 +115,12 @@ type Config struct {
 // including index.html, which has some login-related variables
 // templated into it, as well as static assets.
 func Handler(cfg Config) http.Handler {
-	fileServer := http.FileServer(&assetfs.AssetFS{
-		Asset:     Asset,
-		AssetDir:  AssetDir,
-		AssetInfo: AssetInfo,
-	})
+	fs, _ := fs.Sub(Assets, "assets")
+	fileServer := http.FileServer(http.FS(fs))
 	buildInfo := build.GetInfo()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !haveUI() {
+		if !HaveUI {
 			http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(bareIndexHTML))
 			return
 		}
