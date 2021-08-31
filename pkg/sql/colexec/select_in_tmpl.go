@@ -20,6 +20,8 @@
 package colexec
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -141,6 +143,7 @@ type selectInOp_TYPE struct {
 	filterRow []_GOTYPE
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOp_TYPE{}
@@ -153,6 +156,7 @@ type projectInOp_TYPE struct {
 	filterRow []_GOTYPE
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOp_TYPE{}
@@ -173,11 +177,22 @@ func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool) {
 	return result, hasNulls
 }
 
+func sortDatumRow_TYPE(filterRow []_GOTYPE, targetCol _GOTYPESLICE) {
+	less := func(i, j int) bool {
+		var cmpResult int
+		_COMPARE(cmpResult, filterRow[i], filterRow[j], targetCol, _)
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpIn_TYPE(
 	targetElem _GOTYPE, targetCol _GOTYPESLICE, filterRow []_GOTYPE, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRow_TYPE, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -211,6 +226,14 @@ func (si *selectInOp_TYPE) Next() coldata.Batch {
 		col := vec.TemplateType()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRow_TYPE because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRow_TYPE(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -285,6 +308,14 @@ func (pi *projectInOp_TYPE) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.TemplateType()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRow_TYPE because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRow_TYPE(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()

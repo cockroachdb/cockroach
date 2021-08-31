@@ -12,6 +12,7 @@ package colexec
 import (
 	"bytes"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
@@ -352,6 +353,7 @@ type selectInOpBool struct {
 	filterRow []bool
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpBool{}
@@ -364,6 +366,7 @@ type projectInOpBool struct {
 	filterRow []bool
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpBool{}
@@ -384,11 +387,30 @@ func fillDatumRowBool(t *types.T, datumTuple *tree.DTuple) ([]bool, bool) {
 	return result, hasNulls
 }
 
+func sortDatumRowBool(filterRow []bool, targetCol coldata.Bools) {
+	less := func(i, j int) bool {
+		var cmpResult int
+
+		if !filterRow[i] && filterRow[j] {
+			cmpResult = -1
+		} else if filterRow[i] && !filterRow[j] {
+			cmpResult = 1
+		} else {
+			cmpResult = 0
+		}
+
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInBool(
 	targetElem bool, targetCol coldata.Bools, filterRow []bool, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowBool, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -430,6 +452,14 @@ func (si *selectInOpBool) Next() coldata.Batch {
 		col := vec.Bool()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowBool because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowBool(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -500,6 +530,14 @@ func (pi *projectInOpBool) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.Bool()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowBool because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowBool(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
@@ -586,6 +624,7 @@ type selectInOpBytes struct {
 	filterRow [][]byte
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpBytes{}
@@ -598,6 +637,7 @@ type projectInOpBytes struct {
 	filterRow [][]byte
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpBytes{}
@@ -618,11 +658,22 @@ func fillDatumRowBytes(t *types.T, datumTuple *tree.DTuple) ([][]byte, bool) {
 	return result, hasNulls
 }
 
+func sortDatumRowBytes(filterRow [][]byte, targetCol *coldata.Bytes) {
+	less := func(i, j int) bool {
+		var cmpResult int
+		cmpResult = bytes.Compare(filterRow[i], filterRow[j])
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInBytes(
 	targetElem []byte, targetCol *coldata.Bytes, filterRow [][]byte, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowBytes, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -656,6 +707,14 @@ func (si *selectInOpBytes) Next() coldata.Batch {
 		col := vec.Bytes()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowBytes because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowBytes(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -724,6 +783,14 @@ func (pi *projectInOpBytes) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.Bytes()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowBytes because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowBytes(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
@@ -808,6 +875,7 @@ type selectInOpDecimal struct {
 	filterRow []apd.Decimal
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpDecimal{}
@@ -820,6 +888,7 @@ type projectInOpDecimal struct {
 	filterRow []apd.Decimal
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpDecimal{}
@@ -840,11 +909,22 @@ func fillDatumRowDecimal(t *types.T, datumTuple *tree.DTuple) ([]apd.Decimal, bo
 	return result, hasNulls
 }
 
+func sortDatumRowDecimal(filterRow []apd.Decimal, targetCol coldata.Decimals) {
+	less := func(i, j int) bool {
+		var cmpResult int
+		cmpResult = tree.CompareDecimals(&filterRow[i], &filterRow[j])
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInDecimal(
 	targetElem apd.Decimal, targetCol coldata.Decimals, filterRow []apd.Decimal, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowDecimal, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -878,6 +958,14 @@ func (si *selectInOpDecimal) Next() coldata.Batch {
 		col := vec.Decimal()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowDecimal because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowDecimal(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -948,6 +1036,14 @@ func (pi *projectInOpDecimal) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.Decimal()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowDecimal because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowDecimal(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
@@ -1034,6 +1130,7 @@ type selectInOpInt16 struct {
 	filterRow []int16
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpInt16{}
@@ -1046,6 +1143,7 @@ type projectInOpInt16 struct {
 	filterRow []int16
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpInt16{}
@@ -1066,11 +1164,33 @@ func fillDatumRowInt16(t *types.T, datumTuple *tree.DTuple) ([]int16, bool) {
 	return result, hasNulls
 }
 
+func sortDatumRowInt16(filterRow []int16, targetCol coldata.Int16s) {
+	less := func(i, j int) bool {
+		var cmpResult int
+
+		{
+			a, b := int64(filterRow[i]), int64(filterRow[j])
+			if a < b {
+				cmpResult = -1
+			} else if a > b {
+				cmpResult = 1
+			} else {
+				cmpResult = 0
+			}
+		}
+
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInInt16(
 	targetElem int16, targetCol coldata.Int16s, filterRow []int16, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowInt16, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -1115,6 +1235,14 @@ func (si *selectInOpInt16) Next() coldata.Batch {
 		col := vec.Int16()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowInt16 because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowInt16(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -1185,6 +1313,14 @@ func (pi *projectInOpInt16) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.Int16()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowInt16 because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowInt16(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
@@ -1271,6 +1407,7 @@ type selectInOpInt32 struct {
 	filterRow []int32
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpInt32{}
@@ -1283,6 +1420,7 @@ type projectInOpInt32 struct {
 	filterRow []int32
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpInt32{}
@@ -1303,11 +1441,33 @@ func fillDatumRowInt32(t *types.T, datumTuple *tree.DTuple) ([]int32, bool) {
 	return result, hasNulls
 }
 
+func sortDatumRowInt32(filterRow []int32, targetCol coldata.Int32s) {
+	less := func(i, j int) bool {
+		var cmpResult int
+
+		{
+			a, b := int64(filterRow[i]), int64(filterRow[j])
+			if a < b {
+				cmpResult = -1
+			} else if a > b {
+				cmpResult = 1
+			} else {
+				cmpResult = 0
+			}
+		}
+
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInInt32(
 	targetElem int32, targetCol coldata.Int32s, filterRow []int32, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowInt32, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -1352,6 +1512,14 @@ func (si *selectInOpInt32) Next() coldata.Batch {
 		col := vec.Int32()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowInt32 because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowInt32(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -1422,6 +1590,14 @@ func (pi *projectInOpInt32) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.Int32()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowInt32 because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowInt32(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
@@ -1508,6 +1684,7 @@ type selectInOpInt64 struct {
 	filterRow []int64
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpInt64{}
@@ -1520,6 +1697,7 @@ type projectInOpInt64 struct {
 	filterRow []int64
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpInt64{}
@@ -1540,11 +1718,33 @@ func fillDatumRowInt64(t *types.T, datumTuple *tree.DTuple) ([]int64, bool) {
 	return result, hasNulls
 }
 
+func sortDatumRowInt64(filterRow []int64, targetCol coldata.Int64s) {
+	less := func(i, j int) bool {
+		var cmpResult int
+
+		{
+			a, b := int64(filterRow[i]), int64(filterRow[j])
+			if a < b {
+				cmpResult = -1
+			} else if a > b {
+				cmpResult = 1
+			} else {
+				cmpResult = 0
+			}
+		}
+
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInInt64(
 	targetElem int64, targetCol coldata.Int64s, filterRow []int64, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowInt64, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -1589,6 +1789,14 @@ func (si *selectInOpInt64) Next() coldata.Batch {
 		col := vec.Int64()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowInt64 because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowInt64(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -1659,6 +1867,14 @@ func (pi *projectInOpInt64) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.Int64()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowInt64 because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowInt64(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
@@ -1745,6 +1961,7 @@ type selectInOpFloat64 struct {
 	filterRow []float64
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpFloat64{}
@@ -1757,6 +1974,7 @@ type projectInOpFloat64 struct {
 	filterRow []float64
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpFloat64{}
@@ -1777,11 +1995,41 @@ func fillDatumRowFloat64(t *types.T, datumTuple *tree.DTuple) ([]float64, bool) 
 	return result, hasNulls
 }
 
+func sortDatumRowFloat64(filterRow []float64, targetCol coldata.Float64s) {
+	less := func(i, j int) bool {
+		var cmpResult int
+
+		{
+			a, b := float64(filterRow[i]), float64(filterRow[j])
+			if a < b {
+				cmpResult = -1
+			} else if a > b {
+				cmpResult = 1
+			} else if a == b {
+				cmpResult = 0
+			} else if math.IsNaN(a) {
+				if math.IsNaN(b) {
+					cmpResult = 0
+				} else {
+					cmpResult = -1
+				}
+			} else {
+				cmpResult = 1
+			}
+		}
+
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInFloat64(
 	targetElem float64, targetCol coldata.Float64s, filterRow []float64, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowFloat64, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -1834,6 +2082,14 @@ func (si *selectInOpFloat64) Next() coldata.Batch {
 		col := vec.Float64()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowFloat64 because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowFloat64(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -1904,6 +2160,14 @@ func (pi *projectInOpFloat64) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.Float64()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowFloat64 because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowFloat64(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
@@ -1990,6 +2254,7 @@ type selectInOpTimestamp struct {
 	filterRow []time.Time
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpTimestamp{}
@@ -2002,6 +2267,7 @@ type projectInOpTimestamp struct {
 	filterRow []time.Time
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpTimestamp{}
@@ -2022,11 +2288,29 @@ func fillDatumRowTimestamp(t *types.T, datumTuple *tree.DTuple) ([]time.Time, bo
 	return result, hasNulls
 }
 
+func sortDatumRowTimestamp(filterRow []time.Time, targetCol coldata.Times) {
+	less := func(i, j int) bool {
+		var cmpResult int
+
+		if filterRow[i].Before(filterRow[j]) {
+			cmpResult = -1
+		} else if filterRow[j].Before(filterRow[i]) {
+			cmpResult = 1
+		} else {
+			cmpResult = 0
+		}
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInTimestamp(
 	targetElem time.Time, targetCol coldata.Times, filterRow []time.Time, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowTimestamp, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -2067,6 +2351,14 @@ func (si *selectInOpTimestamp) Next() coldata.Batch {
 		col := vec.Timestamp()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowTimestamp because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowTimestamp(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -2137,6 +2429,14 @@ func (pi *projectInOpTimestamp) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.Timestamp()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowTimestamp because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowTimestamp(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
@@ -2223,6 +2523,7 @@ type selectInOpInterval struct {
 	filterRow []duration.Duration
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpInterval{}
@@ -2235,6 +2536,7 @@ type projectInOpInterval struct {
 	filterRow []duration.Duration
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpInterval{}
@@ -2255,11 +2557,22 @@ func fillDatumRowInterval(t *types.T, datumTuple *tree.DTuple) ([]duration.Durat
 	return result, hasNulls
 }
 
+func sortDatumRowInterval(filterRow []duration.Duration, targetCol coldata.Durations) {
+	less := func(i, j int) bool {
+		var cmpResult int
+		cmpResult = filterRow[i].Compare(filterRow[j])
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInInterval(
 	targetElem duration.Duration, targetCol coldata.Durations, filterRow []duration.Duration, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowInterval, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -2293,6 +2606,14 @@ func (si *selectInOpInterval) Next() coldata.Batch {
 		col := vec.Interval()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowInterval because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowInterval(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -2363,6 +2684,14 @@ func (pi *projectInOpInterval) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.Interval()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowInterval because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowInterval(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
@@ -2449,6 +2778,7 @@ type selectInOpJSON struct {
 	filterRow []json.JSON
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpJSON{}
@@ -2461,6 +2791,7 @@ type projectInOpJSON struct {
 	filterRow []json.JSON
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpJSON{}
@@ -2481,11 +2812,28 @@ func fillDatumRowJSON(t *types.T, datumTuple *tree.DTuple) ([]json.JSON, bool) {
 	return result, hasNulls
 }
 
+func sortDatumRowJSON(filterRow []json.JSON, targetCol *coldata.JSONs) {
+	less := func(i, j int) bool {
+		var cmpResult int
+
+		var err error
+		cmpResult, err = filterRow[i].Compare(filterRow[j])
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInJSON(
 	targetElem json.JSON, targetCol *coldata.JSONs, filterRow []json.JSON, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowJSON, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -2525,6 +2873,14 @@ func (si *selectInOpJSON) Next() coldata.Batch {
 		col := vec.JSON()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowJSON because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowJSON(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -2593,6 +2949,14 @@ func (pi *projectInOpJSON) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.JSON()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowJSON because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowJSON(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
@@ -2677,6 +3041,7 @@ type selectInOpDatum struct {
 	filterRow []interface{}
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &selectInOpDatum{}
@@ -2689,6 +3054,7 @@ type projectInOpDatum struct {
 	filterRow []interface{}
 	hasNulls  bool
 	negate    bool
+	sorted    bool
 }
 
 var _ colexecop.Operator = &projectInOpDatum{}
@@ -2709,11 +3075,24 @@ func fillDatumRowDatum(t *types.T, datumTuple *tree.DTuple) ([]interface{}, bool
 	return result, hasNulls
 }
 
+func sortDatumRowDatum(filterRow []interface{}, targetCol coldata.DatumVec) {
+	less := func(i, j int) bool {
+		var cmpResult int
+
+		cmpResult = coldataext.CompareDatum(filterRow[i], targetCol, filterRow[j])
+
+		return cmpResult < 0
+	}
+	if !sort.SliceIsSorted(filterRow, less) {
+		sort.Slice(filterRow, less)
+	}
+}
+
 func cmpInDatum(
 	targetElem interface{}, targetCol coldata.DatumVec, filterRow []interface{}, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in sortDatumRowDatum, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -2749,6 +3128,14 @@ func (si *selectInOpDatum) Next() coldata.Batch {
 		col := vec.Datum()
 		var idx int
 		n := batch.Length()
+
+		// Sort si.filterRow once. We perform the sort here instead of in
+		// fillDatumRowDatum because the compare overload requires the eval
+		// context of a coldata.DatumVec target column.
+		if !si.sorted {
+			sortDatumRowDatum(si.filterRow, col)
+			si.sorted = true
+		}
 
 		compVal := siTrue
 		if si.negate {
@@ -2817,6 +3204,14 @@ func (pi *projectInOpDatum) Next() coldata.Batch {
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec.Datum()
+
+	// Sort pi.filterRow once. We perform the sort here instead of in
+	// fillDatumRowDatum because the compare overload requires the eval context
+	// of a coldata.DatumVec target column.
+	if !pi.sorted {
+		sortDatumRowDatum(pi.filterRow, col)
+		pi.sorted = true
+	}
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
