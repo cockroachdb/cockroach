@@ -1019,7 +1019,8 @@ func loadTPCCBench(
 	if err := c.RunE(ctx, roachNodes[:1], cmd); err != nil {
 		return err
 	}
-	if rebalanceWait == 0 || len(roachNodes) <= 3 {
+	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING server.consistency_check.interval='60s'`)
+	if rebalanceWait == 0 || len(roachNodes) <= 3 || true {
 		return nil
 	}
 
