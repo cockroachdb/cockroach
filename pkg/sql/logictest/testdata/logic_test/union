@@ -653,3 +653,16 @@ SELECT e, f, g, h FROM efgh EXCEPT SELECT a, b, c, d FROM abcd ORDER by e, f
 3  2  3  3
 4  2  2  2
 5  2  3  3
+
+# Regression test for #68702. Ensure correct behavior when a column is projected
+# twice on the left side.
+query III
+SELECT a, b AS b1, b AS b2 FROM abc EXCEPT SELECT a, b, c FROM abc ORDER by a, b1
+----
+
+query III
+SELECT a, b AS b1, b AS b2 FROM abc INTERSECT SELECT a, c, b FROM abc ORDER by a, b2
+----
+1  1  1
+1  2  2
+2  2  2

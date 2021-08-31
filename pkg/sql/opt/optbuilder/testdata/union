@@ -1029,3 +1029,53 @@ union
       │         └── columns: i8:9 i4:10 ab.f8:11 f4:12 ab.d:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       └── projections
            └── ab.f8:11::DECIMAL [as=f8:17]
+
+# Regression test for #68702. When a column is projected twice on the left side,
+# assign new column IDs for the output columns.
+exec-ddl
+CREATE TABLE t68702 (a INT, b INT, c INT, INDEX (a, b, c DESC))
+----
+
+# This is the same error as Postgres.
+build
+SELECT a, b, b FROM t68702 EXCEPT SELECT a, b, c FROM t68702 ORDER by a, b
+----
+error (42P09): ORDER BY "b" is ambiguous
+
+build
+SELECT a, b AS b1, b AS b2 FROM t68702 EXCEPT SELECT a, b, c FROM t68702 ORDER by a, b1
+----
+sort
+ ├── columns: a:13 b1:14 b2:15
+ ├── ordering: +13,+14
+ └── except
+      ├── columns: a:13 b1:14 b2:15
+      ├── left columns: t68702.a:1 b:2 b:2
+      ├── right columns: t68702.a:7 b:8 c:9
+      ├── project
+      │    ├── columns: t68702.a:1 b:2
+      │    └── scan t68702
+      │         └── columns: t68702.a:1 b:2 c:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── project
+           ├── columns: t68702.a:7 b:8 c:9
+           └── scan t68702
+                └── columns: t68702.a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+
+build
+SELECT a, b AS b1, b AS b2 FROM t68702 INTERSECT SELECT a, c, b FROM t68702 ORDER by a, b2
+----
+sort
+ ├── columns: a:13 b1:14 b2:15
+ ├── ordering: +13,+15
+ └── intersect
+      ├── columns: a:13 b1:14 b2:15
+      ├── left columns: t68702.a:1 b:2 b:2
+      ├── right columns: t68702.a:7 c:9 b:8
+      ├── project
+      │    ├── columns: t68702.a:1 b:2
+      │    └── scan t68702
+      │         └── columns: t68702.a:1 b:2 c:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── project
+           ├── columns: t68702.a:7 b:8 c:9
+           └── scan t68702
+                └── columns: t68702.a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12

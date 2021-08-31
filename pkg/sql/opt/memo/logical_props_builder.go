@@ -751,6 +751,18 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 			remapped.RemapFrom(&rightProps.FuncDeps, setPrivate.RightCols, setPrivate.OutCols)
 			rel.FuncDeps.AddFrom(&remapped)
 		}
+
+		// If columns at ordinals (i, j) are equivalent in the left input, then the
+		// output columns at ordinals at (i, j) are also equivalent. Although we
+		// have already copied the left FDs above, we also need to add equivalencies
+		// in case some left input columns were projected multiple times.
+		for i := range setPrivate.OutCols {
+			for j := i + 1; j < len(setPrivate.OutCols); j++ {
+				if leftProps.FuncDeps.AreColsEquiv(setPrivate.LeftCols[i], setPrivate.LeftCols[j]) {
+					rel.FuncDeps.AddEquivalency(setPrivate.OutCols[i], setPrivate.OutCols[j])
+				}
+			}
+		}
 	}
 
 	// Add a strict key for variants that eliminate duplicates.

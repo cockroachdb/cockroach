@@ -103,6 +103,7 @@ vectorized: true
 ·
 • project
 │ columns: (a)
+│ estimated row count: 1
 │
 └── • except all
     │ columns: (a, a)
