@@ -125,6 +125,9 @@ type streamIngestionProcessor struct {
 		// cutover signal so that it can be forwarded through the DistSQL flow.
 		pollingErr error
 	}
+
+	// metrics are monitoring counters shared between all ingestion jobs.
+	metrics *Metrics
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -180,6 +183,8 @@ func newStreamIngestionDataProcessor(
 // Start is part of the RowSource interface.
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
+
+	sip.metrics = sip.flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
 
 	evalCtx := sip.FlowCtx.EvalCtx
 	db := sip.FlowCtx.Cfg.DB
@@ -514,6 +519,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 	if lastTimestamp, ok := sip.bufferedCheckpoints[event.partition]; !ok || lastTimestamp.Less(resolvedTime) {
 		sip.bufferedCheckpoints[event.partition] = resolvedTime
 	}
+	sip.metrics.ResolvedEvents.Inc(1)
 	return nil
 }
 
@@ -522,15 +528,20 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	// Ensure that the current batch is sorted.
 	sort.Sort(sip.curBatch)
 
+	totalSize := 0
 	for _, kv := range sip.curBatch {
 		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil {
 			return nil, errors.Wrapf(err, "adding key %+v", kv)
 		}
+		totalSize += len(kv.Key.Key) + len(kv.Value)
 	}
 
 	if err := sip.batcher.Flush(sip.Ctx); err != nil {
 		return nil, errors.Wrap(err, "flushing")
 	}
+	sip.metrics.Flushes.Inc(1)
+	sip.metrics.IngestedBytes.Inc(int64(totalSize))
+	sip.metrics.IngestedEvents.Inc(int64(len(sip.curBatch)))
 
 	// Go through buffered checkpoint events, and put them on the channel to be
 	// emitted to the downstream frontier processor.
