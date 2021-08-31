@@ -5751,7 +5751,11 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	GatewayRegionBuiltinName: makeBuiltin(
-		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.FunctionProperties{
+			Category: categoryMultiRegion,
+			// We should always evaluate this built-in at the gateway.
+			DistsqlBlocklist: true,
+		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
