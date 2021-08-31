@@ -198,10 +198,12 @@ RUN apt-get purge -y \
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
 RUN ln -s /go/src/github.com/cockroachdb/cockroach/build/builder/mkrelease.sh /usr/local/bin/mkrelease \
-    && ln -s /usr/bin/bazel-3.6.0 /usr/bin/bazel
+  && ln -s /usr/bin/bazel-3.6.0 /usr/bin/bazel
 
-RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz \
-    | tar xz -C / --strip-components 1
+RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz -o autouseradd.tar.gz \
+  && echo 'f7b0cf67564044c31ffc5e84c961726098b88b0296a57c84421659d56434a365 autouseradd.tar.gz' | sha256sum -c - \
+  && tar xzf autouseradd.tar.gz --strip-components 1 \
+  && rm autouseradd.tar.gz
 
 COPY entrypoint.sh /usr/local/bin
 

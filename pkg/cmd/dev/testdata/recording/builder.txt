@@ -13,19 +13,23 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-docker volume inspect bzlcache
+id
 ----
+1001:1002
 
 bazel info workspace --color=no --config=dev
 ----
 go/src/github.com/cockroachdb/cockroach
 
-mkdir go/src/github.com/cockroachdb/cockroach/artifacts
-----
-
 cat go/src/github.com/cockroachdb/cockroach/build/teamcity-bazel-support.sh
 ----
 BAZEL_IMAGE=mock_bazel_image:1234
 
-docker run --rm -it -v go/src/github.com/cockroachdb/cockroach:/cockroach --workdir=/cockroach -v go/src/github.com/cockroachdb/cockroach/artifacts:/artifacts -v bzlcache:/root/.cache/bazel:delegated mock_bazel_image:1234
+docker volume inspect bzlhome
+----
+
+mkdir go/src/github.com/cockroachdb/cockroach/artifacts
+----
+
+docker run --rm -it -v go/src/github.com/cockroachdb/cockroach:/cockroach --workdir=/cockroach -v go/src/github.com/cockroachdb/cockroach/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 1001:1002 mock_bazel_image:1234
 ----
