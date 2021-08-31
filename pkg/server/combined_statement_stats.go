@@ -116,11 +116,12 @@ func collectCombinedStatements(
 				app_name,
 				aggregated_ts,
 				metadata,
-				statistics
+				statistics,
+				sampled_plan
 			FROM crdb_internal.statement_statistics
 			%s`, whereClause)
 
-	const expectedNumDatums = 5
+	const expectedNumDatums = 6
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-by-interval", nil,
 		sessiondata.InternalExecutorOverride{
@@ -164,12 +165,19 @@ func collectCombinedStatements(
 			return nil, err
 		}
 
+		metadata.Key.App = app
+
 		statsJSON := tree.MustBeDJSON(row[4]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
 			return nil, err
 		}
 
-		metadata.Key.App = app
+		planJSON := tree.MustBeDJSON(row[5]).JSON
+		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
+		if err != nil {
+			return nil, err
+		}
+		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
 		stmt := serverpb.StatementsResponse_CollectedStatementStatistics{
 			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{
