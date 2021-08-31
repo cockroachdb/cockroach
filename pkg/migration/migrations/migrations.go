@@ -118,7 +118,7 @@ var migrations = []migration.Migration{
 	migration.NewTenantMigration(
 		"validates no interleaved tables exist",
 		toCV(clusterversion.EnsureNoInterleavedTables),
-		interleavedTablesRemovedMigration,
+		interleavedTablesRemovedCheck,
 		interleavedTablesRemovedMigration,
 	),
 	migration.NewTenantMigration(

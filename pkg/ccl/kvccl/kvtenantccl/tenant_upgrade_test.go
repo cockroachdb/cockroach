@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -262,7 +263,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 							},
 								migrations.NoPrecondition,
 								func(
-									ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
+									ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps, _ *jobs.Job,
 								) error {
 									return nil
 								}), true
@@ -272,7 +273,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 							},
 								migrations.NoPrecondition,
 								func(
-									ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
+									ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps, _ *jobs.Job,
 								) error {
 									tenantStopperChannel <- struct{}{}
 									return nil

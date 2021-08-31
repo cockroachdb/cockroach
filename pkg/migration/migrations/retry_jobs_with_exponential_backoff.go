@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -51,7 +52,7 @@ CREATE INDEX jobs_run_stats_idx
 // retryJobsWithExponentialBackoff changes the schema of system.jobs table in
 // two steps. It first adds two new columns and then an index.
 func retryJobsWithExponentialBackoff(
-	ctx context.Context, cs clusterversion.ClusterVersion, d migration.TenantDeps,
+	ctx context.Context, cs clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
 ) error {
 	jobsTable := systemschema.JobsTable
 	ops := [...]struct {

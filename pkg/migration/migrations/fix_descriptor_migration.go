@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -34,7 +35,7 @@ type descIDAndVersion struct {
 
 // fixDescriptorMigration calls RunPostDeserializationChanges on every descriptor.
 func fixDescriptorMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
 ) error {
 	fixDescriptorFunc := func(ids []descpb.ID, descs []descpb.Descriptor, timestamps []hlc.Timestamp) error {
 		var descIDAndVersions []descIDAndVersion
