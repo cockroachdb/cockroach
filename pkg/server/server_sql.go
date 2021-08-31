@@ -53,6 +53,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlreconciler"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -833,6 +835,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// create the span config reconciliation job and captures all relevant job
 	// dependencies.
 	knobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+	sqlReconciler := spanconfigsqlreconciler.New(execCfg, codec)
+	sqlWatcher := spanconfigsqlwatcher.New(
+		codec,
+		cfg.Settings,
+		cfg.rangeFeedFactory,
+		cfg.stopper,
+	)
 	spanconfigMgr := spanconfigmanager.New(
 		cfg.db,
 		jobRegistry,
@@ -840,6 +849,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.stopper,
 		cfg.Settings,
 		cfg.spanConfigAccessor,
+		sqlWatcher,
+		sqlReconciler,
 		knobs,
 	)
 	execCfg.SpanConfigReconciliationJobDeps = spanconfigMgr

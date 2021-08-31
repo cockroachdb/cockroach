@@ -57,6 +57,8 @@ type Manager struct {
 	knobs    *spanconfig.TestingKnobs
 
 	spanconfig.KVAccessor
+	spanconfig.SQLWatcher
+	spanconfig.SQLReconciler
 }
 
 var _ spanconfig.ReconciliationDependencies = &Manager{}
@@ -69,19 +71,23 @@ func New(
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
 	kvAccessor spanconfig.KVAccessor,
+	sqlWatcher spanconfig.SQLWatcher,
+	sqlReconciler spanconfig.SQLReconciler,
 	knobs *spanconfig.TestingKnobs,
 ) *Manager {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &Manager{
-		db:         db,
-		jr:         jr,
-		ie:         ie,
-		stopper:    stopper,
-		settings:   settings,
-		knobs:      knobs,
-		KVAccessor: kvAccessor,
+		db:            db,
+		jr:            jr,
+		ie:            ie,
+		stopper:       stopper,
+		settings:      settings,
+		KVAccessor:    kvAccessor,
+		SQLWatcher:    sqlWatcher,
+		SQLReconciler: sqlReconciler,
+		knobs:         knobs,
 	}
 }
 

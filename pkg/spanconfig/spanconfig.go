@@ -14,6 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // KVAccessor mediates access to KV span configurations pertaining to a given
@@ -33,6 +35,37 @@ type KVAccessor interface {
 	UpdateSpanConfigEntries(ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry) error
 }
 
+// SQLWatcher can be used to incrementally process zone configuration updates in
+// the SQL layer.
+type SQLWatcher interface {
+	// WatchForSQLUpdates watches for SQL layer updates, starting from the given
+	// timestamp, that may imply a change to the span configuration state.
+	// Descriptor IDs that may imply a change are passed to the callback handler
+	// along with a checkpoint timestamp. The checkpoint timestamp guarantees that
+	// all IDs in the window [previous checkpoint timestamp, checkpoint timestamp]
+	// that could have implied a span configuration changes have been passed to
+	// the callback. The very first time the callback is invoked previous
+	// checkpoint timestmap is simply the start timestamp.
+	WatchForSQLUpdates(ctx context.Context, startTS hlc.Timestamp, f SQLWatcherHandleFunc) error
+}
+
+type SQLWatcherHandleFunc func(ids descpb.IDs, checkpointTS hlc.Timestamp) error
+
+// SQLReconciler reconciles SQL descriptors and their corresponding zone
+// configurations to span configurations. The SQLReconciler merely constructs
+// the implied span configuration state from SQL's perspective -- it is agnostic
+// to the actual span configuration state in KV.
+type SQLReconciler interface {
+	// Reconcile generates the implied span configuration state given a list of
+	// {descriptor, named zone} IDs.
+	Reconcile(ctx context.Context, ids descpb.IDs) ([]Update, error)
+	// FullReconcile performs a full reconciliation of the SQL zone configuration
+	// state to the implied span configuration state. The implied span
+	// configuration state is agnostic of the actual span configuration state. The
+	// timestamp at which the full reconciliation occurred is returned.
+	FullReconcile(ctx context.Context) ([]Update, hlc.Timestamp, error)
+}
+
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
@@ -40,11 +73,21 @@ type KVAccessor interface {
 type ReconciliationDependencies interface {
 	KVAccessor
 
-	// TODO(irfansharif): We'll also want access to a "SQLWatcher", something
-	// that watches for changes to system.{descriptor,zones} and be responsible
-	// for generating corresponding span config updates. Put together, the
-	// reconciliation job will react to these updates by installing them into KV
-	// through the KVAccessor.
+	SQLWatcher
+
+	SQLReconciler
+}
+
+// Update captures what span has seen a config change. It's the unit of what a
+// {SQL,KV}Watcher emits.
+type Update struct {
+	// Entry captures the keyspan and the corresponding config that has been
+	// updated. If deleted is true, the config over that span has been deleted
+	// (those keys no longer exist). If false, the embedded config is what the
+	// keyspan was updated to.
+	Entry roachpb.SpanConfigEntry
+	// Deleted is true if the span config entry has been deleted.
+	Deleted bool
 }
 
 // Store is a data structure used to store span configs.
