@@ -80,7 +80,7 @@ func (d *dev) getDockerRunArgs(
 	if err != nil {
 		return
 	}
-	args = append(args, "-v", workspace+":/cockroach:ro")
+	args = append(args, "-v", workspace+":/cockroach")
 	args = append(args, "--workdir=/cockroach")
 	// Create the artifacts directory.
 	artifacts := filepath.Join(workspace, "artifacts")

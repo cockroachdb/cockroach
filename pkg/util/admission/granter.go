@@ -1527,9 +1527,17 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 	l0AddedBytes := m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested
 	// Compute the stats for the interval.
 	bytesAdded := int64(l0AddedBytes - io.l0AddedBytes)
+	if bytesAdded < 0 {
+		// bytesAdded is a simple delta computation over individually cumulative
+		// stats, so should not be negative.
+		log.Warningf(context.Background(), "bytesAdded %d is negative", bytesAdded)
+		bytesAdded = 0
+	}
 	// bytesRemoved are due to finished compactions.
 	bytesRemoved := io.l0Bytes + bytesAdded - l0Bytes
 	if bytesRemoved < 0 {
+		// Ignore potential inconsistencies across cumulative stats and current L0
+		// bytes (gauge).
 		bytesRemoved = 0
 	}
 	const alpha = 0.5
@@ -1538,8 +1546,14 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 	io.smoothedBytesRemoved =
 		int64(alpha*float64(bytesRemoved) + (1-alpha)*float64(io.smoothedBytesRemoved))
 	// admitted represents what we actually admitted.
-	admitted := admittedCount - io.admittedCount
+	var admitted uint64
 	doLog := true
+	if admittedCount < io.admittedCount {
+		log.Warningf(context.Background(), "admitted count decreased from %d to %d",
+			io.admittedCount, admittedCount)
+	} else {
+		admitted = admittedCount - io.admittedCount
+	}
 	if admitted == 0 {
 		admitted = 1
 		// Admission control is likely disabled, given there was no KVWork
@@ -1551,7 +1565,12 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 	if m.Levels[0].NumFiles > L0FileCountOverloadThreshold.Get(&io.settings.SV) ||
 		m.Levels[0].Sublevels > int32(L0SubLevelCountOverloadThreshold.Get(&io.settings.SV)) {
 		// Attribute the bytesAdded equally to all the admitted work.
+		// INVARIANT: bytesAddedPerWork >= 0
 		bytesAddedPerWork := float64(bytesAdded) / float64(admitted)
+		if bytesAddedPerWork == 0 {
+			// We are here because bytesAdded was 0. This will be very rare.
+			bytesAddedPerWork = 1
+		}
 		// Don't admit more work than we can remove via compactions. numAdmit
 		// tracks our goal for admission.
 		numAdmit := float64(io.smoothedBytesRemoved) / bytesAddedPerWork
@@ -1562,7 +1581,12 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 		// Smooth it out in case our estimation of numAdmit goes awry in some
 		// intervals.
 		io.smoothedNumAdmit = alpha*numAdmit + (1-alpha)*io.smoothedNumAdmit
-		io.totalTokens = int64(io.smoothedNumAdmit)
+		if float64(math.MaxInt64) < io.smoothedNumAdmit {
+			// Avoid overflow. This will be very rare.
+			io.totalTokens = math.MaxInt64
+		} else {
+			io.totalTokens = int64(io.smoothedNumAdmit)
+		}
 		if doLog {
 			log.Infof(context.Background(),
 				"IO overload on store %d (files %d, sub-levels %d): admitted: %d, added: %d, "+

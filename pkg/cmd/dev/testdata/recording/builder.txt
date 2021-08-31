@@ -27,5 +27,5 @@ cat go/src/github.com/cockroachdb/cockroach/build/teamcity-bazel-support.sh
 ----
 BAZEL_IMAGE=mock_bazel_image:1234
 
-docker run --rm -it -v go/src/github.com/cockroachdb/cockroach:/cockroach:ro --workdir=/cockroach -v go/src/github.com/cockroachdb/cockroach/artifacts:/artifacts -v bzlcache:/root/.cache/bazel:delegated mock_bazel_image:1234
+docker run --rm -it -v go/src/github.com/cockroachdb/cockroach:/cockroach --workdir=/cockroach -v go/src/github.com/cockroachdb/cockroach/artifacts:/artifacts -v bzlcache:/root/.cache/bazel:delegated mock_bazel_image:1234
 ----

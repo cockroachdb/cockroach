@@ -27,7 +27,6 @@ if ! run run_bazel build/bazelutil/check.sh &> artifacts/buildshort.log || (cat 
     exit 1
 fi
 rm artifacts/buildshort.log
-TEAMCITY_BAZEL_SUPPORT_GENERATE=1  # See teamcity-bazel-support.sh.
 run run_bazel build/bazelutil/bazel-generate.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
 rm artifacts/buildshort.log
 check_clean "Run \`./dev generate bazel\` to automatically regenerate these."
