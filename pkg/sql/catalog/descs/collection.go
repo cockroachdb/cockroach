@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -41,7 +40,7 @@ func makeCollection(
 	settings *cluster.Settings,
 	hydratedTables *hydratedtables.Cache,
 	virtualSchemas catalog.VirtualSchemas,
-	sessionData *sessiondata.SessionData,
+	temporarySchemaProvider TemporarySchemaProvider,
 ) Collection {
 	codec := keys.SystemSQLCodec
 	if leaseMgr != nil { // permitted for testing
@@ -55,7 +54,7 @@ func makeCollection(
 		synthetic:      makeSyntheticDescriptors(),
 		uncommitted:    makeUncommittedDescriptors(),
 		kv:             makeKVDescriptors(codec),
-		temporary:      makeTemporaryDescriptors(codec, sessionData),
+		temporary:      makeTemporaryDescriptors(codec, temporarySchemaProvider),
 	}
 }
 

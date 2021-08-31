@@ -24,17 +24,53 @@ import (
 )
 
 type temporaryDescriptors struct {
-	codec       keys.SQLCodec
-	sessionData *sessiondata.SessionData
+	codec keys.SQLCodec
+	tsp   TemporarySchemaProvider
 }
 
 func makeTemporaryDescriptors(
-	codec keys.SQLCodec, data *sessiondata.SessionData,
+	codec keys.SQLCodec, temporarySchemaProvider TemporarySchemaProvider,
 ) temporaryDescriptors {
 	return temporaryDescriptors{
-		codec:       codec,
-		sessionData: data,
+		codec: codec,
+		tsp:   temporarySchemaProvider,
 	}
+}
+
+// TemporarySchemaProvider is an interface that provides temporary schema
+// details on the current session.
+type TemporarySchemaProvider interface {
+	GetTemporarySchemaName() string
+	GetTemporarySchemaIDForDB(descpb.ID) (descpb.ID, bool)
+	MaybeGetDatabaseForTemporarySchemaID(descpb.ID) (descpb.ID, bool)
+}
+
+type temporarySchemaProviderImpl sessiondata.Stack
+
+var _ TemporarySchemaProvider = (*temporarySchemaProviderImpl)(nil)
+
+// NewTemporarySchemaProvider creates a TemporarySchemaProvider.
+func NewTemporarySchemaProvider(sds *sessiondata.Stack) TemporarySchemaProvider {
+	return (*temporarySchemaProviderImpl)(sds)
+}
+
+// GetTemporarySchemaName implements the TemporarySchemaProvider interface.
+func (impl *temporarySchemaProviderImpl) GetTemporarySchemaName() string {
+	return (*sessiondata.Stack)(impl).Top().SearchPath.GetTemporarySchemaName()
+}
+
+// GetTemporarySchemaIDForDB implements the TemporarySchemaProvider interface.
+func (impl *temporarySchemaProviderImpl) GetTemporarySchemaIDForDB(id descpb.ID) (descpb.ID, bool) {
+	ret, found := (*sessiondata.Stack)(impl).Top().GetTemporarySchemaIDForDB(uint32(id))
+	return descpb.ID(ret), found
+}
+
+// MaybeGetDatabaseForTemporarySchemaID implements the TemporarySchemaProvider interface.
+func (impl *temporarySchemaProviderImpl) MaybeGetDatabaseForTemporarySchemaID(
+	id descpb.ID,
+) (descpb.ID, bool) {
+	ret, found := (*sessiondata.Stack)(impl).Top().MaybeGetDatabaseForTemporarySchemaID(uint32(id))
+	return descpb.ID(ret), found
 }
 
 // getSchemaByName assumes that the schema name carries the `pg_temp` prefix.
@@ -50,14 +86,14 @@ func (td *temporaryDescriptors) getSchemaByName(
 ) (refuseFurtherLookup bool, _ catalog.SchemaDescriptor, _ error) {
 	// If a temp schema is requested, check if it's for the current session, or
 	// else fall back to reading from the store.
-	if td.sessionData != nil {
+	if tsp := td.tsp; tsp != nil {
 		if schemaName == catconstants.PgTempSchemaName ||
-			schemaName == td.sessionData.SearchPath.GetTemporarySchemaName() {
-			schemaID, found := td.sessionData.GetTemporarySchemaIDForDb(uint32(dbID))
+			schemaName == tsp.GetTemporarySchemaName() {
+			schemaID, found := tsp.GetTemporarySchemaIDForDB(dbID)
 			if found {
 				return true, schemadesc.NewTemporarySchema(
-					td.sessionData.SearchPath.GetTemporarySchemaName(),
-					descpb.ID(schemaID),
+					tsp.GetTemporarySchemaName(),
+					schemaID,
 					dbID,
 				), nil
 			}
@@ -79,16 +115,15 @@ func (td *temporaryDescriptors) getSchemaByName(
 func (td *temporaryDescriptors) getSchemaByID(
 	ctx context.Context, schemaID descpb.ID,
 ) catalog.SchemaDescriptor {
-	if td.sessionData == nil {
+	tsp := td.tsp
+	if tsp == nil {
 		return nil
 	}
-	if dbID, exists := td.sessionData.MaybeGetDatabaseForTemporarySchemaID(
-		uint32(schemaID),
-	); exists {
+	if dbID, exists := tsp.MaybeGetDatabaseForTemporarySchemaID(schemaID); exists {
 		return schemadesc.NewTemporarySchema(
-			td.sessionData.SearchPath.GetTemporarySchemaName(),
+			tsp.GetTemporarySchemaName(),
 			schemaID,
-			descpb.ID(dbID),
+			dbID,
 		)
 	}
 	return nil

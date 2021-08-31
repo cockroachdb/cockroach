@@ -308,9 +308,10 @@ func newInternalPlanner(
 	sd.SessionData.Database = "system"
 	sd.SessionData.UserProto = user.EncodeProto()
 	sd.SessionData.Internal = true
+	sds := sessiondata.NewStack(sd)
 
 	if params.collection == nil {
-		params.collection = execCfg.CollectionFactory.NewCollection(sd)
+		params.collection = execCfg.CollectionFactory.NewCollection(descs.NewTemporarySchemaProvider(sds))
 	}
 
 	var ts time.Time
@@ -344,7 +345,6 @@ func newInternalPlanner(
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
 	plannerMon.Start(ctx, execCfg.RootMemoryMonitor, mon.BoundAccount{})
 
-	sds := sessiondata.NewStack(sd)
 	smi := &sessionDataMutatorIterator{
 		sds: sds,
 		sessionDataMutatorBase: sessionDataMutatorBase{
