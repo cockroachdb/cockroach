@@ -617,7 +617,16 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 		req := arg.GetInner()
 		if et, ok := req.(*EndTxnRequest); ok {
 			h := req.Header()
-			s.Printf("%s(commit:%t", req.Method(), et.Commit)
+			s.Printf("%s(", req.Method())
+			if et.Commit {
+				if et.IsParallelCommit() {
+					s.Printf("parallel commit")
+				} else {
+					s.Printf("commit")
+				}
+			} else {
+				s.Printf("abort")
+			}
 			if et.InternalCommitTrigger != nil {
 				s.Printf(" %s", et.InternalCommitTrigger.Kind())
 			}

@@ -510,8 +510,16 @@ func evaluateCommand(
 		return result.Result{}, errors.Errorf("unrecognized command %s", args.Method())
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "evaluated %s command %+v: %+v, err=%v", args.Method(), args, reply, err)
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		trunc := func(s string) string {
+			const maxLen = 256
+			if len(s) > maxLen {
+				return s[:maxLen-3] + "..."
+			}
+			return s
+		}
+		log.VEventf(ctx, 2, "evaluated %s command %s, txn=%v : resp=%s, err=%v",
+			args.Method(), trunc(args.String()), h.Txn, trunc(reply.String()), err)
 	}
 	return pd, err
 }
