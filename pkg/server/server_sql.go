@@ -832,17 +832,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Instantiate a span config manager; it exposes a hook to idempotently
 	// create the span config reconciliation job and captures all relevant job
 	// dependencies.
-	knobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-	spanconfigMgr := spanconfigmanager.New(
+	spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+	spanConfigMgr := spanconfigmanager.New(
 		cfg.db,
 		jobRegistry,
 		cfg.circularInternalExecutor,
 		cfg.stopper,
 		cfg.Settings,
 		cfg.spanConfigAccessor,
-		knobs,
+		spanConfigKnobs,
 	)
-	execCfg.SpanConfigReconciliationJobDeps = spanconfigMgr
+	execCfg.SpanConfigReconciliationJobDeps = spanConfigMgr
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
@@ -904,7 +904,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlInstanceProvider:     cfg.sqlInstanceProvider,
 		metricsRegistry:         cfg.registry,
 		diagnosticsReporter:     reporter,
-		spanconfigMgr:           spanconfigMgr,
+		spanconfigMgr:           spanConfigMgr,
 		settingsWatcher:         settingsWatcher,
 	}, nil
 }

@@ -132,6 +132,9 @@ type TestServerArgs struct {
 
 	// If set, a TraceDir is initialized at the provided path.
 	TraceDir string
+
+	// If set, the span configs infrastructure will be enabled.
+	EnableSpanConfigs bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
