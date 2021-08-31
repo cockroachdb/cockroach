@@ -57,6 +57,8 @@ func (s *SpanConfig) TTL() time.Duration {
 
 // GetNumVoters returns the number of voting replicas as defined in the
 // span config.
+// TODO(arul): We can get rid of this now that we're correctly populating
+//  numVoters when going from ZoneConfigs -> SpanConfigs.
 func (s *SpanConfig) GetNumVoters() int32 {
 	if s.NumVoters != 0 {
 		return s.NumVoters
@@ -116,5 +118,6 @@ func TestingDefaultSpanConfig() SpanConfig {
 			TTLSeconds: 25 * 60 * 60,
 		},
 		NumReplicas: 3,
+		NumVoters:   3,
 	}
 }

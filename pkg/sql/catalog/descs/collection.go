@@ -15,6 +15,7 @@ package descs
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -276,6 +278,37 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
 	return tc.kv.getAllDatabaseDescriptors(ctx, txn)
+}
+
+// GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
+// the transaction inside the database referenced by the given database ID. It
+// first checks the collections cached descriptors before defaulting to a key-value scan.
+func (tc *Collection) GetAllTableDescriptorsInDatabase(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID,
+) ([]catalog.TableDescriptor, error) {
+	// Ensure the given ID does indeed belong to a database.
+	found, _, err := tc.getDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
+		AvoidCached: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+	}
+	descs, err := tc.GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	var ret []catalog.TableDescriptor
+	for _, desc := range descs {
+		if desc.GetParentID() == dbID {
+			if table, ok := desc.(catalog.TableDescriptor); ok {
+				ret = append(ret, table)
+			}
+		}
+	}
+	return ret, nil
 }
 
 // GetSchemasForDatabase returns the schemas for a given database
