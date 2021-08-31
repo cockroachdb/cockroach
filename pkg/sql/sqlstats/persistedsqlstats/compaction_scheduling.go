@@ -94,10 +94,10 @@ func CreateCompactionJob(
 	}
 
 	record := jobs.Record{
-		Description: "SQL Stats compaction",
+		Description: "automatic SQL Stats compaction",
 		Username:    security.NodeUserName(),
-		Details:     jobspb.SQLStatsCompactionDetails{},
-		Progress:    jobspb.SQLStatsCompactionProgress{},
+		Details:     jobspb.AutoSQLStatsCompactionDetails{},
+		Progress:    jobspb.AutoSQLStatsCompactionProgress{},
 		CreatedBy:   createdByInfo,
 	}
 
@@ -119,7 +119,7 @@ func CheckExistingCompactionJob(
 		jobID = job.ID()
 	}
 	exists, err := jobs.RunningJobExists(ctx, jobID, ie, txn, func(payload *jobspb.Payload) bool {
-		return payload.Type() == jobspb.TypeSQLStatsCompaction
+		return payload.Type() == jobspb.TypeAutoSQLStatsCompaction
 	})
 
 	if err == nil && exists {
