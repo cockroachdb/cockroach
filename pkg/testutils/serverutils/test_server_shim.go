@@ -122,6 +122,10 @@ type TestServerInterface interface {
 	// an interface{}.
 	SpanConfigSQLTranslator() interface{}
 
+	// SpanConfigSQLWatcherFactory returns the underlying
+	// spanconfig.SQLWatcherFactory as an interface{}.
+	SpanConfigSQLWatcherFactory() interface{}
+
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}
 
