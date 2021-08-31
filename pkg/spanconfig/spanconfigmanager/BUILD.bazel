@@ -41,6 +41,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/testspanconfig",
         "//pkg/sql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

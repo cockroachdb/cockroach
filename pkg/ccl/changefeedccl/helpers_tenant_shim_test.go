@@ -71,6 +71,7 @@ func (t *testServerShim) DistSenderI() interface{}              { panic(unsuppor
 func (t *testServerShim) MigrationServer() interface{}          { panic(unsupportedShimMethod) }
 func (t *testServerShim) SpanConfigAccessor() interface{}       { panic(unsupportedShimMethod) }
 func (t *testServerShim) SpanConfigSQLTranslator() interface{}  { panic(unsupportedShimMethod) }
+func (t *testServerShim) SpanConfigSQLWatcher() interface{}     { panic(unsupportedShimMethod) }
 func (t *testServerShim) SQLServer() interface{}                { panic(unsupportedShimMethod) }
 func (t *testServerShim) SQLLivenessProvider() interface{}      { panic(unsupportedShimMethod) }
 func (t *testServerShim) StartupMigrationsManager() interface{} { panic(unsupportedShimMethod) }
