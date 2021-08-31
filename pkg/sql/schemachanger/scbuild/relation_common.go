@@ -33,7 +33,7 @@ func (b *buildContext) removeTypeBackRefDeps(
 	if err != nil {
 		panic(err)
 	}
-	typeIDs, err := tableDesc.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
+	typeIDs, _, err := tableDesc.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		mutDesc, err := b.Descs.GetMutableTypeByID(ctx, b.EvalCtx.Txn, id, tree.ObjectLookupFlagsWithRequired())
 		if err != nil {
 			return nil, err
