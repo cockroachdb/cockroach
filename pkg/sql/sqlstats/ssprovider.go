@@ -126,9 +126,11 @@ type StatsCollector interface {
 	// was previously tracking before being Reset.
 	PreviousPhaseTimes() *sessionphase.Times
 
-	// Reset resets the StatsCollector with a new Writer and a new copy of the
-	// sessionphase.Times.
-	Reset(Writer, *sessionphase.Times)
+	// ResetPhaseTime resets the sessionphase.Times tracked by the StatsCollector.
+	ResetPhaseTime(*sessionphase.Times)
+
+	// ResetWriter resets the Writer used by the StatsCollector.
+	ResetWriter(Writer)
 }
 
 // Storage provides clients with interface to perform read and write operations

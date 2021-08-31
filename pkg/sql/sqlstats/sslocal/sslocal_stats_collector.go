@@ -48,12 +48,13 @@ func (s *statsCollector) PreviousPhaseTimes() *sessionphase.Times {
 	return s.previousPhaseTimes
 }
 
-// Reset implements sqlstats.StatsCollector interface.
-func (s *statsCollector) Reset(writer sqlstats.Writer, phaseTime *sessionphase.Times) {
-	previousPhaseTime := s.phaseTimes
-	*s = statsCollector{
-		Writer:             writer,
-		previousPhaseTimes: previousPhaseTime,
-		phaseTimes:         phaseTime.Clone(),
-	}
+// ResetPhaseTime implements sqlstats.StatsCollector interface.
+func (s *statsCollector) ResetPhaseTime(phaseTime *sessionphase.Times) {
+	s.previousPhaseTimes = s.phaseTimes
+	s.phaseTimes = phaseTime.Clone()
+}
+
+// ResetWriter implements sqlstats.StatsCollector interface.
+func (s *statsCollector) ResetWriter(writer sqlstats.Writer) {
+	s.Writer = writer
 }

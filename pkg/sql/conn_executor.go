@@ -809,6 +809,7 @@ func (s *Server) newConnExecutor(
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
 		ex.statsWriter = ex.server.sqlStats.GetWriterForApplication(newName)
+		ex.statsCollector.ResetWriter(ex.statsWriter)
 	}
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
@@ -2136,7 +2137,7 @@ func (ex *connExecutor) execCopyIn(
 		// state machine, but the copyMachine manages its own transactions without
 		// going through the state machine.
 		ex.state.sqlTimestamp = txnTS
-		ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
+		ex.statsCollector.ResetPhaseTime(ex.phaseTimes)
 		ex.initPlanner(ctx, p)
 		ex.resetPlanner(ctx, p, txn, stmtTS)
 	}
