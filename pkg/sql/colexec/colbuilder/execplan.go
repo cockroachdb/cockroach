@@ -1492,7 +1492,7 @@ func planSelectionOperators(
 					// the default comparison operator.
 					break
 				}
-				op, err = colexec.GetInOperator(lTyp, leftOp, leftIdx, datumTuple, negate)
+				op, err = colexec.GetInOperator(evalCtx, lTyp, leftOp, leftIdx, datumTuple, negate)
 			case tree.IsDistinctFrom, tree.IsNotDistinctFrom:
 				if constArg != tree.DNull {
 					// Optimized IsDistinctFrom and IsNotDistinctFrom are
@@ -1922,7 +1922,7 @@ func planProjectionExpr(
 					break
 				}
 				op, err = colexec.GetInProjectionOperator(
-					allocator, typs[leftIdx], input, leftIdx, resultIdx, datumTuple, negate,
+					evalCtx, allocator, typs[leftIdx], input, leftIdx, resultIdx, datumTuple, negate,
 				)
 			case tree.IsDistinctFrom, tree.IsNotDistinctFrom:
 				if right != tree.DNull {

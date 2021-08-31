@@ -43,6 +43,7 @@ const (
 )
 
 func GetInProjectionOperator(
+	evalCtx *tree.EvalContext,
 	allocator *colmem.Allocator,
 	t *types.T,
 	input colexecbase.Operator,
@@ -64,7 +65,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowBool(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowBool(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.BytesFamily:
@@ -78,7 +79,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowBytes(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowBytes(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.DecimalFamily:
@@ -92,7 +93,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowDecimal(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowDecimal(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.IntFamily:
@@ -105,7 +106,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowInt16(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowInt16(evalCtx, t, datumTuple)
 			return obj, nil
 		case 32:
 			obj := &projectInOpInt32{
@@ -115,7 +116,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowInt32(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowInt32(evalCtx, t, datumTuple)
 			return obj, nil
 		case -1:
 		default:
@@ -126,7 +127,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowInt64(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowInt64(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.FloatFamily:
@@ -140,7 +141,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowFloat64(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowFloat64(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.TimestampTZFamily:
@@ -154,7 +155,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowTimestamp(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowTimestamp(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.IntervalFamily:
@@ -168,7 +169,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowInterval(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowInterval(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -182,7 +183,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowDatum(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowDatum(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	}
@@ -190,7 +191,12 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
-	t *types.T, input colexecbase.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
+	evalCtx *tree.EvalContext,
+	t *types.T,
+	input colexecbase.Operator,
+	colIdx int,
+	datumTuple *tree.DTuple,
+	negate bool,
 ) (colexecbase.Operator, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
@@ -202,7 +208,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowBool(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowBool(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.BytesFamily:
@@ -214,7 +220,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowBytes(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowBytes(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.DecimalFamily:
@@ -226,7 +232,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowDecimal(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowDecimal(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.IntFamily:
@@ -237,7 +243,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowInt16(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowInt16(evalCtx, t, datumTuple)
 			return obj, nil
 		case 32:
 			obj := &selectInOpInt32{
@@ -245,7 +251,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowInt32(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowInt32(evalCtx, t, datumTuple)
 			return obj, nil
 		case -1:
 		default:
@@ -254,7 +260,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowInt64(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowInt64(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.FloatFamily:
@@ -266,7 +272,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowFloat64(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowFloat64(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.TimestampTZFamily:
@@ -278,7 +284,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowTimestamp(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowTimestamp(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case types.IntervalFamily:
@@ -290,7 +296,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowInterval(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowInterval(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -302,7 +308,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRowDatum(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRowDatum(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	}
@@ -331,7 +337,12 @@ type projectInOpBool struct {
 
 var _ colexecbase.Operator = &projectInOpBool{}
 
-func fillDatumRowBool(t *types.T, datumTuple *tree.DTuple) ([]bool, bool) {
+func fillDatumRowBool(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([]bool, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := GetDatumToPhysicalFn(t)
 	var result []bool
 	hasNulls := false
@@ -350,8 +361,8 @@ func fillDatumRowBool(t *types.T, datumTuple *tree.DTuple) ([]bool, bool) {
 func cmpInBool(
 	targetElem bool, targetCol coldata.Bools, filterRow []bool, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRowBool, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -569,7 +580,12 @@ type projectInOpBytes struct {
 
 var _ colexecbase.Operator = &projectInOpBytes{}
 
-func fillDatumRowBytes(t *types.T, datumTuple *tree.DTuple) ([][]byte, bool) {
+func fillDatumRowBytes(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([][]byte, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := GetDatumToPhysicalFn(t)
 	var result [][]byte
 	hasNulls := false
@@ -588,8 +604,8 @@ func fillDatumRowBytes(t *types.T, datumTuple *tree.DTuple) ([][]byte, bool) {
 func cmpInBytes(
 	targetElem []byte, targetCol *coldata.Bytes, filterRow [][]byte, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRowBytes, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -803,7 +819,12 @@ type projectInOpDecimal struct {
 
 var _ colexecbase.Operator = &projectInOpDecimal{}
 
-func fillDatumRowDecimal(t *types.T, datumTuple *tree.DTuple) ([]apd.Decimal, bool) {
+func fillDatumRowDecimal(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([]apd.Decimal, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := GetDatumToPhysicalFn(t)
 	var result []apd.Decimal
 	hasNulls := false
@@ -822,8 +843,8 @@ func fillDatumRowDecimal(t *types.T, datumTuple *tree.DTuple) ([]apd.Decimal, bo
 func cmpInDecimal(
 	targetElem apd.Decimal, targetCol coldata.Decimals, filterRow []apd.Decimal, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRowDecimal, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -1033,7 +1054,12 @@ type projectInOpInt16 struct {
 
 var _ colexecbase.Operator = &projectInOpInt16{}
 
-func fillDatumRowInt16(t *types.T, datumTuple *tree.DTuple) ([]int16, bool) {
+func fillDatumRowInt16(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([]int16, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := GetDatumToPhysicalFn(t)
 	var result []int16
 	hasNulls := false
@@ -1052,8 +1078,8 @@ func fillDatumRowInt16(t *types.T, datumTuple *tree.DTuple) ([]int16, bool) {
 func cmpInInt16(
 	targetElem int16, targetCol coldata.Int16s, filterRow []int16, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRowInt16, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -1274,7 +1300,12 @@ type projectInOpInt32 struct {
 
 var _ colexecbase.Operator = &projectInOpInt32{}
 
-func fillDatumRowInt32(t *types.T, datumTuple *tree.DTuple) ([]int32, bool) {
+func fillDatumRowInt32(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([]int32, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := GetDatumToPhysicalFn(t)
 	var result []int32
 	hasNulls := false
@@ -1293,8 +1324,8 @@ func fillDatumRowInt32(t *types.T, datumTuple *tree.DTuple) ([]int32, bool) {
 func cmpInInt32(
 	targetElem int32, targetCol coldata.Int32s, filterRow []int32, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRowInt32, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -1515,7 +1546,12 @@ type projectInOpInt64 struct {
 
 var _ colexecbase.Operator = &projectInOpInt64{}
 
-func fillDatumRowInt64(t *types.T, datumTuple *tree.DTuple) ([]int64, bool) {
+func fillDatumRowInt64(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([]int64, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := GetDatumToPhysicalFn(t)
 	var result []int64
 	hasNulls := false
@@ -1534,8 +1570,8 @@ func fillDatumRowInt64(t *types.T, datumTuple *tree.DTuple) ([]int64, bool) {
 func cmpInInt64(
 	targetElem int64, targetCol coldata.Int64s, filterRow []int64, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRowInt64, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -1756,7 +1792,12 @@ type projectInOpFloat64 struct {
 
 var _ colexecbase.Operator = &projectInOpFloat64{}
 
-func fillDatumRowFloat64(t *types.T, datumTuple *tree.DTuple) ([]float64, bool) {
+func fillDatumRowFloat64(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([]float64, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := GetDatumToPhysicalFn(t)
 	var result []float64
 	hasNulls := false
@@ -1775,8 +1816,8 @@ func fillDatumRowFloat64(t *types.T, datumTuple *tree.DTuple) ([]float64, bool) 
 func cmpInFloat64(
 	targetElem float64, targetCol coldata.Float64s, filterRow []float64, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRowFloat64, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -2005,7 +2046,12 @@ type projectInOpTimestamp struct {
 
 var _ colexecbase.Operator = &projectInOpTimestamp{}
 
-func fillDatumRowTimestamp(t *types.T, datumTuple *tree.DTuple) ([]time.Time, bool) {
+func fillDatumRowTimestamp(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([]time.Time, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := GetDatumToPhysicalFn(t)
 	var result []time.Time
 	hasNulls := false
@@ -2024,8 +2070,8 @@ func fillDatumRowTimestamp(t *types.T, datumTuple *tree.DTuple) ([]time.Time, bo
 func cmpInTimestamp(
 	targetElem time.Time, targetCol coldata.Times, filterRow []time.Time, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRowTimestamp, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -2242,7 +2288,12 @@ type projectInOpInterval struct {
 
 var _ colexecbase.Operator = &projectInOpInterval{}
 
-func fillDatumRowInterval(t *types.T, datumTuple *tree.DTuple) ([]duration.Duration, bool) {
+func fillDatumRowInterval(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([]duration.Duration, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := GetDatumToPhysicalFn(t)
 	var result []duration.Duration
 	hasNulls := false
@@ -2261,8 +2312,8 @@ func fillDatumRowInterval(t *types.T, datumTuple *tree.DTuple) ([]duration.Durat
 func cmpInInterval(
 	targetElem duration.Duration, targetCol coldata.Durations, filterRow []duration.Duration, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRowInterval, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -2472,7 +2523,12 @@ type projectInOpDatum struct {
 
 var _ colexecbase.Operator = &projectInOpDatum{}
 
-func fillDatumRowDatum(t *types.T, datumTuple *tree.DTuple) ([]interface{}, bool) {
+func fillDatumRowDatum(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([]interface{}, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := GetDatumToPhysicalFn(t)
 	var result []interface{}
 	hasNulls := false
@@ -2491,8 +2547,8 @@ func fillDatumRowDatum(t *types.T, datumTuple *tree.DTuple) ([]interface{}, bool
 func cmpInDatum(
 	targetElem interface{}, targetCol coldata.DatumVec, filterRow []interface{}, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRowDatum, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
