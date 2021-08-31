@@ -269,6 +269,20 @@ func TestAtMostOneSQLStatsCompactionJob(t *testing.T) {
 		fmt.Sprintf(`SELECT count(*) FROM system.jobs where id = %d AND status = 'succeeded'`, jobID),
 		[][]string{{"1"}},
 	)
+
+	// Ensure the sqlstats job is hidden from the SHOW JOBS command.
+	sqlDB.CheckQueryResults(
+		t,
+		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '"+jobspb.TypeSQLStatsCompaction.String()+"'",
+		[][]string{{"0"}},
+	)
+
+	// Ensure the sqlstats job is displayed in SHOW AUTOMATIC JOBS command.
+	sqlDB.CheckQueryResults(
+		t,
+		"SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = '"+jobspb.TypeSQLStatsCompaction.String()+"'",
+		[][]string{{"2"}},
+	)
 }
 
 func launchSQLStatsCompactionJob(server serverutils.TestServerInterface) (jobspb.JobID, error) {
