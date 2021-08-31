@@ -1,0 +1,109 @@
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t(i INT, j INT, PRIMARY KEY(i, j)) PARTITION BY LIST (i) (
+PARTITION one VALUES IN (1) PARTITION BY RANGE (j) (
+  PARTITION "lessThanEleven" VALUES FROM (MINVALUE) TO (11),
+  PARTITION "moreThanEleven" VALUES FROM (11) TO (MAXVALUE)
+),
+PARTITION default VALUES IN (default)
+);
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+ALTER PARTITION one OF TABLE db.t CONFIGURE ZONE USING gc.ttlseconds=1000;
+ALTER PARTITION "lessThanEleven" OF TABLE db.t CONFIGURE ZONE USING global_reads=true;
+----
+
+query-sql
+SHOW ZONE CONFIGURATION FOR DATABASE db
+----
+DATABASE db ALTER DATABASE db CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 7,
+	constraints = '[]',
+	lease_preferences = '[]'
+
+query-sql
+SHOW ZONE CONFIGURATION FOR PARTITION one OF TABLE db.t
+----
+PARTITION one OF TABLE db.public.t ALTER PARTITION one OF TABLE db.public.t CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 1000,
+	num_replicas = 7,
+	constraints = '[]',
+	lease_preferences = '[]'
+
+query-sql
+SHOW ZONE CONFIGURATION FOR PARTITION "lessThanEleven" OF TABLE db.t
+----
+PARTITION "lessThanEleven" OF TABLE db.public.t ALTER PARTITION "lessThanEleven" OF TABLE db.public.t CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	global_reads = true,
+	num_replicas = 7,
+	constraints = '[]',
+	lease_preferences = '[]'
+
+query-sql
+SHOW ZONE CONFIGURATION FOR PARTITION "moreThanEleven" OF TABLE db.t
+----
+DATABASE db ALTER DATABASE db CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 7,
+	constraints = '[]',
+	lease_preferences = '[]'
+
+generate-span-configs database-name=db table-name=t
+----
+Span: /Table/53{-/1/1}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 90000
+globalreads: false
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+Span: /Table/53/1/1{-/11}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 90000
+globalreads: true
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+Span: /Table/53/1/{1/11-2}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 1000
+globalreads: false
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+Span: /Table/5{3/1/2-4}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 90000
+globalreads: false
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------

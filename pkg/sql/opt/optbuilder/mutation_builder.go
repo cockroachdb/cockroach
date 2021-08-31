@@ -651,7 +651,7 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 // and addSynthesizedColsForUpdate that scans the list of table columns, looking
 // for any that are computed and do not yet have values provided by the input
 // expression. New columns are synthesized for any missing columns using the
-// computed column expression.
+// computed column expression	.
 //
 // NOTE: colIDs is updated with the column IDs of any synthesized columns which
 // are added to mb.outScope. If restrict is true, only columns that depend on

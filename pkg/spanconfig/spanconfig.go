@@ -33,6 +33,11 @@ type KVAccessor interface {
 	UpdateSpanConfigEntries(ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry) error
 }
 
+// SQLWatcher emits SQL span configuration updates.
+type SQLWatcher interface {
+	WatchForSQLUpdates(ctx context.Context) (<-chan Update, error)
+}
+
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
@@ -40,11 +45,19 @@ type KVAccessor interface {
 type ReconciliationDependencies interface {
 	KVAccessor
 
-	// TODO(irfansharif): We'll also want access to a "SQLWatcher", something
-	// that watches for changes to system.{descriptor,zones} and be responsible
-	// for generating corresponding span config updates. Put together, the
-	// reconciliation job will react to these updates by installing them into KV
-	// through the KVAccessor.
+	SQLWatcher
+}
+
+// Update captures what span has seen a config change. It's the unit of what a
+// {SQL,KV}Watcher emits.
+type Update struct {
+	// Entry captures the keyspan and the corresponding config that has been
+	// updated. If deleted is true, the config over that span has been deleted
+	// (those keys no longer exist). If false, the embedded config is what the
+	// keyspan was updated to.
+	Entry roachpb.SpanConfigEntry
+	// Deleted is true if the span config entry has been deleted.
+	Deleted bool
 }
 
 // Store is a data structure used to store span configs.

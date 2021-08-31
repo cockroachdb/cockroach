@@ -25,6 +25,9 @@ type TestingKnobs struct {
 	// manager has checked if the auto span config reconciliation job exists or
 	// not.
 	ManagerAfterCheckedReconciliationJobExistsInterceptor func(exists bool)
+	// SQLWatcherDisableInitialScan disables the initial scan of
+	// system.{zones,descriptors} which occurs on instantiation of a SQLWatcher.
+	SQLWatcherDisableInitialScan bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -29,6 +29,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var _ spanconfig.SQLWatcher = &testSQLWatcher{}
+
+type testSQLWatcher struct{}
+
+func (*testSQLWatcher) WatchForSQLUpdates(_ context.Context) (<-chan spanconfig.Update, error) {
+	return nil, errors.New("test sql watcher is not intended for use")
+}
+
 // TestManagerConcurrentJobCreation ensures that only one of two concurrent
 // attempts to create the auto span config reconciliation job are successful. We
 // also ensure that the created job is what we expect.
@@ -67,6 +75,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		&testSQLWatcher{},
 		&spanconfig.TestingKnobs{
 			ManagerCreatedJobInterceptor: func(jobI interface{}) {
 				job := jobI.(*jobs.Job)
@@ -153,6 +162,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		&testSQLWatcher{},
 		&spanconfig.TestingKnobs{
 			ManagerAfterCheckedReconciliationJobExistsInterceptor: func(exists bool) {
 				require.False(t, exists)

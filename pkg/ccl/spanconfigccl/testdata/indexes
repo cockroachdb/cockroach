@@ -1,0 +1,194 @@
+# Setup:
+# We start off by creating a simple database -> table -> index hierarchy. We set
+# a zone configuration on the index but not on the table. This means the table
+# has a "placeholder zone config".
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
+CREATE INDEX idx ON db.t (j);
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+ALTER INDEX db.t@idx CONFIGURE ZONE USING num_voters = 5;
+----
+
+query-sql
+SHOW ZONE CONFIGURATION FOR DATABASE db
+----
+DATABASE db ALTER DATABASE db CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 7,
+	constraints = '[]',
+	lease_preferences = '[]'
+
+query-sql
+SHOW ZONE CONFIGURATION FOR TABLE db.t
+----
+DATABASE db ALTER DATABASE db CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 7,
+	constraints = '[]',
+	lease_preferences = '[]'
+
+query-sql
+SHOW ZONE CONFIGURATION FOR INDEX db.t@idx
+----
+INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 7,
+	num_voters = 5,
+	constraints = '[]',
+	voter_constraints = '[]',
+	lease_preferences = '[]'
+
+# First entry = primary index (table's config above)
+# Second entry = index idx, so numvoters should be overridden.
+# Third entry = Any future indexes that may be added to this table. Should be
+#               the same as the table's config.
+generate-span-configs database-name=db table-name=t
+----
+Span: /Table/53{-/2}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 90000
+globalreads: false
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+Span: /Table/53/{2-3}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 90000
+globalreads: false
+numreplicas: 7
+numvoters: 5
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+Span: /Table/5{3/3-4}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 90000
+globalreads: false
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+
+# Configure GC ttl on the database and override it for the index. The table
+# continues to hold a placeholder zone config.
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 3600;
+ALTER INDEX db.t@idx CONFIGURE ZONE USING gc.ttlseconds = 25
+----
+
+generate-span-configs database-name=db table-name=t
+----
+Span: /Table/53{-/2}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 3600
+globalreads: false
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+Span: /Table/53/{2-3}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 25
+globalreads: false
+numreplicas: 7
+numvoters: 5
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+Span: /Table/5{3/3-4}
+rangeminbytes: 134217728
+rangemaxbytes: 536870912
+gcpolicy:
+  ttlseconds: 3600
+globalreads: false
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+
+# Configure a zone config field on the table, so that it is no longer a
+# placeholder zone config.
+exec-sql
+ALTER TABLE db.t CONFIGURE ZONE USING range_min_bytes = 1000, range_max_bytes=100000;
+----
+
+query-sql
+SHOW ZONE CONFIGURATION FOR INDEX db.t@idx
+----
+INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
+	range_min_bytes = 1000,
+	range_max_bytes = 100000,
+	gc.ttlseconds = 25,
+	num_replicas = 7,
+	num_voters = 5,
+	constraints = '[]',
+	voter_constraints = '[]',
+	lease_preferences = '[]'
+
+generate-span-configs database-name=db table-name=t
+----
+Span: /Table/53{-/2}
+rangeminbytes: 1000
+rangemaxbytes: 100000
+gcpolicy:
+  ttlseconds: 3600
+globalreads: false
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+Span: /Table/53/{2-3}
+rangeminbytes: 1000
+rangemaxbytes: 100000
+gcpolicy:
+  ttlseconds: 25
+globalreads: false
+numreplicas: 7
+numvoters: 5
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
+Span: /Table/5{3/3-4}
+rangeminbytes: 1000
+rangemaxbytes: 100000
+gcpolicy:
+  ttlseconds: 3600
+globalreads: false
+numreplicas: 7
+numvoters: 7
+constraints: []
+voterconstraints: []
+leasepreferences: []
+-----------------------
