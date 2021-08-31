@@ -511,7 +511,8 @@ func evaluateCommand(
 	}
 
 	if log.V(2) {
-		log.Infof(ctx, "evaluated %s command %+v: %+v, err=%v", args.Method(), args, reply, err)
+		log.Infof(ctx, "evaluated %s command %+v, txn=%+v: resp=%+v, err=%v",
+			args.Method(), args, h.Txn, reply, err)
 	}
 	return pd, err
 }
