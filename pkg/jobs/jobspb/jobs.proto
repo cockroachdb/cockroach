@@ -713,10 +713,10 @@ message MigrationDetails {
 message MigrationProgress {
 }
 
-message SQLStatsCompactionDetails {
+message AutoSQLStatsCompactionDetails {
 }
 
-message SQLStatsCompactionProgress {
+message AutoSQLStatsCompactionProgress {
 }
 
 message Payload {
@@ -763,7 +763,7 @@ message Payload {
     NewSchemaChangeDetails newSchemaChange = 24;
     MigrationDetails migration = 25;
     AutoSpanConfigReconciliationDetails autoSpanConfigReconciliation = 27;
-    SQLStatsCompactionDetails sqlStatsCompaction = 30;
+    AutoSQLStatsCompactionDetails autoSQLStatsCompaction = 30;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -799,7 +799,7 @@ message Progress {
     NewSchemaChangeProgress newSchemaChange = 19;
     MigrationProgress migration = 20;
     AutoSpanConfigReconciliationProgress AutoSpanConfigReconciliation = 22;
-    SQLStatsCompactionProgress sqlStatsCompaction = 23;
+    AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
   }
 
   uint64 trace_id = 21 [(gogoproto.customname) = "TraceID"];
@@ -825,7 +825,7 @@ enum Type {
   NEW_SCHEMA_CHANGE = 11 [(gogoproto.enumvalue_customname) = "TypeNewSchemaChange"];
   MIGRATION = 12 [(gogoproto.enumvalue_customname) = "TypeMigration"];
   AUTO_SPAN_CONFIG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeAutoSpanConfigReconciliation"];
-  SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeSQLStatsCompaction"];
+  AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
 }
 
 message Job {

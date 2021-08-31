@@ -251,7 +251,7 @@ func (e *scheduledSQLStatsCompactionExecutor) GetCreateScheduleStatement(
 }
 
 func init() {
-	jobs.RegisterConstructor(jobspb.TypeSQLStatsCompaction, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+	jobs.RegisterConstructor(jobspb.TypeAutoSQLStatsCompaction, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &sqlStatsCompactionResumer{
 			job: job,
 			st:  settings,
