@@ -46,6 +46,7 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/gossip",
+        "//pkg/jobs",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/migration",
         "//pkg/migration/migrations",

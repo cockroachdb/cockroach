@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
@@ -432,7 +433,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 				},
 					migrations.NoPrecondition,
 					func(
-						ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
+						ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps, _ *jobs.Job,
 					) error {
 						return nil
 					}), true
