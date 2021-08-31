@@ -183,6 +183,7 @@ ALL_TESTS = [
     "//pkg/spanconfig/spanconfigkvaccessor:spanconfigkvaccessor_test",
     "//pkg/spanconfig/spanconfigmanager:spanconfigmanager_test",
     "//pkg/spanconfig/spanconfigsqltranslator:spanconfigsqltranslator_test",
+    "//pkg/spanconfig/spanconfigsqlwatcher:spanconfigsqlwatcher_test",
     "//pkg/spanconfig/spanconfigstore:spanconfigstore_test",
     "//pkg/spanconfig/spanconfigtestutils:spanconfigtestutils_test",
     "//pkg/sql/catalog/catalogkeys:catalogkeys_test",

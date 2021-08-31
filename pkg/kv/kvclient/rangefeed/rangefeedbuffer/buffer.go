@@ -50,7 +50,7 @@ func New(limit int) *Buffer {
 }
 
 // Add adds the given entry to the buffer.
-func (b *Buffer) Add(ctx context.Context, ev Event) error {
+func (b *Buffer) Add(ev Event) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
