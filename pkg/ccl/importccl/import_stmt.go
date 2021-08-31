@@ -286,6 +286,58 @@ func addToFileFormatTelemetry(fileFormat, state string) {
 	telemetry.Count(fmt.Sprintf("%s.%s.%s", "import", strings.ToLower(fileFormat), state))
 }
 
+// resolveUDTsUsedByImportInto resolves all the user defined types that are
+// referenced by the table being imported into.
+func resolveUDTsUsedByImportInto(
+	ctx context.Context, p sql.PlanHookState, table *tabledesc.Mutable,
+) ([]catalog.TypeDescriptor, error) {
+	typeDescs := make([]catalog.TypeDescriptor, 0)
+	var dbDesc catalog.DatabaseDescriptor
+	err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) (err error) {
+		_, dbDesc, err = descriptors.GetImmutableDatabaseByID(ctx, txn, table.GetParentID(),
+			tree.DatabaseLookupFlags{
+				Required:    true,
+				AvoidCached: true,
+			})
+		if err != nil {
+			return err
+		}
+		typeIDs, _, err := table.GetAllReferencedTypeIDs(dbDesc,
+			func(id descpb.ID) (catalog.TypeDescriptor, error) {
+				immutDesc, err := descriptors.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required:    true,
+						AvoidCached: true,
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+				return immutDesc, nil
+			})
+		if err != nil {
+			return errors.Wrap(err, "resolving type descriptors")
+		}
+
+		for _, typeID := range typeIDs {
+			immutDesc, err := descriptors.GetImmutableTypeByID(ctx, txn, typeID, tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:    true,
+					AvoidCached: true,
+				},
+			})
+			if err != nil {
+				return err
+			}
+			typeDescs = append(typeDescs, immutDesc)
+		}
+		return err
+	})
+	return typeDescs, err
+}
+
 // importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -744,28 +796,13 @@ func importPlanHook(
 
 		var tableDetails []jobspb.ImportDetails_Table
 		var tableDescs []*tabledesc.Mutable // parallel with tableDetails
+		var typeDetails []jobspb.ImportDetails_Type
 		jobDesc, err := importJobDescription(p, importStmt, nil, filenamePatterns, opts)
 		if err != nil {
 			return err
 		}
 
 		if importStmt.Into {
-			// TODO(dt): this is a prototype for incremental import but there are many
-			// TODOs remaining before it is ready to graduate to prime-time. Some of
-			// them are captured in specific TODOs below, but some of the big, scary
-			// things to do are:
-			// - review planner vs txn use very carefully. We should try to get to a
-			//   single txn used to plan the job and create it. Using the planner's
-			//   txn today is very wrong since it will not commit until after the job
-			//   has run, so starting a job based on reads it returned is very wrong.
-			// - audit every place that we resolve/lease/read table descs to be sure
-			//   that the IMPORTING state is handled correctly. SQL lease acquisition
-			//   is probably the easy one here since it has single read path -- the
-			//   things that read directly like the queues or background jobs are the
-			//   ones we'll need to really carefully look though.
-			// - Look at if/how cleanup/rollback works. Reconsider the cpu from the
-			//   desc version (perhaps we should be re-reading instead?).
-			// - Write _a lot_ of tests.
 			if _, ok := allowedIntoFormats[importStmt.FileFormat]; !ok {
 				return errors.Newf(
 					"%s file format is currently unsupported by IMPORT INTO",
@@ -817,6 +854,22 @@ func importPlanHook(
 					}
 				}
 			}
+
+			{
+				// Resolve the UDTs used by the table being imported into.
+				typeDescs, err := resolveUDTsUsedByImportInto(ctx, p, found)
+				if err != nil {
+					return errors.Wrap(err, "resolving UDTs used by table being imported into")
+				}
+				if len(typeDescs) > 0 {
+					typeDetails = make([]jobspb.ImportDetails_Type, 0, len(typeDescs))
+				}
+				for _, typeDesc := range typeDescs {
+					typeDetails = append(typeDetails, jobspb.ImportDetails_Type{
+						Desc: typeDesc.DescriptorProto().GetType()})
+				}
+			}
+
 			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
 		} else {
 			seqVals := make(map[descpb.ID]int64)
@@ -954,6 +1007,7 @@ func importPlanHook(
 			Format:            format,
 			ParentID:          db.GetID(),
 			Tables:            tableDetails,
+			Types:             typeDetails,
 			SSTSize:           sstSize,
 			Oversample:        oversample,
 			SkipFKs:           skipFKs,

@@ -267,8 +267,13 @@ message ImportDetails {
   message Schema {
     sqlbase.SchemaDescriptor desc = 1;
   }
+  message Type {
+    sqlbase.TypeDescriptor desc = 1;
+  }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
   repeated Schema schemas = 23 [(gogoproto.nullable) = false];
+  repeated Type types = 26 [(gogoproto.nullable) = false];
+
   repeated string uris = 2 [(gogoproto.customname) = "URIs"];
   roachpb.IOFileFormat format = 3 [(gogoproto.nullable) = false];
 
@@ -317,7 +322,7 @@ message ImportDetails {
   // when the import is planned.
   int32 default_int_size = 25;
 
-  // next val: 26
+  // next val: 27
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated
