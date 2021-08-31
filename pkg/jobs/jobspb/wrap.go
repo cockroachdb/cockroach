@@ -71,7 +71,11 @@ var _ base.SQLInstanceID
 const AutoStatsName = "__auto__"
 
 // AutomaticJobTypes is a list of automatic job types that currently exist.
-var AutomaticJobTypes = [...]Type{TypeAutoCreateStats, TypeAutoSpanConfigReconciliation}
+var AutomaticJobTypes = [...]Type{
+	TypeAutoCreateStats,
+	TypeAutoSpanConfigReconciliation,
+	TypeAutoSQLStatsCompaction,
+}
 
 // DetailsType returns the type for a payload detail.
 func DetailsType(d isPayload_Details) Type {
@@ -104,8 +108,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeMigration
 	case *Payload_AutoSpanConfigReconciliation:
 		return TypeAutoSpanConfigReconciliation
-	case *Payload_SqlStatsCompaction:
-		return TypeSQLStatsCompaction
+	case *Payload_AutoSQLStatsCompaction:
+		return TypeAutoSQLStatsCompaction
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -144,8 +148,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_Migration{Migration: &d}
 	case AutoSpanConfigReconciliationProgress:
 		return &Progress_AutoSpanConfigReconciliation{AutoSpanConfigReconciliation: &d}
-	case SQLStatsCompactionProgress:
-		return &Progress_SqlStatsCompaction{SqlStatsCompaction: &d}
+	case AutoSQLStatsCompactionProgress:
+		return &Progress_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -179,8 +183,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.Migration
 	case *Payload_AutoSpanConfigReconciliation:
 		return *d.AutoSpanConfigReconciliation
-	case *Payload_SqlStatsCompaction:
-		return *d.SqlStatsCompaction
+	case *Payload_AutoSQLStatsCompaction:
+		return *d.AutoSQLStatsCompaction
 	default:
 		return nil
 	}
@@ -214,8 +218,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.Migration
 	case *Progress_AutoSpanConfigReconciliation:
 		return *d.AutoSpanConfigReconciliation
-	case *Progress_SqlStatsCompaction:
-		return *d.SqlStatsCompaction
+	case *Progress_AutoSQLStatsCompaction:
+		return *d.AutoSQLStatsCompaction
 	default:
 		return nil
 	}
@@ -262,8 +266,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_Migration{Migration: &d}
 	case AutoSpanConfigReconciliationDetails:
 		return &Payload_AutoSpanConfigReconciliation{AutoSpanConfigReconciliation: &d}
-	case SQLStatsCompactionDetails:
-		return &Payload_SqlStatsCompaction{SqlStatsCompaction: &d}
+	case AutoSQLStatsCompactionDetails:
+		return &Payload_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}

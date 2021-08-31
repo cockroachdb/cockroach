@@ -2579,7 +2579,7 @@ var charts = []sectionDescription{
 					"jobs.stream_ingestion.currently_running",
 					"jobs.migration.currently_running",
 					"jobs.auto_span_config_reconciliation.currently_running",
-					"jobs.sql_stats_compaction.currently_running",
+					"jobs.auto_sql_stats_compaction.currently_running",
 				},
 			},
 			{
@@ -2737,12 +2737,12 @@ var charts = []sectionDescription{
 			{
 				Title: "SQL Stats Compaction",
 				Metrics: []string{
-					"jobs.sql_stats_compaction.fail_or_cancel_completed",
-					"jobs.sql_stats_compaction.fail_or_cancel_failed",
-					"jobs.sql_stats_compaction.fail_or_cancel_retry_error",
-					"jobs.sql_stats_compaction.resume_completed",
-					"jobs.sql_stats_compaction.resume_failed",
-					"jobs.sql_stats_compaction.resume_retry_error",
+					"jobs.auto_sql_stats_compaction.fail_or_cancel_completed",
+					"jobs.auto_sql_stats_compaction.fail_or_cancel_failed",
+					"jobs.auto_sql_stats_compaction.fail_or_cancel_retry_error",
+					"jobs.auto_sql_stats_compaction.resume_completed",
+					"jobs.auto_sql_stats_compaction.resume_failed",
+					"jobs.auto_sql_stats_compaction.resume_retry_error",
 				},
 			},
 		},
