@@ -3957,6 +3957,7 @@ lock_timeout                                           0                   NULL 
 max_identifier_length                                  128                 NULL      NULL        NULL        string
 max_index_keys                                         32                  NULL      NULL        NULL        string
 node_id                                                1                   NULL      NULL        NULL        string
+on_update_rehome_row_enabled                           on                  NULL      NULL        NULL        string
 optimizer_use_histograms                               on                  NULL      NULL        NULL        string
 optimizer_use_multicol_stats                           on                  NULL      NULL        NULL        string
 override_multi_region_zone_config                      off                 NULL      NULL        NULL        string
@@ -4051,6 +4052,7 @@ lock_timeout                                           0                   NULL 
 max_identifier_length                                  128                 NULL  user     NULL      128                 128
 max_index_keys                                         32                  NULL  user     NULL      32                  32
 node_id                                                1                   NULL  user     NULL      1                   1
+on_update_rehome_row_enabled                           on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                               on                  NULL  user     NULL      on                  on
 optimizer_use_multicol_stats                           on                  NULL  user     NULL      on                  on
 override_multi_region_zone_config                      off                 NULL  user     NULL      off                 off
@@ -4141,6 +4143,7 @@ lock_timeout                                           NULL    NULL     NULL    
 max_identifier_length                                  NULL    NULL     NULL     NULL        NULL
 max_index_keys                                         NULL    NULL     NULL     NULL        NULL
 node_id                                                NULL    NULL     NULL     NULL        NULL
+on_update_rehome_row_enabled                           NULL    NULL     NULL     NULL        NULL
 optimizer                                              NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                               NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                           NULL    NULL     NULL     NULL        NULL

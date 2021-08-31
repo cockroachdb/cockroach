@@ -36,6 +36,23 @@ SELECT crdb_region, * FROM rbr WHERE p = 1
 ----
 ca-central-1  1  bye
 
+# Do not re-home if session variable for rehoming is disabled.
+query TIT nodeidx=2
+USE testdb;
+SET on_update_rehome_row_enabled = false;
+UPSERT INTO rbr (p, s) VALUES (1, 'bye again');
+SELECT crdb_region, * FROM rbr WHERE p = 1
+----
+ca-central-1  1  bye again
+
+query TIT nodeidx=2
+USE testdb;
+SET on_update_rehome_row_enabled = false;
+UPDATE rbr SET s = 'cya' WHERE p = 1;
+SELECT crdb_region, * FROM rbr WHERE p = 1
+----
+ca-central-1  1  cya
+
 # Re-homing still works even after locality change.
 statement ok
 DROP TABLE rbr;

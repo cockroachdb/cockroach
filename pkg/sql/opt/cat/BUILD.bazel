@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/treeprinter",
