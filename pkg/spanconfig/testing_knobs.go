@@ -53,6 +53,10 @@ type TestingKnobs struct {
 	// StoreKVSubscriberOverride is used to override the KVSubscriber used when
 	// setting up a new store.
 	StoreKVSubscriberOverride KVSubscriber
+
+	// SQLWatcherOnEventInterceptor, if set, is invoked when the SQLWatcher
+	// receives an event on one of its rangefeeds.
+	SQLWatcherOnEventInterceptor func() error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
