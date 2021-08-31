@@ -7233,7 +7233,20 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+
+	type magicKey struct{}
+	var minQuotaSize uint64
+	propErr := errors.New("proposal error")
+
+	tsc := TestStoreConfig(nil /* clock */)
+	tsc.TestingKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+		if v := args.Ctx.Value(magicKey{}); v != nil {
+			minQuotaSize = tc.repl.mu.proposalQuota.ApproximateQuota() + args.QuotaAlloc.Acquired()
+			return roachpb.NewError(propErr)
+		}
+		return nil
+	}
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	// Flush a write all the way through the Raft proposal pipeline to ensure
 	// that the replica becomes the Raft leader and sets up its quota pool.
@@ -7241,20 +7254,6 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 	if _, pErr := tc.SendWrapped(iArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-
-	type magicKey struct{}
-	var minQuotaSize uint64
-	propErr := errors.New("proposal error")
-
-	tc.repl.mu.Lock()
-	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
-		if v := p.ctx.Value(magicKey{}); v != nil {
-			minQuotaSize = tc.repl.mu.proposalQuota.ApproximateQuota() + p.quotaAlloc.Acquired()
-			return 0, propErr
-		}
-		return 0, nil
-	}
-	tc.repl.mu.Unlock()
 
 	var ba roachpb.BatchRequest
 	pArg := putArgs(roachpb.Key("a"), make([]byte, 1<<10))
@@ -7918,13 +7917,13 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	var wrongLeaseIndex uint64 // populated below
 
 	tc.repl.mu.Lock()
-	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
+	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
 		if v := p.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
-				return wrongLeaseIndex, nil
+				return wrongLeaseIndex
 			}
 		}
-		return 0, nil
+		return 0
 	}
 	tc.repl.mu.Unlock()
 
@@ -8018,9 +8017,9 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	repl := tc.repl
 
 	tc.repl.mu.Lock()
-	abandoned := make(map[int64]struct{}) // protected by repl.mu
+	abandoned := make(map[kvserverbase.CmdIDKey]struct{}) // protected by repl.mu
 	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
-		if _, ok := abandoned[int64(p.command.MaxLeaseIndex)]; ok {
+		if _, ok := abandoned[p.idKey]; ok {
 			log.Infof(p.ctx, "abandoning command")
 			return true, nil
 		}
@@ -8040,14 +8039,14 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 		})
 		st := repl.CurrentLeaseStatus(ctx)
 		_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		ch, _, idx, err := repl.evalAndPropose(ctx, &ba, allSpansGuard(), st, hlc.Timestamp{}, tok.Move(ctx))
+		ch, _, id, err := repl.evalAndPropose(ctx, &ba, allSpansGuard(), st, hlc.Timestamp{}, tok.Move(ctx))
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		repl.mu.Lock()
 		if rand.Intn(2) == 0 {
-			abandoned[idx] = struct{}{}
+			abandoned[id] = struct{}{}
 		} else {
 			chs = append(chs, ch)
 		}
@@ -8099,7 +8098,6 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	tc.repl.mu.Unlock()
 
 	const num = 10
-	expIndexes := make([]int, 0, num)
 	chs := make([]chan proposalResult, 0, num)
 	for i := 0; i < num; i++ {
 		var ba roachpb.BatchRequest
@@ -8111,12 +8109,11 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		})
 		_, tok := tc.repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 		st := tc.repl.CurrentLeaseStatus(ctx)
-		ch, _, idx, err := tc.repl.evalAndPropose(ctx, &ba, allSpansGuard(), st, hlc.Timestamp{}, tok.Move(ctx))
+		ch, _, _, err := tc.repl.evalAndPropose(ctx, &ba, allSpansGuard(), st, hlc.Timestamp{}, tok.Move(ctx))
 		if err != nil {
 			t.Fatal(err)
 		}
 		chs = append(chs, ch)
-		expIndexes = append(expIndexes, int(idx))
 	}
 
 	tc.repl.mu.Lock()
@@ -8131,10 +8128,6 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 	sort.Ints(origIndexes)
 	tc.repl.mu.Unlock()
-
-	if !reflect.DeepEqual(expIndexes, origIndexes) {
-		t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
-	}
 
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
@@ -8152,8 +8145,8 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		}
 	}
 
-	if !reflect.DeepEqual(seenCmds, expIndexes) {
-		t.Fatalf("expected indexes %v, got %v", expIndexes, seenCmds)
+	if !reflect.DeepEqual(seenCmds, origIndexes) {
+		t.Fatalf("expected indexes %v, got %v", origIndexes, seenCmds)
 	}
 
 	tc.repl.mu.RLock()
@@ -8241,7 +8234,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 		cmd.command.ProposerLeaseSequence = st.Lease.Sequence
 		_, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		if _, pErr := r.propose(ctx, cmd, tok); pErr != nil {
+		if pErr := r.propose(ctx, cmd, tok); pErr != nil {
 			t.Error(pErr)
 		}
 		r.mu.Lock()
@@ -8368,12 +8361,12 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 		t.Fatalf("test requires LeaseAppliedIndex >= 2 at this point, have %d", ai)
 	}
 	assigned := false
-	repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
+	repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
 		if p == proposal && !assigned {
 			assigned = true
-			return ai - 1, nil
+			return ai - 1
 		}
-		return 0, nil
+		return 0
 	}
 	repl.mu.Unlock()
 
@@ -8383,7 +8376,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	// twice to repropose it and put it in the logs twice more.
 	proposal.command.ProposerLeaseSequence = repl.mu.state.Lease.Sequence
 	_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	if _, pErr := repl.propose(ctx, proposal, tok); pErr != nil {
+	if pErr := repl.propose(ctx, proposal, tok); pErr != nil {
 		t.Fatal(pErr)
 	}
 	repl.mu.Lock()
@@ -8450,12 +8443,12 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 	type magicKey struct{}
 	magicCtx := context.WithValue(ctx, magicKey{}, "foo")
 
-	var c int32 // updated atomically
+	var curFlushAttempt, curInsertAttempt int32 // updated atomically
 	tc.repl.mu.Lock()
-	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
+	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
 		if v := p.ctx.Value(magicKey{}); v != nil {
-			curAttempt := atomic.AddInt32(&c, 1)
-			switch curAttempt {
+			curFlushAttempt := atomic.AddInt32(&curFlushAttempt, 1)
+			switch curFlushAttempt {
 			case 1:
 				// This is the first time the command is being given a max lease
 				// applied index. Set the index to that of the recently applied
@@ -8463,20 +8456,31 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 				// so this will cause it to be rejected beneath raft with an
 				// illegal lease index error.
 				wrongLeaseIndex := uint64(1)
-				return wrongLeaseIndex, nil
+				return wrongLeaseIndex
+			default:
+				// Unexpected. Asserted against below.
+				return 0
+			}
+		}
+		return 0
+	}
+	tc.repl.mu.proposalBuf.testing.insertFilter = func(p *ProposalData) error {
+		if v := p.ctx.Value(magicKey{}); v != nil {
+			curAttempt := atomic.AddInt32(&curInsertAttempt, 1)
+			switch curAttempt {
 			case 2:
 				// This is the second time the command is being given a max
 				// lease applied index, which should be after the command was
 				// rejected beneath raft. Return an error. We expect this error
 				// to propagate up through tryReproposeWithNewLeaseIndex and
 				// make it back to the client.
-				return 0, errors.New("boom")
+				return errors.New("boom")
 			default:
 				// Unexpected. Asserted against below.
-				return 0, nil
+				return nil
 			}
 		}
-		return 0, nil
+		return nil
 	}
 	tc.repl.mu.Unlock()
 
@@ -8500,8 +8504,8 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 	} else if !testutils.IsPError(pErr, "boom") {
 		t.Fatalf("unexpected error: %v", pErr)
 	}
-	// The command should have picked a new max lease index exactly twice.
-	if exp, act := int32(2), atomic.LoadInt32(&c); exp != act {
+	// The command should have been inserted in the buffer exactly twice.
+	if exp, act := int32(2), atomic.LoadInt32(&curInsertAttempt); exp != act {
 		t.Fatalf("expected %d proposals, got %d", exp, act)
 	}
 
@@ -8594,16 +8598,16 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 
 	r := tc.repl
 	r.mu.Lock()
-	r.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
-		// We're going to recognize the first time the commnand for the EndTxn
-		// is proposed and we're going to hackily decrease its MaxLeaseIndex, so
-		// that the processing gets rejected further on.
+	r.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
+		// We're going to recognize the first time the commnand for the EndTxn is
+		// proposed and we're going to hackily force a low MaxLeaseIndex, so that
+		// the processing gets rejected further on.
 		ut := p.Local.UpdatedTxns
 		if atomic.LoadInt64(&proposalRecognized) == 0 && ut != nil && len(ut) == 1 && ut[0].ID == txn.ID {
 			atomic.StoreInt64(&proposalRecognized, 1)
-			return p.command.MaxLeaseIndex - 1, nil
+			return 1
 		}
-		return 0, nil
+		return 0
 	}
 	r.mu.Unlock()
 

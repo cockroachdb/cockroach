@@ -58,10 +58,11 @@ type ProposalData struct {
 	sp *tracing.Span
 
 	// idKey uniquely identifies this proposal.
-	// TODO(andreimatei): idKey is legacy at this point: We could easily key
-	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
-	// the-world migration. However, various test facilities depend on the
-	// command ID for e.g. replay protection.
+	// TODO(andrei): idKey is legacy at this point: We could easily key commands
+	// by their MaxLeaseIndex, and doing so should be ok with a stop- the-world
+	// migration. However, various test facilities depend on the command ID for
+	// e.g. replay protection. Later edit: the MaxLeaseIndex assignment has,
+	// however, moved to happen later, at proposal time.
 	idKey kvserverbase.CmdIDKey
 
 	// proposedAtTicks is the (logical) time at which this command was
@@ -81,9 +82,6 @@ type ProposalData struct {
 	// raftMu. Once the proposal comes out of Raft, ownerwhip of this quota is
 	// passed to r.mu.quotaReleaseQueue.
 	quotaAlloc *quotapool.IntAlloc
-
-	// tmpFooter is used to avoid an allocation.
-	tmpFooter kvserverpb.MaxLeaseFooter
 
 	// ec.done is called after command application to update the timestamp
 	// cache and optionally release latches and exits lock wait-queues.
@@ -444,7 +442,7 @@ func (r *Replica) leasePostApplyLocked(
 
 	// Inform the propBuf about the new lease so that it can initialize its closed
 	// timestamp tracking.
-	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.RaftClosedTimestamp)
+	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.RaftClosedTimestamp, r.mu.state.LeaseAppliedIndex)
 
 	// Ordering is critical here. We only install the new lease after we've
 	// checked for an in-progress merge and updated the timestamp cache. If the
@@ -517,11 +515,6 @@ func (r *Replica) leasePostApplyLocked(
 			if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, keys.NodeLivenessSpan); err != nil {
 				log.Errorf(ctx, "%v", err)
 			}
-
-			// Emit an MLAI on the leaseholder replica, as follower will be looking
-			// for one and if we went on to quiesce, they wouldn't necessarily get
-			// one otherwise (unless they ask for it, which adds latency).
-			r.EmitMLAI()
 		})
 		if leaseChangingHands && log.V(1) {
 			// This logging is useful to troubleshoot incomplete drains.

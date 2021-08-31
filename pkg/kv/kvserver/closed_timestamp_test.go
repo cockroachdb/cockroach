@@ -738,8 +738,7 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			require.NoError(t, err)
 			r, err := store.GetReplica(rightDesc.RangeID)
 			require.NoError(t, err)
-			maxClosed, ok := r.MaxClosed(ctx)
-			require.True(t, ok)
+			maxClosed := r.GetClosedTimestamp(ctx)
 			// Note that maxClosed would not necessarily be below the freeze start if
 			// this was a LEAD_FOR_GLOBAL_READS range.
 			assert.True(t, maxClosed.LessEq(freezeStartTimestamp),

@@ -410,7 +410,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
-	r.handleClosedTimestampUpdateRaftMuLocked(ctx)
+	r.handleClosedTimestampUpdateRaftMuLocked(ctx, r.GetClosedTimestamp(ctx))
 
 	return p
 }
@@ -602,26 +602,29 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 }
 
-// handleClosedTimestampUpdate determines the current maximum closed timestamp
-// for the replica and informs the rangefeed, if one is running. No-op if a
+// handleClosedTimestampUpdate takes the a closed timestamp for the replica
+// and informs the rangefeed, if one is running. No-op if a
 // rangefeed is not active.
-func (r *Replica) handleClosedTimestampUpdate(ctx context.Context) {
+//
+// closeTS is generally expected to be the highest closed timestamp known, but
+// it doesn't need to be - handleClosedTimestampUpdate can be called with
+// updates out of order.
+func (r *Replica) handleClosedTimestampUpdate(ctx context.Context, closedTS hlc.Timestamp) {
 	ctx = r.AnnotateCtx(ctx)
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	r.handleClosedTimestampUpdateRaftMuLocked(ctx)
+	r.handleClosedTimestampUpdateRaftMuLocked(ctx, closedTS)
 }
 
 // handleClosedTimestampUpdateRaftMuLocked is like handleClosedTimestampUpdate,
 // but it requires raftMu to be locked.
-func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
+func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
+	ctx context.Context, closedTS hlc.Timestamp,
+) {
 	p := r.getRangefeedProcessor()
 	if p == nil {
 		return
 	}
-
-	// Determine what the maximum closed timestamp is for this replica.
-	closedTS, _ := r.maxClosed(ctx)
 
 	// If the closed timestamp is sufficiently stale, signal that we want an
 	// update to the leaseholder so that it will eventually begin to progress
@@ -713,25 +716,5 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 			return roachpb.NewError(err)
 		}
 	}
-
-	if r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
-		// In the "new closed timestamps subsystem", there's nothing more to do.
-		// Once there's a leaseholder, that node will connect to us and inform us of
-		// updates.
-		return nil
-	}
-
-	lease = r.CurrentLeaseStatus(ctx)
-	if lease.OwnedBy(r.StoreID()) {
-		// We have the lease. Request is essentially a wrapper for calling EmitMLAI
-		// on a remote node, so cut out the middleman.
-		r.EmitMLAI()
-		return nil
-	}
-	leaseholderNodeID := lease.Lease.Replica.NodeID
-	// Request fixes any issues where we've missed a closed timestamp update or
-	// where we're not connected to receive them from this node in the first
-	// place.
-	r.store.cfg.ClosedTimestamp.Clients.Request(leaseholderNodeID, r.RangeID)
 	return nil
 }

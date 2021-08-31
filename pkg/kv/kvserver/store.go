@@ -35,8 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
@@ -209,7 +207,6 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		ScanInterval:                10 * time.Minute,
 		HistogramWindowInterval:     metric.TestSampleInterval,
-		ClosedTimestamp:             container.NoopContainer(),
 		ProtectedTimestampCache:     protectedts.EmptyCache(clock),
 	}
 
@@ -649,7 +646,6 @@ type StoreConfig struct {
 	RPCContext              *rpc.Context
 	RangeDescriptorCache    *rangecache.RangeCache
 
-	ClosedTimestamp         *container.Container
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
 
@@ -1595,7 +1591,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Connect rangefeeds to closed timestamp updates.
-	s.startClosedTimestampRangefeedSubscriber(ctx)
 	s.startRangefeedUpdater(ctx)
 
 	if s.replicateQueue != nil {
@@ -1808,67 +1803,6 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 	})
 }
 
-// startClosedTimestampRangefeedSubscriber establishes a new ClosedTimestamp
-// subscription and runs an infinite loop to listen for closed timestamp updates
-// and inform Replicas with active Rangefeeds about them.
-func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
-	// NB: We can't use Stopper.RunWorker because doing so would race with
-	// calling Stopper.Stop. We give the subscription channel a small capacity
-	// to avoid blocking the closed timestamp goroutine.
-	ch := make(chan ctpb.Entry, 8)
-	const name = "closedts-rangefeed-subscriber"
-	if err := s.stopper.RunAsyncTask(ctx, name, func(ctx context.Context) {
-		s.cfg.ClosedTimestamp.Provider.Subscribe(ctx, ch)
-	}); err != nil {
-		return
-	}
-
-	_ = s.stopper.RunAsyncTask(ctx, "ct-subscriber", func(ctx context.Context) {
-		var replIDs []roachpb.RangeID
-		for {
-			if s.cfg.Settings.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
-				// The startRangefeedUpdater goroutine takes over.
-				return
-			}
-			select {
-			case <-ch:
-				// Drain all notifications from the channel.
-			loop:
-				for {
-					select {
-					case _, ok := <-ch:
-						if !ok {
-							break loop
-						}
-					default:
-						break loop
-					}
-				}
-
-				// Gather replicas to notify under lock.
-				s.rangefeedReplicas.Lock()
-				for replID := range s.rangefeedReplicas.m {
-					replIDs = append(replIDs, replID)
-				}
-				s.rangefeedReplicas.Unlock()
-
-				// Notify each replica with an active rangefeed to
-				// check for an updated closed timestamp.
-				for _, replID := range replIDs {
-					repl, err := s.GetReplica(replID)
-					if err != nil {
-						continue
-					}
-					repl.handleClosedTimestampUpdate(ctx)
-				}
-				replIDs = replIDs[:0]
-			case <-s.stopper.ShouldQuiesce():
-				return
-			}
-		}
-	})
-}
-
 // startRangefeedUpdater periodically informs all the replicas with rangefeeds
 // about closed timestamp updates.
 func (s *Store) startRangefeedUpdater(ctx context.Context) {
@@ -1909,9 +1843,6 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			select {
 			case <-timer.C:
 				timer.Read = true
-				if !s.cfg.Settings.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
-					continue
-				}
 				s.rangefeedReplicas.Lock()
 				replIDs = replIDs[:0]
 				for replID := range s.rangefeedReplicas.m {
@@ -1925,7 +1856,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 					if r == nil {
 						continue
 					}
-					r.handleClosedTimestampUpdate(ctx)
+					r.handleClosedTimestampUpdate(ctx, r.GetClosedTimestamp(ctx))
 				}
 			case <-confCh:
 				// Loop around to use the updated timer.
@@ -2636,8 +2567,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if w := metrics.LockTableMetrics.TopKLocksByWaiters[0].Waiters; w > maxLockWaitQueueWaitersForLock {
 			maxLockWaitQueueWaitersForLock = w
 		}
-		mc, ok := rep.maxClosed(ctx)
-		if ok && (minMaxClosedTS.IsEmpty() || mc.Less(minMaxClosedTS)) {
+		mc := rep.GetClosedTimestamp(ctx)
+		if minMaxClosedTS.IsEmpty() || mc.Less(minMaxClosedTS) {
 			minMaxClosedTS = mc
 		}
 		return true // more
@@ -2668,9 +2599,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		nanos := timeutil.Since(minMaxClosedTS.GoTime()).Nanoseconds()
 		s.metrics.ClosedTimestampMaxBehindNanos.Update(nanos)
 	}
-	s.metrics.ClosedTimestampFailuresToClose.Update(
-		s.cfg.ClosedTimestamp.Tracker.FailedCloseAttempts(),
-	)
 
 	s.metrics.RaftEnqueuedPending.Update(s.cfg.Transport.queuedMessageCount())
 
