@@ -1315,7 +1315,7 @@ func createImportingDescriptors(
 				if err != nil {
 					return err
 				}
-				typeIDs, err := table.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
+				typeIDs, _, err := table.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
 					return typesByID[id], nil
 				})
 				if err != nil {
@@ -2343,7 +2343,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 		}
 
 		// Get all types that this descriptor references.
-		referencedTypes, err := tbl.GetAllReferencedTypeIDs(dbDesc, lookup)
+		referencedTypes, _, err := tbl.GetAllReferencedTypeIDs(dbDesc, lookup)
 		if err != nil {
 			return err
 		}
