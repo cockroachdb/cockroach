@@ -975,13 +975,13 @@ func TestZoneSpecifiers(t *testing.T) {
 	// Simulate exactly two named zones: one named default and one named carl.
 	// N.B. DefaultZoneName must always exist in the mapping; it is treated
 	// specially so that it always appears first in the lookup path.
-	defer func(old map[string]uint32) { NamedZones = old }(NamedZones)
-	NamedZones = map[string]uint32{
+	defer func(old map[NamedZone]uint32) { NamedZones = old }(NamedZones)
+	NamedZones = map[NamedZone]uint32{
 		DefaultZoneName: 0,
 		"carl":          42,
 	}
-	defer func(old map[uint32]string) { NamedZonesByID = old }(NamedZonesByID)
-	NamedZonesByID = map[uint32]string{
+	defer func(old map[uint32]NamedZone) { NamedZonesByID = old }(NamedZonesByID)
+	NamedZonesByID = map[uint32]NamedZone{
 		0:  DefaultZoneName,
 		42: "carl",
 	}
@@ -1189,7 +1189,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads:      false,
-				NumVoters:        0,
+				NumVoters:        3,
 				NumReplicas:      3,
 				Constraints:      []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{},
@@ -1214,7 +1214,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads:      true,
-				NumVoters:        0,
+				NumVoters:        3,
 				NumReplicas:      3,
 				Constraints:      []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{},
@@ -1239,7 +1239,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads:      false,
-				NumVoters:        0,
+				NumVoters:        3,
 				NumReplicas:      3,
 				Constraints:      []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{},
@@ -1297,7 +1297,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads: false,
-				NumVoters:   0,
+				NumVoters:   3,
 				NumReplicas: 3,
 				Constraints: []roachpb.ConstraintsConjunction{
 					{
@@ -1345,7 +1345,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads: false,
-				NumVoters:   0,
+				NumVoters:   3,
 				NumReplicas: 3,
 				Constraints: []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{
@@ -1397,7 +1397,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads:      false,
-				NumVoters:        0,
+				NumVoters:        3,
 				NumReplicas:      3,
 				Constraints:      []roachpb.ConstraintsConjunction{},
 				VoterConstraints: []roachpb.ConstraintsConjunction{},
