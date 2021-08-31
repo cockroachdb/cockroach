@@ -45,7 +45,7 @@ tick: 12, setAvailableIOTokens: 84
 tick: 13, setAvailableIOTokens: 84
 tick: 14, setAvailableIOTokens: 74
 
-# Same as previous but smoothing bumps up the smoothed-admit to 2500.
+# Same delta as previous but smoothing bumps up the smoothed-admit to 2500.
 set-state admitted=20000 l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21
 ----
 admitted: 20000, bytes: 10000, added-bytes: 201000,
@@ -67,12 +67,34 @@ tick: 12, setAvailableIOTokens: 167
 tick: 13, setAvailableIOTokens: 167
 tick: 14, setAvailableIOTokens: 162
 
+# No delta. This used to trigger an overflow bug.
+set-state admitted=20000 l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21
+----
+admitted: 20000, bytes: 10000, added-bytes: 201000,
+smoothed-removed: 37500, smoothed-admit: 10625,
+tokens: 10625, tokens-allocated: 0
+tick: 0, setAvailableIOTokens: 709
+tick: 1, setAvailableIOTokens: 709
+tick: 2, setAvailableIOTokens: 709
+tick: 3, setAvailableIOTokens: 709
+tick: 4, setAvailableIOTokens: 709
+tick: 5, setAvailableIOTokens: 709
+tick: 6, setAvailableIOTokens: 709
+tick: 7, setAvailableIOTokens: 709
+tick: 8, setAvailableIOTokens: 709
+tick: 9, setAvailableIOTokens: 709
+tick: 10, setAvailableIOTokens: 709
+tick: 11, setAvailableIOTokens: 709
+tick: 12, setAvailableIOTokens: 709
+tick: 13, setAvailableIOTokens: 709
+tick: 14, setAvailableIOTokens: 699
+
 # l0-sublevels drops below threshold. We calculate the smoothed values, but
 # don't limit the tokens.
 set-state admitted=30000 l0-bytes=10000 l0-added=301000 l0-files=21 l0-sublevels=20
 ----
 admitted: 30000, bytes: 10000, added-bytes: 301000,
-smoothed-removed: 87500, smoothed-admit: 6250,
+smoothed-removed: 68750, smoothed-admit: 10312,
 tokens: unlimited, tokens-allocated: 0
 tick: 0, setAvailableIOTokens: unlimited
 tick: 1, setAvailableIOTokens: unlimited
