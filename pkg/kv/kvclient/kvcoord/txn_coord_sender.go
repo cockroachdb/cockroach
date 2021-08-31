@@ -753,6 +753,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 			tc.metrics.RestartsSerializable.Inc()
 		case roachpb.RETRY_ASYNC_WRITE_FAILURE:
 			tc.metrics.RestartsAsyncWriteFailure.Inc()
+		case roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED:
+			tc.metrics.RestartsCommitDeadlineExceeded.Inc()
 		default:
 			tc.metrics.RestartsUnknown.Inc()
 		}
