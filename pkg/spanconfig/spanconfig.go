@@ -117,6 +117,32 @@ func FullTranslate(
 	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
 }
 
+// SQLWatcher watches for events on system.zones and system.descriptors.
+type SQLWatcher interface {
+	// WatchForSQLUpdates watches for changes to zones and descriptors starting at
+	// the given timestamp (exclusive), informing callers using the handler
+	// callback.
+	//
+	// The handler callback is invoked from time to time with a list of updates
+	// and a checkpointTS. Invocations of the handler callback provide the
+	// following semantics:
+	// 1. Calls to the handler are serial.
+	// 2. The timestamp supplied to the handler is monotonically increasing.
+	// 3. The list of DescriptorUpdates supplied to handler includes all events
+	// in the window (prevInvocationCheckpointTS, checkpointTS].
+	// 4. No further calls to the handler are made if an invocation returns an
+	// error.
+	//
+	// These guarantees mean that users of this interface are free to persist the
+	// checkpointTS and later use it to re-establish the SQLWatcher without
+	// missing any updates.
+	WatchForSQLUpdates(
+		ctx context.Context,
+		startTS hlc.Timestamp,
+		handler func(ctx context.Context, updates []DescriptorUpdate, checkpointTS hlc.Timestamp) error,
+	) error
+}
+
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
@@ -126,11 +152,7 @@ type ReconciliationDependencies interface {
 
 	SQLTranslator
 
-	// TODO(arul): We'll also want access to a "SQLWatcher", something that
-	// watches for changes to system.{descriptors, zones} to feed IDs to the
-	// SQLTranslator. These interfaces will be used by the "Reconciler to perform
-	// full/partial reconciliation, checkpoint the span config job, and update KV
-	// with the tenants span config state.
+	SQLWatcher
 }
 
 // Store is a data structure used to store spans and their corresponding
@@ -216,27 +238,4 @@ type StoreReader interface {
 	NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool
 	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
-}
-
-// Update captures a span and the corresponding config change. It's the unit of
-// what can be applied to a StoreWriter.
-type Update struct {
-	// Span captures the key span being updated.
-	Span roachpb.Span
-
-	// Config captures the span config the key span was updated to. An empty
-	// config indicates the span config being deleted.
-	Config roachpb.SpanConfig
-}
-
-// Deletion returns true if the update corresponds to a span config being
-// deleted.
-func (u Update) Deletion() bool {
-	return u.Config.IsEmpty()
-}
-
-// Addition returns true if the update corresponds to a span config being
-// added.
-func (u Update) Addition() bool {
-	return !u.Deletion()
 }

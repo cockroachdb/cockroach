@@ -116,6 +116,7 @@ go_library(
         "//pkg/spanconfig/spanconfigkvsubscriber",
         "//pkg/spanconfig/spanconfigmanager",
         "//pkg/spanconfig/spanconfigsqltranslator",
+        "//pkg/spanconfig/spanconfigsqlwatcher",
         "//pkg/sql",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",

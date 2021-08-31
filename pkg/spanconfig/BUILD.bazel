@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "spanconfig.go",
         "testing_knobs.go",
+        "types.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig",
     visibility = ["//visibility:public"],
@@ -14,5 +15,6 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/descpb",
         "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

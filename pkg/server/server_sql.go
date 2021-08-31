@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -842,6 +843,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// only do it if COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		sqlTranslator := spanconfigsqltranslator.New(execCfg, codec)
+		sqlWatcher := spanconfigsqlwatcher.New(
+			codec,
+			cfg.Settings,
+			cfg.rangeFeedFactory,
+			1<<20, /* 1 MB bufferMemLimit */
+			cfg.stopper,
+			spanConfigKnobs,
+		)
 		spanConfigMgr = spanconfigmanager.New(
 			cfg.db,
 			jobRegistry,
@@ -849,6 +858,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			cfg.Settings,
 			cfg.spanConfigAccessor,
+			sqlWatcher,
 			sqlTranslator,
 			spanConfigKnobs,
 		)
