@@ -391,6 +391,10 @@ func (r *registration) maybeRunCatchUpScan() error {
 			if err := outputEvents(); err != nil {
 				return err
 			}
+			// Truncate ByteAllocator to reuse memory that we
+			// were previously using for the events that
+			// were just output.
+			a.Truncate()
 			a, lastKey = a.Copy(unsafeKey.Key, 0)
 		}
 		key := lastKey
