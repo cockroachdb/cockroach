@@ -57,10 +57,15 @@ func (b *Builder) buildSetOp(
 	}
 
 	// For UNION, we have to synthesize new output columns (because they contain
-	// values from both the left and right relations). This is not necessary for
-	// INTERSECT or EXCEPT, since these operations are basically filters on the
-	// left relation.
-	if unionType == tree.UnionOp {
+	// values from both the left and right relations).
+	//
+	// This is not usually necessary for INTERSECT or EXCEPT, since these
+	// operations are basically filters on the left relation. The exception is if
+	// the left input projects the same column twice, since having the same column
+	// ID for multiple output columns would make it too complicated to represent
+	// the merge ordering for streaming operations (the merge ordering must
+	// include all output columns for the streaming operation to work correctly).
+	if unionType == tree.UnionOp || leftScope.colSet().Len() < len(leftScope.cols) {
 		outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
 		for i := range leftScope.cols {
 			c := &leftScope.cols[i]
