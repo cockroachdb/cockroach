@@ -836,6 +836,12 @@ func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) 
 	return backupManifestIndex, nil
 }
 
+// loadSQLDescsFromBackupsAtTime is the common method used during restore
+// planning and execution to resolve the descriptors from the appropriate
+// backup.
+// The method identifies the appropriate backup manifest, descriptors, and
+// descriptor changes, and filters out descriptor revisions that we do not
+// require during the restore.
 func loadSQLDescsFromBackupsAtTime(
 	backupManifests []BackupManifest, asOf hlc.Timestamp,
 ) ([]catalog.Descriptor, BackupManifest) {
@@ -880,8 +886,14 @@ func loadSQLDescsFromBackupsAtTime(
 		// backed up -- if the DB is missing, filter the object.
 		desc := catalogkv.UnwrapDescriptorRaw(context.TODO(), raw)
 		var isObject bool
-		switch desc.(type) {
-		case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
+		switch d := desc.(type) {
+		case catalog.TableDescriptor:
+			// Filter out revisions in the dropped state.
+			if d.GetState() == descpb.DescriptorState_DROP {
+				continue
+			}
+			isObject = true
+		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
 			isObject = true
 		}
 		if isObject && byID[desc.GetParentID()] == nil {
