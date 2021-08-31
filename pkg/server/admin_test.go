@@ -1543,6 +1543,11 @@ func TestAdminAPIJobs(t *testing.T) {
 			[]int64{},
 		},
 		{
+			fmt.Sprintf("jobs?type=%d", jobspb.TypeSQLStatsCompaction),
+			[]int64{},
+			[]int64{},
+		},
+		{
 			fmt.Sprintf("jobs?type=%d", invalidJobType),
 			[]int64{},
 			[]int64{},

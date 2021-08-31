@@ -71,7 +71,11 @@ var _ base.SQLInstanceID
 const AutoStatsName = "__auto__"
 
 // AutomaticJobTypes is a list of automatic job types that currently exist.
-var AutomaticJobTypes = [...]Type{TypeAutoCreateStats, TypeAutoSpanConfigReconciliation}
+var AutomaticJobTypes = [...]Type{
+	TypeAutoCreateStats,
+	TypeAutoSpanConfigReconciliation,
+	TypeSQLStatsCompaction,
+}
 
 // DetailsType returns the type for a payload detail.
 func DetailsType(d isPayload_Details) Type {
