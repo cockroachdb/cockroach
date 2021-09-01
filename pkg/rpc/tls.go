@@ -197,9 +197,14 @@ func (ctx *SecurityContext) getUIClientTLSConfig() (*tls.Config, error) {
 	return tlsCfg, nil
 }
 
-// GetUIServerTLSConfig returns the server TLS config for the Admin UI, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a server UI TLS config.
+// GetUIServerTLSConfig returns the server TLS config for the DB
+// Console, initializing it if needed. If Insecure is true, return a nil
+// config, otherwise ask the certificate manager for a server UI TLS
+// config. When called on a tenant instance, will fall back to returning
+// the server TLS config for the node if the UI Server Config cannot be
+// found. This choice was made to allow for simpler configuration
+// simpler on the tenant, and due to the fact that tenant HTTPS access
+// is currently mediated through a proxy.
 //
 // TODO(peter): This method is only used by `server.NewServer` and
 // `Server.Start`. Move it.
@@ -215,6 +220,13 @@ func (ctx *SecurityContext) GetUIServerTLSConfig() (*tls.Config, error) {
 	}
 
 	tlsCfg, err := cm.GetUIServerTLSConfig()
+	if err != nil && ctx.tenID != roachpb.SystemTenantID {
+		tlsCfg, err := cm.GetServerTLSConfig()
+		if err != nil {
+			return nil, wrapError(err)
+		}
+		return tlsCfg, nil
+	}
 	if err != nil {
 		return nil, wrapError(err)
 	}

@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"time"
 
@@ -70,6 +71,7 @@ func StartTenant(
 		histogramWindowInterval: args.HistogramWindowInterval(),
 		settings:                args.Settings,
 	})
+
 	connManager := netutil.MakeServer(
 		args.stopper,
 		// The SQL server only uses connManager.ServeWith. The both below
@@ -182,6 +184,11 @@ func StartTenant(
 		pgLAddr,   // sql addr
 	)
 
+	serverTLSConfig, err := args.rpcContext.GetUIServerTLSConfig()
+	if err != nil {
+		return nil, "", "", err
+	}
+
 	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
 		mux := http.NewServeMux()
 		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn())
@@ -196,7 +203,17 @@ func StartTenant(
 		})
 		f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
 		mux.Handle(statusVars, http.HandlerFunc(f))
-		_ = http.Serve(httpL, mux)
+
+		connManager := netutil.MakeServer(
+			args.stopper,
+			serverTLSConfig, // tlsConfig
+			mux,             // handler
+		)
+
+		if serverTLSConfig != nil {
+			httpL = tls.NewListener(httpL, serverTLSConfig)
+		}
+		netutil.FatalIfUnexpected(connManager.Serve(httpL))
 	}); err != nil {
 		return nil, "", "", err
 	}
