@@ -878,3 +878,10 @@ query B
 SELECT is_temporary FROM crdb_internal.create_statements WHERE descriptor_name = 'temp'
 ----
 true
+
+# Regression test for incorrectly handling tree.DOidWrappers by some builtins
+# (#69684).
+statement ok
+CREATE TABLE t69684(a NAME);
+INSERT INTO t69684 VALUES ('foo');
+SELECT * FROM t69684 WHERE crdb_internal.increment_feature_counter(a)
