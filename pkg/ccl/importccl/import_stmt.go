@@ -2123,6 +2123,13 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
+	// If the table being imported into referenced UDTs, ensure that a concurrent
+	// schema change on any of the types has not modified the type descriptor. If
+	// it has, it is unsafe to import the data and we fail the import job.
+	if err := r.checkForUDTModification(ctx, p.ExecCfg()); err != nil {
+		return err
+	}
+
 	if err := r.publishSchemas(ctx, p.ExecCfg()); err != nil {
 		return err
 	}
@@ -2268,6 +2275,44 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 		err := r.job.SetDetails(ctx, txn, details)
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing schemas")
+		}
+		return nil
+	})
+}
+
+// checkForUDTModification checks whether any of the types referenced by the
+// table being imported into have been modified since they were read during
+// import planning. If they have, it may be unsafe to continue with the import
+// since we could be ingesting data that is no longer valid for the type.
+//
+// Egs: Renaming an enum value mid import could result in the import ingesting a
+// value that is no longer valid.
+//
+// TODO(SQL Schema): This method might be unnecessarily aggressive in failing
+// the import. The semantics of what concurrent type changes are/are not safe
+// during an IMPORT still need to be ironed out. Once they are, we can make this
+// method more conservative in what it uses to deem a type change dangerous.
+func (r *importResumer) checkForUDTModification(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) error {
+	details := r.job.Details().(jobspb.ImportDetails)
+	if details.Types == nil {
+		return nil
+	}
+	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn,
+		col *descs.Collection) error {
+		for _, savedTypeDesc := range details.Types {
+			typeDesc, err := catalogkv.MustGetTypeDescByID(ctx, txn, execCfg.Codec,
+				savedTypeDesc.Desc.GetID())
+			if err != nil {
+				return errors.Wrap(err, "resolving type descriptor when checking version mismatch")
+			}
+			if typeDesc.GetModificationTime() != savedTypeDesc.Desc.GetModificationTime() {
+				return errors.Newf("type descriptor %d has a different modification time than what"+
+					" was saved during import planning; unsafe to import since the type"+
+					" has changed during the course of the import",
+					typeDesc.GetID())
+			}
 		}
 		return nil
 	})
