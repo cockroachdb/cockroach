@@ -1311,6 +1311,7 @@ func (rq *replicateQueue) shedLease(
 		ctx,
 		conf,
 		desc.Replicas().VoterDescriptors(),
+		repl,
 		repl.store.StoreID(),
 		repl.leaseholderStats,
 		opts.checkTransferLeaseSource,
