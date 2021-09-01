@@ -548,7 +548,7 @@ func clusterNameAndTenantFromParams(
 		return msg, "", roachpb.MaxTenantID, err
 	}
 
-	clusterNameFromOpt, err := parseOptionsParam(msg.Parameters["options"])
+	clusterNameFromOpt, newOptionsParam, err := parseOptionsParam(msg.Parameters["options"])
 	if err != nil {
 		return msg, "", roachpb.MaxTenantID, err
 	}
@@ -595,7 +595,11 @@ func clusterNameAndTenantFromParams(
 	for key, value := range msg.Parameters {
 		if key == "database" {
 			paramsOut[key] = databaseName
-		} else if key != "options" {
+		} else if key == "options" {
+			if newOptionsParam != "" {
+				paramsOut[key] = newOptionsParam
+			}
+		} else {
 			paramsOut[key] = value
 		}
 	}
@@ -636,47 +640,45 @@ func parseDatabaseParam(databaseParam string) (clusterName, databaseName string,
 }
 
 // parseOptionsParam parses the options parameter from the PG connection string,
-// and tries to return the cluster name if present. Just like PostgreSQL, the
+// and tries to return the cluster name if present. It also returns the options
+// parameter with the cluster name stripped out. Just like PostgreSQL, the
 // sqlproxy supports three different ways to set a run-time parameter through
 // its command-line options:
 //     -c NAME=VALUE (commonly used throughout documentation around PGOPTIONS)
 //     -cNAME=VALUE
 //     --NAME=VALUE
 //
-// CockroachDB currently does not support the options parameter, so the parsing
-// logic is built on that assumption. If we do start supporting options in
-// CockroachDB itself, then we should revisit this.
-//
 // Note that this parsing approach is not perfect as it allows a negative case
 // like options="-c --cluster=happy-koala -c -c -c" to go through. To properly
 // parse this, we need to traverse the string from left to right, and look at
 // every single argument, but that involves quite a bit of work, so we'll punt
 // for now.
-func parseOptionsParam(optionsParam string) (string, error) {
+func parseOptionsParam(optionsParam string) (clusterName, newOptionsParam string, err error) {
 	// Only search up to 2 in case of large inputs.
 	matches := clusterNameLongOptionRE.FindAllStringSubmatch(optionsParam, 2 /* n */)
 	if len(matches) == 0 {
-		return "", nil
+		return "", optionsParam, nil
 	}
 
 	if len(matches) > 1 {
 		// Technically we could still allow requests to go through if all
 		// cluster names match, but we don't want to parse the entire string, so
 		// we will just error out if at least two cluster flags are provided.
-		return "", errors.New("multiple cluster flags provided")
+		return "", "", errors.New("multiple cluster flags provided")
 	}
 
 	// Length of each match should always be 2 with the given regex, one for
 	// the full string, and the other for the cluster name.
 	if len(matches[0]) != 2 {
 		// We don't want to panic here.
-		return "", errors.New("internal server error")
+		return "", "", errors.New("internal server error")
 	}
 
 	// Flag was provided, but value is NULL.
 	if len(matches[0][1]) == 0 {
-		return "", errors.New("invalid cluster flag")
+		return "", "", errors.New("invalid cluster flag")
 	}
-
-	return matches[0][1], nil
+	newOptionsParam = strings.ReplaceAll(optionsParam, matches[0][0], "")
+	newOptionsParam = strings.TrimSpace(newOptionsParam)
+	return matches[0][1], newOptionsParam, nil
 }
