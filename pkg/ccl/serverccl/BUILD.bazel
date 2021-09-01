@@ -41,7 +41,6 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util",
         "//pkg/util/envutil",
-        "//pkg/util/httputil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
