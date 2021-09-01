@@ -961,7 +961,7 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 		ctx,
 		zone,
 		desc.Replicas().Voters(),
-		repl.store.StoreID(),
+		repl,
 		repl.leaseholderStats,
 		opts.checkTransferLeaseSource,
 		opts.checkCandidateFullness,

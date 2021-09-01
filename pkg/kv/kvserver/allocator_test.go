@@ -1281,6 +1281,43 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	}
 }
 
+// mockRepl satisfies the interface for the `leaseRepl` passed into
+// `Allocator.TransferLeaseTarget()` for these tests.
+type mockRepl struct {
+	replicationFactor     int32
+	storeID               roachpb.StoreID
+	replsInNeedOfSnapshot map[roachpb.ReplicaID]struct{}
+}
+
+func (r *mockRepl) RaftStatus() *raft.Status {
+	raftStatus := &raft.Status{
+		Progress: make(map[uint64]tracker.Progress),
+	}
+	for i := int32(1); i <= r.replicationFactor; i++ {
+		state := tracker.StateReplicate
+		if _, ok := r.replsInNeedOfSnapshot[roachpb.ReplicaID(i)]; ok {
+			state = tracker.StateSnapshot
+		}
+		raftStatus.Progress[uint64(i)] = tracker.Progress{State: state}
+	}
+	return raftStatus
+}
+
+func (r *mockRepl) StoreID() roachpb.StoreID {
+	return r.storeID
+}
+
+func (r *mockRepl) GetRangeID() roachpb.RangeID {
+	return roachpb.RangeID(0)
+}
+
+func (r *mockRepl) markReplAsNeedingSnapshot(id roachpb.ReplicaID) {
+	if r.replsInNeedOfSnapshot == nil {
+		r.replsInNeedOfSnapshot = make(map[roachpb.ReplicaID]struct{})
+	}
+	r.replsInNeedOfSnapshot[id] = struct{}{}
+}
+
 func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1301,9 +1338,9 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	sg.GossipStores(stores, t)
 
 	existing := []roachpb.ReplicaDescriptor{
-		{StoreID: 1},
-		{StoreID: 2},
-		{StoreID: 3},
+		{StoreID: 1, ReplicaID: 1},
+		{StoreID: 2, ReplicaID: 2},
+		{StoreID: 3, ReplicaID: 3},
 	}
 
 	// TODO(peter): Add test cases for non-empty constraints.
@@ -1331,7 +1368,10 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 				context.Background(),
 				zonepb.EmptyCompleteZoneConfig(),
 				c.existing,
-				c.leaseholder,
+				&mockRepl{
+					replicationFactor: 3,
+					storeID:           c.leaseholder,
+				},
 				nil, /* replicaStats */
 				c.check,
 				true,  /* checkCandidateFullness */
@@ -1339,6 +1379,116 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
+			}
+		})
+	}
+}
+
+func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	existing := []roachpb.ReplicaDescriptor{
+		{StoreID: 1, NodeID: 1, ReplicaID: 1},
+		{StoreID: 2, NodeID: 2, ReplicaID: 2},
+		{StoreID: 3, NodeID: 3, ReplicaID: 3},
+		{StoreID: 4, NodeID: 4, ReplicaID: 4},
+	}
+	stopper, g, _, a, _ := createTestAllocator(10, true /* deterministic */)
+	defer stopper.Stop(context.Background())
+
+	// 4 stores where the lease count for each store is equal to 10x the store
+	// ID.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 4; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(10 * i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	testCases := []struct {
+		existing          []roachpb.ReplicaDescriptor
+		replsNeedingSnaps []roachpb.ReplicaID
+		leaseholder       roachpb.StoreID
+		checkSource       bool
+		transferTarget    roachpb.StoreID
+	}{
+		{
+			existing:          existing,
+			replsNeedingSnaps: []roachpb.ReplicaID{1},
+			leaseholder:       3,
+			checkSource:       true,
+			transferTarget:    0,
+		},
+		{
+			existing:          existing,
+			replsNeedingSnaps: []roachpb.ReplicaID{1},
+			leaseholder:       3,
+			checkSource:       false,
+			transferTarget:    2,
+		},
+		{
+			existing:          existing,
+			replsNeedingSnaps: []roachpb.ReplicaID{1},
+			leaseholder:       4,
+			checkSource:       true,
+			transferTarget:    2,
+		},
+		{
+			existing:          existing,
+			replsNeedingSnaps: []roachpb.ReplicaID{1},
+			leaseholder:       4,
+			checkSource:       false,
+			transferTarget:    2,
+		},
+		{
+			existing:          existing,
+			replsNeedingSnaps: []roachpb.ReplicaID{1, 2},
+			leaseholder:       4,
+			checkSource:       false,
+			transferTarget:    3,
+		},
+		{
+			existing:          existing,
+			replsNeedingSnaps: []roachpb.ReplicaID{1, 2},
+			leaseholder:       4,
+			checkSource:       true,
+			transferTarget:    0,
+		},
+		{
+			existing:          existing,
+			replsNeedingSnaps: []roachpb.ReplicaID{1, 2, 3},
+			leaseholder:       4,
+			checkSource:       true,
+			transferTarget:    0,
+		},
+	}
+
+	for _, c := range testCases {
+		repl := &mockRepl{
+			replicationFactor: 4,
+			storeID:           c.leaseholder,
+		}
+		for _, r := range c.replsNeedingSnaps {
+			repl.markReplAsNeedingSnapshot(r)
+		}
+		t.Run("", func(t *testing.T) {
+			target := a.TransferLeaseTarget(
+				context.Background(),
+				zonepb.EmptyCompleteZoneConfig(),
+				c.existing,
+				repl,
+				nil,
+				c.checkSource,
+				true,  /* checkCandidateFullness */
+				false, /* alwaysAllowDecisionWithoutStats */
+			)
+			if c.transferTarget != target.StoreID {
+				t.Fatalf("expected %d, but found %d", c.transferTarget, target.StoreID)
 			}
 		})
 	}
@@ -1392,9 +1542,9 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	}
 
 	existing := []roachpb.ReplicaDescriptor{
-		{StoreID: 1},
-		{StoreID: 2},
-		{StoreID: 3},
+		{StoreID: 1, ReplicaID: 1},
+		{StoreID: 2, ReplicaID: 2},
+		{StoreID: 3, ReplicaID: 3},
 	}
 
 	testCases := []struct {
@@ -1430,7 +1580,10 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 				context.Background(),
 				c.zone,
 				c.existing,
-				c.leaseholder,
+				&mockRepl{
+					replicationFactor: 3,
+					storeID:           c.leaseholder,
+				},
 				nil, /* replicaStats */
 				c.check,
 				true,  /* checkCandidateFullness */
@@ -1678,9 +1831,9 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 	sg.GossipStores(stores, t)
 
 	existing := []roachpb.ReplicaDescriptor{
-		{NodeID: 1, StoreID: 1},
-		{NodeID: 2, StoreID: 3},
-		{NodeID: 3, StoreID: 5},
+		{NodeID: 1, StoreID: 1, ReplicaID: 1},
+		{NodeID: 2, StoreID: 3, ReplicaID: 2},
+		{NodeID: 3, StoreID: 5, ReplicaID: 3},
 	}
 
 	testCases := []struct {
@@ -1701,7 +1854,10 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 				context.Background(),
 				zonepb.EmptyCompleteZoneConfig(),
 				existing,
-				c.leaseholder,
+				&mockRepl{
+					replicationFactor: 6,
+					storeID:           c.leaseholder,
+				},
 				nil, /* replicaStats */
 				c.check,
 				true,  /* checkCandidateFullness */
@@ -1961,7 +2117,10 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 				context.Background(),
 				zone,
 				c.existing,
-				c.leaseholder,
+				&mockRepl{
+					replicationFactor: 5,
+					storeID:           c.leaseholder,
+				},
 				nil,   /* replicaStats */
 				true,  /* checkTransferLeaseSource */
 				true,  /* checkCandidateFullness */
@@ -1974,7 +2133,10 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 				context.Background(),
 				zone,
 				c.existing,
-				c.leaseholder,
+				&mockRepl{
+					replicationFactor: 5,
+					storeID:           c.leaseholder,
+				},
 				nil,   /* replicaStats */
 				false, /* checkTransferLeaseSource */
 				true,  /* checkCandidateFullness */
@@ -2057,7 +2219,10 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 				context.Background(),
 				zone,
 				c.existing,
-				c.leaseholder,
+				&mockRepl{
+					replicationFactor: 6,
+					storeID:           c.leaseholder,
+				},
 				nil,   /* replicaStats */
 				true,  /* checkTransferLeaseSource */
 				true,  /* checkCandidateFullness */
@@ -2070,7 +2235,10 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 				context.Background(),
 				zone,
 				c.existing,
-				c.leaseholder,
+				&mockRepl{
+					replicationFactor: 6,
+					storeID:           c.leaseholder,
+				},
 				nil,   /* replicaStats */
 				false, /* checkTransferLeaseSource */
 				true,  /* checkCandidateFullness */
@@ -3834,9 +4002,9 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	}
 
 	existing := []roachpb.ReplicaDescriptor{
-		{NodeID: 1, StoreID: 1},
-		{NodeID: 2, StoreID: 2},
-		{NodeID: 3, StoreID: 3},
+		{NodeID: 1, StoreID: 1, ReplicaID: 1},
+		{NodeID: 2, StoreID: 2, ReplicaID: 2},
+		{NodeID: 3, StoreID: 3, ReplicaID: 3},
 	}
 
 	testCases := []struct {
@@ -3914,7 +4082,10 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 				context.Background(),
 				zonepb.EmptyCompleteZoneConfig(),
 				existing,
-				c.leaseholder,
+				&mockRepl{
+					replicationFactor: 3,
+					storeID:           c.leaseholder,
+				},
 				c.stats,
 				c.check,
 				true,  /* checkCandidateFullness */
