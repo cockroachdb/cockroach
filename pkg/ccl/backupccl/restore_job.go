@@ -2064,13 +2064,29 @@ func (r *restoreResumer) restoreSystemTables(
 	executor := r.execCfg.InternalExecutor
 	var err error
 
-	// Iterate through all the tables that we're restoring, and if it was restored
-	// to the temporary system DB then copy it's data over to the real system
-	// table.
+	// Aggregate the system tables that are to be restored, and ensure that the
+	// settings table is restored last. This is important so that other system
+	// tables respect the cluster settings of the destination cluster during
+	// restore, rather than the settings being restored.
+	var settingsTableDesc catalog.TableDescriptor
+	systemTables := make([]catalog.TableDescriptor, 0)
 	for _, table := range tables {
 		if table.GetParentID() != tempSystemDBID {
 			continue
 		}
+		if table.GetName() == systemschema.SettingsTable.Name {
+			settingsTableDesc = table
+			continue
+		}
+		systemTables = append(systemTables, table)
+	}
+
+	// Append the settings table to the end of the system tables to be restored.
+	systemTables = append(systemTables, settingsTableDesc)
+
+	// Iterate through all the system tables that we're restoring, and copy their
+	// data over to the real system table.
+	for _, table := range systemTables {
 		systemTableName := table.GetName()
 		if details.SystemTablesRestored[systemTableName] {
 			// We've already restored this table.
