@@ -52,9 +52,8 @@ func New(
 	}
 }
 
-// enabledSetting is a hidden cluster setting that gates usage of the
-// KVAccessor. It has no effect unless COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is
-// also set.
+// enabledSetting gates usage of the KVAccessor. It has no effect unless
+// COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is also set.
 var enabledSetting = settings.RegisterBoolSetting(
 	"spanconfig.experimental_kvaccessor.enabled",
 	"enable the use of the kv accessor", false).WithSystemOnly()
