@@ -98,6 +98,7 @@ type migrateLockTablePool struct {
 	done     chan bool
 	status   [concurrentMigrateLockTableRequests]int64
 	finished uint64
+	total    uint64
 
 	mu struct {
 		syncutil.Mutex
@@ -379,8 +380,9 @@ func (m *migrateLockTablePool) runStatusLogger(ctx context.Context) {
 			}
 
 			finished := atomic.LoadUint64(&m.finished)
+			total := m.total // TODO(dt): count in background and load via atomic.
 			lowWaterMark := m.lowWaterMark()
-			log.Infof(ctx, "%d ranges, up to %s, have completed lock table migration", finished, lowWaterMark)
+			log.Infof(ctx, "%d of %d ranges, up to %s, have completed lock table migration", finished, total, lowWaterMark)
 			if ranges.Len() > 0 {
 				log.Infof(ctx, "currently migrating lock table on ranges %s", ranges.String())
 			}
@@ -389,7 +391,11 @@ func (m *migrateLockTablePool) runStatusLogger(ctx context.Context) {
 				if err := m.job.FractionProgressed(ctx, nil, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 					prog := details.(*jobspb.Progress_Migration).Migration
 					prog.Watermark = lowWaterMark
-					// TODO(dt): count total ranges, return fraction here.
+					if total > 0 && finished <= total {
+						return float32(finished) / float32(total)
+					} else if finished > total {
+						return 1.0
+					}
 					return 0.0
 				}); err != nil {
 					log.Warningf(ctx, "failed to update progress: %v", err)
@@ -402,6 +408,18 @@ func (m *migrateLockTablePool) runStatusLogger(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func countTotalRanges(ctx context.Context, ri rangeIterator) (uint64, error) {
+	var total uint64
+	rs := roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax}
+	for ri.Seek(ctx, roachpb.RKeyMin, kvcoord.Ascending); ri.Valid(); ri.Next(ctx) {
+		total++
+		if !ri.NeedAnother(rs) {
+			break
+		}
+	}
+	return total, ri.Error()
 }
 
 // rangeIterator provides a not-necessarily-transactional view of KV ranges
@@ -429,6 +447,7 @@ func runSeparatedIntentsMigration(
 	db *kv.DB,
 	ri rangeIterator,
 	ir intentResolver,
+	expectedRanges uint64,
 	job *jobs.Job,
 ) error {
 	workerPool := migrateLockTablePool{
@@ -438,6 +457,7 @@ func runSeparatedIntentsMigration(
 		ir:       ir,
 		clock:    clock,
 		job:      job,
+		total:    expectedRanges,
 	}
 
 	workerPool.mu.lowWater = make([]roachpb.RKey, concurrentMigrateLockTableRequests)
@@ -479,7 +499,13 @@ func separatedIntentsMigration(
 	})
 	ri := kvcoord.NewRangeIterator(deps.DistSender)
 
-	return runSeparatedIntentsMigration(ctx, deps.DB.Clock(), deps.Stopper, deps.DB, ri, ir, job)
+	// TODO(dt): count this in background instead on own iterator.
+	expected, err := countTotalRanges(ctx, ri)
+	if err != nil {
+		return err
+	}
+
+	return runSeparatedIntentsMigration(ctx, deps.DB.Clock(), deps.Stopper, deps.DB, ri, ir, expected, job)
 }
 
 func postSeparatedIntentsMigration(
