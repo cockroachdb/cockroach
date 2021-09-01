@@ -15,8 +15,10 @@ RUN apt-get update \
     gnupg2 \
     libncurses-dev \
     libtinfo-dev \
+    lsof \
     make \
     netbase \
+    openjdk-8-jre \
     unzip \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
