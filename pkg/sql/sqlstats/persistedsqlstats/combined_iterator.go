@@ -186,7 +186,15 @@ func compareStmtStats(lhs, rhs *roachpb.CollectedStatementStatistics) int {
 		return 1
 	}
 
-	// 4. we compare their plan hash.
+	// 4. we compare their transaction fingerprint ID
+	if lhs.Key.TransactionFingerprintID < rhs.Key.TransactionFingerprintID {
+		return -1
+	}
+	if lhs.Key.TransactionFingerprintID > rhs.Key.TransactionFingerprintID {
+		return 1
+	}
+
+	// 5. we compare their plan hash.
 	if lhs.Key.PlanHash < rhs.Key.PlanHash {
 		return -1
 	}

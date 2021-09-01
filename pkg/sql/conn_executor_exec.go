@@ -1906,7 +1906,15 @@ func (ex *connExecutor) recordTransactionStart() (
 
 	onTxnFinish = func(ctx context.Context, ev txnEvent) {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
-		err := ex.recordTransaction(ctx, ev, implicit, txnStart)
+		transactionFingerprintID :=
+			roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
+		if !implicit {
+			ex.statsCollector.EndExplicitTransaction(
+				ctx,
+				transactionFingerprintID,
+			)
+		}
+		err := ex.recordTransaction(ctx, transactionFingerprintID, ev, implicit, txnStart)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to record transaction stats: %s", err)
@@ -1930,11 +1938,20 @@ func (ex *connExecutor) recordTransactionStart() (
 			ex.server.cfg.TestingKnobs.BeforeRestart(ex.Ctx(), ex.extraTxnState.autoRetryReason)
 		}
 	}
+
+	if !implicit {
+		ex.statsCollector.StartExplicitTransaction()
+	}
+
 	return onTxnFinish, onTxnRestart
 }
 
 func (ex *connExecutor) recordTransaction(
-	ctx context.Context, ev txnEvent, implicit bool, txnStart time.Time,
+	ctx context.Context,
+	transactionFingerprintID roachpb.TransactionFingerprintID,
+	ev txnEvent,
+	implicit bool,
+	txnStart time.Time,
 ) error {
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
@@ -1964,7 +1981,7 @@ func (ex *connExecutor) recordTransaction(
 
 	return ex.statsCollector.RecordTransaction(
 		ctx,
-		roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum()),
+		transactionFingerprintID,
 		recordedTxnStats,
 	)
 }
