@@ -108,7 +108,8 @@ type hashAggregator struct {
 	buckets []*aggBucket
 	// ht stores tuples that are "heads" of the corresponding aggregation
 	// groups ("head" here means the tuple that was first seen from the group).
-	ht *colexechash.HashTable
+	ht                  *colexechash.HashTable
+	hashTableNumBuckets uint64
 
 	// state stores the current state of hashAggregator.
 	state hashAggregatorState
@@ -188,6 +189,13 @@ func NewHashAggregator(
 		// coldata.MaxBatchSize, so we need to shrink it.
 		maxBuffered = coldata.MaxBatchSize
 	}
+	// This number was chosen after running the micro-benchmarks and relevant
+	// TPCH queries using tpchvec/bench.
+	// TODO: restore to 256.
+	hashTableNumBuckets := uint64(32)
+	if args.TestingKnobs.HashTableNumBuckets != 0 {
+		hashTableNumBuckets = args.TestingKnobs.HashTableNumBuckets
+	}
 	hashAgg := &hashAggregator{
 		OneInputNode:          colexecop.NewOneInputNode(args.Input),
 		hashTableAllocator:    args.Allocator,
@@ -201,6 +209,7 @@ func NewHashAggregator(
 		maxOutputBatchMemSize: maxOutputBatchMemSize,
 		aggFnsAlloc:           aggFnsAlloc,
 		hashAlloc:             aggBucketAlloc{allocator: args.Allocator},
+		hashTableNumBuckets:   hashTableNumBuckets,
 	}
 	hashAgg.accountingHelper.Init(outputUnlimitedAllocator, args.OutputTypes, nil /* notNeededVecIdxs */)
 	hashAgg.bufferingState.tuples = colexecutils.NewAppendOnlyBufferedBatch(args.Allocator, args.InputTypes, nil /* colsToStore */)
@@ -217,15 +226,14 @@ func (op *hashAggregator) Init(ctx context.Context) {
 		return
 	}
 	op.Input.Init(op.Ctx)
-	// These numbers were chosen after running the micro-benchmarks and relevant
+	// This number was chosen after running the micro-benchmarks and relevant
 	// TPCH queries using tpchvec/bench.
 	const hashTableLoadFactor = 0.1
-	const hashTableNumBuckets = 32
 	op.ht = colexechash.NewHashTable(
 		op.Ctx,
 		op.hashTableAllocator,
 		hashTableLoadFactor,
-		hashTableNumBuckets,
+		op.hashTableNumBuckets,
 		op.inputTypes,
 		op.spec.GroupCols,
 		true, /* allowNullEquality */
@@ -420,6 +428,7 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 	op.ht.ComputeHashAndBuildChains(b)
 	op.ht.FindBuckets(
 		b, op.ht.Keys, op.ht.ProbeScratch.First, op.ht.ProbeScratch.Next, op.ht.CheckProbeForDistinct,
+		false /* zeroHeadIDForDistinctTuple */, true, /* probingAgainstItself */
 	)
 
 	// Step 2: now that we have op.ht.ProbeScratch.HeadID populated we can
@@ -437,8 +446,12 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 	// the equality chains (which the selection vector on b currently contains)
 	// against the heads of the existing groups.
 	if len(op.buckets) > 0 {
+		// Note that here we want for each equality chain that doesn't have a
+		// match with already existing groups have its HeadID value set to 0, so
+		// we pass 'true' for the last argument in FindBuckets.
 		op.ht.FindBuckets(
 			b, op.ht.Keys, op.ht.BuildScratch.First, op.ht.BuildScratch.Next, op.ht.CheckBuildForAggregation,
+			true /* zeroHeadIDForDistinctTuple */, false, /* probingAgainstItself */
 		)
 		for eqChainsSlot, HeadID := range op.ht.ProbeScratch.HeadID[:eqChainsCount] {
 			if HeadID != 0 {

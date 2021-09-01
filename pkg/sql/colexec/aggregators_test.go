@@ -753,6 +753,7 @@ func TestAggregators(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
+	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 	for _, tc := range aggregatorsTestCases {
 		constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
@@ -776,7 +777,7 @@ func TestAggregators(t *testing.T) {
 			}
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier,
 				func(input []colexecop.Operator) (colexecop.Operator, error) {
-					return agg.new(&colexecagg.NewAggregatorArgs{
+					args := &colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
 						MemAccount:     testMemAcc,
 						Input:          input[0],
@@ -786,7 +787,9 @@ func TestAggregators(t *testing.T) {
 						Constructors:   constructors,
 						ConstArguments: constArguments,
 						OutputTypes:    outputTypes,
-					})
+					}
+					args.TestingKnobs.HashTableNumBuckets = uint64(1 + rng.Intn(7))
+					return agg.new(args)
 				})
 		}
 	}
@@ -895,7 +898,7 @@ func TestAggregatorRandom(t *testing.T) {
 						&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 					)
 					require.NoError(t, err)
-					a, err := agg.new(&colexecagg.NewAggregatorArgs{
+					args := &colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
 						MemAccount:     testMemAcc,
 						Input:          source,
@@ -905,7 +908,9 @@ func TestAggregatorRandom(t *testing.T) {
 						Constructors:   constructors,
 						ConstArguments: constArguments,
 						OutputTypes:    outputTypes,
-					})
+					}
+					args.TestingKnobs.HashTableNumBuckets = uint64(1 + rng.Intn(31))
+					a, err := agg.new(args)
 					if err != nil {
 						t.Fatal(err)
 					}

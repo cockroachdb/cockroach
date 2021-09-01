@@ -9273,7 +9273,6 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 							nDiffers++
 						}
 					}
-					continue
 				} else {
 					// Continue probing in this next chain for the probe key.
 					ht.ProbeScratch.differs[toCheck] = false
@@ -9312,7 +9311,6 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 							nDiffers++
 						}
 					}
-					continue
 				} else {
 					// Continue probing in this next chain for the probe key.
 					ht.ProbeScratch.differs[toCheck] = false
@@ -9327,3 +9325,21 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 	}
 	return nDiffers
 }
+
+// execgen:inline
+const _ = "inlined_findBuckets_true_true"
+
+// execgen:inline
+const _ = "inlined_findBuckets_true_false"
+
+// execgen:inline
+const _ = "inlined_findBuckets_false_true"
+
+// execgen:inline
+const _ = "inlined_findBuckets_false_false"
+
+// execgen:inline
+const _ = "inlined_setHeadIDForDistinctTuple_true"
+
+// execgen:inline
+const _ = "inlined_setHeadIDForDistinctTuple_false"

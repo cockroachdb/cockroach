@@ -5577,9 +5577,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -5638,9 +5635,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -5703,9 +5697,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -5763,9 +5754,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -5832,9 +5820,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -5893,9 +5878,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -5958,9 +5940,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -6018,9 +5997,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -6094,9 +6070,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -6147,9 +6120,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -6204,9 +6174,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -6256,9 +6223,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -6317,9 +6281,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -6370,9 +6331,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -6427,9 +6385,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -6479,9 +6434,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -6561,9 +6513,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -6614,9 +6563,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -6671,9 +6617,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -6723,9 +6666,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -6784,9 +6724,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -6837,9 +6774,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -6894,9 +6828,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -6946,9 +6877,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -7031,9 +6959,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -7095,9 +7020,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -7163,9 +7085,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -7226,9 +7145,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -7298,9 +7214,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -7362,9 +7275,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -7430,9 +7340,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -7493,9 +7400,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -7581,9 +7485,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -7645,9 +7546,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -7713,9 +7611,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -7776,9 +7671,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -7848,9 +7740,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -7912,9 +7801,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -7980,9 +7866,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -8043,9 +7926,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -8133,9 +8013,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -8197,9 +8074,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -8265,9 +8139,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -8328,9 +8199,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -8400,9 +8268,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -8464,9 +8329,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -8532,9 +8394,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -8595,9 +8454,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -8699,9 +8555,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -8771,9 +8624,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -8847,9 +8697,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -8918,9 +8765,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -8998,9 +8842,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -9070,9 +8911,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -9146,9 +8984,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -9217,9 +9052,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -9303,9 +9135,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -9363,9 +9192,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -9427,9 +9253,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -9486,9 +9309,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -9554,9 +9374,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -9614,9 +9431,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -9678,9 +9492,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -9737,9 +9548,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -9813,9 +9621,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -9866,9 +9671,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -9923,9 +9725,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -9975,9 +9774,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -10036,9 +9832,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -10089,9 +9882,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -10146,9 +9936,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -10198,9 +9985,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -10280,9 +10064,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -10339,9 +10120,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -10402,9 +10180,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -10460,9 +10235,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -10527,9 +10299,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -10586,9 +10355,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -10649,9 +10415,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -10707,9 +10470,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -10785,9 +10545,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -10840,9 +10597,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -10899,9 +10653,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -10953,9 +10704,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -11016,9 +10764,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -11071,9 +10816,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
 							}
@@ -11130,9 +10872,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							} else {
 								var (
@@ -11185,9 +10924,6 @@ func (ht *HashTable) checkColForDistinctTuples(
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
 									}
-									if keyID == 0 {
-										ht.ProbeScratch.distinct[toCheck] = true
-									}
 								}
 							}
 						}
@@ -11219,9 +10955,7 @@ func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 			// If the current key matches with the probe key, we want to update HeadID
 			// with the current key if it has not been set yet.
 			keyID := ht.ProbeScratch.GroupID[toCheck]
-			if ht.ProbeScratch.HeadID[toCheck] == 0 {
-				ht.ProbeScratch.HeadID[toCheck] = keyID
-			}
+			ht.ProbeScratch.HeadID[toCheck] = keyID
 		} else {
 			// Continue probing in this next chain for the probe key.
 			ht.ProbeScratch.differs[toCheck] = false
@@ -11331,6 +11065,10 @@ func (ht *HashTable) DistinctCheck(nToCheck uint64, probeSel []int) uint64 {
 // batch, number of tuples to check, and the selection vector of the batch, and
 // it returns number of tuples that needs to be checked for next iteration.
 // The "buckets" are specified by equal values in ht.ProbeScratch.HeadID.
+// If zeroHeadIDForDistinctTuple is true, then all tuples that are distinct
+// (i.e. they don't have duplicates) will have HeadID value of 0.
+// - probingAgainstItself indicates whether 'first' and 'next' "represent" the
+// hash table built on the probing batch.
 // NOTE: *first* and *next* vectors should be properly populated.
 // NOTE: batch is assumed to be non-zero length.
 func (ht *HashTable) FindBuckets(
@@ -11338,27 +11076,255 @@ func (ht *HashTable) FindBuckets(
 	keyCols []coldata.Vec,
 	first, next []uint64,
 	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
+	zeroHeadIDForDistinctTuple bool,
+	probingAgainstItself bool,
 ) {
-	batchLength := batch.Length()
-	sel := batch.Selection()
+	ht.ProbeScratch.SetupLimitedSlices(batch.Length(), ht.BuildMode)
+	if zeroHeadIDForDistinctTuple {
+		if probingAgainstItself {
+			{
+				batchLength := batch.Length()
+				sel := batch.Selection()
+				// Early bounds checks.
+				groupIDs := ht.ProbeScratch.GroupID
+				_ = groupIDs[batchLength-1]
+				var nToCheck uint64
+				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+					f := first[hash]
+					if f != 0 {
+						//gcassert:bce
+						groupIDs[i] = f
+						ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+						nToCheck++
+					} else {
+						// This tuple doesn't have a duplicate in the hash table.
+						{
+							var i uint64 = uint64(i)
+							// We leave the HeadID of this tuple unchanged (i.e. zero - that was set
+							// in SetupLimitedSlices).
+							_ = i
+						}
+					}
+				}
 
-	ht.ProbeScratch.SetupLimitedSlices(batchLength, ht.BuildMode)
-	// Early bounds checks.
-	groupIDs := ht.ProbeScratch.GroupID
-	_ = groupIDs[batchLength-1]
-	for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-		f := first[hash]
-		//gcassert:bce
-		groupIDs[i] = f
-	}
-	copy(ht.ProbeScratch.ToCheck, HashTableInitialToCheck[:batchLength])
+				for nToCheck > 0 {
+					// Continue searching for the build table matching keys while the ToCheck
+					// array is non-empty.
+					nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
+					toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
+					nToCheck = 0
+					for _, toCheck := range toCheckSlice {
+						nextGroupIDToCheck := next[groupIDs[toCheck]]
+						// When we're probing against itself, all the tuples that have
+						// non-zero HeadID can be skipped because they are the part of
+						// already found equality chains. We must have already compared
+						// the 'toCheck' tuple against the head of the corresponding
+						// equality chain, so there is no reason to perform the check
+						// against another element from the same equality chain.
+						for nextGroupIDToCheck != 0 && ht.ProbeScratch.HeadID[nextGroupIDToCheck-1] != 0 {
+							nextGroupIDToCheck = next[nextGroupIDToCheck]
+						}
+						if nextGroupIDToCheck != 0 {
+							groupIDs[toCheck] = nextGroupIDToCheck
+							ht.ProbeScratch.ToCheck[nToCheck] = toCheck
+							nToCheck++
+						} else {
+							// This tuple doesn't have a duplicate.
+							{
+								var i uint64 = toCheck
+								// We leave the HeadID of this tuple unchanged (i.e. zero - that was set
+								// in SetupLimitedSlices).
+								_ = i
+							}
+						}
+					}
+				}
+			}
+		} else {
+			{
+				batchLength := batch.Length()
+				sel := batch.Selection()
+				// Early bounds checks.
+				groupIDs := ht.ProbeScratch.GroupID
+				_ = groupIDs[batchLength-1]
+				var nToCheck uint64
+				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+					f := first[hash]
+					if f != 0 {
+						//gcassert:bce
+						groupIDs[i] = f
+						ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+						nToCheck++
+					} else {
+						// This tuple doesn't have a duplicate in the hash table.
+						{
+							var i uint64 = uint64(i)
+							// We leave the HeadID of this tuple unchanged (i.e. zero - that was set
+							// in SetupLimitedSlices).
+							_ = i
+						}
+					}
+				}
 
-	for nToCheck := uint64(batchLength); nToCheck > 0; {
-		// Continue searching for the build table matching keys while the ToCheck
-		// array is non-empty.
-		nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
-		for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-			ht.ProbeScratch.GroupID[toCheck] = next[ht.ProbeScratch.GroupID[toCheck]]
+				for nToCheck > 0 {
+					// Continue searching for the build table matching keys while the ToCheck
+					// array is non-empty.
+					nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
+					toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
+					nToCheck = 0
+					for _, toCheck := range toCheckSlice {
+						nextGroupIDToCheck := next[groupIDs[toCheck]]
+						if nextGroupIDToCheck != 0 {
+							groupIDs[toCheck] = nextGroupIDToCheck
+							ht.ProbeScratch.ToCheck[nToCheck] = toCheck
+							nToCheck++
+						} else {
+							// This tuple doesn't have a duplicate.
+							{
+								var i uint64 = toCheck
+								// We leave the HeadID of this tuple unchanged (i.e. zero - that was set
+								// in SetupLimitedSlices).
+								_ = i
+							}
+						}
+					}
+				}
+			}
+		}
+	} else {
+		if probingAgainstItself {
+			{
+				batchLength := batch.Length()
+				sel := batch.Selection()
+				// Early bounds checks.
+				groupIDs := ht.ProbeScratch.GroupID
+				_ = groupIDs[batchLength-1]
+				var nToCheck uint64
+				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+					f := first[hash]
+					if f != 0 {
+						//gcassert:bce
+						groupIDs[i] = f
+						ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+						nToCheck++
+					} else {
+						// This tuple doesn't have a duplicate in the hash table.
+						{
+							var i uint64 = uint64(i)
+							// Set the HeadID of this tuple to point to itself since it is an
+							// equality chain consisting only of a single element.
+							ht.ProbeScratch.HeadID[i] = i + 1
+						}
+					}
+				}
+
+				for nToCheck > 0 {
+					// Continue searching for the build table matching keys while the ToCheck
+					// array is non-empty.
+					nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
+					toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
+					nToCheck = 0
+					for _, toCheck := range toCheckSlice {
+						nextGroupIDToCheck := next[groupIDs[toCheck]]
+						// When we're probing against itself, all the tuples that have
+						// non-zero HeadID can be skipped because they are the part of
+						// already found equality chains. We must have already compared
+						// the 'toCheck' tuple against the head of the corresponding
+						// equality chain, so there is no reason to perform the check
+						// against another element from the same equality chain.
+						for nextGroupIDToCheck != 0 && ht.ProbeScratch.HeadID[nextGroupIDToCheck-1] != 0 {
+							nextGroupIDToCheck = next[nextGroupIDToCheck]
+						}
+						if nextGroupIDToCheck != 0 {
+							groupIDs[toCheck] = nextGroupIDToCheck
+							ht.ProbeScratch.ToCheck[nToCheck] = toCheck
+							nToCheck++
+						} else {
+							// This tuple doesn't have a duplicate.
+							{
+								var i uint64 = toCheck
+								// Set the HeadID of this tuple to point to itself since it is an
+								// equality chain consisting only of a single element.
+								ht.ProbeScratch.HeadID[i] = i + 1
+							}
+						}
+					}
+				}
+			}
+		} else {
+			{
+				batchLength := batch.Length()
+				sel := batch.Selection()
+				// Early bounds checks.
+				groupIDs := ht.ProbeScratch.GroupID
+				_ = groupIDs[batchLength-1]
+				var nToCheck uint64
+				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+					f := first[hash]
+					if f != 0 {
+						//gcassert:bce
+						groupIDs[i] = f
+						ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+						nToCheck++
+					} else {
+						// This tuple doesn't have a duplicate in the hash table.
+						{
+							var i uint64 = uint64(i)
+							// Set the HeadID of this tuple to point to itself since it is an
+							// equality chain consisting only of a single element.
+							ht.ProbeScratch.HeadID[i] = i + 1
+						}
+					}
+				}
+
+				for nToCheck > 0 {
+					// Continue searching for the build table matching keys while the ToCheck
+					// array is non-empty.
+					nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
+					toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
+					nToCheck = 0
+					for _, toCheck := range toCheckSlice {
+						nextGroupIDToCheck := next[groupIDs[toCheck]]
+						if nextGroupIDToCheck != 0 {
+							groupIDs[toCheck] = nextGroupIDToCheck
+							ht.ProbeScratch.ToCheck[nToCheck] = toCheck
+							nToCheck++
+						} else {
+							// This tuple doesn't have a duplicate.
+							{
+								var i uint64 = toCheck
+								// Set the HeadID of this tuple to point to itself since it is an
+								// equality chain consisting only of a single element.
+								ht.ProbeScratch.HeadID[i] = i + 1
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 }
+
+// execgen:inline
+const _ = "template_findBuckets"
+
+// execgen:inline
+const _ = "template_setHeadIDForDistinctTuple"
+
+// execgen:inline
+const _ = "inlined_findBuckets_true_true"
+
+// execgen:inline
+const _ = "inlined_findBuckets_true_false"
+
+// execgen:inline
+const _ = "inlined_findBuckets_false_true"
+
+// execgen:inline
+const _ = "inlined_findBuckets_false_false"
+
+// execgen:inline
+const _ = "inlined_setHeadIDForDistinctTuple_true"
+
+// execgen:inline
+const _ = "inlined_setHeadIDForDistinctTuple_false"
