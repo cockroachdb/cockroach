@@ -1881,6 +1881,10 @@ func TestStatusAPIStatements(t *testing.T) {
 				// Ignore the ALTER USER ... VIEWACTIVITY statement.
 				continue
 			}
+			if len(respStatement.Stats.SensitiveInfo.MostRecentPlanDescription.Name) == 0 {
+				// Ensure that we populate the explain plan.
+				t.Fatal("expected MostRecentPlanDescription to be populated")
+			}
 			statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
 		}
 
@@ -1980,6 +1984,12 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 				// Ignore the ALTER USER ... VIEWACTIVITY statement.
 				continue
 			}
+
+			if len(respStatement.Stats.SensitiveInfo.MostRecentPlanDescription.Name) == 0 {
+				// Ensure that we populate the explain plan.
+				t.Fatal("expected MostRecentPlanDescription to be populated")
+			}
+
 			statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
 		}
 

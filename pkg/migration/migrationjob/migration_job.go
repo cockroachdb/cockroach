@@ -37,9 +37,11 @@ func init() {
 }
 
 // NewRecord constructs a new jobs.Record for this migration.
-func NewRecord(version clusterversion.ClusterVersion, user security.SQLUsername) jobs.Record {
+func NewRecord(
+	version clusterversion.ClusterVersion, user security.SQLUsername, name string,
+) jobs.Record {
 	return jobs.Record{
-		Description: "Migration to " + version.String(),
+		Description: name,
 		Details: jobspb.MigrationDetails{
 			ClusterVersion: &version,
 		},
