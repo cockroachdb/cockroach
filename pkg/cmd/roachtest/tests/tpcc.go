@@ -606,7 +606,7 @@ func registerTPCC(r registry.Registry) {
 						Warehouses:     len(regions) * warehousesPerRegion,
 						Duration:       duration,
 						ExtraSetupArgs: partitionArgs,
-						ExtraRunArgs:   `--method=simple --wait=false --tolerate-errors ` + partitionArgs,
+						ExtraRunArgs:   `--method=noprepare --wait=false --tolerate-errors ` + partitionArgs,
 						Chaos: func() Chaos {
 							return Chaos{
 								Timer: Periodic{
