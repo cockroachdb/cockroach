@@ -30,14 +30,17 @@ fi
 # - github.com/cockroachdb/cockroach/pkg/build.channel
 # - github.com/cockroachdb/cockroach/pkg/util/log.crashReportEnv
 
-# Prefix with STABLE_ so that these values are saved to stable-status.txt
-# instead of volatile-status.txt.
-# Stamped rules will be retriggered by changes to stable-status.txt, but not by
-# changes to volatile-status.txt.
+# Variables beginning with "STABLE" will be written to stable-status.txt, and
+# others will be written to volatile-status.txt.
+# Go binaries will be re-linked by Bazel upon changes to stable-status.txt, but
+# not if only volatile-status.txt has changed.
+# Ref:
+# * https://docs.bazel.build/versions/main/user-manual.html#workspace_status
+# * https://github.com/bazelbuild/rules_go/blob/master/go/core.rst#defines-and-stamping
 cat <<EOF
 STABLE_BUILD_GIT_COMMIT ${GIT_COMMIT-}
 STABLE_BUILD_GIT_TAG ${GIT_TAG-}
-STABLE_BUILD_GIT_UTCTIME ${GIT_UTCTIME-}
 STABLE_BUILD_GIT_BUILD_TYPE ${GIT_BUILD_TYPE-}
 STABLE_BUILD_TARGET_TRIPLE ${TARGET_TRIPLE-}
+BUILD_GIT_UTCTIME ${GIT_UTCTIME-}
 EOF
