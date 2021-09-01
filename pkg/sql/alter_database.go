@@ -67,7 +67,16 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 	newOwner := n.n.Owner
 	oldOwner := n.desc.GetPrivileges().Owner()
 
-	if err := params.p.checkCanAlterDatabaseAndSetNewOwner(params.ctx, n.desc, newOwner); err != nil {
+	if err := params.p.checkCanAlterToNewOwner(params.ctx, n.desc, newOwner); err != nil {
+		return err
+	}
+
+	// To alter the owner, the user also has to have CREATEDB privilege.
+	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
+		return err
+	}
+
+	if err := params.p.setNewDatabaseOwner(params.ctx, n.desc, newOwner); err != nil {
 		return err
 	}
 
@@ -87,20 +96,11 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 	return nil
 }
 
-// checkCanAlterDatabaseAndSetNewOwner handles privilege checking and setting new owner.
+// setNewDatabaseOwner handles setting a new database owner.
 // Called in ALTER DATABASE and REASSIGN OWNED BY.
-func (p *planner) checkCanAlterDatabaseAndSetNewOwner(
+func (p *planner) setNewDatabaseOwner(
 	ctx context.Context, desc catalog.MutableDescriptor, newOwner security.SQLUsername,
 ) error {
-	if err := p.checkCanAlterToNewOwner(ctx, desc, newOwner); err != nil {
-		return err
-	}
-
-	// To alter the owner, the user also has to have CREATEDB privilege.
-	if err := p.CheckRoleOption(ctx, roleoption.CREATEDB); err != nil {
-		return err
-	}
-
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
