@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -66,6 +68,7 @@ const migrateLockTableRetries = 3
 type migrateLockTableRequest struct {
 	start, end   roachpb.Key
 	debugRangeID roachpb.RangeID
+	rangeStart   roachpb.RKey // for progress.
 	barrierDone  bool
 	barrierTS    hlc.Timestamp
 }
@@ -94,13 +97,16 @@ type migrateLockTablePool struct {
 	mu struct {
 		syncutil.Mutex
 
+		lowWater    []roachpb.RKey
 		errorCount  int
 		combinedErr error
 	}
+
+	job *jobs.Job
 }
 
 func (m *migrateLockTablePool) runMigrateRequestsForRanges(
-	ctx context.Context, ri rangeIterator, concurrentRequests int,
+	ctx context.Context, ri rangeIterator, concurrentRequests int, startFrom roachpb.RKey,
 ) (int, error) {
 	var numMigratedRanges int
 	m.wg.Add(concurrentRequests)
@@ -117,7 +123,7 @@ func (m *migrateLockTablePool) runMigrateRequestsForRanges(
 	defer m.wg.Wait()
 	defer m.stopStatusLogger()
 	rs := roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax}
-	for ri.Seek(ctx, roachpb.RKeyMin, kvcoord.Ascending); ri.Valid(); ri.Next(ctx) {
+	for ri.Seek(ctx, startFrom, kvcoord.Ascending); ri.Valid(); ri.Next(ctx) {
 		desc := ri.Desc()
 		start, end := desc.StartKey, desc.EndKey
 
@@ -301,15 +307,33 @@ func (m *migrateLockTablePool) run(ctx context.Context, workerIdx int) {
 			handleError(err)
 			continue
 		} else {
-			retryRequest = nextReq
 			if nextReq == nil {
 				// This range has been migrated.
 				atomic.AddUint64(&m.finished, 1)
+				m.mu.Lock()
+				m.mu.lowWater[workerIdx] = retryRequest.rangeStart
+				m.mu.Unlock()
 			}
+			retryRequest = nextReq
 			retryAttempt = 0
 			atomic.StoreInt64(statusSlot, 0)
 		}
 	}
+}
+
+func (m *migrateLockTablePool) lowWaterMark() roachpb.RKey {
+	if len(m.mu.lowWater) < 1 {
+		return roachpb.RKeyMin
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	min := m.mu.lowWater[0]
+	for i := range m.mu.lowWater {
+		if i > 0 && m.mu.lowWater[i].Less(min) {
+			min = m.mu.lowWater[i]
+		}
+	}
+	return min
 }
 
 func (m *migrateLockTablePool) startStatusLogger(ctx context.Context) {
@@ -331,6 +355,7 @@ func (m *migrateLockTablePool) runStatusLogger(ctx context.Context) {
 	ticker := time.NewTicker(statusTickDuration)
 	defer ticker.Stop()
 
+	var lastProgress time.Time
 	for {
 		select {
 		case <-ticker.C:
@@ -347,9 +372,21 @@ func (m *migrateLockTablePool) runStatusLogger(ctx context.Context) {
 			}
 
 			finished := atomic.LoadUint64(&m.finished)
-			log.Infof(ctx, "%d ranges have completed lock table migration", finished)
+			lowWaterMark := m.lowWaterMark()
+			log.Infof(ctx, "%d ranges, up to %s, have completed lock table migration", finished, lowWaterMark)
 			if ranges.Len() > 0 {
 				log.Infof(ctx, "currently migrating lock table on ranges %s", ranges.String())
+			}
+			if m.job != nil && timeutil.Since(lastProgress) > 30*time.Second {
+				lastProgress = timeutil.Now()
+				if err := m.job.FractionProgressed(ctx, nil, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+					prog := details.(*jobspb.Progress_Migration).Migration
+					prog.Watermark = lowWaterMark
+					// TODO(dt): count total ranges, return fraction here.
+					return 0.0
+				}); err != nil {
+					log.Warningf(ctx, "failed to update progress: %v", err)
+				}
 			}
 
 		case <-m.done:
@@ -385,6 +422,7 @@ func runSeparatedIntentsMigration(
 	db *kv.DB,
 	ri rangeIterator,
 	ir intentResolver,
+	job *jobs.Job,
 ) error {
 	workerPool := migrateLockTablePool{
 		requests: make(chan migrateLockTableRequest, concurrentMigrateLockTableRequests),
@@ -392,8 +430,25 @@ func runSeparatedIntentsMigration(
 		db:       db,
 		ir:       ir,
 		clock:    clock,
+		job:      job,
 	}
-	migratedRanges, err := workerPool.runMigrateRequestsForRanges(ctx, ri, concurrentMigrateLockTableRequests)
+
+	workerPool.mu.lowWater = make([]roachpb.RKey, concurrentMigrateLockTableRequests)
+	for i := range workerPool.mu.lowWater {
+		workerPool.mu.lowWater[i] = roachpb.RKeyMin
+	}
+
+	startFrom := roachpb.RKeyMin
+	if job != nil {
+		if p := job.Progress().Details; p != nil {
+			if prog := p.(*jobspb.Progress_Migration); prog != nil && len(prog.Migration.Watermark) > 0 {
+				startFrom = prog.Migration.Watermark
+				log.Infof(ctx, "resuming separated intent migraiton from persisted progress position %s", startFrom)
+			}
+		}
+	}
+
+	migratedRanges, err := workerPool.runMigrateRequestsForRanges(ctx, ri, concurrentMigrateLockTableRequests, startFrom)
 	if err != nil {
 		return err
 	}
@@ -407,7 +462,7 @@ func runSeparatedIntentsMigration(
 }
 
 func separatedIntentsMigration(
-	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps, _ *jobs.Job,
+	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps, job *jobs.Job,
 ) error {
 	ir := intentresolver.New(intentresolver.Config{
 		Clock:                deps.DB.Clock(),
@@ -417,7 +472,7 @@ func separatedIntentsMigration(
 	})
 	ri := kvcoord.NewRangeIterator(deps.DistSender)
 
-	return runSeparatedIntentsMigration(ctx, deps.DB.Clock(), deps.Stopper, deps.DB, ri, ir)
+	return runSeparatedIntentsMigration(ctx, deps.DB.Clock(), deps.Stopper, deps.DB, ri, ir, job)
 }
 
 func postSeparatedIntentsMigration(
