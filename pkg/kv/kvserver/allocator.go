@@ -1255,6 +1255,7 @@ func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
+	leaseRepl interface{ RaftStatus() *raft.Status }, // optional
 	leaseStoreID roachpb.StoreID,
 	stats *replicaStats,
 	checkTransferLeaseSource bool,
@@ -1313,6 +1314,14 @@ func (a *Allocator) TransferLeaseTarget(
 
 	// Only consider live, non-draining, non-suspect replicas.
 	existing, _ = a.storePool.liveAndDeadReplicas(existing, false /* includeSuspectStores */)
+
+	// Only proceed with the lease transfer if we are also the raft leader (we
+	// already know we are the leaseholder at this point), and only consider
+	// replicas that are in `StateReplicate` as potential candidates.
+	if leaseRepl != nil {
+		// NB: Some tests do not pass in a `leaseRepl`.
+		existing = excludeReplicasInNeedOfSnapshots(ctx, leaseRepl.RaftStatus(), existing)
+	}
 
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseStoreID) {
@@ -1760,6 +1769,51 @@ func replicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool 
 		}
 	}
 	return true
+}
+
+// replicaMayNeedSnapshot determines whether the replica referred to by
+// `replicaID` may be in need of a raft snapshot. If this function is called
+// with an empty or nil `raftStatus` (as will be the case when its called by a
+// replica that is not the raft leader), we pessimistically assume that
+// `replicaID` may need a snapshot.
+func replicaMayNeedSnapshot(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool {
+	if raftStatus == nil || len(raftStatus.Progress) == 0 {
+		return true
+	}
+	if progress, ok := raftStatus.Progress[uint64(replicaID)]; ok {
+		// We can only reasonably assume that the follower replica is not in need of
+		// a snapshot iff it is in `StateReplicate`. However, even this is racey
+		// because we can still possibly have an ill-timed log truncation between
+		// when we make this determination and when we act on it.
+		if progress.State != tracker.StateReplicate {
+			return true
+		}
+		return false
+	}
+	return true
+}
+
+// excludeReplicasInNeedOfSnapshots filters out the `replicas` that may be in
+// need of a raft snapshot. If this function is called with the `raftStatus` of
+// a non-raft leader replica, an empty slice is returned.
+func excludeReplicasInNeedOfSnapshots(
+	ctx context.Context, raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
+) []roachpb.ReplicaDescriptor {
+	var filled = 0
+	for i, repl := range replicas {
+		if replicaMayNeedSnapshot(raftStatus, repl.ReplicaID) {
+			log.VEventf(
+				ctx,
+				3,
+				"not considering [n%d, s%d] as a potential candidate for a lease transfer because the replica may be waiting for a snapshot",
+				repl.NodeID, repl.StoreID,
+			)
+			continue
+		}
+		replicas[filled] = replicas[i]
+		filled += 1
+	}
+	return replicas[:filled]
 }
 
 // simulateFilterUnremovableReplicas removes any unremovable replicas from the
