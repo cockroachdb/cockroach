@@ -1812,3 +1812,24 @@ CREATE TABLE duplicate_index_test (k INT PRIMARY KEY, v INT, INDEX idx (v));
 
 statement error pgcode 42P07 duplicate index name: \"idx\"
 ALTER TABLE duplicate_index_test ADD CONSTRAINT idx UNIQUE (v)
+
+# Ensure unique constraint partial predicates are not ignored.
+subtest regression_67234
+
+statement ok
+CREATE TABLE t67234 (k INT PRIMARY KEY, a INT, b INT, FAMILY (k, a, b));
+ALTER TABLE t67234 ADD CONSTRAINT t67234_c1 UNIQUE (a) WHERE b > 0;
+ALTER TABLE t67234 ADD CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t67234]
+----
+CREATE TABLE public.t67234 (
+   k INT8 NOT NULL,
+   a INT8 NULL,
+   b INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
+   FAMILY fam_0_k_a_b (k, a, b),
+   CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
+)
