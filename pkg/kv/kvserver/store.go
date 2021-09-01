@@ -2900,7 +2900,29 @@ func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 func WriteClusterVersion(
 	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
-	return storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+	err := storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+	if err != nil {
+		return err
+	}
+
+	// The storage engine sometimes must make backwards incompatible
+	// changes. However, the store cluster version key is a key stored
+	// within the storage engine, so it's unavailable when the store is
+	// opened.
+	//
+	// The storage engine maintains its own minimum version on disk that
+	// it may consult it before opening the Engine. This version is
+	// stored in a separate file on the filesystem. For now, write to
+	// this file in combination with the store cluster version key.
+	//
+	// This parallel version state is a bit of a wart and an eventual
+	// goal is to replace the store cluster version key with the storage
+	// engine's flat file. This requires that there are no writes to the
+	// engine until either bootstrapping or joining an existing cluster.
+	// Writing the version to this file would happen before opening the
+	// engine for completing the rest of bootstrapping/joining the
+	// cluster.
+	return eng.SetMinVersion(cv.Version)
 }
 
 // ReadClusterVersion reads the cluster version from the store-local version
