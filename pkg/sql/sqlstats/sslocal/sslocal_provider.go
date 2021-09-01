@@ -101,8 +101,8 @@ func (s *SQLStats) periodicallyClearSQLStats(
 	})
 }
 
-// GetWriterForApplication implements sqlstats.Provider interface.
-func (s *SQLStats) GetWriterForApplication(appName string) sqlstats.Writer {
+// GetApplicationStats implements sqlstats.Provider interface.
+func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if a, ok := s.mu.apps[appName]; ok {

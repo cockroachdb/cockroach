@@ -1087,7 +1087,7 @@ func encodeGeoKeys(
 
 // EncodePrimaryIndex constructs a list of k/v pairs for a
 // row encoded as a primary index. This function mirrors the encoding
-// logic in prepareInsertOrUpdateBatch in pkg/sql/row/writer.go.
+// logic in prepareInsertOrUpdateBatch in pkg/sql/row/appStats.go.
 // It is somewhat duplicated here due to the different arguments
 // that prepareOrInsertUpdateBatch needs and uses to generate
 // the k/v's for the row it inserts. includeEmpty controls
