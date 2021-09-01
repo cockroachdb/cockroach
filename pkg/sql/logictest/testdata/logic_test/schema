@@ -51,9 +51,9 @@ SELECT
 FROM crdb_internal.tables
 WHERE database_name = 'test'
 ----
-test  52  myschema  54  tb  55
-test  52  myschema  54  v   58
-test  52  myschema  54  s   59
+test  54  myschema  57  tb  58
+test  54  myschema  57  v   61
+test  54  myschema  57  s   62
 
 query I
 SELECT * FROM myschema.tb
@@ -632,18 +632,12 @@ user testuser
 statement ok
 USE new_db
 
-statement error user testuser does not have CREATE privilege on database new_db
-CREATE TABLE new_db.public.bar()
-
 user root
 
 statement ok
 CREATE SCHEMA AUTHORIZATION testuser
 
 user testuser
-
-statement error user testuser does not have CREATE privilege on database new_db
-CREATE TABLE new_db.public.bar()
 
 statement ok
 CREATE TABLE new_db.testuser.bar()
