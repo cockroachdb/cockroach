@@ -178,11 +178,6 @@ func _CHECK_COL_BODY(
 				ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 			}
 		}
-		// {{if .SelectDistinct}}
-		if keyID == 0 {
-			ht.ProbeScratch.distinct[toCheck] = true
-		}
-		// {{end}}
 	}
 	// {{end}}
 	// {{/*
@@ -432,11 +427,21 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 					nDiffers++
 				}
 			}
-			continue
+			// {{else}}
+			// {{if .SelectDistinct}}
+			// {{/*
+			//     If we're selecting distinct tuples and we're currently
+			//     probing the tuple at position 'toCheck', then necessarily
+			//     HeadID[toCheck] is zero - if that wasn't the case, then we
+			//     would have not included this tuple into the ToCheck slice
+			//     after the previous probing iteration.
+			// */}}
+			ht.ProbeScratch.HeadID[toCheck] = keyID
 			// {{else}}
 			if ht.ProbeScratch.HeadID[toCheck] == 0 {
 				ht.ProbeScratch.HeadID[toCheck] = keyID
 			}
+			// {{end}}
 			// {{if .SelectSameTuples}}
 			firstID := ht.ProbeScratch.HeadID[toCheck]
 			if !ht.Visited[keyID] {
@@ -609,6 +614,12 @@ func (ht *HashTable) DistinctCheck(nToCheck uint64, probeSel []int) uint64 {
 // batch, number of tuples to check, and the selection vector of the batch, and
 // it returns number of tuples that needs to be checked for next iteration.
 // The "buckets" are specified by equal values in ht.ProbeScratch.HeadID.
+//
+// If zeroHeadIDForDistinctTuple is true, then all tuples that are distinct
+// (i.e. they don't have duplicates) will have HeadID value of 0.
+// - probingAgainstItself indicates whether 'first' and 'next' "represent" the
+// hash table built on the probing batch.
+//
 // NOTE: *first* and *next* vectors should be properly populated.
 // NOTE: batch is assumed to be non-zero length.
 func (ht *HashTable) FindBuckets(
@@ -616,28 +627,98 @@ func (ht *HashTable) FindBuckets(
 	keyCols []coldata.Vec,
 	first, next []uint64,
 	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
+	zeroHeadIDForDistinctTuple bool,
+	probingAgainstItself bool,
+) {
+	ht.ProbeScratch.SetupLimitedSlices(batch.Length(), ht.BuildMode)
+	if zeroHeadIDForDistinctTuple {
+		if probingAgainstItself {
+			findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, true, true)
+		} else {
+			findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, true, false)
+		}
+	} else {
+		if probingAgainstItself {
+			findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, false, true)
+		} else {
+			findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, false, false)
+		}
+	}
+}
+
+// execgen:inline
+// execgen:template<zeroHeadIDForDistinctTuple,probingAgainstItself>
+func findBuckets(
+	ht *HashTable,
+	batch coldata.Batch,
+	keyCols []coldata.Vec,
+	first []uint64,
+	next []uint64,
+	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
+	zeroHeadIDForDistinctTuple bool,
+	probingAgainstItself bool,
 ) {
 	batchLength := batch.Length()
 	sel := batch.Selection()
-
-	ht.ProbeScratch.SetupLimitedSlices(batchLength, ht.BuildMode)
 	// Early bounds checks.
 	groupIDs := ht.ProbeScratch.GroupID
 	_ = groupIDs[batchLength-1]
+	var nToCheck uint64
 	for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
 		f := first[hash]
-		//gcassert:bce
-		groupIDs[i] = f
+		if f != 0 {
+			//gcassert:bce
+			groupIDs[i] = f
+			ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+			nToCheck++
+		} else {
+			// This tuple doesn't have a duplicate in the hash table.
+			setHeadIDForDistinctTuple(ht, uint64(i), zeroHeadIDForDistinctTuple)
+		}
 	}
-	copy(ht.ProbeScratch.ToCheck, HashTableInitialToCheck[:batchLength])
 
-	for nToCheck := uint64(batchLength); nToCheck > 0; {
+	for nToCheck > 0 {
 		// Continue searching for the build table matching keys while the ToCheck
 		// array is non-empty.
 		nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
-		for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-			ht.ProbeScratch.GroupID[toCheck] = next[ht.ProbeScratch.GroupID[toCheck]]
+		toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
+		nToCheck = 0
+		for _, toCheck := range toCheckSlice {
+			nextGroupIDToCheck := next[groupIDs[toCheck]]
+			if probingAgainstItself {
+				// When we're probing against itself, all the tuples that have
+				// non-zero HeadID can be skipped because they are the part of
+				// already found equality chains. We must have already compared
+				// the 'toCheck' tuple against the head of the corresponding
+				// equality chain, so there is no reason to perform the check
+				// against another element from the same equality chain.
+				for nextGroupIDToCheck != 0 && ht.ProbeScratch.HeadID[nextGroupIDToCheck-1] != 0 {
+					nextGroupIDToCheck = next[nextGroupIDToCheck]
+				}
+			}
+			if nextGroupIDToCheck != 0 {
+				groupIDs[toCheck] = nextGroupIDToCheck
+				ht.ProbeScratch.ToCheck[nToCheck] = toCheck
+				nToCheck++
+			} else {
+				// This tuple doesn't have a duplicate.
+				setHeadIDForDistinctTuple(ht, toCheck, zeroHeadIDForDistinctTuple)
+			}
 		}
+	}
+}
+
+// execgen:inline
+// execgen:template<zeroHeadIDForDistinctTuple>
+func setHeadIDForDistinctTuple(ht *HashTable, i uint64, zeroHeadIDForDistinctTuple bool) {
+	if zeroHeadIDForDistinctTuple {
+		// We leave the HeadID of this tuple unchanged (i.e. zero - that was set
+		// in SetupLimitedSlices).
+		_ = i
+	} else {
+		// Set the HeadID of this tuple to point to itself since it is an
+		// equality chain consisting only of a single element.
+		ht.ProbeScratch.HeadID[i] = i + 1
 	}
 }
 

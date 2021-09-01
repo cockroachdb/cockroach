@@ -38,6 +38,8 @@ func NewUnorderedDistinct(
 		typs:                 typs,
 		nullsAreDistinct:     nullsAreDistinct,
 		UpsertDistinctHelper: colexecbase.UpsertDistinctHelper{ErrorOnDup: errorOnDup},
+		// This number was chosen after running the micro-benchmarks.
+		hashTableNumBuckets: 128,
 	}
 }
 
@@ -55,7 +57,8 @@ type unorderedDistinct struct {
 	typs             []*types.T
 	nullsAreDistinct bool
 
-	ht *colexechash.HashTable
+	ht                  *colexechash.HashTable
+	hashTableNumBuckets uint64
 	// lastInputBatch tracks the last input batch read from the input and not
 	// emitted into the output. It is the only batch that we need to export when
 	// spilling to disk, and it will contain only the distinct tuples that need
@@ -74,14 +77,13 @@ func (op *unorderedDistinct) Init(ctx context.Context) {
 		return
 	}
 	op.Input.Init(op.Ctx)
-	// These numbers were chosen after running the micro-benchmarks.
+	// This number was chosen after running the micro-benchmarks.
 	const hashTableLoadFactor = 2.0
-	const hashTableNumBuckets = 128
 	op.ht = colexechash.NewHashTable(
 		op.Ctx,
 		op.allocator,
 		hashTableLoadFactor,
-		hashTableNumBuckets,
+		op.hashTableNumBuckets,
 		op.typs,
 		op.distinctCols,
 		!op.nullsAreDistinct, /* allowNullEquality */
@@ -183,9 +185,15 @@ func (f *unorderedDistinctFilterer) Next() coldata.Batch {
 		// all tuples in batch against the hash table.
 		f.ud.ht.ComputeHashAndBuildChains(batch)
 		// Remove the duplicates within batch itself.
-		f.ud.ht.RemoveDuplicates(batch, f.ud.ht.Keys, f.ud.ht.ProbeScratch.First, f.ud.ht.ProbeScratch.Next, f.ud.ht.CheckProbeForDistinct)
+		f.ud.ht.RemoveDuplicates(
+			batch, f.ud.ht.Keys, f.ud.ht.ProbeScratch.First, f.ud.ht.ProbeScratch.Next,
+			f.ud.ht.CheckProbeForDistinct, true, /* probingAgainstItself */
+		)
 		// Remove the duplicates of already emitted distinct tuples.
-		f.ud.ht.RemoveDuplicates(batch, f.ud.ht.Keys, f.ud.ht.BuildScratch.First, f.ud.ht.BuildScratch.Next, f.ud.ht.CheckBuildForDistinct)
+		f.ud.ht.RemoveDuplicates(
+			batch, f.ud.ht.Keys, f.ud.ht.BuildScratch.First, f.ud.ht.BuildScratch.Next,
+			f.ud.ht.CheckBuildForDistinct, false, /* probingAgainstItself */
+		)
 		f.ud.MaybeEmitErrorOnDup(origLen, batch.Length())
 		if batch.Length() > 0 {
 			return batch

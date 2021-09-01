@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,6 +122,7 @@ func TestHashAggregator(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
+	rng, _ := randutil.NewPseudoRand()
 	for _, tc := range hashAggregatorTestCases {
 		constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
@@ -131,7 +133,7 @@ func TestHashAggregator(t *testing.T) {
 			verifier = colexectestutils.UnorderedVerifier
 		}
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.input}, tc.expected, verifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
-			return NewHashAggregator(&colexecagg.NewAggregatorArgs{
+			args := &colexecagg.NewAggregatorArgs{
 				Allocator:      testAllocator,
 				MemAccount:     testMemAcc,
 				Input:          sources[0],
@@ -141,11 +143,9 @@ func TestHashAggregator(t *testing.T) {
 				Constructors:   constructors,
 				ConstArguments: constArguments,
 				OutputTypes:    outputTypes,
-			},
-				nil, /* newSpillingQueueArgs */
-				testAllocator,
-				math.MaxInt64,
-			)
+			}
+			args.TestingKnobs.HashTableNumBuckets = uint64(1 + rng.Intn(7))
+			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
 		})
 	}
 }

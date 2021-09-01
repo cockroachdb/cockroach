@@ -8353,3 +8353,21 @@ func (ht *HashTable) checkCol(
 		}
 	}
 }
+
+// execgen:inline
+const _ = "inlined_findBuckets_true_true"
+
+// execgen:inline
+const _ = "inlined_findBuckets_true_false"
+
+// execgen:inline
+const _ = "inlined_findBuckets_false_true"
+
+// execgen:inline
+const _ = "inlined_findBuckets_false_false"
+
+// execgen:inline
+const _ = "inlined_setHeadIDForDistinctTuple_true"
+
+// execgen:inline
+const _ = "inlined_setHeadIDForDistinctTuple_false"
