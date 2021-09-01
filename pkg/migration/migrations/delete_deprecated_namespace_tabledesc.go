@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
@@ -28,7 +29,7 @@ import (
 )
 
 func deleteDeprecatedNamespaceTableDescriptorMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
 ) error {
 	const pageSize = 1000
 	deprecatedTablePrefix := d.Codec.TablePrefix(uint32(keys.DeprecatedNamespaceTableID))

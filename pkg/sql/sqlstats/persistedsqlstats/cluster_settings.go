@@ -58,7 +58,7 @@ var SQLStatsMaxPersistedRows = settings.RegisterIntSetting(
 	"sql.stats.persisted_rows.max",
 	"maximum number of rows of statement and transaction"+
 		" statistics that will be persisted in the system tables",
-	10000, /* defaultValue */
+	1000000, /* defaultValue */
 ).WithPublic()
 
 // SQLStatsCleanupRecurrence is the cron-tab string specifying the recurrence

@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -140,7 +141,7 @@ type SystemMigration struct {
 
 // SystemMigrationFunc is used to perform kv-level migrations. It should only be
 // run from the system tenant.
-type SystemMigrationFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps) error
+type SystemMigrationFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps, *jobs.Job) error
 
 // NewSystemMigration constructs a SystemMigration.
 func NewSystemMigration(
@@ -157,8 +158,8 @@ func NewSystemMigration(
 
 // Run kickstarts the actual migration process for system-level migrations.
 func (m *SystemMigration) Run(
-	ctx context.Context, cv clusterversion.ClusterVersion, d SystemDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, d SystemDeps, job *jobs.Job,
 ) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s", cv), nil)
-	return m.fn(ctx, cv, d)
+	return m.fn(ctx, cv, d, job)
 }

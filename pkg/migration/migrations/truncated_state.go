@@ -16,6 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,7 +38,7 @@ import (
 const defaultPageSize = 200
 
 func truncatedStateMigration(
-	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps, _ *jobs.Job,
 ) error {
 	var batchIdx, numMigratedRanges int
 	init := func() { batchIdx, numMigratedRanges = 1, 0 }
@@ -80,7 +81,7 @@ func truncatedStateMigration(
 }
 
 func postTruncatedStateMigration(
-	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps, _ *jobs.Job,
 ) error {
 	// Purge all replicas that haven't been migrated to use the unreplicated
 	// truncated state and the range applied state.
