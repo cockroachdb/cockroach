@@ -204,7 +204,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 		outputDirectory = *firstStoreDir
 	}
 	for _, fc := range h.Config.Sinks.FileGroups {
-		if fc.Channels.HasChannel(channel.DEV) && fc.Dir != nil && *fc.Dir != "" {
+		if fc.Channels.AllChannels.HasChannel(channel.DEV) && fc.Dir != nil && *fc.Dir != "" {
 			outputDirectory = *fc.Dir
 			break
 		}
@@ -437,7 +437,7 @@ func addPredefinedLogFiles(c *logconfig.Config) {
 		}
 
 		sinkConfig := &logconfig.FileSinkConfig{
-			Channels: logconfig.ChannelList{Channels: []logpb.Channel{ch}},
+			Channels: logconfig.SelectChannels(ch),
 			FileDefaults: logconfig.FileDefaults{
 				Dir: dir,
 				CommonSinkConfig: logconfig.CommonSinkConfig{
