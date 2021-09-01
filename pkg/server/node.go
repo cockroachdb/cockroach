@@ -180,6 +180,10 @@ type Node struct {
 	tenantUsage multitenant.TenantUsageServer
 
 	spanConfigAccessor spanconfig.KVAccessor // powers the span configuration RPCs
+
+	// Turns `Node.writeNodeStatus` into a no-op. This is a hack to enable the
+	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
+	suppressNodeStatus syncutil.AtomicBool
 }
 
 var _ roachpb.InternalServer = &Node{}
@@ -778,6 +782,9 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 // If mustExist is true the status key must already exist and must
 // not change during writing -- if false, the status is always written.
 func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, mustExist bool) error {
+	if n.suppressNodeStatus.Get() {
+		return nil
+	}
 	var err error
 	if runErr := n.stopper.RunTask(ctx, "node.Node: writing summary", func(ctx context.Context) {
 		nodeStatus := n.recorder.GenerateNodeStatus(ctx)
