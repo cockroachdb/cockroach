@@ -6607,10 +6607,10 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G8: (union-all G13 G14)
  │    ├── [ordering: +(2|3)]
  │    │    ├── best: (sort G8)
- │    │    └── cost: 1099.89
+ │    │    └── cost: 1099.82
  │    └── []
  │         ├── best: (union-all G13 G14)
- │         └── cost: 1099.79
+ │         └── cost: 1099.78
  ├── G9: (aggregations G15 G16)
  ├── G10: (eq G17 G18)
  ├── G11: (or G19 G20)
