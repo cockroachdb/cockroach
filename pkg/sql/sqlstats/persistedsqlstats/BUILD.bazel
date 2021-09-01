@@ -5,6 +5,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "persistedsqlstats",
     srcs = [
+        "appStats.go",
         "cluster_settings.go",
         "combined_iterator.go",
         "compaction_exec.go",
@@ -16,7 +17,6 @@ go_library(
         "scheduled_job_monitor.go",
         "stmt_reader.go",
         "txn_reader.go",
-        "writer.go",
     ],
     embed = [":persistedsqlstats_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats",
@@ -34,7 +34,6 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/systemschema",
-        "//pkg/sql/execstats",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",

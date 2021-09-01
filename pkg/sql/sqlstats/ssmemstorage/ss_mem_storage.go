@@ -99,7 +99,7 @@ type Container struct {
 	txnCounts transactionCounts
 }
 
-var _ sqlstats.Writer = &Container{}
+var _ sqlstats.ApplicationStats = &Container{}
 
 // New returns a new instance of Container.
 func New(
@@ -131,17 +131,17 @@ func New(
 	return s
 }
 
-// IterateAggregatedTransactionStats iterates through the stored aggregated
-// transaction statistics stored in this Container.
+// IterateAggregatedTransactionStats implements sqlstats.ApplicationStats
+// interface.
 func (s *Container) IterateAggregatedTransactionStats(
-	appName string, visitor sqlstats.AggregatedTransactionVisitor,
+	_ context.Context, _ *sqlstats.IteratorOptions, visitor sqlstats.AggregatedTransactionVisitor,
 ) error {
 	var txnStat roachpb.TxnStats
 	s.txnCounts.mu.Lock()
 	txnStat = s.txnCounts.mu.TxnStats
 	s.txnCounts.mu.Unlock()
 
-	err := visitor(appName, &txnStat)
+	err := visitor(s.appName, &txnStat)
 	if err != nil {
 		return fmt.Errorf("sql stats iteration abort: %s", err)
 	}
@@ -205,6 +205,37 @@ func (s *Container) StmtStatsIterator(options *sqlstats.IteratorOptions) *StmtSt
 // TxnStatsIterator returns an instance of TxnStatsIterator.
 func (s *Container) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStatsIterator {
 	return NewTxnStatsIterator(s, options)
+}
+
+// IterateStatementStats implements sqlstats.Provider interface.
+func (s *Container) IterateStatementStats(
+	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
+) error {
+	iter := s.StmtStatsIterator(options)
+
+	for iter.Next() {
+		if err := visitor(ctx, iter.Cur()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// IterateTransactionStats implements sqlstats.Provider interface.
+func (s *Container) IterateTransactionStats(
+	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
+) error {
+	iter := s.TxnStatsIterator(options)
+
+	for iter.Next() {
+		stats := iter.Cur()
+		if err := visitor(ctx, stats); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // NewTempContainerFromExistingStmtStats creates a new Container by ingesting a slice
