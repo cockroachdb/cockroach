@@ -1,0 +1,69 @@
+exec-sql
+SET application_name = 'app1'
+----
+
+set-time time=2021-09-20T15:00:00Z
+----
+2021-09-20 15:00:00 +0000 UTC
+
+should-sample-logical-plan db=defaultdb implicitTxn=true fingerprint=SELECT%_
+----
+true
+
+# implicit txn
+exec-sql
+SELECT 1
+----
+
+should-sample-logical-plan db=defaultdb implicitTxn=true fingerprint=SELECT%_
+----
+false
+
+should-sample-logical-plan db=defaultdb implicitTxn=false fingerprint=SELECT%_
+----
+true
+
+# explicit txn
+exec-sql
+BEGIN
+SELECT 1
+COMMIT
+----
+
+should-sample-logical-plan db=defaultdb implicitTxn=false fingerprint=SELECT%_
+----
+false
+
+
+set-time time=2021-09-20T15:05:01Z
+----
+2021-09-20 15:05:01 +0000 UTC
+
+
+should-sample-logical-plan db=defaultdb implicitTxn=true fingerprint=SELECT%_
+----
+true
+
+# implicit txn
+exec-sql
+SELECT 1
+----
+
+should-sample-logical-plan db=defaultdb implicitTxn=true fingerprint=SELECT%_
+----
+false
+
+should-sample-logical-plan db=defaultdb implicitTxn=false fingerprint=SELECT%_
+----
+true
+
+# explicit txn
+exec-sql
+BEGIN
+SELECT 1
+COMMIT
+----
+
+should-sample-logical-plan db=defaultdb implicitTxn=false fingerprint=SELECT%_
+----
+false

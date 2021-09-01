@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -41,9 +40,6 @@ const (
 	//  Once we are able get consistent hash value from a query plan, we should
 	//  update this.
 	dummyPlanHash = int64(0)
-
-	// TODO(azhng): Gone after #59205.
-	dummyTransactionFingerprintID = roachpb.TransactionFingerprintID(0)
 )
 
 // ErrConcurrentSQLStatsCompaction is reported when two sql stats compaction

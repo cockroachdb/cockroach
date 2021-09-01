@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-// StatementWriter is the interface that provides methods to record
-// statement stats for a given application name.
-type StatementWriter interface {
+// Writer is the interface that provides methods to record statement and
+// transaction stats.
+type Writer interface {
 	// RecordStatement records statistics for a statement.
 	RecordStatement(ctx context.Context, key roachpb.StatementStatisticsKey, value RecordedStmtStats) (roachpb.StmtFingerprintID, error)
 
@@ -37,19 +37,9 @@ type StatementWriter interface {
 	// ShouldSaveLogicalPlanDesc returns whether we should save the logical plan
 	// description for a given combination of statement metadata.
 	ShouldSaveLogicalPlanDesc(fingerprint string, implicitTxn bool, database string) bool
-}
 
-// TransactionWriter is the interface that provides methods to record
-// transaction stats for a given application name..
-type TransactionWriter interface {
+	// RecordTransaction records statistics for a transaction.
 	RecordTransaction(ctx context.Context, key roachpb.TransactionFingerprintID, value RecordedTxnStats) error
-}
-
-// Writer is the interface that provides methods to record statement and
-// transaction stats.
-type Writer interface {
-	StatementWriter
-	TransactionWriter
 }
 
 // Reader provides methods to retrieve transaction/statement statistics from
@@ -77,6 +67,34 @@ type Reader interface {
 type ApplicationStats interface {
 	Reader
 	Writer
+
+	// MergeApplicationStatementStats merges the other application's statement
+	// statistics into the current ApplicationStats. It returns how many number
+	// of statistics were being discarded due to memory constraint. If the
+	// transformer is non-nil, then it is applied to other's statement statistics
+	// before other's statement statistics are merged into the current
+	// ApplicationStats.
+	MergeApplicationStatementStats(
+		ctx context.Context,
+		other ApplicationStats,
+		transformer func(statistics *roachpb.CollectedStatementStatistics),
+	) uint64
+
+	// MergeApplicationTransactionStats merges the other application's transaction
+	// statistics into the current ApplicationStats. It returns how many number
+	// of statistics were being discarded due to memory constraint.
+	MergeApplicationTransactionStats(
+		ctx context.Context,
+		other ApplicationStats,
+	) uint64
+
+	// NewApplicationStatsWithInheritedOptions returns a new ApplicationStats
+	// interface that inherits all memory limits of the existing
+	NewApplicationStatsWithInheritedOptions() ApplicationStats
+
+	// Free frees the current ApplicationStats and zeros out the memory counts
+	// and fingerprint counts.
+	Free(context.Context)
 }
 
 // IteratorOptions provides the ability to the caller to change how it iterates
@@ -126,6 +144,18 @@ type StatsCollector interface {
 	// Reset resets the StatsCollector with a new ApplicationStats and a new copy
 	// of the sessionphase.Times.
 	Reset(ApplicationStats, *sessionphase.Times)
+
+	// StartExplicitTransaction informs StatsCollector that all subsequent
+	// statements will be executed in the context an explicit transaction.
+	StartExplicitTransaction()
+
+	// EndExplicitTransaction informs the StatsCollector that the explicit txn has
+	// finished execution. (Either COMMITTED or ABORTED). This means the txn's
+	// fingerprint ID is now available. StatsCollector will now go back to update
+	// the transaction fingerprint ID field of all the statement statistics for that
+	// txn.
+	EndExplicitTransaction(ctx context.Context, transactionFingerprintID roachpb.TransactionFingerprintID,
+	)
 }
 
 // Storage provides clients with interface to perform read and write operations

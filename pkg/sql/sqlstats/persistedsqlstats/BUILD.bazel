@@ -56,12 +56,14 @@ go_test(
     srcs = [
         "compaction_test.go",
         "controller_test.go",
+        "datadriven_test.go",
         "flush_test.go",
         "job_monitor_test.go",
         "main_test.go",
         "reader_test.go",
         "scheduled_sql_stats_compaction_test.go",
     ],
+    data = glob(["testdata/**"]),
     deps = [
         ":persistedsqlstats",
         "//pkg/base",
@@ -96,6 +98,7 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
