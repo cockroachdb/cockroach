@@ -7,8 +7,6 @@ dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/teamcity-support.sh"  # For $root
 source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 
-tc_prepare
-
 tc_start_block "Determine changed packages"
 if tc_release_branch; then
   pkgspec=./pkg/...
