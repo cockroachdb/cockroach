@@ -2123,6 +2123,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
+	// If the table being imported into referenced UDTs, ensure that a concurrent
+	// schema change on any of the types has not incremented the version of the
+	// descriptor. If it has, it is unsafe to import the data and we fail the
+	// import job.
+	if err := r.checkForUDTVersionMismatch(ctx, p.ExecCfg()); err != nil {
+		return err
+	}
+
 	if err := r.publishSchemas(ctx, p.ExecCfg()); err != nil {
 		return err
 	}
@@ -2268,6 +2276,30 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 		err := r.job.SetDetails(ctx, txn, details)
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing schemas")
+		}
+		return nil
+	})
+}
+
+func (r *importResumer) checkForUDTVersionMismatch(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) error {
+	details := r.job.Details().(jobspb.ImportDetails)
+	if details.Types == nil {
+		return nil
+	}
+	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		for _, savedTypeDesc := range details.Types {
+			typeDesc, err := catalogkv.MustGetTypeDescByID(ctx, txn, execCfg.Codec,
+				savedTypeDesc.Desc.GetID())
+			if err != nil {
+				return errors.Wrap(err, "resolving type descriptor when checking version mismatch")
+			}
+			if typeDesc.GetVersion() != savedTypeDesc.Desc.GetVersion() {
+				return errors.Newf("type descriptor %d has a version %d != version %d saved for this type"+
+					" during import planning; unsafe to import data referencing type since it has changed",
+					typeDesc.GetID(), typeDesc.GetVersion(), savedTypeDesc.Desc.GetVersion())
+			}
 		}
 		return nil
 	})

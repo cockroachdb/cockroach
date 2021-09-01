@@ -7085,3 +7085,101 @@ CSV DATA ($1)
 		}
 	}
 }
+
+func TestImportDuringUserDefinedTypeChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	// Write some data to the test file.
+	f, err := ioutil.TempFile(baseDir, "data")
+	require.NoError(t, err)
+	_, err = f.Write([]byte("1,hello\n2,hi\n"))
+	require.NoError(t, err)
+
+	importStmt := "IMPORT INTO t (a, b) CSV DATA ($1)"
+	importArgs := fmt.Sprintf("nodelocal://0/%s", filepath.Base(f.Name()))
+
+	testCases := []struct {
+		name  string
+		query string
+	}{
+		{
+			"add-value",
+			"ALTER TYPE d.greeting ADD VALUE 'cheers'",
+		},
+		{
+			"drop-value",
+			"ALTER TYPE d.greeting DROP VALUE 'hi';",
+		},
+		{
+			"add-drop-value-in-txn",
+			"BEGIN; ALTER TYPE d.greeting DROP VALUE 'hi'; ALTER TYPE d.greeting ADD VALUE 'cheers'; COMMIT;",
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			requestReceived := make(chan struct{})
+			allowResponse := make(chan struct{})
+			tc := testcluster.StartTestCluster(
+				t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+					ExternalIODir: baseDir,
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+						Store: &kvserver.StoreTestingKnobs{
+							TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+							TestingRequestFilter: func(ctx context.Context, br roachpb.BatchRequest) *roachpb.Error {
+								for _, ru := range br.Requests {
+									switch ru.GetInner().(type) {
+									case *roachpb.AddSSTableRequest:
+										<-requestReceived
+									}
+								}
+								return nil
+							},
+						}},
+				}})
+			defer tc.Stopper().Stop(ctx)
+			conn := tc.Conns[0]
+			sqlDB := sqlutils.MakeSQLRunner(conn)
+
+			// Create a database with a type.
+			sqlDB.Exec(t, `
+SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
+SET enable_drop_enum_value = true;
+CREATE DATABASE d;
+USE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE t (a INT, b greeting);
+`)
+
+			// Start the import.
+			go func() {
+				sqlDB.ExpectErr(t, "unsafe to import data referencing type since it has changed",
+					importStmt, importArgs)
+			}()
+
+			// Wait for the import to start.
+			requestReceived <- struct{}{}
+
+			sqlDB.Exec(t, test.query)
+
+			// Allow the import to finish.
+			close(requestReceived)
+			close(allowResponse)
+
+			testutils.SucceedsSoon(t, func() error {
+				res := sqlDB.QueryStr(t,
+					`SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status = 'failed'`)
+				if res[0][0] != "1" {
+					return errors.New("expected a failed import job")
+				}
+				return nil
+			})
+		})
+	}
+}
