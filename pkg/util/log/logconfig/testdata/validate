@@ -4,10 +4,9 @@ yaml
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -24,10 +23,9 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -46,11 +44,10 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: {INFO: all}
       dir: /custom
       filter: INFO
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -70,10 +67,9 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: {WARNING: all}
       filter: WARNING
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -91,11 +87,11 @@ sinks:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   fluent-servers:
     custom:
-      channels: [DEV]
+      channels: {INFO: [DEV]}
       net: tcp
       address: 127.0.0.1:5170
       filter: INFO
@@ -104,7 +100,6 @@ sinks:
       redactable: true
       exit-on-error: false
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -121,10 +116,9 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -142,11 +136,10 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: {INFO: all}
       buffered-writes: false
       filter: INFO
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -165,11 +158,11 @@ sinks:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   fluent-servers:
     custom:
-      channels: [DEV]
+      channels: {INFO: [DEV]}
       net: tcp
       address: localhost:5170
       filter: INFO
@@ -178,7 +171,6 @@ sinks:
       redactable: true
       exit-on-error: true
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -196,10 +188,9 @@ sinks:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   stderr:
-    channels: [DEV]
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -212,7 +203,6 @@ file-defaults: {filter: NONE}
 ----
 sinks:
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -270,3 +260,11 @@ sinks:
 ----
 ERROR: file group "example": log directory cannot start with '~': ~/bar
 file group "example": no channel selected
+
+# Check that duplicate channel use in filter spec is refused.
+yaml
+sinks:
+  stderr:
+    channels: {INFO: DEV, WARNING: DEV}
+----
+ERROR: stderr sink: cannot use channel DEV at severity WARNING: already listed at severity INFO

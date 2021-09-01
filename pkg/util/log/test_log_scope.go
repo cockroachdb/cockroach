@@ -176,17 +176,13 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 	testConfig = logconfig.DefaultConfig()
 
-	if err := testConfig.Validate(fileDir); err != nil {
-		return testConfig, err
-	}
-
 	if fileDir == nil {
 		// File output is disabled; we use stderr for everything.
 
 		// All messages go to stderr.
 		testConfig.Sinks.Stderr.Filter = severity.INFO
 		// Ensure all channels go to stderr.
-		testConfig.Sinks.Stderr.Channels.Channels = logconfig.SelectAllChannels()
+		testConfig.Sinks.Stderr.Channels = logconfig.FilterChannels(logconfig.SelectAllChannels()...)
 		// Remove all sinks other than stderr.
 		testConfig.Sinks.FluentServers = nil
 		testConfig.Sinks.FileGroups = nil
@@ -214,6 +210,7 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 	// we cannot keep redaction markers there.
 	*testConfig.Sinks.Stderr.Redactable = false
 
+	err = testConfig.Validate(fileDir)
 	return testConfig, nil
 }
 
