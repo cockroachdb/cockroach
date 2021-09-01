@@ -95,6 +95,9 @@ type TestingKnobs struct {
 	// ImportTimeseriesFile, if set, is a file created via `DumpRaw` that written
 	// back to the KV layer upon server start.
 	ImportTimeseriesFile string
+	// ImportTimeseriesMappingFile points to a file containing a YAML map from storeID
+	// to nodeID, for use with ImportTimeseriesFile.
+	ImportTimeseriesMappingFile string
 	// DrainSleepFn used in testing to override the usual sleep function with
 	// a custom function that counts the number of times the sleep function is called.
 	DrainSleepFn func(time.Duration)

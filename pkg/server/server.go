@@ -11,6 +11,7 @@
 package server
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/tls"
@@ -106,6 +107,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -1983,6 +1985,14 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 	// confusion.
 	ts.TimeseriesStorageEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 
+	// Suppress writing of node statuses for the local node (n1). If it wrote one,
+	// and the imported data also contains n1 but with a different set of stores,
+	// we'd effectively clobber the timeseries display for n1 (which relies on the
+	// store statuses to map the store timeseries to the node under which they
+	// fall). An alternative to this is setting a FirstStoreID and FirstNodeID that
+	// is not in use in the data set to import.
+	s.node.suppressNodeStatus.Set(true)
+
 	f, err := os.Open(tsImport)
 	if err != nil {
 		return err
@@ -2050,6 +2060,21 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 		// matching ID, i.e. n1->s1, n2->s2, etc.
 		nodeToStore[n] = []string{n}
 	}
+	storeToNode := map[string]string{}
+	if knobs.ImportTimeseriesMappingFile == "" {
+		return errors.Errorf("need to specify COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE; it should point at " +
+			"a YAML file that maps StoreID to NodeID. For example, if s1 is on n1 and s2 is on n5:\n\n1: 1\n2:5")
+	}
+	mapBytes, err := ioutil.ReadFile(knobs.ImportTimeseriesMappingFile)
+	if err != nil {
+		return err
+	}
+	if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
+		return err
+	}
+	for sid, nid := range storeToNode {
+		nodeToStore[nid] = append(nodeToStore[nid], sid)
+	}
 
 	for nodeString, storeStrings := range nodeToStore {
 		nid, err := strconv.ParseInt(nodeString, 10, 32)
@@ -2079,15 +2104,10 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 			return err
 		}
 	}
-	if len(storeIDs) == 0 {
-		log.Warningf(ctx, "*** guessed the assignment of nodes to stores: %v ***", nodeToStore)
-	} else {
-		// If you end up here, you can adjust nodeToStore above with the correct mapping and run
-		// a custom binary. We could add an env var that takes JSON if this becomes too burdensome.
-		// Another complication is the fact that at least n1 is live and will write regular statuses,
-		// and generally whatever nodes are running in the cluster have to have the right storeIDs
-		// or things will quickly be out of whack.
-		return errors.Errorf("unable to guess the assignment of remaining stores %v to nodes %v, needs manual mapping", storeIDs, nodeIDs)
+	if len(storeIDs) > 0 {
+		return errors.Errorf(
+			"need to map the remaining stores %v to nodes %v, please provide an updated mapping file %s",
+			storeIDs, nodeIDs, knobs.ImportTimeseriesMappingFile)
 	}
 
 	return nil
