@@ -1367,6 +1367,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				emptySpanConfig(),
+				nil, /* leaseRepl */
 				c.existing,
 				c.leaseholder,
 				nil, /* replicaStats */
@@ -1455,6 +1456,7 @@ func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				c.conf,
+				nil, /* leaseRepl */
 				c.existing,
 				c.leaseholder,
 				nil, /* replicaStats */
@@ -2160,6 +2162,7 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				conf,
+				nil, /* leaseRepl */
 				c.existing,
 				c.leaseholder,
 				nil,   /* replicaStats */
@@ -2173,6 +2176,7 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 			target = a.TransferLeaseTarget(
 				context.Background(),
 				conf,
+				nil, /* leaseRepl */
 				c.existing,
 				c.leaseholder,
 				nil,   /* replicaStats */
@@ -4563,6 +4567,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				emptySpanConfig(),
+				nil, /* leaseRepl */
 				existing,
 				c.leaseholder,
 				c.stats,

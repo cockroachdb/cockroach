@@ -1310,6 +1310,7 @@ func (rq *replicateQueue) shedLease(
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		conf,
+		repl,
 		desc.Replicas().VoterDescriptors(),
 		repl.store.StoreID(),
 		repl.leaseholderStats,
