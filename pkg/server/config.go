@@ -149,6 +149,11 @@ type BaseConfig struct {
 	// instantiate stores.
 	StorageEngine enginepb.EngineType
 
+	// Enables the use of the (experimental) span configs infrastructure.
+	//
+	// Environment Variable: COCKROACH_EXPERIMENTAL_SPAN_CONFIGS
+	SpanConfigsEnabled bool
+
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 }
@@ -221,11 +226,6 @@ type KVConfig struct {
 
 	// The following values can only be set via environment variables and are
 	// for testing only. They are not meant to be set by the end user.
-
-	// Enables the use of the (experimental) span configs infrastructure.
-	//
-	// Environment Variable: COCKROACH_EXPERIMENTAL_SPAN_CONFIGS
-	SpanConfigsEnabled bool
 
 	// Enables linearizable behavior of operations on this node by making sure
 	// that no commit timestamp is reported back to the client until all other
