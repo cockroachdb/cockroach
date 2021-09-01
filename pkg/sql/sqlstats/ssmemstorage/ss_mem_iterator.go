@@ -84,14 +84,15 @@ func (s *StmtStatsIterator) Next() bool {
 
 	s.currentValue = &roachpb.CollectedStatementStatistics{
 		Key: roachpb.StatementStatisticsKey{
-			Query:       stmtKey.anonymizedStmt,
-			DistSQL:     distSQLUsed,
-			Vec:         vectorized,
-			ImplicitTxn: stmtKey.implicitTxn,
-			FullScan:    fullScan,
-			Failed:      stmtKey.failed,
-			App:         s.container.appName,
-			Database:    database,
+			Query:                    stmtKey.anonymizedStmt,
+			DistSQL:                  distSQLUsed,
+			Vec:                      vectorized,
+			ImplicitTxn:              stmtKey.implicitTxn,
+			FullScan:                 fullScan,
+			Failed:                   stmtKey.failed,
+			App:                      s.container.appName,
+			Database:                 database,
+			TransactionFingerprintID: stmtKey.transactionFingerprintID,
 		},
 		ID:    stmtFingerprintID,
 		Stats: data,
