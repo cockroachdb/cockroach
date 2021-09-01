@@ -27,7 +27,7 @@ env=(
   "TC_SERVER_URL=$TC_SERVER_URL"
   "TC_BUILD_BRANCH=$TC_BUILD_BRANCH"
   "PKG=internal/metamorphic"
-  "STRESSFLAGS=-maxtime 1h -maxfails 1 -stderr -p 1"
+  "STRESSFLAGS=-maxtime 3h -maxfails 1 -stderr -p 1"
   "TZ=America/New_York"
 )
 
