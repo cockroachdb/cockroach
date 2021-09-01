@@ -253,7 +253,11 @@ func (s *Stack) Push(elem *SessionData) {
 
 // PushTopClone pushes a copy of the top element to the stack.
 func (s *Stack) PushTopClone() {
-	s.Push(s.Top().Clone())
+	if len(s.stack) == 0 {
+		return
+	}
+	sd := s.stack[len(s.stack)-1]
+	s.stack = append(s.stack, sd.Clone())
 }
 
 // Pop removes the top SessionData element from the stack.
