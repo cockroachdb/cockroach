@@ -1097,21 +1097,21 @@ EXPLAIN (OPT,VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 sort
  ├── columns: a:1 b:2
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
- ├── cost: 86.7943856
+ ├── cost: 86.8243856
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
  └── index-join tc
       ├── columns: a:1 b:2
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-      ├── cost: 85.72
+      ├── cost: 85.74
       ├── fd: ()-->(1)
       ├── prune: (2)
       └── scan tc@c
            ├── columns: a:1 rowid:3
            ├── constraint: /1/3: [/10 - /10]
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-           ├── cost: 24.81
+           ├── cost: 24.82
            ├── key: (3)
            └── fd: ()-->(1)
 
@@ -1121,21 +1121,21 @@ EXPLAIN (OPT,TYPES) SELECT * FROM tc WHERE a = 10 ORDER BY b
 sort
  ├── columns: a:1(int!null) b:2(int)
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
- ├── cost: 86.7943856
+ ├── cost: 86.8243856
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
  └── index-join tc
       ├── columns: a:1(int!null) b:2(int)
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-      ├── cost: 85.72
+      ├── cost: 85.74
       ├── fd: ()-->(1)
       ├── prune: (2)
       └── scan tc@c
            ├── columns: a:1(int!null) rowid:3(int!null)
            ├── constraint: /1/3: [/10 - /10]
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-           ├── cost: 24.81
+           ├── cost: 24.82
            ├── key: (3)
            └── fd: ()-->(1)
 
@@ -1183,20 +1183,20 @@ inner-join (hash)
  ├── columns: a:1 b:2 k:6 v:7
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
- ├── cost: 2269.87625
+ ├── cost: 2269.90625
  ├── fd: (6)-->(7), (1)==(6), (6)==(1)
  ├── prune: (2,7)
  ├── scan tc
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1125.01
+ │    ├── cost: 1125.02
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── unfiltered-cols: (1-5)
  ├── scan t
  │    ├── columns: k:6 v:7
  │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
- │    ├── cost: 1104.81
+ │    ├── cost: 1104.82
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    ├── prune: (6,7)
@@ -1224,7 +1224,7 @@ sort
  ├── columns: a:1 b:2  [hidden: column6:6]
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1214.26951
+ ├── cost: 1214.30951
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
  ├── prune: (1,2,6)
@@ -1233,7 +1233,7 @@ sort
       ├── columns: column6:6 a:1 b:2
       ├── immutable
       ├── stats: [rows=333.333333]
-      ├── cost: 1141.70667
+      ├── cost: 1141.73667
       ├── fd: (1,2)-->(6)
       ├── prune: (1,2,6)
       ├── interesting orderings: (+1)
@@ -1241,12 +1241,12 @@ sort
       │    ├── columns: a:1 b:2
       │    ├── immutable
       │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1135.03
+      │    ├── cost: 1135.05
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1 b:2
       │    │    ├── stats: [rows=1000]
-      │    │    ├── cost: 1125.01
+      │    │    ├── cost: 1125.02
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    └── filters
@@ -1261,7 +1261,7 @@ sort
  ├── columns: a:1(int) b:2(int)  [hidden: column6:6(int)]
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1214.26951
+ ├── cost: 1214.30951
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
  ├── prune: (1,2,6)
@@ -1270,7 +1270,7 @@ sort
       ├── columns: column6:6(int) a:1(int) b:2(int)
       ├── immutable
       ├── stats: [rows=333.333333]
-      ├── cost: 1141.70667
+      ├── cost: 1141.73667
       ├── fd: (1,2)-->(6)
       ├── prune: (1,2,6)
       ├── interesting orderings: (+1)
@@ -1278,12 +1278,12 @@ sort
       │    ├── columns: a:1(int) b:2(int)
       │    ├── immutable
       │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1135.03
+      │    ├── cost: 1135.05
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1(int) b:2(int)
       │    │    ├── stats: [rows=1000]
-      │    │    ├── cost: 1125.01
+      │    │    ├── cost: 1125.02
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    └── filters
@@ -1598,31 +1598,31 @@ memo (optimized, ~14KB, required=[presentation: info:10])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7])
  │    └── [presentation: info:10]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7]" [presentation: a:1,b:2,k:6,v:7])
- │         └── cost: 2269.89
+ │         └── cost: 2269.93
  ├── G2: (inner-join G3 G4 G5) (inner-join G4 G3 G5) (merge-join G3 G4 G6 inner-join,+1,+6) (lookup-join G3 G6 t,keyCols=[1],outCols=(1,2,6,7)) (merge-join G4 G3 G6 inner-join,+6,+1) (lookup-join G7 G6 tc,keyCols=[3],outCols=(1,2,6,7))
  │    └── [presentation: a:1,b:2,k:6,v:7]
  │         ├── best: (inner-join G3 G4 G5)
- │         └── cost: 2269.88
+ │         └── cost: 2269.91
  ├── G3: (scan tc,cols=(1,2))
  │    ├── [ordering: +1]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1364.48
+ │    │    └── cost: 1364.50
  │    └── []
  │         ├── best: (scan tc,cols=(1,2))
- │         └── cost: 1125.01
+ │         └── cost: 1125.02
  ├── G4: (scan t,cols=(6,7))
  │    ├── [ordering: +6]
  │    │    ├── best: (scan t,cols=(6,7))
- │    │    └── cost: 1104.81
+ │    │    └── cost: 1104.82
  │    └── []
  │         ├── best: (scan t,cols=(6,7))
- │         └── cost: 1104.81
+ │         └── cost: 1104.82
  ├── G5: (filters G8)
  ├── G6: (filters)
  ├── G7: (lookup-join G4 G6 tc@c,keyCols=[6],outCols=(1,3,6,7))
  │    └── []
  │         ├── best: (lookup-join G4 G6 tc@c,keyCols=[6],outCols=(1,3,6,7))
- │         └── cost: 23173.92
+ │         └── cost: 23173.94
  ├── G8: (eq G9 G10)
  ├── G9: (variable k)
  └── G10: (variable a)
@@ -1657,31 +1657,31 @@ memo (optimized, ~14KB, required=[presentation: info:10])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7])
  │    └── [presentation: info:10]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7]" [presentation: a:1,b:2,k:6,v:7])
- │         └── cost: 2269.89
+ │         └── cost: 2269.93
  ├── G2: (inner-join G3 G4 G5) (inner-join G4 G3 G5) (merge-join G3 G4 G6 inner-join,+1,+6) (lookup-join G3 G6 t,keyCols=[1],outCols=(1,2,6,7)) (merge-join G4 G3 G6 inner-join,+6,+1) (lookup-join G7 G6 tc,keyCols=[3],outCols=(1,2,6,7))
  │    └── [presentation: a:1,b:2,k:6,v:7]
  │         ├── best: (inner-join G3 G4 G5)
- │         └── cost: 2269.88
+ │         └── cost: 2269.91
  ├── G3: (scan tc,cols=(1,2))
  │    ├── [ordering: +1]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1364.48
+ │    │    └── cost: 1364.50
  │    └── []
  │         ├── best: (scan tc,cols=(1,2))
- │         └── cost: 1125.01
+ │         └── cost: 1125.02
  ├── G4: (scan t,cols=(6,7))
  │    ├── [ordering: +6]
  │    │    ├── best: (scan t,cols=(6,7))
- │    │    └── cost: 1104.81
+ │    │    └── cost: 1104.82
  │    └── []
  │         ├── best: (scan t,cols=(6,7))
- │         └── cost: 1104.81
+ │         └── cost: 1104.82
  ├── G5: (filters G8)
  ├── G6: (filters)
  ├── G7: (lookup-join G4 G6 tc@c,keyCols=[6],outCols=(1,3,6,7))
  │    └── []
  │         ├── best: (lookup-join G4 G6 tc@c,keyCols=[6],outCols=(1,3,6,7))
- │         └── cost: 23173.92
+ │         └── cost: 23173.94
  ├── G8: (eq G9 G10)
  ├── G9: (variable k)
  └── G10: (variable a)
@@ -1689,20 +1689,20 @@ inner-join (hash)
  ├── columns: a:1 b:2 k:6 v:7
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
- ├── cost: 2269.87625
+ ├── cost: 2269.90625
  ├── fd: (6)-->(7), (1)==(6), (6)==(1)
  ├── prune: (2,7)
  ├── scan tc
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1125.01
+ │    ├── cost: 1125.02
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── unfiltered-cols: (1-5)
  ├── scan t
  │    ├── columns: k:6 v:7
  │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
- │    ├── cost: 1104.81
+ │    ├── cost: 1104.82
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    ├── prune: (6,7)
