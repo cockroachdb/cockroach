@@ -147,7 +147,11 @@ var generators = map[string]builtinDefinition{
 			tree.ArgTypes{{"name", types.String}},
 			types.Int,
 			func(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
-				name := string(*args[0].(*tree.DString))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				name := string(s)
 				gen, ok := ctx.TestingKnobs.CallbackGenerators[name]
 				if !ok {
 					return nil, errors.Errorf("callback %q not registered", name)
