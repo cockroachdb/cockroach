@@ -97,19 +97,26 @@ func TestClientSSLSettings(t *testing.T) {
 func TestServerSSLSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	testTenantID := roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0])
+
 	testCases := []struct {
 		// args
 		insecure bool
 		hasCerts bool
+		tenantID roachpb.TenantID
 		// output
 		requestScheme string
 		configSuccess bool
 		nilConfig     bool
 	}{
-		{true, false, "http", true, true},
-		{false, false, "https", false, false},
-		{false, true, "https", true, false},
-		{false, false, "https", false, false},
+		{true, false, roachpb.SystemTenantID, "http", true, true},
+		{false, false, roachpb.SystemTenantID, "https", false, false},
+		{false, true, roachpb.SystemTenantID, "https", true, false},
+		{false, false, roachpb.SystemTenantID, "https", false, false},
+		{true, false, testTenantID, "http", true, true},
+		{false, false, testTenantID, "https", false, false},
+		{false, true, testTenantID, "https", true, false},
+		{false, false, testTenantID, "https", false, false},
 	}
 
 	for tcNum, tc := range testCases {
@@ -121,7 +128,7 @@ func TestServerSSLSettings(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.Background())
 			rpcContext := NewContext(ContextOptions{
-				TenantID: roachpb.SystemTenantID,
+				TenantID: tc.tenantID,
 				Clock:    hlc.NewClock(hlc.UnixNano, 1),
 				Stopper:  stopper,
 				Settings: cluster.MakeTestingClusterSettings(),
@@ -138,6 +145,16 @@ func TestServerSSLSettings(t *testing.T) {
 				return
 			}
 			if (tlsConfig == nil) != tc.nilConfig {
+				t.Fatalf("#%d: expected nil config=%t, got: %+v", tcNum, tc.nilConfig, tlsConfig)
+			}
+			uiTLSConfig, err := rpcContext.GetUIServerTLSConfig()
+			if (err == nil) != tc.configSuccess {
+				t.Fatalf("#%d: expected GetUIServerTLSConfig success=%t, got err=%v", tcNum, tc.configSuccess, err)
+			}
+			if err != nil {
+				return
+			}
+			if (uiTLSConfig == nil) != tc.nilConfig {
 				t.Fatalf("#%d: expected nil config=%t, got: %+v", tcNum, tc.nilConfig, tlsConfig)
 			}
 		})
