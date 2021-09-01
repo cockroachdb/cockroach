@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
@@ -152,6 +153,13 @@ func changefeedPlanHook(
 		opts, err := optsFn()
 		if err != nil {
 			return err
+		}
+
+		for key, value := range opts {
+			// if option is case insensitive then convert its value to lower case
+			if _, ok := changefeedbase.CaseInsensitiveOpts[key]; ok {
+				opts[key] = strings.ToLower(value)
+			}
 		}
 
 		if opts[changefeedbase.OptFormat] == changefeedbase.DeprecatedOptFormatAvro {
