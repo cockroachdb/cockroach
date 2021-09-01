@@ -3123,6 +3123,56 @@ SELECT encode(descriptor, 'hex') AS descriptor
 		}
 	}
 
+	// Ensure each database's zone configs are valid.
+	if err := func() (retErr error) {
+		dbs, err := t.db.Query(
+			`SELECT database_name FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres')`,
+		)
+		if err != nil {
+			return errors.Wrap(err, "error getting database names")
+		}
+		defer func() {
+			retErr = errors.CombineErrors(retErr, dbs.Close())
+		}()
+		var dbNames []string
+		for dbs.Next() {
+			if err := dbs.Err(); err != nil {
+				return errors.Wrap(err, "error processing databases")
+			}
+			var dbName string
+			if err := dbs.Scan(&dbName); err != nil {
+				return errors.Wrap(err, "error scanning db name")
+			}
+			dbNames = append(dbNames, dbName)
+		}
+		for _, dbName := range dbNames {
+			if err := func() (retErr error) {
+				ctx := context.Background()
+				// Open a new connection, since we want to preserve the original DB
+				// that we were originally on in t.db.
+				conn, err := t.db.Conn(ctx)
+				if err != nil {
+					return errors.Wrap(err, "error grabbing new connection")
+				}
+				defer func() {
+					retErr = errors.CombineErrors(retErr, conn.Close())
+				}()
+				if _, err := conn.ExecContext(ctx, "SET database = $1", dbName); err != nil {
+					return errors.Wrapf(err, "error validating zone config for database %s", dbName)
+				}
+				if _, err := conn.ExecContext(ctx, "SELECT crdb_internal.validate_multi_region_zone_configs()"); err != nil {
+					return errors.Wrapf(err, "error validating zone config for database %s", dbName)
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return err
+	}
+
 	// TODO(lucy): we should really drop all created databases in this test, not
 	// just the one we started with.
 	stmt := "SET sql_safe_updates=false; DROP DATABASE IF EXISTS test CASCADE"
