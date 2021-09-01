@@ -1226,3 +1226,25 @@ func TestSQLDecommissioned(t *testing.T) {
 		return err != nil
 	}, 10*time.Second, 100*time.Millisecond, "timed out waiting for queries to error")
 }
+
+func TestAssertEnginesEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng, err := storage.Open(ctx, storage.InMemory())
+	require.NoError(t, err)
+	defer eng.Close()
+
+	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
+
+	require.NoError(t, storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(),
+		hlc.Timestamp{}, nil, &roachpb.Version{Major: 21, Minor: 1, Internal: 122}))
+	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
+
+	batch := eng.NewBatch()
+	key := storage.MVCCKey{[]byte{0xde, 0xad, 0xbe, 0xef}, hlc.Timestamp{WallTime: 100}}
+	require.NoError(t, batch.PutMVCC(key, []byte("foo")))
+	require.NoError(t, batch.Commit(false))
+	require.Error(t, assertEnginesEmpty([]storage.Engine{eng}))
+}

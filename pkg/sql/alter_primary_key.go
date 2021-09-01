@@ -408,6 +408,16 @@ func (p *planner) AlterPrimaryKey(
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newUniqueIdx, newPrimaryIndexDesc); err != nil {
 			return err
 		}
+		// Copy the old zone configuration into the newly created unique index for PARTITION ALL BY.
+		if tableDesc.IsLocalityRegionalByRow() {
+			if err := p.configureZoneConfigForNewIndexPartitioning(
+				ctx,
+				tableDesc,
+				newUniqueIdx,
+			); err != nil {
+				return err
+			}
+		}
 	}
 
 	// We have to rewrite all indexes that either:

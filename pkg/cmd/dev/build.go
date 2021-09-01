@@ -44,7 +44,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
-	buildCmd.Flags().String(volumeFlag, "bzlcache", "the Docker volume to use as the Bazel cache (only used for cross builds)")
+	buildCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
 	buildCmd.Flags().String(crossFlag, "", `
         Turns on cross-compilation. Builds the binary using the builder image w/ Docker.
         You can optionally set a config, as in --cross=windows.
@@ -111,7 +111,6 @@ func (d *dev) build(cmd *cobra.Command, targets []string) error {
 	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s`\n", cross))
 	for _, target := range fullTargets {
 		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", bazelutil.OutputOfBinaryRule(target)))
-		script.WriteString(fmt.Sprintf("chmod +w /artifacts/%s\n", targetToBinBasename(target)))
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, script.String(), "docker", dockerArgs...)
 	if err != nil {

@@ -3745,9 +3745,16 @@ func (d *DTuple) Normalize(ctx *EvalContext) {
 
 func (d *DTuple) sort(ctx *EvalContext) {
 	if !d.sorted {
-		sort.Slice(d.D, func(i, j int) bool {
+		lessFn := func(i, j int) bool {
 			return d.D[i].Compare(ctx, d.D[j]) < 0
-		})
+		}
+
+		// It is possible for the tuple to be sorted even though the sorted flag
+		// is not true. So before we perform the sort we check that it is not
+		// already sorted.
+		if !sort.SliceIsSorted(d.D, lessFn) {
+			sort.Slice(d.D, lessFn)
+		}
 		d.SetSorted()
 	}
 }

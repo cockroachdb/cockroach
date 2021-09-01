@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -267,6 +268,41 @@ func TestAtMostOneSQLStatsCompactionJob(t *testing.T) {
 	sqlDB.CheckQueryResultsRetry(
 		t,
 		fmt.Sprintf(`SELECT count(*) FROM system.jobs where id = %d AND status = 'succeeded'`, jobID),
+		[][]string{{"1"}},
+	)
+}
+
+func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	server := tc.Server(0 /* idx */)
+	conn := tc.ServerConn(0 /* idx */)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	jobID, err := launchSQLStatsCompactionJob(server)
+	require.NoError(t, err)
+
+	// Ensure the sqlstats job is hidden from the SHOW JOBS command.
+	sqlDB.CheckQueryResults(
+		t,
+		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '"+jobspb.TypeAutoSQLStatsCompaction.String()+"'",
+		[][]string{{"0"}},
+	)
+
+	// Ensure the sqlstats job is displayed in SHOW AUTOMATIC JOBS command.
+	sqlDB.CheckQueryResults(
+		t,
+		fmt.Sprintf("SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_id = %d", jobID),
 		[][]string{{"1"}},
 	)
 }
