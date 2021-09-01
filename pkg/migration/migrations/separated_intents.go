@@ -55,17 +55,25 @@ const migrateLockTableRetries = 3
 // run: a Barrier, a ScanInterleavedIntents, then multiple txn pushes and intent
 // resolutions.
 //
-// One request will correspond to one range at the time of running the
+// One or more requests will correspond to one range at the time of running the
 // IterateRangeDescriptors command. If range boundaries change during the
 // course of the migration, that is okay as the migration logic does not rely on
-// that assumption. The debugRangeID is the range ID for this range at the time
-// of the range descriptor iteration, and is
-// present solely for observability / logging purposes.
+// that assumption. All of the requests required to migrate a range are bundled
+// in a migrateLockTableRange.
 type migrateLockTableRequest struct {
-	start, end   roachpb.Key
+	start, end  roachpb.Key
+	barrierDone bool
+	barrierTS   hlc.Timestamp
+}
+
+// migrateLockTableRange bundles the migrateLockTableRequests for a given range.
+// The debugRangeID is the range ID for this range at the time of the range
+// descriptor iteration, and is present solely for observability / logging
+// purposes.
+type migrateLockTableRange struct {
 	debugRangeID roachpb.RangeID
-	barrierDone  bool
-	barrierTS    hlc.Timestamp
+	local        *migrateLockTableRequest
+	global       *migrateLockTableRequest
 }
 
 type intentResolver interface {
@@ -79,7 +87,7 @@ type intentResolver interface {
 }
 
 type migrateLockTablePool struct {
-	requests chan migrateLockTableRequest
+	ranges   chan migrateLockTableRange
 	wg       sync.WaitGroup
 	stopper  *stop.Stopper
 	ir       intentResolver
@@ -119,46 +127,32 @@ func (m *migrateLockTablePool) runMigrateRequestsForRanges(
 		desc := ri.Desc()
 		start, end := desc.StartKey, desc.EndKey
 
-		{
-			// Enqueue a request for range local keys.
-			rangeKeyStart := keys.MakeRangeKeyPrefix(desc.StartKey)
-			rangeKeyEnd := keys.MakeRangeKeyPrefix(desc.EndKey)
+		request := migrateLockTableRange{
+			debugRangeID: desc.RangeID,
+		}
 
-			request := migrateLockTableRequest{
-				start:        rangeKeyStart,
-				end:          rangeKeyEnd,
-				debugRangeID: desc.RangeID,
-			}
-			select {
-			case m.requests <- request:
-			case <-ctx.Done():
-				return numMigratedRanges, errors.Wrap(ctx.Err(), "lock table migration canceled")
-			}
+		request.local = &migrateLockTableRequest{
+			start: keys.MakeRangeKeyPrefix(desc.StartKey),
+			end:   keys.MakeRangeKeyPrefix(desc.EndKey),
 		}
 
 		// See if this range's global keys need a migration. Range-local keys always
 		// need a migration, so we issue the above request regardless.
-		if ignoreSeparatedIntentsMigrationForRange(start, end) {
-			numMigratedRanges++
-			continue
-		}
-
-		{
-			// Enqueue a request for the range's global keys.
+		if !ignoreSeparatedIntentsMigrationForRange(start, end) {
 			startKeyRaw := desc.StartKey.AsRawKey()
 			if bytes.Compare(desc.StartKey, keys.LocalMax) < 0 {
 				startKeyRaw = keys.LocalMax
 			}
-			request := migrateLockTableRequest{
-				start:        startKeyRaw,
-				end:          end.AsRawKey(),
-				debugRangeID: desc.RangeID,
+			request.global = &migrateLockTableRequest{
+				start: startKeyRaw,
+				end:   end.AsRawKey(),
 			}
-			select {
-			case m.requests <- request:
-			case <-ctx.Done():
-				return numMigratedRanges, errors.Wrap(ctx.Err(), "lock table migration canceled")
-			}
+		}
+
+		select {
+		case m.ranges <- request:
+		case <-ctx.Done():
+			return numMigratedRanges, errors.Wrap(ctx.Err(), "lock table migration canceled")
 		}
 
 		numMigratedRanges++
@@ -169,10 +163,10 @@ func (m *migrateLockTablePool) runMigrateRequestsForRanges(
 	}
 	if err := ri.Error(); err != nil {
 		log.Errorf(ctx, "error when iterating through ranges in lock table migration: %s", err)
-		close(m.requests)
+		close(m.ranges)
 		return numMigratedRanges, err
 	}
-	close(m.requests)
+	close(m.ranges)
 	return numMigratedRanges, nil
 }
 
@@ -242,20 +236,20 @@ func (m *migrateLockTablePool) run(ctx context.Context, workerIdx int) {
 	ctx, cancel := m.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 
-	var retryRequest *migrateLockTableRequest
+	var currentRange *migrateLockTableRange
 	retryAttempt := 0
 	statusSlot := &m.status[workerIdx]
 	atomic.StoreInt64(statusSlot, 0)
 
 	for {
-		if retryRequest == nil {
+		if currentRange == nil {
 			// Pull a new request out of the channel.
 			select {
-			case r, ok := <-m.requests:
+			case r, ok := <-m.ranges:
 				if !ok {
 					return
 				}
-				retryRequest = &r
+				currentRange = &r
 				retryAttempt = 0
 			case <-ctx.Done():
 				log.Warningf(ctx, "lock table migration canceled")
@@ -264,14 +258,14 @@ func (m *migrateLockTablePool) run(ctx context.Context, workerIdx int) {
 		}
 
 		if ctx.Err() != nil {
-			log.Warningf(ctx, "lock table migration canceled on range r%d", retryRequest.debugRangeID)
+			log.Warningf(ctx, "lock table migration canceled on range r%d", currentRange.debugRangeID)
 			return
 		}
 
-		atomic.StoreInt64(statusSlot, int64(retryRequest.debugRangeID))
+		atomic.StoreInt64(statusSlot, int64(currentRange.debugRangeID))
 		handleError := func(err error) {
 			log.Errorf(ctx, "error when running migrate lock table command for range r%d: %s",
-				retryRequest.debugRangeID, err)
+				currentRange.debugRangeID, err)
 			retryAttempt++
 			if retryAttempt >= migrateLockTableRetries {
 				// Report this error to the migration manager. This will cause the
@@ -288,24 +282,39 @@ func (m *migrateLockTablePool) run(ctx context.Context, workerIdx int) {
 				m.mu.Unlock()
 
 				retryAttempt = 0
-				retryRequest = nil
+				currentRange = nil
 				atomic.StoreInt64(statusSlot, 0)
 			}
 		}
 
-		nextReq, err := m.attemptMigrateRequest(ctx, retryRequest)
-
-		if err != nil {
-			handleError(err)
-			continue
-		} else {
-			retryRequest = nextReq
-			if nextReq == nil {
-				// This range has been migrated.
-				atomic.AddUint64(&m.finished, 1)
+		if currentRange.local != nil {
+			nextReq, err := m.attemptMigrateRequest(ctx, currentRange.local)
+			if err != nil {
+				handleError(err)
+				continue
+			} else {
+				currentRange.local = nextReq
 			}
-			retryAttempt = 0
-			atomic.StoreInt64(statusSlot, 0)
+		}
+
+		if currentRange.global != nil {
+			nextReq, err := m.attemptMigrateRequest(ctx, currentRange.global)
+			if err != nil {
+				handleError(err)
+				continue
+			} else {
+				currentRange.global = nextReq
+			}
+		}
+
+		// If we made it here, neither one error'ed, so reset the counter.
+		retryAttempt = 0
+		atomic.StoreInt64(statusSlot, 0)
+
+		if currentRange.local == nil && currentRange.global == nil {
+			// This range has been fully migrated.
+			atomic.AddUint64(&m.finished, 1)
+			currentRange = nil
 		}
 	}
 }
@@ -387,12 +396,12 @@ func runSeparatedIntentsMigration(
 ) error {
 	concurrentRequests := concurrentMigrateLockTableRequests * numNodes
 	workerPool := migrateLockTablePool{
-		requests: make(chan migrateLockTableRequest, concurrentRequests),
-		stopper:  stopper,
-		db:       db,
-		ir:       ir,
-		clock:    clock,
-		status:   make([]int64, concurrentRequests),
+		ranges:  make(chan migrateLockTableRange, concurrentRequests),
+		stopper: stopper,
+		db:      db,
+		ir:      ir,
+		clock:   clock,
+		status:  make([]int64, concurrentRequests),
 	}
 	migratedRanges, err := workerPool.runMigrateRequestsForRanges(ctx, ri, concurrentRequests)
 	if err != nil {
