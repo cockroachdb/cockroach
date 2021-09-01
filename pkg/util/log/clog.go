@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -136,8 +137,9 @@ type sinkInfo struct {
 	// sink is where the log entries should be written.
 	sink logSink
 
-	// Level at or beyond which entries are output to this sink.
-	threshold Severity
+	// Levels at or beyond which entries are output to this sink.
+	// There is one entry per channel.
+	threshold [logpb.Channel_CHANNEL_MAX]Severity
 
 	// editor is the optional step that occurs prior to emitting the log
 	// entry.
@@ -342,7 +344,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 		// Stopper's Stop() call (e.g. the pgwire async processing
 		// goroutine). These asynchronous log calls are concurrent with
 		// the stderrSinkInfo update in (*TestLogScope).Close().
-		if entry.sev < s.threshold.Get() || !s.sink.active() {
+		if entry.sev < s.threshold[int(entry.ch)].Get() || !s.sink.active() {
 			continue
 		}
 		editedEntry := entry
