@@ -1526,6 +1526,9 @@ DELETE FROM regional_by_row_table WHERE pk = 1000
 statement ok
 ALTER TABLE regional_by_row_table ALTER PRIMARY KEY USING COLUMNS (pk2)
 
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
 query T
 SELECT
   create_statement
@@ -1562,6 +1565,19 @@ PARTITION "ap-southeast-2" OF INDEX regional_by_row_table@primary  ALTER PARTITI
                                                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                                                    voter_constraints = '{+region=ap-southeast-2: 2}',
                                                                    lease_preferences = '[[+region=ap-southeast-2]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF INDEX regional_by_row_table@regional_by_row_table_pk_key
+----
+PARTITION "ap-southeast-2" OF INDEX regional_by_row_table@regional_by_row_table_pk_key  ALTER PARTITION "ap-southeast-2" OF INDEX regional_by_row_table@regional_by_row_table_pk_key CONFIGURE ZONE USING
+                                                                                        range_min_bytes = 134217728,
+                                                                                        range_max_bytes = 536870912,
+                                                                                        gc.ttlseconds = 90000,
+                                                                                        num_replicas = 5,
+                                                                                        num_voters = 5,
+                                                                                        constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                                                        voter_constraints = '{+region=ap-southeast-2: 2}',
+                                                                                        lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF INDEX regional_by_row_table@unique_b_a
