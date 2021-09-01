@@ -622,8 +622,19 @@ func TestDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var parentDatabaseID descpb.ID
+	var parentSchemaID descpb.ID
+	row := sqlDB.QueryRow("SELECT id FROM system.namespace WHERE name='t'")
+	if err := row.Scan(&parentDatabaseID); err != nil {
+		t.Fatal(err)
+	}
+	parentSchemaIDRow := sqlDB.QueryRow(fmt.Sprintf(
+		`SELECT id FROM system.namespace WHERE name='public' AND "parentID"=%d`, parentDatabaseID))
+	if err := parentSchemaIDRow.Scan(&parentSchemaID); err != nil {
+		t.Fatal(err)
+	}
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, keys.MinNonPredefinedUserDescID, "kv")
+	nameKey := catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, parentDatabaseID, parentSchemaID, "kv")
 	gr, err := kvDB.Get(ctx, nameKey)
 
 	if err != nil {
@@ -722,8 +733,18 @@ func TestDropTableDeleteData(t *testing.T) {
 		}
 
 		descs = append(descs, catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName))
-
-		nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, keys.MinNonPredefinedUserDescID, tableName)
+		var parentDatabaseID descpb.ID
+		var parentSchemaID descpb.ID
+		row := sqlDB.QueryRow("SELECT id FROM system.namespace WHERE name='t'")
+		if err := row.Scan(&parentDatabaseID); err != nil {
+			t.Fatal(err)
+		}
+		parentSchemaIDRow := sqlDB.QueryRow(fmt.Sprintf(
+			`SELECT id FROM system.namespace WHERE name='public' AND "parentID"=%d`, parentDatabaseID))
+		if err := parentSchemaIDRow.Scan(&parentSchemaID); err != nil {
+			t.Fatal(err)
+		}
+		nameKey := catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, parentDatabaseID, parentSchemaID, tableName)
 		gr, err := kvDB.Get(ctx, nameKey)
 		if err != nil {
 			t.Fatal(err)

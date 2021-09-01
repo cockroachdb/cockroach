@@ -296,6 +296,11 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 			t, db, "test", "x INT PRIMARY KEY", 1, sqlutils.ToRowFn(sqlutils.RowIdxFn),
 		)
 
+		var tableID int
+		row := db.QueryRow(`SELECT id FROM system.namespace WHERE name='test' AND "parentID" != 0`)
+		row.Scan(&tableID)
+		contentionEventSubstring := fmt.Sprintf("tableID=%d indexID=1", tableID)
+
 		if contention {
 			// Begin a contending transaction.
 			conn, err := db.Conn(ctx)
@@ -326,7 +331,6 @@ COMMIT;
 SET TRACING=off;
 `)
 		require.NoError(t, err)
-		const contentionEventSubstring = "tableID=53 indexID=1"
 		if contention {
 			// Soft check to protect against flakiness where an internal query
 			// causes the contention metric to increment.

@@ -3,6 +3,9 @@
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT, FAMILY (a, b))
 
+let $t_id
+SELECT id FROM system.namespace WHERE name='t'
+
 statement ok
 CREATE TABLE u (a INT PRIMARY KEY, c INT, FAMILY (a, c))
 
@@ -296,13 +299,8 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for update
 
-# ------------------------------------------------------------------------------
-# Tests with numeric table references.
-# Cockroach numeric references start after 53 for user tables.
-# ------------------------------------------------------------------------------
-
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [53 AS t] FOR UPDATE
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE
 ----
 distribution: local
 vectorized: true
@@ -315,7 +313,7 @@ vectorized: true
   locking strength: for update
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [53 AS t] FOR UPDATE OF t
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE OF t
 ----
 distribution: local
 vectorized: true
@@ -328,7 +326,7 @@ vectorized: true
   locking strength: for update
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
-EXPLAIN (VERBOSE) SELECT * FROM [53 AS t] FOR UPDATE OF t2
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE OF t2
 
 # ------------------------------------------------------------------------------
 # Tests with views.

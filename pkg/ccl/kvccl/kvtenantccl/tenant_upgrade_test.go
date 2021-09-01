@@ -123,6 +123,13 @@ func TestTenantUpgrade(t *testing.T) {
 			clusterversion.TestingBinaryVersion.String())
 
 		// Ensure that the tenant still works.
+		rows := initialTenantRunner.Query(t, "SELECT schema_name, table_name, type, owner FROM [SHOW TABLES]")
+		var schemaName, tableName, typeName, owner string
+		defer rows.Close()
+		for rows.Next() {
+			rows.Scan(&schemaName, &tableName, &typeName, &owner)
+			println(schemaName, tableName, typeName, owner)
+		}
 		initialTenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
 		initialTenantRunner.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
 			[][]string{{clusterversion.TestingBinaryVersion.String()}})

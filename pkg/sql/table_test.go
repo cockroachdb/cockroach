@@ -466,46 +466,46 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		// Test a simple UDT as the default value.
 		{
 			"x greeting DEFAULT ('hello')",
-			`x'80':::@100053`,
+			`x'80':::@100056`,
 			getDefault,
 		},
 		{
 			"x greeting DEFAULT ('hello':::greeting)",
-			`x'80':::@100053`,
+			`x'80':::@100056`,
 			getDefault,
 		},
 		// Test when a UDT is used in a default value, but isn't the
 		// final type of the column.
 		{
 			"x INT DEFAULT (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END)",
-			`CASE WHEN x'80':::@100053 = x'80':::@100053 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			`CASE WHEN x'80':::@100056 = x'80':::@100056 THEN 0:::INT8 ELSE 1:::INT8 END`,
 			getDefault,
 		},
 		{
 			"x BOOL DEFAULT ('hello'::greeting IS OF (greeting, greeting))",
-			`x'80':::@100053 IS OF (@100053, @100053)`,
+			`x'80':::@100056 IS OF (@100056, @100056)`,
 			getDefault,
 		},
 		// Test check constraints.
 		{
 			"x greeting, CHECK (x = 'hello')",
-			`x = x'80':::@100053`,
+			`x = x'80':::@100056`,
 			getCheck,
 		},
 		{
 			"x greeting, y STRING, CHECK (y::greeting = x)",
-			`y::@100053 = x`,
+			`y::@100056 = x`,
 			getCheck,
 		},
 		// Test a computed column in the same cases as above.
 		{
 			"x greeting AS ('hello') STORED",
-			`x'80':::@100053`,
+			`x'80':::@100056`,
 			getComputed,
 		},
 		{
 			"x INT AS (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END) STORED",
-			`CASE WHEN x'80':::@100053 = x'80':::@100053 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			`CASE WHEN x'80':::@100056 = x'80':::@100056 THEN 0:::INT8 ELSE 1:::INT8 END`,
 			getComputed,
 		},
 	}
@@ -553,22 +553,22 @@ func TestSerializedUDTsInView(t *testing.T) {
 		// Test simple UDT in the view query.
 		{
 			"SELECT 'hello':::greeting",
-			`(SELECT b'\x80':::@100053)`,
+			`(SELECT b'\x80':::@100056)`,
 		},
 		// Test when a UDT is used in a view query, but isn't the
 		// final type of the column.
 		{
 			"SELECT 'hello'::greeting < 'hello'::greeting",
-			`(SELECT b'\x80':::@100053 < b'\x80':::@100053)`,
+			`(SELECT b'\x80':::@100056 < b'\x80':::@100056)`,
 		},
 		// Test when a UDT is used in various parts of a view (subquery, CTE, etc.).
 		{
 			"SELECT k FROM (SELECT 'hello'::greeting AS k)",
-			`(SELECT k FROM (SELECT b'\x80':::@100053 AS k))`,
+			`(SELECT k FROM (SELECT b'\x80':::@100056 AS k))`,
 		},
 		{
 			"WITH w AS (SELECT 'hello':::greeting AS k) SELECT k FROM w",
-			`(WITH w AS (SELECT b'\x80':::@100053 AS k) SELECT k FROM w)`,
+			`(WITH w AS (SELECT b'\x80':::@100056 AS k) SELECT k FROM w)`,
 		},
 	}
 

@@ -12,6 +12,7 @@ package sql_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -86,9 +87,6 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 	return cfg
 }
 
-// TODO(benesch,ridwansharif): modernize these tests to avoid hardcoding
-// expectations about descriptor IDs and zone config encoding.
-// TestGetZoneConfig exercises config.getZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -107,8 +105,6 @@ func TestGetZoneConfig(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.(*server.TestServer)
-
-	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
 
 	type testCase struct {
 		objectID uint32
@@ -172,43 +168,57 @@ func TestGetZoneConfig(t *testing.T) {
 	// db1 has tables tb11 and tb12
 	// db2 has tables tb21 and tb22
 
-	db1 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db1`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	db2 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db2`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb11 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb12 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb21 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb22 := expectedCounter
 	if _, err := sqlDB.Exec(`TRUNCATE TABLE db2.tb2`); err != nil {
+		t.Fatal(err)
+	}
+
+	var db1, db2, tb11, tb12, tb21, tb22 uint32
+	row := sqlDB.QueryRow(`SELECT id FROM system.namespace WHERE name='db1'`)
+	if err := row.Scan(&db1); err != nil {
+		t.Fatal(err)
+	}
+	row = sqlDB.QueryRow(`SELECT id FROM system.namespace WHERE name='db2'`)
+	if err := row.Scan(&db2); err != nil {
+		t.Fatal(err)
+	}
+	row = sqlDB.QueryRow(fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='tb1' AND "parentID"=%d`, db1))
+	if err := row.Scan(&tb11); err != nil {
+		t.Fatal(err)
+	}
+	row = sqlDB.QueryRow(fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='tb2' AND "parentID"=%d`, db1))
+	if err := row.Scan(&tb12); err != nil {
+		t.Fatal(err)
+	}
+	row = sqlDB.QueryRow(fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='tb1' AND "parentID"=%d`, db2))
+	if err := row.Scan(&tb21); err != nil {
+		t.Fatal(err)
+	}
+	row = sqlDB.QueryRow(fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='tb2' AND "parentID"=%d`, db2))
+	if err := row.Scan(&tb22); err != nil {
 		t.Fatal(err)
 	}
 
@@ -347,8 +357,6 @@ func TestCascadingZoneConfig(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.(*server.TestServer)
 
-	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
-
 	type testCase struct {
 		objectID uint32
 
@@ -411,43 +419,57 @@ func TestCascadingZoneConfig(t *testing.T) {
 	// db1 has tables tb11 and tb12
 	// db2 has tables tb21 and tb22
 
-	db1 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db1`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	db2 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db2`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb11 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb12 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb21 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb22 := expectedCounter
 	if _, err := sqlDB.Exec(`TRUNCATE TABLE db2.tb2`); err != nil {
+		t.Fatal(err)
+	}
+
+	var db1, db2, tb11, tb12, tb21, tb22 uint32
+	row := sqlDB.QueryRow(`SELECT id FROM system.namespace WHERE name='db1'`)
+	if err := row.Scan(&db1); err != nil {
+		t.Fatal(err)
+	}
+	row = sqlDB.QueryRow(`SELECT id FROM system.namespace WHERE name='db2'`)
+	if err := row.Scan(&db2); err != nil {
+		t.Fatal(err)
+	}
+	row = sqlDB.QueryRow(fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='tb1' AND "parentID"=%d`, db1))
+	if err := row.Scan(&tb11); err != nil {
+		t.Fatal(err)
+	}
+	row = sqlDB.QueryRow(fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='tb2' AND "parentID"=%d`, db1))
+	if err := row.Scan(&tb12); err != nil {
+		t.Fatal(err)
+	}
+	row = sqlDB.QueryRow(fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='tb1' AND "parentID"=%d`, db2))
+	if err := row.Scan(&tb21); err != nil {
+		t.Fatal(err)
+	}
+	row = sqlDB.QueryRow(fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='tb2' AND "parentID"=%d`, db2))
+	if err := row.Scan(&tb22); err != nil {
 		t.Fatal(err)
 	}
 

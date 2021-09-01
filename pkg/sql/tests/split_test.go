@@ -98,7 +98,6 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	})
 
 	// Verify the actual splits.
-	objectID := uint32(keys.MinUserDescID)
 	splits := []roachpb.RKey{roachpb.RKeyMax}
 	ranges, err := getRangeKeys(kvDB)
 	if err != nil {
@@ -125,7 +124,12 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	})
 
 	// Verify the actual splits.
-	splits = []roachpb.RKey{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(objectID + 3)), roachpb.RKeyMax}
+	var tableID uint32
+	row := sqlDB.QueryRow(`SELECT id FROM system.namespace WHERE name='test' AND "parentID"!=0`)
+	if err := row.Scan(&tableID); err != nil {
+		t.Fatal(err)
+	}
+	splits = []roachpb.RKey{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tableID)), roachpb.RKeyMax}
 	ranges, err = getRangeKeys(kvDB)
 	if err != nil {
 		t.Fatal(err)
