@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -164,9 +165,12 @@ func (n *renameTableNode) startExec(params runParams) error {
 		)
 	}
 
-	// Special checks when attempting to move a table to a different database,
-	// which is usually not allowed.
+	// Ensure tables cannot be moved cross-database.
 	if oldTn.Catalog() != newTn.Catalog() {
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+			return pgerror.Newf(pgcode.InvalidName,
+				"cannot change database of table using alter table rename to")
+		}
 		// Don't allow moving the table to a different database unless both the
 		// source and target schemas are the public schema. This preserves backward
 		// compatibility for the behavior prior to user-defined schemas.
