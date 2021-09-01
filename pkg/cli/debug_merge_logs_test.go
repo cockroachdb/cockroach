@@ -12,6 +12,7 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
@@ -184,14 +185,17 @@ func getCases(format string) []testCase {
 	}
 }
 
-func (c testCase) run(t *testing.T) {
-	outBuf := bytes.Buffer{}
+func resetDebugMergeLogFlags(errorFn func(s string)) {
 	debugMergeLogsCmd.Flags().Visit(func(f *pflag.Flag) {
 		if err := f.Value.Set(f.DefValue); err != nil {
-			t.Fatalf("Failed to set flag to default: %v", err)
+			errorFn(fmt.Sprintf("Failed to set flag to default: %v", err))
 		}
 	})
+}
 
+func (c testCase) run(t *testing.T) {
+	resetDebugMergeLogFlags(func(s string) { t.Fatal(s) })
+	outBuf := bytes.Buffer{}
 	debugMergeLogsCmd.SetOut(&outBuf)
 	// Ensure that the original writer is restored when the test
 	// completes. Otherwise, subsequent tests may not see their output.
@@ -244,6 +248,8 @@ func TestCrdbV1DebugMergeLogs(t *testing.T) {
 func Example_format_error() {
 	c := NewCLITest(TestCLIParams{NoServer: true})
 	defer c.Cleanup()
+
+	resetDebugMergeLogFlags(func(s string) { fmt.Fprintf(stderr, "ERROR: %v", s) })
 
 	c.RunWithArgs([]string{"debug", "merge-logs", "testdata/merge_logs_v1/missing_format/*"})
 
