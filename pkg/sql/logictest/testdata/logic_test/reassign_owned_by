@@ -10,6 +10,17 @@ CREATE ROLE old_role;
 GRANT CREATE ON DATABASE test TO old_role;
 ALTER TABLE t OWNER TO old_role
 
+user testuser
+
+# Ensure the current user is a member of the old roles.
+statement error pq: permission denied to reassign objects\nHINT: user must be a member of the old roles
+REASSIGN OWNED BY old_role TO testuser
+
+statement error pq: permission denied to reassign objects\nHINT: user must be a member of the old roles
+REASSIGN OWNED BY testuser, old_role TO testuser
+
+user root
+
 # Make testuser a member of old_role.
 statement ok
 GRANT old_role TO testuser
@@ -29,8 +40,11 @@ GRANT CREATE ON DATABASE test TO new_role
 user testuser
 
 # Ensure the current user is a member of the role we're setting to.
-statement error pq: must be member of role "new_role"
+statement error pq: permission denied to reassign objects\nHINT: user must be a member of the new role
 REASSIGN OWNED BY old_role TO new_role
+
+statement error pq: permission denied to reassign objects\nHINT: user must be a member of the new role
+REASSIGN OWNED BY old_role, testuser TO new_role
 
 user root
 
@@ -50,11 +64,7 @@ DROP TABLE t
 user root
 
 statement ok
-GRANT testuser TO root
-
-statement ok
 CREATE ROLE testuser2 WITH LOGIN;
-GRANT testuser2 TO root
 
 # Create database for old role
 statement ok
@@ -97,7 +107,6 @@ DROP ROLE testuser
 statement ok
 use test;
 CREATE ROLE testuser;
-GRANT testuser TO root
 
 # Create schema for testuser and one for root.
 statement ok
@@ -113,6 +122,9 @@ SELECT nspname, nspowner FROM pg_namespace WHERE nspname='s1' OR nspname='s2'
 ----
 s1  2264919399
 s2  1546506610
+
+# root / superusers can always perform REASSIGN OWNED BY.
+user root
 
 statement ok
 REASSIGN OWNED BY testuser, root TO testuser2
@@ -264,7 +276,6 @@ t2  testuser
 
 statement ok
 CREATE ROLE testuser2;
-GRANT testuser2 TO root;
 GRANT CREATE ON DATABASE test TO testuser2
 
 statement ok
