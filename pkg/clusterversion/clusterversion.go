@@ -131,6 +131,12 @@ type Handle interface {
 	// node restarts when initializing the cluster version, as seen by this
 	// node.
 	SetActiveVersion(context.Context, ClusterVersion) error
+
+	// SetOnChange installs a callback that's invoked when the active cluster
+	// version changes. The callback should avoid doing long-running or blocking
+	// work; it's called on the same goroutine handling all cluster setting
+	// updates.
+	SetOnChange(fn func(context.Context))
 }
 
 // handleImpl is a concrete implementation of Handle. It mostly relegates to the
@@ -203,6 +209,11 @@ func (v *handleImpl) SetActiveVersion(ctx context.Context, cv ClusterVersion) er
 
 	version.SetInternal(ctx, v.sv, encoded)
 	return nil
+}
+
+// SetOnChange implements the Handle interface.
+func (v *handleImpl) SetOnChange(fn func(ctx context.Context)) {
+	version.SetOnChange(v.sv, fn)
 }
 
 // IsActive implements the Handle interface.

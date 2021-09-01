@@ -15,12 +15,16 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -178,4 +182,71 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
 	require.NoError(t, err)
 	require.True(t, started)
+}
+
+func TestManagerJobStartConditions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	spanConfigJobVersion := clusterversion.ByKey(clusterversion.AutoSpanConfigReconciliationJob)
+	preSpanConfigJobVersion := clusterversion.ByKey(clusterversion.AutoSpanConfigReconciliationJob - 1)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		spanConfigJobVersion, preSpanConfigJobVersion, false, /* initializeVersion */
+	)
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings:          settings,
+			EnableSpanConfigs: true,
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // disable the automatic job creation
+				},
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          preSpanConfigJobVersion,
+					DisableAutomaticVersionUpgrade: 1,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0)
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = false;`)
+
+	interceptCount := 0
+	manager := spanconfigmanager.New(
+		ts.DB(),
+		ts.JobRegistry().(*jobs.Registry),
+		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.Stopper(),
+		ts.ClusterSettings(),
+		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		&spanconfig.TestingKnobs{
+			ManagerDisableJobCreation: true,
+			ManagerPreCreateJobInterceptor: func() {
+				interceptCount++
+			},
+		},
+	)
+	require.NoError(t, manager.Start(ctx))
+	require.Equal(t, 0, interceptCount) // pre-conditions not met (version too low + jjob setting disabled)
+
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = true;`)
+	require.Equal(t, 0, interceptCount) // pre-conditions not met (version too low)
+
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.check_interval = '2m'`)
+	require.Equal(t, 0, interceptCount) // pre-conditions not met (version too low)
+
+	tdb.Exec(t, `SET CLUSTER SETTING version = $1`, spanConfigJobVersion.String())
+	require.Equal(t, 1, interceptCount) // pre-conditions met; job creation triggered by cluster setting change
+
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.check_interval = '1m'`)
+	require.Equal(t, 2, interceptCount) // pre-conditions met; job creation triggered by cluster setting change
+
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = false;`)
+	require.Equal(t, 2, interceptCount) // pre-conditions not met (job setting disabled)
+
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = true;`)
+	require.Equal(t, 3, interceptCount) // pre-conditions met; job creation triggered by cluster setting change
 }
