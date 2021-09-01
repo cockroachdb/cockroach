@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -194,10 +195,14 @@ var ExportRequestsLimit = settings.RegisterIntSetting(
 
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
+	return testStoreConfig(clock, clusterversion.TestingBinaryVersion)
+}
+
+func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
-	st := cluster.MakeTestingClusterSettings()
+	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 	sc := StoreConfig{
 		DefaultSpanConfig:           zonepb.DefaultZoneConfigRef().AsSpanConfig(),
 		DefaultSystemSpanConfig:     zonepb.DefaultSystemZoneConfigRef().AsSpanConfig(),
@@ -217,6 +222,19 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	sc.RaftTickInterval = 100 * time.Millisecond
 	sc.SetDefaults()
 	return sc
+}
+
+// TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration randomizes
+// the StoreConfig to be before or after completion of the separated intents
+// migration.
+func TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(clock *hlc.Clock) StoreConfig {
+	version := clusterversion.TestingBinaryVersion
+	if rand.Intn(2) == 0 {
+		// This is before SeparatedIntentsMigration, so we may have interleaved
+		// intents.
+		version = clusterversion.ByKey(clusterversion.SeparatedIntentsMigration - 1)
+	}
+	return testStoreConfig(clock, version)
 }
 
 func newRaftConfig(
