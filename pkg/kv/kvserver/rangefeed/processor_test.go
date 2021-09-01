@@ -563,7 +563,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		makeIntent("z", txn2, "txnKey2", 21),
 		makeProvisionalKV("z", "txnKey2", 21),
 		makeKV("z", "val11", 4),
-	})
+	}, nil)
 	rtsIter.block = make(chan struct{})
 
 	p, stopper := newTestProcessor(rtsIter)

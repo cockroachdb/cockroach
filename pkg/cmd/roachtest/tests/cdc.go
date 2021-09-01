@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
@@ -82,6 +83,27 @@ type cdcTestArgs struct {
 	targetTxnPerSecond       float64
 }
 
+func cdcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
+	// kv.rangefeed.enabled is required for changefeeds to run
+	db.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	// jobs.registry.retry.max_delay is set to work around #69037.
+	// TODO(ssd): revert once #69037 is fixed.
+	db.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.max_delay = '1s'")
+	randomlyRun(t, db, "SET CLUSTER SETTING kv.rangefeed.catchup_scan_iterator_optimization.enabled = true")
+}
+
+const randomSettingPercent = 0.50
+
+var rng, _ = randutil.NewTestPseudoRand()
+
+func randomlyRun(t test.Test, db *sqlutils.SQLRunner, query string) {
+	if rng.Float64() < randomSettingPercent {
+		db.Exec(t, query)
+		t.L().Printf("setting non-default cluster setting: %s", query)
+	}
+
+}
+
 func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcTestArgs) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
@@ -93,8 +115,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
 	tdb := sqlutils.MakeSQLRunner(db)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING jobs.registry.retry.max_delay = '1s'`)
+	cdcClusterSettings(t, tdb)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -315,21 +336,10 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
 
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`,
-	); err != nil {
-		t.Fatal(err)
-	}
+	tdb := sqlutils.MakeSQLRunner(db)
+	cdcClusterSettings(t, tdb)
+	tdb.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 
 	// NB: the WITH diff option was not supported until v20.1.
 	withDiff := t.IsBuildVersion("v20.1.0")
@@ -481,9 +491,8 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
 
-	if _, err := db.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = $1`, true); err != nil {
-		t.Fatal(err)
-	}
+	cdcClusterSettings(t, sqlutils.MakeSQLRunner(db))
+
 	if _, err := db.Exec(`CREATE TABLE foo (a INT PRIMARY KEY)`); err != nil {
 		t.Fatal(err)
 	}
@@ -615,24 +624,12 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
 
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`CREATE TABLE auth_test_table (a INT PRIMARY KEY)`); err != nil {
-		t.Fatal(err)
-	}
+	tdb := sqlutils.MakeSQLRunner(db)
+	cdcClusterSettings(t, tdb)
+	tdb.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+
+	tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
 
 	caCert := testCerts.CACertBase64()
 	saslURL := kafka.sinkURLSASL(ctx)

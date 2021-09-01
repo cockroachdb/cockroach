@@ -95,6 +95,13 @@ type testRegistration struct {
 	errC   <-chan *roachpb.Error
 }
 
+func makeCatchUpIteratorConstructor(iter storage.SimpleMVCCIterator) CatchUpIteratorConstructor {
+	if iter == nil {
+		return nil
+	}
+	return func() *CatchUpIterator { return &CatchUpIterator{SimpleMVCCIterator: iter} }
+}
+
 func newTestRegistration(
 	span roachpb.Span, ts hlc.Timestamp, catchup storage.SimpleMVCCIterator, withDiff bool,
 ) *testRegistration {
@@ -103,7 +110,7 @@ func newTestRegistration(
 	r := newRegistration(
 		span,
 		ts,
-		makeIteratorConstructor(catchup),
+		makeCatchUpIteratorConstructor(catchup),
 		withDiff,
 		5,
 		NewMetrics(),
@@ -156,7 +163,7 @@ func TestRegistrationBasic(t *testing.T) {
 		makeInline("ba", "val2"),
 		makeKV("bc", "val3", 11),
 		makeKV("bd", "val4", 9),
-	}), false)
+	}, nil), false)
 	catchupReg.publish(ev1)
 	catchupReg.publish(ev2)
 	require.Equal(t, len(catchupReg.buf), 2)
@@ -259,7 +266,7 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 		makeIntent("z", txn2, "txnKeyZ", 21),
 		makeProvisionalKV("z", "txnKeyZ", 21),
 		makeKV("z", "valZ1", 4),
-	})
+	}, roachpb.Key("w"))
 	r := newTestRegistration(roachpb.Span{
 		Key:    roachpb.Key("d"),
 		EndKey: roachpb.Key("w"),

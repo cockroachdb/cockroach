@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -52,6 +53,13 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
 	0,
 	settings.NonNegativeDuration,
+)
+
+// RangefeedTBIEnabled controls whether or not we use a TBI during catch-up scan.
+var RangefeedTBIEnabled = settings.RegisterBoolSetting(
+	"kv.rangefeed.catchup_scan_iterator_optimization.enabled",
+	"if true, rangefeeds will use time-bound iterators for catchup-scans when possible",
+	util.ConstantWithMetamorphicTestBool("kv.rangefeed.catchup_scan_iterator_optimization.enabled", false),
 )
 
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
@@ -122,16 +130,6 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 		// NB: Poison is ignored for non-ABORTED intents.
 		intentresolver.ResolveOptions{Poison: true},
 	).GoError()
-}
-
-type iteratorWithCloser struct {
-	storage.SimpleMVCCIterator
-	close func()
-}
-
-func (i iteratorWithCloser) Close() {
-	i.SimpleMVCCIterator.Close()
-	i.close()
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
@@ -223,28 +221,14 @@ func (r *Replica) rangeFeedWithRangeID(
 	}
 
 	// Register the stream with a catch-up iterator.
-	var catchUpIterFunc rangefeed.IteratorConstructor
+	var catchUpIterFunc rangefeed.CatchUpIteratorConstructor
 	if usingCatchUpIter {
-		catchUpIterFunc = func() storage.SimpleMVCCIterator {
+		catchUpIterFunc = func() *rangefeed.CatchUpIterator {
 			// Assert that we still hold the raftMu when this is called to ensure
 			// that the catchUpIter reads from the current snapshot.
 			r.raftMu.AssertHeld()
-			innerIter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-				UpperBound: args.Span.EndKey,
-				// RangeFeed originally intended to use the time-bound iterator
-				// performance optimization. However, they've had correctness issues in
-				// the past (#28358, #34819) and no-one has the time for the due-diligence
-				// necessary to be confidant in their correctness going forward. Not using
-				// them causes the total time spent in RangeFeed catch-up on changefeed
-				// over tpcc-1000 to go from 40s -> 4853s, which is quite large but still
-				// workable. See #35122 for details.
-				// MinTimestampHint: args.Timestamp,
-			})
-			catchUpIter := iteratorWithCloser{
-				SimpleMVCCIterator: innerIter,
-				close:              iterSemRelease,
-			}
-			return catchUpIter
+			return rangefeed.NewCatchUpIterator(r.Engine(),
+				args, RangefeedTBIEnabled.Get(&r.store.cfg.Settings.SV), iterSemRelease)
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
@@ -346,7 +330,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchUpIter rangefeed.IteratorConstructor,
+	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
 	errC chan<- *roachpb.Error,

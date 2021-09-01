@@ -4546,3 +4546,42 @@ CREATE CHANGEFEED FOR tbl INTO 'null://';
 		tableID)
 	sqlDB.CheckQueryResultsRetry(t, numRangesQuery, [][]string{{"1"}})
 }
+
+func TestChangefeedCaseInsensitiveOpts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Sanity check for case insensitive options
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		// Set up a type and table.
+		sqlDB.Exec(t, `CREATE TABLE insensitive (x INT PRIMARY KEY, y string)`)
+		sqlDB.Exec(t, `INSERT INTO insensitive VALUES (0, 'hello')`)
+
+		t.Run(`format=JSON`, func(t *testing.T) {
+			cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE insensitive WITH format=JSON`)
+			defer closeFeed(t, cf)
+			assertPayloads(t, cf, []string{`insensitive: [0]->{"after": {"x": 0, "y": "hello"}}`})
+		})
+
+		t.Run(`envelope=ROW`, func(t *testing.T) {
+			cf := feed(t, f, `CREATE CHANGEFEED FOR insensitive WITH envelope='ROW'`)
+			defer closeFeed(t, cf)
+			assertPayloads(t, cf, []string{`insensitive: [0]->{"x": 0, "y": "hello"}`})
+		})
+
+		t.Run(`schema_change_events=COLUMN_CHANGES, schema_change_policy=STOP`, func(t *testing.T) {
+			cf := feed(t, f, `CREATE CHANGEFEED FOR insensitive `+
+				`WITH schema_change_events=COLUMN_CHANGES, schema_change_policy=STOP`)
+			defer closeFeed(t, cf)
+			assertPayloads(t, cf, []string{`insensitive: [0]->{"after": {"x": 0, "y": "hello"}}`})
+		})
+
+		t.Run(`on_error=FAIL`, func(t *testing.T) {
+			cf := feed(t, f, `CREATE CHANGEFEED FOR insensitive WITH on_error=FAIL`)
+			defer closeFeed(t, cf)
+			assertPayloads(t, cf, []string{`insensitive: [0]->{"after": {"x": 0, "y": "hello"}}`})
+		})
+	}
+	t.Run(`sinkless`, sinklessTest(testFn))
+}
