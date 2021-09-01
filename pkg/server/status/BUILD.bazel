@@ -10,6 +10,7 @@ go_library(
         "runtime.go",
         "runtime_jemalloc.go",
         "runtime_jemalloc_darwin.go",
+        "runtime_log.go",
     ],
     # keep
     cdeps = [
