@@ -78,7 +78,7 @@ func TestSetupLogging(t *testing.T) {
 			`enable: true, ` +
 			`dir: (?P<path>[^}]+)\}`)
 	fileCfgRe := regexp.MustCompile(
-		`\{channels: (?P<chans>all|\[[^]]*\]), ` +
+		`\{channels: \{INFO: (?P<chans>all|\[[^]]*\])\}, ` +
 			`dir: (?P<path>[^,]+), ` +
 			`max-file-size: 10MiB, ` +
 			`file-permissions: "0644", ` +
@@ -87,7 +87,7 @@ func TestSetupLogging(t *testing.T) {
 			`format: (?P<format>[^,]+), ` +
 			`redactable: true\}`)
 	telemetryFileCfgRe := regexp.MustCompile(
-		`\{channels: \[TELEMETRY\], ` +
+		`\{channels: \{INFO: \[TELEMETRY\]\}, ` +
 			`dir: (?P<path>[^,]+), ` +
 			`max-file-size: 100KiB, ` +
 			`max-group-size: 1.0MiB, ` +
@@ -98,8 +98,13 @@ func TestSetupLogging(t *testing.T) {
 			`redactable: true\}`)
 
 	stderrCfgRe := regexp.MustCompile(
-		`stderr: {channels: all, ` +
-			`filter: (?P<level>[^,]+), ` +
+		`stderr: {channels: \{(?P<level>[^:]+): all\}, ` +
+			`filter: [^,]+, ` +
+			`format: crdb-v2-tty, ` +
+			`redactable: (?P<redactable>[^}]+)}`)
+
+	stderrCfgNoneRe := regexp.MustCompile(
+		`stderr: {filter: NONE, ` +
 			`format: crdb-v2-tty, ` +
 			`redactable: (?P<redactable>[^}]+)}`)
 
@@ -163,6 +168,7 @@ func TestSetupLogging(t *testing.T) {
 		actual = fileCfgRe.ReplaceAllString(actual, "<fileCfg($chans,$path,$buf,$format)>")
 		actual = telemetryFileCfgRe.ReplaceAllString(actual, "<telemetryCfg($path)>")
 		actual = stderrCfgRe.ReplaceAllString(actual, "<stderrCfg($level,$redactable)>")
+		actual = stderrCfgNoneRe.ReplaceAllString(actual, "<stderrCfg(NONE,$redactable)>")
 		actual = strings.ReplaceAll(actual, `<stderrCfg(NONE,true)>`, `<stderrDisabled>`)
 		actual = strings.ReplaceAll(actual, `<stderrCfg(INFO,false)>`, `<stderrEnabledInfoNoRedaction>`)
 		actual = strings.ReplaceAll(actual, `<stderrCfg(WARNING,false)>`, `<stderrEnabledWarningNoRedaction>`)

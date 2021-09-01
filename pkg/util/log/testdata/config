@@ -4,19 +4,16 @@ yaml
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: {INFO: all}
       dir: TMPDIR
       max-file-size: 10MiB
       max-group-size: 100MiB
       buffered-writes: true
-      filter: INFO
       format: crdb-v2
       redact: false
       redactable: true
       exit-on-error: true
   stderr:
-    channels: all
-    filter: NONE
     format: crdb-v2-tty
     redact: false
     redactable: true
@@ -26,6 +23,35 @@ capture-stray-errors:
   dir: TMPDIR
   max-group-size: 100MiB
 
+# Test the default config with heterogeneous filters on stderr.
+yaml
+sinks:
+  stderr: {channels: {WARNING: all except DEV, INFO: DEV}}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      dir: TMPDIR
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      buffered-writes: true
+      format: crdb-v2
+      redact: false
+      redactable: true
+      exit-on-error: true
+  stderr:
+    channels: {INFO: [DEV], WARNING: [OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA,
+        USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF,
+        TELEMETRY]}
+    format: crdb-v2-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: TMPDIR
+  max-group-size: 100MiB
 
 # Test the default config with a fluent server.
 yaml
@@ -35,29 +61,25 @@ sinks:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: {INFO: all}
       dir: TMPDIR
       max-file-size: 10MiB
       max-group-size: 100MiB
       buffered-writes: true
-      filter: INFO
       format: crdb-v2
       redact: false
       redactable: true
       exit-on-error: true
   fluent-servers:
     s1:
-      channels: [SESSIONS]
+      channels: {INFO: [SESSIONS]}
       net: tcp
       address: localhost:5170
-      filter: INFO
       format: json-fluent-compact
       redact: false
       redactable: true
       exit-on-error: false
   stderr:
-    channels: all
-    filter: NONE
     format: crdb-v2-tty
     redact: false
     redactable: true
@@ -76,19 +98,16 @@ sinks:
 sinks:
   file-groups:
     all:
-      channels: all
+      channels: {INFO: all}
       dir: TMPDIR
       max-file-size: 10MiB
       max-group-size: 100MiB
       buffered-writes: false
-      filter: INFO
       format: crdb-v2
       redact: false
       redactable: true
       exit-on-error: true
   stderr:
-    channels: all
-    filter: NONE
     format: crdb-v2-tty
     redact: false
     redactable: true

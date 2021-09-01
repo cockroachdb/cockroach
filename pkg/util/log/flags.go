@@ -171,6 +171,10 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 				BufferedWrites:  &bf,
 				FilePermissions: &fm,
 			},
+			Channels: logconfig.SelectChannels(channel.DEV),
+		}
+		if err := fakeConfig.Channels.Validate(fakeConfig.CommonSinkConfig.Filter); err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "programming error: incorrect filter config")
 		}
 		fileSinkInfo, fileSink, err := newFileSinkInfo("stderr", fakeConfig)
 		if err != nil {
@@ -232,11 +236,15 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 	if err := logging.stderrSinkInfoTemplate.applyConfig(config.Sinks.Stderr.CommonSinkConfig); err != nil {
 		return nil, err
 	}
+	logging.stderrSinkInfoTemplate.applyFilters(config.Sinks.Stderr.Channels)
 
 	// Create the per-channel loggers.
-	chans := make(map[Channel]*loggerT, len(logpb.Channel_name))
+	chans := make(map[Channel]*loggerT, len(logpb.Channel_name)-1)
 	for chi := range logpb.Channel_name {
 		ch := Channel(chi)
+		if ch == logpb.Channel_CHANNEL_MAX {
+			continue
+		}
 		chans[ch] = &loggerT{}
 		if ch == channel.DEV {
 			debugLog = chans[ch]
@@ -248,19 +256,19 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 	stderrSinkInfo := logging.stderrSinkInfoTemplate
 
 	// Connect the stderr channels.
-	for _, ch := range config.Sinks.Stderr.Channels.Channels {
+	for _, ch := range config.Sinks.Stderr.Channels.AllChannels.Channels {
 		// Note: we connect stderr even if the severity is NONE
 		// so that tests can raise the severity after configuration.
 		l := chans[ch]
 		l.sinkInfos = append(l.sinkInfos, &stderrSinkInfo)
 	}
 
-	attachSinkInfo := func(si *sinkInfo, chs []logpb.Channel) {
+	attachSinkInfo := func(si *sinkInfo, chs *logconfig.ChannelFilters) {
 		sinkInfos = append(sinkInfos, si)
 		logging.allSinkInfos.put(si)
 
 		// Connect the channels for this sink.
-		for _, ch := range chs {
+		for _, ch := range chs.AllChannels.Channels {
 			l := chans[ch]
 			l.sinkInfos = append(l.sinkInfos, si)
 		}
@@ -278,7 +286,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachSinkInfo(fileSinkInfo, fc.Channels.Channels)
+		attachSinkInfo(fileSinkInfo, &fc.Channels)
 
 		// Start the GC process. This ensures that old capture files get
 		// erased as new files get created.
@@ -294,7 +302,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachSinkInfo(fluentSinkInfo, fc.Channels.Channels)
+		attachSinkInfo(fluentSinkInfo, &fc.Channels)
 	}
 
 	// Create the HTTP sinks.
@@ -306,7 +314,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachSinkInfo(httpSinkInfo, fc.Channels.Channels)
+		attachSinkInfo(httpSinkInfo, &fc.Channels)
 	}
 
 	// Prepend the interceptor sink to all channels.
@@ -332,6 +340,7 @@ func newFileSinkInfo(
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
 		return nil, nil, err
 	}
+	info.applyFilters(c.Channels)
 	fileSink := newFileSink(
 		*c.Dir,
 		fileNamePrefix,
@@ -352,6 +361,7 @@ func newFluentSinkInfo(c logconfig.FluentSinkConfig) (*sinkInfo, error) {
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
 		return nil, err
 	}
+	info.applyFilters(c.Channels)
 	fluentSink := newFluentSink(c.Net, c.Address)
 	info.sink = fluentSink
 	return info, nil
@@ -362,6 +372,7 @@ func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
 		return nil, err
 	}
+	info.applyFilters(c.Channels)
 	httpSink, err := newHTTPSink(*c.Address, httpSinkOptions{
 		method:            string(*c.Method),
 		unsafeTLS:         *c.UnsafeTLS,
@@ -375,9 +386,16 @@ func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 	return info, nil
 }
 
+// applyFilters applies the channel filters to a sinkInfo.
+func (l *sinkInfo) applyFilters(chs logconfig.ChannelFilters) {
+	for ch, threshold := range chs.ChannelFilters {
+		l.threshold.set(ch, threshold)
+	}
+}
+
 // applyConfig applies a common sink configuration to a sinkInfo.
 func (l *sinkInfo) applyConfig(c logconfig.CommonSinkConfig) error {
-	l.threshold = c.Filter
+	l.threshold.setAll(severity.NONE)
 	l.redact = *c.Redact
 	l.redactable = *c.Redactable
 	l.editor = getEditor(SelectEditMode(*c.Redact, *c.Redactable))
@@ -395,7 +413,6 @@ func (l *sinkInfo) applyConfig(c logconfig.CommonSinkConfig) error {
 // holds into the sinkInfo parameters by reference and thus should
 // not be reused if the configuration can change asynchronously.
 func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
-	c.Filter = l.threshold
 	c.Redact = &l.redact
 	c.Redactable = &l.redactable
 	c.Criticality = &l.criticality
@@ -445,13 +462,14 @@ func DescribeAppliedConfig() string {
 	config.Sinks.Stderr.CommonSinkConfig = logging.stderrSinkInfoTemplate.describeAppliedConfig()
 
 	describeConnections := func(l *loggerT, ch Channel,
-		target *sinkInfo, list *logconfig.ChannelList) {
+		target *sinkInfo, filters *logconfig.ChannelFilters) {
 		for _, s := range l.sinkInfos {
 			if s == target {
-				list.Channels = append(list.Channels, ch)
+				sev := s.threshold.get(ch)
+				filters.AddChannel(ch, sev)
 			}
 		}
-		list.Sort()
+		_ = filters.Validate(logpb.Severity_UNKNOWN)
 	}
 
 	// Describe the connections to the stderr sink.

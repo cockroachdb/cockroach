@@ -99,13 +99,13 @@ func (l *loggingT) getLogger(ch Channel) *loggerT {
 }
 
 // LoggingToStderr returns true if log messages of the given severity
-// sent to the channel's logger are also visible on the process'
+// sent to the DEV channel are also visible on the process'
 // external stderr. This is used e.g. by the startup code to announce
 // server details both on the external stderr and to the log file.
 //
 // This is also the logic used by Shout calls.
 func LoggingToStderr(s Severity) bool {
-	return s >= logging.stderrSinkInfoTemplate.threshold.Get()
+	return s >= logging.stderrSinkInfoTemplate.threshold.get(channel.DEV)
 }
 
 // MaybeSendCrashReport is injected by package logcrash
