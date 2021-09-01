@@ -768,6 +768,10 @@ SET override_multi_region_zone_config = true;
 ALTER PARTITION "ca-central-1" OF INDEX regional_by_row@primary CONFIGURE ZONE DISCARD;
 SET override_multi_region_zone_config = false
 
+# Drop invalid zone config database so validation passes.
+statement ok
+DROP DATABASE "mr-zone-configs" CASCADE
+
 # Test validation for initial SET PRIMARY REGION
 statement ok
 CREATE DATABASE initial_multiregion_db;
