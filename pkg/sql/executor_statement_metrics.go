@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -158,6 +159,31 @@ func (ex *connExecutor) recordStatementSummary(
 		FullScan:    flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 		Failed:      stmtErr != nil,
 		Database:    planner.SessionData().Database,
+	}
+
+	// We only populate the transaction fingerprint ID field if we are in an
+	// implicit transaction.
+	//
+	// TODO(azhng): This will require some big refactoring later, we already
+	//  compute statement's fingerprintID in RecordStatement().
+	//  However, we need to recompute the Fingerprint() here because this
+	//  is required to populate the transaction fingerprint ID field.
+	//
+	//  The reason behind it is that: for explicit transactions, we have a final
+	//  callback that will eventually invoke
+	//  statsCollector.EndExplicitTransaction() which will use the extraTxnState
+	//  stored in the connExecutor to compute the transaction fingerprintID.
+	//  Unfortunately, that callback is not invoked for implicit transactions,
+	//  because we don't create temporary stats container for the implicit
+	//  transactions. (The statement stats directly gets written to the actual
+	//  stats container). This means that, unless we populate the transaction
+	//  fingerprintID here, we will not have another chance to do so later.
+	if ex.implicitTxn() {
+		stmtFingerprintID := recordedStmtStatsKey.FingerprintID()
+		txnFingerprintHash := util.MakeFNV64()
+		txnFingerprintHash.Add(uint64(stmtFingerprintID))
+		recordedStmtStatsKey.TransactionFingerprintID =
+			roachpb.TransactionFingerprintID(txnFingerprintHash.Sum())
 	}
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{

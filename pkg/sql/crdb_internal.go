@@ -5079,13 +5079,14 @@ var crdbInternalStmtStatsTable = virtualSchemaTable{
 		`cluster-wide RPC-fanout.`,
 	schema: `
 CREATE TABLE crdb_internal.statement_statistics (
-    aggregated_ts  TIMESTAMPTZ NOT NULL,
-    fingerprint_id BYTES NOT NULL,
-    plan_hash      BYTES NOT NULL,
-    app_name       STRING NOT NULL,
-    metadata       JSONB NOT NULL,
-    statistics     JSONB NOT NULL,
-    sampled_plan   JSONB NOT NULL
+    aggregated_ts              TIMESTAMPTZ NOT NULL,
+    fingerprint_id             BYTES NOT NULL,
+    transaction_fingerprint_id BYTES NOT NULL,
+    plan_hash                  BYTES NOT NULL,
+    app_name                   STRING NOT NULL,
+    metadata                   JSONB NOT NULL,
+    statistics                 JSONB NOT NULL,
+    sampled_plan               JSONB NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
@@ -5119,7 +5120,7 @@ CREATE TABLE crdb_internal.statement_statistics (
 			Knobs:            execCfg.SQLStatsTestingKnobs,
 		}, memSQLStats)
 
-		row := make(tree.Datums, 7 /* number of columns for this virtual table */)
+		row := make(tree.Datums, 8 /* number of columns for this virtual table */)
 		worker := func(pusher rowPusher) error {
 			return sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
@@ -5133,6 +5134,9 @@ CREATE TABLE crdb_internal.statement_statistics (
 
 				fingerprintID := tree.NewDBytes(
 					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.ID))))
+
+				transactionFingerprintID := tree.NewDBytes(
+					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.Key.TransactionFingerprintID))))
 
 				// TODO(azhng): properly update plan_hash value once we can expose it
 				//  from the optimizer.
@@ -5153,6 +5157,7 @@ CREATE TABLE crdb_internal.statement_statistics (
 				row = append(row,
 					aggregatedTs,                        // aggregated_ts
 					fingerprintID,                       // fingerprint_id
+					transactionFingerprintID,            // transaction_fingerprint_id
 					planHash,                            // plan_hash
 					tree.NewDString(statistics.Key.App), // app_name
 					tree.NewDJSON(metadataJSON),         // metadata
