@@ -1038,17 +1038,18 @@ project
  │    │    │    │    │    │    ├── columns: "lookup_join_const_col_@36":83!null symb:35!null
  │    │    │    │    │    │    ├── key: (35)
  │    │    │    │    │    │    ├── fd: ()-->(83)
- │    │    │    │    │    │    ├── inner-join (lookup industry)
+ │    │    │    │    │    │    ├── inner-join (lookup security@secondary)
  │    │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null co_id:6!null co_in_id:9!null s_symb:17!null s_co_id:22!null
- │    │    │    │    │    │    │    ├── key columns: [9] = [1]
- │    │    │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    │    │    ├── key columns: [6] = [22]
  │    │    │    │    │    │    │    ├── key: (17)
  │    │    │    │    │    │    │    ├── fd: ()-->(1,2,9), (17)-->(22), (6)==(22), (22)==(6), (1)==(9), (9)==(1)
- │    │    │    │    │    │    │    ├── inner-join (lookup security@secondary)
- │    │    │    │    │    │    │    │    ├── columns: co_id:6!null co_in_id:9!null s_symb:17!null s_co_id:22!null
- │    │    │    │    │    │    │    │    ├── key columns: [6] = [22]
- │    │    │    │    │    │    │    │    ├── key: (17)
- │    │    │    │    │    │    │    │    ├── fd: (6)-->(9), (17)-->(22), (6)==(22), (22)==(6)
+ │    │    │    │    │    │    │    ├── inner-join (lookup industry)
+ │    │    │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null co_id:6!null co_in_id:9!null
+ │    │    │    │    │    │    │    │    ├── key columns: [9] = [1]
+ │    │    │    │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    │    │    │    ├── cardinality: [0 - 5000]
+ │    │    │    │    │    │    │    │    ├── key: (6)
+ │    │    │    │    │    │    │    │    ├── fd: ()-->(1,2,9), (1)==(9), (9)==(1)
  │    │    │    │    │    │    │    │    ├── scan company
  │    │    │    │    │    │    │    │    │    ├── columns: co_id:6!null co_in_id:9!null
  │    │    │    │    │    │    │    │    │    ├── constraint: /6: [/1 - /5000]
@@ -1056,9 +1057,9 @@ project
  │    │    │    │    │    │    │    │    │    ├── key: (6)
  │    │    │    │    │    │    │    │    │    └── fd: (6)-->(9)
  │    │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │    │         └── (s_co_id:22 >= 1) AND (s_co_id:22 <= 5000) [outer=(22), constraints=(/22: [/1 - /5000]; tight)]
+ │    │    │    │    │    │    │    │         └── in_name:2 = 'Software' [outer=(2), constraints=(/2: [/'Software' - /'Software']; tight), fd=()-->(2)]
  │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │         └── in_name:2 = 'Software' [outer=(2), constraints=(/2: [/'Software' - /'Software']; tight), fd=()-->(2)]
+ │    │    │    │    │    │    │         └── (s_co_id:22 >= 1) AND (s_co_id:22 <= 5000) [outer=(22), constraints=(/22: [/1 - /5000]; tight)]
  │    │    │    │    │    │    └── projections
  │    │    │    │    │    │         ├── '2020-06-17' [as="lookup_join_const_col_@36":83]
  │    │    │    │    │    │         └── s_symb:17 [as=symb:35, outer=(17)]
