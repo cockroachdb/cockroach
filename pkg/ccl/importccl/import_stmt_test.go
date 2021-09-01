@@ -1302,13 +1302,21 @@ func TestImportUserDefinedTypes(t *testing.T) {
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
-		// Test table with default value
+		// Test table with default value.
 		{
 			create:    "a greeting, b greeting default 'hi'",
 			intoCols:  "a, b",
 			typ:       "PGCOPY",
 			contents:  "hello\nhi\thi\n",
 			errString: "type OID 100052 does not exist",
+		},
+		// Test table with an invalid enum value.
+		{
+			create:    "a greeting",
+			intoCols:  "a",
+			typ:       "PGCOPY",
+			contents:  "randomvalue\n",
+			errString: "encountered error invalid input value for enum greeting",
 		},
 	}
 
@@ -7083,5 +7091,133 @@ CSV DATA ($1)
 				}
 			})
 		}
+	}
+}
+
+func TestUDTChangeDuringImport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	// Write some data to the test file.
+	f, err := ioutil.TempFile(baseDir, "data")
+	require.NoError(t, err)
+	_, err = f.Write([]byte("1,hello\n2,hi\n"))
+	require.NoError(t, err)
+
+	importStmt := "IMPORT INTO t (a, b) CSV DATA ($1)"
+	importArgs := fmt.Sprintf("nodelocal://0/%s", filepath.Base(f.Name()))
+
+	testCases := []struct {
+		name                string
+		query               string
+		expectTypeChangeErr string
+		expectImportErr     bool
+	}{
+		{
+			"add-value",
+			"ALTER TYPE d.greeting ADD VALUE 'cheers'",
+			"",
+			true,
+		},
+		{
+			"rename-value",
+			"ALTER TYPE d.greeting RENAME VALUE 'howdy' TO 'hola';",
+			"",
+			true,
+		},
+		{
+			"add-value-in-txn",
+			"BEGIN; ALTER TYPE d.greeting ADD VALUE 'cheers'; COMMIT;",
+			"",
+			true,
+		},
+		// Dropping a value does change the modification time on the descriptor,
+		// even though the enum value removal is forbidden during an import.
+		// As a result of this, the import is expected to fail.
+		{
+			"drop-value",
+			"ALTER TYPE d.greeting DROP VALUE 'howdy';",
+			"could not validate enum value removal",
+			true,
+		},
+		// Dropping a type does not change the modification time on the descriptor,
+		// and so the import is expected to succeed.
+		{
+			"drop-type",
+			"DROP TYPE d.greeting",
+			"cannot drop type \"greeting\"",
+			false,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			requestReceived := make(chan struct{})
+			allowResponse := make(chan struct{})
+			tc := testcluster.StartTestCluster(
+				t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+					ExternalIODir: baseDir,
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+						Store: &kvserver.StoreTestingKnobs{
+							TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+							TestingRequestFilter: func(ctx context.Context, br roachpb.BatchRequest) *roachpb.Error {
+								for _, ru := range br.Requests {
+									switch ru.GetInner().(type) {
+									case *roachpb.AddSSTableRequest:
+										<-requestReceived
+									}
+								}
+								return nil
+							},
+						}},
+				}})
+			defer tc.Stopper().Stop(ctx)
+			conn := tc.Conns[0]
+			sqlDB := sqlutils.MakeSQLRunner(conn)
+
+			// Create a database with a type.
+			sqlDB.Exec(t, `
+SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
+SET enable_drop_enum_value = true;
+CREATE DATABASE d;
+USE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE t (a INT, b greeting);
+`)
+
+			// Start the import.
+			errCh := make(chan error)
+			defer close(errCh)
+			go func() {
+				_, err := sqlDB.DB.ExecContext(ctx, importStmt, importArgs)
+				errCh <- err
+			}()
+
+			// Wait for the import to start.
+			requestReceived <- struct{}{}
+
+			if test.expectTypeChangeErr != "" {
+				sqlDB.ExpectErr(t, test.expectTypeChangeErr, test.query)
+			} else {
+				sqlDB.Exec(t, test.query)
+			}
+
+			// Allow the import to finish.
+			close(requestReceived)
+			close(allowResponse)
+
+			err := <-errCh
+			if test.expectImportErr {
+				testutils.IsError(err,
+					"unsafe to import since the type has changed during the course of the import")
+			} else {
+				require.NoError(t, err)
+			}
+		})
 	}
 }
