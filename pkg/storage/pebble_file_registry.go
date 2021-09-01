@@ -342,23 +342,25 @@ func (r *PebbleFileRegistry) MaybeDeleteEntry(filename string) error {
 	return r.processBatchLocked(batch)
 }
 
-// MaybeRenameEntry moves the entry under src to dst, if src exists. If src does not exist, but dst
-// exists, dst is deleted. Persists the registry if changed.
-func (r *PebbleFileRegistry) MaybeRenameEntry(src, dst string) error {
+// MaybeCopyEntry copies the entry under src to dst. If no entry exists
+// for src but an entry exists for dst, dst's entry is deleted. These
+// semantics are necessary for handling plaintext files that exist on
+// the filesystem without a corresponding entry in the registry.
+func (r *PebbleFileRegistry) MaybeCopyEntry(src, dst string) error {
 	src = r.tryMakeRelativePath(src)
 	dst = r.tryMakeRelativePath(dst)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.currProto.Files[src] == nil && r.mu.currProto.Files[dst] == nil {
+	srcEntry := r.mu.currProto.Files[src]
+	if srcEntry == nil && r.mu.currProto.Files[dst] == nil {
 		return nil
 	}
 	batch := &enginepb.RegistryUpdateBatch{}
-	if r.mu.currProto.Files[src] == nil {
+	if srcEntry == nil {
 		batch.DeleteEntry(dst)
 	} else {
-		batch.PutEntry(dst, r.mu.currProto.Files[src])
-		batch.DeleteEntry(src)
+		batch.PutEntry(dst, srcEntry)
 	}
 	return r.processBatchLocked(batch)
 }

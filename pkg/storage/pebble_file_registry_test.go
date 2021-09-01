@@ -110,9 +110,13 @@ func TestFileRegistryOps(t *testing.T) {
 	expected["file2"] = barFileEntry
 	checkEquality()
 
-	// {file3 => foo, file2 => bar}
-	require.NoError(t, registry.MaybeRenameEntry("file1", "file3"))
+	// {file1 => foo, file3 => foo, file2 => bar}
+	require.NoError(t, registry.MaybeCopyEntry("file1", "file3"))
 	expected["file3"] = fooFileEntry
+	checkEquality()
+
+	// {file3 => foo, file2 => bar}
+	require.NoError(t, registry.MaybeDeleteEntry("file1"))
 	delete(expected, "file1")
 	checkEquality()
 
@@ -127,7 +131,7 @@ func TestFileRegistryOps(t *testing.T) {
 	checkEquality()
 
 	// {file3 => foo}
-	require.NoError(t, registry.MaybeRenameEntry("file7", "file4"))
+	require.NoError(t, registry.MaybeCopyEntry("file7", "file4"))
 	delete(expected, "file4")
 	checkEquality()
 
@@ -153,7 +157,7 @@ func TestFileRegistryOps(t *testing.T) {
 
 	// Noops
 	require.NoError(t, registry.MaybeDeleteEntry("file1"))
-	require.NoError(t, registry.MaybeRenameEntry("file4", "file5"))
+	require.NoError(t, registry.MaybeCopyEntry("file4", "file5"))
 	require.NoError(t, registry.MaybeLinkEntry("file6", "file7"))
 	checkEquality()
 
@@ -162,7 +166,7 @@ func TestFileRegistryOps(t *testing.T) {
 	require.NoError(t, roRegistry.Load())
 	require.Error(t, roRegistry.SetFileEntry("file3", bazFileEntry))
 	require.Error(t, roRegistry.MaybeDeleteEntry("file3"))
-	require.Error(t, roRegistry.MaybeRenameEntry("file3", "file4"))
+	require.Error(t, roRegistry.MaybeCopyEntry("file3", "file4"))
 	require.Error(t, roRegistry.MaybeLinkEntry("file3", "file4"))
 }
 
