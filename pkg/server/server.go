@@ -636,6 +636,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			db, internalExecutor, cfg.Settings,
 			systemschema.SpanConfigurationsTableName.FQString(),
 		)
+	} else {
+		spanConfigAccessor = spanconfigkvaccessor.DisabledAccessor{}
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
