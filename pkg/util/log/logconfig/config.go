@@ -140,9 +140,9 @@ type CaptureFd2Config struct {
 
 // CommonSinkConfig represents the common configuration shared across all sinks.
 type CommonSinkConfig struct {
-	// Filter indicates the minimum severity for log events to be
-	// emitted to this sink. This can be set to NONE to disable the
-	// sink.
+	// Filter specifies the default minimum severity for log events to
+	// be emitted to this sink, when not otherwise specified by the
+	// 'channels' sink attribute.
 	Filter logpb.Severity `yaml:",omitempty"`
 
 	// Format indicates the entry format to use.
@@ -218,7 +218,7 @@ type SinkConfig struct {
 //
 type StderrSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
-	Channels ChannelList `yaml:",omitempty,flow"`
+	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	// NoColor forces the omission of VT color codes in the output even
 	// when stderr is a terminal.
@@ -297,7 +297,7 @@ type FluentDefaults struct {
 //
 type FluentSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
-	Channels ChannelList `yaml:",omitempty,flow"`
+	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	// Net is the protocol for the fluent server. Can be "tcp", "udp",
 	// "tcp4", etc.
@@ -400,7 +400,7 @@ type FileDefaults struct {
 //
 type FileSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
-	Channels ChannelList `yaml:",omitempty,flow"`
+	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	// FileDefaults contains the defaultable fields of the config.
 	FileDefaults `yaml:",inline"`
@@ -478,7 +478,7 @@ type HTTPDefaults struct {
 //
 type HTTPSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
-	Channels ChannelList `yaml:",omitempty,flow"`
+	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	HTTPDefaults `yaml:",inline"`
 
@@ -509,9 +509,11 @@ func (c *Config) IterateDirectories(fn func(d string) error) error {
 var _ yaml.Marshaler = (*logpb.Severity)(nil)
 var _ yaml.Marshaler = (*ByteSize)(nil)
 var _ yaml.Marshaler = (*ChannelList)(nil)
+var _ yaml.Marshaler = (*ChannelFilters)(nil)
 var _ yaml.Unmarshaler = (*logpb.Severity)(nil)
 var _ yaml.Unmarshaler = (*ByteSize)(nil)
 var _ yaml.Unmarshaler = (*ChannelList)(nil)
+var _ yaml.Unmarshaler = (*ChannelFilters)(nil)
 
 // ChannelList represents a list of channels.
 type ChannelList struct {
@@ -573,7 +575,8 @@ func (c *ChannelList) UnmarshalYAML(fn func(interface{}) error) error {
 	// We recognize two formats here: YAML arrays,
 	// and a simple string-based format.
 	var a []string
-	if err := fn(&a); err == nil /* no error: it's an array */ {
+	err := fn(&a)
+	if err == nil /* no error: it's an array */ {
 		ch, err := selectChannels(false /* invert */, a)
 		if err != nil {
 			return err
@@ -582,13 +585,16 @@ func (c *ChannelList) UnmarshalYAML(fn func(interface{}) error) error {
 		return nil
 	}
 
-	// It was not an array. Is it a string?
-	var s string
-	if err := fn(&s); err != nil {
-		return err
+	if errors.HasType(err, (*yaml.TypeError)(nil)) {
+		// It was not an array. Is it a string?
+		var s string
+		if err := fn(&s); err != nil {
+			return err
+		}
+		// It was a string: use the string configuration format.
+		return c.Set(s)
 	}
-	// It was a string: use the string configuration format.
-	return c.Set(s)
+	return err
 }
 
 // Sort ensures a channel list is sorted, for stability.
@@ -654,7 +660,7 @@ func selectChannels(invert bool, parts []string) ([]logpb.Channel, error) {
 
 		// Verify the channel name is known.
 		c, ok := logpb.Channel_value[p]
-		if !ok {
+		if !ok || c >= int32(logpb.Channel_CHANNEL_MAX) {
 			return nil, errors.Newf("unknown channel name: %q", p)
 		}
 		// Reject duplicates.
@@ -701,8 +707,11 @@ func SelectAllChannels() []logpb.Channel {
 // use a sorted list to ensure that reference log configurations are
 // deterministic.
 var channelValues = func() []logpb.Channel {
-	is := make([]int, 0, len(logpb.Channel_name))
+	is := make([]int, 0, len(logpb.Channel_name)-1)
 	for c := range logpb.Channel_name {
+		if c == int32(logpb.Channel_CHANNEL_MAX) {
+			continue
+		}
 		is = append(is, int(c))
 	}
 	sort.Ints(is)
@@ -712,6 +721,171 @@ var channelValues = func() []logpb.Channel {
 	}
 	return ns
 }()
+
+// ChannelFilters represents a map of severities to channels.
+type ChannelFilters struct {
+	// Filters represents the input configuration.
+	Filters map[logpb.Severity]ChannelList
+
+	// AllChannels lists all the channels listed in the configuration.
+	// Populated/overwritten by Update().
+	AllChannels ChannelList
+	// ChannelFilters inverts the configured filters, for
+	// use internally when instantiating the configuration.
+	// Populated/overwritten by Update().
+	ChannelFilters map[logpb.Channel]logpb.Severity
+}
+
+// SelectChannels is a constructor for ChannelFilters that
+// helps in tests.
+func SelectChannels(chs ...logpb.Channel) ChannelFilters {
+	return ChannelFilters{
+		Filters: map[logpb.Severity]ChannelList{
+			logpb.Severity_UNKNOWN: {Channels: chs}}}
+}
+
+// AddChannel adds the given channel at the specified severity.
+func (c *ChannelFilters) AddChannel(ch logpb.Channel, sev logpb.Severity) {
+	if c.Filters == nil {
+		c.Filters = make(map[logpb.Severity]ChannelList)
+	}
+	list := c.Filters[sev]
+	list.Channels = append(list.Channels, ch)
+	c.Filters[sev] = list
+}
+
+// MarshalYAML implements the yaml.Marshaler interface.
+func (c ChannelFilters) MarshalYAML() (interface{}, error) {
+	// If there is just one filter at unknown severity, this means we
+	// are observing the result of a config read from a simple string.
+	// Simplify to the same on the way out.
+	if cfg, ok := c.Filters[logpb.Severity_UNKNOWN]; ok && len(c.Filters) == 1 {
+		return &cfg, nil
+	}
+	// General form: produce a map.
+	return c.Filters, nil
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (c *ChannelFilters) UnmarshalYAML(fn func(interface{}) error) error {
+	// We recognize two formats here: either a map of
+	// severity to channel lists, or a single channel list.
+	var a ChannelList
+	err := fn(&a)
+	if err == nil /* no error: it's a simple channel list */ {
+		c.Filters = map[logpb.Severity]ChannelList{
+			logpb.Severity_UNKNOWN: a,
+		}
+		return nil
+	}
+
+	if errors.HasType(err, (*yaml.TypeError)(nil)) {
+		// It was not a simple channel list. Assume a map.
+		err = fn(&c.Filters)
+	}
+	return err
+}
+
+// fillDefaultSeverityAndPrune replaces instances of severity UNKNOWN
+// by the specified default (typically comming from the separate
+// Filter field on the sink). It also deletes any entry at severity
+// NONE. This also ensures the Filter map exists if it was not created
+// yet.
+func (c *ChannelFilters) fillDefaultSeverityAndPrune(defSev logpb.Severity) {
+	// We're going to modify c.Filters below. Create the map
+	// if it does not exist yet.
+	if c.Filters == nil {
+		c.Filters = make(map[logpb.Severity]ChannelList)
+	}
+	// Fill in the default into the user-supplied configuration.
+	if cfg, ok := c.Filters[logpb.Severity_UNKNOWN]; ok {
+		// If there is already a config at the default severity,
+		// add the unknown channels to it. This is needed
+		// for the special case of adding leftover channels
+		// to the DEV sink in Validate().
+		defCfg := c.Filters[defSev]
+		for _, ch := range cfg.Channels {
+			if defCfg.HasChannel(ch) {
+				// Channel already in default config. Skip it to avoid
+				// duplicates.
+				continue
+			}
+			defCfg.Channels = append(defCfg.Channels, ch)
+		}
+		c.Filters[defSev] = defCfg
+		delete(c.Filters, logpb.Severity_UNKNOWN)
+	}
+
+	// If anything was specified at severity NONE, remove it.  This
+	// means "no channel connected". This also takes care of removing
+	// all entries after the check above if there were multiple channels
+	// at severity UNKNOWN initially and defSev is NONE.
+	delete(c.Filters, logpb.Severity_NONE)
+}
+
+// propagateFilters translates the specification in Filters into
+// the helper fields AllChannels and ChannelFilters.
+func (c *ChannelFilters) propagateFilters() error {
+	c.ChannelFilters = map[logpb.Channel]logpb.Severity{}
+
+	// We use a sorted array of severities, to ensure that the list is
+	// traversed deterministically. This ensures that tests that check
+	// the error condition above have a stable output.
+	allUsedSeverities := make([]int, 0, len(c.Filters))
+	for sev := range c.Filters {
+		allUsedSeverities = append(allUsedSeverities, int(sev))
+	}
+	sort.Ints(allUsedSeverities)
+
+	// Translate the Filters to ChannelFilters.
+	for _, iSev := range allUsedSeverities {
+		sev := logpb.Severity(iSev)
+		cl := c.Filters[sev]
+		for _, ch := range cl.Channels {
+			if prevSev, ok := c.ChannelFilters[ch]; ok {
+				return errors.Newf("cannot use channel %s at severity %s: already listed at severity %s", ch, sev, prevSev)
+			}
+			c.ChannelFilters[ch] = sev
+		}
+	}
+
+	// Extract a sorted list of all channels from ChannelFilters into AllChannels.
+	c.AllChannels.Channels = make([]logpb.Channel, 0, len(c.ChannelFilters))
+	for ch := range c.ChannelFilters {
+		c.AllChannels.Channels = append(c.AllChannels.Channels, ch)
+	}
+	c.AllChannels.Sort()
+
+	return nil
+}
+
+// Validate changes the expressed filters to substitute the UNKNOWN
+// severity by the proposed default; it also propagates the user
+// configuration into the other accessor fields.
+func (c *ChannelFilters) Validate(defSev logpb.Severity) error {
+	c.fillDefaultSeverityAndPrune(defSev)
+
+	// Ensure the configurations are stable to make tests deterministic.
+	for sev, cfg := range c.Filters {
+		cfg.Sort()
+		c.Filters[sev] = cfg
+	}
+
+	return c.propagateFilters()
+}
+
+// noChannelsSelected returns true if there are no channels listed or
+// all of them are filtered at level NONE.
+func (c ChannelFilters) noChannelsSelected() bool {
+	filtered := true
+	for sev := range c.Filters {
+		if sev != logpb.Severity_NONE {
+			filtered = false
+			break
+		}
+	}
+	return filtered
+}
 
 // ByteSize represents a size in bytes.
 type ByteSize uint64

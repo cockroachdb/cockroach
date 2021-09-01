@@ -173,7 +173,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 				FileDefaults: logconfig.FileDefaults{
 					CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
 				},
-				Channels: logconfig.ChannelList{Channels: []log.Channel{channel.SESSIONS}},
+				Channels: logconfig.SelectChannels(channel.SESSIONS),
 			}}
 		dir := sc.GetDirectory()
 		if err := cfg.Validate(&dir); err != nil {
