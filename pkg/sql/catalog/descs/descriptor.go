@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -267,14 +266,7 @@ func getSchemaByName(
 	mutable bool,
 	version clusterversion.Handle,
 ) (bool, catalog.Descriptor, error) {
-	// TODO(richardjcai): Consider creating a descriptor for the system public
-	//     schema. Handle this in a separate PR.
-	if db.GetID() == keys.SystemDatabaseID {
-		if name == tree.PublicSchema {
-			return true, schemadesc.GetPublicSchema(), nil
-		}
-	}
-	if !tc.settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+	if !db.HasPublicSchemaWithDescriptor() {
 		if name == tree.PublicSchema {
 			return true, schemadesc.GetPublicSchema(), nil
 		}
