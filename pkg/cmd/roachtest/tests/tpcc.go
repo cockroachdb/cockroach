@@ -1183,7 +1183,12 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 
 	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
 	iteration := 0
+	stopIter := false
 	if res, err := s.Search(func(warehouses int) (bool, error) {
+		if stopIter {
+			// Give fake results for the rest of the line search.
+			return false, nil
+		}
 		iteration++
 		t.L().Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
 
@@ -1322,6 +1327,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 
 		// Print the result.
 		if failErr == nil {
+			stopIter = true
 			ttycolor.Stdout(ttycolor.Green)
 			t.L().Printf("--- SEARCH ITER PASS: TPCC %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
 				warehouses, res.TpmC(), res.Efficiency())
