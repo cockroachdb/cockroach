@@ -3149,28 +3149,32 @@ SELECT encode(descriptor, 'hex') AS descriptor
 			if _, err := conn.ExecContext(ctx, "SELECT crdb_internal.validate_multi_region_zone_configs()"); err != nil {
 				return errors.Wrapf(err, "error validating zone config for database %s", dbName)
 			}
+			// Drop the database.
+			dbTreeName := tree.Name(dbName)
+			dropDatabaseStmt := fmt.Sprintf(
+				"DROP DATABASE %s CASCADE",
+				dbTreeName.String(),
+			)
+			if _, err := t.db.Exec(dropDatabaseStmt); err != nil {
+				return errors.Wrapf(err, "dropping database %s failed", dbName)
+			}
 			return nil
 		}(); err != nil {
 			return err
 		}
 	}
 
-	// TODO(lucy): we should really drop all created databases in this test, not
-	// just the one we started with.
-	stmt := "SET sql_safe_updates=false; DROP DATABASE IF EXISTS test CASCADE"
-	if _, err := t.db.Exec(stmt); err != nil {
-		return errors.Wrap(err, "dropping test database failed")
-	}
-
+	// Ensure after dropping all databases state is still valid.
 	invalidObjects, err = validate()
 	if err != nil {
-		return errors.Wrap(err, "running object validation after failed")
+		return errors.Wrap(err, "running object validation after database drops failed")
 	}
 	if invalidObjects != "" {
 		return errors.Errorf(
-			"descriptor validation failed after dropping test database:\n%s", invalidObjects,
+			"descriptor validation failed after dropping databases:\n%s", invalidObjects,
 		)
 	}
+
 	return nil
 }
 
