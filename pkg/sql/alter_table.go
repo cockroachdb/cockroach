@@ -198,6 +198,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err
 				}
+
+				if d.Predicate != nil {
+					idxValidator := schemaexpr.MakeIndexPredicateValidator(params.ctx, *tn, n.tableDesc, params.p.SemaCtx())
+					expr, err := idxValidator.Validate(d.Predicate)
+					if err != nil {
+						return err
+					}
+					idx.Predicate = expr
+				}
+
 				if d.PartitionBy != nil {
 					partitioning, err := CreatePartitioning(
 						params.ctx, params.p.ExecCfg().Settings,
