@@ -164,41 +164,10 @@ func (n *renameTableNode) startExec(params runParams) error {
 		)
 	}
 
-	// Special checks when attempting to move a table to a different database,
-	// which is usually not allowed.
+	// Ensure tables cannot be moved cross-database.
 	if oldTn.Catalog() != newTn.Catalog() {
-		// Don't allow moving the table to a different database unless both the
-		// source and target schemas are the public schema. This preserves backward
-		// compatibility for the behavior prior to user-defined schemas.
-		if oldTn.Schema() != string(tree.PublicSchemaName) || newTn.Schema() != string(tree.PublicSchemaName) {
-			return pgerror.Newf(pgcode.InvalidName,
-				"cannot change database of table unless both the old and new schemas are the public schema in each database")
-		}
-		// Don't allow moving the table to a different database if the table
-		// references any user-defined types, to prevent cross-database type
-		// references.
-		columns := make([]descpb.ColumnDescriptor, 0, len(tableDesc.Columns)+len(tableDesc.Mutations))
-		columns = append(columns, tableDesc.Columns...)
-		for _, m := range tableDesc.Mutations {
-			if col := m.GetColumn(); col != nil {
-				columns = append(columns, *col)
-			}
-		}
-		for _, c := range columns {
-			if c.Type.UserDefined() {
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"cannot change database of table if any of its column types are user-defined")
-			}
-		}
-	}
-
-	// Special checks for tables, view and sequences to determine if cross
-	// DB references would occur.
-	if oldTn.Catalog() != newTn.Catalog() {
-		err := n.checkForCrossDbReferences(ctx, p, targetDbDesc)
-		if err != nil {
-			return err
-		}
+		return pgerror.Newf(pgcode.InvalidName,
+			"cannot change database of table using alter table rename to")
 	}
 
 	// oldTn and newTn are already normalized, so we can compare directly here.
