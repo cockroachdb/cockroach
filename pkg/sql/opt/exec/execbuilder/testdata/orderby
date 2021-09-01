@@ -1182,7 +1182,7 @@ vectorized: true
 • filter
 │ columns: (x, y, z)
 │ ordering: +y
-│ estimated row count: 1 (missing stats)
+│ estimated row count: 0 (missing stats)
 │ filter: x = y
 │
 └── • index join

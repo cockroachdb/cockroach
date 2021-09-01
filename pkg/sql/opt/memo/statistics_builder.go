@@ -806,13 +806,17 @@ func (sb *statisticsBuilder) constrainScan(
 	// -----------------------------------
 	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, scan, s)
 	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
+	// Apply selectivity from multi-col distinct counts, adjusting so that we
+	// don't double-count the histogram columns. This adjustment may cause the
+	// selectivity to increase, so apply a limit to ensure it does not exceed the
+	// upper bound based on the histograms.
+	s.ApplySelectivityRatio(
+		sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s),
+		sb.selectivityFromSingleColDistinctCounts(histCols, scan, s),
+	)
 	s.LimitSelectivity(selectivityUpperBound)
 }
 
@@ -996,12 +1000,16 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 	s.RowCount = inputStats.RowCount
 	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, invFilter, s)
 	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, invFilter, s))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps.NotNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, invFilter, s))
+	// Apply selectivity from multi-col distinct counts, adjusting so that we
+	// don't double-count the histogram columns. This adjustment may cause the
+	// selectivity to increase, so apply a limit to ensure it does not exceed the
+	// upper bound based on the histograms.
+	s.ApplySelectivityRatio(
+		sb.selectivityFromMultiColDistinctCounts(constrainedCols, invFilter, s),
+		sb.selectivityFromSingleColDistinctCounts(histCols, invFilter, s),
+	)
 	s.LimitSelectivity(selectivityUpperBound)
 
 	sb.finalizeFromCardinality(relProps)
@@ -1165,18 +1173,23 @@ func (sb *statisticsBuilder) buildJoin(
 	}
 	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, join, s)
 	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(
-		constrainedCols.Intersection(leftCols), join, s,
-	))
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(
-		constrainedCols.Intersection(rightCols), join, s,
-	))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps.NotNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, join, s))
+	// Apply selectivity from multi-col distinct counts, adjusting so that we
+	// don't double-count the histogram columns. This adjustment may cause the
+	// selectivity to increase, so apply a limit to ensure it does not exceed the
+	// upper bound based on the histograms.
+	multiColSelectivity := sb.selectivityFromMultiColDistinctCounts(
+		constrainedCols.Intersection(leftCols), join, s,
+	)
+	multiColSelectivity.Multiply(sb.selectivityFromMultiColDistinctCounts(
+		constrainedCols.Intersection(rightCols), join, s),
+	)
+	s.ApplySelectivityRatio(
+		multiColSelectivity,
+		sb.selectivityFromSingleColDistinctCounts(histCols, join, s),
+	)
 	s.LimitSelectivity(selectivityUpperBound)
 
 	// Update distinct counts based on equivalencies; this should happen after
@@ -2865,14 +2878,18 @@ func (sb *statisticsBuilder) filterRelExpr(
 	// -----------------------------------
 	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, e, s)
 	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, e, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, e, s))
+	// Apply selectivity from multi-col distinct counts, adjusting so that we
+	// don't double-count the histogram columns. This adjustment may cause the
+	// selectivity to increase, so apply a limit to ensure it does not exceed the
+	// upper bound based on the histograms.
+	s.ApplySelectivityRatio(
+		sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s),
+		sb.selectivityFromSingleColDistinctCounts(histCols, e, s),
+	)
 	s.LimitSelectivity(selectivityUpperBound)
 
 	// Update distinct and null counts based on equivalencies; this should
@@ -3104,12 +3121,16 @@ func (sb *statisticsBuilder) constrainExpr(
 	// -----------------------------------
 	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, e, s)
 	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, e, s))
+	// Apply selectivity from multi-col distinct counts, adjusting so that we
+	// don't double-count the histogram columns. This adjustment may cause the
+	// selectivity to increase, so apply a limit to ensure it does not exceed the
+	// upper bound based on the histograms.
+	s.ApplySelectivityRatio(
+		sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s),
+		sb.selectivityFromSingleColDistinctCounts(histCols, e, s),
+	)
 	s.LimitSelectivity(selectivityUpperBound)
 }
 
