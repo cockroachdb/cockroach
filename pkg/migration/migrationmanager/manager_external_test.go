@@ -78,7 +78,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 							return nil, false
 						}
 						return migration.NewTenantMigration("test", cv, migrations.NoPrecondition, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
+							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps, _ *jobs.Job,
 						) error {
 							canResume := make(chan error)
 							ch <- canResume
@@ -212,7 +212,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 							return nil, false
 						}
 						return migration.NewSystemMigration("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, d migration.SystemDeps,
+							ctx context.Context, version clusterversion.ClusterVersion, d migration.SystemDeps, _ *jobs.Job,
 						) error {
 							return d.DB.Migrate(ctx, desc.StartKey, desc.EndKey, cv.Version)
 						}), true
@@ -327,7 +327,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 					},
 					RegistryOverride: func(cv clusterversion.ClusterVersion) (migration.Migration, bool) {
 						return migration.NewSystemMigration("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, d migration.SystemDeps,
+							ctx context.Context, version clusterversion.ClusterVersion, d migration.SystemDeps, _ *jobs.Job,
 						) error {
 							if atomic.AddInt32(&active, 1) != 1 {
 								t.Error("unexpected concurrency")
@@ -412,7 +412,7 @@ func TestPauseMigration(t *testing.T) {
 							return nil, false
 						}
 						return migration.NewTenantMigration("test", cv, migrations.NoPrecondition, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
+							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps, _ *jobs.Job,
 						) error {
 							canResume := make(chan error)
 							ch <- migrationEvent{
@@ -500,7 +500,7 @@ func TestPrecondition(t *testing.T) {
 	migrationErr.Store(true)
 	cf := func(run *int64, err *atomic.Value) migration.TenantMigrationFunc {
 		return func(
-			context.Context, clusterversion.ClusterVersion, migration.TenantDeps,
+			context.Context, clusterversion.ClusterVersion, migration.TenantDeps, *jobs.Job,
 		) error {
 			atomic.AddInt64(run, 1)
 			if err.Load().(bool) {
@@ -526,7 +526,11 @@ func TestPrecondition(t *testing.T) {
 				switch cv {
 				case v1:
 					return migration.NewTenantMigration("v1", cv,
-						migration.PreconditionFunc(cf(&preconditionRun, &preconditionErr)),
+						migration.PreconditionFunc(func(
+							ctx context.Context, cv clusterversion.ClusterVersion, td migration.TenantDeps,
+						) error {
+							return cf(&preconditionRun, &preconditionErr)(ctx, cv, td, nil)
+						}),
 						cf(&migrationRun, &migrationErr),
 					), true
 				case v2:

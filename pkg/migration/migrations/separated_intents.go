@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -406,7 +407,7 @@ func runSeparatedIntentsMigration(
 }
 
 func separatedIntentsMigration(
-	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps, _ *jobs.Job,
 ) error {
 	ir := intentresolver.New(intentresolver.Config{
 		Clock:                deps.DB.Clock(),
@@ -420,7 +421,7 @@ func separatedIntentsMigration(
 }
 
 func postSeparatedIntentsMigration(
-	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps, _ *jobs.Job,
 ) error {
 	var batchIdx, numMigratedRanges int
 	init := func() { batchIdx, numMigratedRanges = 1, 0 }

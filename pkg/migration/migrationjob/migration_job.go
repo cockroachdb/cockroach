@@ -80,7 +80,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	}
 	switch m := m.(type) {
 	case *migration.SystemMigration:
-		err = m.Run(ctx, cv, mc.SystemDeps())
+		err = m.Run(ctx, cv, mc.SystemDeps(), r.j)
 	case *migration.TenantMigration:
 		err = m.Run(ctx, cv, migration.TenantDeps{
 			DB:                execCtx.ExecCfg().DB,
@@ -90,7 +90,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			LeaseManager:      execCtx.ExecCfg().LeaseManager,
 			InternalExecutor:  execCtx.ExecCfg().InternalExecutor,
 			TestingKnobs:      execCtx.ExecCfg().MigrationTestingKnobs,
-		})
+		}, r.j)
 	default:
 		return errors.AssertionFailedf("unknown migration type %T", m)
 	}
