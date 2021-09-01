@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -321,6 +322,23 @@ func (r *Replica) updateRangefeedFilterLocked() bool {
 // that.
 const defaultEventChanCap = 4096
 
+// Rangefeed registration takes place under the raftMu, so log if we ever hold
+// the mutex for too long, as this could affect foreground traffic.
+//
+// At the time of writing (09/2021), the blocking call to Processor.syncEventC
+// in Processor.Register appears to be mildly concerning, but we have no reason
+// to believe that is blocks the raftMu in practice.
+func logSlowRangefeedRegistration(ctx context.Context) func() {
+	const slowRaftMuWarnThreshold = 20 * time.Millisecond
+	start := timeutil.Now()
+	return func() {
+		elapsed := timeutil.Since(start)
+		if elapsed >= slowRaftMuWarnThreshold {
+			log.Warningf(ctx, "rangefeed registration took %s", elapsed)
+		}
+	}
+}
+
 // registerWithRangefeedRaftMuLocked sets up a Rangefeed registration over the
 // provided span. It initializes a rangefeed for the Replica if one is not
 // already running. Requires raftMu be locked.
@@ -333,6 +351,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	stream rangefeed.Stream,
 	errC chan<- *roachpb.Error,
 ) *rangefeed.Processor {
+	defer logSlowRangefeedRegistration(ctx)()
+
 	// Attempt to register with an existing Rangefeed processor, if one exists.
 	// The locking here is a little tricky because we need to handle the case
 	// of concurrent processor shutdowns (see maybeDisconnectEmptyRangefeed).
