@@ -116,6 +116,7 @@ type RestoreOptions struct {
 	SkipMissingViews          bool
 	Detached                  bool
 	SkipLocalitiesCheck       bool
+	DebugPauseOn              Expr
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -320,6 +321,12 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.IntoDB)
 	}
 
+	if o.DebugPauseOn != nil {
+		maybeAddSep()
+		ctx.WriteString("debug_pause_on = ")
+		ctx.FormatNode(o.DebugPauseOn)
+	}
+
 	if o.SkipMissingFKs {
 		maybeAddSep()
 		ctx.WriteString("skip_missing_foreign_keys")
@@ -420,6 +427,12 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.SkipLocalitiesCheck = other.SkipLocalitiesCheck
 	}
 
+	if o.DebugPauseOn == nil {
+		o.DebugPauseOn = other.DebugPauseOn
+	} else if other.DebugPauseOn != nil {
+		return errors.New("debug_pause_on specified multiple times")
+	}
+
 	return nil
 }
 
@@ -434,5 +447,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.IntoDB == options.IntoDB &&
 		o.Detached == options.Detached &&
-		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck
+		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
+		o.DebugPauseOn == options.DebugPauseOn
 }

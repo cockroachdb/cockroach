@@ -768,7 +768,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CURSOR CYCLE
 
-%token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT DEFAULTS
+%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_PAUSE_ON DEC DECIMAL DEFAULT DEFAULTS
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DESC DESTINATION DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
@@ -2881,6 +2881,7 @@ opt_with_schedule_options:
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : decrypt backups using KMS
 //    detached: execute restore job asynchronously, without waiting for its completion
 //    skip_localities_check: ignore difference of zone configuration between restore cluster and backup cluster
+//    debug_pause_on: describes the events that the job should pause itself on for debugging purposes.
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
   RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
@@ -3016,6 +3017,10 @@ restore_options:
 | SKIP_LOCALITIES_CHECK
   {
     $$.val = &tree.RestoreOptions{SkipLocalitiesCheck: true}
+  }
+| DEBUG_PAUSE_ON '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{DebugPauseOn: $3.expr()}
   }
 
 import_format:
@@ -13107,6 +13112,7 @@ unreserved_keyword:
 | DATABASES
 | DAY
 | DEALLOCATE
+| DEBUG_PAUSE_ON
 | DECLARE
 | DELETE
 | DEFAULTS
