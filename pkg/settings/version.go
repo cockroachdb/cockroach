@@ -176,15 +176,3 @@ func TestingRegisterVersionSetting(key, desc string, impl VersionSettingImpl) *V
 	register(key, desc, &setting)
 	return &setting
 }
-
-// SetOnChange is part of the Setting interface, and is discouraged for use in
-// VersionSetting (we're implementing it here to not fall back on the embedded
-// `common` type definition).
-//
-// NB: VersionSetting is unique in more ways than one, and we might want to move
-// it out of the settings package before long (see TODO on the type itself). In
-// our current usage we don't rely on attaching pre-change triggers, so let's
-// not add it needlessly.
-func (v *VersionSetting) SetOnChange(sv *Values, fn func(ctx context.Context)) {
-	panic("unimplemented")
-}

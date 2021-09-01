@@ -460,6 +460,8 @@ type testClusterConfig struct {
 	// If true, a sql tenant server will be started and pointed at a node in the
 	// cluster. Connections on behalf of the logic test will go to that tenant.
 	useTenant bool
+	// If true, XXX:
+	useSpanConfigs bool
 	// isCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	isCCLConfig bool
@@ -724,6 +726,11 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats: "false",
 		localities:        multiregion9node3region3azsLocalities,
 		overrideVectorize: "off",
+	},
+	{
+		name:           "experimental-span-configs",
+		numNodes:       1,
+		useSpanConfigs: true,
 	},
 }
 
@@ -1386,10 +1393,13 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 		ReplicationMode: base.ReplicationManual,
 	}
 
+	cfg := t.cfg
+	if cfg.useSpanConfigs {
+		params.ServerArgs.EnableSpanConfigs = true
+	}
 	distSQLKnobs := &execinfra.TestingKnobs{
 		MetadataTestLevel: execinfra.Off,
 	}
-	cfg := t.cfg
 	if cfg.sqlExecUseDisk {
 		distSQLKnobs.ForceDiskSpill = true
 	}
