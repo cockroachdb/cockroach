@@ -38,7 +38,7 @@ func installTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
 	// Make a sink for just the session log.
 	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
 		"telemetry": {
-			Channels: logconfig.ChannelList{Channels: []log.Channel{channel.TELEMETRY}},
+			Channels: logconfig.SelectChannels(channel.TELEMETRY),
 		}}
 	dir := sc.GetDirectory()
 	if err := cfg.Validate(&dir); err != nil {

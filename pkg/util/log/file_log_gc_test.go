@@ -63,7 +63,7 @@ func TestSecondaryGC(t *testing.T) {
 			MaxGroupSize:   &m,
 			BufferedWrites: &bf,
 		},
-		Channels: logconfig.ChannelList{Channels: []Channel{channel.OPS}},
+		Channels: logconfig.SelectChannels(channel.OPS),
 	}
 
 	// Validate and apply the config
