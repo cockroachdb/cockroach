@@ -66,11 +66,14 @@ const withData: DatabaseDetailsPageProps = {
         roles: roles,
         grants: grants,
       },
+      showNodeRegionsColumn: true,
       stats: {
         loading: false,
         loaded: true,
         replicationSizeInBytes: _.random(1000.0) * 1024 ** _.random(1, 2),
         rangeCount: _.random(50, 500),
+        nodesByRegionString:
+          "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
       },
     };
   }),

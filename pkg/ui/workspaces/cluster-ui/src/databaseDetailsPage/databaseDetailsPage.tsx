@@ -68,6 +68,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 //         loaded: boolean;
 //         replicationSizeInBytes: number;
 //         rangeCount: number;
+//         nodesByRegionString: string;
 //       };
 //     }[];
 //   }
@@ -76,6 +77,7 @@ export interface DatabaseDetailsPageData {
   loaded: boolean;
   name: string;
   tables: DatabaseDetailsPageDataTable[];
+  showNodeRegionsColumn?: boolean;
 }
 
 export interface DatabaseDetailsPageDataTable {
@@ -99,6 +101,7 @@ export interface DatabaseDetailsPageDataTableStats {
   loaded: boolean;
   replicationSizeInBytes: number;
   rangeCount: number;
+  nodesByRegionString?: string;
 }
 
 export interface DatabaseDetailsPageActions {
@@ -267,6 +270,22 @@ export class DatabaseDetailsPage extends React.Component<
         sort: table => table.details.indexCount,
         className: cx("database-table__col-index-count"),
         name: "indexCount",
+      },
+      {
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="Regions/nodes on which the table data is stored."
+          >
+            Regions
+          </Tooltip>
+        ),
+        cell: table => table.stats.nodesByRegionString || "None",
+        sort: table => table.stats.nodesByRegionString,
+        className: cx("database-table__col--regions"),
+        name: "regions",
+        showByDefault: this.props.showNodeRegionsColumn,
+        hideIfTenant: true,
       },
     ];
   }
