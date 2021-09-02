@@ -57,7 +57,7 @@ func singleRegionIntersects(aRegion s2.Region, bRegion s2.Region) (bool, error) 
 	case s2.Point:
 		switch bRegion := bRegion.(type) {
 		case s2.Point:
-			return aRegion.IntersectsCell(s2.CellFromPoint(bRegion)), nil
+			return aRegion.Contains(bRegion), nil
 		case *s2.Polyline:
 			return bRegion.IntersectsCell(s2.CellFromPoint(aRegion)), nil
 		case *s2.Polygon:
