@@ -61,6 +61,7 @@ var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
 	ctx context.Context,
+	semaCtx *tree.SemaContext,
 	kvCh chan row.KVBatch,
 	walltime int64,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
@@ -75,8 +76,9 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(ctx, tabledesc.NewBuilder(table.Desc).BuildImmutableTable(),
-			nil /* targetColNames */, evalCtx, kvCh, nil /* seqChunkProvider */, nil /* metrics */)
+		conv, err := row.NewDatumRowConverter(ctx, semaCtx, tabledesc.NewBuilder(table.Desc).
+			BuildImmutableTable(), nil /* targetColNames */, evalCtx, kvCh,
+			nil /* seqChunkProvider */, nil /* metrics */)
 		if err != nil {
 			return nil, err
 		}
