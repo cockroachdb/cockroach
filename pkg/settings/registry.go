@@ -103,6 +103,8 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.optimizer_improve_disjunction_selectivity.enabled": {},
 	"bulkio.backup.proxy_file_writes.enabled":                        {},
 	"sql.distsql.prefer_local_execution.enabled":                     {},
+	"kv.follower_read.target_multiple":                               {},
+	"kv.closed_timestamp.close_fraction":                             {},
 }
 
 // register adds a setting to the registry.

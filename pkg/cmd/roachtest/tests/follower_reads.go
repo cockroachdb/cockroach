@@ -492,15 +492,32 @@ func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Durati
 	if err != nil {
 		return 0, err
 	}
-	var closeFraction float64
-	err = db.QueryRowContext(ctx, "SELECT value FROM crdb_internal.cluster_settings WHERE variable = 'kv.closed_timestamp.close_fraction'").Scan(&closeFraction)
+
+	var sideTransIntervalStr string
+	err = db.QueryRowContext(ctx, "SELECT value FROM crdb_internal.cluster_settings WHERE variable = 'kv.closed_timestamp.side_transport_interval'").Scan(&sideTransIntervalStr)
 	if err != nil {
 		return 0, err
 	}
-	// target_multiple is a hidden setting which cannot be read from crdb_internal
-	// so for now hard code to the default value.
-	const targetMultiple = 3
-	return time.Duration(float64(targetDuration) * (1 + targetMultiple*closeFraction)), nil
+	sideTransInterval, err := time.ParseDuration(sideTransIntervalStr)
+	if err != nil {
+		return 0, err
+	}
+
+	var propagationSlackStr string
+	err = db.QueryRowContext(ctx, "SELECT value FROM crdb_internal.cluster_settings WHERE variable = 'kv.closed_timestamp.propagation_slack'").Scan(&propagationSlackStr)
+	if err != nil {
+		// 21.1 doesn't have this setting, so we'll just hardcode the default.
+		if testutils.IsError(err, "sql: no rows in result set") {
+			propagationSlackStr = "1s"
+		} else {
+			return 0, err
+		}
+	}
+	propagationSlack, err := time.ParseDuration(propagationSlackStr)
+	if err != nil {
+		return 0, err
+	}
+	return targetDuration + sideTransInterval + propagationSlack, nil
 }
 
 // verifySQLLatency verifies that the client-facing SQL latencies in the 90th

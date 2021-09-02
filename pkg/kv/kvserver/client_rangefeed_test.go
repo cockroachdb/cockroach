@@ -196,8 +196,7 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 	clusterArgs.ReplicationMode = base.ReplicationManual
 	// NB: setupClusterForClosedTSTesting sets a low closed timestamp target
 	// duration.
-	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, clusterArgs, "cttest", "kv")
+	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, clusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	tc.AddNonVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1))
 
