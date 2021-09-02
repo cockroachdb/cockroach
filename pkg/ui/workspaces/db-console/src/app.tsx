@@ -14,9 +14,7 @@ import "nvd3/build/nv.d3.min.css";
 import React from "react";
 import { Provider } from "react-redux";
 import { Redirect, Route, Switch } from "react-router-dom";
-// TODO (koorosh): commented out to make bazel build pass
-// TODO (koorosh): cluster-ui and db-console depend on differend versions of react-select
-// import "react-select/dist/react-select.css";
+import "react-select/dist/react-select.css";
 import { Action, Store } from "redux";
 import { AdminUIState } from "src/redux/state";
 import { createLoginRoute, createLogoutRoute } from "src/routes/login";
