@@ -90,16 +90,17 @@ type intentResolver interface {
 }
 
 type migrateLockTablePool struct {
-	ranges   chan migrateLockTableRange
-	wg       sync.WaitGroup
-	stopper  *stop.Stopper
-	ir       intentResolver
-	db       *kv.DB
-	clock    *hlc.Clock
-	done     chan bool
-	status   []int64
-	finished uint64
-	total    uint64
+	stopper *stop.Stopper
+	ir      intentResolver
+	db      *kv.DB
+	clock   *hlc.Clock
+	done    chan bool
+	wg      sync.WaitGroup
+	status  []int64
+
+	ranges         chan migrateLockTableRange
+	finishedAtomic uint64
+	total          uint64
 
 	mu struct {
 		syncutil.Mutex
@@ -321,7 +322,7 @@ func (m *migrateLockTablePool) run(ctx context.Context, workerIdx int) {
 
 		if currentRange.local == nil && currentRange.global == nil {
 			// This range has been fully migrated.
-			atomic.AddUint64(&m.finished, 1)
+			atomic.AddUint64(&m.finishedAtomic, 1)
 			m.mu.Lock()
 			m.mu.lowWater[workerIdx] = currentRange.rangeStart
 			m.mu.Unlock()
@@ -380,7 +381,7 @@ func (m *migrateLockTablePool) runStatusLogger(ctx context.Context) {
 				fmt.Fprintf(&ranges, "%s", roachpb.RangeID(rangeID))
 			}
 
-			finished := atomic.LoadUint64(&m.finished)
+			finished := atomic.LoadUint64(&m.finishedAtomic)
 			total := m.total // TODO(dt): count in background and load via atomic.
 			lowWaterMark := m.lowWaterMark()
 			log.Infof(ctx, "%d of %d ranges, up to %s, have completed lock table migration", finished, total, lowWaterMark)
