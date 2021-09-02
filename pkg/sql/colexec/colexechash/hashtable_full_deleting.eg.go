@@ -9338,8 +9338,58 @@ const _ = "inlined_findBuckets_false_true"
 // execgen:inline
 const _ = "inlined_findBuckets_false_false"
 
+// processNextGroupIDToCheck processes the information about a single tuple and
+// prepares the tuple for being probed on the next iteration.
+// - needToCheck indicates whether the tuple needs to be probed, if it is false,
+// then we already know how to handle it (which depends on
+// zeroHeadIDForDistinctTuple parameter)
+// - nextGroupIDToCheck is the ID of the tuple in the hash table that we want to
+// probe the current tuple against on the next iteration
+// - nToCheck tracks the number of tuples we have already included for probing
+// on the next iteration and might be incremented.
+// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
+// and ht.ProbeScratch.HeadID.
 // execgen:inline
-const _ = "inlined_setHeadIDForDistinctTuple_true"
+const _ = "inlined_processNextGroupIDToCheck_true_true"
 
+// processNextGroupIDToCheck processes the information about a single tuple and
+// prepares the tuple for being probed on the next iteration.
+// - needToCheck indicates whether the tuple needs to be probed, if it is false,
+// then we already know how to handle it (which depends on
+// zeroHeadIDForDistinctTuple parameter)
+// - nextGroupIDToCheck is the ID of the tuple in the hash table that we want to
+// probe the current tuple against on the next iteration
+// - nToCheck tracks the number of tuples we have already included for probing
+// on the next iteration and might be incremented.
+// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
+// and ht.ProbeScratch.HeadID.
 // execgen:inline
-const _ = "inlined_setHeadIDForDistinctTuple_false"
+const _ = "inlined_processNextGroupIDToCheck_true_false"
+
+// processNextGroupIDToCheck processes the information about a single tuple and
+// prepares the tuple for being probed on the next iteration.
+// - needToCheck indicates whether the tuple needs to be probed, if it is false,
+// then we already know how to handle it (which depends on
+// zeroHeadIDForDistinctTuple parameter)
+// - nextGroupIDToCheck is the ID of the tuple in the hash table that we want to
+// probe the current tuple against on the next iteration
+// - nToCheck tracks the number of tuples we have already included for probing
+// on the next iteration and might be incremented.
+// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
+// and ht.ProbeScratch.HeadID.
+// execgen:inline
+const _ = "inlined_processNextGroupIDToCheck_false_true"
+
+// processNextGroupIDToCheck processes the information about a single tuple and
+// prepares the tuple for being probed on the next iteration.
+// - needToCheck indicates whether the tuple needs to be probed, if it is false,
+// then we already know how to handle it (which depends on
+// zeroHeadIDForDistinctTuple parameter)
+// - nextGroupIDToCheck is the ID of the tuple in the hash table that we want to
+// probe the current tuple against on the next iteration
+// - nToCheck tracks the number of tuples we have already included for probing
+// on the next iteration and might be incremented.
+// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
+// and ht.ProbeScratch.HeadID.
+// execgen:inline
+const _ = "inlined_processNextGroupIDToCheck_false_false"
