@@ -124,6 +124,7 @@ describe("Database Details Page", function() {
       loading: false,
       loaded: false,
       name: "things",
+      showNodeRegionsColumn: false,
       tables: [],
     });
   });
@@ -139,6 +140,7 @@ describe("Database Details Page", function() {
       loading: false,
       loaded: true,
       name: "things",
+      showNodeRegionsColumn: false,
       tables: [
         {
           name: "foo",
@@ -156,6 +158,7 @@ describe("Database Details Page", function() {
             loaded: false,
             replicationSizeInBytes: 0,
             rangeCount: 0,
+            nodesByRegionString: "",
           },
         },
         {
@@ -174,6 +177,7 @@ describe("Database Details Page", function() {
             loaded: false,
             replicationSizeInBytes: 0,
             rangeCount: 0,
+            nodesByRegionString: "",
           },
         },
       ],
@@ -317,6 +321,7 @@ describe("Database Details Page", function() {
       loaded: true,
       replicationSizeInBytes: 44040192,
       rangeCount: 4200,
+      nodesByRegionString: "",
     });
 
     driver.assertTableStats("bar", {
@@ -324,6 +329,7 @@ describe("Database Details Page", function() {
       loaded: true,
       replicationSizeInBytes: 8675309,
       rangeCount: 1023,
+      nodesByRegionString: "",
     });
   });
 });

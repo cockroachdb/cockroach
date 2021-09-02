@@ -193,8 +193,7 @@ export class SortedTable<T> extends React.Component<
     (props: SortedTableProps<T>) => props.data,
     (props: SortedTableProps<T>) => props.columns,
     (data: T[], columns: ColumnDescriptor<T>[]) => {
-      return _.map(
-        columns,
+      return columns.map(
         (c): React.ReactNode => {
           if (c.rollup) {
             return c.rollup(data);
@@ -219,9 +218,7 @@ export class SortedTable<T> extends React.Component<
       if (!sortSetting) {
         return this.paginatedData();
       }
-      const sortColumn = columns.filter(
-        c => c.name === sortSetting.columnTitle,
-      )[0];
+      const sortColumn = columns.find(c => c.name === sortSetting.columnTitle);
       if (!sortColumn || !sortColumn.sort) {
         return this.paginatedData();
       }
@@ -249,20 +246,21 @@ export class SortedTable<T> extends React.Component<
       rollups: React.ReactNode[],
       columns: ColumnDescriptor<T>[],
     ) => {
-      return _.map(
-        columns,
-        (cd, ii): SortableColumn => {
-          return {
-            name: cd.name,
-            title: cd.title,
-            cell: index => cd.cell(sorted[index]),
-            columnTitle: cd.sort ? cd.name : undefined,
-            rollup: rollups[ii],
-            className: cd.className,
-            titleAlign: cd.titleAlign,
-          };
-        },
-      );
+      return columns
+        .filter(col => col.alwaysShow || col.showByDefault !== false)
+        .map(
+          (cd, ii): SortableColumn => {
+            return {
+              name: cd.name,
+              title: cd.title,
+              cell: index => cd.cell(sorted[index]),
+              columnTitle: cd.sort ? cd.name : undefined,
+              rollup: rollups[ii],
+              className: cd.className,
+              titleAlign: cd.titleAlign,
+            };
+          },
+        );
     },
   );
 
