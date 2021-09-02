@@ -101,6 +101,7 @@ sql.defaults.intervalstyle	enumeration	postgres	default value for IntervalStyle 
 sql.defaults.intervalstyle.enabled	boolean	false	default value for intervalstyle_enabled session setting
 sql.defaults.locality_optimized_partitioned_index_scan.enabled	boolean	true	default value for locality_optimized_partitioned_index_scan session setting; enables searching for rows in the current region before searching remote regions
 sql.defaults.lock_timeout	duration	0s	default value for the lock_timeout; default value for the lock_timeout session setting; controls the duration a query is permitted to wait while attempting to acquire a lock on a key or while blocking on an existing lock in order to perform a non-locking read on a key; if set to 0, there is no timeout
+sql.defaults.on_update_rehome_row.enabled	boolean	true	default value for on_update_rehome_row; enables ON UPDATE rehome_row() expressions to trigger on updates
 sql.defaults.optimizer_use_histograms.enabled	boolean	true	default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default
 sql.defaults.optimizer_use_multicol_stats.enabled	boolean	true	default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default
 sql.defaults.override_multi_region_zone_config.enabled	boolean	false	default value for override_multi_region_zone_config; allows for overriding the zone configs of a multi-region table or database

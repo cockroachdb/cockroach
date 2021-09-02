@@ -1027,6 +1027,7 @@ var charts = []sectionDescription{
 					"txn.restarts.serializable",
 					"txn.restarts.writetooold",
 					"txn.restarts.asyncwritefailure",
+					"txn.restarts.commitdeadlineexceeded",
 					"txn.restarts.readwithinuncertainty",
 					"txn.restarts.txnaborted",
 					"txn.restarts.txnpush",

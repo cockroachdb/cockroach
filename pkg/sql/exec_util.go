@@ -260,6 +260,13 @@ var autoRehomingEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var onUpdateRehomeRowEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.on_update_rehome_row.enabled",
+	"default value for on_update_rehome_row;"+
+		" enables ON UPDATE rehome_row() expressions to trigger on updates",
+	true,
+).WithPublic()
+
 var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_temporary_tables.enabled",
 	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
@@ -2806,6 +2813,10 @@ func (m *sessionDataMutator) SetPlacementEnabled(val bool) {
 
 func (m *sessionDataMutator) SetAutoRehomingEnabled(val bool) {
 	m.data.AutoRehomingEnabled = val
+}
+
+func (m *sessionDataMutator) SetOnUpdateRehomeRowEnabled(val bool) {
+	m.data.OnUpdateRehomeRowEnabled = val
 }
 
 func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
