@@ -440,23 +440,23 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 			// {{if .SelectSameTuples}}
 			firstID := ht.ProbeScratch.HeadID[toCheck]
 			if !ht.Visited[keyID] {
-				// We can then add this keyID into the same array at the end of the
-				// corresponding linked list and mark this ID as visited. Since there
-				// can be multiple keys that match this probe key, we want to mark
-				// differs at this position to be true. This way, the prober will
-				// continue probing for this key until it reaches the end of the next
-				// chain.
-				ht.ProbeScratch.differs[toCheck] = true
+				// We can then add this keyID into the same array at the end of
+				// the corresponding linked list and mark this ID as visited.
 				ht.Visited[keyID] = true
 				if firstID != keyID {
 					ht.Same[keyID] = ht.Same[firstID]
 					ht.Same[firstID] = keyID
 				}
+				// Since there can be multiple keys that match this probe key,
+				// we need to continue probing for this key until it reaches the
+				// end of the next chain.
+				//gcassert:bce
+				toCheckSlice[nDiffers] = toCheck
+				nDiffers++
 			}
 			// {{end}}
 			// {{end}}
-		}
-		if ht.ProbeScratch.differs[toCheck] {
+		} else {
 			// Continue probing in this next chain for the probe key.
 			ht.ProbeScratch.differs[toCheck] = false
 			//gcassert:bce
@@ -601,6 +601,44 @@ func (ht *HashTable) DistinctCheck(nToCheck uint64, probeSel []int) uint64 {
 		}
 	}
 	return nDiffers
+}
+
+// FindBuckets finds the buckets for all tuples in batch when probing against a
+// hash table that is specified by 'first' and 'next' vectors as well as
+// 'duplicatesChecker'. `duplicatesChecker` takes a slice of key columns of the
+// batch, number of tuples to check, and the selection vector of the batch, and
+// it returns number of tuples that needs to be checked for next iteration.
+// The "buckets" are specified by equal values in ht.ProbeScratch.HeadID.
+// NOTE: *first* and *next* vectors should be properly populated.
+// NOTE: batch is assumed to be non-zero length.
+func (ht *HashTable) FindBuckets(
+	batch coldata.Batch,
+	keyCols []coldata.Vec,
+	first, next []uint64,
+	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
+) {
+	batchLength := batch.Length()
+	sel := batch.Selection()
+
+	ht.ProbeScratch.SetupLimitedSlices(batchLength, ht.BuildMode)
+	// Early bounds checks.
+	groupIDs := ht.ProbeScratch.GroupID
+	_ = groupIDs[batchLength-1]
+	for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+		f := first[hash]
+		//gcassert:bce
+		groupIDs[i] = f
+	}
+	copy(ht.ProbeScratch.ToCheck, HashTableInitialToCheck[:batchLength])
+
+	for nToCheck := uint64(batchLength); nToCheck > 0; {
+		// Continue searching for the build table matching keys while the ToCheck
+		// array is non-empty.
+		nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
+		for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+			ht.ProbeScratch.GroupID[toCheck] = next[ht.ProbeScratch.GroupID[toCheck]]
+		}
+	}
 }
 
 // {{end}}

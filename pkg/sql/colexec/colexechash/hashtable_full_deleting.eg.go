@@ -9198,21 +9198,21 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 					}
 					firstID := ht.ProbeScratch.HeadID[toCheck]
 					if !ht.Visited[keyID] {
-						// We can then add this keyID into the same array at the end of the
-						// corresponding linked list and mark this ID as visited. Since there
-						// can be multiple keys that match this probe key, we want to mark
-						// differs at this position to be true. This way, the prober will
-						// continue probing for this key until it reaches the end of the next
-						// chain.
-						ht.ProbeScratch.differs[toCheck] = true
+						// We can then add this keyID into the same array at the end of
+						// the corresponding linked list and mark this ID as visited.
 						ht.Visited[keyID] = true
 						if firstID != keyID {
 							ht.Same[keyID] = ht.Same[firstID]
 							ht.Same[firstID] = keyID
 						}
+						// Since there can be multiple keys that match this probe key,
+						// we need to continue probing for this key until it reaches the
+						// end of the next chain.
+						//gcassert:bce
+						toCheckSlice[nDiffers] = toCheck
+						nDiffers++
 					}
-				}
-				if ht.ProbeScratch.differs[toCheck] {
+				} else {
 					// Continue probing in this next chain for the probe key.
 					ht.ProbeScratch.differs[toCheck] = false
 					//gcassert:bce
@@ -9233,8 +9233,7 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 					if ht.ProbeScratch.HeadID[toCheck] == 0 {
 						ht.ProbeScratch.HeadID[toCheck] = keyID
 					}
-				}
-				if ht.ProbeScratch.differs[toCheck] {
+				} else {
 					// Continue probing in this next chain for the probe key.
 					ht.ProbeScratch.differs[toCheck] = false
 					//gcassert:bce
@@ -9275,8 +9274,7 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 						}
 					}
 					continue
-				}
-				if ht.ProbeScratch.differs[toCheck] {
+				} else {
 					// Continue probing in this next chain for the probe key.
 					ht.ProbeScratch.differs[toCheck] = false
 					//gcassert:bce
@@ -9315,8 +9313,7 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 						}
 					}
 					continue
-				}
-				if ht.ProbeScratch.differs[toCheck] {
+				} else {
 					// Continue probing in this next chain for the probe key.
 					ht.ProbeScratch.differs[toCheck] = false
 					//gcassert:bce
