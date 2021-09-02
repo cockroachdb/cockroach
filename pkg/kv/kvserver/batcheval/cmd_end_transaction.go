@@ -1108,8 +1108,7 @@ func mergeTrigger(
 	// directly in this method. The primary reason why these are different is
 	// because the RHS's persistent read summary may not be up-to-date, as it is
 	// not updated by the SubsumeRequest.
-	readSumActive := rec.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries)
-	if merge.RightReadSummary != nil && readSumActive {
+	if merge.RightReadSummary != nil {
 		mergedSum := merge.RightReadSummary.Clone()
 		if priorSum, err := readsummary.Load(ctx, batch, rec.GetRangeID()); err != nil {
 			return result.Result{}, err

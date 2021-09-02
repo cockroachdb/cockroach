@@ -210,10 +210,6 @@ const (
 	// are propagated across RPC boundaries independently of their verbosity setting.
 	// This requires a version gate this violates implicit assumptions in v20.2.
 	TracingVerbosityIndependentSemantics
-	// PriorReadSummaries introduces support for the use of read summary objects
-	// to ship information about reads on a range through lease changes and
-	// range merges.
-	PriorReadSummaries
 	// NonVotingReplicas enables the creation of non-voting replicas.
 	NonVotingReplicas
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
@@ -374,10 +370,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TracingVerbosityIndependentSemantics,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 28},
-	},
-	{
-		Key:     PriorReadSummaries,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 44},
 	},
 	{
 		Key:     NonVotingReplicas,
