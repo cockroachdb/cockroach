@@ -171,3 +171,9 @@ var SchemaRefreshMaterializedView = telemetry.GetCounterOnce("sql.schema.refresh
 func SchemaChangeErrorCounter(typ string) telemetry.Counter {
 	return telemetry.GetCounter(fmt.Sprintf("sql.schema_changer.errors.%s", typ))
 }
+
+// CrossDBReferenceCounter is incremented when a cross-database view, FK constraint,
+// or a column using a cross-database sequence are created.
+func CrossDBReferenceCounter(typ string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.cross_database_reference_on_create." + typ)
+}

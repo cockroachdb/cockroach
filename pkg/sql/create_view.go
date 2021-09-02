@@ -86,9 +86,10 @@ func (n *createViewNode) startExec(params runParams) error {
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
 	// Check that the view does not contain references to other databases.
-	if !allowCrossDatabaseViews.Get(&params.p.execCfg.Settings.SV) {
-		for _, dep := range n.planDeps {
-			if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
+	// Record telemetry if the view contain references to other databases.
+	for _, dep := range n.planDeps {
+		if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
+			if !allowCrossDatabaseViews.Get(&params.p.execCfg.Settings.SV) {
 				return errors.WithHintf(
 					pgerror.Newf(pgcode.FeatureNotSupported,
 						"the view cannot refer to other databases; (see the '%s' cluster setting)",
@@ -96,6 +97,7 @@ func (n *createViewNode) startExec(params runParams) error {
 					crossDBReferenceDeprecationHint(),
 				)
 			}
+			telemetry.Inc(sqltelemetry.CrossDBReferenceCounter("view"))
 		}
 	}
 

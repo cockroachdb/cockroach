@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/jackc/pgx/v4"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDatabaseDescriptor(t *testing.T) {
@@ -547,4 +549,50 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTelemetryCrossDBReferencesOnCreate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Reset the counts.
+	_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+
+	// Create cross-db references.
+	tdb.Exec(t, `
+SET CLUSTER SETTING sql.cross_db_fks.enabled = true;
+SET CLUSTER SETTING sql.cross_db_views.enabled = true;
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = true;
+
+CREATE DATABASE referenced_db;
+CREATE TABLE referenced_db.referenced_table (referenced_col INT PRIMARY KEY);
+CREATE SEQUENCE referenced_db.referenced_sequence;
+
+CREATE DATABASE d;
+CREATE TABLE d.t (
+  -- To create a cross-db FK constraint.
+  fk_col INT REFERENCES referenced_db.referenced_table(referenced_col),
+
+  -- To create a column with cross-db sequence.
+  seq_col INT DEFAULT nextval('referenced_db.referenced_sequence')
+);
+
+-- To create a cross-db view.
+CREATE VIEW d.v AS SELECT referenced_col FROM referenced_db.referenced_table;
+
+-- To create a cross-db sequence ownership. 
+CREATE SEQUENCE d.s OWNED BY referenced_db.referenced_table.referenced_col;
+`)
+
+	// Validate the counters.
+	counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+	require.Equal(t, int32(1), counts[`sql.schema.cross_database_reference_on_create.foreign-key`])
+	//require.Equal(t, int32(1), counts[`sql.schema.cross_database_reference_on_create.sequence-column`])
+	require.Equal(t, int32(1), counts[`sql.schema.cross_database_reference_on_create.sequence-ownership`])
+	require.Equal(t, int32(1), counts[`sql.schema.cross_database_reference_on_create.view`])
+
 }

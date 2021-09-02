@@ -806,6 +806,7 @@ func ResolveFK(
 				crossDBReferenceDeprecationHint(),
 			)
 		}
+		telemetry.Inc(sqltelemetry.CrossDBReferenceCounter("foreign-key"))
 	}
 	if tbl.Temporary != target.Temporary {
 		persistenceType := "permanent"
