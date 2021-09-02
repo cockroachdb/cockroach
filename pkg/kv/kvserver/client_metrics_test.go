@@ -380,11 +380,8 @@ func TestStoreMaxBehindNanosOnlyTracksEpochBasedLeases(t *testing.T) {
 	// with the caveat that under extreme stress, we need to make sure that the
 	// subsystem remains live.
 	const closedTimestampDuration = 15 * time.Millisecond
-	const closedTimestampFraction = 1
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1",
 		closedTimestampDuration.String())
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1",
-		closedTimestampFraction)
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = $1",
 		closedTimestampDuration.String())
 

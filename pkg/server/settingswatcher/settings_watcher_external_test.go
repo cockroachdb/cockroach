@@ -50,7 +50,7 @@ func TestSettingWatcher(t *testing.T) {
 	toSet := map[string][]interface{}{
 		"sql.defaults.experimental_hash_sharded_indexes.enabled": {true, false},
 		"kv.queue.process.guaranteed_time_budget":                {"17s", "20s"},
-		"kv.closed_timestamp.close_fraction":                     {.23, .55},
+		"sql.txn_stats.sample_rate":                              {.23, .55},
 		"cluster.organization":                                   {"foobar", "bazbax"},
 	}
 	fakeTenant := roachpb.MakeTenantID(2)

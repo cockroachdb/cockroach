@@ -122,7 +122,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "sleep-for-follower-read":
-				time.Sleep(time.Millisecond * 4400)
+				time.Sleep(time.Second)
 			case "new-cluster":
 				if ds.tc != nil {
 					t.Fatal("cluster already exists, cleanup cluster first")
@@ -168,20 +168,13 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
-				// Speed up closing of timestamps, as we need in order to be able to use
-				// follower_read_timestamp().
-				// Every 0.2s we'll close the timestamp from 0.4s ago. We'll attempt
-				// follower reads for anything below 0.4s * (1 + 0.5 * 20) = 4.4s.
+				// Speed up closing of timestamps, in order to sleep less below before
+				// we can use follower_read_timestamp(). follower_read_timestamp() uses
+				// sum of the following settings.
 				_, err = sqlConn.Exec(
-					"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s'")
-				if err != nil {
-					return err.Error()
-				}
-				_, err = sqlConn.Exec("SET CLUSTER SETTING kv.closed_timestamp.close_fraction = 0.5")
-				if err != nil {
-					return err.Error()
-				}
-				_, err = sqlConn.Exec("SET CLUSTER SETTING kv.follower_read.target_multiple = 20")
+					"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s';" +
+						"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s';" +
+						"SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'")
 				if err != nil {
 					return err.Error()
 				}
