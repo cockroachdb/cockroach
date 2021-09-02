@@ -51,7 +51,7 @@ webpack(
         "src",
         "tsconfig.json",
         "webpack.config.js",
-        "//pkg/ui:node_modules",
+        "//pkg/ui:node_modules2",
         "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
         "@npm//@babel/parser",
         "@npm//@babel/plugin-proposal-class-properties",
