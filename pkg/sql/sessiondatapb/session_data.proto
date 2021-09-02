@@ -76,6 +76,9 @@ message SessionData {
   // Internal is true if this query came from InternalExecutor or an internal
   // planner.
   bool internal = 16;
+  // OnUpdateRehomeRowEnabled controls whether the ON UPDATE rehome_row()
+  // will actually trigger on row updates.
+  bool on_update_rehome_row_enabled = 17;
 }
 
 // DataConversionConfig contains the parameters that influence the output

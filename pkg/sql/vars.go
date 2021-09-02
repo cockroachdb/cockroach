@@ -1349,6 +1349,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`on_update_rehome_row_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`on_update_rehome_row_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("on_update_rehome_row_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetOnUpdateRehomeRowEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OnUpdateRehomeRowEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(onUpdateRehomeRowEnabledClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_enable_implicit_column_partitioning`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_implicit_column_partitioning`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

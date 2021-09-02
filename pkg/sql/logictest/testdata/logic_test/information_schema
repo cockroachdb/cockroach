@@ -4633,6 +4633,7 @@ lock_timeout                                           0
 max_identifier_length                                  128
 max_index_keys                                         32
 node_id                                                1
+on_update_rehome_row_enabled                           on
 optimizer                                              on
 optimizer_use_histograms                               on
 optimizer_use_multicol_stats                           on
