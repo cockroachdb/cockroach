@@ -63,6 +63,7 @@ export interface OwnProps {
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
   uiConfig?: UIConfigState["pages"]["sessionDetails"];
+  isTenant?: UIConfigState["isTenant"];
   onBackButtonClick?: () => void;
   onTerminateSessionClick?: () => void;
   onTerminateStatementClick?: () => void;
@@ -91,11 +92,16 @@ export const MemoryUsageItem: React.FC<{
 export class SessionDetails extends React.Component<SessionDetailsProps> {
   terminateSessionRef: React.RefObject<TerminateSessionModalRef>;
   terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
-  static defaultProps = { uiConfig: { showGatewayNodeLink: true } };
+  static defaultProps = {
+    uiConfig: { showGatewayNodeLink: true },
+    isTenant: false,
+  };
 
   componentDidMount() {
-    this.props.refreshNodes();
-    this.props.refreshNodesLiveness();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+      this.props.refreshNodesLiveness();
+    }
     this.props.refreshSessions();
   }
 
@@ -218,6 +224,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
     if (!this.props.session) {
       return null;
     }
+    const { isTenant } = this.props;
     const { session } = this.props.session;
 
     if (!session) {
@@ -346,20 +353,22 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 value={TimestampToMoment(session.start).format(DATE_FORMAT)}
                 className={cx("details-item")}
               />
-              <SummaryCardItem
-                label={"Gateway Node"}
-                value={
-                  this.props.uiConfig.showGatewayNodeLink ? (
-                    <NodeLink
-                      nodeId={session.node_id.toString()}
-                      nodeNames={this.props.nodeNames}
-                    />
-                  ) : (
-                    session.node_id.toString()
-                  )
-                }
-                className={cx("details-item")}
-              />
+              {!isTenant && (
+                <SummaryCardItem
+                  label={"Gateway Node"}
+                  value={
+                    this.props.uiConfig.showGatewayNodeLink ? (
+                      <NodeLink
+                        nodeId={session.node_id.toString()}
+                        nodeNames={this.props.nodeNames}
+                      />
+                    ) : (
+                      session.node_id.toString()
+                    )
+                  }
+                  className={cx("details-item")}
+                />
+              )}
             </Col>
             <Col className="gutter-row" span={4}></Col>
             <Col className="gutter-row" span={10}>

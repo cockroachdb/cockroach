@@ -352,16 +352,20 @@ export class StatementDetails extends React.Component<
 
   componentDidMount() {
     this.refreshStatements();
-    this.props.refreshStatementDiagnosticsRequests();
-    this.props.refreshNodes();
-    this.props.refreshNodesLiveness();
+    if (!this.props.isTenant) {
+      this.props.refreshStatementDiagnosticsRequests();
+      this.props.refreshNodes();
+      this.props.refreshNodesLiveness();
+    }
   }
 
   componentDidUpdate() {
     this.refreshStatements();
-    this.props.refreshStatementDiagnosticsRequests();
-    this.props.refreshNodes();
-    this.props.refreshNodesLiveness();
+    if (!this.props.isTenant) {
+      this.props.refreshStatementDiagnosticsRequests();
+      this.props.refreshNodes();
+      this.props.refreshNodesLiveness();
+    }
   }
 
   onTabChange = (tabId: string) => {
@@ -703,25 +707,27 @@ export class StatementDetails extends React.Component<
             </Col>
           </Row>
         </TabPane>
-        <TabPane
-          tab={`Diagnostics ${
-            hasDiagnosticReports ? `(${diagnosticsReports.length})` : ""
-          }`}
-          key="diagnostics"
-        >
-          <DiagnosticsView
-            activate={createStatementDiagnosticsReport}
-            diagnosticsReports={diagnosticsReports}
-            dismissAlertMessage={dismissStatementDiagnosticsAlertMessage}
-            hasData={hasDiagnosticReports}
-            statementFingerprint={statement}
-            onDownloadDiagnosticBundleClick={onDiagnosticBundleDownload}
-            showDiagnosticsViewLink={
-              this.props.uiConfig.showStatementDiagnosticsLink
-            }
-            onSortingChange={this.props.onSortingChange}
-          />
-        </TabPane>
+        {!isTenant && (
+          <TabPane
+            tab={`Diagnostics ${
+              hasDiagnosticReports ? `(${diagnosticsReports.length})` : ""
+            }`}
+            key="diagnostics"
+          >
+            <DiagnosticsView
+              activate={createStatementDiagnosticsReport}
+              diagnosticsReports={diagnosticsReports}
+              dismissAlertMessage={dismissStatementDiagnosticsAlertMessage}
+              hasData={hasDiagnosticReports}
+              statementFingerprint={statement}
+              onDownloadDiagnosticBundleClick={onDiagnosticBundleDownload}
+              showDiagnosticsViewLink={
+                this.props.uiConfig.showStatementDiagnosticsLink
+              }
+              onSortingChange={this.props.onSortingChange}
+            />
+          </TabPane>
+        )}
         <TabPane tab="Explain Plan" key="explain-plan">
           <SummaryCard>
             <PlanView
