@@ -666,14 +666,34 @@ func findBuckets(
 	var nToCheck uint64
 	for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
 		f := first[hash]
-		if f != 0 {
-			//gcassert:bce
-			groupIDs[i] = f
-			ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
-			nToCheck++
+		if probingAgainstItself {
+			// When probing against itself, we know for sure that 'f' will not
+			// be zero - we definitely have a match when using the same probing
+			// tuple on the build side. Additionally, we can skip checking this
+			// scenario since we know that the tuple is equal to itself.
+			if uint64(i) != f-1 {
+				//gcassert:bce
+				groupIDs[i] = f
+				ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+				nToCheck++
+			} else {
+				// This tuple is the head of its equality chain, so we treat it
+				// as distinct from all others. Note that if
+				// probingAgainstItself is true, then zeroHeadIDForDistinctTuple
+				// is false, so the function call below will set up HeadID for
+				// the tuple to point to itself.
+				setHeadIDForDistinctTuple(ht, uint64(i), zeroHeadIDForDistinctTuple)
+			}
 		} else {
-			// This tuple doesn't have a duplicate in the hash table.
-			setHeadIDForDistinctTuple(ht, uint64(i), zeroHeadIDForDistinctTuple)
+			if f != 0 {
+				//gcassert:bce
+				groupIDs[i] = f
+				ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+				nToCheck++
+			} else {
+				// This tuple doesn't have a duplicate in the hash table.
+				setHeadIDForDistinctTuple(ht, uint64(i), zeroHeadIDForDistinctTuple)
+			}
 		}
 	}
 
