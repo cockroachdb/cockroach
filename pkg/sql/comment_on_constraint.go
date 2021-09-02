@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -75,21 +76,22 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 
 	hasher := makeOidHasher()
 	switch kind := constraint.Kind; kind {
-	case "PRIMARY KEY":
+	case descpb.ConstraintTypePK:
 		constraintDesc := constraint.Index
 		n.oid = hasher.PrimaryKeyConstraintOid(n.tableDesc.GetParentID(), cSchema.GetName(), n.tableDesc.GetID(), constraintDesc)
-	case "FOREIGN KEY":
+	case descpb.ConstraintTypeFK:
 		constraintDesc := constraint.FK
 		n.oid = hasher.ForeignKeyConstraintOid(n.tableDesc.GetParentID(), cSchema.GetName(), n.tableDesc.GetID(), constraintDesc)
-	case "UNIQUE":
+	case descpb.ConstraintTypeUnique:
 		constraintDesc := constraint.Index.ID
 		n.oid = hasher.UniqueConstraintOid(n.tableDesc.GetParentID(), cSchema.GetName(), n.tableDesc.GetID(), constraintDesc)
-	case "CHECK":
+	case descpb.ConstraintTypeCheck:
 		constraintDesc := constraint.CheckConstraint
 		n.oid = hasher.CheckConstraintOid(n.tableDesc.GetParentID(), cSchema.GetName(), n.tableDesc.GetID(), constraintDesc)
 
 	}
-
+	// Setting the comment to NULL is the
+	// equivalent of deleting the comment.
 	if n.n.Comment != nil {
 		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
@@ -110,7 +112,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 			"delete-constraint-comment",
 			params.p.Txn(),
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$0",
+			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 			keys.ConstraintCommentType,
 			n.oid.DInt,
 		)

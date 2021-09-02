@@ -76,6 +76,7 @@ Informational
   \dT               show the user defined types of the current database.
   \du               list the users for all databases.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
+  \dd TABLE         show details about constraints on the specified table.
 
 Formatting
   \x [on|off]       toggle records display format.
@@ -1159,7 +1160,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			return cliRunStatement
 		}
 		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
-
+	case `\dd`:
+		c.concatLines = `SHOW CONSTRAINTS FROM ` + cmd[1] + ` WITH COMMENT`
+		return cliRunStatement
 	case `\connect`, `\c`:
 		return c.handleConnect(cmd[1:], loopState, errState)
 
