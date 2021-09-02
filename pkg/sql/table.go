@@ -148,6 +148,9 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 				FormatVersion: jobspb.DatabaseJobFormatVersion,
 			},
 			Progress: jobspb.SchemaChangeProgress{},
+			// Mark jobs without a mutation ID as non-cancellable,
+			// since we expect these to be trivial.
+			NonCancelable: mutationID == descpb.InvalidMutationID,
 		}
 		p.extendedEvalCtx.SchemaChangeJobRecords[tableDesc.ID] = &newRecord
 		// Only add a MutationJob if there's an associated mutation.
@@ -188,6 +191,9 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			// TODO (lucy): get rid of this when we get rid of MutationJobs.
 			tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
 				MutationID: mutationID, JobID: int64(record.JobID)})
+			// For existing records, if a mutation ID ever gets assigned
+			// at a later point then mark it as cancellable again.
+			record.NonCancelable = false
 		}
 	}
 	record.Details = newDetails
