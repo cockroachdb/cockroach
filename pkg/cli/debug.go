@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/ttycolor"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
@@ -1290,6 +1291,7 @@ var debugMergeLogsOpts = struct {
 	keepRedactable bool
 	redactInput    bool
 	format         string
+	useColor       forceColor
 }{
 	program:        nil, // match everything
 	file:           regexp.MustCompile(log.FilePattern),
@@ -1307,7 +1309,31 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return writeLogStream(s, cmd.OutOrStdout(), o.filter, o.prefix, o.keepRedactable)
+
+	outStream := cmd.OutOrStdout()
+	var cp, cpAutoDetect ttycolor.Profile
+	if f, ok := outStream.(*os.File); ok {
+		// If the output is a terminal, auto-detect the color scheme based
+		// on that.
+		cpAutoDetect = ttycolor.DetectProfile(f)
+	}
+	// Now choose the color profile depending on the user option.
+	switch o.useColor {
+	case forceColorOff:
+		// Nothing to do, cp stays nil.
+	case forceColorOn:
+		// If there was a color profile auto-detected, we want
+		// to use that as it will be tailored to the output terminal.
+		cp = cpAutoDetect
+		if cpAutoDetect == nil {
+			// The user requested "forcing" the color mode. Use a best guess.
+			cp = ttycolor.Profile8
+		}
+	case forceColorAuto:
+		cp = cpAutoDetect
+	}
+
+	return writeLogStream(s, outStream, o.filter, o.prefix, o.keepRedactable, cp)
 }
 
 var debugIntentCount = &cobra.Command{
@@ -1553,6 +1579,8 @@ func init() {
 		"redact the input files to remove sensitive information")
 	f.StringVar(&debugMergeLogsOpts.format, "format", "",
 		"log format of the input files")
+	f.Var(&debugMergeLogsOpts.useColor, "color",
+		"force use of TTY escape codes to colorize the output")
 
 	f = debugDecodeProtoCmd.Flags()
 	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",
