@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "migrations",
     srcs = [
+        "alter_web_sessions_create_indexes.go",
         "database_role_settings.go",
         "delete_deprecated_namespace_tabledesc.go",
         "fix_descriptor_migration.go",
@@ -11,6 +12,7 @@ go_library(
         "migrations.go",
         "records_based_registry.go",
         "retry_jobs_with_exponential_backoff.go",
+        "schema_changes.go",
         "separated_intents.go",
         "span_configurations.go",
         "sql_instances.go",
@@ -54,6 +56,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_kr_pretty//:pretty",
     ],
 )
@@ -61,6 +64,7 @@ go_library(
 go_test(
     name = "migrations_test",
     srcs = [
+        "alter_web_sessions_create_indexes_test.go",
         "delete_deprecated_namespace_tabledesc_external_test.go",
         "fix_descriptor_migration_external_test.go",
         "helpers_test.go",

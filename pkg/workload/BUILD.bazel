@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/bufalloc",
         "//pkg/util/encoding/csv",
+        "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/workload/histogram",
         "@com_github_cockroachdb_errors//:errors",
