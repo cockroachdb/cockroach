@@ -37,6 +37,7 @@ const withoutData: DatabasesPageProps = {
 const withData: DatabasesPageProps = {
   loading: false,
   loaded: true,
+  showNodeRegionsColumn: true,
   databases: _.map(Array(42), _item => {
     return {
       loading: false,
@@ -46,8 +47,11 @@ const withData: DatabasesPageProps = {
       tableCount: _.random(5, 100),
       rangeCount: _.random(50, 500),
       missingTables: [],
+      nodesByRegionString:
+        "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
     };
   }),
+
   refreshDatabases: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableStats: () => {},

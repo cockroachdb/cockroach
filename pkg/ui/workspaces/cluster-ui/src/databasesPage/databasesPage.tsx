@@ -53,6 +53,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 //       sizeInBytes: number;
 //       tableCount: number;
 //       rangeCount: number;
+//       nodesByRegionString: string;
 //       missingTables: { // DatabasesPageDataMissingTable[]
 //         loading: boolean;
 //         name: string;
@@ -63,6 +64,7 @@ export interface DatabasesPageData {
   loading: boolean;
   loaded: boolean;
   databases: DatabasesPageDataDatabase[];
+  showNodeRegionsColumn?: boolean;
 }
 
 export interface DatabasesPageDataDatabase {
@@ -73,6 +75,9 @@ export interface DatabasesPageDataDatabase {
   tableCount: number;
   rangeCount: number;
   missingTables: DatabasesPageDataMissingTable[];
+  // String of nodes grouped by region in alphabetical order, e.g.
+  // regionA(n1,n2), regionB(n3)
+  nodesByRegionString?: string;
 }
 
 // A "missing" table is one for which we were unable to gather size and range
@@ -91,6 +96,7 @@ export interface DatabasesPageActions {
   refreshDatabases: () => void;
   refreshDatabaseDetails: (database: string) => void;
   refreshTableStats: (database: string, table: string) => void;
+  refreshNodes?: () => void;
 }
 
 export type DatabasesPageProps = DatabasesPageData & DatabasesPageActions;
@@ -130,6 +136,10 @@ export class DatabasesPage extends React.Component<
   }
 
   private refresh() {
+    if (this.props.refreshNodes != null) {
+      this.props.refreshNodes();
+    }
+
     if (!this.props.loaded && !this.props.loading) {
       return this.props.refreshDatabases();
     }
@@ -217,9 +227,27 @@ export class DatabasesPage extends React.Component<
       className: cx("databases-table__col-range-count"),
       name: "rangeCount",
     },
+    {
+      title: (
+        <Tooltip
+          placement="bottom"
+          title="Regions/nodes on which the database tables are located."
+        >
+          Regions/nodes
+        </Tooltip>
+      ),
+      cell: database => database.nodesByRegionString || "None",
+      sort: database => database.nodesByRegionString,
+      className: cx("databases-table__col-node-regions"),
+      name: "nodeRegions",
+      hideIfTenant: true,
+    },
   ];
 
   render() {
+    this.columns.find(
+      c => c.name === "nodeRegions",
+    ).showByDefault = this.props.showNodeRegionsColumn;
     return (
       <div>
         <section className={baseHeadingClasses.wrapper}>
