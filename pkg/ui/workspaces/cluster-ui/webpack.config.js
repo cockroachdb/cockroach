@@ -42,11 +42,11 @@ module.exports = (env, argv) => {
     "redux": "redux",
   };
 
-  if (isBazelBuild) {
-    // TODO (koorosh): commented to avoid bazel build failure.
-    // should be fixed to consume react-router-dom as peer dependency
-    delete externals["react-router-dom"];
-  }
+  // if (isBazelBuild) {
+  //   // TODO (koorosh): commented to avoid bazel build failure.
+  //   // should be fixed to consume react-router-dom as peer dependency
+  //   delete externals["react-router-dom"];
+  // }
 
   const config = {
     entry: path.resolve(__dirname, "./src/index.ts"),

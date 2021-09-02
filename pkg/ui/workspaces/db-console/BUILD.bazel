@@ -24,7 +24,8 @@ webpack(
         "styl",
         "tsconfig.json",
         "webpack.app.js",
-        "//pkg/ui:node_modules",
+        ":node_modules",
+        "//pkg/ui:node_modules1",
         "//pkg/ui/workspaces/cluster-ui:cluster_ui_package",
         "//pkg/ui/workspaces/db-console/ccl/src/js:db_console_ccl_js_proto",
         "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
@@ -71,4 +72,20 @@ js_library(
         "//pkg/ui/workspaces/db-console/ccl/src/js:db_console_ccl_js_proto",
         "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
     ],
+)
+
+filegroup(
+    name = "node_modules",
+    srcs = glob(
+        include = [
+            "node_modules/**",
+        ],
+        # exclude = [
+        #     "node_modules/db-console",
+        #     "node_modules/@cockroachlabs/cluster-ui",
+        #     "node_modules/@types/react-select",
+        #     "node_modules/react-select",
+        # ],
+    ),
+    visibility = ["//pkg/ui:__subpackages__"],
 )
