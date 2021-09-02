@@ -39,7 +39,8 @@ type Limiters struct {
 	// rangefeeds in the "catch-up" state across the store. The "catch-up" state
 	// is a temporary state at the beginning of a rangefeed which is expensive
 	// because it uses an engine iterator.
-	ConcurrentRangefeedIters limit.ConcurrentRequestLimiter
+	ConcurrentRangefeedIters         limit.ConcurrentRequestLimiter
+	ConcurrentScanInterleavedIntents limit.ConcurrentRequestLimiter
 }
 
 // EvalContext is the interface through which command evaluation accesses the

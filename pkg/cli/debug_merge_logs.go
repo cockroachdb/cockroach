@@ -499,9 +499,8 @@ func (s *fileLogStream) open() bool {
 	if s.err = seekToFirstAfterFrom(s.f, s.from, s.editMode, s.format); s.err != nil {
 		return false
 	}
-	var err error
-	if s.d, err = log.NewEntryDecoderWithFormat(bufio.NewReaderSize(s.f, readBufSize), s.editMode, s.format); err != nil {
-		panic(err)
+	if s.d, s.err = log.NewEntryDecoderWithFormat(bufio.NewReaderSize(s.f, readBufSize), s.editMode, s.format); s.err != nil {
+		return false
 	}
 	return true
 }

@@ -241,7 +241,6 @@ CREATE TABLE data2.foo (a int);
 			systemschema.TableStatisticsTable.GetName(),
 			systemschema.UITable.GetName(),
 			systemschema.UsersTable.GetName(),
-			systemschema.ZonesTable.GetName(),
 			systemschema.ScheduledJobsTable.GetName(),
 		}
 
@@ -315,6 +314,22 @@ CREATE TABLE data2.foo (a int);
 			}
 			require.Equal(t, oldJob, newJob)
 		}
+	})
+
+	t.Run("zone_configs", func(t *testing.T) {
+		// The restored zones should be a superset of the zones in the backed up
+		// cluster.
+		zoneIDsResult := sqlDB.QueryStr(t, `SELECT id FROM system.zones`)
+		var q strings.Builder
+		q.WriteString("SELECT * FROM system.zones WHERE id IN (")
+		for i, restoreZoneIDRow := range zoneIDsResult {
+			if i > 0 {
+				q.WriteString(", ")
+			}
+			q.WriteString(restoreZoneIDRow[0])
+		}
+		q.WriteString(")")
+		sqlDBRestore.CheckQueryResults(t, q.String(), sqlDB.QueryStr(t, q.String()))
 	})
 
 	t.Run("ensure that tables can be created at the excepted ID", func(t *testing.T) {
