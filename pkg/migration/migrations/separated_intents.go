@@ -36,16 +36,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// The number of concurrent migrateLockTableRequests requests to run. This
-// is effectively a cluster-wide setting as the actual legwork of the migration
-// happens when the destination replica(s) are sending replies back to the
-// original node.
+// The number of concurrent lock table migration related requests (eg. barrier,
+// ScanInterleavedIntents) to run, as a multiplier of the number of nodes. If
+// this cluster has 15 nodes, 15 * concurrentMigrateLockTableRequests requests
+// will be executed at once.
 //
-// TODO(bilal): Add logic to make this concurrency limit a per-leaseholder limit
-// as opposed to a cluster-wide limit. That way, we could limit
-// migrateLockTableRequests to 1 per leaseholder as opposed to 4 for the entire
-// cluster, avoiding the case where all 4 ranges at a time could have the same node
-// as their leaseholder.
+// Note that some of the requests (eg. ScanInterleavedIntents) do throttling on
+// the receiving end, to reduce the chances of a large number of requests
+// being directed at a few nodes.
 const concurrentMigrateLockTableRequests = 4
 
 // The maximum number of times to retry a migrateLockTableRequest before failing
@@ -88,7 +86,7 @@ type migrateLockTablePool struct {
 	db       *kv.DB
 	clock    *hlc.Clock
 	done     chan bool
-	status   [concurrentMigrateLockTableRequests]int64
+	status   []int64
 	finished uint64
 
 	mu struct {
@@ -335,7 +333,7 @@ func (m *migrateLockTablePool) runStatusLogger(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			var ranges strings.Builder
-			for i := 0; i < concurrentMigrateLockTableRequests; i++ {
+			for i := 0; i < len(m.status); i++ {
 				rangeID := atomic.LoadInt64(&m.status[i])
 				if rangeID == 0 {
 					continue
@@ -385,15 +383,18 @@ func runSeparatedIntentsMigration(
 	db *kv.DB,
 	ri rangeIterator,
 	ir intentResolver,
+	numNodes int,
 ) error {
+	concurrentRequests := concurrentMigrateLockTableRequests * numNodes
 	workerPool := migrateLockTablePool{
-		requests: make(chan migrateLockTableRequest, concurrentMigrateLockTableRequests),
+		requests: make(chan migrateLockTableRequest, concurrentRequests),
 		stopper:  stopper,
 		db:       db,
 		ir:       ir,
 		clock:    clock,
+		status:   make([]int64, concurrentRequests),
 	}
-	migratedRanges, err := workerPool.runMigrateRequestsForRanges(ctx, ri, concurrentMigrateLockTableRequests)
+	migratedRanges, err := workerPool.runMigrateRequestsForRanges(ctx, ri, concurrentRequests)
 	if err != nil {
 		return err
 	}
@@ -417,7 +418,11 @@ func separatedIntentsMigration(
 	})
 	ri := kvcoord.NewRangeIterator(deps.DistSender)
 
-	return runSeparatedIntentsMigration(ctx, deps.DB.Clock(), deps.Stopper, deps.DB, ri, ir)
+	numNodes, err := deps.Cluster.NumNodes(ctx)
+	if err != nil {
+		return err
+	}
+	return runSeparatedIntentsMigration(ctx, deps.DB.Clock(), deps.Stopper, deps.DB, ri, ir, numNodes)
 }
 
 func postSeparatedIntentsMigration(

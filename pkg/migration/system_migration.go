@@ -27,6 +27,11 @@ import (
 // Cluster abstracts a physical KV cluster and can be utilized by a long-running
 // migration.
 type Cluster interface {
+	// NumNodes returns the number of nodes in the cluster. This is merely a
+	// convenience method and is not meant to be used to infer cluster stability;
+	// for that, use UntilClusterStable.
+	NumNodes(ctx context.Context) (int, error)
+
 	// ForEveryNode is a short hand to execute the given closure (named by the
 	// informational parameter op) against every node in the cluster at a given
 	// point in time. Given it's possible for nodes to join or leave the cluster
