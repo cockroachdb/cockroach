@@ -8,9 +8,9 @@ query IITI rowsort
 SELECT * FROM system.namespace
 ----
 0   0   defaultdb                        50
-0   0   postgres                         51
+0   0   postgres                         52
 0   0   system                           1
-0   0   test                             52
+0   0   test                             54
 1   0   public                           29
 1   29  comments                         24
 1   29  database_role_settings           44
@@ -48,9 +48,9 @@ SELECT * FROM system.namespace
 1   29  users                            4
 1   29  web_sessions                     19
 1   29  zones                            5
-50  0   public                           29
-51  0   public                           29
-52  0   public                           29
+50  0   public                           51
+52  0   public                           53
+54  0   public                           55
 
 # Verify format of system tables.
 query TTBTTTB

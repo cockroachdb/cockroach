@@ -573,7 +573,7 @@ statement ok
 DROP SCHEMA db1.sc1 CASCADE
 
 statement ok
-DROP DATABASE db1
+DROP DATABASE db1 CASCADE
 
 # Drop database testing
 subtest drop-database

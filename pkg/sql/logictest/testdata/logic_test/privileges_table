@@ -13,8 +13,11 @@ SET DATABASE = a
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)
 
+let $t_id
+SELECT id FROM system.namespace WHERE name = 't'
+
 statement ok
-SELECT * from [54 as num_ref]
+SELECT * from [$t_id as num_ref]
 
 statement ok
 SHOW GRANTS ON t
@@ -55,6 +58,9 @@ DROP TABLE t
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)
 
+let $t_id
+SELECT id FROM system.namespace WHERE name = 't'
+
 # Switch to a user without any privileges.
 user testuser
 
@@ -72,7 +78,7 @@ statement error pq: user testuser does not have SELECT privilege on relation t
 SELECT r FROM t
 
 statement error pq: user testuser does not have SELECT privilege on relation t
-SELECT * from [55 as num_ref]
+SELECT * from [$t_id as num_ref]
 
 statement error user testuser does not have GRANT privilege on relation t
 GRANT ALL ON t TO bar
