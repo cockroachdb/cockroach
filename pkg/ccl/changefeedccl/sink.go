@@ -78,6 +78,9 @@ func getSink(
 	if err != nil {
 		return nil, err
 	}
+	if scheme, ok := changefeedbase.NoLongerExperimental[u.Scheme]; ok {
+		u.Scheme = scheme
+	}
 
 	// check that options are compatible with the given sink
 	validateOptionsAndMakeSink := func(sinkSpecificOpts map[string]struct{}, makeSink func() (Sink, error)) (Sink, error) {
@@ -115,9 +118,6 @@ func getSink(
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
 				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets)
 			})
-		case u.Scheme == changefeedbase.SinkSchemeHTTP || u.Scheme == changefeedbase.SinkSchemeHTTPS:
-			return nil, errors.Errorf(`unsupported sink: %s. HTTP endpoints can be used with %s and %s`,
-				u.Scheme, changefeedbase.SinkSchemeWebhookHTTPS, changefeedbase.SinkSchemeCloudStorageHTTPS)
 		case u.Scheme == "":
 			return nil, errors.Errorf(`no scheme found for sink URL %q`, feedCfg.SinkURI)
 		default:
