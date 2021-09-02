@@ -77,7 +77,7 @@ WHERE
 	return nil
 }
 
-func check3322(db *gosql.DB, asOfSystemTime string) (err error) {
+func check3322(db *gosql.DB, asOfSystemTime string) (retErr error) {
 	// Entries in the DISTRICT, ORDER, and NEW-ORDER tables must satisfy the relationship:
 	// D_NEXT_O_ID - 1 = max(O_ID) = max(NO_O_ID)
 	txn, err := beginAsOfSystemTime(db, asOfSystemTime)
@@ -100,6 +100,7 @@ ORDER BY
 	if err != nil {
 		return err
 	}
+	defer func() { retErr = errors.CombineErrors(retErr, districtRows.Close()) }()
 	newOrderQuery := `
 SELECT
     max(no_o_id)
@@ -113,6 +114,7 @@ ORDER BY
 	if err != nil {
 		return err
 	}
+	defer func() { retErr = errors.CombineErrors(retErr, newOrderRows.Close()) }()
 	orderRowsQuery := `
 SELECT
     max(o_id)
@@ -126,7 +128,7 @@ ORDER BY
 	if err != nil {
 		return err
 	}
-
+	defer func() { retErr = errors.CombineErrors(retErr, orderRows.Close()) }()
 	var district, newOrder, order float64
 	var i int
 	for ; districtRows.Next() && newOrderRows.Next() && orderRows.Next(); i++ {
@@ -148,21 +150,13 @@ ORDER BY
 	if districtRows.Next() || newOrderRows.Next() || orderRows.Next() {
 		return errors.New("length mismatch between rows")
 	}
-	if err := districtRows.Close(); err != nil {
-		return err
-	}
-	if err := newOrderRows.Close(); err != nil {
-		return err
-	}
-	if err := orderRows.Close(); err != nil {
-		return err
-	}
-
 	if i == 0 {
 		return errors.Errorf("zero rows")
 	}
-
-	return nil
+	retErr = errors.CombineErrors(retErr, districtRows.Err())
+	retErr = errors.CombineErrors(retErr, newOrderRows.Err())
+	retErr = errors.CombineErrors(retErr, orderRows.Err())
+	return retErr
 }
 
 func check3323(db *gosql.DB, asOfSystemTime string) error {
@@ -199,7 +193,7 @@ WHERE
 	return nil
 }
 
-func check3324(db *gosql.DB, asOfSystemTime string) (err error) {
+func check3324(db *gosql.DB, asOfSystemTime string) (retErr error) {
 	// sum(O_OL_CNT) = [number of rows in the ORDER-LINE table for this district]
 	txn, err := beginAsOfSystemTime(db, asOfSystemTime)
 	if err != nil {
@@ -223,6 +217,7 @@ ORDER BY
 	if err != nil {
 		return err
 	}
+	defer func() { retErr = errors.CombineErrors(retErr, leftRows.Close()) }()
 	rightRows, err := db.Query(`
 SELECT
     count(*)
@@ -235,6 +230,7 @@ ORDER BY
 	if err != nil {
 		return err
 	}
+	defer func() { retErr = errors.CombineErrors(retErr, rightRows.Close()) }()
 	var i int
 	var left, right int64
 	for ; leftRows.Next() && rightRows.Next(); i++ {
@@ -248,26 +244,22 @@ ORDER BY
 			return errors.Errorf("order.sum(o_ol_cnt): %d != order_line.count(*): %d", left, right)
 		}
 	}
+	if leftRows.Next() || rightRows.Next() {
+		return errors.Errorf("at %s: length of order.sum(o_ol_cnt) != order_line.count(*)", ts)
+	}
+	if i == 0 {
+		return errors.Errorf("0 rows returned")
+	}
 	if err := leftRows.Err(); err != nil {
 		return errors.Wrap(err, "on `order`")
 	}
 	if err := rightRows.Err(); err != nil {
 		return errors.Wrap(err, "on `order_line`")
 	}
-	if i == 0 {
-		return errors.Errorf("0 rows returned")
-	}
-	if leftRows.Next() || rightRows.Next() {
-		return errors.Errorf("at %s: length of order.sum(o_ol_cnt) != order_line.count(*)", ts)
-	}
-
-	if err := leftRows.Close(); err != nil {
-		return err
-	}
-	return rightRows.Close()
+	return retErr
 }
 
-func check3325(db *gosql.DB, asOfSystemTime string) error {
+func check3325(db *gosql.DB, asOfSystemTime string) (retErr error) {
 	// We want the symmetric difference between the sets:
 	// (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
 	// (SELECT o_w_id, o_d_id, o_id FROM order@primary WHERE o_carrier_id IS NULL)
@@ -284,10 +276,11 @@ EXCEPT ALL
 	if err != nil {
 		return err
 	}
+	defer func() { retErr = errors.CombineErrors(retErr, firstQuery.Close()) }()
 	if firstQuery.Next() {
 		return errors.Errorf("left EXCEPT right returned nonzero results.")
 	}
-	if err := firstQuery.Close(); err != nil {
+	if err = firstQuery.Err(); err != nil {
 		return err
 	}
 	secondQuery, err := txn.Query(`
@@ -297,13 +290,15 @@ EXCEPT ALL
 	if err != nil {
 		return err
 	}
+	defer func() { retErr = errors.CombineErrors(retErr, secondQuery.Close()) }()
 	if secondQuery.Next() {
 		return errors.Errorf("right EXCEPT left returned nonzero results.")
 	}
-	return secondQuery.Close()
+	retErr = secondQuery.Err()
+	return retErr
 }
 
-func check3326(db *gosql.DB, asOfSystemTime string) (err error) {
+func check3326(db *gosql.DB, asOfSystemTime string) (retErr error) {
 	// For any row in the ORDER table, O_OL_CNT must equal the number of rows
 	// in the ORDER-LINE table for the corresponding order defined by
 	// (O_W_ID, O_D_ID, O_ID) = (OL_W_ID, OL_D_ID, OL_O_ID).
@@ -323,10 +318,11 @@ EXCEPT ALL
 	if err != nil {
 		return err
 	}
+	defer func() { retErr = errors.CombineErrors(retErr, firstQuery.Close()) }()
 	if firstQuery.Next() {
 		return errors.Errorf("left EXCEPT right returned nonzero results")
 	}
-	if err := firstQuery.Close(); err != nil {
+	if err := firstQuery.Err(); err != nil {
 		return err
 	}
 	secondQuery, err := txn.Query(`
@@ -338,11 +334,12 @@ EXCEPT ALL
 	if err != nil {
 		return err
 	}
-
+	defer func() { retErr = errors.CombineErrors(retErr, secondQuery.Close()) }()
 	if secondQuery.Next() {
 		return errors.Errorf("right EXCEPT left returned nonzero results")
 	}
-	return secondQuery.Close()
+	retErr = secondQuery.Err()
+	return retErr
 }
 
 func check3327(db *gosql.DB, asOfSystemTime string) error {
