@@ -49,6 +49,7 @@ var (
 	_ jsonMarshaler = (*jsonBool)(nil)
 	_ jsonMarshaler = (*jsonInt)(nil)
 	_ jsonMarshaler = (*stmtFingerprintID)(nil)
+	_ jsonMarshaler = (*int64Array)(nil)
 )
 
 type txnStats roachpb.TransactionStatistics
@@ -99,6 +100,39 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 		{"vec", (*jsonBool)(&s.Key.Vec)},
 		{"fullScan", (*jsonBool)(&s.Key.FullScan)},
 	}
+}
+
+type int64Array []int64
+
+func (a *int64Array) decodeJSON(js json.JSON) error {
+	arrLen := js.Len()
+	for i := 0; i < arrLen; i++ {
+		var value jsonInt
+		valJSON, err := js.FetchValIdx(i)
+		if err != nil {
+			return err
+		}
+		if err := value.decodeJSON(valJSON); err != nil {
+			return err
+		}
+		*a = append(*a, int64(value))
+	}
+
+	return nil
+}
+
+func (a *int64Array) encodeJSON() (json.JSON, error) {
+	builder := json.NewArrayBuilder(len(*a))
+
+	for _, value := range *a {
+		jsVal, err := (*jsonInt)(&value).encodeJSON()
+		if err != nil {
+			return nil, err
+		}
+		builder.Add(jsVal)
+	}
+
+	return builder.Build(), nil
 }
 
 type stmtFingerprintIDArray []roachpb.StmtFingerprintID
@@ -200,6 +234,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"ovhLat", (*numericStats)(&s.OverheadLat)},
 		{"bytesRead", (*numericStats)(&s.BytesRead)},
 		{"rowsRead", (*numericStats)(&s.RowsRead)},
+		{"nodes", (*int64Array)(&s.Nodes)},
 	}
 }
 

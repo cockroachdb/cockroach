@@ -904,3 +904,10 @@ query TT
 SELECT * FROM crdb_internal.regions ORDER BY 1
 ----
 test  {}
+
+# Regression test for incorrectly handling tree.DOidWrappers by some builtins
+# (#69684).
+statement ok
+CREATE TABLE t69684(a NAME);
+INSERT INTO t69684 VALUES ('foo');
+SELECT * FROM t69684 WHERE crdb_internal.increment_feature_counter(a)

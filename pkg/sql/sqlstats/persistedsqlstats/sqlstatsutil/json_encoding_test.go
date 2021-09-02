@@ -29,7 +29,7 @@ func jsonTestHelper(t *testing.T, expectedStr string, actual json.JSON) {
 
 	cmp, err := actual.Compare(expected)
 	require.NoError(t, err)
-	require.True(t, cmp == 0, "expected %s\nbut found %s", expected.String(), actual.String())
+	require.Zerof(t, cmp, "expected %s\nbut found %s", expected.String(), actual.String())
 }
 func TestSQLStatsJsonEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -91,7 +91,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "rowsRead": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
-         }
+         },
+         "nodes": [{{joinInts .IntArray}}]
        },
        "execution_statistics": {
          "cnt": {{.Int64}},
