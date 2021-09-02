@@ -2067,6 +2067,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 		}
 	}
+
+	typeDescs := make([]*descpb.TypeDescriptor, 0)
+	if details.Types != nil {
+		for _, t := range details.Types {
+			typeDescs = append(typeDescs, t.Desc)
+		}
+	}
+
 	// If details.Walltime is still 0, then it was not set during
 	// `prepareTableDescsForIngestion`. This indicates that we are in an IMPORT INTO,
 	// and that the walltime was not set in a previous run of IMPORT.
@@ -2098,7 +2106,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	res, err := ingestWithRetry(ctx, p, r.job, tables, files, format, details.Walltime,
+	res, err := ingestWithRetry(ctx, p, r.job, tables, typeDescs, files, format, details.Walltime,
 		r.testingKnobs.alwaysFlushJobProgress)
 	if err != nil {
 		return err
@@ -2123,7 +2131,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	// If the table being imported into referenced UDTs, ensure that a concurrent
-	// schema change on any of the types has not modified the type descriptor. If
+	// schema change on any of the typeDescs has not modified the type descriptor. If
 	// it has, it is unsafe to import the data and we fail the import job.
 	if err := r.checkForUDTModification(ctx, p.ExecCfg()); err != nil {
 		return err
@@ -2178,6 +2186,7 @@ func ingestWithRetry(
 	execCtx sql.JobExecContext,
 	job *jobs.Job,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	typeDescs []*descpb.TypeDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -2206,7 +2215,8 @@ func ingestWithRetry(
 			AttemptNumber: retryCount,
 			RetryError:    tracing.RedactAndTruncateError(err),
 		})
-		res, err = sql.DistIngest(ctx, execCtx, job, tables, from, format, walltime, alwaysFlushProgress)
+		res, err = sql.DistIngest(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
+			alwaysFlushProgress)
 		if err == nil {
 			break
 		}
