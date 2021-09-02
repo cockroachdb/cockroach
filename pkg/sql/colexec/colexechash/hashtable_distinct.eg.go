@@ -11091,13 +11091,21 @@ func (ht *HashTable) FindBuckets(
 				var nToCheck uint64
 				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
 					f := first[hash]
-					if f != 0 {
+					// When probing against itself, we know for sure that 'f' will not
+					// be zero - we definitely have a match when using the same probing
+					// tuple on the build side. Additionally, we can skip checking this
+					// scenario since we know that the tuple is equal to itself.
+					if uint64(i) != f-1 {
 						//gcassert:bce
 						groupIDs[i] = f
 						ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
 						nToCheck++
 					} else {
-						// This tuple doesn't have a duplicate in the hash table.
+						// This tuple is the head of its equality chain, so we treat it
+						// as distinct from all others. Note that if
+						// probingAgainstItself is true, then zeroHeadIDForDistinctTuple
+						// is false, so the function call below will set up HeadID for
+						// the tuple to point to itself.
 						{
 							var i uint64 = uint64(i)
 							// We leave the HeadID of this tuple unchanged (i.e. zero - that was set
@@ -11202,13 +11210,21 @@ func (ht *HashTable) FindBuckets(
 				var nToCheck uint64
 				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
 					f := first[hash]
-					if f != 0 {
+					// When probing against itself, we know for sure that 'f' will not
+					// be zero - we definitely have a match when using the same probing
+					// tuple on the build side. Additionally, we can skip checking this
+					// scenario since we know that the tuple is equal to itself.
+					if uint64(i) != f-1 {
 						//gcassert:bce
 						groupIDs[i] = f
 						ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
 						nToCheck++
 					} else {
-						// This tuple doesn't have a duplicate in the hash table.
+						// This tuple is the head of its equality chain, so we treat it
+						// as distinct from all others. Note that if
+						// probingAgainstItself is true, then zeroHeadIDForDistinctTuple
+						// is false, so the function call below will set up HeadID for
+						// the tuple to point to itself.
 						{
 							var i uint64 = uint64(i)
 							// Set the HeadID of this tuple to point to itself since it is an
