@@ -16,7 +16,7 @@ Stage 0
         oid: 20
         width: 64
     FamilyName: primary
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -34,28 +34,28 @@ Stage 0
       - j
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 2
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
-    TableID: 52
+    TableID: 54
 Stage 3
   *scop.BackfillIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 4
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
-    TableID: 52
+    TableID: 54
 Stage 5
   *scop.MakeColumnPublic
     ColumnID: 2
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -73,7 +73,7 @@ Stage 5
       - j
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
       EncodingType: 1
@@ -87,15 +87,15 @@ Stage 5
       Name: foo_pkey
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
 Stage 6
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
-    TableID: 52
+    TableID: 54
 Stage 7
   *scop.MakeIndexAbsent
     IndexID: 1
-    TableID: 52
+    TableID: 54
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
@@ -112,7 +112,7 @@ Stage 0
         oid: 20
         width: 64
     FamilyName: primary
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -130,28 +130,28 @@ Stage 0
       - j
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 2
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
-    TableID: 52
+    TableID: 54
 Stage 3
   *scop.BackfillIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 4
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
-    TableID: 52
+    TableID: 54
 Stage 5
   *scop.MakeColumnPublic
     ColumnID: 2
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -169,7 +169,7 @@ Stage 5
       - j
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
       EncodingType: 1
@@ -183,15 +183,15 @@ Stage 5
       Name: foo_pkey
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
 Stage 6
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
-    TableID: 52
+    TableID: 54
 Stage 7
   *scop.MakeIndexAbsent
     IndexID: 1
-    TableID: 52
+    TableID: 54
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
@@ -209,7 +209,7 @@ Stage 0
         oid: 20
         width: 64
     FamilyName: primary
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -229,7 +229,7 @@ Stage 0
       - k
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedColumnDeleteOnly
     Column:
       DefaultExpr: 456:::INT8
@@ -241,31 +241,31 @@ Stage 0
         oid: 20
         width: 64
     FamilyName: primary
-    TableID: 52
+    TableID: 54
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 2
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 3
-    TableID: 52
+    TableID: 54
 Stage 3
   *scop.BackfillIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 4
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
-    TableID: 52
+    TableID: 54
 Stage 5
   *scop.MakeColumnPublic
     ColumnID: 2
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -285,7 +285,7 @@ Stage 5
       - k
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
       EncodingType: 1
@@ -299,18 +299,18 @@ Stage 5
       Name: foo_pkey
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
   *scop.MakeColumnPublic
     ColumnID: 3
-    TableID: 52
+    TableID: 54
 Stage 6
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
-    TableID: 52
+    TableID: 54
 Stage 7
   *scop.MakeIndexAbsent
     IndexID: 1
-    TableID: 52
+    TableID: 54
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
@@ -327,7 +327,7 @@ Stage 0
         oid: 20
         width: 64
     FamilyName: primary
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -345,28 +345,28 @@ Stage 0
       - a
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 2
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
-    TableID: 52
+    TableID: 54
 Stage 3
   *scop.BackfillIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
 Stage 4
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
-    TableID: 52
+    TableID: 54
 Stage 5
   *scop.MakeColumnPublic
     ColumnID: 2
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -384,7 +384,7 @@ Stage 5
       - a
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
       EncodingType: 1
@@ -398,15 +398,15 @@ Stage 5
       Name: foo_pkey
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
 Stage 6
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
-    TableID: 52
+    TableID: 54
 Stage 7
   *scop.MakeIndexAbsent
     IndexID: 1
-    TableID: 52
+    TableID: 54
 
 
 create-table
@@ -428,7 +428,7 @@ Stage 0
         oid: 20
         width: 64
     FamilyName: primary
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -446,7 +446,7 @@ Stage 0
       - a
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedColumnDeleteOnly
     Column:
       ID: 3
@@ -457,7 +457,7 @@ Stage 0
         oid: 20
         width: 64
     FamilyName: primary
-    TableID: 53
+    TableID: 55
   *scop.MakeAddedIndexDeleteOnly
     Index:
       EncodingType: 1
@@ -477,41 +477,41 @@ Stage 0
       - b
       Unique: true
       Version: 4
-    TableID: 53
+    TableID: 55
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
-    TableID: 53
+    TableID: 55
 Stage 2
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 3
-    TableID: 53
+    TableID: 55
 Stage 3
   *scop.BackfillIndex
     IndexID: 2
-    TableID: 52
+    TableID: 54
   *scop.BackfillIndex
     IndexID: 2
-    TableID: 53
+    TableID: 55
 Stage 4
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
-    TableID: 52
+    TableID: 54
   *scop.ValidateUniqueIndex
     IndexID: 2
     PrimaryIndexID: 1
-    TableID: 53
+    TableID: 55
 Stage 5
   *scop.MakeColumnPublic
     ColumnID: 2
-    TableID: 52
+    TableID: 54
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -529,7 +529,7 @@ Stage 5
       - a
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
       EncodingType: 1
@@ -543,10 +543,10 @@ Stage 5
       Name: foo_pkey
       Unique: true
       Version: 4
-    TableID: 52
+    TableID: 54
   *scop.MakeColumnPublic
     ColumnID: 3
-    TableID: 53
+    TableID: 55
   *scop.MakeAddedPrimaryIndexPublic
     Index:
       EncodingType: 1
@@ -566,7 +566,7 @@ Stage 5
       - b
       Unique: true
       Version: 4
-    TableID: 53
+    TableID: 55
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
       EncodingType: 1
@@ -584,18 +584,18 @@ Stage 5
       - j
       Unique: true
       Version: 4
-    TableID: 53
+    TableID: 55
 Stage 6
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
-    TableID: 52
+    TableID: 54
   *scop.MakeDroppedIndexDeleteOnly
     IndexID: 1
-    TableID: 53
+    TableID: 55
 Stage 7
   *scop.MakeIndexAbsent
     IndexID: 1
-    TableID: 52
+    TableID: 54
   *scop.MakeIndexAbsent
     IndexID: 1
-    TableID: 53
+    TableID: 55

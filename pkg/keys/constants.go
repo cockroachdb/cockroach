@@ -337,7 +337,9 @@ const (
 	// MinNonPredefinedUserDescID is the first descriptor ID used by
 	// user-level objects that are not created automatically on empty
 	// clusters (default databases).
-	MinNonPredefinedUserDescID = MinUserDescID + 2
+	// Two default databases and two public schemas are created by default using
+	// 4 ids.
+	MinNonPredefinedUserDescID = MinUserDescID + 4
 
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID = 0
