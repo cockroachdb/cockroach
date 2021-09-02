@@ -116,7 +116,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/keys",

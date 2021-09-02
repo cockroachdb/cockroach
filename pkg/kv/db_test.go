@@ -170,9 +170,9 @@ func TestDB_CPut(t *testing.T) {
 func TestDB_CPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.Background())
-	ctx := kv.CtxForCPutInline(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	if err := db.PutInline(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)

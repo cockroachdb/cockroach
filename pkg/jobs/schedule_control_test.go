@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,6 +74,23 @@ func TestScheduleControl(t *testing.T) {
 		scheduleID := makeSchedule("one-schedule", recurringNever)
 		th.sqlDB.Exec(t, "PAUSE SCHEDULE $1", scheduleID)
 		require.True(t, th.loadSchedule(t, scheduleID).IsPaused())
+	})
+
+	t.Run("pause-active-schedule", func(t *testing.T) {
+		schedule := th.newScheduledJob(t, "test schedule", "select 42")
+		require.NoError(t, schedule.SetSchedule("@weekly"))
+		// Datums only store up until microseconds.
+		ms := time.Microsecond
+		firstRunTime := timeutil.Now().Add(10 * time.Second).Truncate(ms)
+		schedule.SetNextRun(firstRunTime)
+		require.NoError(t, schedule.Create(ctx, th.cfg.InternalExecutor, nil))
+		scheduleID := schedule.ScheduleID()
+		require.Equal(t, schedule.NextRun(), firstRunTime)
+		th.sqlDB.Exec(t, "RESUME SCHEDULE $1", scheduleID)
+
+		afterSchedule := th.loadSchedule(t, scheduleID)
+		require.False(t, afterSchedule.IsPaused())
+		require.Equal(t, afterSchedule.NextRun(), firstRunTime)
 	})
 
 	t.Run("cannot-resume-one-off-schedule", func(t *testing.T) {

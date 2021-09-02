@@ -57,6 +57,11 @@ func StartTenant(
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 ) (sqlServer *SQLServer, pgAddr string, httpAddr string, _ error) {
+	err := ApplyTenantLicense()
+	if err != nil {
+		return nil, "", "", err
+	}
+
 	args, err := makeTenantSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, "", "", err
@@ -457,6 +462,11 @@ var NewTenantSideCostController = func(
 	// Return a no-op implementation.
 	return noopTenantSideCostController{}, nil
 }
+
+// ApplyTenantLicense is a hook for CCL code which enables enterprise features
+// for the tenant process if the COCKROACH_TENANT_LICENSE environment variable
+// is set.
+var ApplyTenantLicense = func() error { return nil /* no-op */ }
 
 // noopTenantSideCostController is a no-op implementation of
 // TenantSideCostController.

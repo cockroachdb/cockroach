@@ -236,8 +236,14 @@ const (
 	storeStatusAvailable
 	// The store is decommissioning.
 	storeStatusDecommissioning
-	// The store failed it's liveness heartbeat recently and is considered suspect.
+	// The store failed it's liveness heartbeat recently and is considered
+	// suspect. Consequently, stores always move from `storeStatusUnknown`
+	// (indicating a node that has a non-live node liveness record) to
+	// `storeStatusSuspect`.
 	storeStatusSuspect
+	// The store is alive but is currently marked as draining, so it is not a
+	// candidate for lease transfers or replica rebalancing.
+	storeStatusDraining
 )
 
 func (sd *storeDetail) status(
@@ -282,6 +288,9 @@ func (sd *storeDetail) status(
 
 	// Even if the store has been updated via gossip, we still rely on
 	// the node liveness to determine whether it is considered live.
+	//
+	// Store statuses checked in the following order:
+	// dead -> decommissioning -> unknown -> draining -> suspect -> available.
 	switch nl(sd.desc.Node.NodeID, now, threshold) {
 	case livenesspb.NodeLivenessStatus_DEAD, livenesspb.NodeLivenessStatus_DECOMMISSIONED:
 		return storeStatusDead
@@ -302,7 +311,7 @@ func (sd *storeDetail) status(
 		// and we may not see a store in this state. To help with that we perform
 		// a similar clear of lastAvailable on a DEAD store.
 		sd.lastAvailable = time.Time{}
-		return storeStatusUnknown
+		return storeStatusDraining
 	}
 
 	if sd.isThrottled(now) {
@@ -668,11 +677,12 @@ func (sp *StorePool) storeStatus(storeID roachpb.StoreID) (storeStatus, error) {
 //
 // - Replicas on decommissioning node/store are considered live.
 //
-// - If `includeSuspectStores` is true, stores that are marked suspect (i.e.
-// stores that have failed a liveness heartbeat in the recent past) are
-// considered live. Otherwise, they are excluded from the returned slices.
+// - If `includeSuspectAndDrainingStores` is true, stores that are marked
+// suspect (i.e. stores that have failed a liveness heartbeat in the recent
+// past), and stores that are marked as draining are considered live. Otherwise,
+// they are excluded from the returned slices.
 func (sp *StorePool) liveAndDeadReplicas(
-	repls []roachpb.ReplicaDescriptor, includeSuspectStores bool,
+	repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
 ) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
@@ -696,8 +706,8 @@ func (sp *StorePool) liveAndDeadReplicas(
 			liveReplicas = append(liveReplicas, repl)
 		case storeStatusUnknown:
 		// No-op.
-		case storeStatusSuspect:
-			if includeSuspectStores {
+		case storeStatusSuspect, storeStatusDraining:
+			if includeSuspectAndDrainingStores {
 				liveReplicas = append(liveReplicas, repl)
 			}
 		default:
@@ -824,7 +834,8 @@ type throttledStoreReasons []string
 // getStoreList returns a storeList that contains all active stores that contain
 // the required attributes and their associated stats. The storeList is filtered
 // according to the provided storeFilter. It also returns the total number of
-// alive and throttled stores.
+// alive stores and a list of throttled stores with a reason for why they're
+// throttled.
 func (sp *StorePool) getStoreList(filter storeFilter) (StoreList, int, throttledStoreReasons) {
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
@@ -881,9 +892,11 @@ func (sp *StorePool) getStoreListFromIDsLocked(
 		case storeStatusAvailable:
 			aliveStoreCount++
 			storeDescriptors = append(storeDescriptors, *detail.desc)
+		case storeStatusDraining:
+			throttled = append(throttled, fmt.Sprintf("s%d: draining", storeID))
 		case storeStatusSuspect:
 			aliveStoreCount++
-			throttled = append(throttled, "throttled because the node is considered suspect")
+			throttled = append(throttled, fmt.Sprintf("s%d: suspect", storeID))
 			if filter != storeFilterThrottled && filter != storeFilterSuspect {
 				storeDescriptors = append(storeDescriptors, *detail.desc)
 			}
@@ -1006,7 +1019,7 @@ func (sp *StorePool) isStoreReadyForRoutineReplicaTransferInternal(
 		log.VEventf(ctx, 3,
 			"s%d is a live target, candidate for rebalancing", targetStoreID)
 		return true
-	case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning, storeStatusSuspect:
+	case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning, storeStatusSuspect, storeStatusDraining:
 		log.VEventf(ctx, 3,
 			"not considering non-live store s%d (%v)", targetStoreID, status)
 		return false
