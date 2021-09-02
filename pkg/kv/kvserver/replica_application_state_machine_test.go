@@ -77,7 +77,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 
 				confChange = raftpb.ConfChange{
 					Type:   raftpb.ConfChangeAddNode,
-					NodeID: uint64(addedReplDesc.NodeID),
+					NodeID: uint64(addedReplDesc.ReplicaID),
 				}
 			} else {
 				// Remove ourselves from the Range.
@@ -100,7 +100,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 
 				confChange = raftpb.ConfChange{
 					Type:   raftpb.ConfChangeRemoveNode,
-					NodeID: uint64(removedReplDesc.NodeID),
+					NodeID: uint64(removedReplDesc.ReplicaID),
 				}
 			}
 
