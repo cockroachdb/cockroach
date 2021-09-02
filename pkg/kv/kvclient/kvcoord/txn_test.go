@@ -202,7 +202,17 @@ func TestLostUpdate(t *testing.T) {
 func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := createTestDB(t)
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+			// Reject transaction heartbeats, which can make the test flaky when they
+			// detect an aborted transaction before the Get operation does. See #68584
+			// for an explanation.
+			if ba.IsSingleHeartbeatTxnRequest() {
+				return roachpb.NewErrorf("rejected")
+			}
+			return nil
+		},
+	})
 	defer s.Stop()
 
 	pushByReading := func(key roachpb.Key) {
