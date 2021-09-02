@@ -453,6 +453,7 @@ type avroInputReader struct {
 var _ inputConverter = &avroInputReader{}
 
 func newAvroInputReader(
+	semaCtx *tree.SemaContext,
 	kvCh chan row.KVBatch,
 	tableDesc catalog.TableDescriptor,
 	avroOpts roachpb.AvroOptions,
@@ -463,6 +464,7 @@ func newAvroInputReader(
 
 	return &avroInputReader{
 		importContext: &parallelImportContext{
+			semaCtx:    semaCtx,
 			walltime:   walltime,
 			numWorkers: parallelism,
 			evalCtx:    evalCtx,

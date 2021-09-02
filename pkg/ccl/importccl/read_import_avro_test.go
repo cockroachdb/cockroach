@@ -246,14 +246,15 @@ func (th *testHelper) newRecordStream(
 		opts.SchemaJSON = th.schemaJSON
 		th.genRecordsData(t, format, numRecords, opts.RecordSeparator, records)
 	}
+	semaCtx := tree.MakeSemaContext()
 
-	avro, err := newAvroInputReader(nil, th.schemaTable, opts, 0, 1, &th.evalCtx)
+	avro, err := newAvroInputReader(&semaCtx, nil, th.schemaTable, opts, 0, 1, &th.evalCtx)
 	require.NoError(t, err)
 	producer, consumer, err := newImportAvroPipeline(avro, &fileReader{Reader: records})
 	require.NoError(t, err)
 
 	conv, err := row.NewDatumRowConverter(
-		context.Background(), th.schemaTable, nil, th.evalCtx.Copy(), nil,
+		context.Background(), &semaCtx, th.schemaTable, nil, th.evalCtx.Copy(), nil,
 		nil /* seqChunkProvider */, nil, /* metrics */
 	)
 	require.NoError(t, err)
@@ -595,7 +596,7 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	input, err := os.Open(testData)
 	require.NoError(b, err)
 
-	avro, err := newAvroInputReader(kvCh,
+	avro, err := newAvroInputReader(&semaCtx, kvCh,
 		tableDesc.ImmutableCopy().(catalog.TableDescriptor),
 		avroOpts, 0, 0, &evalCtx)
 	require.NoError(b, err)
