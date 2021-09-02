@@ -207,7 +207,8 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
            ELSE c.contype::TEXT
         END AS constraint_type,
         c.condef AS details,
-        c.convalidated AS validated
+        c.convalidated AS validated,
+				obj_description(c.oid) AS comment
     FROM
        %[4]s.pg_catalog.pg_class t,
        %[4]s.pg_catalog.pg_namespace n,
