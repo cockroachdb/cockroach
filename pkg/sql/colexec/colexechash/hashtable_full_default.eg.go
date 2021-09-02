@@ -8375,8 +8375,6 @@ const _ = "inlined_findBuckets_false_false"
 // probe the current tuple against on the next iteration
 // - nToCheck tracks the number of tuples we have already included for probing
 // on the next iteration and might be incremented.
-// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
-// and ht.ProbeScratch.HeadID.
 // execgen:inline
 const _ = "inlined_processNextGroupIDToCheck_true_true"
 
@@ -8389,8 +8387,6 @@ const _ = "inlined_processNextGroupIDToCheck_true_true"
 // probe the current tuple against on the next iteration
 // - nToCheck tracks the number of tuples we have already included for probing
 // on the next iteration and might be incremented.
-// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
-// and ht.ProbeScratch.HeadID.
 // execgen:inline
 const _ = "inlined_processNextGroupIDToCheck_true_false"
 
@@ -8403,8 +8399,6 @@ const _ = "inlined_processNextGroupIDToCheck_true_false"
 // probe the current tuple against on the next iteration
 // - nToCheck tracks the number of tuples we have already included for probing
 // on the next iteration and might be incremented.
-// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
-// and ht.ProbeScratch.HeadID.
 // execgen:inline
 const _ = "inlined_processNextGroupIDToCheck_false_true"
 
@@ -8417,7 +8411,5 @@ const _ = "inlined_processNextGroupIDToCheck_false_true"
 // probe the current tuple against on the next iteration
 // - nToCheck tracks the number of tuples we have already included for probing
 // on the next iteration and might be incremented.
-// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
-// and ht.ProbeScratch.HeadID.
 // execgen:inline
 const _ = "inlined_processNextGroupIDToCheck_false_false"
