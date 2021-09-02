@@ -11,7 +11,7 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
-import moment, { Moment } from "moment";
+import { Moment } from "moment";
 
 import { AppState } from "src/store";
 import { actions as statementsActions } from "src/store/statements";
@@ -54,7 +54,7 @@ export const ConnectedStatementsPage = withRouter(
       totalFingerprints: selectTotalFingerprints(state),
       lastReset: selectLastReset(state),
       columns: selectColumns(state),
-      nodeRegions: nodeRegionsByIDSelector(state),
+      nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
       isTenant: selectIsTenant(state),
       dateRange: selectIsTenant(state) ? null : selectDateRange(state),
     }),

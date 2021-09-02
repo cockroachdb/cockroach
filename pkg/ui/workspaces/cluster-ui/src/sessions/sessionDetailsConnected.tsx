@@ -22,6 +22,7 @@ import { actions as nodesActions } from "src/store/nodes";
 import { actions as nodesLivenessActions } from "src/store/liveness";
 
 import { nodeDisplayNameByIDSelector } from "src/store/nodes";
+import { selectIsTenant } from "../store/uiConfig";
 
 export const SessionDetailsPageConnected = withRouter(
   connect(
@@ -30,6 +31,7 @@ export const SessionDetailsPageConnected = withRouter(
       session: selectSession(state, props),
       sessionError: state.adminUI.sessions.lastError,
       uiConfig: selectSessionDetailsUiConfig(state),
+      isTenant: selectIsTenant(state),
     }),
     {
       refreshSessions: sessionsActions.refresh,

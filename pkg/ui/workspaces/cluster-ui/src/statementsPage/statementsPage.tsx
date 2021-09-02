@@ -252,7 +252,9 @@ export class StatementsPage extends React.Component<
 
   componentDidMount() {
     this.refreshStatements();
-    this.props.refreshStatementDiagnosticsRequests();
+    if (!this.props.isTenant) {
+      this.props.refreshStatementDiagnosticsRequests();
+    }
   }
 
   componentDidUpdate = (
@@ -263,7 +265,9 @@ export class StatementsPage extends React.Component<
       this.props.onSearchComplete(this.filteredStatementsData());
     }
     this.refreshStatements();
-    this.props.refreshStatementDiagnosticsRequests();
+    if (!this.props.isTenant) {
+      this.props.refreshStatementDiagnosticsRequests();
+    }
   };
 
   componentWillUnmount() {
@@ -455,6 +459,7 @@ export class StatementsPage extends React.Component<
       totalWorkload,
       nodeRegions,
       "statement",
+      isTenant,
       search,
       this.activateDiagnosticsRef,
       onDiagnosticsReportDownload,
