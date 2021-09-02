@@ -639,8 +639,8 @@ show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
 
 show_constraints_stmt ::=
-	'SHOW' 'CONSTRAINT' 'FROM' table_name
-	| 'SHOW' 'CONSTRAINTS' 'FROM' table_name
+	'SHOW' 'CONSTRAINT' 'FROM' table_name with_comment
+	| 'SHOW' 'CONSTRAINTS' 'FROM' table_name with_comment
 
 show_create_stmt ::=
 	'SHOW' 'CREATE' table_name
