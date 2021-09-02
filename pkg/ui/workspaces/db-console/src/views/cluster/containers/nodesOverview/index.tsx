@@ -34,7 +34,6 @@ import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
-import { switchExhaustiveCheck } from "src/util/switchExhaustiveCheck";
 
 import TableSection from "./tableSection";
 import "./nodes.styl";
@@ -65,9 +64,9 @@ const decommissionedNodesSortSetting = new LocalSetting<
 // AggregatedNodeStatus indexes have to be greater than LivenessStatus indexes
 // for correct sorting in the table.
 export enum AggregatedNodeStatus {
-  LIVE = 6,
-  WARNING = 7,
-  DEAD = 8,
+  LIVE = 100,
+  WARNING = 101,
+  DEAD = 102,
 }
 
 // Represents the aggregated dataset with possibly nested items
@@ -129,7 +128,7 @@ interface DecommissionedNodeListProps extends NodeCategoryListProps {
 }
 
 const getBadgeTypeByNodeStatus = (
-  status: LivenessStatus,
+  status: LivenessStatus | AggregatedNodeStatus,
 ): BadgeProps["status"] => {
   switch (status) {
     case LivenessStatus.NODE_STATUS_UNKNOWN:
@@ -146,15 +145,6 @@ const getBadgeTypeByNodeStatus = (
       return "default";
     case LivenessStatus.NODE_STATUS_DRAINING:
       return "warning";
-    default:
-      return switchExhaustiveCheck(status);
-  }
-};
-
-const getBadgeTypeByNodeStatusAggregated = (
-  status: AggregatedNodeStatus,
-): BadgeProps["status"] => {
-  switch (status) {
     case AggregatedNodeStatus.LIVE:
       return "default";
     case AggregatedNodeStatus.WARNING:
@@ -162,7 +152,7 @@ const getBadgeTypeByNodeStatusAggregated = (
     case AggregatedNodeStatus.DEAD:
       return "danger";
     default:
-      return switchExhaustiveCheck(status);
+      return "default";
   }
 };
 
@@ -216,14 +206,14 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "region",
       title: "nodes",
-      render: (_text, record) => {
+      render: (_text: string, record: NodeStatusRow) => {
         if (record.nodeId) {
           return <NodeNameColumn record={record} />;
         } else {
           return <NodeLocalityColumn record={record} />;
         }
       },
-      sorter: (a, b) => {
+      sorter: (a: NodeStatusRow, b: NodeStatusRow) => {
         if (!_.isUndefined(a.nodeId) && !_.isUndefined(b.nodeId)) {
           return 0;
         }
@@ -241,7 +231,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "nodesCount",
       title: <NodeCountTooltip>Node Count</NodeCountTooltip>,
-      sorter: (a, b) => {
+      sorter: (a: NodeStatusRow, b: NodeStatusRow) => {
         if (_.isUndefined(a.nodesCount) || _.isUndefined(b.nodesCount)) {
           return 0;
         }
@@ -253,7 +243,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
         }
         return 0;
       },
-      render: (_text, record) => record.nodesCount,
+      render: (_text: string, record: NodeStatusRow) => record.nodesCount,
       sortDirections: ["ascend", "descend"],
       className: "column--align-right",
       width: "10%",
@@ -282,9 +272,9 @@ export class NodeList extends React.Component<LiveNodeListProps> {
           Capacity Usage
         </NodelistCapacityUsageTooltip>
       ),
-      render: (_text, record) =>
+      render: (_text: string, record: NodeStatusRow) =>
         Percentage(record.usedCapacity, record.availableCapacity),
-      sorter: (a, b) =>
+      sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
         a.usedCapacity / a.availableCapacity -
         b.usedCapacity / b.availableCapacity,
       className: "column--align-right",
@@ -293,9 +283,9 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "memoryUse",
       title: <MemoryUseTooltip>Memory Use</MemoryUseTooltip>,
-      render: (_text, record) =>
+      render: (_text: string, record: NodeStatusRow) =>
         Percentage(record.usedMemory, record.availableMemory),
-      sorter: (a, b) =>
+      sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
         a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
       className: "column--align-right",
       width: "10%",
@@ -319,15 +309,13 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "status",
       title: <StatusTooltip>Status</StatusTooltip>,
-      render: (_text, record) => {
+      render: (_text: string, record: NodeStatusRow) => {
         let badgeText: string;
         let tooltipText: string | JSX.Element;
         let nodeTooltip: string | JSX.Element;
 
         // single node row
-        const badgeType = getBadgeTypeByNodeStatus(
-          record.status as LivenessStatus,
-        );
+        const badgeType = getBadgeTypeByNodeStatus(record.status);
         switch (record.status) {
           case AggregatedNodeStatus.DEAD:
             badgeText = "warning";
@@ -352,9 +340,6 @@ export class NodeList extends React.Component<LiveNodeListProps> {
 
         // if aggregated row
         if (!record.nodeId) {
-          const badgeType = getBadgeTypeByNodeStatusAggregated(
-            record.status as AggregatedNodeStatus,
-          );
           return (
             <Tooltip title={nodeTooltip}>
               {""}
@@ -370,13 +355,13 @@ export class NodeList extends React.Component<LiveNodeListProps> {
           />
         );
       },
-      sorter: (a, b) => a.status - b.status,
+      sorter: (a: NodeStatusRow, b: NodeStatusRow) => a.status - b.status,
       width: "13%",
     },
     {
       key: "logs",
       title: "",
-      render: (_text, record) =>
+      render: (_text: string, record: NodeStatusRow) =>
         record.nodeId && (
           <div className="cell--show-on-hover ">
             <Link
@@ -398,7 +383,9 @@ export class NodeList extends React.Component<LiveNodeListProps> {
 
     // Remove "Nodes Count" column If nodes are not partitioned by regions,
     if (regionsCount === 1) {
-      columns = columns.filter(column => column.key !== "nodesCount");
+      columns = columns.filter(
+        (column: NodeStatusRow) => column.key !== "nodesCount",
+      );
       dataSource = _.head(dataSource).children;
     }
     return (
@@ -431,18 +418,20 @@ class DecommissionedNodeList extends React.Component<
     {
       key: "nodes",
       title: "decommissioned nodes",
-      render: (_text, record) => <NodeNameColumn record={record} />,
+      render: (_text: string, record: DecommissionedNodeStatusRow) => (
+        <NodeNameColumn record={record} />
+      ),
     },
     {
       key: "decommissionedSince",
       title: "decommissioned on",
-      render: (_text, record) =>
+      render: (_text: string, record: DecommissionedNodeStatusRow) =>
         record.decommissionedDate.format("LL[ at ]h:mm a"),
     },
     {
       key: "status",
       title: "status",
-      render: (_text, record) => {
+      render: (_text: string, record: DecommissionedNodeStatusRow) => {
         const badgeText = _.capitalize(LivenessStatus[record.status]);
         const tooltipText = getStatusDescription(record.status);
         return (

@@ -88,6 +88,9 @@ message DatabaseDetailsResponse {
     // An approximation of the disk space (in bytes) used for all replicas
     // of all tables across the cluster.
     uint64 approximate_disk_bytes = 3;
+    // node_ids is the ordered list of node ids on which data is stored.
+    repeated int32 node_ids = 4 [(gogoproto.customname) = "NodeIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   }
 
   // grants are the results of SHOW GRANTS for this database.
@@ -250,6 +253,10 @@ message TableStatsResponse {
   // A list of nodes which should contain data for this table (according to
   // cluster metadata), but could not be contacted during this request.
   repeated MissingNode missing_nodes = 5 [(gogoproto.nullable) = false];
+
+  // node_ids is the ordered list of node ids on which the table data is stored.
+  repeated int32 node_ids = 7 [(gogoproto.customname) = "NodeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
 // NonTableStatsRequest requests statistics on cluster data ranges that do not
