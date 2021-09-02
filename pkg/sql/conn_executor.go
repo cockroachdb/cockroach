@@ -283,6 +283,9 @@ type Server struct {
 
 	// InternalMetrics is used to account internal queries.
 	InternalMetrics Metrics
+
+	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
+	TelemetryLoggingMetrics *TelemetryLoggingMetrics
 }
 
 // Metrics collects timeseries data about SQL activity.
@@ -350,6 +353,13 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		}),
 	}
 
+	telemetryLoggingMetrics := NewTelemetryLoggingMetrics(
+		telemetrySmoothingAlpha.Get(&cfg.Settings.SV),
+		cfg.getTelemetryRollingInterval())
+
+	telemetryLoggingMetrics.Knobs = cfg.TelemetryLoggingTestingKnobs
+	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
+
 	sqlStatsInternalExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
 	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
 		Settings:         s.cfg.Settings,
@@ -366,6 +376,14 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
 	return s
+}
+
+func (cfg *ExecutorConfig) getTelemetryRollingInterval() int64 {
+	if cfg.TelemetryLoggingTestingKnobs != nil && cfg.TelemetryLoggingTestingKnobs.getRollingIntervalLength != nil {
+		return cfg.TelemetryLoggingTestingKnobs.getRollingIntervalLength()
+	}
+
+	return telemetryRollingInterval.Get(&cfg.Settings.SV)
 }
 
 func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {

@@ -62,27 +62,27 @@ sort
  ├── save-table-name: q20_sort_1
  ├── columns: s_name:2(char!null) s_address:3(varchar!null)
  ├── immutable
- ├── stats: [rows=1e-06, distinct(2)=1e-06, null(2)=0, distinct(3)=1e-06, null(3)=0]
+ ├── stats: [rows=2.01612903e-05, distinct(2)=2.01612903e-05, null(2)=0, distinct(3)=2.01612903e-05, null(3)=0]
  ├── ordering: +2
  └── project
       ├── save-table-name: q20_project_2
       ├── columns: s_name:2(char!null) s_address:3(varchar!null)
       ├── immutable
-      ├── stats: [rows=1e-06, distinct(2)=1e-06, null(2)=0, distinct(3)=1e-06, null(3)=0]
+      ├── stats: [rows=2.01612903e-05, distinct(2)=2.01612903e-05, null(2)=0, distinct(3)=2.01612903e-05, null(3)=0]
       └── inner-join (lookup nation)
            ├── save-table-name: q20_lookup_join_3
            ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null) n_nationkey:10(int!null) n_name:11(char!null)
            ├── key columns: [4] = [10]
            ├── lookup columns are key
            ├── immutable
-           ├── stats: [rows=1e-06, distinct(1)=1.66666666e-07, null(1)=0, distinct(2)=1e-06, null(2)=0, distinct(3)=1e-06, null(3)=0, distinct(4)=1e-06, null(4)=0, distinct(10)=1e-06, null(10)=0, distinct(11)=1e-06, null(11)=0]
+           ├── stats: [rows=2.01612903e-05, distinct(1)=2e-05, null(1)=0, distinct(2)=2.01612903e-05, null(2)=0, distinct(3)=2.01612903e-05, null(3)=0, distinct(4)=2.01612824e-05, null(4)=0, distinct(10)=2.01612824e-05, null(10)=0, distinct(11)=2.01612903e-05, null(11)=0]
            ├── key: (1)
            ├── fd: ()-->(11), (1)-->(2-4), (4)==(10), (10)==(4)
            ├── project
            │    ├── save-table-name: q20_project_4
            │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null)
            │    ├── immutable
-           │    ├── stats: [rows=1e-06, distinct(1)=1.66666666e-07, null(1)=0, distinct(2)=1e-06, null(2)=0, distinct(3)=1e-06, null(3)=0, distinct(4)=1e-06, null(4)=0]
+           │    ├── stats: [rows=2.01612903e-05, distinct(1)=2e-05, null(1)=0, distinct(2)=2.01612903e-05, null(2)=0, distinct(3)=2.01612903e-05, null(3)=0, distinct(4)=2.01612824e-05, null(4)=0]
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-4)
            │    └── inner-join (lookup supplier)
@@ -91,7 +91,7 @@ sort
            │         ├── key columns: [17] = [1]
            │         ├── lookup columns are key
            │         ├── immutable
-           │         ├── stats: [rows=0.00166666666, distinct(1)=1.66666666e-07, null(1)=0, distinct(2)=0.00166666666, null(2)=0, distinct(3)=0.00166666666, null(3)=0, distinct(4)=0.00166666666, null(4)=0, distinct(17)=1.66666666e-07, null(17)=0]
+           │         ├── stats: [rows=0.2, distinct(1)=2e-05, null(1)=0, distinct(2)=0.2, null(2)=0, distinct(3)=0.2, null(3)=0, distinct(4)=0.2, null(4)=0, distinct(17)=2e-05, null(17)=0]
            │         ├── key: (17)
            │         ├── fd: (1)-->(2-4), (1)==(17), (17)==(1)
            │         ├── distinct-on
@@ -99,7 +99,7 @@ sort
            │         │    ├── columns: ps_suppkey:17(int!null)
            │         │    ├── grouping columns: ps_suppkey:17(int!null)
            │         │    ├── immutable
-           │         │    ├── stats: [rows=1.66666666e-07, distinct(17)=1.66666666e-07, null(17)=0]
+           │         │    ├── stats: [rows=2e-05, distinct(17)=2e-05, null(17)=0]
            │         │    ├── key: (17)
            │         │    └── inner-join (lookup part)
            │         │         ├── save-table-name: q20_lookup_join_7
@@ -107,7 +107,7 @@ sort
            │         │         ├── key columns: [16] = [23]
            │         │         ├── lookup columns are key
            │         │         ├── immutable
-           │         │         ├── stats: [rows=2.11745534e-05, distinct(16)=1.66666667e-07, null(16)=0, distinct(17)=2.11745534e-05, null(17)=0, distinct(18)=2.11745534e-05, null(18)=0, distinct(23)=1.66666667e-07, null(23)=0, distinct(24)=1.66666667e-07, null(24)=0, distinct(52)=2.11745534e-05, null(52)=0]
+           │         │         ├── stats: [rows=0.0025409464, distinct(16)=2e-05, null(16)=0, distinct(17)=0.0025409464, null(17)=0, distinct(18)=0.0025409464, null(18)=0, distinct(23)=2e-05, null(23)=0, distinct(24)=2e-05, null(24)=0, distinct(52)=0.0025409464, null(52)=0]
            │         │         ├── key: (17,23)
            │         │         ├── fd: (16,17)-->(18,52), (23)-->(24), (16)==(23), (23)==(16)
            │         │         ├── select

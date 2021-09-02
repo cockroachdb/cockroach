@@ -437,12 +437,12 @@ vectorized: true
 • union
 │ columns: (a, b, c, d, e)
 │ ordering: +a
-│ estimated row count: 2 (missing stats)
+│ estimated row count: 0 (missing stats)
 │
 ├── • filter
 │   │ columns: (a, b, c, d, e)
 │   │ ordering: +a
-│   │ estimated row count: 1 (missing stats)
+│   │ estimated row count: 0 (missing stats)
 │   │ filter: (c = 1) AND (d = e)
 │   │
 │   └── • scan
@@ -455,12 +455,12 @@ vectorized: true
 └── • sort
     │ columns: (a, c, b, d, e)
     │ ordering: +a
-    │ estimated row count: 1 (missing stats)
+    │ estimated row count: 0 (missing stats)
     │ order: +a
     │
     └── • filter
         │ columns: (a, b, c, d, e)
-        │ estimated row count: 1 (missing stats)
+        │ estimated row count: 0 (missing stats)
         │ filter: d = e
         │
         └── • scan
@@ -480,12 +480,12 @@ vectorized: true
 • union
 │ columns: (a, b, c, d, e)
 │ ordering: +b,+c,+d,+a
-│ estimated row count: 2 (missing stats)
+│ estimated row count: 0 (missing stats)
 │
 ├── • filter
 │   │ columns: (a, b, c, d, e)
 │   │ ordering: +b,+d,+a
-│   │ estimated row count: 1 (missing stats)
+│   │ estimated row count: 0 (missing stats)
 │   │ filter: (c = 1) AND (d = e)
 │   │
 │   └── • scan
@@ -498,7 +498,7 @@ vectorized: true
 └── • filter
     │ columns: (a, c, b, d, e)
     │ ordering: +c,+d,+a
-    │ estimated row count: 1 (missing stats)
+    │ estimated row count: 0 (missing stats)
     │ filter: d = e
     │
     └── • scan
@@ -519,12 +519,12 @@ vectorized: true
 • union all
 │ columns: (a, b, c, d, e)
 │ ordering: +a
-│ estimated row count: 2 (missing stats)
+│ estimated row count: 0 (missing stats)
 │
 ├── • filter
 │   │ columns: (a, b, c, d, e)
 │   │ ordering: +a
-│   │ estimated row count: 1 (missing stats)
+│   │ estimated row count: 0 (missing stats)
 │   │ filter: (c = 1) AND (d = e)
 │   │
 │   └── • scan
@@ -537,7 +537,7 @@ vectorized: true
 └── • filter
     │ columns: (a, b, c, d, e)
     │ ordering: +a
-    │ estimated row count: 1 (missing stats)
+    │ estimated row count: 0 (missing stats)
     │ filter: (c = 1) AND (d = e)
     │
     └── • scan
@@ -558,12 +558,12 @@ vectorized: true
 • union all
 │ columns: (a, b, c, d, e)
 │ ordering: +b,+c,+d,+a
-│ estimated row count: 2 (missing stats)
+│ estimated row count: 0 (missing stats)
 │
 ├── • filter
 │   │ columns: (a, b, c, d, e)
 │   │ ordering: +b,+d,+a
-│   │ estimated row count: 1 (missing stats)
+│   │ estimated row count: 0 (missing stats)
 │   │ filter: (c = 1) AND (d = e)
 │   │
 │   └── • scan
@@ -576,7 +576,7 @@ vectorized: true
 └── • filter
     │ columns: (a, b, c, d, e)
     │ ordering: +b,+d,+a
-    │ estimated row count: 1 (missing stats)
+    │ estimated row count: 0 (missing stats)
     │ filter: (c = 1) AND (d = e)
     │
     └── • scan
@@ -597,12 +597,12 @@ vectorized: true
 • intersect
 │ columns: (b, c, d, e)
 │ ordering: +b
-│ estimated row count: 1 (missing stats)
+│ estimated row count: 0 (missing stats)
 │
 ├── • filter
 │   │ columns: (b, c, d, e)
 │   │ ordering: +b,+d
-│   │ estimated row count: 1 (missing stats)
+│   │ estimated row count: 0 (missing stats)
 │   │ filter: (c = 1) AND (d = e)
 │   │
 │   └── • scan
@@ -615,7 +615,7 @@ vectorized: true
 └── • filter
     │ columns: (b, c, d, e)
     │ ordering: +b,+d
-    │ estimated row count: 1 (missing stats)
+    │ estimated row count: 0 (missing stats)
     │ filter: (c = 1) AND (d = e)
     │
     └── • scan
@@ -636,12 +636,12 @@ vectorized: true
 • except
 │ columns: (b, c, d, e)
 │ ordering: +b,+d
-│ estimated row count: 1 (missing stats)
+│ estimated row count: 0 (missing stats)
 │
 ├── • filter
 │   │ columns: (b, c, d, e)
 │   │ ordering: +b,+d
-│   │ estimated row count: 1 (missing stats)
+│   │ estimated row count: 0 (missing stats)
 │   │ filter: (c = 1) AND (d = e)
 │   │
 │   └── • scan
@@ -654,7 +654,7 @@ vectorized: true
 └── • filter
     │ columns: (b, c, d, e)
     │ ordering: +b,+d
-    │ estimated row count: 1 (missing stats)
+    │ estimated row count: 0 (missing stats)
     │ filter: (c = 1) AND (d = e)
     │
     └── • scan
@@ -675,12 +675,12 @@ vectorized: true
 • except all
 │ columns: (a, b, c, d, e)
 │ ordering: +a
-│ estimated row count: 1 (missing stats)
+│ estimated row count: 0 (missing stats)
 │
 ├── • filter
 │   │ columns: (a, b, c, d, e)
 │   │ ordering: +a
-│   │ estimated row count: 1 (missing stats)
+│   │ estimated row count: 0 (missing stats)
 │   │ filter: (c = 1) AND (d = e)
 │   │
 │   └── • scan
@@ -693,7 +693,7 @@ vectorized: true
 └── • filter
     │ columns: (a, b, c, d, e)
     │ ordering: +a
-    │ estimated row count: 1 (missing stats)
+    │ estimated row count: 0 (missing stats)
     │ filter: (c = 1) AND (d = e)
     │
     └── • scan
@@ -714,12 +714,12 @@ vectorized: true
 • intersect all
 │ columns: (a, b, c, d, e)
 │ ordering: +b,+d,+a
-│ estimated row count: 1 (missing stats)
+│ estimated row count: 0 (missing stats)
 │
 ├── • filter
 │   │ columns: (a, b, c, d, e)
 │   │ ordering: +b,+d,+a
-│   │ estimated row count: 1 (missing stats)
+│   │ estimated row count: 0 (missing stats)
 │   │ filter: (c = 1) AND (d = e)
 │   │
 │   └── • scan
@@ -732,7 +732,7 @@ vectorized: true
 └── • filter
     │ columns: (a, b, c, d, e)
     │ ordering: +b,+d,+a
-    │ estimated row count: 1 (missing stats)
+    │ estimated row count: 0 (missing stats)
     │ filter: (c = 1) AND (d = e)
     │
     └── • scan
