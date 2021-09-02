@@ -14,6 +14,7 @@ import (
 	"html/template"
 	"math/rand"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -36,10 +37,11 @@ func GetRandomizedCollectedStatementStatisticsForTest(
 }
 
 type randomData struct {
-	Bool   bool
-	String string
-	Int64  int64
-	Float  float64
+	Bool     bool
+	String   string
+	Int64    int64
+	Float    float64
+	IntArray []int64
 }
 
 var alphabet = []rune("abcdefghijklmkopqrstuvwxyz")
@@ -58,11 +60,30 @@ func genRandomData() randomData {
 	r.Int64 = rand.Int63()
 	r.Float = rand.Float64()
 
+	// Generate a randomized array of length 5.
+	arrLen := 5
+	r.IntArray = make([]int64, arrLen)
+	for i := 0; i < arrLen; i++ {
+		r.IntArray[i] = rand.Int63()
+	}
+
 	return r
 }
 
 func fillTemplate(t *testing.T, tmplStr string, data randomData) string {
-	tmpl, err := template.New("").Parse(tmplStr)
+	joinInts := func(arr []int64) string {
+		strArr := make([]string, len(arr))
+		for i, val := range arr {
+			strArr[i] = strconv.FormatInt(val, 10)
+		}
+		return strings.Join(strArr, ",")
+	}
+	tmpl, err := template.
+		New("").
+		Funcs(template.FuncMap{
+			"joinInts": joinInts,
+		}).
+		Parse(tmplStr)
 	require.NoError(t, err)
 
 	b := strings.Builder{}
@@ -72,6 +93,9 @@ func fillTemplate(t *testing.T, tmplStr string, data randomData) string {
 	return b.String()
 }
 
+// fieldBlacklist contains a list of fields in the protobuf message where
+// we don't populate using random data. This can be because it is either a
+// complex type or might be the test data is already hard coded with values.
 var fieldBlacklist = map[string]struct{}{
 	"App":                     {},
 	"SensitiveInfo":           {},
@@ -102,9 +126,8 @@ func fillObject(t *testing.T, val reflect.Value, data *randomData) {
 	case reflect.Bool:
 		val.SetBool(data.Bool)
 	case reflect.Slice:
-		numElem := val.Len()
-		for i := 0; i < numElem; i++ {
-			fillObject(t, val.Index(i).Addr(), data)
+		for _, randInt := range data.IntArray {
+			val.Set(reflect.Append(val, reflect.ValueOf(randInt)))
 		}
 	case reflect.Struct:
 		numFields := val.NumField()
