@@ -557,6 +557,8 @@ func (s *adminServer) getDatabaseStats(
 		}
 	}
 
+	// Track all nodes storing databases.
+	nodeIDs := make(map[roachpb.NodeID]struct{})
 	for i := 0; i < len(tableSpans); i++ {
 		select {
 		case response := <-responses:
@@ -570,11 +572,22 @@ func (s *adminServer) getDatabaseStats(
 			} else {
 				stats.RangeCount += response.resp.RangeCount
 				stats.ApproximateDiskBytes += response.resp.ApproximateDiskBytes
+				for _, id := range response.resp.NodeIDs {
+					nodeIDs[id] = struct{}{}
+				}
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
+
+	stats.NodeIDs = make([]roachpb.NodeID, 0, len(nodeIDs))
+	for id := range nodeIDs {
+		stats.NodeIDs = append(stats.NodeIDs, id)
+	}
+	sort.Slice(stats.NodeIDs, func(i, j int) bool {
+		return stats.NodeIDs[i] < stats.NodeIDs[j]
+	})
 
 	return &stats, nil
 }
@@ -1058,9 +1071,18 @@ func (s *adminServer) statsForSpan(
 		}
 	}
 
+	nodeIDList := make([]roachpb.NodeID, 0, len(nodeIDs))
+	for id := range nodeIDs {
+		nodeIDList = append(nodeIDList, id)
+	}
+	sort.Slice(nodeIDList, func(i, j int) bool {
+		return nodeIDList[i] < nodeIDList[j]
+	})
+
 	// Construct TableStatsResponse by sending an RPC to every node involved.
 	tableStatResponse := serverpb.TableStatsResponse{
 		NodeCount: int64(len(nodeIDs)),
+		NodeIDs:   nodeIDList,
 		// TODO(mrtracy): The "RangeCount" returned by TableStats is more
 		// accurate than the "RangeCount" returned by TableDetails, because this
 		// method always consistently queries the meta2 key range for the table;
