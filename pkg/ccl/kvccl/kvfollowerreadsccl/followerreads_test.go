@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -44,11 +43,7 @@ import (
 )
 
 const (
-	defaultInterval                          = 3
-	defaultFraction                          = .2
-	defaultMultiple                          = 3
-	expectedFollowerReadOffset time.Duration = 1e9 * /* 1 second */
-		-defaultInterval * (1 + defaultFraction*defaultMultiple)
+	expectedFollowerReadOffset time.Duration = -4200 * time.Millisecond
 )
 
 func TestEvalFollowerReadOffset(t *testing.T) {
@@ -361,18 +356,6 @@ func TestCanSendToFollower(t *testing.T) {
 	}
 }
 
-func TestFollowerReadMultipleValidation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatalf("expected panic from setting followerReadMultiple to .1")
-		}
-	}()
-	st := cluster.MakeTestingClusterSettings()
-	followerReadMultiple.Override(ctx, &st.SV, .1)
-}
-
 // mockNodeStore implements the kvcoord.NodeDescStore interface.
 type mockNodeStore []roachpb.NodeDescriptor
 
@@ -570,9 +553,6 @@ func TestOracle(t *testing.T) {
 func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// This test sleeps for a few sec.
-	skip.UnderShort(t)
-
 	ctx := context.Background()
 	// The test uses follower_read_timestamp().
 	defer utilccl.TestingEnableEnterprise()()
@@ -626,19 +606,17 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n1.Exec(t, `CREATE DATABASE t`)
 	n1.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY)`)
 	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1,2], 1)`)
-	// Speed up closing of timestamps, as we'll in order to be able to use
-	// follower_read_timestamp().
-	// Every 0.2s we'll close the timestamp from 0.4s ago. We'll attempt follower reads
-	// for anything below 0.4s * (1 + 0.5 * 20) = 4.4s.
-	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s'`)
-	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.close_fraction = 0.5`)
-	n1.Exec(t, `SET CLUSTER SETTING kv.follower_read.target_multiple = 20`)
+	// Speed up closing of timestamps, in order to sleep less below before we can
+	// use follower_read_timestamp(). follower_read_timestamp() uses the sum of
+	// the following settings.
+	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
+	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
+	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.1s'`)
 
 	// Sleep so that we can perform follower reads. The read timestamp needs to be
-	// above the timestamp when the table was created. See the calculation above
-	// for the sleep duration.
+	// above the timestamp when the table was created.
 	log.Infof(ctx, "test sleeping for the follower read timestamps to pass the table creation timestamp...")
-	time.Sleep(4400 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 	log.Infof(ctx, "test sleeping... done")
 
 	// Run a query on n4 to populate its cache.

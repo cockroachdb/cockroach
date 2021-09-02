@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgtype"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -483,24 +484,17 @@ func initFollowerReadsDB(
 }
 
 func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Duration, error) {
-	var targetDurationStr string
-	err := db.QueryRowContext(ctx, "SELECT value FROM crdb_internal.cluster_settings WHERE variable = 'kv.closed_timestamp.target_duration'").Scan(&targetDurationStr)
+	var d pgtype.Interval
+	err := db.QueryRowContext(ctx, "SELECT now() - follower_read_timestamp()").Scan(&d)
 	if err != nil {
 		return 0, err
 	}
-	targetDuration, err := time.ParseDuration(targetDurationStr)
+	var lag time.Duration
+	err = d.AssignTo(&lag)
 	if err != nil {
 		return 0, err
 	}
-	var closeFraction float64
-	err = db.QueryRowContext(ctx, "SELECT value FROM crdb_internal.cluster_settings WHERE variable = 'kv.closed_timestamp.close_fraction'").Scan(&closeFraction)
-	if err != nil {
-		return 0, err
-	}
-	// target_multiple is a hidden setting which cannot be read from crdb_internal
-	// so for now hard code to the default value.
-	const targetMultiple = 3
-	return time.Duration(float64(targetDuration) * (1 + targetMultiple*closeFraction)), nil
+	return lag, nil
 }
 
 // verifySQLLatency verifies that the client-facing SQL latencies in the 90th
