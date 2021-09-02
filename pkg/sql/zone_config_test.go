@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -86,9 +87,6 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 	return cfg
 }
 
-// TODO(benesch,ridwansharif): modernize these tests to avoid hardcoding
-// expectations about descriptor IDs and zone config encoding.
-// TestGetZoneConfig exercises config.getZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -107,8 +105,6 @@ func TestGetZoneConfig(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.(*server.TestServer)
-
-	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
 
 	type testCase struct {
 		objectID uint32
@@ -172,45 +168,40 @@ func TestGetZoneConfig(t *testing.T) {
 	// db1 has tables tb11 and tb12
 	// db2 has tables tb21 and tb22
 
-	db1 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db1`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	db2 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db2`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb11 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb12 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb21 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb22 := expectedCounter
 	if _, err := sqlDB.Exec(`TRUNCATE TABLE db2.tb2`); err != nil {
 		t.Fatal(err)
 	}
+
+	db1 := sqlutils.QueryDatabaseID(t, sqlDB, "db1")
+	db2 := sqlutils.QueryDatabaseID(t, sqlDB, "db2")
+	tb11 := sqlutils.QueryTableID(t, sqlDB, "db1", "public", "tb1")
+	tb12 := sqlutils.QueryTableID(t, sqlDB, "db1", "public", "tb2")
+	tb21 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb1")
+	tb22 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb2")
 
 	// We have no custom zone configs.
 	verifyZoneConfigs([]testCase{
@@ -347,8 +338,6 @@ func TestCascadingZoneConfig(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.(*server.TestServer)
 
-	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
-
 	type testCase struct {
 		objectID uint32
 
@@ -411,45 +400,40 @@ func TestCascadingZoneConfig(t *testing.T) {
 	// db1 has tables tb11 and tb12
 	// db2 has tables tb21 and tb22
 
-	db1 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db1`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	db2 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db2`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb11 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb12 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb21 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb22 := expectedCounter
 	if _, err := sqlDB.Exec(`TRUNCATE TABLE db2.tb2`); err != nil {
 		t.Fatal(err)
 	}
+
+	db1 := sqlutils.QueryDatabaseID(t, sqlDB, "db1")
+	db2 := sqlutils.QueryDatabaseID(t, sqlDB, "db2")
+	tb11 := sqlutils.QueryTableID(t, sqlDB, "db1", "public", "tb1")
+	tb12 := sqlutils.QueryTableID(t, sqlDB, "db1", "public", "tb2")
+	tb21 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb1")
+	tb22 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb2")
 
 	// We have no custom zone configs.
 	verifyZoneConfigs([]testCase{

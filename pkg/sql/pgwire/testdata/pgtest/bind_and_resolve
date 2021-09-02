@@ -61,10 +61,14 @@ Execute {"Portal": "p7"}
 Sync
 ----
 
+# TODO(richardjcai): Support let command similar to logic tests to
+# programmatically get the table id.
+# The first table created has id 54.
+
 until
 ReadyForQuery
 ----
 {"Type":"BindComplete"}
-{"Type":"DataRow","Values":[{"text":"52"}]}
+{"Type":"DataRow","Values":[{"text":"54"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
