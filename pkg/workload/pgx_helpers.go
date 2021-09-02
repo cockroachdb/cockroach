@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/sync/errgroup"
@@ -25,9 +26,13 @@ type MultiConnPool struct {
 	Pools []*pgxpool.Pool
 	// Atomic counter used by Get().
 	counter uint32
-	// preparedStatements is a map from name to SQL. The statements in the map
-	// are prepared whenever a new connection is acquired from the pool.
-	preparedStatements map[string]string
+
+	mu struct {
+		syncutil.RWMutex
+		// preparedStatements is a map from name to SQL. The statements in the map
+		// are prepared whenever a new connection is acquired from the pool.
+		preparedStatements map[string]string
+	}
 }
 
 // MultiConnPoolCfg encapsulates the knobs passed to NewMultiConnPool.
@@ -66,9 +71,9 @@ func (p pgxLogger) Log(
 func NewMultiConnPool(
 	ctx context.Context, cfg MultiConnPoolCfg, urls ...string,
 ) (*MultiConnPool, error) {
-	m := &MultiConnPool{
-		preparedStatements: map[string]string{},
-	}
+	m := &MultiConnPool{}
+	m.mu.preparedStatements = map[string]string{}
+
 	connsPerURL := distribute(cfg.MaxTotalConnections, len(urls))
 	maxConnsPerPool := cfg.MaxConnsPerPool
 	if maxConnsPerPool == 0 {
@@ -90,7 +95,9 @@ func NewMultiConnPool(
 			connCfg.ConnConfig.Logger = pgxLogger{}
 			connCfg.MaxConns = int32(numConns)
 			connCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
-				for name, sql := range m.preparedStatements {
+				m.mu.RLock()
+				defer m.mu.RUnlock()
+				for name, sql := range m.mu.preparedStatements {
 					// Note that calling `Prepare` with a name that has already been
 					// prepared is idempotent and short-circuits before doing any
 					// communication to the server.
@@ -148,6 +155,15 @@ func NewMultiConnPool(
 	}
 
 	return m, nil
+}
+
+// AddPreparedStatement adds the given sql statement to the map of
+// statements that will be prepared when a new connection is retrieved
+// from the pool.
+func (m *MultiConnPool) AddPreparedStatement(name string, statement string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.preparedStatements[name] = statement
 }
 
 // Get returns one of the pools, in round-robin manner.
