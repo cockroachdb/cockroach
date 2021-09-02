@@ -12,7 +12,6 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/util/hlc",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

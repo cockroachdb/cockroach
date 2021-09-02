@@ -75,8 +75,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 		// Disable the replicateQueue so that it doesn't interfere with replica
 		// membership ranges.
 		clusterArgs.ReplicationMode = base.ReplicationManual
-		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
-			testingCloseFraction, clusterArgs, dbName, tableName)
+		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, clusterArgs, dbName, tableName)
 		defer tc.Stopper().Stop(ctx)
 
 		if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
@@ -147,8 +146,7 @@ func TestClosedTimestampCanServeOnVoterIncoming(t *testing.T) {
 	clusterArgs.ReplicationMode = base.ReplicationManual
 	knobs, ltk := makeReplicationTestKnobs()
 	clusterArgs.ServerArgs.Knobs = knobs
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, testingCloseFraction,
-		clusterArgs, dbName, tableName)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, clusterArgs, dbName, tableName)
 	defer tc.Stopper().Stop(ctx)
 
 	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
@@ -184,8 +182,7 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
@@ -258,8 +255,7 @@ func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc, numNodes)
 	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
@@ -333,8 +329,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	repls := replsForRange(ctx, t, tc, desc, numNodes)
 	// Disable the automatic merging.
 	if _, err := db0.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
@@ -414,8 +409,7 @@ func TestClosedTimestampCantServeBasedOnUncertaintyLimit(t *testing.T) {
 	ctx := context.Background()
 	// Set up the target duration to be very long and rely on lease transfers to
 	// drive MaxClosed.
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
@@ -448,8 +442,7 @@ func TestClosedTimestampCanServeForWritingTransaction(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
@@ -496,8 +489,7 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
@@ -539,8 +531,7 @@ func TestClosedTimestampCantServeForNonTransactionalBatch(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "tsFromServer", func(t *testing.T, tsFromServer bool) {
 		ctx := context.Background()
-		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
-			testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 		defer tc.Stopper().Stop(ctx)
 		repls := replsForRange(ctx, t, tc, desc, numNodes)
 
@@ -672,16 +663,19 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 					},
 				},
 			}
-			// If the initial phase of the merge txn takes longer than the closed
-			// timestamp target duration, its initial CPuts can have their write
-			// timestamps bumped due to an intervening closed timestamp update. This
-			// causes the entire merge txn to retry. So we use a long closed timestamp
-			// duration at the beginning of the test until we have the merge txn
-			// suspended at its commit trigger, and then change it back down to
-			// `testingTargetDuration`.
-			tc, leftDesc, rightDesc := setupClusterForClosedTSTestingWithSplitRanges(ctx, t, 5*time.Second,
-				testingCloseFraction, clusterArgs)
+
+			// Set up the closed timestamp timing such that, when we block a merge and
+			// transfer the RHS lease, the closed timestamp advances over the LHS
+			// lease but not over the RHS lease.
+			tc, _ := setupTestClusterWithDummyRange(t, clusterArgs, "cttest" /* dbName */, "kv" /* tableName */, numNodes)
 			defer tc.Stopper().Stop(ctx)
+			_, err := tc.ServerConn(0).Exec(fmt.Sprintf(`
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
+SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
+`, 5*time.Second, 100*time.Millisecond))
+			require.NoError(t, err)
+			leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, "cttest", "kv", hlc.Timestamp{} /* splitExpirationTime */)
 
 			leftLeaseholder := getCurrentLeaseholder(t, tc, leftDesc)
 			rightLeaseholder := getCurrentLeaseholder(t, tc, rightDesc)
@@ -722,9 +716,11 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			var rhsLeaseStart hlc.Timestamp
 			if test.transferLease != nil {
 				// Transfer the RHS lease while the RHS is subsumed.
+				log.Infof(ctx, "test: transferring RHS lease...")
 				rightLeaseholder, rhsLeaseStart = test.transferLease(ctx, t, tc, rightDesc, rightLeaseholder, manual)
 				// Sanity check.
 				require.True(t, freezeStartTimestamp.Less(rhsLeaseStart))
+				log.Infof(ctx, "test: transferring RHS lease... done")
 			}
 
 			// Sleep a bit and assert that the closed timestamp has not advanced while
@@ -773,6 +769,7 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 				mergedLeaseholder, err := leftLeaseholderStore.GetReplica(leftDesc.RangeID)
 				require.NoError(t, err)
 				writeTime := rhsLeaseStart.Prev()
+				require.True(t, mergedLeaseholder.GetClosedTimestamp(ctx).Less(writeTime))
 				var baWrite roachpb.BatchRequest
 				baWrite.Header.RangeID = leftDesc.RangeID
 				baWrite.Header.Timestamp = writeTime
@@ -933,21 +930,6 @@ func mergeWithRightNeighbor(
 	return err.GoError()
 }
 
-func setupClusterForClosedTSTestingWithSplitRanges(
-	ctx context.Context,
-	t *testing.T,
-	targetDuration time.Duration,
-	closeFraction float64,
-	clusterArgs base.TestClusterArgs,
-) (serverutils.TestClusterInterface, roachpb.RangeDescriptor, roachpb.RangeDescriptor) {
-	dbName, tableName := "cttest", "kv"
-	tc, _, _ := setupClusterForClosedTSTesting(ctx, t, targetDuration, closeFraction,
-		clusterArgs, dbName, tableName)
-	leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, dbName, tableName,
-		hlc.Timestamp{} /* splitExpirationTime */)
-	return tc, leftDesc, rightDesc
-}
-
 func getEncodedKeyForTable(
 	t *testing.T, db *gosql.DB, dbName, tableName string, val tree.Datum,
 ) roachpb.Key {
@@ -1078,7 +1060,8 @@ func countNotLeaseHolderErrors(ba roachpb.BatchRequest, repls []*kvserver.Replic
 // We don't want to be more aggressive than that since it's also
 // a limit on how long transactions can run.
 const testingTargetDuration = 300 * time.Millisecond
-const testingCloseFraction = 0.333
+
+const testingSideTransportInterval = 100 * time.Millisecond
 const numNodes = 3
 
 func replsForRange(
@@ -1159,26 +1142,18 @@ func setupClusterForClosedTSTesting(
 	ctx context.Context,
 	t *testing.T,
 	targetDuration time.Duration,
-	closeFraction float64,
 	clusterArgs base.TestClusterArgs,
 	dbName, tableName string,
 ) (tc serverutils.TestClusterInterface, db0 *gosql.DB, kvTableDesc roachpb.RangeDescriptor) {
 	tc, desc := setupTestClusterWithDummyRange(t, clusterArgs, dbName, tableName, numNodes)
-	require.NoError(t, enableFollowerReadsForTesting(tc.ServerConn(0), targetDuration, closeFraction))
-	return tc, tc.ServerConn(0), desc
-}
-
-func enableFollowerReadsForTesting(
-	db *gosql.DB, targetDuration time.Duration, closeFraction float64,
-) error {
-	if _, err := db.Exec(fmt.Sprintf(`
+	_, err := tc.ServerConn(0).Exec(fmt.Sprintf(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
-SET CLUSTER SETTING kv.closed_timestamp.close_fraction = %.3f;
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
-`, targetDuration, closeFraction)); err != nil {
-		return err
-	}
-	return nil
+`, targetDuration, targetDuration/4))
+	require.NoError(t, err)
+
+	return tc, tc.ServerConn(0), desc
 }
 
 // setupTestClusterWithDummyRange creates a TestCluster with an empty table. It
