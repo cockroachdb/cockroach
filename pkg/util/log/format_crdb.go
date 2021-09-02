@@ -27,37 +27,25 @@ const MessageTimeFormat = "060102 15:04:05.999999"
 
 // FormatLegacyEntry writes the contents of the legacy log entry struct to the specified writer.
 func FormatLegacyEntry(e logpb.Entry, w io.Writer) error {
-	return formatLegacyEntry(e, w, nil /* cp */)
+	return FormatLegacyEntryWithOptionalColors(e, w, nil /* cp */)
 }
 
-// FormatLegacyEntryTTY writes the legacy log entry to the specified writer,
-// using colors if possible.
-func FormatLegacyEntryTTY(e logpb.Entry, w io.Writer) error {
-	cp := ttycolor.StderrProfile
-	if logging.stderrSink.noColor.Get() {
-		cp = nil
-	}
-	return formatLegacyEntry(e, w, cp)
-}
-
-func formatLegacyEntry(e logpb.Entry, w io.Writer, cp ttycolor.Profile) error {
+// FormatLegacyEntryWithOptionalColors is like FormatLegacyEntry but the caller can specify
+// a color profile.
+func FormatLegacyEntryWithOptionalColors(e logpb.Entry, w io.Writer, cp ttycolor.Profile) error {
 	buf := formatLogEntryInternalV1(e, false /* isHeader */, true /* showCounter */, cp)
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
 }
 
-// FormatLegacyEntryPrefixTTY writes a color-decorated prefix to the specified
+// FormatLegacyEntryPrefix writes a color-decorated prefix to the specified
 // writer. The color is rendered in the background of the prefix and is chosen
 // from an arbitrary but deterministic mapping from the prefix bytes to the
 // color profile entries.
-func FormatLegacyEntryPrefixTTY(prefix []byte, w io.Writer) (err error) {
+func FormatLegacyEntryPrefix(prefix []byte, w io.Writer, cp ttycolor.Profile) (err error) {
 	if prefix == nil {
 		return nil
-	}
-	cp := ttycolor.StderrProfile
-	if logging.stderrSink.noColor.Get() {
-		cp = nil
 	}
 
 	if cp != nil {
