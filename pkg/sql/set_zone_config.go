@@ -491,6 +491,15 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				"cannot remove default zone")
 		}
 
+		// Secondary tenants are not allowed to set zone configurations on any named
+		// zones other than RANGE DEFAULT.
+		if !params.p.execCfg.Codec.ForSystemTenant() &&
+			zonepb.IsNamedZoneID(targetID) &&
+			targetID != keys.RootNamespaceID {
+			zoneName := zonepb.NamedZonesByID[uint32(targetID)]
+			return pgerror.Newf(pgcode.CheckViolation, "non-system tenants cannot configure zone configuration for %s range", zoneName)
+		}
+
 		// resolveSubzone determines the sub-parts of the zone
 		// specifier. This ought to succeed regardless of whether there is
 		// already a zone config.

@@ -32,3 +32,45 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 25  TABLE system.public.replication_constraint_stats
 27  TABLE system.public.replication_stats
 53  TABLE test.public.t
+
+# The tests below test semantics around named zone for the system tenant. The
+# system tenant is allowed to alter all named zones. All named zones bar
+# RANGE DEFAULT can be deleted.
+subtest named_zones_system_tenant
+
+statement ok
+ALTER RANGE liveness CONFIGURE ZONE USING num_replicas=3;
+
+statement ok
+ALTER RANGE liveness CONFIGURE ZONE DISCARD
+
+statement ok
+ALTER RANGE meta CONFIGURE ZONE USING num_replicas=3
+
+statement ok
+ALTER RANGE meta CONFIGURE ZONE DISCARD
+
+statement ok
+ALTER RANGE timeseries CONFIGURE ZONE USING num_replicas=3
+
+statement ok
+ALTER RANGE timeseries CONFIGURE ZONE DISCARD
+
+statement ok
+ALTER RANGE system CONFIGURE ZONE USING num_replicas=3
+
+statement ok
+ALTER RANGE system CONFIGURE ZONE DISCARD
+
+statement ok
+ALTER RANGE tenants CONFIGURE ZONE USING num_replicas=3
+
+statement ok
+ALTER RANGE tenants CONFIGURE ZONE DISCARD
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas=3
+
+# Removing RANGE DEFAULT is not allowed (for both host and secondary tenants)
+statement error pq: cannot remove default zone
+ALTER RANGE default CONFIGURE ZONE DISCARD

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,6 +58,13 @@ var NamedZonesByID = func() map[uint32]string {
 	}
 	return out
 }()
+
+// IsNamedZoneID returns true if the given ID is one of the pseudo-table IDs
+// that maps to named zones.
+func IsNamedZoneID(id descpb.ID) bool {
+	_, ok := NamedZonesByID[(uint32(id))]
+	return ok
+}
 
 // MultiRegionZoneConfigFields are the fields on a zone configuration which
 // may be set by the system for multi-region objects".
