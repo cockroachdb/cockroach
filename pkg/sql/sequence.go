@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -486,14 +488,16 @@ func assignSequenceOptions(
 				if err != nil {
 					return err
 				}
-				if tableDesc.ParentID != sequenceParentID &&
-					!allowCrossDatabaseSeqOwner.Get(&params.p.execCfg.Settings.SV) {
-					return errors.WithHintf(
-						pgerror.Newf(pgcode.FeatureNotSupported,
-							"OWNED BY cannot refer to other databases; (see the '%s' cluster setting)",
-							allowCrossDatabaseSeqOwnerSetting),
-						crossDBReferenceDeprecationHint(),
-					)
+				if tableDesc.ParentID != sequenceParentID {
+					if !allowCrossDatabaseSeqOwner.Get(&params.p.execCfg.Settings.SV) {
+						return errors.WithHintf(
+							pgerror.Newf(pgcode.FeatureNotSupported,
+								"OWNED BY cannot refer to other databases; (see the '%s' cluster setting)",
+								allowCrossDatabaseSeqOwnerSetting),
+							crossDBReferenceDeprecationHint(),
+						)
+					}
+					telemetry.Inc(sqltelemetry.CrossDBReferenceCounter("sequence-ownership"))
 				}
 				// We only want to trigger schema changes if the owner is not what we
 				// want it to be.
@@ -690,6 +694,14 @@ func maybeAddSequenceDependencies(
 		}
 		s := tree.Serialize(newExpr)
 		col.DefaultExpr = &s
+	}
+
+	// Record telemetry for cross-db references.
+	for _, seqDesc := range seqDescs {
+		// If this sequence is in a different database than this table's database.
+		if seqDesc.GetParentID() != tableDesc.GetParentID() {
+			telemetry.Inc(sqltelemetry.CrossDBReferenceCounter("sequence-column"))
+		}
 	}
 
 	return seqDescs, nil
