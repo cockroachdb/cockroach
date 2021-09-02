@@ -338,6 +338,15 @@ export const nodeRegionsByIDSelector = createSelector(
   },
 );
 
+// selectIsMoreThanOneNode returns a boolean describing whether or not there
+// exists more than one node in the cluster.
+export const selectIsMoreThanOneNode = createSelector(
+  (state: AdminUIState) => nodeRegionsByIDSelector(state),
+  (nodeRegions): boolean => {
+    return Object.keys(nodeRegions).length > 1;
+  },
+);
+
 // selectStoreIDsByNodeID returns a map from node ID to a list of store IDs for
 // that node. Like nodeIDsSelector, the store ids are converted to strings.
 export const selectStoreIDsByNodeID = createSelector(
