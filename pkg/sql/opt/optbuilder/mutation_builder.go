@@ -600,7 +600,7 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 		tabCol := mb.tab.Column(i)
 		if kind := tabCol.Kind(); kind == cat.WriteOnly {
 			// Always include WriteOnly columns.
-		} else if tabCol.HasOnUpdate() && applyOnUpdate {
+		} else if tabCol.UseOnUpdate(mb.b.evalCtx.SessionData()) && applyOnUpdate {
 			// Use ON UPDATE columns if specified.
 		} else if includeOrdinary && kind == cat.Ordinary {
 			// Include Ordinary columns if indicated.
@@ -620,7 +620,7 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 		tabColID := mb.tabID.ColumnID(i)
 		var mutationSuffix string
 		var expr tree.Expr
-		if tabCol.HasOnUpdate() && applyOnUpdate {
+		if tabCol.UseOnUpdate(mb.b.evalCtx.SessionData()) && applyOnUpdate {
 			mutationSuffix = "on_update"
 			expr = mb.parseOnUpdateExpr(tabColID)
 		} else {

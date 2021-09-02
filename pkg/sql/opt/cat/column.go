@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -111,6 +112,14 @@ func (c *Column) DefaultExprStr() string {
 // HasOnUpdate returns true if the column has an ON UPDATE expression.
 func (c *Column) HasOnUpdate() bool {
 	return c.onUpdateExpr != ""
+}
+
+// UseOnUpdate returns true if there is an ON UPDATE expression which should be
+// updated as part of the session. This is to allow gating ON UPDATE
+// rehome_row() from triggering when on_update_rehome_row_enabled = false.
+func (c *Column) UseOnUpdate(sd *sessiondata.SessionData) bool {
+	return c.onUpdateExpr != "" &&
+		(sd.OnUpdateRehomeRowEnabled || !strings.HasPrefix(c.onUpdateExpr, "rehome_row()"))
 }
 
 // OnUpdateExprStr is set to the SQL expression string that describes the
