@@ -24,7 +24,11 @@ import { AdminUIState } from "src/redux/state";
 import { databaseNameAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { getMatchParamByName } from "src/util/query";
-
+import {
+  nodeRegionsByIDSelector,
+  selectIsMoreThanOneNode,
+} from "src/redux/nodes";
+import { getNodesByRegionString } from "../utils";
 const {
   DatabaseDetailsRequest,
   TableDetailsRequest,
@@ -71,17 +75,21 @@ export const mapStateToProps = createSelector(
   state => state.cachedData.databaseDetails,
   state => state.cachedData.tableDetails,
   state => state.cachedData.tableStats,
-
+  state => nodeRegionsByIDSelector(state),
+  state => selectIsMoreThanOneNode(state),
   (
     database,
     databaseDetails,
     tableDetails,
     tableStats,
+    nodeRegions,
+    showNodeRegionsColumn,
   ): DatabaseDetailsPageData => {
     return {
       loading: !!databaseDetails[database]?.inFlight,
       loaded: !!databaseDetails[database]?.valid,
       name: database,
+      showNodeRegionsColumn,
       tables: _.map(databaseDetails[database]?.data?.table_names, table => {
         const tableId = generateTableID(database, table);
 
@@ -92,6 +100,7 @@ export const mapStateToProps = createSelector(
         const grants = normalizePrivileges(
           _.flatMap(details?.data?.grants, "privileges"),
         );
+        const nodes = stats?.data?.node_ids || [];
 
         return {
           name: table,
@@ -111,6 +120,7 @@ export const mapStateToProps = createSelector(
               stats?.data?.approximate_disk_bytes || 0,
             ).toNumber(),
             rangeCount: FixLong(stats?.data?.range_count || 0).toNumber(),
+            nodesByRegionString: getNodesByRegionString(nodes, nodeRegions),
           },
         };
       }),
