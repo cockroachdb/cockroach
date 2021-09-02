@@ -498,7 +498,6 @@ func (w *querylog) getTableNames(db *gosql.DB) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 	w.state.tableNames = make([]string, 0)
 	for rows.Next() {
 		var tableName string
@@ -507,7 +506,7 @@ func (w *querylog) getTableNames(db *gosql.DB) error {
 		}
 		w.state.tableNames = append(w.state.tableNames, tableName)
 	}
-	return nil
+	return rows.Err()
 }
 
 // unzip unzips the zip file at src into dest. It was copied (with slight
@@ -750,7 +749,7 @@ func (w *querylog) getColumnsInfo(db *gosql.DB) error {
 			}
 			columnTypeByColumnName[columnName] = dataType
 		}
-		if err = rows.Close(); err != nil {
+		if err = rows.Err(); err != nil {
 			return err
 		}
 
@@ -775,7 +774,6 @@ WHERE attrelid=$1`, relid)
 		var cols []columnInfo
 		var numCols = 0
 
-		defer rows.Close()
 		for rows.Next() {
 			var c columnInfo
 			c.dataPrecision = 0
@@ -797,7 +795,9 @@ WHERE attrelid=$1`, relid)
 			cols = append(cols, c)
 			numCols++
 		}
-
+		if err = rows.Err(); err != nil {
+			return err
+		}
 		if numCols == 0 {
 			return errors.Errorf("no columns detected")
 		}
@@ -825,6 +825,9 @@ func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) error {
 		count.Next()
 		var numRows int
 		if err = count.Scan(&numRows); err != nil {
+			return err
+		}
+		if err = count.Err(); err != nil {
 			return err
 		}
 		if err = count.Close(); err != nil {
@@ -869,7 +872,7 @@ func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) error {
 				cols[i].samples = append(cols[i].samples, sample)
 			}
 		}
-		if err = samples.Close(); err != nil {
+		if err = samples.Err(); err != nil {
 			return err
 		}
 	}

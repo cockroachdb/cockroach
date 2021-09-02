@@ -151,7 +151,6 @@ WHERE attrelid=$1`, relid)
 	var cols []col
 	var numCols = 0
 
-	defer rows.Close()
 	for rows.Next() {
 		var c col
 		c.dataPrecision = 0
@@ -177,6 +176,10 @@ WHERE attrelid=$1`, relid)
 		return workload.QueryLoad{}, errors.New("no columns detected")
 	}
 
+	if err = rows.Err(); err != nil {
+		return workload.QueryLoad{}, err
+	}
+
 	// insert on conflict requires the primary key. check information_schema if not specified on the command line
 	if strings.HasPrefix(w.method, "ioc") && w.primaryKey == "" {
 		rows, err := db.Query(
@@ -190,7 +193,6 @@ AND    i.indisprimary`, relid)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
-		defer rows.Close()
 		for rows.Next() {
 			var colname string
 
@@ -202,6 +204,9 @@ AND    i.indisprimary`, relid)
 			} else {
 				w.primaryKey += colname
 			}
+		}
+		if err = rows.Err(); err != nil {
+			return workload.QueryLoad{}, err
 		}
 	}
 
