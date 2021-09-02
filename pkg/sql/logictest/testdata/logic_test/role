@@ -675,9 +675,6 @@ user testuser
 statement error user testuser does not have SELECT privilege on relation role_members
 SELECT * FROM system.role_members
 
-statement error user testuser does not have CREATE privilege on database db2
-CREATE TABLE db2.foo (k int);
-
 user root
 
 query TTB colnames

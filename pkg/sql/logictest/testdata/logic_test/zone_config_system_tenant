@@ -31,8 +31,12 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 22  RANGE liveness
 25  TABLE system.public.replication_constraint_stats
 27  TABLE system.public.replication_stats
+<<<<<<< HEAD
 45  TABLE system.public.tenant_usage
 53  TABLE test.public.t
+=======
+56  TABLE test.public.t
+>>>>>>> 79e2e299cb (sql: update tests resulting from public schema being an explicit schema)
 
 # The tests below test semantics around named zone for the system tenant. The
 # system tenant is allowed to alter all named zones. All named zones bar

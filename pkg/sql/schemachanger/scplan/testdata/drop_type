@@ -7,14 +7,14 @@ DROP TYPE defaultdb.typ
 ----
 Stage 0
   *scop.MarkDescriptorAsDropped
-    TableID: 52
+    TableID: 54
   *scop.MarkDescriptorAsDropped
-    TableID: 53
-Stage 1 (non-revertible)
+    TableID: 55
+Stage 1
   *scop.DrainDescriptorName
-    TableID: 52
+    TableID: 54
   *scop.DrainDescriptorName
-    TableID: 53
+    TableID: 55
 
 deps
 DROP TYPE defaultdb.typ
