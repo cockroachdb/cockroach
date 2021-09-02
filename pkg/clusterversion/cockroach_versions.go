@@ -92,7 +92,7 @@ type Key int
 //    You'll then want to backport (i) to the release branch itself (i.e.
 //    release-20.2). You'll also want to bump binaryMinSupportedVersion. In the
 //    example above, you'll set it to V20_2. This indicates that the
-//    minimum binary version required in a cluster with with nodes running
+//    minimum binary version required in a cluster with nodes running
 //    v21.1 binaries (including pre-release alphas) is v20.2, i.e. that an
 //    upgrade into such a binary must start out from at least v20.2 nodes.
 //
@@ -163,9 +163,6 @@ const (
 	// the 21.1 release. This is because we now support tenants at the
 	// predecessor binary interacting with a fully upgraded KV cluster.
 	Start20_2
-	// NodeMembershipStatus gates the usage of the MembershipStatus enum in the
-	// Liveness proto. See comment on proto definition for more details.
-	NodeMembershipStatus
 	// MinPasswordLength adds the server.user_login.min_password_length setting.
 	MinPasswordLength
 	// AbortSpanBytes adds a field to MVCCStats
@@ -344,10 +341,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start20_2,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 1},
-	},
-	{
-		Key:     NodeMembershipStatus,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 11},
 	},
 	{
 		Key:     MinPasswordLength,
