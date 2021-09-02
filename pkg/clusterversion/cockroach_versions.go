@@ -165,9 +165,6 @@ const (
 	Start20_2
 	// MinPasswordLength adds the server.user_login.min_password_length setting.
 	MinPasswordLength
-	// AbortSpanBytes adds a field to MVCCStats
-	// (MVCCStats.AbortSpanBytes) that tracks the size of a range's abort span.
-	AbortSpanBytes
 	// CreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN are introduced.
 	//
 	// It represents adding authn principal management via CREATELOGIN role
@@ -345,10 +342,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     MinPasswordLength,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 13},
-	},
-	{
-		Key:     AbortSpanBytes,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 14},
 	},
 	{
 		Key:     CreateLoginPrivilege,

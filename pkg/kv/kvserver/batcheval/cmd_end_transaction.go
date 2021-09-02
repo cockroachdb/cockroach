@@ -931,15 +931,6 @@ func splitTriggerHelper(
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
-	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.AbortSpanBytes) {
-		// Since the stats here is used to seed the initial state for the RHS
-		// replicas, we need to be careful about zero-ing out the abort span
-		// bytes if the cluster version introducing it is not yet active. Not
-		// doing so can result in inconsistencies in MVCCStats across replicas
-		// in a mixed-version cluster.
-		h.AbsPostSplitRight().AbortSpanBytes = 0
-	}
-
 	// Note: we don't copy the queue last processed times. This means
 	// we'll process the RHS range in consistency and time series
 	// maintenance queues again possibly sooner than if we copied. The
