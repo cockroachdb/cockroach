@@ -296,8 +296,8 @@ github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847/go.mod h
 github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11 h1:UAqRo5xPCyTtZznAJ9iPVpDUFxGI0a6QWtQ8E+zwJRg=
 github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11/go.mod h1:3299Mt0Q7PkqGqbsxhvbrTpMqRyIcZ6OMw4IEmiO09g=
 github.com/cockroachdb/ttycolor v0.0.0-20180709150743-a1d5aaeb377d/go.mod h1:NltwFG0VBANi1jHKpn5KL9AbsHTE+8fPaAHT0TzL20k=
-github.com/cockroachdb/ttycolor v0.0.0-20210717002733-a2a538deeb8c h1:S2vg+TZySZ0jBGFPM2kmcYr0OwIPRoMX8/AMTajFmzE=
-github.com/cockroachdb/ttycolor v0.0.0-20210717002733-a2a538deeb8c/go.mod h1:NltwFG0VBANi1jHKpn5KL9AbsHTE+8fPaAHT0TzL20k=
+github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8 h1:Hli+oX84dKq44sLVCcsGKqifm5Lg9J8VoJ2P3h9iPdI=
+github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8/go.mod h1:75wnig8+TF6vst9hChkpcFO7YrRLddouJ5is8uqpfv0=
 github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82 h1:8htEd1lLILqfjKardWfKKGgXVCs0WmcgEj9cXnmcuos=
 github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82/go.mod h1:+bhevpN4bd6bstiRREkJDaMWZR3lTe5ypydTtXgf7GU=
 github.com/cockroachdb/yaml v0.0.0-20210825132133-2d6955c8edbc h1:vVVz+IAeHhYPxGW9EC8j6HR7uZl/1wSP0Wijaxs4frw=
