@@ -1,3 +1,13 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package sql_test
 
 import (
@@ -33,7 +43,6 @@ func TestCommentOnConstraint(t *testing.T) {
 		query  string
 		expect gosql.NullString
 	}{
-		//SEPT 1 EOD:MAKING FOREIGN KEY CONSTRAINT AND UNIQUE CONSTRAINT TEST!
 		{
 			`COMMENT ON CONSTRAINT t_a_key ON t IS 'unique_comment'`,
 			`SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='t_a_key'`,
@@ -63,6 +72,11 @@ func TestCommentOnConstraint(t *testing.T) {
 			`COMMENT ON CONSTRAINT fk_b_ref_t ON t2 IS 'fk_comment'`,
 			`SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='fk_b_ref_t'`,
 			gosql.NullString{String: `fk_comment`, Valid: true},
+		},
+		{
+			`COMMENT ON CONSTRAINT fk_b_ref_t ON t2 IS 'fk_comment'; COMMENT ON CONSTRAINT fk_b_ref_t ON t2 IS NULL`,
+			`SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='fk_b_ref_t'`,
+			gosql.NullString{Valid: false},
 		},
 	}
 

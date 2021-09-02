@@ -52,7 +52,7 @@ CREATE TABLE b (id INT PRIMARY KEY)
 statement ok
 CREATE TABLE c (
   id INT PRIMARY KEY,
-  foo INT,
+  foo INT CONSTRAINT foo_positive CHECK (foo > 0),
   bar INT,
   INDEX c_foo_idx (foo),
   INDEX (foo),
@@ -98,6 +98,14 @@ c           primary        false       2             foo          N/A        tru
 c           primary        false       3             bar          N/A        true     false     NULL
 
 # primary keys can never be null
+
+query TTTTBT colnames
+SHOW CONSTRAINTS FROM c WITH COMMENT
+----
+table_name  constraint_name  constraint_type  details               validated  comment
+c           c_bar_key        UNIQUE           UNIQUE (bar ASC)      true       NULL
+c           foo_positive     CHECK            CHECK ((foo > 0))     true       NULL
+c           primary          PRIMARY KEY      PRIMARY KEY (id ASC)  true       NULL
 
 statement ok
 CREATE TABLE d (

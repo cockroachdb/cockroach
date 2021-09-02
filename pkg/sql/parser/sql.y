@@ -5267,14 +5267,14 @@ show_indexes_stmt:
 // %Text: SHOW CONSTRAINTS FROM <tablename>
 // %SeeAlso: WEBDOCS/show-constraints.html
 show_constraints_stmt:
-  SHOW CONSTRAINT FROM table_name
+  SHOW CONSTRAINT FROM table_name with_comment
   {
-    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW CONSTRAINT error // SHOW HELP: SHOW CONSTRAINTS
-| SHOW CONSTRAINTS FROM table_name
+| SHOW CONSTRAINTS FROM table_name with_comment
   {
-    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW CONSTRAINTS error // SHOW HELP: SHOW CONSTRAINTS
 
