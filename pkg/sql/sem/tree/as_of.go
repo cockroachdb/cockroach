@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -227,9 +226,7 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 		s := string(*d)
 		// Parse synthetic flag.
 		syn := false
-		if strings.HasSuffix(s, "?") && evalCtx.Settings.Version.IsActive(evalCtx.Context, clusterversion.PriorReadSummaries) {
-			// NOTE: we don't parse this in mixed-version clusters because v20.2
-			// nodes will not know how to handle synthetic timestamps.
+		if strings.HasSuffix(s, "?") {
 			s = s[:len(s)-1]
 			syn = true
 		}

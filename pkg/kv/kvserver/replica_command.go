@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -561,13 +560,6 @@ func (r *Replica) AdminMerge(
 	runMergeTxn := func(txn *kv.Txn) error {
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
-
-		// If we aren't certain that all possible nodes in the cluster support a
-		// range merge transaction refreshing its reads while the RHS range is
-		// subsumed, observe the commit timestamp to force a client-side retry.
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries) {
-			_ = txn.CommitTimestamp()
-		}
 
 		// Pipelining might send QueryIntent requests to the RHS after the RHS has
 		// noticed the merge and started blocking all traffic. This causes the merge
