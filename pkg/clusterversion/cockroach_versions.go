@@ -206,8 +206,6 @@ const (
 	// using the replicated legacy TruncatedState. It's also used in asserting
 	// that no replicated truncated state representation is found.
 	PostTruncatedAndRangeAppliedStateMigration
-	// SeparatedIntents allows the writing of separated intents/locks.
-	SeparatedIntents
 	// TracingVerbosityIndependentSemantics marks a change in which trace spans
 	// are propagated across RPC boundaries independently of their verbosity setting.
 	// This requires a version gate this violates implicit assumptions in v20.2.
@@ -372,10 +370,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PostTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 24},
-	},
-	{
-		Key:     SeparatedIntents,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 26},
 	},
 	{
 		Key:     TracingVerbosityIndependentSemantics,
