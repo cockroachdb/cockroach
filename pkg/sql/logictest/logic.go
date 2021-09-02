@@ -3123,22 +3123,58 @@ SELECT encode(descriptor, 'hex') AS descriptor
 		}
 	}
 
-	// TODO(lucy): we should really drop all created databases in this test, not
-	// just the one we started with.
-	stmt := "SET sql_safe_updates=false; DROP DATABASE IF EXISTS test CASCADE"
-	if _, err := t.db.Exec(stmt); err != nil {
-		return errors.Wrap(err, "dropping test database failed")
+	var dbNames pq.StringArray
+	if err := t.db.QueryRow(
+		`SELECT array_agg(database_name) FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres')`,
+	).Scan(&dbNames); err != nil {
+		return errors.Wrap(err, "error getting database names")
 	}
 
+	for _, dbName := range dbNames {
+		if err := func() (retErr error) {
+			ctx := context.Background()
+			// Open a new connection, since we want to preserve the original DB
+			// that we were originally on in t.db.
+			conn, err := t.db.Conn(ctx)
+			if err != nil {
+				return errors.Wrap(err, "error grabbing new connection")
+			}
+			defer func() {
+				retErr = errors.CombineErrors(retErr, conn.Close())
+			}()
+			if _, err := conn.ExecContext(ctx, "SET database = $1", dbName); err != nil {
+				return errors.Wrapf(err, "error validating zone config for database %s", dbName)
+			}
+			// Ensure each database's zone configs are valid.
+			if _, err := conn.ExecContext(ctx, "SELECT crdb_internal.validate_multi_region_zone_configs()"); err != nil {
+				return errors.Wrapf(err, "error validating zone config for database %s", dbName)
+			}
+			// Drop the database.
+			dbTreeName := tree.Name(dbName)
+			dropDatabaseStmt := fmt.Sprintf(
+				"DROP DATABASE %s CASCADE",
+				dbTreeName.String(),
+			)
+			if _, err := t.db.Exec(dropDatabaseStmt); err != nil {
+				return errors.Wrapf(err, "dropping database %s failed", dbName)
+			}
+			return nil
+		}(); err != nil {
+			return err
+		}
+	}
+
+	// Ensure after dropping all databases state is still valid.
 	invalidObjects, err = validate()
 	if err != nil {
-		return errors.Wrap(err, "running object validation after failed")
+		return errors.Wrap(err, "running object validation after database drops failed")
 	}
 	if invalidObjects != "" {
 		return errors.Errorf(
-			"descriptor validation failed after dropping test database:\n%s", invalidObjects,
+			"descriptor validation failed after dropping databases:\n%s", invalidObjects,
 		)
 	}
+
 	return nil
 }
 

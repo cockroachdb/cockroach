@@ -255,6 +255,9 @@ func (m *CreateRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_
 func (m *DropRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *SampledQuery) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *RemoveZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
