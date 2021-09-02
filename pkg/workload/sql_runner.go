@@ -119,10 +119,9 @@ func (sr *SQLRunner) Init(
 		for i, s := range sr.stmts {
 			stmtName := fmt.Sprintf("%s-%d", name, i+1)
 			s.preparedName = stmtName
-			mcp.preparedStatements[stmtName] = s.sql
+			mcp.AddPreparedStatement(stmtName, s.sql)
 		}
 	}
-
 	sr.mcp = mcp
 	sr.initialized = true
 	return nil
