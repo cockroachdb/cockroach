@@ -4,7 +4,15 @@
   "private": true,
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
-  "workspaces": ["workspaces/*"],
+  "workspaces": {
+    "packages": ["workspaces/*"],
+    "nohoist": [
+      "**/db-console/react-select",
+      "**/db-console/react-select/**",
+      "**/db-console/@types/react-select",
+      "**/db-console/@types/react-select/**"
+    ]
+  },
   "devDependencies": {
     "@bazel/typescript": "^3.6.0",
     "@types/long": "3.0.32",

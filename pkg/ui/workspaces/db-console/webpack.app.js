@@ -92,7 +92,13 @@ module.exports = (env, argv) => {
       extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
       // First check for local modules, then for third-party modules from
       // node_modules.
-      modules: [...localRoots, "node_modules"],
+      modules: [
+        ...localRoots,
+        path.resolve(__dirname, "node_modules"),
+        path.resolve(__dirname, "../..", "node_modules"),
+        // required for bazel build to resolve properly dependencies
+        "node_modules",
+      ],
       alias: {
         oss: path.resolve(__dirname),
         "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
