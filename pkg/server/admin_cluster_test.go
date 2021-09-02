@@ -59,7 +59,9 @@ func TestAdminAPIDatabaseDetails(t *testing.T) {
 		var resp serverpb.DatabaseDetailsResponse
 		require.NoError(t, serverutils.GetJSONProto(s, "/_admin/v1/databases/test?include_stats=true", &resp))
 
+		nodeIDs := []roachpb.NodeID{1, 2, 3}
 		assert.Equal(t, int64(1), resp.Stats.RangeCount, "RangeCount")
+		assert.Equal(t, nodeIDs, resp.Stats.NodeIDs, "NodeIDs")
 
 		// TODO(todd): Find a way to produce a non-zero value here that doesn't require writing a million rows.
 		// Giving the test nodes on-disk stores (StoreSpec{inMemory: false, Path: "..."}) didn't work and was slow.
@@ -173,6 +175,9 @@ func TestAdminAPITableStats(t *testing.T) {
 	}
 	if len(tsResponse.MissingNodes) != 1 {
 		t.Errorf("expected one missing node, found %v", tsResponse.MissingNodes)
+	}
+	if len(tsResponse.NodeIDs) == 0 {
+		t.Error("expected at least one node in NodeIds list")
 	}
 
 	// Call TableStats with a very low timeout. This tests that fan-out queries

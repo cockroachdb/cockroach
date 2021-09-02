@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -218,19 +219,24 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	t testing.TB, stopper *stop.Stopper, cfg StoreConfig, bootstrapVersion roachpb.Version,
 ) {
 	tc.TB = t
+	ctx := context.Background()
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
+		AmbientCtx: cfg.AmbientCtx,
+		Config:     &base.Config{Insecure: true},
+		Clock:      cfg.Clock,
+		Stopper:    stopper,
+		Settings:   cfg.Settings,
+	})
+	grpcServer := rpc.NewServer(rpcContext) // never started
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(rpc.ContextOptions{
-			TenantID:   roachpb.SystemTenantID,
-			AmbientCtx: cfg.AmbientCtx,
-			Config:     &base.Config{Insecure: true},
-			Clock:      cfg.Clock,
-			Stopper:    stopper,
-			Settings:   cfg.Settings,
-		})
-		server := rpc.NewServer(rpcContext) // never started
-		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+		tc.gossip = gossip.NewTest(1, rpcContext, grpcServer, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	}
+	if tc.transport == nil {
+		dialer := nodedialer.New(rpcContext, gossip.AddressResolver(tc.gossip))
+		tc.transport = NewRaftTransport(cfg.AmbientCtx, cfg.Settings, dialer, grpcServer, stopper)
 	}
 	if tc.engine == nil {
 		disableSeparatedIntents :=
@@ -249,10 +255,6 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		}
 		stopper.AddCloser(tc.engine)
 	}
-	if tc.transport == nil {
-		tc.transport = NewDummyRaftTransport(cfg.Settings)
-	}
-	ctx := context.Background()
 	if tc.store == nil {
 		cv := clusterversion.ClusterVersion{Version: bootstrapVersion}
 		cfg.Gossip = tc.gossip
