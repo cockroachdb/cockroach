@@ -13,7 +13,6 @@ package kv
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -464,7 +463,7 @@ func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte)
 	b.cputInternal(key, value, expValue, true, false)
 }
 
-// cPutInline conditionally sets the value for a key if the existing value is
+// CPutInline conditionally sets the value for a key if the existing value is
 // equal to expValue, but does not maintain multi-version values. To
 // conditionally set a value only if the key doesn't currently exist, pass an
 // empty expValue. The most recent value is always overwritten. Inline values
@@ -478,14 +477,7 @@ func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte)
 //
 // A nil value can be used to delete the respective key, since there is no
 // DelInline(). This is different from CPut().
-//
-// Callers should check the version gate clusterversion.CPutInline to make sure
-// this is supported. The method is unexported to prevent external callers using
-// this without checking the version, since the CtxForCPutInline guard can't be
-// used with Batch.
-func (b *Batch) cPutInline(key, value interface{}, expValue []byte) {
-	// TODO(erikgrinaker): export once clusterversion.CPutInline is removed.
-	_ = clusterversion.CPutInline
+func (b *Batch) CPutInline(key, value interface{}, expValue []byte) {
 	b.cputInternal(key, value, expValue, false, true)
 }
 

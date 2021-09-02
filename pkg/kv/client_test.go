@@ -369,10 +369,10 @@ func TestClientPutInline(t *testing.T) {
 func TestClientCPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 	db := createTestClient(t, s)
-	ctx := kv.CtxForCPutInline(context.Background())
 	key := testUser + "/key"
 	value := []byte("value")
 

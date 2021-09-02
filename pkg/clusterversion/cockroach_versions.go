@@ -180,8 +180,6 @@ const (
 	//
 	// Start21_1 demarcates work towards CockroachDB v21.1.
 	Start21_1
-	// CPutInline is conditional put support for inline values.
-	CPutInline
 	// ReplicaVersions enables the versioning of Replica state.
 	ReplicaVersions
 	// replacedTruncatedAndRangeAppliedStateMigration stands in for
@@ -360,10 +358,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_1,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     CPutInline,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 10},
 	},
 	{
 		Key:     ReplicaVersions,
