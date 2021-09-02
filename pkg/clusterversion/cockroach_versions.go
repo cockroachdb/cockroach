@@ -92,7 +92,7 @@ type Key int
 //    You'll then want to backport (i) to the release branch itself (i.e.
 //    release-20.2). You'll also want to bump binaryMinSupportedVersion. In the
 //    example above, you'll set it to V20_2. This indicates that the
-//    minimum binary version required in a cluster with with nodes running
+//    minimum binary version required in a cluster with nodes running
 //    v21.1 binaries (including pre-release alphas) is v20.2, i.e. that an
 //    upgrade into such a binary must start out from at least v20.2 nodes.
 //
@@ -163,14 +163,8 @@ const (
 	// the 21.1 release. This is because we now support tenants at the
 	// predecessor binary interacting with a fully upgraded KV cluster.
 	Start20_2
-	// NodeMembershipStatus gates the usage of the MembershipStatus enum in the
-	// Liveness proto. See comment on proto definition for more details.
-	NodeMembershipStatus
 	// MinPasswordLength adds the server.user_login.min_password_length setting.
 	MinPasswordLength
-	// AbortSpanBytes adds a field to MVCCStats
-	// (MVCCStats.AbortSpanBytes) that tracks the size of a range's abort span.
-	AbortSpanBytes
 	// CreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN are introduced.
 	//
 	// It represents adding authn principal management via CREATELOGIN role
@@ -186,10 +180,6 @@ const (
 	//
 	// Start21_1 demarcates work towards CockroachDB v21.1.
 	Start21_1
-	// CPutInline is conditional put support for inline values.
-	CPutInline
-	// ReplicaVersions enables the versioning of Replica state.
-	ReplicaVersions
 	// replacedTruncatedAndRangeAppliedStateMigration stands in for
 	// TruncatedAndRangeAppliedStateMigration which was	re-introduced after the
 	// migration job was introduced. This is necessary because the jobs
@@ -216,18 +206,10 @@ const (
 	// using the replicated legacy TruncatedState. It's also used in asserting
 	// that no replicated truncated state representation is found.
 	PostTruncatedAndRangeAppliedStateMigration
-	// SeparatedIntents allows the writing of separated intents/locks.
-	SeparatedIntents
 	// TracingVerbosityIndependentSemantics marks a change in which trace spans
 	// are propagated across RPC boundaries independently of their verbosity setting.
 	// This requires a version gate this violates implicit assumptions in v20.2.
 	TracingVerbosityIndependentSemantics
-	// PriorReadSummaries introduces support for the use of read summary objects
-	// to ship information about reads on a range through lease changes and
-	// range merges.
-	PriorReadSummaries
-	// NonVotingReplicas enables the creation of non-voting replicas.
-	NonVotingReplicas
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	V21_1
 
@@ -346,16 +328,8 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 1},
 	},
 	{
-		Key:     NodeMembershipStatus,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 11},
-	},
-	{
 		Key:     MinPasswordLength,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 13},
-	},
-	{
-		Key:     AbortSpanBytes,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 14},
 	},
 	{
 		Key:     CreateLoginPrivilege,
@@ -376,14 +350,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
 	},
 	{
-		Key:     CPutInline,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 10},
-	},
-	{
-		Key:     ReplicaVersions,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 12},
-	},
-	{
 		Key:     replacedTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 14},
 	},
@@ -400,20 +366,8 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 24},
 	},
 	{
-		Key:     SeparatedIntents,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 26},
-	},
-	{
 		Key:     TracingVerbosityIndependentSemantics,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 28},
-	},
-	{
-		Key:     PriorReadSummaries,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 44},
-	},
-	{
-		Key:     NonVotingReplicas,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 46},
 	},
 	{
 		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.

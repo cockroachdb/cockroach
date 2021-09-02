@@ -424,6 +424,14 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		var raftStatus *raft.Status
 
 		preferred := sr.rq.allocator.preferredLeaseholders(conf, candidates)
+
+		// Filter both the list of preferred stores as well as the list of all
+		// candidate replicas to only consider live (non-suspect, non-draining)
+		// nodes.
+		const includeSuspectAndDrainingStores = false
+		preferred, _ = sr.rq.allocator.storePool.liveAndDeadReplicas(preferred, includeSuspectAndDrainingStores)
+		candidates, _ = sr.rq.allocator.storePool.liveAndDeadReplicas(candidates, includeSuspectAndDrainingStores)
+
 		for _, candidate := range candidates {
 			if candidate.StoreID == localDesc.StoreID {
 				continue

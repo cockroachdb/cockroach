@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -78,9 +77,6 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 		requiredType: types.Bool,
 		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) },
 		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, d tree.Datum) error {
-			if err := checkVersionActive(ctx, execCfg, clusterversion.NonVotingReplicas, "global_reads"); err != nil {
-				return err
-			}
 			if !tree.MustBeDBool(d) {
 				// Always allow the value to be unset.
 				return nil
@@ -100,9 +96,6 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 	"num_voters": {
 		requiredType: types.Int,
 		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumVoters = proto.Int32(int32(tree.MustBeDInt(d))) },
-		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, _ tree.Datum) error {
-			return checkVersionActive(ctx, execCfg, clusterversion.NonVotingReplicas, "num_voters")
-		},
 	},
 	"gc.ttlseconds": {
 		requiredType: types.Int,
@@ -133,9 +126,6 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 			c.VoterConstraints = voterConstraintsList.Constraints
 			c.NullVoterConstraintsIsEmpty = true
 		},
-		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, _ tree.Datum) error {
-			return checkVersionActive(ctx, execCfg, clusterversion.NonVotingReplicas, "voter_constraints")
-		},
 	},
 	"lease_preferences": {
 		requiredType: types.String,
@@ -162,16 +152,6 @@ func loadYAML(dst interface{}, yamlString string) {
 	if err := yaml.UnmarshalStrict([]byte(yamlString), dst); err != nil {
 		panic(err)
 	}
-}
-
-func checkVersionActive(
-	ctx context.Context, execCfg *ExecutorConfig, minVersion clusterversion.Key, option string,
-) error {
-	if !execCfg.Settings.Version.IsActive(ctx, minVersion) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"%s cannot be used until cluster version is finalized", option)
-	}
-	return nil
 }
 
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {

@@ -2394,17 +2394,6 @@ func (s *SQLServer) startServeSQL(
 func (s *Server) Decommission(
 	ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID,
 ) error {
-	if !s.st.Version.IsActive(ctx, clusterversion.NodeMembershipStatus) {
-		if targetStatus.Decommissioned() {
-			// In mixed-version cluster settings, we need to ensure that we're
-			// on-the-wire compatible with nodes only familiar with the boolean
-			// representation of membership state. We do the simple thing and
-			// simply disallow the setting of the fully decommissioned state until
-			// we're guaranteed to be on v20.2.
-			targetStatus = livenesspb.MembershipStatus_DECOMMISSIONING
-		}
-	}
-
 	// If we're asked to decommission ourself we may lose access to cluster RPC,
 	// so we decommission ourself last. We copy the slice to avoid mutating the
 	// input slice.

@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -365,10 +364,10 @@ func (rq *replicateQueue) processOneChange(
 	voterReplicas := desc.Replicas().VoterDescriptors()
 	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
-		voterReplicas, true, /* includeSuspectStores */
+		voterReplicas, true, /* includeSuspectAndDrainingStores */
 	)
 	liveNonVoterReplicas, deadNonVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
-		nonVoterReplicas, true, /* includeSuspectStores */
+		nonVoterReplicas, true, /* includeSuspectAndDrainingStores */
 	)
 
 	// NB: the replication layer ensures that the below operations don't cause
@@ -661,11 +660,6 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 	removeIdx int,
 	dryRun bool,
 ) (requeue bool, _ error) {
-	// Non-voter creation is disabled before 21.1.
-	if v, st := clusterversion.NonVotingReplicas, repl.ClusterSettings(); !st.Version.IsActive(ctx, v) {
-		return false, errors.AssertionFailedf("non-voting replicas cannot be created pre-21.1")
-	}
-
 	desc, conf := repl.DescAndSpanConfig()
 	existingNonVoters := desc.Replicas().NonVoterDescriptors()
 
@@ -1311,7 +1305,7 @@ func (rq *replicateQueue) shedLease(
 		ctx,
 		conf,
 		desc.Replicas().VoterDescriptors(),
-		repl.store.StoreID(),
+		repl,
 		repl.leaseholderStats,
 		opts.checkTransferLeaseSource,
 		opts.checkCandidateFullness,

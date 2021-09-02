@@ -754,7 +754,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 		mnl.setNodeStatus(roachpb.NodeID(i), livenesspb.NodeLivenessStatus_LIVE)
 	}
 
-	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(replicas, false /* includeSuspectStores */)
+	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(replicas, false /* includeSuspectAndDrainingStores */)
 	if len(liveReplicas) != 5 {
 		t.Fatalf("expected five live replicas, found %d (%v)", len(liveReplicas), liveReplicas)
 	}
@@ -776,7 +776,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	// Mark node 4 as merely unavailable.
 	mnl.setNodeStatus(4, livenesspb.NodeLivenessStatus_UNAVAILABLE)
 
-	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas, false /* includeSuspectStores */)
+	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas, false /* includeSuspectAndDrainingStores */)
 	if a, e := liveReplicas, replicas[:3]; !reflect.DeepEqual(a, e) {
 		t.Fatalf("expected live replicas %+v; got %+v", e, a)
 	}
@@ -803,7 +803,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 
 	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(
 		[]roachpb.ReplicaDescriptor{{StoreID: 1}},
-		false, /* includeSuspectStores */
+		false, /* includeSuspectAndDrainingStores */
 	)
 	if len(liveReplicas) != 0 || len(deadReplicas) != 0 {
 		t.Errorf("expected 0 live and 0 dead replicas; got %v and %v", liveReplicas, deadReplicas)
@@ -913,7 +913,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	s = detail.status(now,
 		timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
 	sp.detailsMu.Unlock()
-	require.Equal(t, s, storeStatusUnknown)
+	require.Equal(t, s, storeStatusDraining)
 	require.True(t, detail.lastAvailable.IsZero())
 
 	mnl.setNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
@@ -1071,7 +1071,7 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 		mnl.setNodeStatus(roachpb.NodeID(i), livenesspb.NodeLivenessStatus_LIVE)
 	}
 
-	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(replicas, false /* includeSuspectStores */)
+	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(replicas, false /* includeSuspectAndDrainingStores */)
 	if len(liveReplicas) != 5 {
 		t.Fatalf("expected five live replicas, found %d (%v)", len(liveReplicas), liveReplicas)
 	}
@@ -1083,7 +1083,7 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 	// Mark node 5 as dead.
 	mnl.setNodeStatus(5, livenesspb.NodeLivenessStatus_DEAD)
 
-	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas, false /* includeSuspectStores */)
+	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas, false /* includeSuspectAndDrainingStores */)
 	// Decommissioning replicas are considered live.
 	if a, e := liveReplicas, replicas[:4]; !reflect.DeepEqual(a, e) {
 		t.Fatalf("expected live replicas %+v; got %+v", e, a)
