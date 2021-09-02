@@ -11086,12 +11086,18 @@ func (ht *HashTable) FindBuckets(
 				batchLength := batch.Length()
 				sel := batch.Selection()
 				// Early bounds checks.
+				hashBuffer := ht.ProbeScratch.HashBuffer
 				groupIDs := ht.ProbeScratch.GroupID
+				toCheck := ht.ProbeScratch.ToCheck
+				headIDs := ht.ProbeScratch.HeadID
+				_ = hashBuffer[batchLength-1]
 				_ = groupIDs[batchLength-1]
-				var tupleIdx, nToCheck uint64
-				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-					tupleIdx = uint64(i)
-					nextGroupIDToCheck := first[hash]
+				_ = toCheck[batchLength-1]
+				_ = headIDs[batchLength-1]
+				var nToCheck uint64
+				//for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+				for tupleIdx := uint64(0); tupleIdx < uint64(batchLength) && nToCheck < uint64(batchLength); tupleIdx++ {
+					nextGroupIDToCheck := first[hashBuffer[tupleIdx]]
 					// When probing against itself, we know for sure that
 					// 'nextGroupIDToCheck' will not be zero - we definitely have a
 					// match when using the same probing tuple on the build side.
@@ -11106,7 +11112,8 @@ func (ht *HashTable) FindBuckets(
 						if needToCheck {
 							//gcassert:bce
 							groupIDs[tupleIdx] = nextGroupIDToCheck
-							ht.ProbeScratch.ToCheck[nToCheck] = tupleIdx
+							//gcassert:bce
+							toCheck[nToCheck] = tupleIdx
 							nToCheck++
 						} else {
 							// No need to check this tuple.
@@ -11124,7 +11131,7 @@ func (ht *HashTable) FindBuckets(
 					nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
 					toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
 					nToCheck = 0
-					for _, tupleIdx = range toCheckSlice {
+					for _, tupleIdx := range toCheckSlice {
 						nextGroupIDToCheck := next[groupIDs[tupleIdx]]
 						// When we're probing against itself, all the tuples that have
 						// non-zero HeadID can be skipped because they are the part of
@@ -11142,7 +11149,7 @@ func (ht *HashTable) FindBuckets(
 						{
 							if needToCheck {
 								groupIDs[tupleIdx] = nextGroupIDToCheck
-								ht.ProbeScratch.ToCheck[nToCheck] = tupleIdx
+								toCheck[nToCheck] = tupleIdx
 								nToCheck++
 							} else {
 								// No need to check this tuple.
@@ -11160,12 +11167,18 @@ func (ht *HashTable) FindBuckets(
 				batchLength := batch.Length()
 				sel := batch.Selection()
 				// Early bounds checks.
+				hashBuffer := ht.ProbeScratch.HashBuffer
 				groupIDs := ht.ProbeScratch.GroupID
+				toCheck := ht.ProbeScratch.ToCheck
+				headIDs := ht.ProbeScratch.HeadID
+				_ = hashBuffer[batchLength-1]
 				_ = groupIDs[batchLength-1]
-				var tupleIdx, nToCheck uint64
-				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-					tupleIdx = uint64(i)
-					nextGroupIDToCheck := first[hash]
+				_ = toCheck[batchLength-1]
+				_ = headIDs[batchLength-1]
+				var nToCheck uint64
+				//for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+				for tupleIdx := uint64(0); tupleIdx < uint64(batchLength) && nToCheck < uint64(batchLength); tupleIdx++ {
+					nextGroupIDToCheck := first[hashBuffer[tupleIdx]]
 					// When 'nextGroupIDToCheck' is zero, then the tuple doesn't have a
 					// duplicate in the hash table because we don't have a hash match.
 					needToCheck := nextGroupIDToCheck != 0
@@ -11173,7 +11186,8 @@ func (ht *HashTable) FindBuckets(
 						if needToCheck {
 							//gcassert:bce
 							groupIDs[tupleIdx] = nextGroupIDToCheck
-							ht.ProbeScratch.ToCheck[nToCheck] = tupleIdx
+							//gcassert:bce
+							toCheck[nToCheck] = tupleIdx
 							nToCheck++
 						} else {
 							// No need to check this tuple.
@@ -11191,7 +11205,7 @@ func (ht *HashTable) FindBuckets(
 					nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
 					toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
 					nToCheck = 0
-					for _, tupleIdx = range toCheckSlice {
+					for _, tupleIdx := range toCheckSlice {
 						nextGroupIDToCheck := next[groupIDs[tupleIdx]]
 						// When 'nextGroupIDToCheck' is zero, then the tuple doesn't have a
 						// duplicate in the hash table because we have already exhausted all
@@ -11200,7 +11214,7 @@ func (ht *HashTable) FindBuckets(
 						{
 							if needToCheck {
 								groupIDs[tupleIdx] = nextGroupIDToCheck
-								ht.ProbeScratch.ToCheck[nToCheck] = tupleIdx
+								toCheck[nToCheck] = tupleIdx
 								nToCheck++
 							} else {
 								// No need to check this tuple.
@@ -11220,12 +11234,18 @@ func (ht *HashTable) FindBuckets(
 				batchLength := batch.Length()
 				sel := batch.Selection()
 				// Early bounds checks.
+				hashBuffer := ht.ProbeScratch.HashBuffer
 				groupIDs := ht.ProbeScratch.GroupID
+				toCheck := ht.ProbeScratch.ToCheck
+				headIDs := ht.ProbeScratch.HeadID
+				_ = hashBuffer[batchLength-1]
 				_ = groupIDs[batchLength-1]
-				var tupleIdx, nToCheck uint64
-				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-					tupleIdx = uint64(i)
-					nextGroupIDToCheck := first[hash]
+				_ = toCheck[batchLength-1]
+				_ = headIDs[batchLength-1]
+				var nToCheck uint64
+				//for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+				for tupleIdx := uint64(0); tupleIdx < uint64(batchLength) && nToCheck < uint64(batchLength); tupleIdx++ {
+					nextGroupIDToCheck := first[hashBuffer[tupleIdx]]
 					// When probing against itself, we know for sure that
 					// 'nextGroupIDToCheck' will not be zero - we definitely have a
 					// match when using the same probing tuple on the build side.
@@ -11240,14 +11260,17 @@ func (ht *HashTable) FindBuckets(
 						if needToCheck {
 							//gcassert:bce
 							groupIDs[tupleIdx] = nextGroupIDToCheck
-							ht.ProbeScratch.ToCheck[nToCheck] = tupleIdx
+							//gcassert:bce
+							toCheck[nToCheck] = tupleIdx
 							nToCheck++
 						} else {
 							// No need to check this tuple.
 							_ = true
 							// Set the HeadID of this tuple to point to itself since it is an
 							// equality chain consisting only of a single element.
-							ht.ProbeScratch.HeadID[tupleIdx] = tupleIdx + 1
+							_ = true
+							//gcassert:bce
+							headIDs[tupleIdx] = tupleIdx + 1
 						}
 					}
 				}
@@ -11258,7 +11281,7 @@ func (ht *HashTable) FindBuckets(
 					nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
 					toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
 					nToCheck = 0
-					for _, tupleIdx = range toCheckSlice {
+					for _, tupleIdx := range toCheckSlice {
 						nextGroupIDToCheck := next[groupIDs[tupleIdx]]
 						// When we're probing against itself, all the tuples that have
 						// non-zero HeadID can be skipped because they are the part of
@@ -11276,14 +11299,15 @@ func (ht *HashTable) FindBuckets(
 						{
 							if needToCheck {
 								groupIDs[tupleIdx] = nextGroupIDToCheck
-								ht.ProbeScratch.ToCheck[nToCheck] = tupleIdx
+								toCheck[nToCheck] = tupleIdx
 								nToCheck++
 							} else {
 								// No need to check this tuple.
 								_ = true
 								// Set the HeadID of this tuple to point to itself since it is an
 								// equality chain consisting only of a single element.
-								ht.ProbeScratch.HeadID[tupleIdx] = tupleIdx + 1
+								_ = true
+								headIDs[tupleIdx] = tupleIdx + 1
 							}
 						}
 					}
@@ -11294,12 +11318,18 @@ func (ht *HashTable) FindBuckets(
 				batchLength := batch.Length()
 				sel := batch.Selection()
 				// Early bounds checks.
+				hashBuffer := ht.ProbeScratch.HashBuffer
 				groupIDs := ht.ProbeScratch.GroupID
+				toCheck := ht.ProbeScratch.ToCheck
+				headIDs := ht.ProbeScratch.HeadID
+				_ = hashBuffer[batchLength-1]
 				_ = groupIDs[batchLength-1]
-				var tupleIdx, nToCheck uint64
-				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-					tupleIdx = uint64(i)
-					nextGroupIDToCheck := first[hash]
+				_ = toCheck[batchLength-1]
+				_ = headIDs[batchLength-1]
+				var nToCheck uint64
+				//for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+				for tupleIdx := uint64(0); tupleIdx < uint64(batchLength) && nToCheck < uint64(batchLength); tupleIdx++ {
+					nextGroupIDToCheck := first[hashBuffer[tupleIdx]]
 					// When 'nextGroupIDToCheck' is zero, then the tuple doesn't have a
 					// duplicate in the hash table because we don't have a hash match.
 					needToCheck := nextGroupIDToCheck != 0
@@ -11307,14 +11337,17 @@ func (ht *HashTable) FindBuckets(
 						if needToCheck {
 							//gcassert:bce
 							groupIDs[tupleIdx] = nextGroupIDToCheck
-							ht.ProbeScratch.ToCheck[nToCheck] = tupleIdx
+							//gcassert:bce
+							toCheck[nToCheck] = tupleIdx
 							nToCheck++
 						} else {
 							// No need to check this tuple.
 							_ = true
 							// Set the HeadID of this tuple to point to itself since it is an
 							// equality chain consisting only of a single element.
-							ht.ProbeScratch.HeadID[tupleIdx] = tupleIdx + 1
+							_ = true
+							//gcassert:bce
+							headIDs[tupleIdx] = tupleIdx + 1
 						}
 					}
 				}
@@ -11325,7 +11358,7 @@ func (ht *HashTable) FindBuckets(
 					nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
 					toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
 					nToCheck = 0
-					for _, tupleIdx = range toCheckSlice {
+					for _, tupleIdx := range toCheckSlice {
 						nextGroupIDToCheck := next[groupIDs[tupleIdx]]
 						// When 'nextGroupIDToCheck' is zero, then the tuple doesn't have a
 						// duplicate in the hash table because we have already exhausted all
@@ -11334,14 +11367,15 @@ func (ht *HashTable) FindBuckets(
 						{
 							if needToCheck {
 								groupIDs[tupleIdx] = nextGroupIDToCheck
-								ht.ProbeScratch.ToCheck[nToCheck] = tupleIdx
+								toCheck[nToCheck] = tupleIdx
 								nToCheck++
 							} else {
 								// No need to check this tuple.
 								_ = true
 								// Set the HeadID of this tuple to point to itself since it is an
 								// equality chain consisting only of a single element.
-								ht.ProbeScratch.HeadID[tupleIdx] = tupleIdx + 1
+								_ = true
+								headIDs[tupleIdx] = tupleIdx + 1
 							}
 						}
 					}
@@ -11363,8 +11397,6 @@ const _ = "template_findBuckets"
 // probe the current tuple against on the next iteration
 // - nToCheck tracks the number of tuples we have already included for probing
 // on the next iteration and might be incremented.
-// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
-// and ht.ProbeScratch.HeadID.
 // execgen:inline
 const _ = "template_processNextGroupIDToCheck"
 
@@ -11389,8 +11421,6 @@ const _ = "inlined_findBuckets_false_false"
 // probe the current tuple against on the next iteration
 // - nToCheck tracks the number of tuples we have already included for probing
 // on the next iteration and might be incremented.
-// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
-// and ht.ProbeScratch.HeadID.
 // execgen:inline
 const _ = "inlined_processNextGroupIDToCheck_true_true"
 
@@ -11403,8 +11433,6 @@ const _ = "inlined_processNextGroupIDToCheck_true_true"
 // probe the current tuple against on the next iteration
 // - nToCheck tracks the number of tuples we have already included for probing
 // on the next iteration and might be incremented.
-// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
-// and ht.ProbeScratch.HeadID.
 // execgen:inline
 const _ = "inlined_processNextGroupIDToCheck_true_false"
 
@@ -11417,8 +11445,6 @@ const _ = "inlined_processNextGroupIDToCheck_true_false"
 // probe the current tuple against on the next iteration
 // - nToCheck tracks the number of tuples we have already included for probing
 // on the next iteration and might be incremented.
-// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
-// and ht.ProbeScratch.HeadID.
 // execgen:inline
 const _ = "inlined_processNextGroupIDToCheck_false_true"
 
@@ -11431,7 +11457,5 @@ const _ = "inlined_processNextGroupIDToCheck_false_true"
 // probe the current tuple against on the next iteration
 // - nToCheck tracks the number of tuples we have already included for probing
 // on the next iteration and might be incremented.
-// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
-// and ht.ProbeScratch.HeadID.
 // execgen:inline
 const _ = "inlined_processNextGroupIDToCheck_false_false"

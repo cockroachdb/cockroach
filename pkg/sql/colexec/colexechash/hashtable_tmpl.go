@@ -661,12 +661,18 @@ func findBuckets(
 	batchLength := batch.Length()
 	sel := batch.Selection()
 	// Early bounds checks.
+	hashBuffer := ht.ProbeScratch.HashBuffer
 	groupIDs := ht.ProbeScratch.GroupID
+	toCheck := ht.ProbeScratch.ToCheck
+	headIDs := ht.ProbeScratch.HeadID
+	_ = hashBuffer[batchLength-1]
 	_ = groupIDs[batchLength-1]
-	var tupleIdx, nToCheck uint64
-	for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-		tupleIdx = uint64(i)
-		nextGroupIDToCheck := first[hash]
+	_ = toCheck[batchLength-1]
+	_ = headIDs[batchLength-1]
+	var nToCheck uint64
+	//for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+	for tupleIdx := uint64(0); tupleIdx < uint64(batchLength) && nToCheck < uint64(batchLength); tupleIdx++ {
+		nextGroupIDToCheck := first[hashBuffer[tupleIdx]]
 		if probingAgainstItself {
 			// When probing against itself, we know for sure that
 			// 'nextGroupIDToCheck' will not be zero - we definitely have a
@@ -679,12 +685,12 @@ func findBuckets(
 			// zeroHeadIDForDistinctTuple is false, so the function call below
 			// will set up HeadID for the tuple to point to itself.
 			needToCheck := tupleIdx != nextGroupIDToCheck-1
-			processNextGroupIDToCheck(ht, groupIDs, tupleIdx, needToCheck, nextGroupIDToCheck, nToCheck, zeroHeadIDForDistinctTuple, true)
+			processNextGroupIDToCheck(ht, groupIDs, toCheck, headIDs, tupleIdx, needToCheck, nextGroupIDToCheck, nToCheck, zeroHeadIDForDistinctTuple, true)
 		} else {
 			// When 'nextGroupIDToCheck' is zero, then the tuple doesn't have a
 			// duplicate in the hash table because we don't have a hash match.
 			needToCheck := nextGroupIDToCheck != 0
-			processNextGroupIDToCheck(ht, groupIDs, tupleIdx, needToCheck, nextGroupIDToCheck, nToCheck, zeroHeadIDForDistinctTuple, true)
+			processNextGroupIDToCheck(ht, groupIDs, toCheck, headIDs, tupleIdx, needToCheck, nextGroupIDToCheck, nToCheck, zeroHeadIDForDistinctTuple, true)
 		}
 	}
 
@@ -694,7 +700,7 @@ func findBuckets(
 		nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
 		toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
 		nToCheck = 0
-		for _, tupleIdx = range toCheckSlice {
+		for _, tupleIdx := range toCheckSlice {
 			nextGroupIDToCheck := next[groupIDs[tupleIdx]]
 			if probingAgainstItself {
 				// When we're probing against itself, all the tuples that have
@@ -711,7 +717,7 @@ func findBuckets(
 			// duplicate in the hash table because we have already exhausted all
 			// hash matches and didn't find an equality match.
 			needToCheck := nextGroupIDToCheck != 0
-			processNextGroupIDToCheck(ht, groupIDs, tupleIdx, needToCheck, nextGroupIDToCheck, nToCheck, zeroHeadIDForDistinctTuple, false)
+			processNextGroupIDToCheck(ht, groupIDs, toCheck, headIDs, tupleIdx, needToCheck, nextGroupIDToCheck, nToCheck, zeroHeadIDForDistinctTuple, false)
 		}
 	}
 }
@@ -725,26 +731,29 @@ func findBuckets(
 // probe the current tuple against on the next iteration
 // - nToCheck tracks the number of tuples we have already included for probing
 // on the next iteration and might be incremented.
-// TODO(yuzefovich): check whether we can get BCE for ht.ProbeScratch.ToCheck
-// and ht.ProbeScratch.HeadID.
 // execgen:inline
-// execgen:template<zeroHeadIDForDistinctTuple,groupIDsBCE>
+// execgen:template<zeroHeadIDForDistinctTuple,bce>
 func processNextGroupIDToCheck(
 	ht *HashTable,
 	groupIDs []uint64,
+	toCheck []uint64,
+	headIDs []uint64,
 	tupleIdx uint64,
 	needToCheck bool,
 	nextGroupIDToCheck uint64,
 	nToCheck uint64,
 	zeroHeadIDForDistinctTuple bool,
-	groupIDsBCE bool,
+	bce bool,
 ) {
 	if needToCheck {
-		if groupIDsBCE {
+		if bce {
 			//gcassert:bce
 		}
 		groupIDs[tupleIdx] = nextGroupIDToCheck
-		ht.ProbeScratch.ToCheck[nToCheck] = tupleIdx
+		if bce {
+			//gcassert:bce
+		}
+		toCheck[nToCheck] = tupleIdx
 		nToCheck++
 	} else {
 		// No need to check this tuple.
@@ -755,7 +764,10 @@ func processNextGroupIDToCheck(
 		} else {
 			// Set the HeadID of this tuple to point to itself since it is an
 			// equality chain consisting only of a single element.
-			ht.ProbeScratch.HeadID[tupleIdx] = tupleIdx + 1
+			if bce {
+				//gcassert:bce
+			}
+			headIDs[tupleIdx] = tupleIdx + 1
 		}
 	}
 }
