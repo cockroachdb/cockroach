@@ -180,8 +180,6 @@ const (
 	//
 	// Start21_1 demarcates work towards CockroachDB v21.1.
 	Start21_1
-	// ReplicaVersions enables the versioning of Replica state.
-	ReplicaVersions
 	// replacedTruncatedAndRangeAppliedStateMigration stands in for
 	// TruncatedAndRangeAppliedStateMigration which was	re-introduced after the
 	// migration job was introduced. This is necessary because the jobs
@@ -358,10 +356,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_1,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     ReplicaVersions,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 12},
 	},
 	{
 		Key:     replacedTruncatedAndRangeAppliedStateMigration,
