@@ -289,6 +289,8 @@ const (
 	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
 	// use a single consumption column (encoding a proto).
 	TenantUsageSingleConsumptionColumn
+	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
+	V21_2
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -486,6 +488,11 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TenantUsageSingleConsumptionColumn,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1168},
+	},
+	{
+		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
+		Key:     V21_2,
+		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
