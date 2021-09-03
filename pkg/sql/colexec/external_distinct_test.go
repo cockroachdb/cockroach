@@ -333,6 +333,7 @@ func BenchmarkExternalDistinct(b *testing.B) {
 				},
 				name,
 				true, /* isExternal */
+				true, /* shuffleInput */
 			)
 		}
 	}

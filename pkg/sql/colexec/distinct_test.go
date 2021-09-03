@@ -445,6 +445,7 @@ func runDistinctBenchmarks(
 	getNumOrderedCols func(nCols int) int,
 	namePrefix string,
 	isExternal bool,
+	shuffleInput bool,
 ) {
 	rng, _ := randutil.NewPseudoRand()
 	const nCols = 2
@@ -514,7 +515,36 @@ func runDistinctBenchmarks(
 						for j := 1; j < nRows; j++ {
 							setIthValue(cols[i], j, newValueProbability)
 						}
-						if hasNulls {
+					}
+					if shuffleInput {
+						// We have just constructed the input so that all rows
+						// are ordered on the distinct columns, but we want the
+						// input to be shuffled. Thus, we create new vectors
+						// and set the values randomly.
+						oldCols := cols
+						cols = make([]coldata.Vec, nCols)
+						for i := range cols {
+							cols[i] = testAllocator.NewMemColumn(typs[i], nRows)
+						}
+						alreadyUsed := make([]bool, nRows)
+						for rowIdx := 0; rowIdx < nRows; rowIdx++ {
+							// Pick the rows from the ordered set that we
+							// haven't used yet.
+							orderedRowIdx := rng.Intn(nRows)
+							for alreadyUsed[orderedRowIdx] {
+								orderedRowIdx++
+								if orderedRowIdx == nRows {
+									orderedRowIdx = 0
+								}
+							}
+							for i := range cols {
+								val := coldata.GetValueAt(oldCols[i], orderedRowIdx)
+								coldata.SetValueAt(cols[i], val, rowIdx)
+							}
+						}
+					}
+					if hasNulls {
+						for i := range cols {
 							cols[i].Nulls().SetNull(0)
 						}
 					}
@@ -578,6 +608,7 @@ func BenchmarkDistinct(b *testing.B) {
 			},
 			distinctNames[distinctIdx],
 			false, /* isExternal */
+			distinctNames[distinctIdx] == "Unordered", /* shuffleInput */
 		)
 	}
 }
