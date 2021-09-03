@@ -378,7 +378,7 @@ WHERE
 	var ok bool
 	for ok, err = defaultSettingsIt.Next(ctx); ok; ok, err = defaultSettingsIt.Next(ctx) {
 		row := defaultSettingsIt.Cur()
-		fetechedDatabaseID := descpb.ID(tree.MustBeDOid(row[0]).DInt)
+		fetechedDatabaseID := descpb.ID(tree.MustBeDOid(row[0]).Oid)
 		fetchedUsername := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(row[1])))
 		settingsDatum := tree.MustBeDArray(row[2])
 		fetchedSettings := make([]string, settingsDatum.Len())

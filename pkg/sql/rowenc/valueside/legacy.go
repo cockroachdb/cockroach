@@ -169,7 +169,7 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 		}
 	case types.OidFamily:
 		if v, ok := val.(*tree.DOid); ok {
-			r.SetInt(int64(v.DInt))
+			r.SetInt(int64(v.Oid))
 			return r, nil
 		}
 	case types.EnumFamily:

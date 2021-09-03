@@ -97,7 +97,7 @@ func getSequenceIdentifier(expr tree.Expr) *SeqIdentifier {
 			SeqName: seqName,
 		}
 	case *tree.DOid:
-		id := int64(a.DInt)
+		id := int64(a.Oid)
 		return &SeqIdentifier{
 			SeqID: id,
 		}

@@ -760,7 +760,7 @@ func (d *DInt) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// compare OIDs to signed 32-bit integers, so we implement the comparison
 		// by converting to a uint32 first. This matches Postgres behavior.
 		thisInt = DInt(uint32(thisInt))
-		v = t.DInt
+		v = DInt(t.Oid)
 	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
@@ -4860,12 +4860,11 @@ func (d *DEnum) MinWriteable() (Datum, bool) {
 // of the reg* types, such as regproc or regclass. An OID must only be
 // 32 bits, since this width encoding is enforced in the pgwire protocol.
 // OIDs are not guaranteed to be globally unique.
-// TODO(rafi): make this use a uint32 instead of a DInt.
 type DOid struct {
-	// A DOid embeds a DInt, the underlying integer OID for this OID datum.
-	DInt
+	// A DOid embeds a oid.Oid, the underlying integer OID for this OID datum.
+	Oid oid.Oid
 	// semanticType indicates the particular variety of OID this datum is, whether raw
-	// oid or a reg* type.
+	// Oid or a reg* type.
 	semanticType *types.T
 	// name is set to the resolved name of this OID, if available.
 	name string
@@ -4873,18 +4872,18 @@ type DOid struct {
 
 // MakeDOid is a helper routine to create a DOid initialized from a DInt.
 func MakeDOid(d DInt, semanticType *types.T) DOid {
-	return DOid{DInt: d, semanticType: semanticType, name: ""}
+	return DOid{Oid: oid.Oid(d), semanticType: semanticType, name: ""}
 }
 
 // NewDOidWithType constructs a DOid with the given type and no name.
 func NewDOidWithType(d DInt, semanticType *types.T) *DOid {
-	oid := DOid{DInt: d, semanticType: semanticType}
+	oid := DOid{Oid: oid.Oid(d), semanticType: semanticType}
 	return &oid
 }
 
 // NewDOidWithTypeAndName constructs a DOid with the given type and name.
 func NewDOidWithTypeAndName(d DInt, semanticType *types.T, name string) *DOid {
-	oid := DOid{DInt: d, semanticType: semanticType, name: name}
+	oid := DOid{Oid: oid.Oid(d), semanticType: semanticType, name: name}
 	return &oid
 }
 
@@ -4924,7 +4923,7 @@ func MustBeDOid(e Expr) *DOid {
 // and a string.
 func NewDOidWithName(d DInt, typ *types.T, name string) *DOid {
 	return &DOid{
-		DInt:         d,
+		Oid:          oid.Oid(d),
 		semanticType: typ,
 		name:         name,
 	}
@@ -4956,23 +4955,23 @@ func (d *DOid) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
-	var v DInt
+	var v oid.Oid
 	switch t := ctx.UnwrapDatum(other).(type) {
 	case *DOid:
-		v = t.DInt
+		v = t.Oid
 	case *DInt:
 		// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 		// compare OIDs to signed 32-bit integers, so we implement the comparison
 		// by converting to a uint32 first. This matches Postgres behavior.
-		v = DInt(uint32(*t))
+		v = oid.Oid(*t)
 	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
 
-	if d.DInt < v {
+	if d.Oid < v {
 		return -1, nil
 	}
-	if d.DInt > v {
+	if d.Oid > v {
 		return 1, nil
 	}
 	return 0, nil
@@ -4980,18 +4979,14 @@ func (d *DOid) CompareError(ctx CompareContext, other Datum) (int, error) {
 
 // Format implements the Datum interface.
 func (d *DOid) Format(ctx *FmtCtx) {
+	s := strconv.FormatUint(uint64(d.Oid), 10)
 	if d.semanticType.Oid() == oid.T_oid || d.name == "" {
-		// If we call FormatNode directly when the disambiguateDatumTypes flag
-		// is set, then we get something like 123:::INT:::OID. This is the
-		// important flag set by FmtParsable which is supposed to be
-		// roundtrippable. Since in this branch, a DOid is a thin wrapper around
-		// a DInt, I _think_ it's correct to just delegate to the DInt's Format.
-		d.DInt.Format(ctx)
+		ctx.WriteString(s)
 	} else if ctx.HasFlags(fmtDisambiguateDatumTypes) {
 		ctx.WriteString("crdb_internal.create_")
 		ctx.WriteString(d.semanticType.SQLStandardName())
 		ctx.WriteByte('(')
-		d.DInt.Format(ctx)
+		ctx.WriteString(s)
 		ctx.WriteByte(',')
 		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncNoFlags)
 		ctx.WriteByte(')')
@@ -5003,21 +4998,25 @@ func (d *DOid) Format(ctx *FmtCtx) {
 }
 
 // IsMax implements the Datum interface.
-func (d *DOid) IsMax(ctx CompareContext) bool { return d.DInt.IsMax(ctx) }
+func (d *DOid) IsMax(ctx CompareContext) bool {
+	return d.Oid == math.MaxUint32
+}
 
 // IsMin implements the Datum interface.
-func (d *DOid) IsMin(ctx CompareContext) bool { return d.DInt.IsMin(ctx) }
+func (d *DOid) IsMin(ctx CompareContext) bool {
+	return d.Oid == 0
+}
 
 // Next implements the Datum interface.
 func (d *DOid) Next(ctx CompareContext) (Datum, bool) {
-	next, ok := d.DInt.Next(ctx)
-	return &DOid{*next.(*DInt), d.semanticType, ""}, ok
+	next := d.Oid + 1
+	return &DOid{next, d.semanticType, ""}, true
 }
 
 // Prev implements the Datum interface.
 func (d *DOid) Prev(ctx CompareContext) (Datum, bool) {
-	prev, ok := d.DInt.Prev(ctx)
-	return &DOid{*prev.(*DInt), d.semanticType, ""}, ok
+	prev := d.Oid - 1
+	return &DOid{prev, d.semanticType, ""}, true
 }
 
 // ResolvedType implements the Datum interface.
@@ -5030,14 +5029,12 @@ func (d *DOid) Size() uintptr { return unsafe.Sizeof(*d) }
 
 // Max implements the Datum interface.
 func (d *DOid) Max(ctx CompareContext) (Datum, bool) {
-	max, ok := d.DInt.Max(ctx)
-	return &DOid{*max.(*DInt), d.semanticType, ""}, ok
+	return &DOid{math.MaxUint32, d.semanticType, ""}, true
 }
 
 // Min implements the Datum interface.
 func (d *DOid) Min(ctx CompareContext) (Datum, bool) {
-	min, ok := d.DInt.Min(ctx)
-	return &DOid{*min.(*DInt), d.semanticType, ""}, ok
+	return &DOid{0, d.semanticType, ""}, true
 }
 
 // DOidWrapper is a Datum implementation which is a wrapper around a Datum, allowing
@@ -5467,8 +5464,8 @@ func MaxDistinctCount(evalCtx CompareContext, first, last Datum) (_ int64, ok bo
 	case *DOid:
 		otherDOid, otherOk := AsDOid(last)
 		if otherOk {
-			start = int64((*t).DInt)
-			end = int64(otherDOid.DInt)
+			start = int64(t.Oid)
+			end = int64(otherDOid.Oid)
 		}
 
 	case *DDate:

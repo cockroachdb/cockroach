@@ -2207,7 +2207,7 @@ var builtins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Sequence.IncrementSequenceByID(evalCtx.Ctx(), int64(dOid.DInt))
+				res, err := evalCtx.Sequence.IncrementSequenceByID(evalCtx.Ctx(), int64(dOid.Oid))
 				if err != nil {
 					return nil, err
 				}
@@ -2221,7 +2221,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := tree.MustBeDOid(args[0])
-				res, err := evalCtx.Sequence.IncrementSequenceByID(evalCtx.Ctx(), int64(oid.DInt))
+				res, err := evalCtx.Sequence.IncrementSequenceByID(evalCtx.Ctx(), int64(oid.Oid))
 				if err != nil {
 					return nil, err
 				}
@@ -2247,7 +2247,7 @@ var builtins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(evalCtx.Ctx(), int64(dOid.DInt))
+				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(evalCtx.Ctx(), int64(dOid.Oid))
 				if err != nil {
 					return nil, err
 				}
@@ -2261,7 +2261,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := tree.MustBeDOid(args[0])
-				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(evalCtx.Ctx(), int64(oid.DInt))
+				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(evalCtx.Ctx(), int64(oid.Oid))
 				if err != nil {
 					return nil, err
 				}
@@ -2311,7 +2311,7 @@ var builtins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(dOid.DInt), int64(newVal), true /* isCalled */); err != nil {
+					evalCtx.Ctx(), uint32(dOid.Oid), int64(newVal), true /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2327,7 +2327,7 @@ var builtins = map[string]builtinDefinition{
 				oid := tree.MustBeDOid(args[0])
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(oid.DInt), int64(newVal), true /* isCalled */); err != nil {
+					evalCtx.Ctx(), uint32(oid.Oid), int64(newVal), true /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2351,7 +2351,7 @@ var builtins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(dOid.DInt), int64(newVal), isCalled); err != nil {
+					evalCtx.Ctx(), uint32(dOid.Oid), int64(newVal), isCalled); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2371,7 +2371,7 @@ var builtins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(oid.DInt), int64(newVal), isCalled); err != nil {
+					evalCtx.Ctx(), uint32(oid.Oid), int64(newVal), isCalled); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -6498,7 +6498,7 @@ table's zone configuration this will return NULL.`,
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := tree.MustBeDOid(args[0])
-				if err := evalCtx.Planner.RepairTTLScheduledJobForTable(evalCtx.Ctx(), int64(oid.DInt)); err != nil {
+				if err := evalCtx.Planner.RepairTTLScheduledJobForTable(evalCtx.Ctx(), int64(oid.Oid)); err != nil {
 					return nil, err
 				}
 				return tree.DVoidDatum, nil
@@ -6587,7 +6587,7 @@ in the current database. Returns an error if validation fails.`,
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.Planner.RevalidateUniqueConstraintsInTable(evalCtx.Ctx(), int(dOid.DInt)); err != nil {
+				if err := evalCtx.Planner.RevalidateUniqueConstraintsInTable(evalCtx.Ctx(), int(dOid.Oid)); err != nil {
 					return nil, err
 				}
 				return tree.DVoidDatum, nil
@@ -6613,7 +6613,7 @@ table. Returns an error if validation fails.`,
 					return nil, err
 				}
 				if err = evalCtx.Planner.RevalidateUniqueConstraint(
-					evalCtx.Ctx(), int(dOid.DInt), string(constraintName),
+					evalCtx.Ctx(), int(dOid.Oid), string(constraintName),
 				); err != nil {
 					return nil, err
 				}
