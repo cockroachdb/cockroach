@@ -155,6 +155,12 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 	})
 }
 
+// GetLocalMemProvider returns a sqlstats.Provider that can only be used to
+// access local in-memory sql statistics.
+func (s *PersistedSQLStats) GetLocalMemProvider() sqlstats.Provider {
+	return s.SQLStats
+}
+
 // nextFlushInterval calculates the wait interval that is between:
 // [(1 - SQLStatsFlushJitter) * SQLStatsFlushInterval),
 //  (1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
