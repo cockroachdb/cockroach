@@ -302,6 +302,18 @@ func (r *RocksDBBatchReader) MVCCEndKey() (MVCCKey, error) {
 	return decodeMVCCKey(r.Value())
 }
 
+// EngineEndKey returns the engine end key of the current batch entry.
+func (r *RocksDBBatchReader) EngineEndKey() (EngineKey, error) {
+	if r.typ != BatchTypeRangeDeletion {
+		panic("cannot only call Value on a range deletion entry")
+	}
+	key, ok := DecodeEngineKey(r.Value())
+	if !ok {
+		return key, errors.Errorf("invalid encoded engine key: %x", r.Value())
+	}
+	return key, nil
+}
+
 // Next advances to the next entry in the batch, returning false when the batch
 // is empty.
 func (r *RocksDBBatchReader) Next() bool {
