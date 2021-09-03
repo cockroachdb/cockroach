@@ -90,6 +90,7 @@ func (kv keyedVersions) Validate() error {
 	// In the above example, we would tolerate 20.1-x but not 19.2-x.
 	// Currently we're actually a few versions behind in enforcing a ban on old
 	// versions/migrations. See #47447.
+	// TODO(celia) should 5 be updated back to 4?
 	if n := len(byRelease) - 5; n >= 0 {
 		var buf strings.Builder
 		for i, mami := range byRelease[:n+1] {
