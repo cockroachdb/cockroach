@@ -1994,7 +1994,7 @@ func (r *Replica) printRaftTail(
 			Key:   mvccKey,
 			Value: it.Value(),
 		}
-		sb.WriteString(truncateEntryString(SprintKeyValue(kv, true /* printKey */), 2000))
+		sb.WriteString(truncateEntryString(SprintMVCCKeyValue(kv, true /* printKey */), 2000))
 		sb.WriteRune('\n')
 
 		valid, err := it.PrevEngineKey()
