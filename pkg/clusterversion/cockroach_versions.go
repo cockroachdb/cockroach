@@ -302,6 +302,11 @@ const (
 	DateAndIntervalStyle
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
+
+	// v22.1 versions.
+	//
+	// Start22_1 demarcates work towards CockroachDB v22.1.
+	Start22_1
 	// Step (1): Add new versions here.
 )
 
@@ -514,6 +519,22 @@ var versionsSingleton = keyedVersions{
 		Key:     V21_2,
 		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
+
+	// v21.2 versions.
+	{
+		Key:     Start21_2,
+
+		// TODO(celia) - what should `Internal` be?
+		// - 162 <== {160, the last_value} + 2?
+		// - or should I jump up a few numbers (like 200?), to leave space for 21.1.x patch key/values?
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 200},
+	},
+
+	// TODO(celia) - should I be making a Start21_2PLUS, similar to
+	// Start21_1PLUS, for internal serverless offerings?
+	// (Start21_1PLUS is a v21.1PLUS version: a special v21.1.x release
+	// with extra changes, used internally for the 2021 Serverless offering.)
+
 	// Step (2): Add new versions here.
 }
 
