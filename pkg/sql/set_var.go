@@ -195,6 +195,13 @@ func getIntVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) 
 	return paramparse.DatumAsInt(evalCtx, name, values[0])
 }
 
+func getFloatVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (float64, error) {
+	if len(values) != 1 {
+		return 0, newSingleArgVarError(name)
+	}
+	return paramparse.DatumAsFloat(evalCtx, name, values[0])
+}
+
 func timeZoneVarGetStringVal(
 	_ context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
 ) (string, error) {

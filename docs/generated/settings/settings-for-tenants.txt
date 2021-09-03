@@ -99,6 +99,7 @@ sql.defaults.insert_fast_path.enabled	boolean	true	default value for enable_inse
 sql.defaults.interleaved_tables.enabled	boolean	false	allows creation of interleaved tables or indexes
 sql.defaults.intervalstyle	enumeration	postgres	default value for IntervalStyle session setting [postgres = 0, iso_8601 = 1, sql_standard = 2]
 sql.defaults.intervalstyle.enabled	boolean	false	default value for intervalstyle_enabled session setting
+sql.defaults.large_full_scan_rows	float	1000	default value for large_full_scan_rows session setting which determines the maximum table size allowed for a full scan when disallow_full_table_scans is set to true
 sql.defaults.locality_optimized_partitioned_index_scan.enabled	boolean	true	default value for locality_optimized_partitioned_index_scan session setting; enables searching for rows in the current region before searching remote regions
 sql.defaults.lock_timeout	duration	0s	default value for the lock_timeout; default value for the lock_timeout session setting; controls the duration a query is permitted to wait while attempting to acquire a lock on a key or while blocking on an existing lock in order to perform a non-locking read on a key; if set to 0, there is no timeout
 sql.defaults.on_update_rehome_row.enabled	boolean	true	default value for on_update_rehome_row; enables ON UPDATE rehome_row() expressions to trigger on updates

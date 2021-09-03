@@ -561,6 +561,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var isDDL bool
 	var containsFullTableScan bool
 	var containsFullIndexScan bool
+	var containsLargeFullTableScan bool
+	var containsLargeFullIndexScan bool
 	var containsMutation bool
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
@@ -573,6 +575,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 		isDDL = bld.IsDDL
 		containsFullTableScan = bld.ContainsFullTableScan
 		containsFullIndexScan = bld.ContainsFullIndexScan
+		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
+		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
 	} else {
 		// Create an explain factory and record the explain.Plan.
@@ -589,6 +593,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 		isDDL = bld.IsDDL
 		containsFullTableScan = bld.ContainsFullTableScan
 		containsFullIndexScan = bld.ContainsFullIndexScan
+		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
+		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
@@ -612,6 +618,12 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	if containsFullIndexScan {
 		planTop.flags.Set(planFlagContainsFullIndexScan)
+	}
+	if containsLargeFullTableScan {
+		planTop.flags.Set(planFlagContainsLargeFullTableScan)
+	}
+	if containsLargeFullIndexScan {
+		planTop.flags.Set(planFlagContainsLargeFullIndexScan)
 	}
 	if containsMutation {
 		planTop.flags.Set(planFlagContainsMutation)

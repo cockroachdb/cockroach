@@ -725,19 +725,33 @@ true NULL
 
 # Tests for `disallow_full_table_scans`
 statement ok
-CREATE TABLE t_disallow_scans(a INT);
-
-statement ok
-INSERT INTO t_disallow_scans VALUES (1), (2), (3)
+CREATE TABLE t_disallow_scans(a INT, b INT, INDEX b_idx(b));
+INSERT INTO t_disallow_scans VALUES (1, 1), (2, 1), (3, 1)
 
 statement ok
 SELECT * FROM t_disallow_scans
 
 statement ok
-SET disallow_full_table_scans = true
+SET disallow_full_table_scans = true;
+
+# Full scans are prohibited because we don't have stats on the table.
+statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans
+
+statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans@b_idx
+
+# Disable 'large_full_scan_rows' heuristic and analyze the table in order to
+# test 'disallow_full_table_scans' in isolation.
+statement ok
+SET large_full_scan_rows = 0;
+ANALYZE t_disallow_scans
 
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
+
+statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans@b_idx
 
 # Internal statements should still be allowed with this setting.
 statement ok
@@ -746,9 +760,31 @@ SELECT * FROM pg_class
 statement ok
 SELECT * FROM crdb_internal.jobs
 
+# Tests for 'large_full_scan_rows'.
+statement ok
+SET large_full_scan_rows = 4
+
+# These queries succeed because the full table/index scans aren't considered
+# "large".
+statement ok
+SELECT * FROM t_disallow_scans
+
+statement ok
+SELECT * FROM t_disallow_scans@b_idx
+
+statement ok
+SET large_full_scan_rows = 2
+
+statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans
+
+statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans@b_idx
+
 # Cleanup
 statement ok
-SET disallow_full_table_scans = false
+SET disallow_full_table_scans = false;
+RESET large_full_scan_rows
 
 # Regression test for #58104.
 statement ok

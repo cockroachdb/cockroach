@@ -406,9 +406,10 @@ func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
 				6*metricsSampleInterval),
 			SQLTxnsOpen: metric.NewGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
 
-			TxnAbortCount:             metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
-			FailureCount:              metric.NewCounter(getMetricMeta(MetaFailure, internal)),
-			FullTableOrIndexScanCount: metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
+			TxnAbortCount:                     metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
+			FailureCount:                      metric.NewCounter(getMetricMeta(MetaFailure, internal)),
+			FullTableOrIndexScanCount:         metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
+			FullTableOrIndexScanRejectedCount: metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScanRejected, internal)),
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),

@@ -584,12 +584,24 @@ const (
 	planFlagTenant
 
 	// planFlagContainsFullTableScan is set if the plan involves an unconstrained
-	// scan on (the primary key of) a table.
+	// scan on (the primary key of) a table. This could be an unconstrained scan
+	// of any cardinality.
 	planFlagContainsFullTableScan
 
 	// planFlagContainsFullIndexScan is set if the plan involves an unconstrained
-	// secondary index scan.
+	// secondary index scan. This could be an unconstrainted scan of any
+	// cardinality.
 	planFlagContainsFullIndexScan
+
+	// planFlagContainsLargeFullTableScan is set if the plan involves an
+	// unconstrained scan on (the primary key of) a table estimated to read more
+	// than large_full_scan_rows (or without available stats).
+	planFlagContainsLargeFullTableScan
+
+	// planFlagContainsLargeFullIndexScan is set if the plan involves an
+	// unconstrained secondary index scan estimated to read more than
+	// large_full_scan_rows (or without available stats).
+	planFlagContainsLargeFullIndexScan
 
 	// planFlagContainsMutation is set if the plan has any mutations.
 	planFlagContainsMutation

@@ -711,6 +711,7 @@ message MigrationDetails {
 }
 
 message MigrationProgress {
+  bytes watermark = 1;
 }
 
 message AutoSQLStatsCompactionDetails {
