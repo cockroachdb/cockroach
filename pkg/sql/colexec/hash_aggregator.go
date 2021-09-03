@@ -220,7 +220,7 @@ func (op *hashAggregator) Init(ctx context.Context) {
 	// These numbers were chosen after running the micro-benchmarks and relevant
 	// TPCH queries using tpchvec/bench.
 	const hashTableLoadFactor = 0.1
-	const hashTableNumBuckets = 256
+	const hashTableNumBuckets = 32
 	op.ht = colexechash.NewHashTable(
 		op.Ctx,
 		op.hashTableAllocator,
