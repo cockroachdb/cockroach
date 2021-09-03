@@ -31,6 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 )
 
+// TODO(celia) -- there used to be a toCRDBVersion() here -- confirm that
+// this no longer lives somewhere else / doesn't need to be updated?
+
 const tpchVecPerfSlownessThreshold = 1.5
 
 var tpchTables = []string{
