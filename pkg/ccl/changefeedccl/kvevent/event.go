@@ -166,8 +166,7 @@ func (b *Event) MVCCTimestamp() hlc.Timestamp {
 // DetachAlloc detaches and returns allocation associated with this event.
 func (b *Event) DetachAlloc() Alloc {
 	a := b.alloc
-	b.alloc.entries = 0
-	b.alloc.bytes = 0
+	b.alloc.clear()
 	return a
 }
 
