@@ -999,28 +999,59 @@ var (
 
 	// Slow request metrics.
 	metaLatchRequests = metric.Metadata{
-		Name:        "requests.slow.latch",
-		Help:        "Number of requests that have been stuck for a long time acquiring latches",
+		Name: "requests.slow.latch",
+		Help: `Number of requests that have been stuck for a long time acquiring latches.
+
+Latches moderate access to the KV keyspace for the purpose of evaluating and
+replicating commands. A slow latch acquisition attempt is often caused by
+another request holding and not releasing its latches in a timely manner. This
+in turn can either be caused by a long delay in evaluation (for example, under
+severe system overload) or by delays at the replication layer.
+
+This gauge registering a nonzero value usually indicates a serious problem and
+should be investigated.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSlowLeaseRequests = metric.Metadata{
-		Name:        "requests.slow.lease",
-		Help:        "Number of requests that have been stuck for a long time acquiring a lease",
+		Name: "requests.slow.lease",
+		Help: `Number of requests that have been stuck for a long time acquiring a lease.
+
+This gauge registering a nonzero value usually indicates range or replica
+unavailability, and should be investigated. In the common case, we also
+expect to see 'requests.slow.raft' to register a nonzero value, indicating
+that the lease requests are not getting a timely response from the replication
+layer.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSlowRaftRequests = metric.Metadata{
-		Name:        "requests.slow.raft",
-		Help:        "Number of requests that have been stuck for a long time in raft",
+		Name: "requests.slow.raft",
+		Help: `Number of requests that have been stuck for a long time in the replication layer.
+
+An (evaluated) request has to pass through the replication layer, notably the
+quota pool and raft. If it fails to do so within a highly permissive duration,
+the gauge is incremented (and decremented again once the request is either
+applied or returns an error).
+
+A nonzero value indicates range or replica unavailability, and should be investigated.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 
 	// Backpressure metrics.
 	metaBackpressuredOnSplitRequests = metric.Metadata{
-		Name:        "requests.backpressure.split",
-		Help:        "Number of backpressured writes waiting on a Range split",
+		Name: "requests.backpressure.split",
+		Help: `Number of backpressured writes waiting on a Range split.
+
+A Range will backpressure (roughly) non-system traffic when the range is above
+the configured size until the range splits. When the rate of this metric is
+nonzero over extended periods of time, it should be investigated why splits are
+not occurring.
+`,
 		Measurement: "Writes",
 		Unit:        metric.Unit_COUNT,
 	}
