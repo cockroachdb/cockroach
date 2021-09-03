@@ -1339,7 +1339,7 @@ func TestChangefeedAuthorization(t *testing.T) {
 			errMsg:    `connecting to kafka`,
 		},
 		{name: `cloud`,
-			statement: `CREATE CHANGEFEED FOR d.table_a INTO 'experimental-nodelocal://12/nope/'`,
+			statement: `CREATE CHANGEFEED FOR d.table_a INTO 'nodelocal://12/nope/'`,
 			errMsg:    `connecting to node 12`,
 		},
 		{name: `sinkless`,
@@ -2883,10 +2883,6 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	// Sanity check webhook sink options.
-	sqlDB.ExpectErr(
-		t, `unsupported sink: https. HTTP endpoints can be used with webhook-https and experimental-https`,
-		`CREATE CHANGEFEED FOR foo INTO $1`, `https://fake-host`,
-	)
 	sqlDB.ExpectErr(
 		t, `param insecure_tls_skip_verify must be a bool`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-https://fake-host?insecure_tls_skip_verify=foo`,

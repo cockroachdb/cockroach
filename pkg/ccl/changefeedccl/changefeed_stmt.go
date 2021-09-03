@@ -162,10 +162,10 @@ func changefeedPlanHook(
 			}
 		}
 
-		if opts[changefeedbase.OptFormat] == changefeedbase.DeprecatedOptFormatAvro {
+		if newFormat, ok := changefeedbase.NoLongerExperimental[opts[changefeedbase.OptFormat]]; ok {
 			p.BufferClientNotice(ctx, pgnotice.Newf(
 				`%[1]s is no longer experimental, use %[2]s=%[1]s`,
-				changefeedbase.OptFormatAvro, changefeedbase.OptFormat),
+				newFormat, changefeedbase.OptFormat),
 			)
 			// Still serialize the experimental_ form for backwards compatibility
 		}
@@ -287,6 +287,13 @@ func changefeedPlanHook(
 		if err != nil {
 			return err
 		}
+		if newScheme, ok := changefeedbase.NoLongerExperimental[parsedSink.Scheme]; ok {
+			parsedSink.Scheme = newScheme // This gets munged anyway when building the sink
+			p.BufferClientNotice(ctx, pgnotice.Newf(`%[1]s is no longer experimental, use %[1]s://`,
+				newScheme),
+			)
+		}
+
 		if details, err = validateDetails(details); err != nil {
 			return err
 		}
