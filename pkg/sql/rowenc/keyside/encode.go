@@ -163,9 +163,9 @@ func Encode(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 		return encoding.EncodeBitArrayDescending(b, t.BitArray), nil
 	case *tree.DOid:
 		if dir == encoding.Ascending {
-			return encoding.EncodeVarintAscending(b, int64(t.DInt)), nil
+			return encoding.EncodeVarintAscending(b, int64(t.Oid)), nil
 		}
-		return encoding.EncodeVarintDescending(b, int64(t.DInt)), nil
+		return encoding.EncodeVarintDescending(b, int64(t.Oid)), nil
 	case *tree.DEnum:
 		if dir == encoding.Ascending {
 			return encoding.EncodeBytesAscending(b, t.PhysicalRep), nil

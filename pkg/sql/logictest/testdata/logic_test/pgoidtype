@@ -420,7 +420,7 @@ SELECT proargtypes::REGTYPE[] FROM pg_proc WHERE proname = 'obj_description'
 query I
 SELECT 'trigger'::REGTYPE::INT
 ----
--1
+0
 
 # Regression test for #41708.
 

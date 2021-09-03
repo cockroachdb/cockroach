@@ -300,7 +300,7 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 	case *tree.DIPAddr:
 		return encoding.EncodeUntaggedIPAddrValue(b, t.IPAddr), nil
 	case *tree.DOid:
-		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
+		return encoding.EncodeUntaggedIntValue(b, int64(t.Oid)), nil
 	case *tree.DCollatedString:
 		return encoding.EncodeUntaggedBytesValue(b, []byte(t.Contents)), nil
 	case *tree.DOidWrapper:

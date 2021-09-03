@@ -2368,7 +2368,7 @@ SELECT pg_catalog.length('hello')
 query OOO
 SELECT oid(3), oid(0), oid(12023948723)
 ----
-3  0  12023948723
+3  0  3434014131
 
 query T
 SELECT to_english(i) FROM (VALUES (1), (13), (617), (-2), (-9223372036854775808)) AS a(i)
