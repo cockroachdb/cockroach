@@ -276,6 +276,11 @@ const (
 	DateAndIntervalStyle
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
+
+	// v22.1 versions.
+	//
+	// Start22_1 demarcates work towards CockroachDB v22.1.
+	Start22_1
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -465,6 +470,16 @@ var versionsSingleton = keyedVersions{
 		Key:     V21_2,
 		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
+
+	// v21.2 versions.
+	// TODO(celia) - should `Internal` be 1160+2? Or should a use something bigger like 2000?
+	{
+		Key:     Start21_2,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 2000},
+	},
+
+	// TODO(celia) - should I be making a Start21_2PLUS, similar to Start21_1PLUS for serverless?
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
