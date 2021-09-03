@@ -315,6 +315,12 @@ func (meta *MVCCMetadata) FormatW(buf io.Writer, expand bool) {
 			fmt.Fprintf(buf, " nih=%d", nih)
 		}
 	}
+
+	var txnDidNotUpdateMeta bool
+	if meta.TxnDidNotUpdateMeta != nil {
+		txnDidNotUpdateMeta = *meta.TxnDidNotUpdateMeta
+	}
+	fmt.Fprintf(buf, " mergeTs=%s txnDidNotUpdateMeta=%t", meta.MergeTimestamp, txnDidNotUpdateMeta)
 }
 
 func (meta *MVCCMetadataSubsetForMergeSerialization) String() string {
