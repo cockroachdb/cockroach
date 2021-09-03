@@ -27,6 +27,7 @@ func TestFormatMVCCMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts := hlc.Timestamp{Logical: 1}
+	txnDidNotUpdateMeta := true
 	tmeta := &enginepb.TxnMeta{
 		Key:            roachpb.Key("a"),
 		ID:             txnID,
@@ -50,10 +51,11 @@ func TestFormatMVCCMetadata(t *testing.T) {
 			{Sequence: 11, Value: val2.RawBytes},
 			{Sequence: 22, Value: val3.RawBytes},
 		},
+		TxnDidNotUpdateMeta: &txnDidNotUpdateMeta,
 	}
 
 	const expStr = `txn={id=d7aa0f5e key="a" pri=0.00000000 epo=1 ts=0,1 min=0,1 seq=0}` +
-		` ts=0,1 del=false klen=123 vlen=456 rawlen=8 nih=2`
+		` ts=0,1 del=false klen=123 vlen=456 rawlen=8 nih=2 mergeTs=<nil> txnDidNotUpdateMeta=true`
 
 	if str := meta.String(); str != expStr {
 		t.Errorf(
@@ -63,7 +65,8 @@ func TestFormatMVCCMetadata(t *testing.T) {
 	}
 
 	const expV = `txn={id=d7aa0f5e key="a" pri=0.00000000 epo=1 ts=0,1 min=0,1 seq=0}` +
-		` ts=0,1 del=false klen=123 vlen=456 raw=/BYTES/foo ih={{11 /BYTES/bar}{22 /BYTES/baz}}`
+		` ts=0,1 del=false klen=123 vlen=456 raw=/BYTES/foo ih={{11 /BYTES/bar}{22 /BYTES/baz}}` +
+		` mergeTs=<nil> txnDidNotUpdateMeta=true`
 
 	if str := fmt.Sprintf("%+v", meta); str != expV {
 		t.Errorf(
