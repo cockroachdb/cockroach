@@ -110,6 +110,10 @@ func formatBoolAsPostgresSetting(b bool) string {
 	return "off"
 }
 
+func formatFloatAsPostgresSetting(f float64) string {
+	return strconv.FormatFloat(f, 'G', -1, 64)
+}
+
 // makeDummyBooleanSessionVar generates a sessionVar for a bool session setting.
 // These functions allow the setting to be changed, but whose values are not used.
 // They are logged to telemetry and output a notice that these are unused.
@@ -932,6 +936,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`large_full_scan_rows`: {
+		GetStringVal: makeFloatGetStringValFn(`large_full_scan_rows`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			m.SetLargeFullScanRows(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatFloatAsPostgresSetting(evalCtx.SessionData().LargeFullScanRows)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(largeFullScanRows.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`locality`: {
 		Get: func(evalCtx *extendedEvalContext) string {
 			return evalCtx.Locality.String()
@@ -1443,8 +1466,9 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
 	`disallow_full_table_scans`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`disallow_full_table_scan`),
+		GetStringVal: makePostgresBoolGetStringValFn(`disallow_full_table_scans`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			b, err := paramparse.ParseBoolVar(`disallow_full_table_scans`, s)
 			if err != nil {
@@ -1860,6 +1884,18 @@ func makeIntGetStringValFn(name string) getStringValFn {
 			return "", err
 		}
 		return strconv.FormatInt(s, 10), nil
+	}
+}
+
+// makeFloatGetStringValFn returns a getStringValFn which allows
+// the user to provide plain float values to a SET variable.
+func makeFloatGetStringValFn(name string) getStringValFn {
+	return func(ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr) (string, error) {
+		f, err := getFloatVal(&evalCtx.EvalContext, name, values)
+		if err != nil {
+			return "", err
+		}
+		return formatFloatAsPostgresSetting(f), nil
 	}
 }
 
