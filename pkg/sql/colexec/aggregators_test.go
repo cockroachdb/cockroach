@@ -1086,7 +1086,10 @@ func benchmarkAggregateFunction(
 // benchmark is measuring the performance of the aggregators themselves
 // depending on the parameters of the input.
 func BenchmarkAggregator(b *testing.B) {
-	aggFn := execinfrapb.Min
+	// We choose any_not_null aggregate function because it is the simplest
+	// possible and, thus, its Compute function call will have the least impact
+	// when benchmarking the aggregator logic.
+	aggFn := execinfrapb.AnyNotNull
 	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
 	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
 	if testing.Short() {
