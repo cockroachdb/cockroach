@@ -281,40 +281,48 @@ func BenchmarkExternalDistinct(b *testing.B) {
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
 
-	for _, spillForced := range []bool{false, true} {
-		for _, maintainOrdering := range []bool{false, true} {
-			if !spillForced && maintainOrdering {
-				// The in-memory unordered distinct maintains the input ordering
-				// by design, so it's not an interesting case to test it with
-				// both options for 'maintainOrdering' parameter, and we skip
-				// one.
-				continue
+	// TODO(yuzefovich): remove shuffleInput == false case in 22.2 without
+	// changing the name of the benchmark (#75106).
+	for _, shuffleInput := range []bool{false, true} {
+		for _, spillForced := range []bool{false, true} {
+			for _, maintainOrdering := range []bool{false, true} {
+				if !spillForced && maintainOrdering {
+					// The in-memory unordered distinct maintains the input ordering
+					// by design, so it's not an interesting case to test it with
+					// both options for 'maintainOrdering' parameter, and we skip
+					// one.
+					continue
+				}
+				flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+				name := fmt.Sprintf("spilled=%t/ordering=%t", spillForced, maintainOrdering)
+				if shuffleInput {
+					name = name + "/shuffled"
+				}
+				runDistinctBenchmarks(
+					ctx,
+					b,
+					func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
+						var outputOrdering execinfrapb.Ordering
+						if maintainOrdering {
+							outputOrdering = convertDistinctColsToOrdering(distinctCols)
+						}
+						op, _, err := createExternalDistinct(
+							ctx, flowCtx, []colexecop.Operator{input}, typs,
+							distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
+							outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
+							nil /* spillingCallbackFn */, 0, /* numForcedRepartitions */
+							&monitorRegistry,
+						)
+						return op, err
+					},
+					func(nCols int) int {
+						return 0
+					},
+					name,
+					true, /* isExternal */
+					shuffleInput,
+				)
 			}
-			flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-			name := fmt.Sprintf("spilled=%t/ordering=%t", spillForced, maintainOrdering)
-			runDistinctBenchmarks(
-				ctx,
-				b,
-				func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
-					var outputOrdering execinfrapb.Ordering
-					if maintainOrdering {
-						outputOrdering = convertDistinctColsToOrdering(distinctCols)
-					}
-					op, _, err := createExternalDistinct(
-						ctx, flowCtx, []colexecop.Operator{input}, typs,
-						distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
-						outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
-						nil /* spillingCallbackFn */, 0, /* numForcedRepartitions */
-						&monitorRegistry,
-					)
-					return op, err
-				},
-				func(nCols int) int {
-					return 0
-				},
-				name,
-				true, /* isExternal */
-			)
 		}
 	}
 }
