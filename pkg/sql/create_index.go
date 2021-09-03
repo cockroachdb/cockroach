@@ -423,6 +423,17 @@ func replaceExpressionElemsWithVirtualCols(
 			}
 
 			if !isInverted && !colinfo.ColumnTypeIsIndexable(typ) {
+				if colinfo.ColumnTypeIsInvertedIndexable(typ) {
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.InvalidTableDefinition,
+							"index element %s of type %s is not indexable in a non-inverted index",
+							elem.Expr.String(),
+							typ.Name(),
+						),
+						"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
+					)
+				}
 				return pgerror.Newf(
 					pgcode.InvalidTableDefinition,
 					"index element %s of type %s is not indexable",
