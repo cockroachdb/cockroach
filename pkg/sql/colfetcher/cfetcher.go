@@ -282,6 +282,9 @@ type cFetcher struct {
 		rowIdx int
 		// nextKV is the kv to process next.
 		nextKV roachpb.KeyValue
+		// nextSpanKey is the opaque key identifier of the span that originally
+		// generated the data in nextKV.
+		nextSpanKey int
 		// seekPrefix is the prefix to seek to in stateSeekPrefix.
 		seekPrefix roachpb.Key
 
@@ -315,6 +318,10 @@ type cFetcher struct {
 		timestampCol []apd.Decimal
 		// tableoidCol is the same as timestampCol but for the tableoid system column.
 		tableoidCol coldata.DatumVec
+
+		// spanKeyCol is a list of opaque key identifiers that generated each of the
+		// rows in the output batch.
+		spanKeyCol []int
 	}
 
 	typs             []*types.T
@@ -355,6 +362,8 @@ func (rf *cFetcher) resetBatch() {
 			minDesiredCapacity = int(rf.estimatedRowCount)
 		}
 	}
+	// TODO(jordan): account for the spanKey column
+	rf.machine.spanKeyCol = make([]int, minDesiredCapacity)
 	rf.machine.batch, reallocated = rf.accountingHelper.ResetMaybeReallocate(
 		rf.typs, rf.machine.batch, minDesiredCapacity, rf.memoryLimit,
 	)
@@ -663,6 +672,7 @@ func (rf *cFetcher) Init(
 func (rf *cFetcher) StartScan(
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	keys []int,
 	bsHeader *roachpb.BoundedStalenessHeader,
 	limitBatches bool,
 	batchBytesLimit rowinfra.BytesLimit,
@@ -698,6 +708,7 @@ func (rf *cFetcher) StartScan(
 	f, err := row.NewKVFetcher(
 		txn,
 		spans,
+		keys,
 		bsHeader,
 		rf.reverse,
 		batchBytesLimit,
@@ -812,7 +823,8 @@ func (rf *cFetcher) setEstimatedRowCount(estimatedRowCount uint64) {
 // the input KV is pointing to the last KV of a batch, so that the batch can
 // be garbage collected before fetching the next one.
 // gcassert:inline
-func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
+func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, spanKey int, needsCopy bool) {
+	rf.machine.nextSpanKey = spanKey
 	if !needsCopy {
 		rf.machine.nextKV = kv
 		return
@@ -837,18 +849,18 @@ func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 // are not needed (as per neededCols) are filled with nulls. The Batch should
 // not be modified and is only valid until the next call. When there are no more
 // rows, the Batch.Length is 0.
-func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
+func (rf *cFetcher) NextBatch(ctx context.Context) (b coldata.Batch, retKeys []int, e error) {
 	for {
 		if debugState {
 			log.Infof(ctx, "State %s", rf.machine.state[0])
 		}
 		switch rf.machine.state[0] {
 		case stateInvalid:
-			return nil, errors.New("invalid fetcher state")
+			return nil, nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			moreKVs, kv, key, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, rf.convertFetchError(ctx, err)
+				return nil, nil, rf.convertFetchError(ctx, err)
 			}
 			if !moreKVs {
 				rf.machine.state[0] = stateEmitLastBatch
@@ -876,7 +888,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				}
 			*/
 
-			rf.setNextKV(kv, finalReferenceToBatch)
+			rf.setNextKV(kv, key, finalReferenceToBatch)
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
@@ -922,7 +934,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 					rf.table.invertedColOrdinal,
 				)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				if !matches {
 					// We found an interleave. Set our skip prefix.
@@ -943,7 +955,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				// without parsing any keys by using GetRowPrefixLength.
 				prefixLen, err := keys.GetRowPrefixLength(rf.machine.nextKV.Key)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				rf.machine.lastRowPrefix = rf.machine.nextKV.Key[:prefixLen]
 			}
@@ -986,7 +998,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 					// Slice off an extra encoded column from remainingBytes.
 					remainingBytes, err = rowenc.SkipTableKey(remainingBytes)
 					if err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 				}
 				rf.machine.lastRowPrefix = rf.machine.nextKV.Key[:prefixLen+(origRemainingBytesLen-len(remainingBytes))]
@@ -994,13 +1006,13 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 			familyID, err := rf.getCurrentColumnFamilyID()
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			rf.machine.remainingValueColsByIdx.CopyFrom(rf.table.neededValueColsByIdx)
 			// Process the current KV's value component.
 			prettyKey, prettyVal, err := rf.processValue(ctx, familyID)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if rf.traceKV {
 				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
@@ -1022,9 +1034,9 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateSeekPrefix:
 			// Note: seekPrefix is only used for interleaved tables.
 			for {
-				moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+				moreKVs, kv, key, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 				if err != nil {
-					return nil, rf.convertFetchError(ctx, err)
+					return nil, nil, rf.convertFetchError(ctx, err)
 				}
 				if debugState {
 					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
@@ -1047,16 +1059,16 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				// TODO(jordan): if nextKV returns newSpan = true, set the new span
 				//  prefix and indicate that it needs decoding.
 				if comparison >= 0 {
-					rf.setNextKV(kv, finalReferenceToBatch)
+					rf.setNextKV(kv, key, finalReferenceToBatch)
 					break
 				}
 			}
 			rf.shiftState()
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			moreKVs, kv, spanKey, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, rf.convertFetchError(ctx, err)
+				return nil, nil, rf.convertFetchError(ctx, err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
@@ -1066,7 +1078,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			// TODO(jordan): if nextKV returns newSpan = true, set the new span
 			// prefix and indicate that it needs decoding.
-			rf.setNextKV(kv, finalReferenceToBatch)
+			rf.setNextKV(kv, spanKey, finalReferenceToBatch)
 			if debugState {
 				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
 			}
@@ -1094,13 +1106,13 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 			familyID, err := rf.getCurrentColumnFamilyID()
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 
 			// Process the current KV's value component.
 			prettyKey, prettyVal, err := rf.processValue(ctx, familyID)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if rf.traceKV {
 				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
@@ -1128,13 +1140,14 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			if rf.table.oidOutputIdx != noOutputColumn {
 				rf.machine.tableoidCol.Set(rf.machine.rowIdx, tree.NewDOid(tree.DInt(rf.table.desc.GetID())))
 			}
+			rf.machine.spanKeyCol[rf.machine.rowIdx] = rf.machine.nextSpanKey
 
 			// We're finished with a row. Fill the row in with nulls if
 			// necessary, perform the memory accounting for the row, bump the
 			// row index, emit the batch if necessary, and move to the next
 			// state.
 			if err := rf.fillNulls(); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			rf.accountingHelper.AccountForSet(rf.machine.rowIdx)
 			rf.machine.rowIdx++
@@ -1165,16 +1178,16 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			if emitBatch {
 				rf.pushState(stateResetBatch)
 				rf.finalizeBatch()
-				return rf.machine.batch, nil
+				return rf.machine.batch, nil, nil
 			}
 
 		case stateEmitLastBatch:
 			rf.machine.state[0] = stateFinished
 			rf.finalizeBatch()
-			return rf.machine.batch, nil
+			return rf.machine.batch, nil, nil
 
 		case stateFinished:
-			return coldata.ZeroBatch, nil
+			return coldata.ZeroBatch, nil, nil
 		}
 	}
 }

@@ -94,6 +94,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	if err := s.rf.StartScan(
 		s.flowCtx.Txn,
 		s.spans,
+		nil, /* keys */
 		s.bsHeader,
 		limitBatches,
 		s.batchBytesLimit,
@@ -107,7 +108,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 
 // Next is part of the Operator interface.
 func (s *ColBatchScan) Next() coldata.Batch {
-	bat, err := s.rf.NextBatch(s.Ctx)
+	bat, _, err := s.rf.NextBatch(s.Ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}

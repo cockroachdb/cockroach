@@ -34,7 +34,7 @@ type KVFetcher struct {
 	kvs []roachpb.KeyValue
 
 	batchResponse []byte
-	newSpan       bool
+	key           int
 
 	// Observability fields.
 	mu struct {
@@ -48,6 +48,7 @@ type KVFetcher struct {
 func NewKVFetcher(
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	keys []int,
 	bsHeader *roachpb.BoundedStalenessHeader,
 	reverse bool,
 	batchBytesLimit rowinfra.BytesLimit,
@@ -87,6 +88,7 @@ func NewKVFetcher(
 	kvBatchFetcher, err := makeKVBatchFetcher(
 		sendFn,
 		spans,
+		keys,
 		reverse,
 		batchBytesLimit,
 		firstBatchLimit,
@@ -142,7 +144,7 @@ const (
 // unexpectedly.
 func (f *KVFetcher) NextKV(
 	ctx context.Context, mvccDecodeStrategy MVCCDecodingStrategy,
-) (moreKVs bool, kv roachpb.KeyValue, finalReferenceToBatch bool, err error) {
+) (moreKVs bool, kv roachpb.KeyValue, inputKey int, finalReferenceToBatch bool, err error) {
 	for {
 		// Only one of f.kvs or f.batchResponse will be set at a given time. Which
 		// one is set depends on the format returned by a given BatchRequest.
@@ -153,7 +155,7 @@ func (f *KVFetcher) NextKV(
 			// We always return "false" for finalReferenceToBatch when returning data in the
 			// KV format, because each of the KVs doesn't share any backing memory -
 			// they are all independently garbage collectable.
-			return true, kv, false, nil
+			return true, kv, f.key, false, nil
 		}
 		if len(f.batchResponse) > 0 {
 			var key []byte
@@ -167,7 +169,7 @@ func (f *KVFetcher) NextKV(
 				key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
 			}
 			if err != nil {
-				return false, kv, false, err
+				return false, kv, 0, false, err
 			}
 			// If we're finished decoding the batch response, nil our reference to it
 			// so that the garbage collector can reclaim the backing memory.
@@ -181,17 +183,16 @@ func (f *KVFetcher) NextKV(
 					RawBytes:  rawBytes[:len(rawBytes):len(rawBytes)],
 					Timestamp: ts,
 				},
-			}, lastKey, nil
+			}, f.key, lastKey, nil
 		}
 
-		moreKVs, f.kvs, f.batchResponse, err = f.nextBatch(ctx)
-		if err != nil {
-			return moreKVs, kv, false, err
+		resp, err := f.nextBatch(ctx)
+		f.kvs = resp.kvs
+		f.batchResponse = resp.batchResponse
+		if err != nil || !resp.moreKVs {
+			return false, roachpb.KeyValue{}, 0, false, err
 		}
-		if !moreKVs {
-			return false, kv, false, nil
-		}
-		f.newSpan = true
+		f.key = resp.key
 		f.mu.Lock()
 		f.mu.bytesRead += int64(len(f.batchResponse))
 		f.mu.Unlock()
@@ -211,15 +212,16 @@ type SpanKVFetcher struct {
 }
 
 // nextBatch implements the kvBatchFetcher interface.
-func (f *SpanKVFetcher) nextBatch(
-	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
+func (f *SpanKVFetcher) nextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
 	if len(f.KVs) == 0 {
-		return false, nil, nil, nil
+		return kvBatchFetcherResponse{}, nil
 	}
 	res := f.KVs
 	f.KVs = nil
-	return true, res, nil, nil
+	return kvBatchFetcherResponse{
+		kvs:     res,
+		moreKVs: true,
+	}, nil
 }
 
 func (f *SpanKVFetcher) close(context.Context) {}
@@ -254,9 +256,7 @@ func MakeBackupSSTKVFetcher(
 	return res
 }
 
-func (f *BackupSSTKVFetcher) nextBatch(
-	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
+func (f *BackupSSTKVFetcher) nextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
 	res := make([]roachpb.KeyValue, 0)
 
 	copyKV := func(mvccKey storage.MVCCKey, value []byte) roachpb.KeyValue {
@@ -274,7 +274,7 @@ func (f *BackupSSTKVFetcher) nextBatch(
 		valid, err := f.iter.Valid()
 		if err != nil {
 			err = errors.Wrapf(err, "iter key value of table data")
-			return false, nil, nil, err
+			return kvBatchFetcherResponse{}, nil
 		}
 
 		if !valid || !f.iter.UnsafeKey().Less(f.endKeyMVCC) {
@@ -317,9 +317,12 @@ func (f *BackupSSTKVFetcher) nextBatch(
 
 	}
 	if len(res) == 0 {
-		return false, nil, nil, err
+		return kvBatchFetcherResponse{}, nil
 	}
-	return true, res, nil, nil
+	return kvBatchFetcherResponse{
+		moreKVs: true,
+		kvs:     res,
+	}, nil
 }
 
 func (f *BackupSSTKVFetcher) close(context.Context) {

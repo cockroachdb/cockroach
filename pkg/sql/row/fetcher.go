@@ -46,12 +46,26 @@ const DebugRowFetch = false
 // part of the output.
 const noOutputColumn = -1
 
+// kvBatchFetcherResponse contains a response from the kvBatchFetcher.
+type kvBatchFetcherResponse struct {
+	// moreKVs is true if there are more keys to fetch in the scan.
+	moreKVs bool
+	// Only one of kvs and batchResponse will be set. Which one is set depends on
+	// the server version. Both must be handled by calling code.
+	// kvs, if set, is a slice of roachpb.KeyValue, the deserialized kv pairs that
+	// were fetched.
+	kvs []roachpb.KeyValue
+	// batchResponse, if set, is a packed byte slice containing the keys and
+	// values.
+	batchResponse []byte
+	// key is the key associated with the span that generated this response.
+	key int
+}
+
 type kvBatchFetcher interface {
-	// nextBatch returns the next batch of rows. Returns false in the first
-	// parameter if there are no more keys in the scan. May return either a slice
-	// of KeyValues or a batchResponse, numKvs pair, depending on the server
-	// version - both must be handled by calling code.
-	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error)
+	// nextBatch returns the next batch of rows. See kvBatchFetcherResponse for
+	// details on what is returned.
+	nextBatch(ctx context.Context) (resp kvBatchFetcherResponse, err error)
 
 	close(ctx context.Context)
 }
@@ -598,6 +612,7 @@ func (rf *Fetcher) StartScan(
 	f, err := makeKVBatchFetcher(
 		makeKVBatchFetcherDefaultSendFunc(txn),
 		spans,
+		nil, /* keys */
 		rf.reverse,
 		batchBytesLimit,
 		rf.rowLimitToKeyLimit(rowLimitHint),
@@ -698,6 +713,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	f, err := makeKVBatchFetcher(
 		sendFunc(sendFn),
 		spans,
+		nil, /* keys */
 		rf.reverse,
 		batchBytesLimit,
 		rf.rowLimitToKeyLimit(rowLimitHint),
@@ -774,7 +790,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	for {
 		var finalReferenceToBatch bool
 		var kv roachpb.KeyValue
-		moreKVs, kv, finalReferenceToBatch, err = rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+		moreKVs, kv, _, finalReferenceToBatch, err = rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 		if err != nil {
 			return false, ConvertFetchError(ctx, rf, err)
 		}

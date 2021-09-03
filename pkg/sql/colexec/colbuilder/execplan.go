@@ -786,7 +786,15 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return r, err
 			}
-			if core.JoinReader.LookupColumns != nil || !core.JoinReader.LookupExpr.Empty() {
+			if !core.JoinReader.LookupExpr.Empty() {
+				return r, errors.AssertionFailedf("lookup join reader with exprs is unsupported in vectorized")
+			}
+			if core.JoinReader.LookupColumns != nil {
+				if core.JoinReader.LookupColumnsAreKey && !core.JoinReader.LeftJoinWithPairedJoiner && core.JoinReader.
+					Type == descpb.JoinType_INNER {
+					// Special case: we can support a simple lookup join.
+
+				}
 				return r, errors.AssertionFailedf("lookup join reader is unsupported in vectorized")
 			}
 			// We have to create a separate account in order for the cFetcher to

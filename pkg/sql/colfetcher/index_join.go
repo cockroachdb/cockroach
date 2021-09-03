@@ -128,6 +128,22 @@ const (
 	indexJoinDone
 )
 
+// indexSpans a small wrapper on top of roachpb.Spans that additionally tracks
+// some integer indices, 1 per span.
+// The indexSpans are sorted by the roachpb.Spans, but the indices are sorted
+// in the same way.
+type indexSpans struct {
+	roachpb.Spans
+	indices []int
+}
+
+func (a indexSpans) Len() int { return len(a.Spans) }
+func (a indexSpans) Swap(i, j int) {
+	a.Spans[i], a.Spans[j] = a.Spans[j], a.Spans[i]
+	a.indices[i], a.indices[j] = a.indices[j], a.indices[i]
+}
+func (a indexSpans) Less(i, j int) bool { return a.Spans[i].Key.Compare(a.Spans[j].Key) < 0 }
+
 // Next is part of the Operator interface.
 func (s *ColIndexJoin) Next() coldata.Batch {
 	for {
@@ -155,6 +171,14 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				s.state = indexJoinDone
 				continue
 			}
+			keys := make([]int, len(spans))
+			for i := range keys {
+				keys[i] = i
+			}
+			indexedSpans := indexSpans{
+				Spans:   spans,
+				indices: keys,
+			}
 
 			if !s.maintainOrdering {
 				// Sort the spans when !maintainOrdering. This allows lower layers to
@@ -162,7 +186,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				// output unchanged, in the retrieval order, so it is not safe to do
 				// this when maintainOrdering is true (the ordering to be maintained
 				// may be different than the ordering in the index).
-				sort.Sort(spans)
+				sort.Sort(indexedSpans)
 			}
 
 			// Index joins will always return exactly one output row per input row.
@@ -170,6 +194,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			if err := s.rf.StartScan(
 				s.flowCtx.Txn,
 				spans,
+				keys,
 				nil,   /* bsHeader */
 				false, /* limitBatches */
 				rowinfra.NoBytesLimit,
@@ -181,7 +206,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			}
 			s.state = indexJoinScanning
 		case indexJoinScanning:
-			batch, err := s.rf.NextBatch(s.Ctx)
+			batch, _, err := s.rf.NextBatch(s.Ctx)
 			if err != nil {
 				colexecerror.InternalError(err)
 			}
