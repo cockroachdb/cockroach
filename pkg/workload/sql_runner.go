@@ -161,8 +161,7 @@ func (h StmtHandle) Exec(ctx context.Context, args ...interface{}) (pgconn.Comma
 		return p.Exec(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return p.Exec(ctx, h.s.sql, append(newArgs, args)...)
+		return p.Exec(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
@@ -184,8 +183,7 @@ func (h StmtHandle) ExecTx(
 		return tx.Exec(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return tx.Exec(ctx, h.s.sql, append(newArgs, args)...)
+		return tx.Exec(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
@@ -206,8 +204,7 @@ func (h StmtHandle) Query(ctx context.Context, args ...interface{}) (pgx.Rows, e
 		return p.Query(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return p.Query(ctx, h.s.sql, append(newArgs, args)...)
+		return p.Query(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
@@ -227,8 +224,7 @@ func (h StmtHandle) QueryTx(ctx context.Context, tx pgx.Tx, args ...interface{})
 		return tx.Query(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return tx.Query(ctx, h.s.sql, append(newArgs, args)...)
+		return tx.Query(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
@@ -249,8 +245,7 @@ func (h StmtHandle) QueryRow(ctx context.Context, args ...interface{}) pgx.Row {
 		return p.QueryRow(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return p.QueryRow(ctx, h.s.sql, append(newArgs, args)...)
+		return p.QueryRow(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
@@ -271,12 +266,21 @@ func (h StmtHandle) QueryRowTx(ctx context.Context, tx pgx.Tx, args ...interface
 		return tx.QueryRow(ctx, h.s.sql, args...)
 
 	case simple:
-		newArgs := []interface{}{pgx.QuerySimpleProtocol(true)}
-		return tx.QueryRow(ctx, h.s.sql, append(newArgs, args)...)
+		return tx.QueryRow(ctx, h.s.sql, prependQuerySimpleProtocol(args)...)
 
 	default:
 		panic("invalid method")
 	}
+}
+
+// prependQuerySimpleProtocol inserts pgx.QuerySimpleProtocol(true) at the
+// beginning of the slice. It is based on
+// https://github.com/golang/go/wiki/SliceTricks.
+func prependQuerySimpleProtocol(args []interface{}) []interface{} {
+	args = append(args, pgx.QuerySimpleProtocol(true))
+	copy(args[1:], args)
+	args[0] = pgx.QuerySimpleProtocol(true)
+	return args
 }
 
 // Appease the linter.
