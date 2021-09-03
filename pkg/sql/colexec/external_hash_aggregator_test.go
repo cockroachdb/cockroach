@@ -178,37 +178,48 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
 
-	aggFn := execinfrapb.Min
 	numRows := []int{coldata.BatchSize(), 64 * coldata.BatchSize(), 4096 * coldata.BatchSize()}
 	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
 	if testing.Short() {
 		numRows = []int{64 * coldata.BatchSize()}
 		groupSizes = []int{1, coldata.BatchSize()}
 	}
-	for _, spillForced := range []bool{false, true} {
-		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-		for _, numInputRows := range numRows {
-			for _, groupSize := range groupSizes {
-				benchmarkAggregateFunction(
-					b, aggType{
-						new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-							op, _, err := createExternalHashAggregator(
-								ctx, flowCtx, args, queueCfg, &colexecop.TestingSemaphore{},
-								0 /* numForcedRepartitions */, &monitorRegistry,
-							)
-							require.NoError(b, err)
-							// The hash-based partitioner is not a
-							// ResettableOperator, so in order to not change the
-							// signatures of the aggregator constructors, we
-							// wrap it with a noop operator. It is ok for the
-							// purposes of this benchmark.
-							return colexecop.NewNoop(op)
+	for _, aggFn := range []execinfrapb.AggregatorSpec_Func{
+		// We choose any_not_null aggregate function because it is the simplest
+		// possible and, thus, its Compute function call will have the least
+		// impact when benchmarking the aggregator logic.
+		execinfrapb.AnyNotNull,
+		// min aggregate function has been used before transitioning to
+		// any_not_null in 22.1 cycle. It is kept so that we could use it for
+		// comparison of 22.1 against 21.2.
+		// TODO(yuzefovich): use only any_not_null in 22.2 (#75106).
+		execinfrapb.Min,
+	} {
+		for _, spillForced := range []bool{false, true} {
+			flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+			for _, numInputRows := range numRows {
+				for _, groupSize := range groupSizes {
+					benchmarkAggregateFunction(
+						b, aggType{
+							new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
+								op, _, err := createExternalHashAggregator(
+									ctx, flowCtx, args, queueCfg, &colexecop.TestingSemaphore{},
+									0 /* numForcedRepartitions */, &monitorRegistry,
+								)
+								require.NoError(b, err)
+								// The hash-based partitioner is not a
+								// ResettableOperator, so in order to not change the
+								// signatures of the aggregator constructors, we
+								// wrap it with a noop operator. It is ok for the
+								// purposes of this benchmark.
+								return colexecop.NewNoop(op)
+							},
+							name:  fmt.Sprintf("spilled=%t", spillForced),
+							order: unordered,
 						},
-						name:  fmt.Sprintf("spilled=%t", spillForced),
-						order: unordered,
-					},
-					aggFn, []*types.T{types.Int}, 1 /* numGroupCol */, groupSize,
-					0 /* distinctProb */, numInputRows, 0 /* chunkSize */, 0 /* limit */)
+						aggFn, []*types.T{types.Int}, 1 /* numGroupCol */, groupSize,
+						0 /* distinctProb */, numInputRows, 0 /* chunkSize */, 0 /* limit */)
+				}
 			}
 		}
 	}
