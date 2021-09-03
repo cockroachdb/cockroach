@@ -1,3 +1,6 @@
+statement error index element j->'some key' of type jsonb is not indexable in a non-inverted index
+CREATE TABLE t (j JSON, INDEX ((j->'some_key')))
+
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -1468,3 +1471,6 @@ SELECT j FROM cb2@i WHERE j <@ '[[1], [2]]' ORDER BY k
 []
 [[2]]
 [[1], [2]]
+
+statement error index element j->'some key' of type jsonb is not indexable in a non-inverted index
+CREATE TABLE t (j JSON, INDEX ((j->'some_key')))
