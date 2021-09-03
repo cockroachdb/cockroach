@@ -14,6 +14,7 @@ var gopgBlocklists = blocklistsForVersion{
 	{"v20.2", "gopgBlockList20_2", gopgBlockList20_2, "gopgIgnoreList20_2", gopgIgnoreList20_2},
 	{"v21.1", "gopgBlockList21_1", gopgBlockList21_1, "gopgIgnoreList21_1", gopgIgnoreList21_1},
 	{"v21.2", "gopgBlockList21_2", gopgBlockList21_2, "gopgIgnoreList21_2", gopgIgnoreList21_2},
+	{"v22.1", "gopgBlockList22_1", gopgBlockList22_1, "gopgIgnoreList22_1", gopgIgnoreList22_1},
 }
 
 // These are lists of known gopg test errors and failures.
@@ -24,6 +25,8 @@ var gopgBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+
+var gopgBlockList22_1 = gopgBlockList21_2
 
 var gopgBlockList21_2 = gopgBlockList21_1
 
@@ -74,6 +77,8 @@ var gopgBlockList20_2 = blocklist{
 	"v10.TestReadColumnValue":                                         "26925",
 	"v10.TestUnixSocket":                                              "31113",
 }
+
+var gopgIgnoreList22_1 = gopgIgnoreList21_2
 
 var gopgIgnoreList21_2 = gopgIgnoreList21_1
 

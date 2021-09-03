@@ -14,16 +14,21 @@ var pgxBlocklists = blocklistsForVersion{
 	{"v20.2", "pgxBlocklist20_2", pgxBlocklist20_2, "pgxIgnorelist20_2", pgxIgnorelist20_2},
 	{"v21.1", "pgxBlocklist21_1", pgxBlocklist21_1, "pgxIgnorelist21_1", pgxIgnorelist21_1},
 	{"v21.2", "pgxBlocklist21_2", pgxBlocklist21_2, "pgxIgnorelist21_2", pgxIgnorelist21_2},
+	{"v22.1", "pgxBlocklist22_1", pgxBlocklist22_1, "pgxIgnorelist22_1", pgxIgnorelist22_1},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var pgxBlocklist22_1 = blocklist{}
+
 var pgxBlocklist21_2 = blocklist{}
 
 var pgxBlocklist21_1 = blocklist{}
 
 var pgxBlocklist20_2 = blocklist{}
+
+var pgxIgnorelist22_1 = pgxIgnorelist21_2
 
 var pgxIgnorelist21_2 = pgxIgnorelist21_1
 
