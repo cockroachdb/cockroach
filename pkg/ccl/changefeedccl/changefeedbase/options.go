@@ -96,7 +96,13 @@ const (
 	OptOnErrorFail  OnErrorType = `fail`
 	OptOnErrorPause OnErrorType = `pause`
 
-	DeprecatedOptFormatAvro = `experimental_avro`
+	DeprecatedOptFormatAvro                   = `experimental_avro`
+	DeprecatedSinkSchemeCloudStorageAzure     = `experimental-azure`
+	DeprecatedSinkSchemeCloudStorageGCS       = `experimental-gs`
+	DeprecatedSinkSchemeCloudStorageHTTP      = `experimental-http`
+	DeprecatedSinkSchemeCloudStorageHTTPS     = `experimental-https`
+	DeprecatedSinkSchemeCloudStorageNodelocal = `experimental-nodelocal`
+	DeprecatedSinkSchemeCloudStorageS3        = `experimental-s3`
 
 	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
 	OptKafkaSinkConfig   = `kafka_sink_config`
@@ -111,12 +117,12 @@ const (
 	SinkParamSkipTLSVerify          = `insecure_tls_skip_verify`
 	SinkParamTopicPrefix            = `topic_prefix`
 	SinkParamTopicName              = `topic_name`
-	SinkSchemeCloudStorageAzure     = `experimental-azure`
-	SinkSchemeCloudStorageGCS       = `experimental-gs`
-	SinkSchemeCloudStorageHTTP      = `experimental-http`
-	SinkSchemeCloudStorageHTTPS     = `experimental-https`
-	SinkSchemeCloudStorageNodelocal = `experimental-nodelocal`
-	SinkSchemeCloudStorageS3        = `experimental-s3`
+	SinkSchemeCloudStorageAzure     = `azure`
+	SinkSchemeCloudStorageGCS       = `gs`
+	SinkSchemeCloudStorageHTTP      = `http`
+	SinkSchemeCloudStorageHTTPS     = `https`
+	SinkSchemeCloudStorageNodelocal = `nodelocal`
+	SinkSchemeCloudStorageS3        = `s3`
 	SinkSchemeExperimentalSQL       = `experimental-sql`
 	SinkSchemeHTTP                  = `http`
 	SinkSchemeHTTPS                 = `https`
@@ -193,3 +199,14 @@ var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTi
 
 // CaseInsensitiveOpts options which supports case Insensitive value
 var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents, OptSchemaChangePolicy, OptOnError)
+
+// NoLongerExperimental aliases options prefixed with experimental that no longer need to be
+var NoLongerExperimental = map[string]string{
+	DeprecatedOptFormatAvro:                   string(OptFormatAvro),
+	DeprecatedSinkSchemeCloudStorageAzure:     SinkSchemeCloudStorageAzure,
+	DeprecatedSinkSchemeCloudStorageGCS:       SinkSchemeCloudStorageGCS,
+	DeprecatedSinkSchemeCloudStorageHTTP:      SinkSchemeCloudStorageHTTP,
+	DeprecatedSinkSchemeCloudStorageHTTPS:     SinkSchemeCloudStorageHTTPS,
+	DeprecatedSinkSchemeCloudStorageNodelocal: SinkSchemeCloudStorageNodelocal,
+	DeprecatedSinkSchemeCloudStorageS3:        SinkSchemeCloudStorageS3,
+}
