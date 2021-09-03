@@ -115,8 +115,12 @@ func newGCQueue(store *Store) *gcQueue {
 			needsLease:           true,
 			needsSystemConfig:    true,
 			acceptsUnsplitRanges: false,
-			processTimeoutFunc: func(_ *cluster.Settings, _ replicaInQueue) time.Duration {
-				return gcQueueTimeout
+			processTimeoutFunc: func(st *cluster.Settings, _ replicaInQueue) time.Duration {
+				timeout := gcQueueTimeout
+				if d := queueGuaranteedProcessingTimeBudget.Get(&st.SV); d > timeout {
+					timeout = d
+				}
+				return timeout
 			},
 			successes:       store.metrics.GCQueueSuccesses,
 			failures:        store.metrics.GCQueueFailures,
