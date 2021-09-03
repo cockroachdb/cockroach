@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/ttycolor"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -39,7 +40,12 @@ type logStream interface {
 // writeLogStream pops messages off of s and writes them to out prepending
 // prefix per message and filtering messages which match filter.
 func writeLogStream(
-	s logStream, out io.Writer, filter *regexp.Regexp, prefix string, keepRedactable bool,
+	s logStream,
+	out io.Writer,
+	filter *regexp.Regexp,
+	prefix string,
+	keepRedactable bool,
+	cp ttycolor.Profile,
 ) error {
 	const chanSize = 1 << 16        // 64k
 	const maxWriteBufSize = 1 << 18 // 256kB
@@ -66,11 +72,11 @@ func writeLogStream(
 		if prefixBytes, err = getPrefix(ei.fileInfo); err != nil {
 			return err
 		}
-		err = log.FormatLegacyEntryPrefixTTY(prefixBytes, w)
+		err = log.FormatLegacyEntryPrefix(prefixBytes, w, cp)
 		if err != nil {
 			return err
 		}
-		return log.FormatLegacyEntryTTY(ei.Entry, w)
+		return log.FormatLegacyEntryWithOptionalColors(ei.Entry, w, cp)
 	}
 
 	g, ctx := errgroup.WithContext(context.Background())
@@ -602,4 +608,44 @@ func seekToFirstAfterFrom(
 	}
 	_, err = f.Seek(int64(offset), io.SeekStart)
 	return err
+}
+
+type forceColor int
+
+const (
+	forceColorAuto forceColor = iota
+	forceColorOn
+	forceColorOff
+)
+
+// Type implements the pflag.Value interface.
+func (c *forceColor) Type() string { return "<true/false/auto>" }
+
+// String implements the pflag.Value interface.
+func (c *forceColor) String() string {
+	switch *c {
+	case forceColorAuto:
+		return "auto"
+	case forceColorOn:
+		return "true"
+	case forceColorOff:
+		return "false"
+	default:
+		panic(errors.AssertionFailedf("unknown value: %v", int(*c)))
+	}
+}
+
+// Set implements the pflag.Value interface.
+func (c *forceColor) Set(v string) error {
+	switch v {
+	case "on", "true":
+		*c = forceColorOn
+	case "off", "false":
+		*c = forceColorOff
+	case "auto":
+		*c = forceColorAuto
+	default:
+		return errors.Newf("unknown value: %v (supported: true/false/auto)", v)
+	}
+	return nil
 }
