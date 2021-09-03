@@ -8,16 +8,23 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sslocal
+package sslocal_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -41,7 +48,7 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 		testData = append(testData, stats)
 	}
 
-	sqlStats, err := NewTempSQLStatsFromExistingStmtStats(testData)
+	sqlStats, err := sslocal.NewTempSQLStatsFromExistingStmtStats(testData)
 	require.NoError(t, err)
 
 	require.NoError(t,
@@ -160,7 +167,7 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 		}
 	}
 
-	sqlStats, err := NewTempSQLStatsFromExistingStmtStats(input)
+	sqlStats, err := sslocal.NewTempSQLStatsFromExistingStmtStats(input)
 	require.NoError(t, err)
 
 	foundStats := make(map[string]int64)
@@ -258,7 +265,7 @@ func TestSQLStatsTxnStatsBulkIngest(t *testing.T) {
 		}
 	}
 
-	sqlStats, err := NewTempSQLStatsFromExistingTxnStats(input)
+	sqlStats, err := sslocal.NewTempSQLStatsFromExistingTxnStats(input)
 	require.NoError(t, err)
 
 	foundStats := make(map[roachpb.TransactionFingerprintID]int64)
@@ -275,4 +282,67 @@ func TestSQLStatsTxnStatsBulkIngest(t *testing.T) {
 			}))
 
 	require.Equal(t, expectedCount, foundStats)
+}
+
+// TestNodeLocalInMemoryViewDoesNotReturnPersistedStats tests the persisted
+// statistics is not returned from the in-memory only view after the stats
+// are flushed to disk.
+func TestNodeLocalInMemoryViewDoesNotReturnPersistedStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+
+	server := cluster.Server(0 /* idx */)
+
+	// Open two connections so that we can run statements without messing up
+	// the SQL stats.
+	testConn := cluster.ServerConn(0 /* idx */)
+
+	sqlDB := sqlutils.MakeSQLRunner(testConn)
+	defer cluster.Stopper().Stop(ctx)
+
+	sqlDB.Exec(t, "SET application_name = 'app1'")
+	sqlDB.Exec(t, "SELECT 1 WHERE true")
+
+	sqlDB.CheckQueryResults(t, `
+SELECT
+  key, count
+FROM
+  crdb_internal.node_statement_statistics
+WHERE
+  application_name = 'app1' AND
+  key LIKE 'SELECT _ WHERE%'
+`, [][]string{{"SELECT _ WHERE _", "1"}})
+
+	server.SQLServer().(*sql.Server).
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
+	sqlDB.CheckQueryResults(t, `
+SELECT
+  key, count
+FROM
+  crdb_internal.node_statement_statistics
+WHERE
+  application_name = 'app1'
+`, [][]string{})
+
+	sqlDB.Exec(t, "SELECT 1 WHERE 1 = 1")
+	sqlDB.CheckQueryResults(t, `
+SELECT
+  key, count
+FROM
+  crdb_internal.node_statement_statistics
+WHERE
+  application_name = 'app1' AND
+  key LIKE 'SELECT _ WHERE%'
+`, [][]string{{"SELECT _ WHERE _ = _", "1"}})
+
 }
