@@ -49,11 +49,12 @@ func _() {
 	_ = x[TenantUsageSingleConsumptionColumn-38]
 	_ = x[SQLStatsTables-39]
 	_ = x[SQLStatsCompactionScheduledJob-40]
+	_ = x[V21_2-41]
 }
 
-const _Key_name = "Start21_1replacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsDatabaseRoleSettingsTenantUsageTableSQLInstancesTableNewRetryableRangefeedErrorsAlterSystemWebSessionsCreateIndexesSeparatedIntentsMigrationPostSeparatedIntentsMigrationRetryJobsWithExponentialBackoffRecordsBasedRegistryAutoSpanConfigReconciliationJobPreventNewInterleavedTablesEnsureNoInterleavedTablesDefaultPrivilegesZonesTableForSecondaryTenantsUseKeyEncodeForHashShardedIndexesDatabasePlacementPolicyGeneratedAsIdentityOnUpdateExpressionsSpanConfigurationsTableBoundedStalenessDateAndIntervalStylePebbleFormatVersionedMarkerDataKeysRegistryPebbleSetWithDeleteTenantUsageSingleConsumptionColumnSQLStatsTablesSQLStatsCompactionScheduledJob"
+const _Key_name = "Start21_1replacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsDatabaseRoleSettingsTenantUsageTableSQLInstancesTableNewRetryableRangefeedErrorsAlterSystemWebSessionsCreateIndexesSeparatedIntentsMigrationPostSeparatedIntentsMigrationRetryJobsWithExponentialBackoffRecordsBasedRegistryAutoSpanConfigReconciliationJobPreventNewInterleavedTablesEnsureNoInterleavedTablesDefaultPrivilegesZonesTableForSecondaryTenantsUseKeyEncodeForHashShardedIndexesDatabasePlacementPolicyGeneratedAsIdentityOnUpdateExpressionsSpanConfigurationsTableBoundedStalenessDateAndIntervalStylePebbleFormatVersionedMarkerDataKeysRegistryPebbleSetWithDeleteTenantUsageSingleConsumptionColumnSQLStatsTablesSQLStatsCompactionScheduledJobV21_2"
 
-var _Key_index = [...]uint16{0, 9, 55, 105, 143, 185, 190, 203, 212, 227, 256, 273, 290, 339, 353, 373, 389, 406, 433, 468, 493, 522, 553, 573, 604, 631, 656, 673, 702, 735, 758, 777, 796, 819, 835, 855, 876, 898, 917, 951, 965, 995}
+var _Key_index = [...]uint16{0, 9, 55, 105, 143, 185, 190, 203, 212, 227, 256, 273, 290, 339, 353, 373, 389, 406, 433, 468, 493, 522, 553, 573, 604, 631, 656, 673, 702, 735, 758, 777, 796, 819, 835, 855, 876, 898, 917, 951, 965, 995, 1000}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
