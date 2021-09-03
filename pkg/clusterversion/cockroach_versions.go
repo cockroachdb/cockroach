@@ -274,6 +274,8 @@ const (
 	SQLStatsCompactionScheduledJob
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
 	DateAndIntervalStyle
+	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
+	V21_2
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -457,6 +459,11 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DateAndIntervalStyle,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1160},
+	},
+	{
+		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
+		Key:     V21_2,
+		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
