@@ -482,7 +482,7 @@ func (s *Server) GetReportedSQLStatsController() *sslocal.Controller {
 func (s *Server) GetScrubbedStmtStats(
 	ctx context.Context,
 ) ([]roachpb.CollectedStatementStatistics, error) {
-	return s.getScrubbedStmtStats(ctx, s.sqlStats)
+	return s.getScrubbedStmtStats(ctx, s.sqlStats.GetLocalMemProvider())
 }
 
 // Avoid lint errors.
@@ -499,7 +499,7 @@ func (s *Server) GetUnscrubbedStmtStats(
 		return nil
 	}
 	err :=
-		s.sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, stmtStatsVisitor)
+		s.sqlStats.GetLocalMemProvider().IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, stmtStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch statement stats")
@@ -519,7 +519,7 @@ func (s *Server) GetUnscrubbedTxnStats(
 		return nil
 	}
 	err :=
-		s.sqlStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, txnStatsVisitor)
+		s.sqlStats.GetLocalMemProvider().IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, txnStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch statement stats")
@@ -2444,7 +2444,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		TxnModesSetter:         ex,
 		Jobs:                   &ex.extraTxnState.jobs,
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
-		statsStorage:           ex.server.sqlStats,
+		statsProvider:          ex.server.sqlStats,
 		indexUsageStats:        ex.indexUsageStats,
 	}
 }
