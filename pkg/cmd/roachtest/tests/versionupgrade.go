@@ -92,6 +92,8 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// the 20.2 release, this test will fail because it is missing a fixture for
 	// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
 	// Check it in (instructions will be logged below) and off we go.
+	// TODO(celia) set this to true and regenerate fixtures,
+	// as per https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-Updateversionmapinroachtestandregeneratetestfixtures
 	if false {
 		// The version to create/update the fixture for. Must be released (i.e.
 		// can download it from the homepage); if that is not the case use the
