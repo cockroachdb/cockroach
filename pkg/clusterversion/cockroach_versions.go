@@ -286,6 +286,8 @@ const (
 	// programming error. See https://github.com/cockroachdb/pebble/issues/1255
 	// and #69891.
 	PebbleSetWithDelete
+	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
+	V21_2
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -479,6 +481,11 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleSetWithDelete,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1166},
+	},
+	{
+		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
+		Key:     V21_2,
+		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
