@@ -1506,7 +1506,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		var cancel func()
 		ctx, cancel = context.WithTimeout(ctx, testutils.DefaultSucceedsSoonDuration)
 		defer cancel()
-		defer txnwait.TestingOverrideTxnLivenessThreshold(2 * testutils.DefaultSucceedsSoonDuration)
+		defer txnwait.TestingOverrideTxnLivenessThreshold(2 * testutils.DefaultSucceedsSoonDuration)()
 
 		// Create a transaction that won't complete until after the merge.
 		txn1 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
