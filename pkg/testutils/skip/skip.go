@@ -78,6 +78,9 @@ func UnderBazelWithIssue(t SkippableTest, githubIssueID int, args ...interface{}
 	}
 }
 
+// Ignore unused warnings.
+var _ = UnderBazelWithIssue
+
 // UnderShort skips this test if the -short flag is specified.
 func UnderShort(t SkippableTest, args ...interface{}) {
 	t.Helper()
