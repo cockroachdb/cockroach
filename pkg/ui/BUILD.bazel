@@ -28,14 +28,13 @@ filegroup(
 )
 
 filegroup(
-    name = "node_modules1",
+    name = "node_modules_db_console",
     srcs = glob(
         include = [
             "node_modules/**",
         ],
         exclude = [
             "node_modules/db-console",
-            "node_modules/@cockroachlabs/cluster-ui",
             "node_modules/@types/react-select",
             "node_modules/react-select",
         ],
@@ -44,7 +43,7 @@ filegroup(
 )
 
 filegroup(
-    name = "node_modules2",
+    name = "node_modules_cluster_ui",
     srcs = glob(
         include = [
             "node_modules/**",

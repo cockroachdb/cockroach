@@ -14,7 +14,6 @@ const path = require("path");
 const rimraf = require("rimraf");
 const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
-const VisualizerPlugin = require("webpack-visualizer-plugin");
 const StringReplacePlugin = require("string-replace-webpack-plugin");
 const WebpackBar = require("webpackbar");
 
@@ -62,6 +61,19 @@ module.exports = (env, argv) => {
     }),
   ];
 
+  // First check for local modules, then for third-party modules from
+  // node_modules.
+  let modules = [
+    ...localRoots,
+    path.resolve(__dirname, "node_modules"),
+    path.resolve(__dirname, "../..", "node_modules"),
+  ];
+
+  if (isBazelBuild) {
+    // required for bazel build to resolve properly dependencies
+    modules.push("node_modules");
+  }
+
   // Exclude DLLPlugin when build with Bazel because bazel handles caching on its own
   if (!isBazelBuild) {
     plugins = plugins.concat([
@@ -90,15 +102,7 @@ module.exports = (env, argv) => {
     resolve: {
       // Add resolvable extensions.
       extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
-      // First check for local modules, then for third-party modules from
-      // node_modules.
-      modules: [
-        ...localRoots,
-        path.resolve(__dirname, "node_modules"),
-        path.resolve(__dirname, "../..", "node_modules"),
-        // required for bazel build to resolve properly dependencies
-        "node_modules",
-      ],
+      modules: modules,
       alias: {
         oss: path.resolve(__dirname),
         "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
