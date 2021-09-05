@@ -3,14 +3,14 @@ load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 load("@npm//@bazel/typescript:index.bzl", "ts_project")
 
 webpack(
-    name = "db_console_webpack",
+    name = "db-console",
     args = [
         "--config $(execpath webpack.app.js)",
         "--env.dist=ccl",
         "--mode",
         "production",
         "--env.is_bazel_build",
-        "--env.output=$(RULEDIR)/db_console_webpack",
+        "--env.output=$(RULEDIR)/db-console",
     ],
     data = [
         ".babelrc",
@@ -25,7 +25,7 @@ webpack(
         "tsconfig.json",
         "webpack.app.js",
         ":node_modules",
-        "//pkg/ui:node_modules1",
+        "//pkg/ui:node_modules_db_console",
         "//pkg/ui/workspaces/cluster-ui:cluster_ui_package",
         "//pkg/ui/workspaces/db-console/ccl/src/js:db_console_ccl_js_proto",
         "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
@@ -48,30 +48,21 @@ webpack(
         "@npm//babel-preset-react-app",
         "@npm//cache-loader",
         "@npm//css-loader",
+        "@npm//copy-webpack-plugin",
+        "@npm//string-replace-webpack-plugin",
         "@npm//protobufjs",
         "@npm//sass-loader",
         "@npm//source-map-loader",
         "@npm//style-loader",
         "@npm//stylus-loader",
+        "@npm//webpack",
+        "@npm//nib",
+        "@npm//webpackbar",
         "@npm//ts-loader",
         "@npm//url-loader",
     ],
     output_dir = True,
     visibility = ["//visibility:public"],
-)
-
-js_library(
-    name = "db_console_package",
-    package_name = "@cockroachlabs/cluster-ui",
-    srcs = [
-        "package.json",
-    ],
-    deps = [
-        ":db_console_webpack",
-        "//pkg/ui/workspaces/cluster-ui:cluster_ui_package",
-        "//pkg/ui/workspaces/db-console/ccl/src/js:db_console_ccl_js_proto",
-        "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
-    ],
 )
 
 filegroup(
@@ -80,12 +71,5 @@ filegroup(
         include = [
             "node_modules/**",
         ],
-        # exclude = [
-        #     "node_modules/db-console",
-        #     "node_modules/@cockroachlabs/cluster-ui",
-        #     "node_modules/@types/react-select",
-        #     "node_modules/react-select",
-        # ],
     ),
-    visibility = ["//pkg/ui:__subpackages__"],
 )
