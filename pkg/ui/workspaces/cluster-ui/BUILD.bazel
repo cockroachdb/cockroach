@@ -3,7 +3,7 @@ load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 load("@npm//@bazel/typescript:index.bzl", "ts_project")
 
 ts_project(
-    name = "cluster_ui_ts_project",
+    name = "ts_project",
     srcs = glob(
         ["src/**"],
         exclude = [
@@ -15,6 +15,7 @@ ts_project(
     declaration = True,
     emit_declaration_only = True,
     out_dir = "dist/types",
+    root_dir = "src",
     tsconfig = "tsconfig.json",
     deps = [
         "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
@@ -37,13 +38,17 @@ ts_project(
 )
 
 webpack(
-    name = "cluster_ui_webpack",
-    outs = ["dist/js/main.js"],
+    name = "webpack",
+    outs = [
+        "dist/js/main.js",
+        # TODO (koorosh): webpack outputs `main.js.map` file as well but it's ignored for now
+        # due to limited understanding how to preserve project structure and include more than
+        # single file as output.
+    ],
     args = [
         "--config $(execpath webpack.config.js)",
         "--env.is_bazel_build",
-        "--mode",
-        "production",
+        "--mode production",
         "-o $@",
     ],
     data = [
@@ -51,7 +56,8 @@ webpack(
         "src",
         "tsconfig.json",
         "webpack.config.js",
-        "//pkg/ui:node_modules2",
+        ":node_modules",
+        "//pkg/ui:node_modules_cluster_ui",
         "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
         "@npm//@babel/parser",
         "@npm//@babel/plugin-proposal-class-properties",
@@ -90,8 +96,17 @@ js_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        ":cluster_ui_ts_project",
-        ":cluster_ui_webpack",
+        ":ts_project",
+        ":webpack",
         "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
     ],
+)
+
+filegroup(
+    name = "node_modules",
+    srcs = glob(
+        include = [
+            "node_modules/**",
+        ],
+    ),
 )
