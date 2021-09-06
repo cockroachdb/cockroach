@@ -86,9 +86,6 @@ type cdcTestArgs struct {
 func cdcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 	// kv.rangefeed.enabled is required for changefeeds to run
 	db.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
-	// jobs.registry.retry.max_delay is set to work around #69037.
-	// TODO(ssd): revert once #69037 is fixed.
-	db.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.max_delay = '1s'")
 	randomlyRun(t, db, "SET CLUSTER SETTING kv.rangefeed.catchup_scan_iterator_optimization.enabled = true")
 }
 
