@@ -135,7 +135,7 @@ func (c *crossJoiner) Next() coldata.Batch {
 // builder for it (assuming that all rows in the batch contribute to the cross
 // product), and returns the length of the batch.
 func (c *crossJoiner) readNextLeftBatch() int {
-	leftBatch := c.inputOne.Next()
+	leftBatch := c.InputOne.Next()
 	c.prepareForNextLeftBatch(leftBatch, 0 /* startIdx */, leftBatch.Length())
 	return leftBatch.Length()
 }
@@ -209,7 +209,7 @@ func (c *crossJoiner) setupForBuilding() {
 		// rows (if positive), so we have to discard first numRightTuples rows
 		// from the left.
 		for c.numRightTuples > 0 {
-			leftBatch := c.inputOne.Next()
+			leftBatch := c.InputOne.Next()
 			c.builderState.left.currentBatch = leftBatch
 			if leftBatch.Length() == 0 {
 				break
@@ -289,7 +289,7 @@ func setAllNulls(vecs []coldata.Vec, length int) {
 }
 
 func (c *crossJoiner) Reset(ctx context.Context) {
-	if r, ok := c.inputOne.(colexecop.Resetter); ok {
+	if r, ok := c.InputOne.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 	if r, ok := c.inputTwo.(colexecop.Resetter); ok {

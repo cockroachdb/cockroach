@@ -1060,7 +1060,7 @@ func NewColOperator(
 					opName := "external-hash-joiner"
 					diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 					result.Root = colexec.NewTwoInputDiskSpiller(
-						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
+						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner,
 						hashJoinerMemMonitorName,
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 							unlimitedAllocator := colmem.NewAllocator(

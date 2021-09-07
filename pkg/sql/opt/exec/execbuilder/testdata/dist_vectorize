@@ -208,7 +208,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             │   └ *colexec.invariantsChecker
 │             │     └ *colexecbase.simpleProjectOp
 │             │       └ *colexec.diskSpillerBase
-│             │         ├ *colexecjoin.hashJoiner
+│             │         ├ *colexecjoin.HashJoiner
 │             │         │ ├ *colexec.invariantsChecker
 │             │         │ │ └ *colexec.ParallelUnorderedSynchronizer
 │             │         │ │   ├ *colexec.invariantsChecker
@@ -264,7 +264,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │         └ *colexec.invariantsChecker
 │           └ *colexecbase.simpleProjectOp
 │             └ *colexec.diskSpillerBase
-│               ├ *colexecjoin.hashJoiner
+│               ├ *colexecjoin.HashJoiner
 │               │ ├ *colexec.invariantsChecker
 │               │ │ └ *colexec.ParallelUnorderedSynchronizer
 │               │ │   ├ *colexec.invariantsChecker
@@ -312,7 +312,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │         └ *colexec.invariantsChecker
 │           └ *colexecbase.simpleProjectOp
 │             └ *colexec.diskSpillerBase
-│               ├ *colexecjoin.hashJoiner
+│               ├ *colexecjoin.HashJoiner
 │               │ ├ *colexec.invariantsChecker
 │               │ │ └ *colexec.ParallelUnorderedSynchronizer
 │               │ │   ├ *colexec.invariantsChecker
@@ -360,7 +360,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │         └ *colexec.invariantsChecker
 │           └ *colexecbase.simpleProjectOp
 │             └ *colexec.diskSpillerBase
-│               ├ *colexecjoin.hashJoiner
+│               ├ *colexecjoin.HashJoiner
 │               │ ├ *colexec.invariantsChecker
 │               │ │ └ *colexec.ParallelUnorderedSynchronizer
 │               │ │   ├ *colexec.invariantsChecker
@@ -408,7 +408,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
           └ *colexec.invariantsChecker
             └ *colexecbase.simpleProjectOp
               └ *colexec.diskSpillerBase
-                ├ *colexecjoin.hashJoiner
+                ├ *colexecjoin.HashJoiner
                 │ ├ *colexec.invariantsChecker
                 │ │ └ *colexec.ParallelUnorderedSynchronizer
                 │ │   ├ *colexec.invariantsChecker
