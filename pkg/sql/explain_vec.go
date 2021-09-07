@@ -62,8 +62,15 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}
 
 	distSQLPlanner.finalizePlanWithRowCount(planCtx, physPlan, n.plan.mainRowCount)
-	flows := physPlan.GenerateFlowSpecs()
 	flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p)
+	flows := physPlan.GenerateFlowSpecs()
+	willDistribute := physPlan.Distribution.WillDistribute()
+	if len(flows) == 1 {
+		// We ended up planning everything locally even if we thought the plan
+		// would be distributed.
+		willDistribute = false
+		flowCtx.Local = true
+	}
 
 	// We want to get the vectorized plan which would be executed with the
 	// current 'vectorize' option. If 'vectorize' is set to 'off', then the
@@ -75,7 +82,6 @@ func (n *explainVecNode) startExec(params runParams) error {
 		return errors.New("vectorize is set to 'off'")
 	}
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]
-	willDistribute := physPlan.Distribution.WillDistribute()
 	n.run.lines, n.run.cleanup, err = colflow.ExplainVec(
 		params.ctx, flowCtx, flows, physPlan.LocalProcessors, nil, /* opChains */
 		distSQLPlanner.gatewayNodeID, verbose, willDistribute,
@@ -96,6 +102,7 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.F
 			VecFDSemaphore: p.execCfg.DistSQLSrv.VecFDSemaphore,
 			NodeDialer:     p.DistSQLPlanner().nodeDialer,
 		},
+		Local: planCtx.isLocal,
 		TypeResolverFactory: &descs.DistSQLTypeResolverFactory{
 			Descriptors: p.Descriptors(),
 		},
