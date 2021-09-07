@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
@@ -2247,7 +2248,7 @@ func (m *sessionDataMutator) SetTemporarySchemaIDForDatabase(dbID uint32, tempSc
 }
 
 func (m *sessionDataMutator) SetDefaultIntSize(size int32) {
-	m.data.DefaultIntSize = size
+	atomic.StoreInt32(&m.data.DefaultIntSize, size)
 }
 
 func (m *sessionDataMutator) SetDefaultTransactionPriority(val tree.UserPriority) {

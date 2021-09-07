@@ -446,7 +446,7 @@ func (h ConnectionHandler) GetUnqualifiedIntSize() *types.T {
 	if h.ex != nil {
 		// The executor will be nil in certain testing situations where
 		// no server is actually present.
-		size = h.ex.sessionData.DefaultIntSize
+		size = atomic.LoadInt32(&h.ex.sessionData.DefaultIntSize)
 	}
 	return parser.NakedIntTypeFromDefaultIntSize(size)
 }
