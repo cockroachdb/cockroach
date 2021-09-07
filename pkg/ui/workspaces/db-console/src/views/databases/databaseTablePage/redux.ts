@@ -18,11 +18,17 @@ import {
   generateTableID,
   refreshTableDetails,
   refreshTableStats,
+  refreshNodes,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { getMatchParamByName } from "src/util/query";
+import {
+  nodeRegionsByIDSelector,
+  selectIsMoreThanOneNode,
+} from "src/redux/nodes";
+import { getNodesByRegionString } from "../utils";
 
 const { TableDetailsRequest, TableStatsRequest } = cockroach.server.serverpb;
 
@@ -34,8 +40,17 @@ export const mapStateToProps = createSelector(
 
   state => state.cachedData.tableDetails,
   state => state.cachedData.tableStats,
+  state => nodeRegionsByIDSelector(state),
+  state => selectIsMoreThanOneNode(state),
 
-  (database, table, tableDetails, tableStats): DatabaseTablePageData => {
+  (
+    database,
+    table,
+    tableDetails,
+    tableStats,
+    nodeRegions,
+    showNodeRegionsSection,
+  ): DatabaseTablePageData => {
     const details = tableDetails[generateTableID(database, table)];
     const stats = tableStats[generateTableID(database, table)];
     const grants = _.flatMap(details?.data?.grants, grant =>
@@ -43,6 +58,7 @@ export const mapStateToProps = createSelector(
         return { user: grant.user, privilege };
       }),
     );
+    const nodes = stats?.data?.node_ids || [];
 
     return {
       databaseName: database,
@@ -55,6 +71,7 @@ export const mapStateToProps = createSelector(
         indexNames: _.uniq(_.map(details?.data?.indexes, index => index.name)),
         grants: grants,
       },
+      showNodeRegionsSection,
       stats: {
         loading: !!stats?.inFlight,
         loaded: !!stats?.valid,
@@ -62,6 +79,7 @@ export const mapStateToProps = createSelector(
           stats?.data?.approximate_disk_bytes || 0,
         ).toNumber(),
         rangeCount: FixLong(stats?.data?.range_count || 0).toNumber(),
+        nodesByRegionString: getNodesByRegionString(nodes, nodeRegions),
       },
     };
   },
@@ -75,4 +93,6 @@ export const mapDispatchToProps = {
   refreshTableStats: (database: string, table: string) => {
     return refreshTableStats(new TableStatsRequest({ database, table }));
   },
+
+  refreshNodes,
 };

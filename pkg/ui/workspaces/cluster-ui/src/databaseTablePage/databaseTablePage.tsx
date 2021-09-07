@@ -54,6 +54,7 @@ const { TabPane } = Tabs;
 //       loaded: boolean;
 //       sizeInBytes: number;
 //       rangeCount: number;
+//       nodesByRegionString: string;
 //     };
 //   }
 export interface DatabaseTablePageData {
@@ -61,6 +62,7 @@ export interface DatabaseTablePageData {
   name: string;
   details: DatabaseTablePageDataDetails;
   stats: DatabaseTablePageDataStats;
+  showNodeRegionsSection?: boolean;
 }
 
 export interface DatabaseTablePageDataDetails {
@@ -82,11 +84,13 @@ export interface DatabaseTablePageDataStats {
   loaded: boolean;
   sizeInBytes: number;
   rangeCount: number;
+  nodesByRegionString?: string;
 }
 
 export interface DatabaseTablePageActions {
   refreshTableDetails: (database: string, table: string) => void;
   refreshTableStats: (databse: string, table: string) => void;
+  refreshNodes?: () => void;
 }
 
 export type DatabaseTablePageProps = DatabaseTablePageData &
@@ -121,6 +125,9 @@ export class DatabaseTablePage extends React.Component<
   }
 
   private refresh() {
+    if (this.props.refreshNodes != null) {
+      this.props.refreshNodes();
+    }
     if (!this.props.details.loaded && !this.props.details.loading) {
       return this.props.refreshTableDetails(
         this.props.databaseName,
@@ -212,6 +219,12 @@ export class DatabaseTablePage extends React.Component<
 
                 <Col span={14}>
                   <SummaryCard className={cx("summary-card")}>
+                    {this.props.showNodeRegionsSection && (
+                      <SummaryCardItem
+                        label="Regions/nodes"
+                        value={this.props.stats.nodesByRegionString}
+                      />
+                    )}
                     <SummaryCardItem
                       label="Database"
                       value={this.props.databaseName}

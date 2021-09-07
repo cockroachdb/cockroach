@@ -385,122 +385,122 @@ var versionsSingleton = keyedVersions{
 	// v21.2 versions.
 	{
 		Key:     Start21_2,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 102},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
 	},
 	{
 		Key:     JoinTokensTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 104},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1104},
 	},
 	{
 		Key:     AcquisitionTypeInLeaseHistory,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 106},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1106},
 	},
 	{
 		Key:     SerializeViewUDTs,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 108},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1108},
 	},
 	{
 		Key:     ExpressionIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 110},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1110},
 	},
 	{
 		Key:     DeleteDeprecatedNamespaceTableDescriptorMigration,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 112},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1112},
 	},
 	{
 		Key:     FixDescriptors,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 114},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1114},
 	},
 	{
 		Key:     SQLStatsTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 116},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1116},
 	},
 	{
 		Key:     DatabaseRoleSettings,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 118},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1118},
 	},
 	{
 		Key:     TenantUsageTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 120},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1120},
 	},
 	{
 		Key:     SQLInstancesTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 122},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1122},
 	},
 	{
 		Key:     NewRetryableRangefeedErrors,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1124},
 	},
 	{
 		Key:     AlterSystemWebSessionsCreateIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 126},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1126},
 	},
 	{
 		Key:     SeparatedIntentsMigration,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 128},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1128},
 	},
 	{
 		Key:     PostSeparatedIntentsMigration,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 130},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1130},
 	},
 	{
 		Key:     RetryJobsWithExponentialBackoff,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 132},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1132},
 	},
 	{
 		Key:     RecordsBasedRegistry,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 134},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1134},
 	}, {
 		Key:     AutoSpanConfigReconciliationJob,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 136},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1136},
 	},
 	{
 		Key:     PreventNewInterleavedTables,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 138},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1138},
 	},
 	{
 		Key:     EnsureNoInterleavedTables,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 140},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1140},
 	},
 	{
 		Key:     DefaultPrivileges,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 142},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1142},
 	},
 	{
 		Key:     ZonesTableForSecondaryTenants,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 144},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1144},
 	},
 	{
 		Key:     UseKeyEncodeForHashShardedIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 146},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1146},
 	},
 	{
 		Key:     DatabasePlacementPolicy,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 148},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1148},
 	},
 	{
 		Key:     GeneratedAsIdentity,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 150},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1150},
 	},
 	{
 		Key:     OnUpdateExpressions,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 152},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1152},
 	},
 	{
 		Key:     SpanConfigurationsTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 154},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1154},
 	},
 	{
 		Key:     BoundedStaleness,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 156},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1156},
 	},
 	{
 		Key:     SQLStatsCompactionScheduledJob,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 158},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1158},
 	},
 	{
 		Key:     DateAndIntervalStyle,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 160},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1160},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
