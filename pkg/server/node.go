@@ -1236,7 +1236,7 @@ func (n *Node) Join(
 	defer span.Finish()
 
 	activeVersion := n.storeCfg.Settings.Version.ActiveVersion(ctx)
-	if req.BinaryVersion.Less(activeVersion.Version) {
+	if req.BinaryVersion.Less(activeVersion.Version) && !clusterversion.Is21Dot1Dot8Equiv(*req.BinaryVersion, activeVersion.Version) {
 		return nil, grpcstatus.Error(codes.PermissionDenied, ErrIncompatibleBinaryVersion.Error())
 	}
 
