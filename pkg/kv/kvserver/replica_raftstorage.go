@@ -209,7 +209,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, _, err := rsl.LoadRaftTruncatedState(ctx, reader)
+	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +305,7 @@ func term(
 	// sideloaded entries. We only need the term, so this is what we do.
 	ents, err := entries(ctx, rsl, reader, rangeID, eCache, nil /* sideloaded */, i, i+1, math.MaxUint64 /* maxBytes */)
 	if errors.Is(err, raft.ErrCompacted) {
-		ts, _, err := rsl.LoadRaftTruncatedState(ctx, reader)
+		ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
 		if err != nil {
 			return 0, err
 		}
@@ -342,7 +342,7 @@ func (r *Replica) raftTruncatedStateLocked(
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
-	ts, _, err := r.mu.stateLoader.LoadRaftTruncatedState(ctx, r.store.Engine())
+	ts, err := r.mu.stateLoader.LoadRaftTruncatedState(ctx, r.store.Engine())
 	if err != nil {
 		return ts, err
 	}
@@ -519,18 +519,9 @@ type IncomingSnapshot struct {
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
-	State *kvserverpb.ReplicaState
-	//
-	// When true, this snapshot contains an unreplicated TruncatedState. When
-	// false, the TruncatedState is replicated (see the reference below) and the
-	// recipient must avoid also writing the unreplicated TruncatedState. The
-	// migration to an unreplicated TruncatedState will be carried out during
-	// the next log truncation (assuming cluster version is bumped at that
-	// point).
-	// See the comment on VersionUnreplicatedRaftTruncatedState for details.
-	UsesUnreplicatedTruncatedState bool
-	snapType                       SnapshotRequest_Type
-	placeholder                    *ReplicaPlaceholder
+	State       *kvserverpb.ReplicaState
+	snapType    SnapshotRequest_Type
+	placeholder *ReplicaPlaceholder
 }
 
 func (s *IncomingSnapshot) String() string {
@@ -886,13 +877,10 @@ func (r *Replica) applySnapshot(
 	}
 	r.store.raftEntryCache.Drop(r.RangeID)
 
-	// Update TruncatedState if it is unreplicated.
-	if inSnap.UsesUnreplicatedTruncatedState {
-		if err := r.raftMu.stateLoader.SetRaftTruncatedState(
-			ctx, &unreplicatedSST, s.TruncatedState,
-		); err != nil {
-			return errors.Wrapf(err, "unable to write UnreplicatedTruncatedState to unreplicated SST writer")
-		}
+	if err := r.raftMu.stateLoader.SetRaftTruncatedState(
+		ctx, &unreplicatedSST, s.TruncatedState,
+	); err != nil {
+		return errors.Wrapf(err, "unable to write TruncatedState to unreplicated SST writer")
 	}
 
 	if err := unreplicatedSST.Finish(); err != nil {

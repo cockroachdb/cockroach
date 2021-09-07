@@ -2440,15 +2440,7 @@ func (r *Replica) sendSnapshot(
 		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
 	}
 
-	usesReplicatedTruncatedState, err := storage.MVCCGetProto(
-		ctx, snap.EngineSnap, keys.RaftTruncatedStateLegacyKey(r.RangeID), hlc.Timestamp{}, nil, storage.MVCCGetOptions{},
-	)
-	if err != nil {
-		return errors.Wrap(err, "loading legacy truncated state")
-	}
-
-	canAvoidSendingLog := !usesReplicatedTruncatedState &&
-		snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex
+	canAvoidSendingLog := snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex
 
 	if canAvoidSendingLog {
 		// If we're not using a legacy (replicated) truncated state, we avoid
@@ -2467,15 +2459,8 @@ func (r *Replica) sendSnapshot(
 	}
 
 	req := SnapshotRequest_Header{
-		State: snap.State,
-		// Tell the recipient whether it needs to synthesize the new
-		// unreplicated TruncatedState. It could tell by itself by peeking into
-		// the data, but it uses a write only batch for performance which
-		// doesn't support that; this is easier. Notably, this is true if the
-		// snap index itself is the one at which the migration happens.
-		//
-		// See VersionUnreplicatedRaftTruncatedState.
-		UnreplicatedTruncatedState: !usesReplicatedTruncatedState,
+		State:                                snap.State,
+		DeprecatedUnreplicatedTruncatedState: true,
 		RaftMessageRequest: RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: sender,
