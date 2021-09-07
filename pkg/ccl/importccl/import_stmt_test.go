@@ -6429,6 +6429,14 @@ func TestImportMultiRegion(t *testing.T) {
 
 	simpleOcf := fmt.Sprintf("nodelocal://0/avro/%s", "simple.ocf")
 
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
 	// Table schemas for USING
 	tableSchemaMR := fmt.Sprintf("nodelocal://0/avro/%s", "simple-schema-multi-region.sql")
 	tableSchemaMRRegionalByRow := fmt.Sprintf("nodelocal://0/avro/%s",
@@ -6498,6 +6506,7 @@ DROP VIEW IF EXISTS v`,
 			create    string
 			args      []interface{}
 			errString string
+			data      string
 		}{
 			{
 				name:      "import-create-using-multi-region-to-non-multi-region-database",
@@ -6523,16 +6532,34 @@ DROP VIEW IF EXISTS v`,
 				errString: "IMPORT to REGIONAL BY ROW table not supported",
 			},
 			{
-				name:      "import-into-multi-region-regional-by-row-to-multi-region-database",
+				name:   "import-into-multi-region-regional-by-row-default-col-to-multi-region-database",
+				db:     "multi_region",
+				table:  "mr_regional_by_row",
+				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
+				sql:    "IMPORT INTO mr_regional_by_row AVRO DATA ($1)",
+				args:   []interface{}{simpleOcf},
+			},
+			{
+				name:   "import-into-multi-region-regional-by-row-to-multi-region-database",
+				db:     "multi_region",
+				table:  "mr_regional_by_row",
+				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
+				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
+				args:   []interface{}{srv.URL},
+				data:   "1,\"foo\",NULL,us-east1\n",
+			},
+			{
+				name:      "import-into-multi-region-regional-by-row-to-multi-region-database-wrong-value",
 				db:        "multi_region",
 				table:     "mr_regional_by_row",
 				create:    "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
-				sql:       "IMPORT INTO mr_regional_by_row AVRO DATA ($1)",
-				args:      []interface{}{simpleOcf},
-				errString: "IMPORT into REGIONAL BY ROW table not supported",
+				sql:       "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
+				args:      []interface{}{srv.URL},
+				data:      "1,\"foo\",NULL,us-west1\n",
+				errString: "invalid input value for enum crdb_internal_region",
 			},
 			{
-				name:   "import-into-using-multi-region-global-to-multi-region-database",
+				name:   "import-into-multi-region-global-to-multi-region-database",
 				db:     "multi_region",
 				table:  "mr_global",
 				create: "CREATE TABLE mr_global (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY GLOBAL",
@@ -6549,6 +6576,10 @@ DROP VIEW IF EXISTS v`,
 				_, err = sqlDB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q CASCADE", test.table))
 				require.NoError(t, err)
 
+				if test.data != "" {
+					data = test.data
+				}
+
 				if test.create != "" {
 					_, err = sqlDB.Exec(test.create)
 					require.NoError(t, err)
@@ -6556,7 +6587,7 @@ DROP VIEW IF EXISTS v`,
 
 				_, err = sqlDB.ExecContext(context.Background(), test.sql, test.args...)
 				if test.errString != "" {
-					testutils.IsError(err, test.errString)
+					require.True(t, testutils.IsError(err, test.errString))
 				} else {
 					require.NoError(t, err)
 					res := sqlDB.QueryRow(fmt.Sprintf("SELECT count(*) FROM %q", test.table))

@@ -974,6 +974,24 @@ func importPlanHook(
 			}
 		}
 
+		// Store the primary region of the database being imported into. This is
+		// used during job execution to evaluate certain default expressions and
+		// computed columns such as `gateway_region`.
+		var databasePrimaryRegion descpb.RegionName
+		if db.IsMultiRegion() {
+			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn,
+				descsCol *descs.Collection) error {
+				regionConfig, err := sql.SynthesizeRegionConfig(ctx, txn, db.GetID(), descsCol)
+				if err != nil {
+					return err
+				}
+				databasePrimaryRegion = regionConfig.PrimaryRegion()
+				return nil
+			}); err != nil {
+				return errors.Wrap(err, "failed to resolve region config for multi region database")
+			}
+		}
+
 		telemetry.CountBucketed("import.files", int64(len(files)))
 
 		// Record telemetry for userfile being used as the import target.
@@ -1002,16 +1020,17 @@ func importPlanHook(
 		// StartableJob which we attached to the connExecutor somehow.
 
 		importDetails := jobspb.ImportDetails{
-			URIs:              files,
-			Format:            format,
-			ParentID:          db.GetID(),
-			Tables:            tableDetails,
-			Types:             typeDetails,
-			SSTSize:           sstSize,
-			Oversample:        oversample,
-			SkipFKs:           skipFKs,
-			ParseBundleSchema: importStmt.Bundle,
-			DefaultIntSize:    p.SessionData().DefaultIntSize,
+			URIs:                  files,
+			Format:                format,
+			ParentID:              db.GetID(),
+			Tables:                tableDetails,
+			Types:                 typeDetails,
+			SSTSize:               sstSize,
+			Oversample:            oversample,
+			SkipFKs:               skipFKs,
+			ParseBundleSchema:     importStmt.Bundle,
+			DefaultIntSize:        p.SessionData().DefaultIntSize,
+			DatabasePrimaryRegion: databasePrimaryRegion,
 		}
 
 		jr := jobs.Record{
@@ -1294,9 +1313,6 @@ func prepareExistingTableDescForIngestion(
 ) (*descpb.TableDescriptor, error) {
 	if len(desc.Mutations) > 0 {
 		return nil, errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", desc.Mutations[0].String())
-	}
-	if desc.LocalityConfig != nil && desc.LocalityConfig.GetRegionalByRow() != nil {
-		return nil, unimplemented.NewWithIssueDetailf(61133, "import.regional-by-row", "IMPORT into REGIONAL BY ROW table not supported")
 	}
 
 	// Note that desc is just used to verify that the version matches.
