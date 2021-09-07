@@ -205,7 +205,7 @@ func MakeSimpleTableDescriptor(
 	evalCtx := tree.EvalContext{
 		Context:            ctx,
 		Sequence:           &importSequenceOperators{},
-		Regions:            &importRegionOperator{},
+		Regions:            makeImportRegionOperator(""),
 		SessionDataStack:   sessiondata.NewStack(&sessiondata.SessionData{}),
 		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
 		Settings:           st,
@@ -264,13 +264,38 @@ var (
 )
 
 // Implements the tree.RegionOperator interface.
-type importRegionOperator struct{}
+type importRegionOperator struct {
+	primaryRegion descpb.RegionName
+}
+
+func makeImportRegionOperator(primaryRegion descpb.RegionName) *importRegionOperator {
+	return &importRegionOperator{primaryRegion: primaryRegion}
+}
+
+// importDatabaseRegionConfig is a stripped down version of
+// multiregion.RegionConfig that is used by import.
+type importDatabaseRegionConfig struct {
+	primaryRegion descpb.RegionName
+}
+
+// IsValidRegionNameString implements the tree.DatabaseRegionConfig interface.
+func (i importDatabaseRegionConfig) IsValidRegionNameString(_ string) bool {
+	// Unimplemented.
+	return false
+}
+
+// PrimaryRegionString implements the tree.DatabaseRegionConfig interface.
+func (i importDatabaseRegionConfig) PrimaryRegionString() string {
+	return string(i.primaryRegion)
+}
+
+var _ tree.DatabaseRegionConfig = &importDatabaseRegionConfig{}
 
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
 func (so *importRegionOperator) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (tree.DatabaseRegionConfig, error) {
-	return nil, errors.WithStack(errRegionOperator)
+	return importDatabaseRegionConfig{primaryRegion: so.primaryRegion}, nil
 }
 
 // ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
