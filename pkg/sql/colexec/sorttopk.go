@@ -13,6 +13,7 @@ package colexec
 import (
 	"container/heap"
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -31,16 +32,18 @@ const (
 
 // NewTopKSorter returns a new sort operator, which sorts its input on the
 // columns given in orderingCols and returns the first K rows. The inputTypes
-// must correspond 1-1 with the columns in the input operator.
+// must correspond 1-1 with the columns in the input operator. If matchLen is
+// non-zero, then the input tuples must be sorted on first matchLen columns.
 func NewTopKSorter(
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
+	matchLen int,
 	k uint64,
 	maxOutputBatchMemSize int64,
-) colexecop.ResettableOperator {
-	return &topKSorter{
+) (colexecop.ResettableOperator, error) {
+	base := &topKSorter{
 		allocator:             allocator,
 		OneInputNode:          colexecop.NewOneInputNode(input),
 		inputTypes:            inputTypes,
@@ -48,6 +51,19 @@ func NewTopKSorter(
 		k:                     k,
 		maxOutputBatchMemSize: maxOutputBatchMemSize,
 	}
+	partialOrderCols := make([]uint32, matchLen)
+	for i := range partialOrderCols {
+		partialOrderCols[i] = orderingCols[i].ColIdx
+	}
+	var err error
+	base.distincterInput = &colexecop.FeedOperator{}
+	base.distincter, base.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
+		base.distincterInput, partialOrderCols, inputTypes, false, /* nullsAreDistinct */
+	)
+	if err != nil {
+		return base, err
+	}
+	return base, nil
 }
 
 var _ colexecop.BufferingInMemoryOperator = &topKSorter{}
@@ -74,6 +90,7 @@ type topKSorter struct {
 
 	allocator    *colmem.Allocator
 	orderingCols []execinfrapb.Ordering_Column
+	partialOrderingCols []execinfrapb.Ordering_Column
 	inputTypes   []*types.T
 	k            uint64
 
@@ -96,6 +113,12 @@ type topKSorter struct {
 	emitted               int
 	output                coldata.Batch
 	maxOutputBatchMemSize int64
+
+	// distincter is an operator that groups an input batch by its partially
+	// ordered column values.
+	distincterInput *colexecop.FeedOperator
+	distincter      colexecop.Operator
+	distinctOutput  []bool
 
 	exportedFromTopK  int
 	exportedFromBatch int
@@ -160,8 +183,14 @@ func (t *topKSorter) Reset(ctx context.Context) {
 // determine the final output ordering. This is used in emit() to output the rows
 // in sorted order.
 func (t *topKSorter) spool() {
+	t.distincter.Init(t.Ctx)
+	t.distincter.(colexecop.Resetter).Reset(t.Ctx)
 	// Fill up t.topK by spooling up to K rows from the input.
+	// We don't need to check for distinct groups until after we have filled
+	// t.topK.
 	t.inputBatch = t.Input.Next()
+	t.distincterInput.SetBatch(t.inputBatch)
+	t.distincter.Next()
 	remainingRows := t.k
 	for remainingRows > 0 && t.inputBatch.Length() > 0 {
 		fromLength := t.inputBatch.Length()
@@ -174,6 +203,8 @@ func (t *topKSorter) spool() {
 		remainingRows -= uint64(fromLength)
 		if fromLength == t.inputBatch.Length() {
 			t.inputBatch = t.Input.Next()
+			t.distincterInput.SetBatch(t.inputBatch)
+			t.distincter.Next()
 			t.firstUnprocessedTupleIdx = 0
 		}
 	}
@@ -191,8 +222,10 @@ func (t *topKSorter) spool() {
 	heap.Init(t)
 
 	// Read the remainder of the input. Whenever a row is less than the heap max,
-	// swap it in.
-	for t.inputBatch.Length() > 0 {
+	// swap it in. When we find the end of the group, we can finish reading the
+	// input.
+	groupDone := false
+	for t.inputBatch.Length() > 0{
 		t.updateComparators(inputVecIdx, t.inputBatch)
 		sel := t.inputBatch.Selection()
 		t.allocator.PerformOperation(
@@ -202,6 +235,12 @@ func (t *topKSorter) spool() {
 					idx := i
 					if sel != nil {
 						idx = sel[i]
+					}
+					// If this is a distinct group, we have already found the top K input,
+					// so we can stop comparing the rest of this and subsequent batches.
+					if t.distinctOutput[idx] {
+						groupDone = true
+						return
 					}
 					maxIdx := t.heap[0]
 					if t.compareRow(inputVecIdx, topKVecIdx, idx, maxIdx) < 0 {
@@ -214,7 +253,12 @@ func (t *topKSorter) spool() {
 				t.firstUnprocessedTupleIdx = t.inputBatch.Length()
 			},
 		)
+		if groupDone {
+			break
+		}
 		t.inputBatch = t.Input.Next()
+		t.distincterInput.SetBatch(t.inputBatch)
+		t.distincter.Next()
 		t.firstUnprocessedTupleIdx = 0
 	}
 

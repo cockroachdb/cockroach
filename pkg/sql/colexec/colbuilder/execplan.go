@@ -371,22 +371,7 @@ func (r opResult) createDiskBackedSort(
 	totalMemLimit := execinfra.GetWorkMemLimit(flowCtx)
 	spoolMemLimit := totalMemLimit * 4 / 5
 	maxOutputBatchMemSize := totalMemLimit - spoolMemLimit
-	if matchLen > 0 {
-		// The input is already partially ordered. Use a chunks sorter to avoid
-		// loading all the rows into memory.
-		var sortChunksMemAccount *mon.BoundAccount
-		if useStreamingMemAccountForBuffering {
-			sortChunksMemAccount = streamingMemAccount
-		} else {
-			sortChunksMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
-				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
-			)
-		}
-		inMemorySorter, err = colexec.NewSortChunks(
-			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
-			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
-		)
-	} else if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
+	if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
 		// There is a limit specified, so we know exactly how many rows the
 		// sorter should output. The last part of the condition is making sure
 		// there is no overflow.
@@ -405,9 +390,24 @@ func (r opResult) createDiskBackedSort(
 			)
 		}
 		topK = post.Limit + post.Offset
-		inMemorySorter = colexec.NewTopKSorter(
+		inMemorySorter, err = colexec.NewTopKSorter(
 			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
-			inputTypes, ordering.Columns, topK, maxOutputBatchMemSize,
+			inputTypes, ordering.Columns, int(matchLen), topK, maxOutputBatchMemSize,
+		)
+	} else if matchLen > 0 {
+		// The input is already partially ordered. Use a chunks sorter to avoid
+		// loading all the rows into memory.
+		var sortChunksMemAccount *mon.BoundAccount
+		if useStreamingMemAccountForBuffering {
+			sortChunksMemAccount = streamingMemAccount
+		} else {
+			sortChunksMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
+			)
+		}
+		inMemorySorter, err = colexec.NewSortChunks(
+			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
+			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
 		)
 	} else {
 		// No optimizations possible. Default to the standard sort operator.

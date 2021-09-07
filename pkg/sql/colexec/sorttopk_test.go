@@ -12,13 +12,13 @@ package colexec
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -62,6 +62,31 @@ func init() {
 			},
 			k: 3,
 		},
+		{
+			description: "partial order single col",
+			tuples:      colexectestutils.Tuples{{1, 5}, {0, 5}, {0, 4}, {0, 3}, {0, 2}, {0, 1}},
+			expected:    colexectestutils.Tuples{{0, 5}, {1, 5}, {0, 4}},
+			typs:        []*types.T{types.Int, types.Int},
+			ordCols: []execinfrapb.Ordering_Column{
+				{ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC},
+				{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC},
+			},
+			matchLen: 1,
+			k: 3,
+		},
+		{
+			description: "partial order multi col",
+			tuples:      colexectestutils.Tuples{{0, 5, 2}, {0, 5, 1}, {0, 4, 3}, {0, 3, 3}, {0, 2, 5}, {0, 1, 1}},
+			expected:    colexectestutils.Tuples{{0, 5, 1}, {0, 5, 2}, {0, 4, 3}},
+			typs:        []*types.T{types.Int, types.Int, types.Int},
+			ordCols: []execinfrapb.Ordering_Column{
+				{ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC},
+				{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC},
+				{ColIdx: 2, Direction: execinfrapb.Ordering_Column_ASC},
+			},
+			matchLen: 2,
+			k: 3,
+		},
 	}
 }
 
@@ -72,7 +97,7 @@ func TestTopKSorter(t *testing.T) {
 	for _, tc := range topKSortTestCases {
 		log.Infof(context.Background(), "%s", tc.description)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.k, execinfra.DefaultMemoryLimit), nil
+			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, tc.k, execinfra.DefaultMemoryLimit)
 		})
 	}
 }
