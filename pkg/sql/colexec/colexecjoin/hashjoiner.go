@@ -450,17 +450,7 @@ func (hj *HashJoiner) exec() coldata.Batch {
 	if batch := hj.ProbeState.prevBatch; batch != nil {
 		// We didn't finish probing the last read batch on the previous call to
 		// exec, so we continue where we left off.
-		hj.ProbeState.prevBatch = nil
-		batchSize := batch.Length()
-		sel := batch.Selection()
-
-		// Since we're probing the same batch for the second time, it is likely
-		// that every probe tuple has multiple matches, so we want to maximize
-		// the number of tuples we collect in a single output batch, and,
-		// therefore, we use coldata.BatchSize() here.
-		hj.prepareForCollecting(coldata.BatchSize())
-		nResults := hj.collect(batch, batchSize, sel)
-		if nResults > 0 {
+		if nResults := hj.resumeProbeAndCollect(); nResults > 0 {
 			hj.congregate(nResults, batch)
 			return hj.output
 		}
@@ -468,97 +458,114 @@ func (hj *HashJoiner) exec() coldata.Batch {
 	}
 	for {
 		batch := hj.InputOne.Next()
-		batchSize := batch.Length()
-
-		if batchSize == 0 {
+		if batch.Length() == 0 {
 			return coldata.ZeroBatch
 		}
-
-		for i, colIdx := range hj.Spec.Left.EqCols {
-			hj.Ht.Keys[i] = batch.ColVec(int(colIdx))
-		}
-
-		sel := batch.Selection()
-
-		// First, we compute the hash values for all tuples in the batch.
-		if cap(hj.ProbeState.buckets) < batchSize {
-			hj.ProbeState.buckets = make([]uint64, batchSize)
-		} else {
-			// Note that we don't need to clear old values from buckets
-			// because the correct values will be populated in
-			// ComputeBuckets.
-			hj.ProbeState.buckets = hj.ProbeState.buckets[:batchSize]
-		}
-		hj.Ht.ComputeBuckets(hj.ProbeState.buckets, hj.Ht.Keys, batchSize, sel)
-
-		// Then, we initialize GroupID with the initial hash buckets and
-		// ToCheck with all applicable indices.
-		hj.Ht.ProbeScratch.SetupLimitedSlices(batchSize, hj.Ht.BuildMode)
-		// Early bounds checks.
-		groupIDs := hj.Ht.ProbeScratch.GroupID
-		_ = groupIDs[batchSize-1]
-		var nToCheck uint64
-		switch hj.Spec.JoinType {
-		case descpb.LeftAntiJoin, descpb.RightAntiJoin, descpb.ExceptAllJoin:
-			// The setup of probing for LEFT/RIGHT ANTI and EXCEPT ALL joins
-			// needs a special treatment in order to reuse the same "check"
-			// functions below.
-			for i, bucket := range hj.ProbeState.buckets[:batchSize] {
-				f := hj.Ht.BuildScratch.First[bucket]
-				//gcassert:bce
-				groupIDs[i] = f
-				if hj.Ht.BuildScratch.First[bucket] != 0 {
-					// Non-zero "first" key indicates that there is a match of hashes
-					// and we need to include the current tuple to check whether it is
-					// an actual match.
-					hj.Ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
-					nToCheck++
-				}
-			}
-		default:
-			for i, bucket := range hj.ProbeState.buckets[:batchSize] {
-				f := hj.Ht.BuildScratch.First[bucket]
-				//gcassert:bce
-				groupIDs[i] = f
-			}
-			copy(hj.Ht.ProbeScratch.ToCheck, colexechash.HashTableInitialToCheck[:batchSize])
-			nToCheck = uint64(batchSize)
-		}
-
-		// Now we collect all matches that we can emit in the probing phase
-		// in a single batch.
-		hj.prepareForCollecting(batchSize)
-		var nResults int
-		if hj.Spec.rightDistinct {
-			for nToCheck > 0 {
-				// Continue searching along the hash table next chains for the corresponding
-				// buckets. If the key is found or end of next chain is reached, the key is
-				// removed from the ToCheck array.
-				nToCheck = hj.Ht.DistinctCheck(nToCheck, sel)
-				hj.Ht.FindNext(hj.Ht.BuildScratch.Next, nToCheck)
-			}
-
-			nResults = hj.distinctCollect(batch, batchSize, sel)
-		} else {
-			for nToCheck > 0 {
-				// Continue searching for the build table matching keys while the ToCheck
-				// array is non-empty.
-				nToCheck = hj.Ht.Check(hj.Ht.Keys, nToCheck, sel)
-				hj.Ht.FindNext(hj.Ht.BuildScratch.Next, nToCheck)
-			}
-
-			// We're processing a new batch, so we'll reset the index to start
-			// collecting from.
-			hj.ProbeState.prevBatchResumeIdx = 0
-			nResults = hj.collect(batch, batchSize, sel)
-		}
-
-		if nResults > 0 {
+		if nResults := hj.InitialProbeAndCollect(batch); nResults > 0 {
 			hj.congregate(nResults, batch)
-			break
+			return hj.output
 		}
 	}
-	return hj.output
+}
+
+// InitialProbeAndCollect sets up the probing state of the HashJoiner for the
+// new probing batch and performs the initial "collection" of the joined rows.
+// "Initial collection" here means finding an equality match if such exists for
+// each probing tuple.
+//
+// batch is assumed to be non-zero length.
+func (hj *HashJoiner) InitialProbeAndCollect(batch coldata.Batch) int {
+	batchSize := batch.Length()
+
+	for i, colIdx := range hj.Spec.Left.EqCols {
+		hj.Ht.Keys[i] = batch.ColVec(int(colIdx))
+	}
+
+	sel := batch.Selection()
+
+	// First, we compute the hash values for all tuples in the batch.
+	if cap(hj.ProbeState.buckets) < batchSize {
+		hj.ProbeState.buckets = make([]uint64, batchSize)
+	} else {
+		// Note that we don't need to clear old values from buckets because the
+		// correct values will be populated in ComputeBuckets.
+		hj.ProbeState.buckets = hj.ProbeState.buckets[:batchSize]
+	}
+	hj.Ht.ComputeBuckets(hj.ProbeState.buckets, hj.Ht.Keys, batchSize, sel)
+
+	// Then, we initialize GroupID with the initial hash buckets and ToCheck
+	// with all applicable indices.
+	hj.Ht.ProbeScratch.SetupLimitedSlices(batchSize, hj.Ht.BuildMode)
+	// Early bounds checks.
+	groupIDs := hj.Ht.ProbeScratch.GroupID
+	_ = groupIDs[batchSize-1]
+	var nToCheck uint64
+	switch hj.Spec.JoinType {
+	case descpb.LeftAntiJoin, descpb.RightAntiJoin, descpb.ExceptAllJoin:
+		// The setup of probing for LEFT/RIGHT ANTI and EXCEPT ALL joins
+		// needs a special treatment in order to reuse the same "check"
+		// functions below.
+		for i, bucket := range hj.ProbeState.buckets[:batchSize] {
+			f := hj.Ht.BuildScratch.First[bucket]
+			//gcassert:bce
+			groupIDs[i] = f
+			if hj.Ht.BuildScratch.First[bucket] != 0 {
+				// Non-zero "first" key indicates that there is a match of
+				// hashes and we need to include the current tuple to check
+				// whether it is an actual match.
+				hj.Ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+				nToCheck++
+			}
+		}
+	default:
+		for i, bucket := range hj.ProbeState.buckets[:batchSize] {
+			f := hj.Ht.BuildScratch.First[bucket]
+			//gcassert:bce
+			groupIDs[i] = f
+		}
+		copy(hj.Ht.ProbeScratch.ToCheck, colexechash.HashTableInitialToCheck[:batchSize])
+		nToCheck = uint64(batchSize)
+	}
+
+	// Now we collect all matches that we can emit in the probing phase in a
+	// single batch.
+	hj.prepareForCollecting(batchSize)
+	if hj.Spec.rightDistinct {
+		for nToCheck > 0 {
+			// Continue searching along the hash table next chains for the
+			// corresponding buckets. If the key is found or end of next chain
+			// is reached, the key is removed from the ToCheck array.
+			nToCheck = hj.Ht.DistinctCheck(nToCheck, sel)
+			hj.Ht.FindNext(hj.Ht.BuildScratch.Next, nToCheck)
+		}
+
+		return hj.distinctCollect(batch, batchSize, sel)
+	}
+	for nToCheck > 0 {
+		// Continue searching for the build table matching keys while the
+		// ToCheck array is non-empty.
+		nToCheck = hj.Ht.Check(hj.Ht.Keys, nToCheck, sel)
+		hj.Ht.FindNext(hj.Ht.BuildScratch.Next, nToCheck)
+	}
+
+	// We're processing a new batch, so we'll reset the index to start
+	// collecting from.
+	hj.ProbeState.prevBatchResumeIdx = 0
+	return hj.collect(batch, batchSize, sel)
+}
+
+func (hj *HashJoiner) resumeProbeAndCollect() int {
+	batch := hj.ProbeState.prevBatch
+	hj.ProbeState.prevBatch = nil
+	batchSize := batch.Length()
+	sel := batch.Selection()
+
+	// Since we're probing the same batch for the second time, it is likely that
+	// every probe tuple has multiple matches, so we want to maximize the number
+	// of tuples we collect in a single output batch, and, therefore, we use
+	// coldata.BatchSize() here.
+	hj.prepareForCollecting(coldata.BatchSize())
+	return hj.collect(batch, batchSize, sel)
 }
 
 // congregate uses the ProbeIdx and BuildIdx pairs to stitch together the
