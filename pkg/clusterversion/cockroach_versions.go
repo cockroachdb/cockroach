@@ -82,8 +82,10 @@ const (
 	VersionCreateLoginPrivilege
 	VersionHBAForNonTLS
 	Version20_2
-
-	// Add new versions here (step one of two).
+	// *************************************************
+	// Step (1): Add new versions here.
+	// Do not add new versions to a patch release.
+	// *************************************************
 )
 
 // versionsSingleton lists all historical versions here in chronological order,
@@ -612,8 +614,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     Version20_2,
 		Version: roachpb.Version{Major: 20, Minor: 2},
 	},
-
-	// Add new versions here (step two of two).
+	// *************************************************
+	// Step (2): Add new versions here.
+	// Do not add new versions to a patch release.
+	// *************************************************
 })
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
