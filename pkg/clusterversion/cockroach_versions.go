@@ -300,7 +300,10 @@ const (
 	SQLStatsCompactionScheduledJob
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
 	DateAndIntervalStyle
+	// *************************************************
 	// Step (1): Add new versions here.
+	// Do not add new versions to a patch release.
+	// *************************************************
 )
 
 // versionsSingleton lists all historical versions here in chronological order,
@@ -507,7 +510,10 @@ var versionsSingleton = keyedVersions{
 		Key:     DateAndIntervalStyle,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 160},
 	},
+	// *************************************************
 	// Step (2): Add new versions here.
+	// Do not add new versions to a patch release.
+	// *************************************************
 }
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
