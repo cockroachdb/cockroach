@@ -355,6 +355,31 @@ SELECT current_user, session_user()
 root  root
 
 statement ok
+BEGIN
+
+statement ok
+SAVEPOINT cockroach_restart
+
+statement ok
+SET LOCAL ROLE testuser
+
+query TT
+SELECT current_user, session_user()
+----
+testuser  root
+
+statement ok
+RELEASE SAVEPOINT cockroach_restart
+
+statement ok
+COMMIT
+
+query TT
+SELECT current_user, session_user()
+----
+root  root
+
+statement ok
 SET ROLE testuser
 
 query T

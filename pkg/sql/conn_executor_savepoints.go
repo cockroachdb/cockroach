@@ -147,6 +147,12 @@ func (ex *connExecutor) execRelease(
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
 		err := ex.commitSQLTransactionInternal(ctx, s)
 		if err == nil {
+			if err := ex.reportSessionDataChanges(func() error {
+				ex.sessionDataStack.PopAll()
+				return nil
+			}); err != nil {
+				return ex.makeErrEvent(err, s)
+			}
 			return eventTxnReleased{}, nil
 		}
 		// Committing the transaction failed. We'll go to state RestartWait if
