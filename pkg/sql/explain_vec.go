@@ -61,8 +61,14 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}
 
 	distSQLPlanner.FinalizePlan(planCtx, physPlan)
-	flows := physPlan.GenerateFlowSpecs()
 	flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p)
+	flows := physPlan.GenerateFlowSpecs()
+	if len(flows) == 1 {
+		// We ended up planning everything locally even if we thought the plan
+		// would be distributed.
+		willDistribute = false
+		flowCtx.Local = true
+	}
 
 	// We want to get the vectorized plan which would be executed with the
 	// current 'vectorize' option. If 'vectorize' is set to 'off', then the
@@ -94,6 +100,7 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.F
 			VecFDSemaphore: p.execCfg.DistSQLSrv.VecFDSemaphore,
 			NodeDialer:     p.DistSQLPlanner().nodeDialer,
 		},
+		Local: planCtx.isLocal,
 		TypeResolverFactory: &descs.DistSQLTypeResolverFactory{
 			Descriptors: p.Descriptors(),
 		},
