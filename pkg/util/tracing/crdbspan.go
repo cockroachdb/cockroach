@@ -222,22 +222,9 @@ func (s *crdbSpan) disableRecording() {
 	}
 }
 
-func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
+func (s *crdbSpan) getRecording(wantTags bool) Recording {
 	if s == nil {
 		return nil // noop span
-	}
-
-	if !everyoneIsV211 {
-		// The cluster may contain nodes that are running v20.2. Unfortunately that
-		// version can easily crash when a peer returns a recording that that node
-		// did not expect would get created. To circumvent this, retain the v20.2
-		// behavior of eliding recordings when verbosity is off until we're sure
-		// that v20.2 is not around any longer.
-		//
-		// TODO(tbg): remove this in the v21.2 cycle.
-		if s.recordingType() == RecordingOff {
-			return nil
-		}
 	}
 
 	// Return early (without allocating) if the trace is empty, i.e. there are
@@ -262,7 +249,7 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 	s.mu.Unlock()
 
 	for _, child := range children {
-		result = append(result, child.getRecording(everyoneIsV211, wantTags)...)
+		result = append(result, child.getRecording(wantTags)...)
 	}
 
 	// Sort the spans by StartTime, except the first Span (the root of this

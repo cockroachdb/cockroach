@@ -82,7 +82,7 @@ func (s *spanInner) GetRecording() Recording {
 	// If the span is not verbose, optimize by avoiding the tags.
 	// This span is likely only used to carry payloads around.
 	wantTags := s.crdb.recordingType() == RecordingVerbose
-	return s.crdb.getRecording(s.tracer.TracingVerbosityIndependentSemanticsIsActive(), wantTags)
+	return s.crdb.getRecording(wantTags)
 }
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {

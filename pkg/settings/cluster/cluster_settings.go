@@ -126,20 +126,6 @@ func MakeClusterSettings() *Settings {
 	sv.Init(context.TODO(), s.Version)
 
 	s.Tracer = tracing.NewTracer()
-	isActive := int32(0) // atomic
-	s.Tracer.TracingVerbosityIndependentSemanticsIsActive = func() bool {
-		// IsActive is mildly expensive for the hot path this function
-		// is in, so cache a return value of true.
-		if atomic.LoadInt32(&isActive) != 0 {
-			return true
-		}
-		if s.Version.IsActive(context.Background(),
-			clusterversion.TracingVerbosityIndependentSemantics) {
-			atomic.StoreInt32(&isActive, 1)
-			return true
-		}
-		return false
-	}
 	s.Tracer.Configure(context.TODO(), sv)
 
 	return s
