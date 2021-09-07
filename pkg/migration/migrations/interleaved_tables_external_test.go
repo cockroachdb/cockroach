@@ -21,12 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInterleavedTableMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -53,7 +55,7 @@ func TestInterleavedTableMigration(t *testing.T) {
  ) INTERLEAVE IN PARENT customers (customer);`)
 	// Migration to the second phase should fail, since the pre-condition was violated.
 	tdb.ExpectErr(t,
-		"pq: verifying precondition for version 21.1-140: interleaved tables are no longer supported at this version, please drop or uninterleave any tables visible using crdb_internal.interleaved.",
+		"pq: verifying precondition for version 21.1-1140: interleaved tables are no longer supported at this version, please drop or uninterleave any tables visible using crdb_internal.interleaved.",
 		"SET CLUSTER SETTING version = $1",
 		clusterversion.ByKey(clusterversion.EnsureNoInterleavedTables).String())
 	// Migration to the first phase should be fine, since it only blocks creating
@@ -63,7 +65,7 @@ func TestInterleavedTableMigration(t *testing.T) {
 		clusterversion.ByKey(clusterversion.PreventNewInterleavedTables).String())
 	// Migration to the next phase without interleaved tables should fail.
 	tdb.ExpectErr(t,
-		"pq: verifying precondition for version 21.1-140: interleaved tables are no longer supported at this version, please drop or uninterleave any tables visible using crdb_internal.interleaved.",
+		"pq: verifying precondition for version 21.1-1140: interleaved tables are no longer supported at this version, please drop or uninterleave any tables visible using crdb_internal.interleaved.",
 		"SET CLUSTER SETTING version = $1",
 		clusterversion.ByKey(clusterversion.EnsureNoInterleavedTables).String())
 	// Next drop the old descriptor and wait for the jobs to complete.
