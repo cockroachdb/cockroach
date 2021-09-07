@@ -163,11 +163,6 @@ const (
 	// the 21.1 release. This is because we now support tenants at the
 	// predecessor binary interacting with a fully upgraded KV cluster.
 	Start20_2
-	// CreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN are introduced.
-	//
-	// It represents adding authn principal management via CREATELOGIN role
-	// option.
-	CreateLoginPrivilege
 	// HBAForNonTLS is when the 'hostssl' and 'hostnossl' HBA configs are
 	// introduced.
 	HBAForNonTLS
@@ -323,10 +318,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start20_2,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 1},
-	},
-	{
-		Key:     CreateLoginPrivilege,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 20},
 	},
 	{
 		Key:     HBAForNonTLS,
