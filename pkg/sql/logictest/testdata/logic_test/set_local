@@ -488,3 +488,23 @@ query T
 SHOW DATABASE
 ----
 test
+
+# Verify that the cockroach_restart savepoint is handled correctly.
+statement ok
+BEGIN;
+SAVEPOINT cockroach_restart;
+SET LOCAL TIME ZONE -1
+
+query TT
+SELECT * FROM tbl
+----
+2020-08-25 14:16:17.123456 -0100 -0100  1 day 15:16:17.123456
+
+statement ok
+RELEASE SAVEPOINT cockroach_restart;
+COMMIT
+
+query TT
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
