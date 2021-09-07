@@ -37,6 +37,58 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 // Send executes a command on this range, dispatching it to the
 // read-only, read-write, or admin execution path as appropriate.
 // ctx should contain the log tags from the store (and up).
+//
+// A rough schematic for the path requests take through a Replica
+// is presented below, with a focus on where requests may spend
+// most of their time (once they arrive at the Node.Batch endpoint).
+//
+//                                 DistSender (tenant)
+//                                      │
+//                                      ┆ (RPC)
+//                                      │
+//                                      ▼
+//                                 Node.Batch (host cluster)
+//                                      │
+//                                      ▼
+//                              Admission control
+//                                      │
+//                                      ▼
+//                                 Replica.Send
+//                                      │
+//                                      ▼
+//                      Replica.maybeBackpressureBatch (if Range too large)
+//                                      │
+//                                      ▼
+//               Replica.maybeRateLimitBatch (tenant rate limits)
+//                                      │
+//                                      ▼
+//                 Replica.maybeCommitWaitBeforeCommitTrigger (if committing with commit-trigger)
+//                                      │
+// read-write ◄─────────────────────────┴────────────────────────► read-only
+//     │                                                               │
+//     │                                                               │
+//     ├─────────────► executeBatchWithConcurrencyRetries ◄────────────┤
+//     │               (handles leases and txn conflicts)              │
+//     │                                                               │
+//     ▼                                                               │
+// executeReadWriteBatch                                               │
+//     │                                                               │
+//     ▼                                                               ▼
+// evalAndPropose         (turns the BatchRequest        executeReadOnlyBatch
+//     │                   into pebble WriteBatch)
+//     │
+//     ├──────────────────► (writes that can use async consensus do not
+//     │                     wait for replication and are done here)
+//     │
+//     ├──────────────────► maybeAcquireProposalQuota
+//     │                    (applies backpressure in case of
+//     │                     lagging Raft followers)
+//     │
+//     │
+//     ▼
+// handleRaftReady        (drives the Raft loop, first appending to the log
+//                         to commit the command, then signaling proposer and
+//                         applying the command)
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
