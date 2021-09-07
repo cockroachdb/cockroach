@@ -84,7 +84,9 @@ vectorized: true
   table: data@primary
   spans: [/0 - /0] [/2 - /2] [/4 - /4] [/6 - /6] … (1 more)
 
-query T
+# We allow to retry because the concurrency limit on the semaphore might not be
+# updated right away.
+query T retry
 EXPLAIN (VEC) SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
 ----
 │
