@@ -467,3 +467,64 @@ SELECT id
 	require.NoError(t, <-upgrade1Err)
 	require.NoError(t, <-upgrade2Err)
 }
+
+// Test21Dot1Dot8 tests that we can move in either direction between the 21.1
+// and 21.1-124 versions, the latter of which was introduced in a backport that
+// was released as 21.1.8.
+func Test21Dot1Dot8(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer jobs.TestingSetAdoptAndCancelIntervals(
+		10*time.Millisecond, 10*time.Millisecond,
+	)()
+
+	// We're going to be migrating between cv21Dot8 and cv21.
+	cv21 := clusterversion.ClusterVersion{Version: clusterversion.V21Dot1}
+	cv21Dot8 := clusterversion.ClusterVersion{Version: clusterversion.V21Dot1Dot8}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: cluster.MakeTestingClusterSettingsWithVersions(cv21Dot8.Version, cv21.Version, false),
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          cv21Dot8.Version,
+					DisableAutomaticVersionUpgrade: 1,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Add a 21.1 node.
+	tc.AddAndStartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				BinaryVersionOverride:          cv21.Version,
+				DisableAutomaticVersionUpgrade: 1,
+			},
+		},
+	})
+
+	// Wait until all nodes have are considered live.
+	tc.WaitForNodeStatuses(t)
+	tc.WaitForNodeLiveness(t)
+
+	// Downgrade.
+	sqlDB := tc.ServerConn(0)
+	testutils.SucceedsSoon(t, func() error {
+		// Need to wait for n3 to start sometimes.
+		_, err := sqlDB.ExecContext(ctx, `SET CLUSTER SETTING version = $1`, cv21.String())
+		return err
+	})
+
+	// Upgrade again.
+	_, err := sqlDB.ExecContext(ctx, `SET CLUSTER SETTING version = $1`, cv21Dot8.String())
+	require.NoError(t, err)
+
+	// Downgrade again.
+	_, err = sqlDB.ExecContext(ctx, `SET CLUSTER SETTING version = $1`, cv21.String())
+	require.NoError(t, err)
+}
