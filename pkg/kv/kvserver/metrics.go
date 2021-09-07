@@ -1099,6 +1099,20 @@ var (
 		Measurement: "Lock-Queue Waiters",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaContentionWaitDuration = metric.Metadata{
+		Name: "kv.concurrency.contention_wait_time",
+		Help: `KV blocking induced by contention.
+
+This measures the time requests spend blocked at a Replica while waiting for
+conflicting transactions to release their locks. It is thus a good measure
+of contention. It is not a good indicator of KV health since contention is
+primarily a property of the workload.
+
+These measurements are shared with any emitted roachpb.ContentionEvent structs.
+`,
+		Measurement: "Wait time",
+		Unit:        metric.Unit_SECONDS,
+	}
 
 	// Closed timestamp metrics.
 	metaClosedTimestampMaxBehindNanos = metric.Metadata{
@@ -1107,6 +1121,7 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	// TODO(tbg): unused?
 	metaClosedTimestampFailuresToClose = metric.Metadata{
 		Name:        "kv.closed_timestamp.failures_to_close",
 		Help:        "Number of times the min prop tracker failed to close timestamps due to epoch mismatch or pending evaluations",
@@ -1325,6 +1340,7 @@ type StoreMetrics struct {
 	LocksWithWaitQueues            *metric.Gauge
 	LockWaitQueueWaiters           *metric.Gauge
 	MaxLockWaitQueueWaitersForLock *metric.Gauge
+	ContentionWaitDuration         *metric.Counter
 
 	// Closed timestamp metrics.
 	ClosedTimestampMaxBehindNanos *metric.Gauge
@@ -1720,6 +1736,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LocksWithWaitQueues:            metric.NewGauge(metaConcurrencyLocksWithWaitQueues),
 		LockWaitQueueWaiters:           metric.NewGauge(metaConcurrencyLockWaitQueueWaiters),
 		MaxLockWaitQueueWaitersForLock: metric.NewGauge(metaConcurrencyMaxLockWaitQueueWaitersForLock),
+		ContentionWaitDuration:         metric.NewCounter(metaContentionWaitDuration),
 
 		// Closed timestamp metrics.
 		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),

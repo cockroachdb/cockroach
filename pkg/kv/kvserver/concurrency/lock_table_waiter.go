@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -108,6 +109,8 @@ type lockTableWaiterImpl struct {
 	onContentionEvent func(ev *roachpb.ContentionEvent)
 	// When set, called just before each push timer event is processed.
 	onPushTimer func()
+
+	contentionWaitDuration *metric.Counter
 }
 
 // IntentResolver is an interface used by lockTableWaiterImpl to push
@@ -144,8 +147,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 	var lockDeadline time.Time
 
 	h := contentionEventHelper{
-		sp:      tracing.SpanFromContext(ctx),
-		onEvent: w.onContentionEvent,
+		sp:           tracing.SpanFromContext(ctx),
+		onEvent:      w.onContentionEvent,
+		waitDuration: func(d time.Duration) { w.contentionWaitDuration.Inc(int64(d)) },
 	}
 	defer h.emit()
 
@@ -872,8 +876,9 @@ type contentionEventHelper struct {
 	onEvent func(event *roachpb.ContentionEvent) // may be nil
 
 	// Internal.
-	ev     *roachpb.ContentionEvent
-	tBegin time.Time
+	ev           *roachpb.ContentionEvent
+	tBegin       time.Time
+	waitDuration func(time.Duration) // called with each ev.Duration
 }
 
 // emit emits the open contention event, if any.
@@ -882,6 +887,7 @@ func (h *contentionEventHelper) emit() {
 		return
 	}
 	h.ev.Duration = timeutil.Since(h.tBegin)
+	h.waitDuration(h.ev.Duration)
 	if h.onEvent != nil {
 		// NB: this is intentionally above the call to RecordStructured so that
 		// this interceptor gets to mutate the event (used for test determinism).

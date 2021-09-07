@@ -933,6 +933,12 @@ var charts = []sectionDescription{
 					"kv.concurrency.max_lock_wait_queue_waiters_for_lock",
 				},
 			},
+			{
+				Title: "Contention Wait Time",
+				Metrics: []string{
+					"kv.concurrency.contention_wait_time",
+				},
+			},
 		},
 	},
 	{

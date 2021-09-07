@@ -121,8 +121,9 @@ type Config struct {
 	Stopper        *stop.Stopper
 	IntentResolver IntentResolver
 	// Metrics.
-	TxnWaitMetrics *txnwait.Metrics
-	SlowLatchGauge *metric.Gauge
+	TxnWaitMetrics         *txnwait.Metrics
+	SlowLatchGauge         *metric.Gauge
+	ContentionWaitDuration *metric.Counter
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
@@ -154,13 +155,14 @@ func NewManager(cfg Config) Manager {
 		},
 		lt: lt,
 		ltw: &lockTableWaiterImpl{
-			st:                cfg.Settings,
-			clock:             cfg.Clock,
-			stopper:           cfg.Stopper,
-			ir:                cfg.IntentResolver,
-			lt:                lt,
-			disableTxnPushing: cfg.DisableTxnPushing,
-			onContentionEvent: cfg.OnContentionEvent,
+			st:                     cfg.Settings,
+			clock:                  cfg.Clock,
+			stopper:                cfg.Stopper,
+			ir:                     cfg.IntentResolver,
+			lt:                     lt,
+			disableTxnPushing:      cfg.DisableTxnPushing,
+			onContentionEvent:      cfg.OnContentionEvent,
+			contentionWaitDuration: cfg.ContentionWaitDuration,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.

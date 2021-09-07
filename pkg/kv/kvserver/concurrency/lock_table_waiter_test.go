@@ -940,6 +940,7 @@ func TestContentionEventHelper(t *testing.T) {
 		onEvent: func(ev *roachpb.ContentionEvent) {
 			sl = append(sl, ev)
 		},
+		waitDuration: func(time.Duration) {},
 	}
 	txn := makeTxnProto("foo")
 	h.emitAndInit(waitingState{
