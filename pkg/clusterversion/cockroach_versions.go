@@ -322,6 +322,10 @@ const (
 
 	// Can return new retryable rangefeed errors without crashing the client
 	NewRetryableRangefeedErrors
+	// *************************************************
+	// Step (1): Add new versions here.
+	// Do not add new versions to a patch release.
+	// *************************************************
 )
 
 // versionsSingleton lists all historical versions here in chronological order,
@@ -530,7 +534,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     NewRetryableRangefeedErrors,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
 	},
+	// *************************************************
 	// Step (2): Add new versions here.
+	// Do not add new versions to a patch release.
+	// *************************************************
 })
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
