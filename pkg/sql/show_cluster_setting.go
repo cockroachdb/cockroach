@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -75,7 +76,7 @@ func (p *planner) showVersionSetting(
 						// which creates tenants sets up the cluster version state. It also
 						// is set when the version is upgraded.
 						tenantDefaultVersion := clusterversion.ClusterVersion{
-							Version: clusterversion.ByKey(clusterversion.V20_2),
+							Version: roachpb.Version{Major: 20, Minor: 2},
 						}
 						encoded, err := protoutil.Marshal(&tenantDefaultVersion)
 						if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -31,7 +32,7 @@ func TestTruncatedStateMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	minVersion := clusterversion.ByKey(clusterversion.V20_2)
+	minVersion := roachpb.Version{Major: 20, Minor: 2}
 	binaryVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration + 1)
 	truncStateVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
 	bootstrapVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration - 1)
