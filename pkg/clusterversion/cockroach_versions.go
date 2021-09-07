@@ -206,10 +206,6 @@ const (
 	// using the replicated legacy TruncatedState. It's also used in asserting
 	// that no replicated truncated state representation is found.
 	PostTruncatedAndRangeAppliedStateMigration
-	// TracingVerbosityIndependentSemantics marks a change in which trace spans
-	// are propagated across RPC boundaries independently of their verbosity setting.
-	// This requires a version gate this violates implicit assumptions in v20.2.
-	TracingVerbosityIndependentSemantics
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	V21_1
 
@@ -300,7 +296,10 @@ const (
 	SQLStatsCompactionScheduledJob
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
 	DateAndIntervalStyle
+	// *************************************************
 	// Step (1): Add new versions here.
+	// Do not add new versions to a patch release.
+	// *************************************************
 )
 
 // versionsSingleton lists all historical versions here in chronological order,
@@ -364,10 +363,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PostTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 24},
-	},
-	{
-		Key:     TracingVerbosityIndependentSemantics,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 28},
 	},
 	{
 		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
@@ -507,7 +502,10 @@ var versionsSingleton = keyedVersions{
 		Key:     DateAndIntervalStyle,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 160},
 	},
+	// *************************************************
 	// Step (2): Add new versions here.
+	// Do not add new versions to a patch release.
+	// *************************************************
 }
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version

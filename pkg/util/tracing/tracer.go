@@ -154,11 +154,6 @@ type Tracer struct {
 		syncutil.Mutex
 		m map[uint64]*Span
 	}
-	// TracingVerbosityIndependentSemanticsIsActive is really
-	// version.IsActive(TracingVerbosityIndependentSemanticsIsActive)
-	// but gets injected this way to avoid import cycles. It defaults
-	// to a function that returns `true`.
-	TracingVerbosityIndependentSemanticsIsActive func() bool
 
 	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
 	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
@@ -172,7 +167,6 @@ type Tracer struct {
 func NewTracer() *Tracer {
 	t := &Tracer{}
 	t.activeSpans.m = make(map[uint64]*Span)
-	t.TracingVerbosityIndependentSemanticsIsActive = func() bool { return true }
 	// The noop span is marked as finished so that even in the case of a bug,
 	// it won't soak up data.
 	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t}}
