@@ -72,6 +72,13 @@ func (p *scanRequestScanner) Scan(
 	var atomicFinished int64
 	for _, span := range spans {
 		span := span
+
+		currentMaxConcurrentExports := maxConcurrentExportRequests(p.gossip, &p.settings.SV)
+		if currentMaxConcurrentExports != maxConcurrentExports {
+			maxConcurrentExports = currentMaxConcurrentExports
+			exportLim.SetLimit(maxConcurrentExports)
+		}
+
 		limAlloc, err := exportLim.Begin(ctx)
 		if err != nil {
 			cancel()
