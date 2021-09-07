@@ -1295,9 +1295,6 @@ func prepareExistingTableDescForIngestion(
 	if len(desc.Mutations) > 0 {
 		return nil, errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", desc.Mutations[0].String())
 	}
-	if desc.LocalityConfig != nil && desc.LocalityConfig.GetRegionalByRow() != nil {
-		return nil, unimplemented.NewWithIssueDetailf(61133, "import.regional-by-row", "IMPORT into REGIONAL BY ROW table not supported")
-	}
 
 	// Note that desc is just used to verify that the version matches.
 	importing, err := descsCol.GetMutableTableVersionByID(ctx, desc.ID, txn)

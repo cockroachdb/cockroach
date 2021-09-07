@@ -502,6 +502,28 @@ func importNextValByID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum,
 	return importNextValHelper(evalCtx, c, seqMetadata)
 }
 
+func importDefaultToDatabasePrimaryRegion(
+	evalCtx *tree.EvalContext, args tree.Datums,
+) (tree.Datum, error) {
+	regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
+	if err != nil {
+		return nil, err
+	}
+	if regionConfig == nil {
+		return nil, pgerror.Newf(
+			pgcode.InvalidDatabaseDefinition,
+			"current database %s is not multi-region enabled",
+			evalCtx.SessionData().Database,
+		)
+	}
+	primaryRegion := regionConfig.PrimaryRegionString()
+	return tree.NewDString(primaryRegion), nil
+}
+
+func importGatewayRegion(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	return importDefaultToDatabasePrimaryRegion(evalCtx, args)
+}
+
 func importNextValHelper(
 	evalCtx *tree.EvalContext, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
 ) (tree.Datum, error) {
@@ -639,6 +661,28 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				ReturnType: tree.FixedReturnType(types.Int),
 				Info:       "Advances the value of the sequence and returns the final value.",
 				Fn:         importNextValByID,
+			},
+		),
+	},
+	"default_to_database_primary_region": {
+		override: makeBuiltinOverride(
+			tree.FunDefs["default_to_database_primary_region"],
+			tree.Overload{
+				Types:      tree.ArgTypes{{"val", types.String}},
+				ReturnType: tree.FixedReturnType(types.String),
+				Info:       "Returns the primary region of the database.",
+				Fn:         importDefaultToDatabasePrimaryRegion,
+			},
+		),
+	},
+	"gateway_region": {
+		override: makeBuiltinOverride(
+			tree.FunDefs["gateway_region"],
+			tree.Overload{
+				Types:      tree.ArgTypes{},
+				ReturnType: tree.FixedReturnType(types.String),
+				Info:       "Returns the primary region of the database.",
+				Fn:         importGatewayRegion,
 			},
 		),
 	},

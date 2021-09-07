@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -52,7 +53,13 @@ func runImport(
 
 	// Install type metadata in all of the import tables.
 	importResolver := newImportTypeResolver(spec.Types)
+	var parentDBID descpb.ID
 	for _, table := range spec.Tables {
+		// We expect all tables in the import to have the same parent ID that is
+		// resolved during planning.
+		if parentDBID == 0 {
+			parentDBID = table.Desc.ParentID
+		}
 		if err := typedesc.HydrateTypesInTableDescriptor(ctx, table.Desc, importResolver); err != nil {
 			return nil, err
 		}
@@ -62,6 +69,8 @@ func runImport(
 	// TODO(adityamaru): Should we just plumb the flowCtx instead of this
 	// assignment.
 	evalCtx.DB = flowCtx.Cfg.DB
+	evalCtx.Regions = makeImportRegionOperator(flowCtx.Cfg.DB, parentDBID, flowCtx.Cfg.Codec,
+		flowCtx.Cfg.CollectionFactory)
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.TypeResolver = importResolver
 	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider)

@@ -16,13 +16,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -205,7 +208,7 @@ func MakeSimpleTableDescriptor(
 	evalCtx := tree.EvalContext{
 		Context:            ctx,
 		Sequence:           &importSequenceOperators{},
-		Regions:            &importRegionOperator{},
+		Regions:            makeImportRegionOperator(nil, 0, keys.TODOSQLCodec, nil),
 		SessionDataStack:   sessiondata.NewStack(&sessiondata.SessionData{}),
 		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
 		Settings:           st,
@@ -264,13 +267,56 @@ var (
 )
 
 // Implements the tree.RegionOperator interface.
-type importRegionOperator struct{}
+type importRegionOperator struct {
+	db    *kv.DB
+	dbID  descpb.ID
+	codec keys.SQLCodec
+	cf    *descs.CollectionFactory
+}
+
+func makeImportRegionOperator(
+	db *kv.DB, dbID descpb.ID, codec keys.SQLCodec, cf *descs.CollectionFactory,
+) *importRegionOperator {
+	return &importRegionOperator{
+		db:    db,
+		dbID:  dbID,
+		codec: codec,
+		cf:    cf,
+	}
+}
 
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
 func (so *importRegionOperator) CurrentDatabaseRegionConfig(
-	_ context.Context,
+	ctx context.Context,
 ) (tree.DatabaseRegionConfig, error) {
-	return nil, errors.WithStack(errRegionOperator)
+	// If the importRegionOperator has not been initialized with the required
+	// fields, error out.
+	if so.db == nil {
+		return nil, errors.WithStack(errRegionOperator)
+	}
+
+	var dbRegionConfig tree.DatabaseRegionConfig
+	var err error
+	err = so.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, so.codec, so.dbID)
+		if err != nil {
+			return err
+		}
+
+		if !dbDesc.IsMultiRegion() {
+			return nil
+		}
+
+		dbRegionConfig, err = sql.SynthesizeRegionConfig(
+			ctx,
+			txn,
+			dbDesc.GetID(),
+			so.cf.NewCollection(nil /* TemporarySchemaProvider */),
+			sql.SynthesizeRegionConfigOptionUseCache,
+		)
+		return err
+	})
+	return dbRegionConfig, err
 }
 
 // ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
