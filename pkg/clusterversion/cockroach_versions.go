@@ -163,8 +163,6 @@ const (
 	// the 21.1 release. This is because we now support tenants at the
 	// predecessor binary interacting with a fully upgraded KV cluster.
 	Start20_2
-	// MinPasswordLength adds the server.user_login.min_password_length setting.
-	MinPasswordLength
 	// CreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN are introduced.
 	//
 	// It represents adding authn principal management via CREATELOGIN role
@@ -325,10 +323,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start20_2,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 1},
-	},
-	{
-		Key:     MinPasswordLength,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 13},
 	},
 	{
 		Key:     CreateLoginPrivilege,
