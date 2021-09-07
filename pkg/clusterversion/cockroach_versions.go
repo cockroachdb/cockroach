@@ -571,3 +571,11 @@ func listBetweenInternal(from, to ClusterVersion, vs keyedVersions) []ClusterVer
 	}
 	return cvs
 }
+
+var (
+	v21dot1, v21dot1dot8 = ByKey(V21_1), roachpb.Version{Major: 21, Minor: 1, Internal: 124}
+)
+
+func Is21Dot1Dot8Equiv(cv1, cv2 roachpb.Version) bool {
+	return cv1 == v21dot1 && cv2 == v21dot1dot8 || cv1 == v21dot1dot8 && cv2 == v21dot1
+}

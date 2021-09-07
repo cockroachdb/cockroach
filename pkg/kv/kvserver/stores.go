@@ -356,7 +356,7 @@ func SynthesizeClusterVersionFromEngines(
 
 		// Avoid running a binary with a store that is too new. For example,
 		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
-		if binaryVersion.Less(cv.Version) {
+		if binaryVersion.Less(cv.Version) && !clusterversion.Is21Dot1Dot8Equiv(binaryVersion, cv.Version) {
 			return clusterversion.ClusterVersion{}, errors.Errorf(
 				"cockroach version v%s is incompatible with data in store %s; use version v%s or later",
 				binaryVersion, eng, cv.Version)

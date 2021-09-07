@@ -225,7 +225,7 @@ func (cv *clusterVersionSetting) validateBinaryVersions(
 	if vh.BinaryMinSupportedVersion() == (roachpb.Version{}) {
 		panic("BinaryMinSupportedVersion not set")
 	}
-	if vh.BinaryVersion().Less(ver) {
+	if vh.BinaryVersion().Less(ver) && !Is21Dot1Dot8Equiv(vh.BinaryVersion(), ver) {
 		// TODO(tschottdorf): also ask gossip about other nodes.
 		return errors.Errorf("cannot upgrade to %s: node running %s",
 			ver, vh.BinaryVersion())
