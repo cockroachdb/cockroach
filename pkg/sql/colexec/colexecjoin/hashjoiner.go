@@ -67,9 +67,9 @@ type HashJoinerSpec struct {
 	// RIGHT SEMI, and RIGHT ANTI joins).
 	trackBuildMatches bool
 
-	// rightDistinct indicates whether or not the build table equality column
+	// RightDistinct indicates whether or not the build table equality column
 	// tuples are distinct. If they are distinct, performance can be optimized.
-	rightDistinct bool
+	RightDistinct bool
 }
 
 type hashJoinerSourceSpec struct {
@@ -101,8 +101,8 @@ type hashJoinerSourceSpec struct {
 // 3. The bucket-chaining hash table organization is prepared with the computed
 //    buckets.
 //
-// Depending on the value of the Spec.rightDistinct flag, there are two
-// variations of the probe phase. The planner will set rightDistinct to true if
+// Depending on the value of the Spec.RightDistinct flag, there are two
+// variations of the probe phase. The planner will set RightDistinct to true if
 // and only if the right equality columns make a distinct key.
 //
 // In the columnarized implementation of the distinct build table probe phase,
@@ -187,6 +187,9 @@ type HashJoiner struct {
 	// Ht holds the HashTable that is populated during the build phase and used
 	// during the probe phase.
 	Ht *colexechash.HashTable
+	// AllowNullEquality indicates whether NULLs should be treated as equals by
+	// the hash table.
+	AllowNullEquality bool
 	// output stores the resulting output batch that is constructed and returned
 	// for every input batch during the probe phase.
 	output      coldata.Batch
@@ -247,9 +250,8 @@ func (hj *HashJoiner) Init(ctx context.Context) {
 		return
 	}
 
-	allowNullEquality, probeMode := false, colexechash.HashTableDefaultProbeMode
+	probeMode := colexechash.HashTableDefaultProbeMode
 	if hj.Spec.JoinType.IsSetOpJoin() {
-		allowNullEquality = true
 		probeMode = colexechash.HashTableDeletingProbeMode
 	}
 	// This number was chosen after running the micro-benchmarks and relevant
@@ -262,7 +264,7 @@ func (hj *HashJoiner) Init(ctx context.Context) {
 		hj.hashTableInitialNumBuckets,
 		hj.Spec.Right.SourceTypes,
 		hj.Spec.Right.EqCols,
-		allowNullEquality,
+		hj.AllowNullEquality,
 		colexechash.HashTableFullBuildMode,
 		probeMode,
 	)
@@ -277,7 +279,7 @@ func (hj *HashJoiner) Next() coldata.Batch {
 	for {
 		switch hj.state {
 		case hjBuilding:
-			hj.Build()
+			hj.Build(false /* storeHashCodes */)
 			if hj.Ht.Vals.Length() == 0 {
 				// The build side is empty, so we might be able to
 				// short-circuit probing phase altogether.
@@ -316,17 +318,18 @@ func (hj *HashJoiner) Next() coldata.Batch {
 
 // Build builds the hash table based on the fully consumed right source as well
 // as sets up some of the internal state of the HashJoiner.
-func (hj *HashJoiner) Build() {
-	hj.Ht.FullBuild(hj.inputTwo)
+// - storeHashCodes indicates whether
+func (hj *HashJoiner) Build(storeHashCodes bool) {
+	hj.Ht.FullBuild(hj.inputTwo, storeHashCodes)
 
 	// We might have duplicates in the hash table, so we need to set up
 	// same and visited slices for the prober.
-	if !hj.Spec.rightDistinct && !hj.Spec.JoinType.IsLeftAntiOrExceptAll() {
+	if !hj.Spec.RightDistinct && !hj.Spec.JoinType.IsLeftAntiOrExceptAll() {
 		// We don't need same with LEFT ANTI and EXCEPT ALL joins because
 		// they have separate collectLeftAnti method.
 		hj.Ht.Same = colexecutils.MaybeAllocateUint64Array(hj.Ht.Same, hj.Ht.Vals.Length()+1)
 	}
-	if !hj.Spec.rightDistinct || hj.Spec.JoinType.IsSetOpJoin() {
+	if !hj.Spec.RightDistinct || hj.Spec.JoinType.IsSetOpJoin() {
 		// visited slice is also used for set-operation joins, regardless of
 		// the fact whether the right side is distinct.
 		hj.Ht.Visited = colexecutils.MaybeAllocateBoolArray(hj.Ht.Visited, hj.Ht.Vals.Length()+1)
@@ -530,7 +533,7 @@ func (hj *HashJoiner) InitialProbeAndCollect(batch coldata.Batch) int {
 	// Now we collect all matches that we can emit in the probing phase in a
 	// single batch.
 	hj.prepareForCollecting(batchSize)
-	if hj.Spec.rightDistinct {
+	if hj.Spec.RightDistinct {
 		for nToCheck > 0 {
 			// Continue searching along the hash table next chains for the
 			// corresponding buckets. If the key is found or end of next chain
@@ -738,7 +741,7 @@ func (hj *HashJoiner) Reset(ctx context.Context) {
 // MakeHashJoinerSpec creates a specification for columnar hash join operator.
 // leftEqCols and rightEqCols specify the equality columns while leftOutCols
 // and rightOutCols specifies the output columns. leftTypes and rightTypes
-// specify the input column types of the two sources. rightDistinct indicates
+// specify the input column types of the two sources. RightDistinct indicates
 // whether the equality columns of the right source form a key.
 func MakeHashJoinerSpec(
 	joinType descpb.JoinType,
@@ -794,7 +797,7 @@ func MakeHashJoinerSpec(
 		Left:              left,
 		Right:             right,
 		trackBuildMatches: trackBuildMatches,
-		rightDistinct:     rightDistinct,
+		RightDistinct:     rightDistinct,
 	}
 }
 
@@ -817,5 +820,6 @@ func NewHashJoiner(
 		Spec:                       spec,
 		outputTypes:                spec.JoinType.MakeOutputTypes(spec.Left.SourceTypes, spec.Right.SourceTypes),
 		hashTableInitialNumBuckets: initialNumBuckets,
+		AllowNullEquality:          spec.JoinType.IsSetOpJoin(),
 	}
 }

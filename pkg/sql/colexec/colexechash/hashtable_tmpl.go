@@ -165,7 +165,7 @@ func _CHECK_COL_BODY(
 				//     current probing tuple as distinct but also set its
 				//     GroupID such that it (the probing tuple) matches itself.
 				// */}}
-				ht.ProbeScratch.distinct[toCheck] = true
+				ht.ProbeScratch.Distinct[toCheck] = true
 				ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 				// {{else}}
 				ht.ProbeScratch.GroupID[toCheck] = 0
@@ -182,7 +182,7 @@ func _CHECK_COL_BODY(
 		}
 		// {{if .SelectDistinct}}
 		if keyID == 0 {
-			ht.ProbeScratch.distinct[toCheck] = true
+			ht.ProbeScratch.Distinct[toCheck] = true
 		}
 		// {{end}}
 	}
@@ -404,7 +404,7 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
 		// {{if .SelectDistinct}}
-		if ht.ProbeScratch.distinct[toCheck] {
+		if ht.ProbeScratch.Distinct[toCheck] {
 			ht.ProbeScratch.HeadID[toCheck] = ht.ProbeScratch.GroupID[toCheck]
 			continue
 		}
@@ -533,7 +533,7 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 	_ = HeadIDs[batchLength-1]
 	_ = hashBuffer[batchLength-1]
 	// Reuse the buffer allocated for distinct.
-	visited := ht.ProbeScratch.distinct
+	visited := ht.ProbeScratch.Distinct
 	copy(visited, colexecutils.ZeroBoolColumn)
 	distinctCount := 0
 	for i := 0; i < batchLength && distinctCount < batchLength; i++ {

@@ -104,9 +104,10 @@ type hashTableProbeBuffer struct {
 	// key.
 	differs []bool
 
-	// distinct stores whether the key in the probe batch is distinct in the build
+	// Distinct stores whether the key in the probe batch is distinct in the build
 	// table.
-	distinct []bool
+	// TODO: this can now exceed coldata.BatchSize() in size.
+	Distinct []bool
 
 	// GroupID stores the keyID that maps to the joining rows of the build table.
 	// The ith element of GroupID stores the keyID of the build table that
@@ -319,7 +320,7 @@ func (p *hashTableProbeBuffer) accountForLimitedSlices(allocator *colmem.Allocat
 // buildFromBufferedTuples builds the hash table from already buffered tuples
 // in ht.Vals. It'll determine the appropriate number of buckets that satisfy
 // the target load factor.
-func (ht *HashTable) buildFromBufferedTuples() {
+func (ht *HashTable) buildFromBufferedTuples(storeHashCodes bool) {
 	for ht.shouldResize(ht.Vals.Length()) {
 		ht.numBuckets *= 2
 	}
@@ -333,6 +334,9 @@ func (ht *HashTable) buildFromBufferedTuples() {
 	// ht.BuildScratch.Next is used to store the computed hash value of each key.
 	ht.BuildScratch.Next = colexecutils.MaybeAllocateUint64Array(ht.BuildScratch.Next, ht.Vals.Length()+1)
 	ht.ComputeBuckets(ht.BuildScratch.Next[1:], ht.Keys, ht.Vals.Length(), nil /* sel */)
+	if storeHashCodes {
+		ht.ProbeScratch.HashBuffer = append(ht.ProbeScratch.HashBuffer[:0], ht.BuildScratch.Next[1:]...)
+	}
 	ht.buildNextChains(ht.BuildScratch.First, ht.BuildScratch.Next, 1 /* offset */, uint64(ht.Vals.Length()))
 	// Account for memory used by the internal auxiliary slices that are
 	// limited in size.
@@ -346,7 +350,7 @@ func (ht *HashTable) buildFromBufferedTuples() {
 // FullBuild executes the entirety of the hash table build phase using the input
 // as the build source. The input is entirely consumed in the process. Note that
 // the hash table is assumed to operate in HashTableFullBuildMode.
-func (ht *HashTable) FullBuild(input colexecop.Operator) {
+func (ht *HashTable) FullBuild(input colexecop.Operator, storeHashCodes bool) {
 	if ht.BuildMode != HashTableFullBuildMode {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"HashTable.FullBuild is called in unexpected build mode %d", ht.BuildMode,
@@ -364,7 +368,7 @@ func (ht *HashTable) FullBuild(input colexecop.Operator) {
 		}
 		ht.Vals.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 	}
-	ht.buildFromBufferedTuples()
+	ht.buildFromBufferedTuples(storeHashCodes)
 }
 
 // DistinctBuild appends all distinct tuples from batch to the hash table. Note
@@ -448,7 +452,14 @@ func (ht *HashTable) FindBuckets(
 		//gcassert:bce
 		groupIDs[i] = f
 	}
-	copy(ht.ProbeScratch.ToCheck, HashTableInitialToCheck[:batchLength])
+	// TODO
+	if len(HashTableInitialToCheck) >= batchLength {
+		copy(ht.ProbeScratch.ToCheck, HashTableInitialToCheck[:batchLength])
+	} else {
+		for i := range ht.ProbeScratch.ToCheck[:batchLength] {
+			ht.ProbeScratch.ToCheck[i] = uint64(i)
+		}
+	}
 
 	for nToCheck := uint64(batchLength); nToCheck > 0; {
 		// Continue searching for the build table matching keys while the ToCheck
@@ -482,7 +493,7 @@ func (ht *HashTable) AppendAllDistinct(batch coldata.Batch) {
 	ht.BuildScratch.Next = append(ht.BuildScratch.Next, ht.ProbeScratch.HashBuffer[:batch.Length()]...)
 	ht.buildNextChains(ht.BuildScratch.First, ht.BuildScratch.Next, numBuffered+1, uint64(batch.Length()))
 	if ht.shouldResize(ht.Vals.Length()) {
-		ht.buildFromBufferedTuples()
+		ht.buildFromBufferedTuples(false /* storeHashCodes */)
 	}
 }
 
@@ -596,7 +607,7 @@ func (p *hashTableProbeBuffer) SetupLimitedSlices(length int, buildMode HashTabl
 	p.HeadID = colexecutils.MaybeAllocateLimitedUint64Array(p.HeadID, length)
 	p.differs = colexecutils.MaybeAllocateLimitedBoolArray(p.differs, length)
 	if buildMode == HashTableDistinctBuildMode {
-		p.distinct = colexecutils.MaybeAllocateLimitedBoolArray(p.distinct, length)
+		p.Distinct = colexecutils.MaybeAllocateLimitedBoolArray(p.Distinct, length)
 	}
 	// Note that we don't use maybeAllocate* methods below because GroupID and
 	// ToCheck don't need to be zeroed out when reused.
@@ -639,8 +650,8 @@ func (ht *HashTable) CheckBuildForDistinct(
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
-		if ht.ProbeScratch.distinct[toCheck] {
-			ht.ProbeScratch.distinct[toCheck] = false
+		if ht.ProbeScratch.Distinct[toCheck] {
+			ht.ProbeScratch.Distinct[toCheck] = false
 			// Calculated using the convention: keyID = keys.indexOf(key) + 1.
 			ht.ProbeScratch.HeadID[toCheck] = toCheck + 1
 		} else if ht.ProbeScratch.differs[toCheck] {
@@ -674,7 +685,7 @@ func (ht *HashTable) CheckBuildForAggregation(
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
-		if !ht.ProbeScratch.distinct[toCheck] {
+		if !ht.ProbeScratch.Distinct[toCheck] {
 			// If the tuple is distinct, it doesn't have a duplicate in the
 			// hash table already, so we skip it.
 			if ht.ProbeScratch.differs[toCheck] {
