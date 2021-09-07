@@ -276,3 +276,189 @@ ReadyForQuery
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
 {"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# Test SET LOCAL with special cockroach_restart savepoint.
+send
+Query {"String": "BEGIN"}
+Query {"String": "SAVEPOINT cockroach_restart"}
+Query {"String": "SET LOCAL TIME ZONE 'Australia/Adelaide'"}
+Query {"String": "SET LOCAL INTERVALSTYLE = 'sql_standard'"}
+Query {"String": "SET LOCAL DATESTYLE = 'ISO,DMY'"}
+Query {"String": "SET LOCAL application_name = 'bobby'"}
+Query {"String": "SET LOCAL role = 'testuser'"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Releasing the special savepoint commits the transaction, but a COMMIT is
+# still required afterwards.
+send
+Query {"String": "RELEASE SAVEPOINT cockroach_restart"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Postgres uses the RELEASE tag since the savepoint is not special in Postgres.
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"RELEASE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Verify that the COMMIT causes the parameter status updates to be sent.
+send
+Query {"String": "COMMIT"}
+----
+
+# Verify that the COMMIT causes the parameter status updates to be sent.
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# Parameter status updates should work if there's an error inside a
+# cockroach_restart savepoint.
+send
+Query {"String": "BEGIN"}
+Query {"String": "SAVEPOINT cockroach_restart"}
+Query {"String": "SET LOCAL TIME ZONE 'Australia/Adelaide'"}
+Query {"String": "SET LOCAL INTERVALSTYLE = 'sql_standard'"}
+Query {"String": "SET LOCAL DATESTYLE = 'ISO,DMY'"}
+Query {"String": "SET LOCAL application_name = 'bobby'"}
+Query {"String": "SET LOCAL role = 'testuser'"}
+Query {"String": "SELECT 1/0"}
+----
+
+# In Postgres, the parameter statuses are all updated as soon as an error
+# occurs in the transaction.
+until noncrdb_only
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+until crdb_only ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "ROLLBACK"}
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# CockroachDB sends the parameter status updates during ROLLBACK.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
