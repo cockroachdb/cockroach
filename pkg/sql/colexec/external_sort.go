@@ -268,17 +268,17 @@ func NewExternalSorter(
 	}
 	inputPartitioner := newInputPartitioningOperator(sortUnlimitedAllocator, input, inputTypes, inMemSortPartitionLimit)
 	var inMemSorter colexecop.ResettableOperator
+	var err error
 	if topK > 0 {
-		inMemSorter = NewTopKSorter(sortUnlimitedAllocator, inputPartitioner, inputTypes, ordering.Columns, topK, inMemSortOutputLimit)
+		inMemSorter, err = NewTopKSorter(sortUnlimitedAllocator, inputPartitioner, inputTypes, ordering.Columns, 0 /* matchLen */, topK, inMemSortOutputLimit)
 	} else {
-		var err error
 		inMemSorter, err = newSorter(
 			sortUnlimitedAllocator, newAllSpooler(sortUnlimitedAllocator, inputPartitioner, inputTypes),
 			inputTypes, ordering.Columns, inMemSortOutputLimit,
 		)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
+	}
+	if err != nil {
+		colexecerror.InternalError(err)
 	}
 	partitionedDiskQueueSemaphore := fdSemaphore
 	if !delegateFDAcquisitions {

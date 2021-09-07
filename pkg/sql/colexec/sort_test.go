@@ -165,19 +165,23 @@ func TestSortRandomized(t *testing.T) {
 	for nCols := 1; nCols < maxCols; nCols++ {
 		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
 			for _, k := range []int{0, rng.Intn(nTups) + 1} {
-				topK := k != 0
-				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/topK=%t", nCols, nOrderingCols, topK)
-				log.Infof(context.Background(), "%s", name)
-				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
-				if topK {
-					expected = expected[:k]
-				}
-				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-					if topK {
-						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, uint64(k), execinfra.DefaultMemoryLimit), nil
-					}
-					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
-				})
+				 topK := k != 0
+				 nPartialOrderingCols := 0
+				 if topK {
+					 nPartialOrderingCols = rng.Intn(nOrderingCols)
+				 }
+				 name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/nPartialOrderingCols=%d/topK=%t", nCols, nOrderingCols, nPartialOrderingCols, topK)
+				 log.Infof(context.Background(), "%s", name)
+				 tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols, nPartialOrderingCols)
+				 if topK {
+						expected = expected[:k]
+				 }
+				 colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+						if topK {
+							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, nPartialOrderingCols /* matchLen */, uint64(k), execinfra.DefaultMemoryLimit)
+						}
+						return NewSorter(testAllocator, input[0], typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
+				 })
 			}
 		}
 	}
@@ -189,9 +193,11 @@ func TestSortRandomized(t *testing.T) {
 // - expected - the same data but already sorted
 // - ordCols - ordering columns used in the sort operation.
 func generateRandomDataForTestSort(
-	rng *rand.Rand, nTups, nCols, nOrderingCols int,
+	rng *rand.Rand, nTups, nCols, nOrderingCols, nPartialOrderingCols int,
 ) (tups, expected colexectestutils.Tuples, ordCols []execinfrapb.Ordering_Column) {
 	ordCols = generateColumnOrdering(rng, nCols, nOrderingCols)
+	partialOrdCols := make([]execinfrapb.Ordering_Column, nPartialOrderingCols)
+	copy(partialOrdCols, ordCols[0:nPartialOrderingCols])
 	tups = make(colexectestutils.Tuples, nTups)
 	for i := range tups {
 		tups[i] = make(colexectestutils.Tuple, nCols)
@@ -208,6 +214,7 @@ func generateRandomDataForTestSort(
 		tups[i][ordCols[nOrderingCols-1].ColIdx] = int64(i)
 	}
 
+	sort.Slice(tups, less(tups, partialOrdCols))
 	expected = make(colexectestutils.Tuples, nTups)
 	copy(expected, tups)
 	sort.Slice(expected, less(expected, ordCols))
@@ -315,14 +322,15 @@ func BenchmarkSort(b *testing.B) {
 					for n := 0; n < b.N; n++ {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 						var sorter colexecop.Operator
+						var err error
 						if topK {
-							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k, execinfra.DefaultMemoryLimit)
+							// TODO(harding): Randomize partial ordering columns, too.
+							sorter, err = NewTopKSorter(testAllocator, source, typs, ordCols, 0 /* matchLen */, k, execinfra.DefaultMemoryLimit)
 						} else {
-							var err error
 							sorter, err = NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
-							if err != nil {
-								b.Fatal(err)
-							}
+						}
+						if err != nil {
+							b.Fatal(err)
 						}
 						sorter.Init(ctx)
 						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
