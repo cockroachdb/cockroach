@@ -1,0 +1,68 @@
+# By default, the test provider grants all RUs immediately. Verify that
+# requests never block.
+
+read bytes=1024000
+----
+
+advance
+1s
+----
+00:00:01.000
+
+write bytes=1024
+----
+
+advance
+1s
+----
+00:00:02.000
+
+write bytes=1024
+----
+
+write bytes=1024
+----
+
+# Set up throttling at 100 RU/s.
+throttle 
+100
+----
+
+# Fire off some writes that need significantly more than the 1000 initial RUs.
+write bytes=5000000 label=w1
+----
+
+advance
+1s
+----
+00:00:03.000
+
+not-completed label=w1
+----
+
+write bytes=10000000 label=w2
+----
+
+not-completed label=w2
+----
+
+# Advance time enough for w1 to complete.
+advance
+20s
+----
+00:00:23.000
+
+await label=w1
+----
+
+not-completed label=w2
+----
+
+# Advance time enough for w2 to complete.
+advance
+40s
+----
+00:01:03.000
+
+await label=w2
+----
