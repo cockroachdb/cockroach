@@ -20,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestOnUpdateVersionGating(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -44,17 +46,17 @@ func TestOnUpdateVersionGating(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	tdb.ExpectErr(t,
-		"pq: version 21.1-152 must be finalized to use ON UPDATE",
+		"pq: version 21.1-1152 must be finalized to use ON UPDATE",
 		"CREATE TABLE test (p INT, j INT ON UPDATE 5)")
 
 	tdb.Exec(t, "CREATE TABLE test (p INT, j INT);")
 
 	tdb.ExpectErr(t,
-		"pq: version 21.1-152 must be finalized to use ON UPDATE",
+		"pq: version 21.1-1152 must be finalized to use ON UPDATE",
 		"ALTER TABLE test ALTER COLUMN j SET ON UPDATE 5")
 
 	tdb.ExpectErr(t,
-		"pq: version 21.1-152 must be finalized to use ON UPDATE",
+		"pq: version 21.1-1152 must be finalized to use ON UPDATE",
 		"ALTER TABLE test ADD COLUMN k INT ON UPDATE 5")
 
 	tdb.Exec(t,

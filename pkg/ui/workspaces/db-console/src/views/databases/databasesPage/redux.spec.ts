@@ -95,6 +95,7 @@ describe("Databases Page", function() {
       loading: false,
       loaded: false,
       databases: [],
+      showNodeRegionsColumn: false,
     });
   });
 
@@ -116,6 +117,7 @@ describe("Databases Page", function() {
           sizeInBytes: 0,
           tableCount: 0,
           rangeCount: 0,
+          nodesByRegionString: "",
           missingTables: [],
         },
         {
@@ -125,9 +127,11 @@ describe("Databases Page", function() {
           sizeInBytes: 0,
           tableCount: 0,
           rangeCount: 0,
+          nodesByRegionString: "",
           missingTables: [],
         },
       ],
+      showNodeRegionsColumn: false,
     });
   });
 
@@ -165,6 +169,7 @@ describe("Databases Page", function() {
       sizeInBytes: 7168,
       tableCount: 2,
       rangeCount: 3,
+      nodesByRegionString: "",
       missingTables: [],
     });
 
@@ -175,6 +180,7 @@ describe("Databases Page", function() {
       sizeInBytes: 1234,
       tableCount: 1,
       rangeCount: 42,
+      nodesByRegionString: "",
       missingTables: [],
     });
   });
@@ -205,6 +211,7 @@ describe("Databases Page", function() {
           sizeInBytes: 7168,
           tableCount: 2,
           rangeCount: 3,
+          nodesByRegionString: "",
           missingTables: [{ loading: false, name: "bar" }],
         });
       });
@@ -239,6 +246,7 @@ describe("Databases Page", function() {
           sizeInBytes: 8192,
           tableCount: 2,
           rangeCount: 8,
+          nodesByRegionString: "",
           missingTables: [],
         });
       });
@@ -264,6 +272,7 @@ describe("Databases Page", function() {
           sizeInBytes: 0,
           tableCount: 2,
           rangeCount: 0,
+          nodesByRegionString: "",
           missingTables: [
             { loading: false, name: "foo" },
             { loading: false, name: "bar" },
@@ -301,6 +310,7 @@ describe("Databases Page", function() {
           sizeInBytes: 7168,
           tableCount: 2,
           rangeCount: 3,
+          nodesByRegionString: "",
           missingTables: [{ loading: false, name: "bar" }],
         });
 
@@ -313,6 +323,7 @@ describe("Databases Page", function() {
           sizeInBytes: 8192,
           tableCount: 2,
           rangeCount: 8,
+          nodesByRegionString: "",
           missingTables: [],
         });
       });
