@@ -137,7 +137,7 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInAbortedState(ctx, ast, res)
 
 	case stateCommitWait:
-		ev, payload = ex.execStmtInCommitWaitState(ast, res)
+		ev, payload = ex.execStmtInCommitWaitState(ctx, ast, res)
 
 	default:
 		panic(errors.AssertionFailedf("unexpected txn state: %#v", ex.machine.CurState()))
@@ -511,7 +511,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	case *tree.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no plan for it.
-		ev, payload := ex.commitSQLTransaction(ctx, ast)
+		ev, payload := ex.commitSQLTransaction(ctx, ast, ex.commitSQLTransactionInternal)
 		return ev, payload, nil
 
 	case *tree.RollbackTransaction:
@@ -808,13 +808,15 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 // commitSQLTransaction executes a commit after the execution of a
 // stmt, which can be any statement when executing a statement with an
 // implicit transaction, or a COMMIT statement when using an explicit
-// transaction.
+// transaction. commitFn is passed as a separate function, so that we avoid
+// executing transactional logic when handling COMMIT in the CommitWait state.
 func (ex *connExecutor) commitSQLTransaction(
-	ctx context.Context, ast tree.Statement,
+	ctx context.Context,
+	ast tree.Statement,
+	commitFn func(ctx context.Context, ast tree.Statement) error,
 ) (fsm.Event, fsm.EventPayload) {
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
-	err := ex.commitSQLTransactionInternal(ctx, ast)
-	if err != nil {
+	if err := commitFn(ctx, ast); err != nil {
 		return ex.makeErrEvent(err, ast)
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndTransactionCommit, timeutil.Now())
@@ -1527,7 +1529,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 // CommitWait.
 // Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
 func (ex *connExecutor) execStmtInCommitWaitState(
-	ast tree.Statement, res RestrictedCommandResult,
+	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
 ) (ev fsm.Event, payload fsm.EventPayload) {
 	ex.incrementStartedStmtCounter(ast)
 	defer func() {
@@ -1540,7 +1542,14 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
 		// get a COMMIT in state Aborted.
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
-		return eventTxnFinishCommitted{}, nil
+		return ex.commitSQLTransaction(
+			ctx,
+			ast,
+			func(ctx context.Context, ast tree.Statement) error {
+				// COMMIT while in the CommitWait state is a no-op.
+				return nil
+			},
+		)
 	default:
 		ev = eventNonRetriableErr{IsCommit: fsm.False}
 		payload = eventNonRetriableErrPayload{
@@ -1785,7 +1794,7 @@ func (ex *connExecutor) handleAutoCommit(
 		}
 	}
 
-	ev, payload := ex.commitSQLTransaction(ctx, stmt)
+	ev, payload := ex.commitSQLTransaction(ctx, stmt, ex.commitSQLTransactionInternal)
 	var err error
 	if perr, ok := payload.(payloadWithError); ok {
 		err = perr.errorCause()
