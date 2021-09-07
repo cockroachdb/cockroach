@@ -629,22 +629,6 @@ func TestSpanRecordingFinished(t *testing.T) {
 	require.Len(t, spanOpsWithFinished, 0)
 }
 
-func TestTracer_TracingVerbosityIndependentSemanticsIsActive(t *testing.T) {
-	// Verify that GetRecording() returns nil for non-verbose spans if we're in
-	// mixed-version mode.
-	tr := NewTracer()
-	tr.TracingVerbosityIndependentSemanticsIsActive = func() bool { return false }
-	sp := tr.StartSpan("root", WithForceRealSpan())
-	defer sp.Finish()
-	sp.SetVerbose(true)
-	sp.Record("foo")
-	require.NotNil(t, sp.GetRecording())
-	sp.SetVerbose(false)
-	require.Nil(t, sp.GetRecording())
-	tr.TracingVerbosityIndependentSemanticsIsActive = func() bool { return true }
-	require.NotNil(t, sp.GetRecording())
-}
-
 func TestNoopSpanFinish(t *testing.T) {
 	tr := NewTracer()
 	sp := tr.StartSpan("noop")

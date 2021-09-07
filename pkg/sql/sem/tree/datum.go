@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"net"
 	"regexp"
 	"sort"
 	"strconv"
@@ -1688,10 +1687,10 @@ func (d *DIPAddr) IsMin(_ *EvalContext) bool {
 // dIPv4 and dIPv6 min and maxes use ParseIP because the actual byte constant is
 // no equal to solely zeros or ones. For IPv4 there is a 0xffff prefix. Without
 // this prefix this makes IP arithmetic invalid.
-var dIPv4min = ipaddr.Addr(uint128.FromBytes([]byte(net.ParseIP("0.0.0.0"))))
-var dIPv4max = ipaddr.Addr(uint128.FromBytes([]byte(net.ParseIP("255.255.255.255"))))
-var dIPv6min = ipaddr.Addr(uint128.FromBytes([]byte(net.ParseIP("::"))))
-var dIPv6max = ipaddr.Addr(uint128.FromBytes([]byte(net.ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"))))
+var dIPv4min = ipaddr.Addr(uint128.FromBytes([]byte(ipaddr.ParseIP("0.0.0.0"))))
+var dIPv4max = ipaddr.Addr(uint128.FromBytes([]byte(ipaddr.ParseIP("255.255.255.255"))))
+var dIPv6min = ipaddr.Addr(uint128.FromBytes([]byte(ipaddr.ParseIP("::"))))
+var dIPv6max = ipaddr.Addr(uint128.FromBytes([]byte(ipaddr.ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"))))
 
 // dMaxIPv4Addr and dMinIPv6Addr are used as global constants to prevent extra
 // heap extra allocation
