@@ -806,6 +806,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/rowstovec.eg.go \
   pkg/sql/colexec/select_in.eg.go \
   pkg/sql/colexec/sort.eg.go \
+  pkg/sql/colexec/sorttopk.eg.go \
   pkg/sql/colexec/sort_partitioner.eg.go \
   pkg/sql/colexec/substring.eg.go \
   pkg/sql/colexec/values_differ.eg.go \

@@ -719,14 +719,14 @@ func (e *distSQLSpecExecFactory) ConstructLimit(
 }
 
 func (e *distSQLSpecExecFactory) ConstructTopK(
-	input exec.Node, k int64, ordering exec.OutputOrdering,
+	input exec.Node, k int64, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
 	if k <= 0 {
 		return nil, errors.New("negative or zero value for LIMIT")
 	}
 	// No already ordered prefix.
-	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), 0 /* alreadyOrderedPrefix */, k)
+	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, k)
 	// Since addition of topk doesn't change any properties of
 	// the physical plan, we don't need to update any of those.
 	return plan, nil
