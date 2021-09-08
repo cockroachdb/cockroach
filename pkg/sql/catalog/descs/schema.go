@@ -68,7 +68,6 @@ func (tc *Collection) getSchemaByName(
 ) (catalog.SchemaDescriptor, error) {
 	found, desc, err := tc.getByName(
 		ctx, txn, db, nil, schemaName, flags.AvoidCached, flags.RequireMutable,
-		tc.settings.Version,
 	)
 	if err != nil {
 		return nil, err
