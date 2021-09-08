@@ -1450,8 +1450,12 @@ func (a *Allocator) TransferLeaseTarget(
 
 		leaseholderReplQPS, _ := stats.avgQPS()
 		currentDelta := getQPSDelta(storeQPSMap, existing)
+		// NB: If the `bestOption` ends up being the current leaseholder, then the
+		// check below will fail since we know that `leaseholderReplQPS` must be
+		// greater than 0 (the `StoreRebalancer` only bothers rebalancing leases /
+		// replicas for ranges serving at least some traffic).
 		bestOption := getCandidateWithMinQPS(storeQPSMap, existing)
-		if bestOption != (roachpb.ReplicaDescriptor{}) &&
+		if bestOption != (roachpb.ReplicaDescriptor{}) && leaseholderReplQPS > 0 &&
 			// It is always beneficial to transfer the lease to the coldest candidate
 			// if the range's own qps is smaller than the difference between the
 			// leaseholder store and the candidate store. This will always drive down
