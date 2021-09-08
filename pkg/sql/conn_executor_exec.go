@@ -1095,6 +1095,75 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	return err
 }
 
+type txnRowsWrittenLimitErr struct {
+	eventpb.CommonTxnRowsLimitDetails
+}
+
+const writtenKind = "written"
+
+var _ error = &txnRowsWrittenLimitErr{}
+var _ errors.SafeDetailer = &txnRowsWrittenLimitErr{}
+var _ fmt.Formatter = &txnRowsWrittenLimitErr{}
+var _ errors.SafeFormatter = &txnRowsWrittenLimitErr{}
+
+// Error is part of the error interface, which txnRowsWrittenLimitErr
+// implements.
+func (e *txnRowsWrittenLimitErr) Error() string {
+	return e.CommonTxnRowsLimitDetails.Error(writtenKind)
+}
+
+// SafeDetails is part of the errors.SafeDetailer interface, which
+// txnRowsWrittenLimitErr implements.
+func (e *txnRowsWrittenLimitErr) SafeDetails() []string {
+	return e.CommonTxnRowsLimitDetails.SafeDetails(writtenKind)
+}
+
+// Format is part of the fmt.Formatter interface, which txnRowsWrittenLimitErr
+// implements.
+func (e *txnRowsWrittenLimitErr) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+// SafeFormatError is part of the errors.SafeFormatter interface, which
+// txnRowsWrittenLimitErr implements.
+func (e *txnRowsWrittenLimitErr) SafeFormatError(p errors.Printer) (next error) {
+	return e.CommonTxnRowsLimitDetails.SafeFormatError(p, "written")
+}
+
+type txnRowsReadLimitErr struct {
+	eventpb.CommonTxnRowsLimitDetails
+}
+
+const readKind = "read"
+
+var _ error = &txnRowsReadLimitErr{}
+var _ errors.SafeDetailer = &txnRowsReadLimitErr{}
+var _ fmt.Formatter = &txnRowsReadLimitErr{}
+var _ errors.SafeFormatter = &txnRowsReadLimitErr{}
+
+// Error is part of the error interface, which txnRowsReadLimitErr implements.
+func (e *txnRowsReadLimitErr) Error() string {
+	return e.CommonTxnRowsLimitDetails.Error(readKind)
+}
+
+// SafeDetails is part of the errors.SafeDetailer interface, which
+// txnRowsReadLimitErr implements.
+func (e *txnRowsReadLimitErr) SafeDetails() []string {
+	return e.CommonTxnRowsLimitDetails.SafeDetails(readKind)
+}
+
+// Format is part of the fmt.Formatter interface, which txnRowsReadLimitErr
+// implements.
+func (e *txnRowsReadLimitErr) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+// SafeFormatError is part of the errors.SafeFormatter interface, which
+// txnRowsReadLimitErr implements.
+func (e *txnRowsReadLimitErr) SafeFormatError(p errors.Printer) (next error) {
+	return e.CommonTxnRowsLimitDetails.SafeFormatError(p, readKind)
+}
+
 // handleTxnRowsGuardrails handles either "written" or "read" rows guardrails.
 func (ex *connExecutor) handleTxnRowsGuardrails(
 	ctx context.Context,
@@ -1112,9 +1181,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 	commonTxnRowsLimitDetails := eventpb.CommonTxnRowsLimitDetails{
 		TxnID:     ex.state.mu.txn.ID().String(),
 		SessionID: ex.sessionID.String(),
-		// Limit will be set below.
-		ViolatesTxnRowsLimitErr: shouldErr,
-		IsRead:                  isRead,
+		// LimitValue will be set below.
 	}
 	if shouldErr && ex.executorType == executorTypeInternal {
 		// Internal work should never err and always log if violating either
@@ -1143,7 +1210,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 	}
 	if shouldLog {
 		commonSQLEventDetails := ex.planner.getCommonSQLEventDetails()
-		commonTxnRowsLimitDetails.Limit = logLimit
+		commonTxnRowsLimitDetails.LimitValue = logLimit
 		var event eventpb.EventPayload
 		if ex.executorType == executorTypeInternal {
 			if isRead {
@@ -1174,8 +1241,13 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 		}
 	}
 	if shouldErr {
-		commonTxnRowsLimitDetails.Limit = errLimit
-		err = pgerror.WithCandidateCode(&commonTxnRowsLimitDetails, pgcode.ProgramLimitExceeded)
+		commonTxnRowsLimitDetails.LimitValue = errLimit
+		if isRead {
+			err = &txnRowsReadLimitErr{CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails}
+		} else {
+			err = &txnRowsWrittenLimitErr{CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails}
+		}
+		err = pgerror.WithCandidateCode(err, pgcode.ProgramLimitExceeded)
 		errCounter.Inc(1)
 	}
 	return err
