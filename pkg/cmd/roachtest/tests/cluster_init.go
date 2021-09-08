@@ -48,9 +48,22 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// command to one of the nodes.
 	for _, initNode := range []int{1, 2} {
 		t.L().Printf("starting test with init node %d", initNode)
-		c.Wipe(ctx)
 
 		func() {
+			// At the end of each iteration, wipe the cluster if the test
+			// has succeeded.  This is useful because the `roachprod
+			// monitor` command at the end seems to be confused by `start`
+			// commands that were not issued by c.Start(). Wipe the data
+			// directory at the end before the test function terminates
+			// ensures that the monitor check does not run.
+			defer func() {
+				// Defers are run unconditionally, even during a Fatal call.
+				if !t.Failed() {
+					t.L().Printf("wiping cluster after test success")
+					c.Wipe(ctx)
+				}
+			}()
+
 			var g errgroup.Group
 			for i := 1; i <= c.Spec().NodeCount; i++ {
 				i := i
