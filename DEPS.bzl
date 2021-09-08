@@ -3489,6 +3489,14 @@ def go_deps():
         version = "v0.6.0",
     )
     go_repository(
+        name = "com_github_prometheus_prometheus",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/prometheus/prometheus",
+        sum = "h1:7QPitgO2kOFG8ecuRn9O/4L9+10He72rVRJvMXrE9Hg=",
+        version = "v2.5.0+incompatible",
+    )
+
+    go_repository(
         name = "com_github_prometheus_tsdb",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/prometheus/tsdb",
