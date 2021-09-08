@@ -863,6 +863,40 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	// pg_is_other_temp_schema returns true if the given OID is the OID of another
+	// session's temporary schema.
+	// https://www.postgresql.org/docs/11/functions-info.html
+	"pg_is_other_temp_schema": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				schemaArg := tree.UnwrapDatum(ctx, args[0])
+				schema, err := getNameForArg(ctx, schemaArg, "pg_namespace", "nspname")
+				if err != nil {
+					return nil, err
+				}
+				if schema == "" {
+					// OID does not exist.
+					return tree.DBoolFalse, nil
+				}
+				if !strings.HasPrefix(schema, catconstants.PgTempSchemaName) {
+					// OID is not a reference to a temporary schema.
+					//
+					// This string matching is what Postgres does too. See isAnyTempNamespace.
+					return tree.DBoolFalse, nil
+				}
+				if schema == ctx.SessionData().SearchPath.GetTemporarySchemaName() {
+					// OID is a reference to this session's temporary schema.
+					return tree.DBoolFalse, nil
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "Returns true if the given OID is the OID of another session's temporary schema. (This can be useful, for example, to exclude other sessions' temporary tables from a catalog display.)",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
 	"pg_typeof": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
 		tree.Overload{
