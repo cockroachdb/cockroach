@@ -3025,3 +3025,96 @@ SELECT * FROM T1`)
 		require.NoError(t, err)
 	})
 }
+
+func TestLeaseBulkInsert(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	beforeExecute := syncutil.Mutex{}
+	// Statement that will be paused
+	beforeExecuteStmt := ""
+	beforeExecuteWait := make(chan struct{})
+	// Statement that will allow any paused
+	// statement to resume.
+	beforeExecuteResumeStmt := ""
+	beforeExecuteResume := make(chan struct{})
+
+	ctx := context.Background()
+
+	params := createTestServerParams()
+	// Set the lease duration such that the next lease acquisition will
+	// require the lease to be reacquired.
+	lease.LeaseDuration.Override(ctx, &params.SV, 0)
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		BeforeExecute: func(ctx context.Context, stmt string) {
+			beforeExecute.Lock()
+			if stmt == beforeExecuteStmt {
+				beforeExecute.Unlock()
+				<-beforeExecuteWait
+				beforeExecuteResume <- struct{}{}
+			} else if stmt == beforeExecuteResumeStmt {
+				beforeExecute.Unlock()
+				<-beforeExecuteResume
+			} else {
+				beforeExecute.Unlock()
+			}
+		},
+	}
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+	// Setup tables for the test.
+	_, err := conn.Exec(`
+CREATE TABLE t1(val int);
+	`)
+	require.NoError(t, err)
+
+	// Executes a bulk UPDATE operation that will be repeatedly
+	// pushed out by a SELECT operation on the same table. The
+	// intention here is to confirm that autocommit will adjust
+	// transaction readline for this.
+	t.Run("validate-lease-txn-deadline-ext-update", func(t *testing.T) {
+		conn, err := tc.ServerConn(0).Conn(ctx)
+		updateConn, err := tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		resultChan := make(chan error)
+		_, err = conn.ExecContext(ctx, `
+INSERT INTO t1 select a from generate_series(1, 100) g(a);
+`,
+		)
+		require.NoError(t, err)
+		executingUpdate := uint32(1)
+		go func() {
+			const bulkUpdateQuery = "UPDATE t1 SET val = 2"
+			beforeExecute.Lock()
+			beforeExecuteStmt = bulkUpdateQuery
+			beforeExecute.Unlock()
+			// Execute a bulk UPDATE, which will get its
+			// timestamp pushed by a read operation.
+			_, err = conn.ExecContext(ctx, bulkUpdateQuery)
+			atomic.SwapUint32(&executingUpdate, 0)
+			<-beforeExecuteWait
+			resultChan <- err
+		}()
+
+		const selectQuery = "SELECT * FROM t1"
+		beforeExecute.Lock()
+		beforeExecuteResumeStmt = selectQuery
+		beforeExecute.Unlock()
+		// While the update hasn't completed executing, repeatedly
+		// execute selects to push out the update operation. We will
+		// do this for a limited amount of time, and let the commit
+		// go through.
+		for atomic.LoadUint32(&executingUpdate) == 1 {
+			beforeExecuteWait <- struct{}{}
+			if atomic.LoadUint32(&executingUpdate) == 1 {
+				_, err = updateConn.ExecContext(ctx, "BEGIN PRIORITY HIGH;")
+				require.NoError(t, err)
+				_, err = updateConn.ExecContext(ctx, selectQuery)
+				require.NoError(t, err)
+				_, err = updateConn.ExecContext(ctx, "END;")
+				require.NoError(t, err)
+			}
+		}
+		require.NoError(t, <-resultChan)
+	})
+}
