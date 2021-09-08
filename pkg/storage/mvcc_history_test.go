@@ -548,8 +548,26 @@ func (e *evalCtx) tryWrapForIntentPrinting(rw ReadWriter) ReadWriter {
 	return rw
 }
 
+func (e *evalCtx) getEpoch() enginepb.TxnEpoch {
+	const key = "epoch"
+	e.t.Helper()
+	if !e.hasArg(key) {
+		return 0
+	}
+	var epoch int
+	e.scanArg(key, &epoch)
+	return enginepb.TxnEpoch(epoch)
+}
+
 func cmdResolveIntent(e *evalCtx) error {
-	txn := e.getTxn(mandatory)
+	txn := e.getTxn(mandatory).Clone()
+	if epoch := e.getEpoch(); epoch > 0 {
+		txn.Epoch = epoch
+	}
+	if ts := e.getTs(nil /* txn */); ts != (hlc.Timestamp{}) {
+		txn.WriteTimestamp = ts
+	}
+
 	key := e.getKey()
 	status := e.getTxnStatus()
 	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status)

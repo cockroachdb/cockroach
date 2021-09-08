@@ -1,0 +1,49 @@
+# Show that intents are removed when pushed across an epoch change.
+
+# Start txn A and lay down an intent at epoch 2.
+run ok
+with t=A k=k
+  txn_begin ts=100
+  txn_restart
+  txn_restart
+  put  k=k v=v
+----
+>> at end:
+txn: "A" meta={id=00000000 key="k" pri=0.00000000 epo=2 ts=100.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=100.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=2 ts=100.000000000,0 min=0,0 seq=0} ts=100.000000000,0 del=false klen=12 vlen=6
+data: "k"/100.000000000,0 -> /BYTES/v
+
+# A pusher who knows that this txn is now in epoch three pushes the intent.
+# The result will be that the intent is removed. Note that we alternatively
+# could also let the intent survive, but we currently do not do that.
+run ok
+with t=A k=k epoch=3 ts=101 status=PENDING
+  resolve_intent
+----
+>> at end:
+<no data>
+
+# Repeat the above scenario with a txn B, the only difference being that when
+# we push the intent, we use a timestamp that is behind the txn's timestamp,
+# meaning that it internally has a chance of hitting a different code path
+# as we wouldn't actually move the intent forward in time if we decided to
+# keep it.
+
+run ok
+with t=B k=k
+  txn_begin ts=100
+  txn_restart
+  txn_restart
+  put  k=k v=v
+----
+>> at end:
+txn: "B" meta={id=00000000 key="k" pri=0.00000000 epo=2 ts=100.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=100.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=2 ts=100.000000000,0 min=0,0 seq=0} ts=100.000000000,0 del=false klen=12 vlen=6
+data: "k"/100.000000000,0 -> /BYTES/v
+
+run ok
+with t=B k=k epoch=3 ts=99 status=PENDING
+  resolve_intent
+----
+>> at end:
+<no data>
