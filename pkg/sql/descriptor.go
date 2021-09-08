@@ -65,7 +65,7 @@ var (
 // state should be an error (false) or a no-op (true).
 // createDatabase implements the DatabaseDescEditor interface.
 func (p *planner) createDatabase(
-	ctx context.Context, database *tree.CreateDatabase, jobDesc string, version clusterversion.Handle,
+	ctx context.Context, database *tree.CreateDatabase, jobDesc string,
 ) (*dbdesc.Mutable, bool, error) {
 
 	dbName := string(database.Name)
@@ -174,7 +174,7 @@ func (p *planner) createPublicSchema(
 
 		if err := p.createDescriptorWithID(
 			ctx,
-			catalogkeys.MakePublicSchemaNameKey(p.ExecCfg().Codec, dbID),
+			catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema),
 			publicSchemaDesc.GetID(),
 			publicSchemaDesc,
 			p.ExecCfg().Settings,
@@ -187,7 +187,7 @@ func (p *planner) createPublicSchema(
 	}
 
 	// Every database must be initialized with the public schema.
-	key := catalogkeys.MakePublicSchemaNameKey(p.ExecCfg().Codec, dbID)
+	key := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema)
 	if err := p.CreateSchemaNamespaceEntry(ctx, key, keys.PublicSchemaID); err != nil {
 		return keys.PublicSchemaID, err
 	}

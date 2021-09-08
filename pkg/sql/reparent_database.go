@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -41,6 +43,11 @@ type reparentDatabaseNode struct {
 func (p *planner) ReparentDatabase(
 	ctx context.Context, n *tree.ReparentDatabase,
 ) (planNode, error) {
+	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot perform ALTER DATABASE CONVERT TO SCHEMA in version %v and beyond",
+			clusterversion.PublicSchemasWithDescriptors)
+	}
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -87,12 +94,8 @@ func (p *planner) ReparentDatabase(
 	}
 
 	// We can't reparent a database that has any child schemas other than public.
-	if _, ok := db.Schemas[tree.PublicSchema]; !ok {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "no public schema found in database %s", n.Name)
-	}
-	if len(db.Schemas) != 1 {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"cannot convert database with schemas other than the public schema into a schema")
+	if len(db.Schemas) > 0 {
+		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cannot convert database with schemas into schema")
 	}
 
 	return &reparentDatabaseNode{
@@ -111,17 +114,20 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	publicSchemaDesc, err := p.Descriptors().GetMutableSchemaByName(
-		ctx, p.txn, n.db, tree.PublicSchema, tree.SchemaLookupFlags{
-			Required:       true,
-			RequireMutable: true,
-		})
+	// Not all Privileges on databases are valid on schemas.
+	// Remove any privileges that are not valid for schemas.
+	schemaPrivs := privilege.GetValidPrivilegesForObject(privilege.Schema).ToBitField()
+	privs := n.db.GetPrivileges()
+	for i, u := range privs.Users {
+		// Remove privileges that are valid for databases but not for schemas.
+		privs.Users[i].Privileges = u.Privileges & schemaPrivs
+	}
 
 	schema := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   n.newParent.ID,
 		Name:       n.db.Name,
 		ID:         id,
-		Privileges: protoutil.Clone(publicSchemaDesc.GetPrivileges()).(*descpb.PrivilegeDescriptor),
+		Privileges: protoutil.Clone(n.db.Privileges).(*descpb.PrivilegeDescriptor),
 		Version:    1,
 	}).BuildCreatedMutable()
 	// Add the new schema to the parent database's name map.
@@ -267,7 +273,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 
 	// Delete the public schema namespace entry for this database. Per our check
 	// during initialization, this is the only schema present under n.db.
-	b.Del(catalogkeys.MakePublicSchemaNameKey(codec, n.db.ID))
+	b.Del(catalogkeys.MakeSchemaNameKey(codec, n.db.ID, tree.PublicSchema))
 
 	// This command can only be run when database leasing is supported, so we don't
 	// have to handle the case where it isn't.

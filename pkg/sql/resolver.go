@@ -1052,11 +1052,6 @@ type internalLookupCtx struct {
 
 	// fallback is utilized in GetDesc and GetNamespaceEntry.
 	fallback catalog.DescGetter
-
-	// TODO(richardjcai): Remove in 22.2.
-	// Used to determine if public schema has a descriptor or not.
-	ctx     context.Context
-	version clusterversion.Handle
 }
 
 // GetDesc implements the catalog.DescGetter interface.
@@ -1127,10 +1122,6 @@ func newInternalLookupCtx(
 	dbDescs := make(map[descpb.ID]catalog.DatabaseDescriptor)
 	schemaDescs := make(map[descpb.ID]catalog.SchemaDescriptor)
 	schemaNames := make(map[descpb.ID]string)
-	// TODO(richardjcai): In 22.2, remove this. Right now it's also possible that
-	// Public schema is also a regular UDS but always adding this entry is still
-	// okay.
-	schemaNames[keys.PublicSchemaID] = tree.PublicSchema
 
 	tbDescs := make(map[descpb.ID]catalog.TableDescriptor)
 	typDescs := make(map[descpb.ID]catalog.TypeDescriptor)
@@ -1167,6 +1158,15 @@ func newInternalLookupCtx(
 		}
 	}
 
+	// Check for the absence of a Public schema, if there is not a
+	// public schema backed by a descriptor, we need to map public to 29,
+	// this is needed for public schemas created on versions 21.2 and prior.
+	for _, schemaDesc := range schemaDescs {
+		if schemaDesc.GetName() == tree.PublicSchema {
+			schemaNames[keys.PublicSchemaID] = tree.PublicSchema
+		}
+	}
+
 	return &internalLookupCtx{
 		dbNames:     dbNames,
 		dbDescs:     dbDescs,
@@ -1179,8 +1179,6 @@ func newInternalLookupCtx(
 		dbIDs:       dbIDs,
 		typIDs:      typIDs,
 		fallback:    fallback,
-		ctx:         ctx,
-		version:     version,
 	}
 }
 
