@@ -374,6 +374,15 @@ func replicas(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
 func createTestAllocator(
 	numNodes int, deterministic bool,
 ) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
+	return createTestAllocatorWithKnobs(numNodes, deterministic, nil /* knobs */)
+}
+
+// createTestAllocatorWithKnobs is like `createTestAllocator`, but allows the
+// caller to pass in custom AllocatorTestingKnobs. Stopper must be stopped by
+// the caller.
+func createTestAllocatorWithKnobs(
+	numNodes int, deterministic bool, knobs *AllocatorTestingKnobs,
+) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
 	stopper, g, manual, storePool, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff, deterministic,
 		func() int { return numNodes },
@@ -381,7 +390,9 @@ func createTestAllocator(
 	a := MakeAllocator(
 		storePool, func(string) (time.Duration, bool) {
 			return 0, true
-		})
+		},
+		knobs,
+	)
 	return stopper, g, storePool, a, manual
 }
 
@@ -713,6 +724,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 				nil,
 				rangeUsageInfo,
 				storeFilterThrottled,
+				a.scorerOptions(),
 			)
 			if e, a := tc.expectTargetRebalance, ok; e != a {
 				t.Errorf(
@@ -777,7 +789,16 @@ func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
 	// After that we should not be seeing replicas move.
 	var rangeUsageInfo RangeUsageInfo
 	for i := 1; i < 40; i++ {
-		add, remove, _, ok := a.RebalanceVoter(context.Background(), emptySpanConfig(), nil, ranges[i].InternalReplicas, nil, rangeUsageInfo, storeFilterThrottled)
+		add, remove, _, ok := a.RebalanceVoter(
+			context.Background(),
+			emptySpanConfig(),
+			nil,
+			ranges[i].InternalReplicas,
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			a.scorerOptions(),
+		)
 		if ok {
 			// Update the descriptor.
 			newReplicas := make([]roachpb.ReplicaDescriptor, 0, len(ranges[i].InternalReplicas))
@@ -809,7 +830,16 @@ func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
 	// We dont expect any range wanting to move since the system should have
 	// reached a stable state at this point.
 	for i := 1; i < 40; i++ {
-		_, _, _, ok := a.RebalanceVoter(context.Background(), emptySpanConfig(), nil, ranges[i].InternalReplicas, nil, rangeUsageInfo, storeFilterThrottled)
+		_, _, _, ok := a.RebalanceVoter(
+			context.Background(),
+			emptySpanConfig(),
+			nil,
+			ranges[i].InternalReplicas,
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			a.scorerOptions(),
+		)
 		require.False(t, ok)
 	}
 }
@@ -872,7 +902,16 @@ func TestAllocatorRebalance(t *testing.T) {
 	// Every rebalance target must be either store 1 or 2.
 	for i := 0; i < 10; i++ {
 		var rangeUsageInfo RangeUsageInfo
-		target, _, _, ok := a.RebalanceVoter(ctx, emptySpanConfig(), nil, []roachpb.ReplicaDescriptor{{NodeID: 3, StoreID: 3}}, nil, rangeUsageInfo, storeFilterThrottled)
+		target, _, _, ok := a.RebalanceVoter(
+			ctx,
+			emptySpanConfig(),
+			nil,
+			[]roachpb.ReplicaDescriptor{{NodeID: 3, StoreID: 3}},
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			a.scorerOptions(),
+		)
 		if !ok {
 			i-- // loop until we find 10 candidates
 			continue
@@ -884,14 +923,14 @@ func TestAllocatorRebalance(t *testing.T) {
 		}
 	}
 
-	// Verify shouldRebalanceBasedOnRangeCount results.
+	// Verify shouldRebalanceBasedOnThresholds results.
 	for i, store := range stores {
 		desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
-		result := shouldRebalanceBasedOnRangeCount(ctx, desc, sl, a.scorerOptions())
+		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(ctx, desc, sl)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
 		}
@@ -1016,7 +1055,16 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		}
 	}
 	for i := 0; i < 10; i++ {
-		result, _, details, ok := a.RebalanceVoter(context.Background(), emptySpanConfig(), status, replicas, nil, rangeUsageInfo, storeFilterThrottled)
+		result, _, details, ok := a.RebalanceVoter(
+			context.Background(),
+			emptySpanConfig(),
+			status,
+			replicas,
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			a.scorerOptions(),
+		)
 		if ok {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
 		}
@@ -1029,7 +1077,16 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	stores[2].Capacity.RangeCount = 46
 	sg.GossipStores(stores, t)
 	for i := 0; i < 10; i++ {
-		target, _, details, ok := a.RebalanceVoter(context.Background(), emptySpanConfig(), status, replicas, nil, rangeUsageInfo, storeFilterThrottled)
+		target, _, details, ok := a.RebalanceVoter(
+			context.Background(),
+			emptySpanConfig(),
+			status,
+			replicas,
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			a.scorerOptions(),
+		)
 		if ok {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", target.StoreID, details)
 		}
@@ -1039,7 +1096,16 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	stores[1].Capacity.RangeCount = 44
 	sg.GossipStores(stores, t)
 	for i := 0; i < 10; i++ {
-		target, origin, details, ok := a.RebalanceVoter(context.Background(), emptySpanConfig(), status, replicas, nil, rangeUsageInfo, storeFilterThrottled)
+		target, origin, details, ok := a.RebalanceVoter(
+			context.Background(),
+			emptySpanConfig(),
+			status,
+			replicas,
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			a.scorerOptions(),
+		)
 		expTo := stores[1].StoreID
 		expFrom := stores[0].StoreID
 		if !ok || target.StoreID != expTo || origin.StoreID != expFrom {
@@ -1109,7 +1175,16 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			var rangeUsageInfo RangeUsageInfo
-			target, _, _, ok := a.RebalanceVoter(ctx, emptySpanConfig(), nil, c.existing, nil, rangeUsageInfo, storeFilterThrottled)
+			target, _, _, ok := a.RebalanceVoter(
+				ctx,
+				emptySpanConfig(),
+				nil,
+				c.existing,
+				nil,
+				rangeUsageInfo,
+				storeFilterThrottled,
+				a.scorerOptions(),
+			)
 			if c.expected > 0 {
 				if !ok {
 					t.Fatalf("expected %d, but found nil", c.expected)
@@ -1245,17 +1320,234 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			})
 			sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 
-			// Verify shouldRebalanceBasedOnRangeCount returns the expected value.
+			// Verify shouldRebalanceBasedOnThresholds returns the expected value.
 			for j, store := range stores {
 				desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
 				if !ok {
 					t.Fatalf("[store %d]: unable to get store %d descriptor", j, store.StoreID)
 				}
-				if a, e := shouldRebalanceBasedOnRangeCount(context.Background(), desc, sl, a.scorerOptions()), cluster[j].shouldRebalanceFrom; a != e {
-					t.Errorf("[store %d]: shouldRebalanceBasedOnRangeCount %t != expected %t", store.StoreID, a, e)
+				if a, e := a.scorerOptions().shouldRebalanceBasedOnThresholds(
+					context.Background(), desc, sl,
+				), cluster[j].shouldRebalanceFrom; a != e {
+					t.Errorf(
+						"[store %d]: shouldRebalanceBasedOnThresholds %t != expected %t", store.StoreID, a, e,
+					)
 				}
 			}
 		})
+	}
+}
+
+// TestAllocatorRebalanceByQPS verifies that rebalance targets are chosen by QPS
+// in the event that some stores lie outside the [underfull, overfull] window
+// for QPS.
+func TestAllocatorRebalanceByQPS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	allStoresEqual := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1000},
+		},
+		{
+			StoreID:  2,
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1000},
+		},
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1000},
+		},
+		{
+			StoreID:  4,
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1000},
+		},
+	}
+	oneOverfullAndOneUnderfull := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1200},
+		},
+		{
+			StoreID:  2,
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1000},
+		},
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1000},
+		},
+		{
+			StoreID:  4,
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 800},
+		},
+	}
+
+	type testCase struct {
+		testStores                              []*roachpb.StoreDescriptor
+		expectRebalance                         bool
+		expectedAddTarget, expectedRemoveTarget roachpb.StoreID
+	}
+	tests := []testCase{
+		{
+			// We don't expect any QPS based rebalancing when all stores are serving
+			// the same QPS.
+			testStores:      allStoresEqual,
+			expectRebalance: false,
+		},
+		{
+			// When one store is overfull and another is underfull, we expect a QPS
+			// based rebalance from the overfull store to the underfull store.
+			testStores:           oneOverfullAndOneUnderfull,
+			expectRebalance:      true,
+			expectedRemoveTarget: roachpb.StoreID(1),
+			expectedAddTarget:    roachpb.StoreID(4),
+		},
+	}
+
+	for _, subtest := range tests {
+		stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+		defer stopper.Stop(context.Background())
+		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
+		ctx := context.Background()
+		var rangeUsageInfo RangeUsageInfo
+		options := qpsScorerOptions{
+			qpsRebalanceThreshold: 0.1,
+		}
+		add, remove, _, ok := a.RebalanceVoter(
+			ctx,
+			emptySpanConfig(),
+			nil,
+			[]roachpb.ReplicaDescriptor{{StoreID: subtest.testStores[0].StoreID}},
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			options,
+		)
+		if subtest.expectRebalance {
+			require.True(t, ok)
+			require.Equal(t, subtest.expectedAddTarget, add.StoreID)
+			require.Equal(t, subtest.expectedRemoveTarget, remove.StoreID)
+			// Verify shouldRebalanceBasedOnThresholds results.
+			desc, ok := a.storePool.getStoreDescriptor(remove.StoreID)
+			if !ok {
+				t.Fatalf("unable to get store %d descriptor", remove.StoreID)
+			}
+			sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+			result := options.shouldRebalanceBasedOnThresholds(ctx, desc, sl)
+			require.True(t, result)
+		} else {
+			require.False(t, ok)
+		}
+	}
+}
+
+func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	region := func(regionName string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: regionName},
+			},
+		}
+	}
+	twoOverfullStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     roachpb.NodeDescriptor{NodeID: 1, Locality: region("a")},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1200},
+		},
+		{
+			StoreID:  2,
+			Node:     roachpb.NodeDescriptor{NodeID: 2, Locality: region("a")},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1400},
+		},
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 3, Locality: region("b")},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1000},
+		},
+		{
+			StoreID:  4,
+			Node:     roachpb.NodeDescriptor{NodeID: 4, Locality: region("c")},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1000},
+		},
+		{
+			StoreID:  5,
+			Node:     roachpb.NodeDescriptor{NodeID: 5, Locality: region("c")},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 800},
+		},
+	}
+
+	replicas := func(ids ...roachpb.StoreID) (repls []roachpb.ReplicaDescriptor) {
+		for _, id := range ids {
+			repls = append(
+				repls,
+				roachpb.ReplicaDescriptor{
+					NodeID:    roachpb.NodeID(id),
+					StoreID:   id,
+					ReplicaID: roachpb.ReplicaID(id),
+				},
+			)
+		}
+		return repls
+	}
+	type testCase struct {
+		testStores           []*roachpb.StoreDescriptor
+		existingRepls        []roachpb.ReplicaDescriptor
+		expectedRemoveTarget roachpb.StoreID
+	}
+	tests := []testCase{
+		{
+			// Expect store 1 to be removed since it is fielding the most QPS out of
+			// all the existing replicas.
+			testStores:           twoOverfullStores,
+			existingRepls:        replicas(1, 3, 4),
+			expectedRemoveTarget: roachpb.StoreID(1),
+		},
+		{
+			// Expect store 2 to be removed since it is serving more QPS than the only
+			// other store that's "comparable" to it (store 1).
+			testStores:           twoOverfullStores,
+			existingRepls:        replicas(1, 2, 3, 4, 5),
+			expectedRemoveTarget: roachpb.StoreID(2),
+		},
+		{
+			// Expect store 4 to be removed because it is serving more QPS than store
+			// 5, which is its only comparable store.
+			testStores:           twoOverfullStores,
+			existingRepls:        replicas(2, 3, 4, 5),
+			expectedRemoveTarget: roachpb.StoreID(4),
+		},
+	}
+
+	for _, subtest := range tests {
+		stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+		defer stopper.Stop(context.Background())
+		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
+		ctx := context.Background()
+		options := qpsScorerOptions{
+			qpsRebalanceThreshold: 0.1,
+		}
+		remove, _, err := a.RemoveVoter(
+			ctx,
+			emptySpanConfig(),
+			subtest.existingRepls,
+			subtest.existingRepls,
+			nil,
+			options,
+		)
+		require.NoError(t, err)
+		require.Equal(t, subtest.expectedRemoveTarget, remove.StoreID)
 	}
 }
 
@@ -1299,20 +1591,29 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
 		var rangeUsageInfo RangeUsageInfo
-		result, _, _, ok := a.RebalanceVoter(ctx, emptySpanConfig(), nil, []roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}}, nil, rangeUsageInfo, storeFilterThrottled)
+		result, _, _, ok := a.RebalanceVoter(
+			ctx,
+			emptySpanConfig(),
+			nil,
+			[]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}},
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			a.scorerOptions(),
+		)
 		if ok && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
 	}
 
-	// Verify shouldRebalanceBasedOnRangeCount results.
+	// Verify shouldRebalanceBasedOnThresholds results.
 	for i, store := range stores {
 		desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
-		result := shouldRebalanceBasedOnRangeCount(ctx, desc, sl, a.scorerOptions())
+		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(ctx, desc, sl)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -1410,10 +1711,12 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 					replicationFactor: 3,
 					storeID:           c.leaseholder,
 				},
-				nil, /* replicaStats */
-				c.check,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: c.check,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1521,9 +1824,11 @@ func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 				c.existing,
 				repl,
 				nil,
-				c.checkSource,
-				true,  /* checkCandidateFullness */
 				false, /* alwaysAllowDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: c.checkSource,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.transferTarget != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.transferTarget, target.StoreID)
@@ -1611,10 +1916,12 @@ func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
 					replicationFactor: 3,
 					storeID:           c.leaseholder,
 				},
-				nil, /* replicaStats */
-				true,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: true,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1632,9 +1939,11 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
-		return 0, true
-	})
+	a := MakeAllocator(
+		storePool, func(string) (time.Duration, bool) {
+			return 0, true
+		}, nil, /* knobs */
+	)
 	defer stopper.Stop(context.Background())
 
 	// 3 stores where the lease count for each store is equal to 100x the store
@@ -1713,10 +2022,12 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 					replicationFactor: 3,
 					storeID:           c.leaseholder,
 				},
-				nil, /* replicaStats */
-				c.check,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: c.check,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1843,7 +2154,15 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 
 	for i, tc := range testCases {
 		var rangeUsageInfo RangeUsageInfo
-		result, _, details, ok := a.RebalanceVoter(ctx, emptySpanConfig(), nil, tc.existing, nil, rangeUsageInfo, storeFilterThrottled)
+		result, _, details, ok := a.RebalanceVoter(
+			ctx,
+			emptySpanConfig(),
+			nil,
+			tc.existing,
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			a.scorerOptions())
 		var resultID roachpb.StoreID
 		if ok {
 			resultID = result.StoreID
@@ -1906,7 +2225,16 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	for i, tc := range testCases2 {
 		log.Infof(ctx, "case #%d", i)
 		var rangeUsageInfo RangeUsageInfo
-		result, _, details, ok := a.RebalanceVoter(ctx, emptySpanConfig(), nil, tc.existing, nil, rangeUsageInfo, storeFilterThrottled)
+		result, _, details, ok := a.RebalanceVoter(
+			ctx,
+			emptySpanConfig(),
+			nil,
+			tc.existing,
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			a.scorerOptions(),
+		)
 		var gotExpected bool
 		if !ok {
 			gotExpected = (tc.expected == nil)
@@ -1986,9 +2314,11 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
-		return 0, true
-	})
+	a := MakeAllocator(
+		storePool, func(string) (time.Duration, bool) {
+			return 0, true
+		}, nil, /* knobs */
+	)
 	defer stopper.Stop(context.Background())
 
 	// 4 stores where the lease count for each store is equal to 10x the store
@@ -2048,9 +2378,11 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
-		return 0, true
-	})
+	a := MakeAllocator(
+		storePool, func(string) (time.Duration, bool) {
+			return 0, true
+		}, nil, /* knobs */
+	)
 	defer stopper.Stop(context.Background())
 
 	var stores []*roachpb.StoreDescriptor
@@ -2226,10 +2558,12 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 					replicationFactor: 5,
 					storeID:           c.leaseholder,
 				},
-				nil,   /* replicaStats */
-				true,  /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: true,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expectedCheckTrue != target.StoreID {
 				t.Errorf("expected s%d for check=true, but found %v", c.expectedCheckTrue, target)
@@ -2242,10 +2576,12 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 					replicationFactor: 5,
 					storeID:           c.leaseholder,
 				},
-				nil,   /* replicaStats */
-				false, /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: false,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expectedCheckFalse != target.StoreID {
 				t.Errorf("expected s%d for check=false, but found %v", c.expectedCheckFalse, target)
@@ -2328,10 +2664,12 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 					replicationFactor: 6,
 					storeID:           c.leaseholder,
 				},
-				nil,   /* replicaStats */
-				true,  /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: true,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expectedCheckTrue != target.StoreID {
 				t.Errorf("expected s%d for check=true, but found %v", c.expectedCheckTrue, target)
@@ -2344,10 +2682,12 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 					replicationFactor: 6,
 					storeID:           c.leaseholder,
 				},
-				nil,   /* replicaStats */
-				false, /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				nil,   /* stats */
+				false, /* forceDecisionWithoutStats */
+				transferLeaseOptions{
+					checkTransferLeaseSource: false,
+					checkCandidateFullness:   true,
+				},
 			)
 			if c.expectedCheckFalse != target.StoreID {
 				t.Errorf("expected s%d for check=false, but found %v", c.expectedCheckFalse, target)
@@ -2419,6 +2759,7 @@ func TestAllocatorRemoveBasedOnDiversity(t *testing.T) {
 			c.existingVoters, /* voterCandidates */
 			c.existingVoters,
 			c.existingNonVoters,
+			a.scorerOptions(),
 		)
 		require.NoError(t, err)
 
@@ -2434,9 +2775,10 @@ func TestAllocatorRemoveBasedOnDiversity(t *testing.T) {
 		targetVoter, _, err = a.RemoveVoter(
 			context.Background(),
 			emptySpanConfig(),
-			c.existingVoters, /* voterCandidates */
 			c.existingVoters,
-			nil, /* existingNonVoters */
+			c.existingVoters,
+			nil,
+			a.scorerOptions(),
 		)
 		require.NoError(t, err)
 		require.Truef(t, checkReplExists(targetVoter, c.expVoterRemovals),
@@ -2449,6 +2791,7 @@ func TestAllocatorRemoveBasedOnDiversity(t *testing.T) {
 			c.existingNonVoters, /* nonVoterCandidates */
 			c.existingVoters,
 			c.existingNonVoters,
+			a.scorerOptions(),
 		)
 		require.NoError(t, err)
 		require.True(t, checkReplExists(targetNonVoter, c.expNonVoterRemovals))
@@ -2714,7 +3057,16 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			}
 		}
 		var rangeUsageInfo RangeUsageInfo
-		target, _, details, ok := a.RebalanceVoter(context.Background(), emptySpanConfig(), nil, existingRepls, nil, rangeUsageInfo, storeFilterThrottled)
+		target, _, details, ok := a.RebalanceVoter(
+			context.Background(),
+			emptySpanConfig(),
+			nil,
+			existingRepls,
+			nil,
+			rangeUsageInfo,
+			storeFilterThrottled,
+			a.scorerOptions(),
+		)
 		if !ok {
 			t.Fatalf("%d: RebalanceVoter(%v) returned no target store; details: %s", i, c.existing, details)
 		}
@@ -3514,12 +3866,12 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 
 		// Check behavior in a span config where `voter_constraints` are empty.
 		checkFn := voterConstraintsCheckerForRemoval(analyzed, constraint.EmptyAnalyzedConstraints)
-		candidates := rankedCandidateListForRemoval(sl,
+		candidates := candidateListForRemoval(sl,
 			checkFn,
 			a.storePool.getLocalitiesByStore(existingRepls),
 			a.scorerOptions())
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
-			t.Errorf("%d (with `constraints`): expected rankedCandidateListForRemoval(%v)"+
+			t.Errorf("%d (with `constraints`): expected candidateListForRemoval(%v)"+
 				" = %v, but got %v\n for candidates %v", testIdx, tc.existing, tc.expected,
 				candidates.worst(), candidates)
 		}
@@ -3527,12 +3879,12 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 		// Check that we'd see the same result if the same constraints were
 		// specified as `voter_constraints`.
 		checkFn = voterConstraintsCheckerForRemoval(constraint.EmptyAnalyzedConstraints, analyzed)
-		candidates = rankedCandidateListForRemoval(sl,
+		candidates = candidateListForRemoval(sl,
 			checkFn,
 			a.storePool.getLocalitiesByStore(existingRepls),
 			a.scorerOptions())
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
-			t.Errorf("%d (with `voter_constraints`): expected rankedCandidateListForRemoval(%v)"+
+			t.Errorf("%d (with `voter_constraints`): expected candidateListForRemoval(%v)"+
 				" = %v, but got %v\n for candidates %v", testIdx, tc.existing, tc.expected,
 				candidates.worst(), candidates)
 		}
@@ -3680,7 +4032,9 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 				test.existingVoters,
 				test.existingNonVoters,
 				rangeUsageInfo,
-				storeFilterThrottled)
+				storeFilterThrottled,
+				a.scorerOptions(),
+			)
 			if test.expectNoAction {
 				require.True(t, !ok)
 			} else {
@@ -3736,6 +4090,7 @@ func TestVotersCanRebalanceToNonVoterStores(t *testing.T) {
 		existingNonVoters,
 		rangeUsageInfo,
 		storeFilterThrottled,
+		a.scorerOptions(),
 	)
 
 	require.Truef(t, ok, "no action taken")
@@ -4556,7 +4911,16 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 		} else {
 			// Also verify that RebalanceVoter picks out one of the best options as
 			// the final rebalance choice.
-			target, _, details, ok := a.RebalanceVoter(context.Background(), conf, nil, existingRepls, nil, rangeUsageInfo, storeFilterThrottled)
+			target, _, details, ok := a.RebalanceVoter(
+				context.Background(),
+				conf,
+				nil,
+				existingRepls,
+				nil,
+				rangeUsageInfo,
+				storeFilterThrottled,
+				a.scorerOptions(),
+			)
 			var found bool
 			if !ok && len(tc.validTargets) == 0 {
 				found = true
@@ -4726,9 +5090,11 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			a := MakeAllocator(storePool, func(addr string) (time.Duration, bool) {
-				return c.latency[addr], true
-			})
+			a := MakeAllocator(
+				storePool, func(addr string) (time.Duration, bool) {
+					return c.latency[addr], true
+				}, nil, /* knobs */
+			)
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				emptySpanConfig(),
@@ -4738,9 +5104,12 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				c.stats,
-				c.check,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
+				false,
+				transferLeaseOptions{
+					checkTransferLeaseSource: c.check,
+					checkCandidateFullness:   true,
+					dryRun:                   false,
+				},
 			)
 			if c.expected != target.StoreID {
 				t.Errorf("expected %d, got %d", c.expected, target.StoreID)
@@ -4932,8 +5301,14 @@ func TestAllocatorRemoveTargetBasedOnCapacity(t *testing.T) {
 
 	// Repeat this test 10 times, it should always be either store 2 or 3.
 	for i := 0; i < 10; i++ {
-		targetRepl, _, err := a.RemoveVoter(ctx, emptySpanConfig(), replicas, replicas,
-			nil)
+		targetRepl, _, err := a.RemoveVoter(
+			ctx,
+			emptySpanConfig(),
+			replicas,
+			replicas,
+			nil,
+			a.scorerOptions(),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -6294,9 +6669,11 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		TestTimeUntilStoreDeadOff, false, /* deterministic */
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(sp, func(string) (time.Duration, bool) {
-		return 0, true
-	})
+	a := MakeAllocator(
+		sp, func(string) (time.Duration, bool) {
+			return 0, true
+		}, nil, /* knobs */
+	)
 
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
@@ -6401,7 +6778,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
+	a := MakeAllocator(nil /* storePool */, nil /* nodeLatencyFn */, nil /* knobs */)
 	action, priority := a.ComputeAction(context.Background(), roachpb.SpanConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -6816,7 +7193,16 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 			}
 
 			var rangeUsageInfo RangeUsageInfo
-			actual, _, _, ok := a.RebalanceVoter(ctx, roachpb.SpanConfig{Constraints: []roachpb.ConstraintsConjunction{constraints}}, nil, existingReplicas, nil, rangeUsageInfo, storeFilterThrottled)
+			actual, _, _, ok := a.RebalanceVoter(
+				ctx,
+				roachpb.SpanConfig{Constraints: []roachpb.ConstraintsConjunction{constraints}},
+				nil,
+				existingReplicas,
+				nil,
+				rangeUsageInfo,
+				storeFilterThrottled,
+				a.scorerOptions(),
+			)
 
 			if tc.expected == nil && ok {
 				t.Errorf("rebalancing to the incorrect store, expected nil, got %d", actual.StoreID)
@@ -6912,9 +7298,11 @@ func TestAllocatorFullDisks(t *testing.T) {
 		mockNodeLiveness.nodeLivenessFunc,
 		false, /* deterministic */
 	)
-	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
-		return 0, false
-	})
+	alloc := MakeAllocator(
+		sp, func(string) (time.Duration, bool) {
+			return 0, false
+		}, nil, /* knobs */
+	)
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
@@ -6976,7 +7364,16 @@ func TestAllocatorFullDisks(t *testing.T) {
 				// Rebalance until there's no more rebalancing to do.
 				if ts.Capacity.RangeCount > 0 {
 					var rangeUsageInfo RangeUsageInfo
-					target, _, details, ok := alloc.RebalanceVoter(ctx, emptySpanConfig(), nil, []roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, nil, rangeUsageInfo, storeFilterThrottled)
+					target, _, details, ok := alloc.RebalanceVoter(
+						ctx,
+						emptySpanConfig(),
+						nil,
+						[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
+						nil,
+						rangeUsageInfo,
+						storeFilterThrottled,
+						alloc.scorerOptions(),
+					)
 					if ok {
 						if log.V(1) {
 							log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
@@ -7049,9 +7446,11 @@ func Example_rebalancing() {
 		newMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE).nodeLivenessFunc,
 		/* deterministic */ true,
 	)
-	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
-		return 0, false
-	})
+	alloc := MakeAllocator(
+		sp, func(string) (time.Duration, bool) {
+			return 0, false
+		}, nil, /* knobs */
+	)
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
@@ -7099,7 +7498,16 @@ func Example_rebalancing() {
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
 			var rangeUsageInfo RangeUsageInfo
-			target, _, details, ok := alloc.RebalanceVoter(ctx, emptySpanConfig(), nil, []roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, nil, rangeUsageInfo, storeFilterThrottled)
+			target, _, details, ok := alloc.RebalanceVoter(
+				ctx,
+				emptySpanConfig(),
+				nil,
+				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
+				nil,
+				rangeUsageInfo,
+				storeFilterThrottled,
+				alloc.scorerOptions(),
+			)
 			if ok {
 				log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
@@ -7136,55 +7544,55 @@ func Example_rebalancing() {
 	// | gen | store 0  | store 1  | store 2  | store 3  | store 4  | store 5  | store 6  | store 7  | store 8  | store 9  | store 10 | store 11 | store 12 | store 13 | store 14 | store 15 | store 16 | store 17 | store 18 | store 19 |
 	// +-----+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+
 	// |   0 |   2 100% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
-	// |   2 |   4 100% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
-	// |   4 |   6 100% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
-	// |   6 |   8 100% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
-	// |   8 |  10 100% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
-	// |  10 |  10  68% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   1  11% |   0   0% |   2  20% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
-	// |  12 |  10  34% |   1   2% |   0   0% |   2  18% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   3  14% |   0   0% |   3  27% |   0   0% |   0   0% |   1   2% |   0   0% |   0   0% |   0   0% |
-	// |  14 |  10  22% |   3   7% |   0   0% |   4  18% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   1   3% |   0   0% |   4  11% |   2   1% |   4  22% |   0   0% |   0   0% |   3   8% |   1   0% |   1   4% |   0   0% |
-	// |  16 |  10  12% |   5  10% |   0   0% |   5  13% |   0   0% |   2   4% |   1   3% |   2   1% |   0   0% |   3   6% |   1   0% |   5   8% |   4   5% |   5  12% |   0   0% |   0   0% |   5   9% |   3   4% |   3   8% |   0   0% |
-	// |  18 |  10   5% |   6   7% |   3   1% |   6   9% |   3   4% |   4   6% |   3   5% |   4   2% |   2   1% |   4   5% |   3   2% |   6   7% |   5   3% |   6  10% |   3   2% |   4   3% |   6   6% |   4   5% |   4   6% |   2   1% |
-	// |  20 |  10   4% |   8   6% |   5   2% |   8   8% |   5   4% |   6   6% |   5   5% |   6   3% |   5   3% |   6   6% |   5   2% |   8   6% |   7   4% |   8   9% |   5   3% |   6   4% |   8   6% |   6   3% |   6   5% |   5   3% |
-	// |  22 |  11   4% |  10   6% |   7   2% |  10   7% |   7   4% |   8   6% |   7   5% |   8   4% |   7   3% |   8   5% |   8   2% |  10   6% |   9   4% |  10   8% |   7   3% |   8   3% |  10   6% |   8   3% |   8   5% |   7   4% |
-	// |  24 |  13   5% |  12   6% |   9   2% |  12   6% |   9   4% |  10   5% |   9   5% |  10   4% |   9   4% |  10   5% |  10   3% |  12   6% |  11   4% |  12   7% |   9   3% |  10   3% |  12   6% |  10   3% |  10   5% |   9   4% |
-	// |  26 |  15   5% |  14   6% |  11   3% |  14   6% |  11   4% |  12   5% |  11   4% |  12   4% |  11   4% |  12   5% |  12   3% |  14   6% |  13   4% |  14   6% |  11   4% |  12   3% |  14   6% |  12   3% |  12   5% |  11   4% |
-	// |  28 |  17   5% |  16   5% |  13   4% |  16   6% |  13   4% |  14   5% |  13   4% |  14   4% |  13   4% |  14   5% |  14   3% |  16   5% |  15   5% |  16   6% |  13   4% |  14   3% |  16   5% |  14   4% |  14   4% |  13   4% |
-	// |  30 |  19   5% |  18   6% |  15   3% |  18   6% |  15   4% |  16   5% |  15   4% |  16   4% |  15   4% |  16   5% |  16   3% |  18   5% |  17   5% |  18   5% |  15   4% |  16   3% |  18   6% |  16   4% |  16   5% |  15   4% |
-	// |  32 |  21   4% |  20   5% |  17   4% |  20   6% |  17   4% |  18   6% |  17   5% |  18   4% |  17   4% |  18   5% |  18   3% |  20   5% |  19   4% |  20   6% |  17   4% |  18   3% |  20   6% |  18   4% |  18   4% |  17   4% |
-	// |  34 |  23   4% |  22   6% |  19   4% |  22   6% |  19   4% |  20   5% |  19   5% |  20   4% |  19   4% |  20   4% |  20   4% |  22   5% |  21   4% |  22   5% |  19   4% |  20   3% |  22   6% |  20   3% |  20   4% |  19   5% |
-	// |  36 |  25   4% |  24   5% |  21   4% |  24   7% |  21   4% |  22   5% |  21   5% |  22   4% |  21   4% |  22   4% |  22   4% |  24   5% |  23   4% |  24   5% |  21   4% |  22   4% |  24   6% |  22   4% |  22   4% |  21   5% |
-	// |  38 |  27   4% |  26   5% |  23   4% |  26   6% |  23   4% |  24   5% |  23   5% |  24   4% |  23   4% |  24   4% |  24   4% |  26   5% |  25   5% |  26   5% |  23   4% |  24   4% |  26   6% |  24   4% |  24   5% |  23   5% |
-	// |  40 |  29   4% |  28   5% |  25   4% |  28   6% |  25   4% |  26   5% |  25   5% |  26   4% |  25   4% |  26   4% |  26   4% |  28   5% |  27   4% |  28   5% |  25   4% |  26   4% |  28   5% |  26   4% |  26   4% |  25   5% |
-	// |  42 |  31   4% |  30   5% |  27   4% |  30   6% |  27   4% |  28   5% |  27   5% |  28   4% |  27   4% |  28   4% |  28   4% |  30   5% |  29   4% |  30   5% |  27   4% |  28   4% |  30   5% |  28   4% |  28   4% |  27   5% |
-	// |  44 |  33   4% |  32   5% |  29   4% |  32   6% |  29   4% |  30   5% |  29   5% |  30   3% |  29   4% |  30   4% |  30   4% |  32   5% |  31   4% |  32   6% |  29   4% |  30   4% |  32   5% |  30   4% |  30   4% |  29   5% |
-	// |  46 |  35   4% |  34   5% |  31   4% |  34   6% |  31   4% |  32   5% |  31   5% |  32   3% |  31   4% |  32   5% |  32   4% |  34   5% |  33   4% |  34   6% |  31   4% |  32   4% |  34   5% |  32   4% |  32   4% |  31   5% |
-	// |  48 |  37   4% |  36   4% |  33   4% |  36   5% |  33   4% |  34   5% |  33   5% |  34   3% |  33   4% |  34   5% |  34   4% |  36   5% |  35   4% |  36   6% |  33   4% |  34   4% |  36   5% |  34   4% |  34   5% |  33   5% |
-	// |  50 |  39   4% |  38   4% |  35   4% |  38   5% |  35   4% |  36   5% |  35   5% |  36   3% |  35   4% |  36   5% |  36   4% |  38   5% |  37   4% |  38   5% |  35   4% |  36   4% |  38   5% |  36   4% |  36   5% |  35   5% |
-	// |  52 |  41   4% |  40   5% |  37   4% |  40   5% |  37   4% |  38   5% |  37   5% |  38   3% |  37   4% |  38   5% |  38   4% |  40   5% |  39   4% |  40   5% |  37   5% |  38   4% |  40   5% |  38   4% |  38   5% |  37   5% |
-	// |  54 |  43   4% |  42   5% |  39   4% |  42   5% |  39   4% |  40   5% |  39   5% |  40   3% |  39   4% |  40   5% |  40   4% |  42   5% |  41   4% |  42   5% |  39   5% |  40   4% |  42   5% |  40   4% |  40   5% |  39   5% |
-	// |  56 |  45   4% |  44   5% |  41   4% |  44   5% |  41   4% |  42   5% |  41   5% |  42   4% |  41   4% |  42   5% |  42   4% |  44   5% |  43   4% |  44   5% |  41   5% |  42   4% |  44   5% |  42   4% |  42   5% |  41   5% |
-	// |  58 |  47   4% |  46   5% |  43   4% |  46   5% |  43   4% |  44   5% |  43   5% |  44   4% |  43   4% |  44   5% |  44   4% |  46   5% |  45   5% |  46   5% |  43   5% |  44   4% |  46   5% |  44   4% |  44   5% |  43   5% |
-	// |  60 |  49   4% |  48   5% |  45   3% |  48   5% |  45   4% |  46   5% |  45   5% |  46   4% |  45   4% |  46   5% |  46   4% |  48   5% |  47   5% |  48   5% |  45   5% |  46   4% |  48   5% |  46   5% |  46   4% |  45   5% |
-	// |  62 |  51   4% |  50   5% |  47   4% |  50   5% |  47   4% |  48   5% |  47   5% |  48   4% |  47   4% |  48   5% |  48   5% |  50   5% |  49   5% |  50   5% |  47   5% |  48   4% |  50   5% |  48   5% |  48   4% |  47   5% |
-	// |  64 |  53   4% |  52   5% |  49   3% |  52   5% |  49   4% |  50   5% |  49   5% |  50   4% |  49   4% |  50   5% |  50   5% |  52   5% |  51   5% |  52   5% |  49   5% |  50   4% |  52   5% |  50   4% |  50   4% |  49   5% |
-	// |  66 |  55   4% |  54   5% |  51   4% |  54   5% |  51   4% |  52   5% |  51   5% |  52   4% |  51   4% |  52   5% |  52   5% |  54   5% |  53   5% |  54   5% |  51   5% |  52   5% |  54   5% |  52   4% |  52   4% |  51   5% |
-	// |  68 |  57   4% |  56   5% |  53   4% |  56   5% |  53   4% |  54   5% |  53   5% |  54   4% |  53   4% |  54   5% |  54   5% |  56   5% |  55   5% |  56   5% |  53   5% |  54   5% |  56   5% |  54   4% |  54   4% |  53   5% |
-	// |  70 |  59   4% |  58   5% |  55   4% |  58   5% |  55   4% |  56   5% |  55   5% |  56   4% |  55   4% |  56   5% |  56   4% |  58   5% |  57   5% |  58   5% |  55   5% |  56   5% |  58   5% |  56   4% |  56   4% |  55   5% |
-	// |  72 |  61   4% |  60   5% |  57   4% |  60   5% |  57   4% |  58   5% |  57   5% |  58   4% |  57   4% |  58   5% |  58   4% |  60   5% |  59   5% |  60   5% |  57   4% |  58   5% |  60   5% |  58   5% |  58   4% |  57   5% |
-	// |  74 |  63   4% |  62   5% |  59   4% |  62   5% |  59   4% |  60   5% |  59   5% |  60   4% |  59   4% |  60   5% |  60   4% |  62   5% |  61   5% |  62   5% |  59   4% |  60   5% |  62   5% |  60   5% |  60   4% |  59   5% |
-	// |  76 |  65   4% |  64   5% |  61   4% |  64   5% |  61   4% |  62   5% |  61   5% |  62   4% |  61   4% |  62   5% |  62   4% |  64   5% |  63   5% |  64   5% |  61   5% |  62   5% |  64   4% |  62   5% |  62   4% |  61   5% |
-	// |  78 |  67   4% |  66   5% |  63   4% |  66   5% |  63   4% |  64   5% |  63   5% |  64   4% |  63   4% |  64   5% |  64   4% |  66   5% |  65   5% |  66   5% |  63   4% |  64   5% |  66   5% |  64   5% |  64   4% |  63   5% |
-	// |  80 |  69   4% |  68   5% |  65   4% |  68   5% |  65   4% |  66   5% |  65   5% |  66   4% |  65   4% |  66   5% |  66   4% |  68   5% |  67   4% |  68   5% |  65   4% |  66   5% |  68   5% |  66   5% |  66   4% |  65   5% |
-	// |  82 |  71   4% |  70   5% |  67   4% |  70   5% |  67   4% |  68   5% |  67   5% |  68   4% |  67   4% |  68   5% |  68   4% |  70   5% |  69   5% |  70   5% |  67   4% |  68   4% |  70   5% |  68   4% |  68   4% |  67   5% |
-	// |  84 |  73   4% |  72   5% |  69   4% |  72   5% |  69   4% |  70   5% |  69   5% |  70   4% |  69   4% |  70   5% |  70   4% |  72   5% |  71   4% |  72   5% |  69   4% |  70   4% |  72   5% |  70   4% |  70   4% |  69   5% |
-	// |  86 |  75   4% |  74   5% |  71   4% |  74   5% |  71   4% |  72   5% |  71   5% |  72   4% |  71   4% |  72   5% |  72   4% |  74   5% |  73   4% |  74   5% |  71   4% |  72   4% |  74   5% |  72   4% |  72   4% |  71   5% |
-	// |  88 |  77   4% |  76   4% |  73   4% |  76   5% |  73   4% |  74   5% |  73   5% |  74   4% |  73   4% |  74   5% |  74   4% |  76   5% |  75   4% |  76   5% |  73   4% |  74   4% |  76   5% |  74   4% |  74   4% |  73   5% |
-	// |  90 |  79   4% |  78   4% |  75   4% |  78   5% |  75   4% |  76   5% |  75   5% |  76   4% |  75   4% |  76   5% |  76   4% |  78   5% |  77   5% |  78   5% |  75   5% |  76   4% |  78   5% |  76   4% |  76   4% |  75   5% |
-	// |  92 |  81   4% |  80   4% |  77   4% |  80   5% |  77   4% |  78   5% |  77   5% |  78   4% |  77   4% |  78   5% |  78   4% |  80   5% |  79   5% |  80   5% |  77   5% |  78   4% |  80   5% |  78   4% |  78   4% |  77   5% |
-	// |  94 |  83   4% |  82   4% |  79   4% |  82   5% |  79   4% |  80   5% |  79   5% |  80   4% |  79   4% |  80   5% |  80   4% |  82   5% |  81   5% |  82   5% |  79   4% |  80   4% |  82   5% |  80   4% |  80   4% |  79   5% |
-	// |  96 |  85   4% |  84   4% |  81   4% |  84   5% |  81   5% |  82   5% |  81   5% |  82   4% |  81   4% |  82   5% |  82   4% |  84   5% |  83   5% |  84   5% |  81   5% |  82   4% |  84   5% |  82   4% |  82   4% |  81   5% |
-	// |  98 |  87   4% |  86   4% |  83   4% |  86   5% |  83   5% |  84   5% |  83   5% |  84   4% |  83   4% |  84   5% |  84   4% |  86   5% |  85   5% |  86   5% |  83   5% |  84   4% |  86   5% |  84   4% |  84   4% |  83   5% |
+	// |   2 |   3  77% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   1  22% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
+	// |   4 |   3  35% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   2  27% |   0   0% |   0   0% |   0   0% |   0   0% |   3  30% |   0   0% |   0   0% |   0   0% |   0   0% |   1   5% |   0   0% |   0   0% |
+	// |   6 |   3  20% |   0   0% |   0   0% |   0   0% |   1   5% |   1   3% |   0   0% |   3  15% |   0   0% |   0   0% |   1   6% |   0   0% |   3  24% |   2   5% |   0   0% |   2  10% |   0   0% |   3   9% |   0   0% |   0   0% |
+	// |   8 |   4  10% |   0   0% |   0   0% |   0   0% |   3  10% |   3   7% |   0   0% |   4   8% |   0   0% |   0   0% |   3   7% |   1   3% |   4  14% |   4   5% |   0   0% |   4  10% |   1   3% |   4  11% |   1   3% |   1   3% |
+	// |  10 |   5   6% |   5  10% |   0   0% |   1   1% |   4   6% |   4   4% |   1   0% |   5   3% |   0   0% |   2   1% |   4   5% |   3   4% |   5  13% |   5   4% |   0   0% |   5  11% |   3   4% |   5   7% |   3   7% |   3   5% |
+	// |  12 |   6   6% |   6   8% |   6   8% |   3   1% |   5   4% |   5   3% |   3   2% |   6   1% |   4   4% |   4   3% |   5   3% |   5   5% |   6   9% |   6   4% |   3   1% |   6   8% |   5   5% |   6   4% |   5   7% |   5   6% |
+	// |  14 |   8   5% |   8   7% |   8   8% |   5   2% |   7   5% |   7   4% |   5   3% |   8   1% |   6   4% |   6   3% |   7   3% |   7   4% |   8   9% |   8   4% |   5   3% |   8   7% |   7   4% |   8   4% |   7   6% |   7   4% |
+	// |  16 |  10   5% |  10   8% |  10   8% |   7   2% |   9   4% |   9   4% |   7   3% |  10   2% |   8   4% |   8   3% |   9   3% |   9   5% |  10   7% |  10   4% |   7   3% |  10   7% |   9   4% |  10   4% |   9   5% |   9   3% |
+	// |  18 |  12   5% |  12   7% |  12   7% |   9   3% |  11   5% |  11   4% |   9   4% |  12   3% |  10   5% |  10   3% |  11   3% |  11   4% |  12   6% |  12   5% |   9   3% |  12   6% |  11   5% |  12   4% |  11   5% |  11   3% |
+	// |  20 |  14   5% |  14   6% |  14   7% |  11   3% |  13   4% |  13   5% |  11   3% |  14   3% |  12   5% |  12   3% |  13   3% |  13   4% |  14   6% |  14   5% |  11   3% |  14   6% |  13   5% |  14   5% |  13   6% |  13   4% |
+	// |  22 |  16   5% |  16   6% |  16   7% |  13   3% |  15   4% |  15   4% |  13   4% |  16   3% |  14   4% |  14   4% |  15   3% |  15   5% |  16   5% |  16   5% |  13   3% |  16   6% |  15   5% |  16   5% |  15   5% |  15   4% |
+	// |  24 |  18   5% |  18   6% |  18   7% |  15   3% |  17   4% |  17   4% |  15   4% |  18   4% |  16   4% |  16   4% |  17   3% |  17   5% |  18   5% |  18   5% |  15   4% |  18   5% |  17   5% |  18   4% |  17   5% |  17   4% |
+	// |  26 |  20   5% |  20   5% |  20   6% |  17   3% |  19   4% |  19   4% |  17   3% |  20   3% |  18   4% |  18   4% |  19   3% |  19   5% |  20   5% |  20   5% |  17   4% |  20   5% |  19   5% |  20   4% |  19   5% |  19   4% |
+	// |  28 |  22   5% |  22   6% |  22   6% |  19   4% |  21   4% |  21   4% |  19   4% |  22   4% |  20   5% |  20   4% |  21   3% |  21   5% |  22   5% |  22   6% |  19   4% |  22   5% |  21   5% |  22   4% |  21   5% |  21   4% |
+	// |  30 |  24   6% |  24   5% |  24   6% |  21   4% |  23   4% |  23   5% |  21   4% |  24   4% |  22   4% |  22   4% |  23   3% |  23   5% |  24   5% |  24   5% |  21   3% |  24   5% |  23   5% |  24   4% |  23   5% |  23   4% |
+	// |  32 |  26   6% |  26   5% |  26   6% |  23   4% |  25   4% |  25   5% |  23   4% |  26   4% |  24   5% |  24   4% |  25   3% |  25   5% |  26   5% |  26   5% |  23   4% |  26   5% |  25   5% |  26   4% |  25   5% |  25   4% |
+	// |  34 |  28   5% |  28   5% |  28   6% |  25   4% |  27   4% |  27   5% |  25   4% |  28   4% |  26   5% |  26   4% |  27   3% |  27   5% |  28   5% |  28   5% |  25   4% |  28   5% |  27   5% |  28   4% |  27   5% |  27   4% |
+	// |  36 |  30   5% |  30   5% |  30   6% |  27   4% |  29   4% |  29   5% |  27   4% |  30   4% |  28   5% |  28   4% |  29   4% |  29   5% |  30   5% |  30   5% |  27   4% |  30   5% |  29   5% |  30   4% |  29   5% |  29   4% |
+	// |  38 |  32   5% |  32   5% |  32   6% |  29   5% |  31   4% |  31   5% |  29   4% |  32   4% |  30   5% |  30   4% |  31   4% |  31   5% |  32   5% |  32   5% |  29   4% |  32   5% |  31   5% |  32   4% |  31   5% |  31   4% |
+	// |  40 |  34   5% |  34   5% |  34   6% |  31   5% |  33   4% |  33   4% |  31   4% |  34   4% |  32   4% |  32   4% |  33   4% |  33   4% |  34   5% |  34   5% |  31   4% |  34   5% |  33   5% |  34   4% |  33   4% |  33   4% |
+	// |  42 |  36   5% |  36   5% |  36   6% |  33   5% |  35   3% |  35   4% |  33   4% |  36   4% |  34   5% |  34   4% |  35   4% |  35   5% |  36   5% |  36   5% |  33   4% |  36   5% |  35   5% |  36   4% |  35   4% |  35   4% |
+	// |  44 |  38   5% |  38   5% |  38   6% |  35   5% |  37   4% |  37   4% |  35   4% |  38   4% |  36   5% |  36   4% |  37   4% |  37   5% |  38   5% |  38   5% |  35   4% |  38   5% |  37   5% |  38   4% |  37   4% |  37   4% |
+	// |  46 |  40   5% |  40   5% |  40   5% |  37   4% |  39   4% |  39   4% |  37   4% |  40   4% |  38   5% |  38   4% |  39   4% |  39   5% |  40   5% |  40   4% |  37   4% |  40   5% |  39   5% |  40   4% |  39   4% |  39   4% |
+	// |  48 |  42   5% |  42   5% |  42   6% |  39   5% |  41   4% |  41   4% |  39   4% |  42   4% |  40   5% |  40   4% |  41   4% |  41   5% |  42   5% |  42   5% |  39   4% |  42   5% |  41   5% |  42   4% |  41   4% |  41   4% |
+	// |  50 |  44   5% |  44   5% |  44   5% |  41   4% |  43   4% |  43   4% |  41   4% |  44   4% |  42   5% |  42   4% |  43   4% |  43   5% |  44   5% |  44   5% |  41   4% |  44   5% |  43   5% |  44   4% |  43   4% |  43   4% |
+	// |  52 |  46   5% |  46   5% |  46   5% |  43   4% |  45   4% |  45   4% |  43   4% |  46   4% |  44   5% |  44   4% |  45   4% |  45   5% |  46   5% |  46   5% |  43   4% |  46   5% |  45   5% |  46   4% |  45   5% |  45   4% |
+	// |  54 |  48   5% |  48   5% |  48   5% |  45   4% |  47   4% |  47   4% |  45   4% |  48   4% |  46   5% |  46   4% |  47   4% |  47   5% |  48   5% |  48   5% |  45   4% |  48   5% |  47   5% |  48   4% |  47   5% |  47   4% |
+	// |  56 |  50   5% |  50   5% |  50   5% |  47   4% |  49   4% |  49   4% |  47   4% |  50   4% |  48   5% |  48   4% |  49   4% |  49   5% |  50   5% |  50   5% |  47   4% |  50   5% |  49   5% |  50   4% |  49   5% |  49   4% |
+	// |  58 |  52   5% |  52   5% |  52   5% |  49   4% |  51   4% |  51   4% |  49   4% |  52   5% |  50   4% |  50   4% |  51   4% |  51   5% |  52   5% |  52   4% |  49   4% |  52   5% |  51   5% |  52   4% |  51   5% |  51   4% |
+	// |  60 |  54   5% |  54   5% |  54   5% |  51   4% |  53   4% |  53   4% |  51   4% |  54   5% |  52   4% |  52   4% |  53   4% |  53   5% |  54   5% |  54   5% |  51   4% |  54   5% |  53   5% |  54   4% |  53   5% |  53   4% |
+	// |  62 |  56   5% |  56   5% |  56   5% |  53   4% |  55   4% |  55   4% |  53   4% |  56   5% |  54   4% |  54   4% |  55   4% |  55   5% |  56   5% |  56   5% |  53   4% |  56   5% |  55   5% |  56   4% |  55   5% |  55   4% |
+	// |  64 |  58   5% |  58   5% |  58   5% |  55   4% |  57   4% |  57   4% |  55   4% |  58   4% |  56   4% |  56   4% |  57   4% |  57   5% |  58   5% |  58   4% |  55   4% |  58   5% |  57   5% |  58   4% |  57   5% |  57   4% |
+	// |  66 |  60   5% |  60   5% |  60   5% |  57   4% |  59   4% |  59   4% |  57   4% |  60   4% |  58   4% |  58   4% |  59   4% |  59   5% |  60   5% |  60   4% |  57   5% |  60   4% |  59   5% |  60   4% |  59   5% |  59   4% |
+	// |  68 |  62   5% |  62   5% |  62   5% |  59   4% |  61   4% |  61   4% |  59   4% |  62   4% |  60   4% |  60   4% |  61   4% |  61   5% |  62   5% |  62   4% |  59   5% |  62   5% |  61   5% |  62   4% |  61   5% |  61   4% |
+	// |  70 |  64   5% |  64   5% |  64   5% |  61   4% |  63   4% |  63   5% |  61   4% |  64   4% |  62   4% |  62   4% |  63   4% |  63   5% |  64   5% |  64   4% |  61   5% |  64   5% |  63   5% |  64   4% |  63   5% |  63   4% |
+	// |  72 |  66   5% |  66   5% |  66   5% |  63   4% |  65   4% |  65   4% |  63   4% |  66   4% |  64   4% |  64   4% |  65   4% |  65   5% |  66   5% |  66   4% |  63   5% |  66   4% |  65   5% |  66   4% |  65   5% |  65   4% |
+	// |  74 |  68   5% |  68   5% |  68   5% |  65   4% |  67   4% |  67   4% |  65   4% |  68   4% |  66   5% |  66   4% |  67   4% |  67   5% |  68   5% |  68   4% |  65   5% |  68   4% |  67   5% |  68   4% |  67   5% |  67   4% |
+	// |  76 |  70   5% |  70   5% |  70   5% |  67   4% |  69   4% |  69   4% |  67   4% |  70   4% |  68   5% |  68   4% |  69   4% |  69   5% |  70   5% |  70   4% |  67   4% |  70   5% |  69   5% |  70   4% |  69   5% |  69   4% |
+	// |  78 |  72   5% |  72   5% |  72   5% |  69   4% |  71   4% |  71   4% |  69   4% |  72   4% |  70   5% |  70   4% |  71   4% |  71   5% |  72   5% |  72   4% |  69   4% |  72   5% |  71   5% |  72   4% |  71   5% |  71   4% |
+	// |  80 |  74   5% |  74   5% |  74   5% |  71   5% |  73   4% |  73   4% |  71   5% |  74   4% |  72   5% |  72   4% |  73   4% |  73   5% |  74   5% |  74   4% |  71   4% |  74   5% |  73   5% |  74   4% |  73   4% |  73   4% |
+	// |  82 |  76   5% |  76   5% |  76   5% |  73   5% |  75   4% |  75   4% |  73   5% |  76   4% |  74   5% |  74   4% |  75   4% |  75   5% |  76   5% |  76   4% |  73   4% |  76   5% |  75   5% |  76   4% |  75   4% |  75   4% |
+	// |  84 |  78   5% |  78   5% |  78   5% |  75   5% |  77   4% |  77   4% |  75   5% |  78   4% |  76   4% |  76   4% |  77   4% |  77   5% |  78   5% |  78   4% |  75   4% |  78   5% |  77   5% |  78   4% |  77   4% |  77   4% |
+	// |  86 |  80   5% |  80   5% |  80   5% |  77   4% |  79   4% |  79   4% |  77   5% |  80   4% |  78   5% |  78   4% |  79   4% |  79   5% |  80   5% |  80   4% |  77   4% |  80   5% |  79   5% |  80   4% |  79   4% |  79   4% |
+	// |  88 |  82   5% |  82   5% |  82   5% |  79   4% |  81   4% |  81   4% |  79   5% |  82   4% |  80   5% |  80   4% |  81   4% |  81   5% |  82   5% |  82   4% |  79   4% |  82   5% |  81   5% |  82   4% |  81   4% |  81   4% |
+	// |  90 |  84   5% |  84   5% |  84   5% |  81   4% |  83   4% |  83   4% |  81   5% |  84   4% |  82   5% |  82   4% |  83   4% |  83   5% |  84   5% |  84   4% |  81   4% |  84   5% |  83   5% |  84   4% |  83   4% |  83   4% |
+	// |  92 |  86   5% |  86   5% |  86   5% |  83   4% |  85   4% |  85   4% |  83   5% |  86   4% |  84   5% |  84   4% |  85   4% |  85   5% |  86   5% |  86   5% |  83   4% |  86   5% |  85   5% |  86   4% |  85   4% |  85   4% |
+	// |  94 |  88   5% |  88   5% |  88   5% |  85   4% |  87   4% |  87   4% |  85   5% |  88   4% |  86   5% |  86   4% |  87   4% |  87   5% |  88   5% |  88   4% |  85   4% |  88   5% |  87   5% |  88   4% |  87   4% |  87   4% |
+	// |  96 |  90   5% |  90   5% |  90   5% |  87   5% |  89   4% |  89   4% |  87   5% |  90   4% |  88   4% |  88   4% |  89   4% |  89   5% |  90   5% |  90   4% |  87   4% |  90   5% |  89   5% |  90   4% |  89   4% |  89   4% |
+	// |  98 |  92   5% |  92   5% |  92   5% |  89   5% |  91   4% |  91   4% |  89   5% |  92   4% |  90   4% |  90   4% |  91   4% |  91   5% |  92   5% |  92   4% |  89   4% |  92   5% |  91   5% |  92   4% |  91   4% |  91   4% |
 	// +-----+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+
-	// Total bytes=894061338, ranges=1708
+	// Total bytes=957538798, ranges=1840
 }

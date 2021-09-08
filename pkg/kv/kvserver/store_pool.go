@@ -793,15 +793,16 @@ func (sl StoreList) String() string {
 	return buf.String()
 }
 
-// filter takes a store list and filters it using the passed in constraints. It
-// maintains the original order of the passed in store list.
-func (sl StoreList) filter(constraints []roachpb.ConstraintsConjunction) StoreList {
+// excludeInvalid takes a store list and removes stores that would be explicitly invalid
+// under the given set of constraints. It maintains the original order of the
+// passed in store list.
+func (sl StoreList) excludeInvalid(constraints []roachpb.ConstraintsConjunction) StoreList {
 	if len(constraints) == 0 {
 		return sl
 	}
 	var filteredDescs []roachpb.StoreDescriptor
 	for _, store := range sl.stores {
-		if ok := constraintsCheck(store, constraints); ok {
+		if ok := isStoreValid(store, constraints); ok {
 			filteredDescs = append(filteredDescs, store)
 		}
 	}
