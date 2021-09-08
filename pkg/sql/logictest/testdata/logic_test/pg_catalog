@@ -4945,20 +4945,20 @@ CREATE TEMPORARY TABLE test_temp (id UUID PRIMARY KEY);
 CREATE UNLOGGED TABLE test_unlogged (id UUID PRIMARY KEY);
 CREATE TABLE test_persistent (id UUID PRIMARY KEY);
 
-# we don't store UNLOGGED beyond the parser at the moment so we expect 'p' for test_unlogged
-query T
+# We don't store UNLOGGED beyond the parser at the moment so we expect 'p' for test_unlogged.
+query TTB
 SELECT
-  relpersistence
+  relname, relpersistence, relistemp
 FROM
   pg_catalog.pg_class
 WHERE
   relname IN ('test_temp', 'test_unlogged', 'test_persistent')
 ORDER BY
-  relpersistence
+  relname
 ----
-p
-p
-t
+test_persistent  p  false
+test_temp        t  true
+test_unlogged    p  false
 
 # Issue 44793
 statement ok
