@@ -385,12 +385,12 @@ project
       │    ├── limit hint: 1.00
       │    ├── sort
       │    │    ├── columns: i:1(int) g:2(geometry)
-      │    │    ├── stats: [rows=1e-07]
+      │    │    ├── stats: [rows=8.875e-08]
       │    │    ├── ordering: +1
       │    │    ├── limit hint: 0.00
       │    │    └── index-join t
       │    │         ├── columns: i:1(int) g:2(geometry)
-      │    │         ├── stats: [rows=1e-07]
+      │    │         ├── stats: [rows=8.875e-08]
       │    │         └── inverted-filter
       │    │              ├── columns: rowid:3(int!null)
       │    │              ├── inverted expression: /5
@@ -398,13 +398,13 @@ project
       │    │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │              ├── pre-filterer expression
       │    │              │    └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool]
-      │    │              ├── stats: [rows=1e-07]
+      │    │              ├── stats: [rows=8.875e-08]
       │    │              ├── key: (3)
       │    │              └── scan t@secondary
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:5(geometry!null)
       │    │                   ├── inverted constraint: /5/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │    │                   ├── stats: [rows=1e-07, distinct(3)=1e-07, null(3)=0, distinct(5)=1e-07, null(5)=0]
+      │    │                   ├── stats: [rows=8.875e-08, distinct(3)=8.875e-08, null(3)=0, distinct(5)=8.875e-08, null(5)=0]
       │    │                   │   histogram(5)=
       │    │                   ├── key: (3)
       │    │                   └── fd: (3)-->(5)
@@ -486,7 +486,7 @@ select
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── stats: [rows=100, distinct(3)=100, null(3)=0, distinct(5)=1, null(5)=0]
+ │              ├── stats: [rows=100, distinct(3)=76.9230769, null(3)=0, distinct(5)=1, null(5)=0]
  │              │   histogram(5)=  0            100             0             0
  │              │                <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
  │              ├── key: (3)
@@ -529,7 +529,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=secondary
-      │              ├── stats: [rows=100, distinct(3)=100, null(3)=0, distinct(5)=1, null(5)=0]
+      │              ├── stats: [rows=100, distinct(3)=76.9230769, null(3)=0, distinct(5)=1, null(5)=0]
       │              │   histogram(5)=  0            100             0             0
       │              │                <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
       │              ├── key: (3)

@@ -1007,9 +1007,29 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 		panic(err)
 	}
 	colType := tree.MustBeStaticallyKnownType(colTypeRef)
-	histogram := make([]cat.HistogramBucket, len(ts.js.HistogramBuckets))
-	for i := range histogram {
-		bucket := &ts.js.HistogramBuckets[i]
+
+	var histogram []cat.HistogramBucket
+	var offset int
+	if ts.js.NullCount > 0 {
+		// A bucket for NULL is not persisted, but we create a fake one to
+		// make histograms easier to work with. The length of histogram
+		// is therefore 1 greater than the length of ts.js.HistogramBuckets.
+		// NOTE: This matches the logic in the TableStatisticsCache.
+		histogram = make([]cat.HistogramBucket, len(ts.js.HistogramBuckets)+1)
+		histogram[0] = cat.HistogramBucket{
+			NumEq:         float64(ts.js.NullCount),
+			NumRange:      0,
+			DistinctRange: 0,
+			UpperBound:    tree.DNull,
+		}
+		offset = 1
+	} else {
+		histogram = make([]cat.HistogramBucket, len(ts.js.HistogramBuckets))
+		offset = 0
+	}
+
+	for i := offset; i < len(histogram); i++ {
+		bucket := &ts.js.HistogramBuckets[i-offset]
 		datum, err := rowenc.ParseDatumStringAs(colType, bucket.UpperBound, &evalCtx)
 		if err != nil {
 			panic(err)
