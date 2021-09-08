@@ -538,7 +538,18 @@ func postSeparatedIntentsMigration(
 			if bytes.HasPrefix(start, keys.TimeseriesPrefix) && bytes.HasPrefix(end, keys.TimeseriesPrefix) {
 				continue
 			}
-			if err := deps.DB.Migrate(ctx, start, end, cv.Version); err != nil {
+			// Try running Migrate on each range 5 times before failing the migration.
+			retries := 0
+			var err error
+			for retries < 5 {
+				err = deps.DB.Migrate(ctx, start, end, cv.Version)
+				if err == nil {
+					break
+				}
+				log.Infof(ctx, "[batch %d/??] error when running no-op Migrate on range r%d: %s", batchIdx, desc.RangeID, err)
+				retries++
+			}
+			if err != nil {
 				return err
 			}
 		}
