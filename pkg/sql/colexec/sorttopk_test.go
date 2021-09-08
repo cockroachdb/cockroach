@@ -12,15 +12,21 @@ package colexec
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 var topKSortTestCases []sortTestCase
@@ -62,6 +68,31 @@ func init() {
 			},
 			k: 3,
 		},
+		{
+			description: "partial order single col",
+			tuples:      colexectestutils.Tuples{{1, 5}, {0, 5}, {0, 4}, {0, 3}, {0, 2}, {0, 1}},
+			expected:    colexectestutils.Tuples{{0, 5}, {1, 5}, {0, 4}},
+			typs:        []*types.T{types.Int, types.Int},
+			ordCols: []execinfrapb.Ordering_Column{
+				{ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC},
+				{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC},
+			},
+			matchLen: 1,
+			k:        3,
+		},
+		{
+			description: "partial order multi col",
+			tuples:      colexectestutils.Tuples{{0, 5, 2}, {0, 5, 1}, {0, 4, 3}, {0, 3, 3}, {0, 2, 5}, {0, 1, 1}},
+			expected:    colexectestutils.Tuples{{0, 5, 1}, {0, 5, 2}, {0, 4, 3}},
+			typs:        []*types.T{types.Int, types.Int, types.Int},
+			ordCols: []execinfrapb.Ordering_Column{
+				{ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC},
+				{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC},
+				{ColIdx: 2, Direction: execinfrapb.Ordering_Column_ASC},
+			},
+			matchLen: 2,
+			k:        3,
+		},
 	}
 }
 
@@ -75,4 +106,147 @@ func TestTopKSorter(t *testing.T) {
 			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.k, execinfra.DefaultMemoryLimit), nil
 		})
 	}
+}
+
+// TestTopKSortRandomized uses the standard sorter to provide partially-ordered
+// input to the top K sorter, as well as provide a sorted input to compare the
+// results of the top K sorter.
+func TestTopKSortRandomized(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	rng, _ := randutil.NewPseudoRand()
+	nTups := coldata.BatchSize()*2 + 1
+	maxCols := 4
+	// TODO(yuzefovich/mgartner): randomize types as well.
+	typs := make([]*types.T, maxCols)
+	for i := range typs {
+		typs[i] = types.Int
+	}
+	for nCols := 1; nCols < maxCols; nCols++ {
+		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
+			tups, _, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols, 0 /* matchLen */)
+			input := colexectestutils.NewOpTestInput(testAllocator, 1 /* batchSize */, tups, typs[:nCols])
+			// Use a normal sorter that sorts on the ordered columns as an oracle to
+			// compare with the top k sorter's output.
+			oracle, err := NewSorter(testAllocator, input, typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			oracle.Init(ctx)
+			var expected colexectestutils.Tuples
+			expectedOut := oracle.Next()
+
+			// Test values for k need to be monotonically increasing, so we can reuse
+			// expected tuples across tests.
+			for _, k := range []int{1, rng.Intn(nTups) + 1} {
+				for len(expected) < k && expectedOut.Length() != 0 {
+					for i := 0; i < expectedOut.Length() && len(expected) < k; i++ {
+						expected = append(expected, colexectestutils.GetTupleFromBatch(expectedOut, i))
+					}
+					if expectedOut.Length() == 0 {
+						expectedOut = oracle.Next()
+					}
+				}
+
+				for matchLen := 1; matchLen < nOrderingCols; matchLen++ {
+					// Use a normal sorter to provide partially-ordered input to the top K
+					// sorter under test.
+					var inputSorter colexecop.Operator
+					inputSorter, err = NewSorter(testAllocator, input, typs[:nCols], ordCols[:matchLen], execinfra.DefaultMemoryLimit)
+					if err != nil {
+						t.Fatal(err)
+					}
+					name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/matchLen=%d/k=%d", nCols, nOrderingCols, matchLen, k)
+					log.Infof(ctx, "%s", name)
+					topk := NewTopKSorter(testAllocator, inputSorter, typs[:nCols], ordCols, uint64(k), execinfra.DefaultMemoryLimit)
+					topk.Init(ctx)
+					var actual colexectestutils.Tuples
+					for out := topk.Next(); out.Length() != 0; out = topk.Next() {
+						for i := 0; i < out.Length(); i++ {
+							actual = append(actual, colexectestutils.GetTupleFromBatch(out, i))
+						}
+					}
+					colexectestutils.AssertTuplesOrderedEqual(expected, actual, evalCtx)
+				}
+			}
+		}
+	}
+}
+
+func BenchmarkSortTopK(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
+	k := uint64(128)
+
+	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
+		for _, nCols := range []int{1, 2, 4} {
+			for _, matchLen := range []int{0, 1, 2, 3} {
+				for _, avgChunkSize := range []int{1 << 3, 1 << 7} {
+					if matchLen >= nCols {
+						continue
+					}
+					b.Run(
+						fmt.Sprintf("rows=%d/cols=%d/matchLen=%d/avgChunkSize=%d",
+							nBatches*coldata.BatchSize(), nCols, matchLen, avgChunkSize),
+						func(b *testing.B) {
+							// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
+							// batch) * nCols (number of columns / row).
+							b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+							typs := make([]*types.T, nCols)
+							for i := range typs {
+								typs[i] = types.Int
+							}
+							batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
+							batch.SetLength(coldata.BatchSize())
+							ordCols := makeOrdCols(*rng, batch, nCols, matchLen, avgChunkSize)
+							b.ResetTimer()
+							for n := 0; n < b.N; n++ {
+								var sorter colexecop.Operator
+								var err error
+								source := colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, matchLen)
+								sorter, err = NewTopKSorter(testAllocator, source, typs, ordCols, k, execinfra.DefaultMemoryLimit), nil
+								if err != nil {
+									b.Fatal(err)
+								}
+								sorter.Init(ctx)
+								for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
+								}
+							}
+							b.StopTimer()
+						})
+				}
+			}
+		}
+	}
+}
+
+func makeOrdCols(
+	rng rand.Rand, batch coldata.Batch, nCols, matchLen, avgChunkSize int,
+) []execinfrapb.Ordering_Column {
+	ordCols := make([]execinfrapb.Ordering_Column, nCols)
+	for i := range ordCols {
+		ordCols[i].ColIdx = uint32(i)
+		if i < matchLen {
+			ordCols[i].Direction = execinfrapb.Ordering_Column_ASC
+		} else {
+			ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
+		}
+
+		col := batch.ColVec(i).Int64()
+		col[0] = 0
+		for j := 1; j < coldata.BatchSize(); j++ {
+			if i < matchLen {
+				col[j] = col[j-1]
+				if rng.Float64() < 1.0/float64(avgChunkSize) {
+					col[j]++
+				}
+			} else {
+				col[j] = rng.Int63() % int64((i*1024)+1)
+			}
+		}
+	}
+	return ordCols
 }
