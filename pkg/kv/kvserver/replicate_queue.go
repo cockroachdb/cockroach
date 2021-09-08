@@ -1284,10 +1284,15 @@ const (
 )
 
 type transferLeaseOptions struct {
-	goal                     transferLeaseGoal
+	goal transferLeaseGoal
+	// checkTransferLeaseSource, when false, tells `TransferLeaseTarget` to
+	// exclude the current leaseholder from consideration as a potential target
+	// (i.e. when the caller explicitly wants to shed its lease away).
 	checkTransferLeaseSource bool
-	checkCandidateFullness   bool
-	dryRun                   bool
+	// checkCandidateFullness, when false, tells `TransferLeaseTarget`
+	// to disregard the existing lease counts on candidates.
+	checkCandidateFullness bool
+	dryRun                 bool
 }
 
 // leaseTransferOutcome represents the result of shedLease().

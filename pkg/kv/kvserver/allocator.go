@@ -1451,7 +1451,7 @@ func (a *Allocator) TransferLeaseTarget(
 		leaseholderReplQPS, _ := stats.avgQPS()
 		currentDelta := getQPSDelta(storeQPSMap, existing)
 		bestOption := getCandidateWithMinQPS(storeQPSMap, existing)
-		if bestOption != (roachpb.ReplicaDescriptor{}) &&
+		if bestOption != (roachpb.ReplicaDescriptor{}) && bestOption.StoreID != leaseRepl.StoreID() &&
 			// It is always beneficial to transfer the lease to the coldest candidate
 			// if the range's own qps is smaller than the difference between the
 			// leaseholder store and the candidate store. This will always drive down
