@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -41,6 +42,11 @@ type reparentDatabaseNode struct {
 func (p *planner) ReparentDatabase(
 	ctx context.Context, n *tree.ReparentDatabase,
 ) (planNode, error) {
+	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot perform ALTER DATABASE CONVERT TO SCHEMA in version %v and beyond",
+			clusterversion.PublicSchemasWithDescriptors)
+	}
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
