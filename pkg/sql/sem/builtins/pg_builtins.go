@@ -832,16 +832,33 @@ var pgBuiltins = map[string]builtinDefinition{
 	),
 
 	// pg_my_temp_schema returns the OID of session's temporary schema, or 0 if
-	// none. CockroachDB doesn't support this, so it always returns 0.
+	// none.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_my_temp_schema": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Oid),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				return tree.NewDOid(0), nil
+			Fn: func(ctx *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				schema := ctx.SessionData().SearchPath.GetTemporarySchemaName()
+				if schema == "" {
+					// The session has not yet created a temporary schema.
+					return tree.NewDOid(0), nil
+				}
+				oid, err := ctx.Planner.ResolveOIDFromString(
+					ctx.Ctx(), types.RegNamespace, tree.NewDString(schema))
+				if err != nil {
+					// If the OID lookup returns an UndefinedObject error, return 0
+					// instead. We can hit this path if the session created a temporary
+					// schema in one database and then changed databases.
+					if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+						return tree.NewDOid(0), nil
+					}
+					return nil, err
+				}
+				return oid, nil
 			},
-			Info:       notUsableInfo,
+			Info: "Returns the OID of the current session's temporary schema, " +
+				"or zero if it has none (because it has not created any temporary tables).",
 			Volatility: tree.VolatilityStable,
 		},
 	),
