@@ -750,6 +750,20 @@ func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) erro
 	return nil
 }
 
+// DeadlineMightBeExpired returns true if there currently is a deadline and
+// that deadline is earlier than either the ProvisionalCommitTimestamp or
+// the current timestamp. This can be used as a hint that we do not want to
+// auto-commit the transaction in a batch with writes.
+func (txn *Txn) DeadlineMightBeExpired() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return !txn.mu.deadline.IsEmpty() &&
+		// Avoids getting the txn mutex again by getting
+		// it off the sender.
+		(txn.mu.deadline.Less(txn.mu.sender.ProvisionalCommitTimestamp()) ||
+			txn.mu.deadline.GoTime().Before(txn.DB().Clock().PhysicalTime()))
+}
+
 // resetDeadlineLocked resets the deadline.
 func (txn *Txn) resetDeadlineLocked() {
 	txn.mu.deadline = nil

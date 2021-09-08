@@ -2854,12 +2854,30 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	filterMu := syncutil.Mutex{}
 	blockTxn := make(chan struct{})
 	blockedOnce := false
+	beforeAutoCommit := syncutil.Mutex{}
+	blockAutoCommitStmt := ""
+	blockAutoCommitResume := make(chan struct{})
+	blockAutoCommitWait := make(chan struct{})
+
 	var txnID string
 
 	params := createTestServerParams()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
 	lease.LeaseDuration.Override(ctx, &params.SV, 0)
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		// This hook is only called when the Executor is the one doing the
+		// committing, when the 1 phase commit optimization hasn't occured.
+		BeforeAutoCommit: func(ctx context.Context, stmt string) error {
+			beforeAutoCommit.Lock()
+			defer beforeAutoCommit.Unlock()
+			if stmt == blockAutoCommitStmt {
+				<-blockAutoCommitWait
+				blockAutoCommitResume <- struct{}{}
+			}
+			return nil
+		},
+	}
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req roachpb.BatchRequest) *roachpb.Error {
 			filterMu.Lock()
@@ -3024,4 +3042,43 @@ SELECT * FROM T1`)
 		err = <-waitChan
 		require.NoError(t, err)
 	})
+
+	// Validates that for bulk inserts/updates that leases can be
+	// refreshed in implicit transactions. The lease duration
+	// is set to zero, so that leases have to be repeatedly reacquired
+	// above via the LeaseDuration override. The auto-commit hook allows
+	// us to confirm the 1 phase commit optimization is bypassed due,
+	// to the lease expiring.
+	t.Run("validate-lease-txn-deadline-ext-update", func(t *testing.T) {
+		conn, err := tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		resultChan := make(chan error)
+		_, err = conn.ExecContext(ctx, `
+INSERT INTO t1 select a from generate_series(1, 100) g(a);
+`,
+		)
+		require.NoError(t, err)
+
+		go func() {
+			const bulkUpdateQuery = "UPDATE t1 SET val = 2"
+			beforeAutoCommit.Lock()
+			blockAutoCommitStmt = bulkUpdateQuery
+			beforeAutoCommit.Unlock()
+			// Execute a bulk UPDATE, which will be delayed
+			// enough that the lease will instantly expire
+			// on us.
+			_, err = conn.ExecContext(ctx, bulkUpdateQuery)
+			resultChan <- err
+		}()
+
+		// We don't expect the 1 phase commit optimization
+		// to occur in this case, so the transaction will be
+		// committed by the executor. We expect this to
+		// occur since the expired lease will cause thngs
+		// to bubble to the top.
+		blockAutoCommitWait <- struct{}{}
+		<-blockAutoCommitResume
+		require.NoError(t, <-resultChan)
+	})
+
 }
