@@ -498,7 +498,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 		h := makeOidHasher()
 		return forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, _ tree.Datum) error {
 			isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
-			isRoleDBool := tree.DBool(isRole)
+			// Currently, all users and roles inherit the privileges of roles they are
+			// members of. See https://github.com/cockroachdb/cockroach/issues/69583.
+			roleInherits := tree.DBool(true)
 			noLogin, err := options.noLogin()
 			if err != nil {
 				return err
@@ -526,7 +528,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				h.UserOid(username),                  // oid
 				tree.NewDName(username.Normalized()), // rolname
 				tree.MakeDBool(isRoot || isSuper),    // rolsuper
-				tree.MakeDBool(isRoleDBool),          // rolinherit. Roles inherit by default.
+				tree.MakeDBool(roleInherits),         // rolinherit
 				tree.MakeDBool(isRoot || createRole), // rolcreaterole
 				tree.MakeDBool(isRoot || createDB),   // rolcreatedb
 				tree.MakeDBool(roleCanLogin),         // rolcanlogin.
@@ -2343,7 +2345,9 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 		return forEachRole(ctx, p,
 			func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 				isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
-				isRoleDBool := tree.DBool(isRole)
+				// Currently, all users and roles inherit the privileges of roles they are
+				// members of. See https://github.com/cockroachdb/cockroach/issues/69583.
+				roleInherits := tree.DBool(true)
 				noLogin, err := options.noLogin()
 				if err != nil {
 					return err
@@ -2370,7 +2374,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					h.UserOid(username),                  // oid
 					tree.NewDName(username.Normalized()), // rolname
 					tree.MakeDBool(isRoot || isSuper),    // rolsuper
-					tree.MakeDBool(isRoleDBool),          // rolinherit. Roles inherit by default.
+					tree.MakeDBool(roleInherits),         // rolinherit
 					tree.MakeDBool(isRoot || createRole), // rolcreaterole
 					tree.MakeDBool(isRoot || createDB),   // rolcreatedb
 					tree.DBoolFalse,                      // rolcatupdate

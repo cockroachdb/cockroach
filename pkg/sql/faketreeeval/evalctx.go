@@ -230,6 +230,13 @@ func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// UserHasAdminRole is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) UserHasAdminRole(
+	ctx context.Context, user security.SQLUsername,
+) (bool, error) {
+	return false, errors.WithStack(errEvalPlanner)
+}
+
 // MemberOfWithAdminOption is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) MemberOfWithAdminOption(
 	ctx context.Context, member security.SQLUsername,
