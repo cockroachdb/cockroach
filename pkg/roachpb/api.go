@@ -1068,9 +1068,6 @@ func NewConditionalPut(key Key, value Value, expValue []byte, allowNotExist bool
 // The callee takes ownership of value's underlying bytes and it will mutate
 // them. The caller retains ownership of expVal; NewConditionalPut will copy it
 // into the request.
-//
-// Callers should check the version gate clusterversion.CPutInline to make
-// sure this is supported.
 func NewConditionalPutInline(key Key, value Value, expValue []byte, allowNotExist bool) Request {
 	value.InitChecksum(key)
 	// Compatibility with 20.1 servers.
