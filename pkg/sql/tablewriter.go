@@ -51,7 +51,7 @@ type tableWriter interface {
 
 	// init provides the tableWriter with a Txn and optional monitor to write to
 	// and returns an error if it was misconfigured.
-	init(context.Context, *kv.Txn, *tree.EvalContext) error
+	init(context.Context, *kv.Txn, *tree.EvalContext, *settings.Values) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
@@ -140,6 +140,8 @@ type tableWriterBase struct {
 	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
 	// to use the non-test value.
 	forceProductionBatchSizes bool
+	// sv settings values for cluster settings
+	sv *settings.Values
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
@@ -149,7 +151,10 @@ var maxBatchBytes = settings.RegisterByteSizeSetting(
 )
 
 func (tb *tableWriterBase) init(
-	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *tree.EvalContext,
+	txn *kv.Txn,
+	tableDesc catalog.TableDescriptor,
+	evalCtx *tree.EvalContext,
+	settings *settings.Values,
 ) {
 	tb.txn = txn
 	tb.desc = tableDesc
@@ -164,6 +169,7 @@ func (tb *tableWriterBase) init(
 		batchMaxBytes = int(maxBatchBytes.Get(&evalCtx.Settings.SV))
 	}
 	tb.maxBatchByteSize = mutations.MaxBatchByteSize(batchMaxBytes, tb.forceProductionBatchSizes)
+	tb.sv = settings
 	tb.initNewBatch()
 }
 
@@ -210,11 +216,16 @@ func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	// NB: unlike flushAndStartNewBatch, we don't bother with admission control
 	// for response processing when finalizing.
 	tb.rowsWritten += int64(tb.currentBatchSize)
-	if tb.autoCommit == autoCommitEnabled && (tb.rowsWrittenLimit == 0 || tb.rowsWritten <= tb.rowsWrittenLimit) {
+	if tb.autoCommit == autoCommitEnabled &&
 		// We can only auto commit if the rows written guardrail is disabled or
 		// we haven't exceeded the specified limit (the optimizer is responsible
 		// for making sure that there is exactly one mutation before enabling
 		// the auto commit).
+		(tb.rowsWrittenLimit == 0 || tb.rowsWritten <= tb.rowsWrittenLimit) &&
+		// Also, we don't want to try to commit here if the deadline is expired.
+		// If we bubble back up to SQL then maybe we can get a fresh deadline
+		// before committing.
+		!tb.txn.DeadlineLikelySufficient(tb.sv) {
 		log.Event(ctx, "autocommit enabled")
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
