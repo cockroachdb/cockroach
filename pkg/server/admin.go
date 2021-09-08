@@ -1786,6 +1786,55 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 	return nil
 }
 
+// livenessStatus returns a NodeLivenessStatus enumeration value for the
+// provided Liveness based on the provided timestamp and threshold.
+//
+// See the note on IsLive() for considerations on what should be passed in as
+// `now`.
+//
+// The timeline of the states that a liveness goes through as time passes after
+// the respective liveness record is written is the following:
+//
+//  -----|-------LIVE---|------UNAVAILABLE---|------DEAD------------> time
+//       tWrite         tExp                 tExp+threshold
+//
+// Explanation:
+//
+//  - Let's say a node write its liveness record at tWrite. It sets the
+//    Expiration field of the record as tExp=tWrite+livenessThreshold.
+//    The node is considered LIVE (or DECOMMISSIONING or DRAINING).
+//  - At tExp, the IsLive() method starts returning false. The state becomes
+//    UNAVAILABLE (or stays DECOMMISSIONING or DRAINING).
+//  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
+//
+// NB: There's a bit of discrepancy between what "Decommissioned" represents, as
+// seen by NodeStatusLiveness, and what "Decommissioned" represents as
+// understood by MembershipStatus. Currently it's possible for a live node, that
+// was marked as fully decommissioned, to have a NodeLivenessStatus of
+// "Decommissioning". This was kept this way for backwards compatibility, and
+// ideally we should remove usage of NodeLivenessStatus altogether. See #50707
+// for more details.
+func livenessStatus(
+	l livenesspb.Liveness, now time.Time, deadThreshold time.Duration,
+) livenesspb.NodeLivenessStatus {
+	if l.IsDead(now, deadThreshold) {
+		if !l.Membership.Active() {
+			return livenesspb.NodeLivenessStatus_DECOMMISSIONED
+		}
+		return livenesspb.NodeLivenessStatus_DEAD
+	}
+	if l.IsLive(now) {
+		if !l.Membership.Active() {
+			return livenesspb.NodeLivenessStatus_DECOMMISSIONING
+		}
+		if l.Draining {
+			return livenesspb.NodeLivenessStatus_DRAINING
+		}
+		return livenesspb.NodeLivenessStatus_LIVE
+	}
+	return livenesspb.NodeLivenessStatus_UNAVAILABLE
+}
+
 // getLivenessStatusMap generates a map from NodeID to LivenessStatus for all
 // nodes known to gossip. Nodes that haven't pinged their liveness record for
 // more than server.time_until_store_dead are considered dead.
@@ -1803,7 +1852,7 @@ func getLivenessStatusMap(
 
 	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
-		status := kvserver.LivenessStatus(liveness, now, threshold)
+		status := livenessStatus(liveness, now, threshold)
 		statusMap[liveness.NodeID] = status
 	}
 	return statusMap

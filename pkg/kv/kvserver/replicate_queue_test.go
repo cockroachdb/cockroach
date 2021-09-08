@@ -527,12 +527,12 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 						NodeLiveness: kvserver.NodeLivenessTestingKnobs{
 							StorePoolNodeLivenessFn: func(
 								id roachpb.NodeID, now time.Time, duration time.Duration,
-							) livenesspb.NodeLivenessStatus {
+							) (kvserver.NodeStatus, kvserver.NodeMembershipStatus) {
 								val := livenessTrap.Load()
 								if val == nil {
-									return livenesspb.NodeLivenessStatus_LIVE
+									return kvserver.NodeStatusLive, kvserver.NodeMembershipStatusActive
 								}
-								return val.(func(nodeID roachpb.NodeID) livenesspb.NodeLivenessStatus)(id)
+								return val.(func(nodeID roachpb.NodeID) kvserver.NodeStatus)(id), kvserver.NodeMembershipStatusActive
 							},
 						},
 					},
@@ -558,13 +558,13 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 	}
 
 	markDead := func(nodeIDs []roachpb.NodeID) {
-		livenessTrap.Store(func(id roachpb.NodeID) livenesspb.NodeLivenessStatus {
+		livenessTrap.Store(func(id roachpb.NodeID) kvserver.NodeStatus {
 			for _, dead := range nodeIDs {
 				if dead == id {
-					return livenesspb.NodeLivenessStatus_DEAD
+					return kvserver.NodeStatusDead
 				}
 			}
-			return livenesspb.NodeLivenessStatus_LIVE
+			return kvserver.NodeStatusLive
 		})
 	}
 
