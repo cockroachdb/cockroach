@@ -2307,3 +2307,187 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 		})
 	}
 }
+
+func TestNodeLivenessLivenessStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	now := timeutil.Now()
+	threshold := 5 * time.Minute
+
+	for _, tc := range []struct {
+		liveness livenesspb.Liveness
+		expected livenesspb.NodeLivenessStatus
+	}{
+		// Valid status.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(5 * time.Minute).UnixNano(),
+				},
+				Draining: false,
+			},
+			expected: livenesspb.NodeLivenessStatus_LIVE,
+		},
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					// Expires just slightly in the future.
+					WallTime: now.UnixNano() + 1,
+				},
+				Draining: false,
+			},
+			expected: livenesspb.NodeLivenessStatus_LIVE,
+		},
+		// Expired status.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					// Just expired.
+					WallTime: now.UnixNano(),
+				},
+				Draining: false,
+			},
+			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+		},
+		// Expired status.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.UnixNano(),
+				},
+				Draining: false,
+			},
+			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+		},
+		// Max bound of expired.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(-threshold).UnixNano() + 1,
+				},
+				Draining: false,
+			},
+			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+		},
+		// Dead status.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(-threshold).UnixNano(),
+				},
+				Draining: false,
+			},
+			expected: livenesspb.NodeLivenessStatus_DEAD,
+		},
+		// Decommissioning.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(time.Second).UnixNano(),
+				},
+				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
+				Draining:   false,
+			},
+			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+		},
+		// Decommissioning + expired.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(-threshold).UnixNano(),
+				},
+				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
+				Draining:   false,
+			},
+			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONED,
+		},
+		// Decommissioned + live.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(time.Second).UnixNano(),
+				},
+				Membership: livenesspb.MembershipStatus_DECOMMISSIONED,
+				Draining:   false,
+			},
+			// Despite having marked the node as fully decommissioned, through
+			// this NodeLivenessStatus API we still surface the node as
+			// "Decommissioning". See #50707 for more details.
+			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+		},
+		// Decommissioned + expired.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(-threshold).UnixNano(),
+				},
+				Membership: livenesspb.MembershipStatus_DECOMMISSIONED,
+				Draining:   false,
+			},
+			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONED,
+		},
+		// Draining
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(5 * time.Minute).UnixNano(),
+				},
+				Draining: true,
+			},
+			expected: livenesspb.NodeLivenessStatus_DRAINING,
+		},
+		// Decommissioning that is unavailable.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.UnixNano(),
+				},
+				Draining:   false,
+				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
+			},
+			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+		},
+		// Draining that is unavailable.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.UnixNano(),
+				},
+				Draining: true,
+			},
+			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			if a, e := livenessStatus(tc.liveness, now, threshold), tc.expected; a != e {
+				t.Errorf("liveness status was %s, wanted %s", a.String(), e.String())
+			}
+		})
+	}
+}

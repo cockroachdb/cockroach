@@ -386,7 +386,8 @@ func createTestAllocatorWithKnobs(
 	stopper, g, manual, storePool, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff, deterministic,
 		func() int { return numNodes },
-		livenesspb.NodeLivenessStatus_LIVE)
+		NodeStatusLive,
+		NodeMembershipStatusActive)
 	a := MakeAllocator(
 		storePool, func(string) (time.Duration, bool) {
 			return 0, true
@@ -422,10 +423,11 @@ func mockStorePool(
 	storePool.detailsMu.Lock()
 	defer storePool.detailsMu.Unlock()
 
-	liveNodeSet := map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
+	mnl := newMockNodeLiveness(NodeStatusUnavailable, NodeMembershipStatusActive)
+
 	storePool.detailsMu.storeDetails = map[roachpb.StoreID]*storeDetail{}
 	for _, storeID := range aliveStoreIDs {
-		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_LIVE
+		mnl.setNodeStatus(roachpb.NodeID(storeID), NodeStatusLive, NodeMembershipStatusActive)
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -433,7 +435,7 @@ func mockStorePool(
 		}
 	}
 	for _, storeID := range unavailableStoreIDs {
-		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_UNAVAILABLE
+		mnl.setNodeStatus(roachpb.NodeID(storeID), NodeStatusUnavailable, NodeMembershipStatusActive)
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -441,7 +443,7 @@ func mockStorePool(
 		}
 	}
 	for _, storeID := range deadStoreIDs {
-		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_DEAD
+		mnl.setNodeStatus(roachpb.NodeID(storeID), NodeStatusDead, NodeMembershipStatusActive)
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -449,7 +451,7 @@ func mockStorePool(
 		}
 	}
 	for _, storeID := range decommissioningStoreIDs {
-		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_DECOMMISSIONING
+		mnl.setNodeStatus(roachpb.NodeID(storeID), NodeStatusLive, NodeMembershipStatusDecommissioning)
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -457,7 +459,7 @@ func mockStorePool(
 		}
 	}
 	for _, storeID := range decommissionedStoreIDs {
-		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_DECOMMISSIONED
+		mnl.setNodeStatus(roachpb.NodeID(storeID), NodeStatusLive, NodeMembershipStatusDecommissioned)
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -466,7 +468,7 @@ func mockStorePool(
 	}
 
 	for _, storeID := range suspectedStoreIDs {
-		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_LIVE
+		mnl.setNodeStatus(roachpb.NodeID(storeID), NodeStatusLive, NodeMembershipStatusActive)
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.lastAvailable = storePool.clock.Now().GoTime()
 		detail.lastUnavailable = storePool.clock.Now().GoTime()
@@ -477,13 +479,7 @@ func mockStorePool(
 	}
 
 	// Set the node liveness function using the set we constructed.
-	storePool.nodeLivenessFn =
-		func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) livenesspb.NodeLivenessStatus {
-			if status, ok := liveNodeSet[nodeID]; ok {
-				return status
-			}
-			return livenesspb.NodeLivenessStatus_UNAVAILABLE
-		}
+	storePool.nodeLivenessFn = mnl.nodeLivenessFunc
 }
 
 func TestAllocatorSimpleRetrieval(t *testing.T) {
@@ -1938,7 +1934,8 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	stopper, g, _, storePool, nl := createTestStorePool(
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_LIVE)
+		NodeStatusLive,
+		NodeMembershipStatusActive)
 	a := MakeAllocator(
 		storePool, func(string) (time.Duration, bool) {
 			return 0, true
@@ -1969,7 +1966,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	nl.setNodeStatus(1, livenesspb.NodeLivenessStatus_DRAINING)
+	nl.setNodeStatus(1, NodeStatusLive, NodeMembershipStatusDraining)
 	preferDC1 := []roachpb.LeasePreference{
 		{Constraints: []roachpb.Constraint{{Key: "dc", Value: "1", Type: roachpb.Constraint_REQUIRED}}},
 	}
@@ -2313,7 +2310,8 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 	stopper, g, _, storePool, nl := createTestStorePool(
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_LIVE)
+		NodeStatusLive,
+		NodeMembershipStatusActive)
 	a := MakeAllocator(
 		storePool, func(string) (time.Duration, bool) {
 			return 0, true
@@ -2334,8 +2332,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	// UNAVAILABLE is the node liveness status used for a node that's draining.
-	nl.setNodeStatus(1, livenesspb.NodeLivenessStatus_UNAVAILABLE)
+	nl.setNodeStatus(1, NodeStatusUnavailable, NodeMembershipStatusDraining)
 
 	testCases := []struct {
 		leaseholder roachpb.StoreID
@@ -2377,7 +2374,8 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 	stopper, g, clock, storePool, nl := createTestStorePool(
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_LIVE)
+		NodeStatusLive,
+		NodeMembershipStatusActive)
 	a := MakeAllocator(
 		storePool, func(string) (time.Duration, bool) {
 			return 0, true
@@ -2413,10 +2411,10 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 	// Based on capacity node 1 is desirable.
 	assertShouldTransferLease(true)
 	// Flip node 1 to unavailable, there should be no lease transfer now.
-	nl.setNodeStatus(1, livenesspb.NodeLivenessStatus_UNAVAILABLE)
+	nl.setNodeStatus(1, NodeStatusUnavailable, NodeMembershipStatusActive)
 	assertShouldTransferLease(false)
 	// Set node back to live, but it's still suspected so not lease transfer expected.
-	nl.setNodeStatus(1, livenesspb.NodeLivenessStatus_LIVE)
+	nl.setNodeStatus(1, NodeStatusLive, NodeMembershipStatusActive)
 	assertShouldTransferLease(false)
 	// Wait out the suspected store timeout, verify that lease transfers are back.
 	clock.Increment(timeAfterStoreSuspect.Nanoseconds() + time.Millisecond.Nanoseconds())
@@ -4948,7 +4946,8 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	stopper, g, _, storePool, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_LIVE)
+		NodeStatusLive,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 
 	// 3 stores where the lease count for each store is equal to 10x the store ID.
@@ -6668,7 +6667,8 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 	stopper, _, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff, false, /* deterministic */
 		func() int { return numNodes },
-		livenesspb.NodeLivenessStatus_LIVE)
+		NodeStatusLive,
+		NodeMembershipStatusActive)
 	a := MakeAllocator(
 		sp, func(string) (time.Duration, bool) {
 			return 0, true
@@ -7286,7 +7286,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	const capacity = (1 << 30) + 1
 	const rangeSize = 16 << 20
 
-	mockNodeLiveness := newMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE)
+	mockNodeLiveness := newMockNodeLiveness(NodeStatusLive, NodeMembershipStatusActive)
 	sp := NewStorePool(
 		log.AmbientContext{Tracer: st.Tracer},
 		st,
@@ -7330,7 +7330,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	for i := 0; i < generations; i++ {
 		// First loop through test stores and randomly add data.
 		for j := 0; j < len(testStores); j++ {
-			if mockNodeLiveness.nodeLivenessFunc(roachpb.NodeID(j), time.Time{}, 0) == livenesspb.NodeLivenessStatus_DEAD {
+			if s, _ := mockNodeLiveness.nodeLivenessFunc(roachpb.NodeID(j), time.Time{}, 0); s == NodeStatusDead {
 				continue
 			}
 			ts := &testStores[j]
@@ -7345,7 +7345,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 			if ts.Capacity.Available <= 0 {
 				t.Errorf("testStore %d ran out of space during generation %d (rangesAdded=%d/%d): %+v",
 					j, i, rangesAdded, rangesToAdd, ts.Capacity)
-				mockNodeLiveness.setNodeStatus(roachpb.NodeID(j), livenesspb.NodeLivenessStatus_DEAD)
+				mockNodeLiveness.setNodeStatus(roachpb.NodeID(j), NodeStatusDead, NodeMembershipStatusActive)
 			}
 			wg.Add(1)
 			if err := g.AddInfoProto(gossip.MakeStoreKey(roachpb.StoreID(j)), &ts.StoreDescriptor, 0); err != nil {
@@ -7357,7 +7357,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 		// Loop through each store a number of times and maybe rebalance.
 		for j := 0; j < 10; j++ {
 			for k := 0; k < len(testStores); k++ {
-				if mockNodeLiveness.nodeLivenessFunc(roachpb.NodeID(k), time.Time{}, 0) == livenesspb.NodeLivenessStatus_DEAD {
+				if s, _ := mockNodeLiveness.nodeLivenessFunc(roachpb.NodeID(k), time.Time{}, 0); s == NodeStatusDead {
 					continue
 				}
 				ts := &testStores[k]
@@ -7393,11 +7393,11 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 		// Simulate rocksdb compactions freeing up disk space.
 		for j := 0; j < len(testStores); j++ {
-			if mockNodeLiveness.nodeLivenessFunc(roachpb.NodeID(j), time.Time{}, 0) != livenesspb.NodeLivenessStatus_DEAD {
+			if s, _ := mockNodeLiveness.nodeLivenessFunc(roachpb.NodeID(j), time.Time{}, 0); s != NodeStatusDead {
 				ts := &testStores[j]
 				if ts.Capacity.Available <= 0 {
 					t.Errorf("testStore %d ran out of space during generation %d: %+v", j, i, ts.Capacity)
-					mockNodeLiveness.setNodeStatus(roachpb.NodeID(j), livenesspb.NodeLivenessStatus_DEAD)
+					mockNodeLiveness.setNodeStatus(roachpb.NodeID(j), NodeStatusDead, NodeMembershipStatusActive)
 				} else {
 					ts.compact()
 				}
@@ -7443,7 +7443,7 @@ func Example_rebalancing() {
 		func() int {
 			return nodes
 		},
-		newMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE).nodeLivenessFunc,
+		newMockNodeLiveness(NodeStatusLive, NodeMembershipStatusActive).nodeLivenessFunc,
 		/* deterministic */ true,
 	)
 	alloc := MakeAllocator(
