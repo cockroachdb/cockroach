@@ -1541,19 +1541,24 @@ SELECT description
 			if err != nil {
 				return nil, err
 			}
+			retNull := false
 			if fdw == "" {
 				switch fdwArg.(type) {
 				case *tree.DString:
 					return nil, pgerror.Newf(pgcode.UndefinedObject,
 						"foreign-data wrapper %s does not exist", fdwArg)
 				case *tree.DOid:
-					// Unlike most of the functions, Postgres does not return
-					// NULL when an OID does not match.
+					// Postgres returns NULL if no matching foreign data wrapper is found
+					// when given an OID.
+					retNull = true
 				}
 			}
 
 			return parsePrivilegeStr(args[1], pgPrivList{
 				"USAGE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
 					// All users have USAGE privileges for all foreign-data wrappers.
 					return tree.DBoolTrue, nil
 				},
@@ -1758,19 +1763,24 @@ SELECT description
 			if err != nil {
 				return nil, err
 			}
+			retNull := false
 			if server == "" {
 				switch serverArg.(type) {
 				case *tree.DString:
 					return nil, pgerror.Newf(pgcode.UndefinedObject,
 						"server %s does not exist", serverArg)
 				case *tree.DOid:
-					// Unlike most of the functions, Postgres does not return
-					// NULL when an OID does not match.
+					// Postgres returns NULL if no matching foreign server is found when
+					// given an OID.
+					retNull = true
 				}
 			}
 
 			return parsePrivilegeStr(args[1], pgPrivList{
 				"USAGE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
 					// All users have USAGE privileges for all foreign servers.
 					return tree.DBoolTrue, nil
 				},
@@ -1823,19 +1833,24 @@ SELECT description
 			if err != nil {
 				return nil, err
 			}
+			retNull := false
 			if tablespace == "" {
 				switch tablespaceArg.(type) {
 				case *tree.DString:
 					return nil, pgerror.Newf(pgcode.UndefinedObject,
 						"tablespace %s does not exist", tablespaceArg)
 				case *tree.DOid:
-					// Unlike most of the functions, Postgres does not return
-					// NULL when an OID does not match.
+					// Postgres returns NULL if no matching tablespace is found when given
+					// an OID.
+					retNull = true
 				}
 			}
 
 			return parsePrivilegeStr(args[1], pgPrivList{
 				"CREATE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
 					// All users have CREATE privileges in all tablespaces.
 					return tree.DBoolTrue, nil
 				},
