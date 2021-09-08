@@ -1790,6 +1790,66 @@ SELECT description
 		},
 	),
 
+	"pg_has_role": makePGPrivilegeInquiryDef(
+		"role",
+		argTypeOpts{{"role", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+			roleArg := tree.UnwrapDatum(ctx, args[0])
+			roleS, err := getNameForArg(ctx, roleArg, "pg_roles", "rolname")
+			if err != nil {
+				return nil, err
+			}
+			// Note: the username in pg_roles is already normalized, so we can safely
+			// turn it into a SQLUsername without re-normalization.
+			role := security.MakeSQLUsernameFromPreNormalizedString(roleS)
+			retNull := false
+			if role.Undefined() {
+				switch roleArg.(type) {
+				case *tree.DString:
+					return nil, pgerror.Newf(pgcode.UndefinedObject,
+						"role %s does not exist", roleArg)
+				case *tree.DOid:
+					// Postgres returns NULL if no matching tablespace is found when given
+					// an OID.
+					retNull = true
+				}
+			}
+
+			privs, err := parsePrivilegeStr(args[1], privMap{
+				// From Postgres: We use USAGE to denote whether the privileges of the
+				// role are accessible (has_privs), MEMBER to denote is_member, and
+				// MEMBER WITH GRANT OPTION (or ADMIN OPTION) to denote is_admin. There
+				// is no ACL bit corresponding to MEMBER so we cheat and use CREATE for
+				// that. This convention is shared only with the switch statement below.
+				"USAGE": {privilege.USAGE},
+				// The following two are not a mistake. See Postgres.
+				"USAGE WITH GRANT OPTION":  {privilege.CREATE, privilege.GRANT},
+				"USAGE WITH ADMIN OPTION":  {privilege.CREATE, privilege.GRANT},
+				"MEMBER":                   {privilege.CREATE},
+				"MEMBER WITH GRANT OPTION": {privilege.CREATE, privilege.GRANT},
+				"MEMBER WITH ADMIN OPTION": {privilege.CREATE, privilege.GRANT},
+			})
+			if err != nil {
+				return nil, err
+			}
+			if retNull {
+				return tree.DNull, nil
+			}
+			return runPrivilegeChecks(privs, func(priv privilege.Kind) (tree.Datum, error) {
+				switch priv {
+				case privilege.USAGE:
+					return hasPrivsOfRole(ctx, user, role)
+				case privilege.CREATE:
+					return isMemberOfRole(ctx, user, role)
+				case privilege.GRANT:
+					return isAdminOfRole(ctx, user, role)
+				default:
+					panic("unexpected")
+				}
+			})
+		},
+	),
+
 	// See https://www.postgresql.org/docs/10/functions-admin.html#FUNCTIONS-ADMIN-SET
 	"current_setting": makeBuiltin(
 		tree.FunctionProperties{
@@ -2037,4 +2097,106 @@ func tableHasPrivilegeSpecifier(tableArg tree.Datum) (tree.HasPrivilegeSpecifier
 		return specifier, errors.AssertionFailedf("unknown privilege specifier: %#v", tableArg)
 	}
 	return specifier, nil
+}
+
+// hasPrivsOfRole returns whether the user has the privileges of the
+// specified role (directly or indirectly).
+//
+// This is defined not to recurse through roles that don't have rolinherit
+// set; for such roles, membership implies the ability to do SET ROLE, but
+// the privileges are not available until you've done so.
+//
+// However, because we don't currently support NOINHERIT, a user being a
+// member of a role is equivalent to a user having the privileges of that
+// role, so this is currently equivalent to isMemberOfRole.
+// See https://github.com/cockroachdb/cockroach/issues/69583.
+func hasPrivsOfRole(ctx *tree.EvalContext, user, role security.SQLUsername) (tree.Datum, error) {
+	return isMemberOfRole(ctx, user, role)
+}
+
+// isMemberOfRole returns whether the user is a member of the specified role
+// (directly or indirectly).
+//
+// This is defined to recurse through roles regardless of rolinherit.
+func isMemberOfRole(ctx *tree.EvalContext, user, role security.SQLUsername) (tree.Datum, error) {
+	// Fast path for simple case.
+	if user == role {
+		return tree.DBoolTrue, nil
+	}
+
+	// Superusers have every privilege, so are part of every role.
+	if isSuperuser(user) {
+		return tree.DBoolTrue, nil
+	}
+
+	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, user)
+	if err != nil {
+		return nil, err
+	}
+	_, member := allRoleMemberships[role]
+	return tree.MakeDBool(tree.DBool(member)), nil
+}
+
+// isAdminOfRole returns whether the user is an admin of the specified role.
+//
+// That is, is member the role itself (subject to restrictions below), a
+// member (directly or indirectly) WITH ADMIN OPTION, or a superuser?
+func isAdminOfRole(ctx *tree.EvalContext, user, role security.SQLUsername) (tree.Datum, error) {
+	// Superusers are an admin of every role.
+	//
+	// NB: this is intentionally before the user == role check here.
+	if isSuperuser(user) {
+		return tree.DBoolTrue, nil
+	}
+
+	// Fast path for simple case.
+	if user == role {
+		// From Postgres:
+		//
+		// > A role can admin itself when it matches the session user and we're
+		// > outside any security-restricted operation, SECURITY DEFINER or
+		// > similar context. SQL-standard roles cannot self-admin. However,
+		// > SQL-standard users are distinct from roles, and they are not
+		// > grantable like roles: PostgreSQL's role-user duality extends the
+		// > standard. Checking for a session user match has the effect of
+		// > letting a role self-admin only when it's conspicuously behaving
+		// > like a user. Note that allowing self-admin under a mere SET ROLE
+		// > would make WITH ADMIN OPTION largely irrelevant; any member could
+		// > SET ROLE to issue the otherwise-forbidden command.
+		// >
+		// > Withholding self-admin in a security-restricted operation prevents
+		// > object owners from harnessing the session user identity during
+		// > administrative maintenance. Suppose Alice owns a database, has
+		// > issued "GRANT alice TO bob", and runs a daily ANALYZE. Bob creates
+		// > an alice-owned SECURITY DEFINER function that issues "REVOKE alice
+		// > FROM carol". If he creates an expression index calling that
+		// > function, Alice will attempt the REVOKE during each ANALYZE.
+		// > Checking InSecurityRestrictedOperation() thwarts that attack.
+		// >
+		// > Withholding self-admin in SECURITY DEFINER functions makes their
+		// > behavior independent of the calling user. There's no security or
+		// > SQL-standard-conformance need for that restriction, though.
+		// >
+		// > A role cannot have actual WITH ADMIN OPTION on itself, because that
+		// > would imply a membership loop. Therefore, we're done either way.
+		//
+		// Because CockroachDB does not have "security-restricted operation", so
+		// for compatibility, we just need to check whether the user matches the
+		// session user.
+		isSessionUser := user == ctx.SessionData().SessionUser()
+		return tree.MakeDBool(tree.DBool(isSessionUser)), nil
+	}
+
+	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, user)
+	if err != nil {
+		return nil, err
+	}
+	isAdmin := allRoleMemberships[role]
+	return tree.MakeDBool(tree.DBool(isAdmin)), nil
+}
+
+// isSuperuser returns whether the specified user has superuser privileges.
+// This is defined to match the pg_roles.rolsuper field.
+func isSuperuser(user security.SQLUsername) bool {
+	return user.IsRootUser() || user.IsAdminRole()
 }
