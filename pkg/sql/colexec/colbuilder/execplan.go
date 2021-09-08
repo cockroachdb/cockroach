@@ -370,7 +370,23 @@ func (r opResult) createDiskBackedSort(
 	totalMemLimit := execinfra.GetWorkMemLimit(flowCtx)
 	spoolMemLimit := totalMemLimit * 4 / 5
 	maxOutputBatchMemSize := totalMemLimit - spoolMemLimit
-	if matchLen > 0 {
+	if limit != 0 {
+		// There is a limit specified, so we know exactly how many rows the
+		// sorter should output. Use a top K sorter, which uses a heap to avoid
+		// storing more rows than necessary.
+		var topKSorterMemAccount *mon.BoundAccount
+		if useStreamingMemAccountForBuffering {
+			topKSorterMemAccount = streamingMemAccount
+		} else {
+			topKSorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+				ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
+			)
+		}
+		inMemorySorter, err = colexec.NewTopKSorter(
+			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
+			inputTypes, ordering.Columns, int(matchLen), uint64(limit), maxOutputBatchMemSize,
+		)
+	} else if matchLen > 0 {
 		// The input is already partially ordered. Use a chunks sorter to avoid
 		// loading all the rows into memory.
 		var sortChunksMemAccount *mon.BoundAccount
@@ -384,22 +400,6 @@ func (r opResult) createDiskBackedSort(
 		inMemorySorter, err = colexec.NewSortChunks(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
 			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
-		)
-	} else if limit != 0 {
-		// There is a limit specified, so we know exactly how many rows the
-		// sorter should output. Use a top K sorter, which uses a heap to avoid
-		// storing more rows than necessary.
-		var topKSorterMemAccount *mon.BoundAccount
-		if useStreamingMemAccountForBuffering {
-			topKSorterMemAccount = streamingMemAccount
-		} else {
-			topKSorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
-				ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
-			)
-		}
-		inMemorySorter = colexec.NewTopKSorter(
-			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
-			inputTypes, ordering.Columns, uint64(limit), maxOutputBatchMemSize,
 		)
 	} else {
 		// No optimizations possible. Default to the standard sort operator.
@@ -457,6 +457,7 @@ func (r opResult) createDiskBackedSort(
 				mergeUnlimitedAllocator,
 				outputUnlimitedAllocator,
 				input, inputTypes, ordering, topK,
+				int(matchLen),
 				execinfra.GetWorkMemLimit(flowCtx),
 				maxNumberPartitions,
 				args.TestingKnobs.NumForcedRepartitions,
@@ -498,7 +499,7 @@ func (r opResult) makeDiskBackedSorterConstructor(
 		}
 		sorter, err := r.createDiskBackedSort(
 			ctx, flowCtx, &sortArgs, input, inputTypes,
-			execinfrapb.Ordering{Columns: orderingCols}, 0 /* limit */,
+			execinfrapb.Ordering{Columns: orderingCols}, 0, /* limit */
 			0 /* matchLen */, maxNumberPartitions, args.Spec.ProcessorID,
 			opNamePrefix+"-", factory,
 		)
@@ -1267,7 +1268,7 @@ func NewColOperator(
 						func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecop.Operator, error) {
 							return result.createDiskBackedSort(
 								ctx, flowCtx, args, input, inputTypes,
-								execinfrapb.Ordering{Columns: orderingCols}, 0 /*limit */, 0 /* matchLen */,
+								execinfrapb.Ordering{Columns: orderingCols}, 0 /*limit */, 0, /* matchLen */
 								0 /* maxNumberPartitions */, spec.ProcessorID,
 								opNamePrefix, factory)
 						},
