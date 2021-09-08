@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // CreatedByScheduledJobs identifies the job that was created
@@ -180,7 +181,8 @@ func (s *jobScheduler) processSchedule(
 		schedule.ScheduleID(), schedule.ScheduleLabel(),
 		schedule.ScheduledRunTime(), schedule.NextRun())
 
-	if err := executor.ExecuteJob(ctx, s.JobExecutionConfig, s.env, schedule, txn); err != nil {
+	execCtx := logtags.AddTag(ctx, "schedule", schedule.ScheduleID())
+	if err := executor.ExecuteJob(execCtx, s.JobExecutionConfig, s.env, schedule, txn); err != nil {
 		return errors.Wrapf(err, "executing schedule %d", schedule.ScheduleID())
 	}
 
