@@ -94,7 +94,7 @@ go_library(
 
 go_test(
     name = "importccl_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "bench_test.go",
         "client_import_test.go",
