@@ -1531,11 +1531,22 @@ func (b *Builder) buildTopK(e *memo.TopKExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	ordering := e.Ordering.ToOrdering()
-
+	inputOrdering := e.Input.ProvidedPhysical().Ordering
+	alreadyOrderedPrefix := 0
+	for i := range inputOrdering {
+		if i == len(ordering) {
+			return execPlan{}, errors.AssertionFailedf("sort ordering already provided by input")
+		}
+		if inputOrdering[i] != ordering[i] {
+			break
+		}
+		alreadyOrderedPrefix = i + 1
+	}
 	node, err := b.factory.ConstructTopK(
 		input.root,
 		e.K,
-		exec.OutputOrdering(input.sqlOrdering(ordering)))
+		exec.OutputOrdering(input.sqlOrdering(ordering)),
+		alreadyOrderedPrefix)
 	if err != nil {
 		return execPlan{}, err
 	}

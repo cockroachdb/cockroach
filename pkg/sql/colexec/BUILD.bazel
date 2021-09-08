@@ -193,6 +193,7 @@ targets = [
     ("rowstovec.eg.go", "rowstovec_tmpl.go"),
     ("select_in.eg.go", "select_in_tmpl.go"),
     ("sort.eg.go", "sort_tmpl.go"),
+    ("sorttopk.eg.go", "sorttopk_tmpl.go"),
     ("substring.eg.go", "substring_tmpl.go"),
     ("values_differ.eg.go", "values_differ_tmpl.go"),
     ("vec_comparators.eg.go", "vec_comparators_tmpl.go"),

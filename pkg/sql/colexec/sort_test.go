@@ -178,7 +178,7 @@ func TestSortRandomized(t *testing.T) {
 				}
 				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 					if topK {
-						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, uint64(k), execinfra.DefaultMemoryLimit), nil
+						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, matchLen, uint64(k), execinfra.DefaultMemoryLimit)
 					}
 					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
 				})
@@ -323,7 +323,7 @@ func BenchmarkSort(b *testing.B) {
 						var sorter colexecop.Operator
 						var err error
 						if topK {
-							sorter, err = NewTopKSorter(testAllocator, source, typs, ordCols, k, execinfra.DefaultMemoryLimit), nil
+							sorter, err = NewTopKSorter(testAllocator, source, typs, ordCols, 0 /* matchLen */, k, execinfra.DefaultMemoryLimit)
 						} else {
 							sorter, err = NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
 						}
