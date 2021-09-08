@@ -1577,7 +1577,7 @@ SELECT description
 			switch t := oidArg.(type) {
 			case *tree.DString:
 				var err error
-				oid, err = tree.PerformCast(ctx, t, types.RegProcedure)
+				oid, err = tree.ParseDOid(ctx, string(*t), types.RegProcedure)
 				if err != nil {
 					return nil, err
 				}
@@ -1869,7 +1869,7 @@ SELECT description
 			switch t := oidArg.(type) {
 			case *tree.DString:
 				var err error
-				oid, err = tree.PerformCast(ctx, t, types.RegType)
+				oid, err = tree.ParseDOid(ctx, string(*t), types.RegType)
 				if err != nil {
 					return nil, err
 				}
