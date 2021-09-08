@@ -31,6 +31,7 @@ import (
 func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
+	t.L().Printf("retrieving VM addresses")
 	addrs, err := c.InternalAddr(ctx, c.All())
 	if err != nil {
 		t.Fatal(err)
@@ -46,6 +47,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// We start all nodes with the same join flags and then issue an "init"
 	// command to one of the nodes.
 	for _, initNode := range []int{1, 2} {
+		t.L().Printf("starting test with init node %d", initNode)
 		c.Wipe(ctx)
 
 		func() {
@@ -53,14 +55,18 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 			for i := 1; i <= c.Spec().NodeCount; i++ {
 				i := i
 				g.Go(func() error {
-					return c.RunE(ctx, c.Node(i),
-						fmt.Sprintf(
-							`mkdir -p {log-dir} && `+
-								`./cockroach start --insecure --background --store={store-dir} `+
-								`--log-dir={log-dir} --cache=10%% --max-sql-memory=10%% `+
-								`--listen-addr=:{pgport:%[1]d} --http-port=$[{pgport:%[1]d}+1] `+
-								`--join=`+strings.Join(addrs, ",")+
-								`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`, i))
+					// We use a custom `cockroach start` command here instead of
+					// c.Start() because we do not want to initialize the
+					// cluster. The test code below owns the initialization.
+					cmd := fmt.Sprintf(
+						`mkdir -p {log-dir} && `+
+							`./cockroach start --insecure --background --store={store-dir} `+
+							`--log-dir={log-dir} --cache=10%% --max-sql-memory=10%% `+
+							`--listen-addr=:{pgport:%[1]d} --http-port=$[{pgport:%[1]d}+1] `+
+							`--join=`+strings.Join(addrs, ",")+
+							`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`, i)
+					t.L().Printf("starting uninitialized node %d\ncommand: %s", i, cmd)
+					return c.RunE(ctx, c.Node(i), cmd)
 				})
 			}
 
@@ -73,7 +79,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 				urlMap[i+1] = `http://` + addr
 			}
 
-			// Wait for the servers to bind their ports.
+			t.L().Printf("waiting for the servers to bind their ports")
 			if err := retry.ForDuration(10*time.Second, func() error {
 				for i := 1; i <= c.Spec().NodeCount; i++ {
 					resp, err := httputil.Get(ctx, urlMap[i]+"/health")
@@ -86,6 +92,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}); err != nil {
 				t.Fatal(err)
 			}
+			t.L().Printf("all nodes started, establishing SQL connections")
 
 			var dbs []*gosql.DB
 			for i := 1; i <= c.Spec().NodeCount; i++ {
@@ -95,6 +102,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 
 			// Initially, we can connect to any node, but queries issued will hang.
+			t.L().Printf("checking that the SQL conns are not failing immediately")
 			errCh := make(chan error, len(dbs))
 			for _, db := range dbs {
 				db := db
@@ -125,6 +133,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 			for _, tc := range httpTests {
 				for _, withCookie := range []bool{false, true} {
+					t.L().Printf("checking for HTTP endpoint %q, using authentication = %v", tc.endpoint, withCookie)
 					req, err := http.NewRequest("GET", urlMap[1]+tc.endpoint, nil /* body */)
 					if err != nil {
 						t.Fatalf("unexpected error while constructing request for %s: %s", tc.endpoint, err)
@@ -157,6 +166,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			}
 
+			t.L().Printf("sending init command to node %d", initNode)
 			c.Run(ctx, c.Node(initNode),
 				fmt.Sprintf(`./cockroach init --insecure --port={pgport:%d}`, initNode))
 			if err := g.Wait(); err != nil {
@@ -177,6 +187,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 
 			{
+				t.L().Printf("checking that double init fails")
 				// Make sure that running init again returns the expected error message and
 				// does not break the cluster. We have to use ExecCLI rather than OneShot in
 				// order to actually get the output from the command.
@@ -189,6 +200,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 
 			// Once initialized, the queries we started earlier will finish.
+			t.L().Printf("waiting for original SQL queries to complete now cluster is initialized")
 			deadline := time.After(10 * time.Second)
 			for i := 0; i < len(dbs); i++ {
 				select {
@@ -201,13 +213,15 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 				}
 			}
 
-			// New queries will work too.
+			t.L().Printf("testing new SQL queries")
 			for i, db := range dbs {
 				var val int
 				if err := db.QueryRow("SELECT 1").Scan(&val); err != nil {
 					t.Fatalf("querying node %d: %s", i, err)
 				}
 			}
+
+			t.L().Printf("test complete")
 		}()
 	}
 }
