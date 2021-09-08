@@ -3111,7 +3111,6 @@ type EvalDatabase interface {
 		specifier HasPrivilegeSpecifier,
 		user security.SQLUsername,
 		kind privilege.Kind,
-		withGrantOpt bool,
 	) (bool, error)
 }
 
