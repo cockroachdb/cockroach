@@ -469,7 +469,7 @@ false  false  false  false  false  false
 query B
 SELECT has_foreign_data_wrapper_privilege(12345, 'USAGE')
 ----
-true
+NULL
 
 query error pgcode 42704 foreign-data wrapper 'does_not_exist' does not exist
 SELECT has_foreign_data_wrapper_privilege('does_not_exist', 'USAGE')
@@ -480,7 +480,7 @@ SELECT has_foreign_data_wrapper_privilege('does_not_exist'::Name, 'USAGE')
 query B
 SELECT has_foreign_data_wrapper_privilege(12345, 'USAGE WITH GRANT OPTION')
 ----
-true
+NULL
 
 query error pgcode 22023 unrecognized privilege type: "UPDATE"
 SELECT has_foreign_data_wrapper_privilege(12345, 'UPDATE')
@@ -494,7 +494,7 @@ SELECT has_foreign_data_wrapper_privilege('no_user', 12345, 'USAGE')
 query B
 SELECT has_foreign_data_wrapper_privilege('bar', 12345, 'USAGE')
 ----
-true
+NULL
 
 
 ## has_function_privilege
@@ -801,7 +801,7 @@ false  false  false
 query B
 SELECT has_server_privilege(12345, 'USAGE')
 ----
-true
+NULL
 
 query error pgcode 42704 server 'does_not_exist' does not exist
 SELECT has_server_privilege('does_not_exist', 'USAGE')
@@ -812,7 +812,7 @@ SELECT has_server_privilege('does_not_exist'::Name, 'USAGE')
 query B
 SELECT has_server_privilege(12345, 'USAGE WITH GRANT OPTION')
 ----
-true
+NULL
 
 query error pgcode 22023 unrecognized privilege type: "UPDATE"
 SELECT has_server_privilege(12345, 'UPDATE')
@@ -826,7 +826,7 @@ SELECT has_server_privilege('no_user', 12345, 'USAGE')
 query B
 SELECT has_server_privilege('bar', 12345, 'USAGE')
 ----
-true
+NULL
 
 
 ## has_table_privilege
@@ -974,7 +974,7 @@ false  false  false  true  true  false  true  false  false
 query B
 SELECT has_tablespace_privilege(12345, 'CREATE')
 ----
-true
+NULL
 
 query B
 SELECT has_tablespace_privilege((SELECT oid FROM pg_tablespace LIMIT 1), 'CREATE')
