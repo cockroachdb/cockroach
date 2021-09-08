@@ -2851,15 +2851,31 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	beforeAutoCommit := syncutil.Mutex{}
 	filterMu := syncutil.Mutex{}
 	blockTxn := make(chan struct{})
 	blockedOnce := false
+	blockAutoCommitStmt := ""
+	blockAutoCommitResume := make(chan struct{})
+	blockAutoCommitWait := make(chan struct{})
+
 	var txnID string
 
 	params := createTestServerParams()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
 	lease.LeaseDuration.Override(ctx, &params.SV, 0)
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		BeforeAutoCommit: func(ctx context.Context, stmt string) error {
+			beforeAutoCommit.Lock()
+			if stmt == blockAutoCommitStmt {
+				<-blockAutoCommitWait
+				blockAutoCommitResume <- struct{}{}
+			}
+			beforeAutoCommit.Unlock()
+			return nil
+		},
+	}
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req roachpb.BatchRequest) *roachpb.Error {
 			filterMu.Lock()
@@ -3024,4 +3040,36 @@ SELECT * FROM T1`)
 		err = <-waitChan
 		require.NoError(t, err)
 	})
+
+	// Validates that for bulk inserts/updates that leases can be
+	// refreshed in implicit transactions
+	t.Run("validate-lease-txn-deadline-ext-insert", func(t *testing.T) {
+		conn, err := tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		resultChan := make(chan error)
+		_, err = conn.ExecContext(ctx, `
+INSERT INTO t1 select a from generate_series(1, 100) g(a);
+SET SQL_SAFE_UPDATES=no
+`,
+		)
+		require.NoError(t, err)
+
+		go func() {
+			beforeAutoCommit.Lock()
+			blockAutoCommitStmt = "UPDATE t1 SET val = 2"
+			beforeAutoCommit.Unlock()
+			// Execute a bulk UPDATE, which will be delayed
+			// enough that the lease will instantly expire
+			// on us.
+			_, err = conn.ExecContext(ctx, `
+UPDATE t1 SET val = 2;`,
+			)
+			resultChan <- err
+		}()
+
+		blockAutoCommitWait <- struct{}{}
+		<-blockAutoCommitResume
+		require.NoError(t, <-resultChan)
+	})
+
 }
