@@ -65,10 +65,6 @@ ALTER DATABASE d SURVIVE REGION FAILURE
 statement error pq: feature ALTER DATABASE is part of the schema change category, which was disabled by the database administrator
 ALTER DATABASE d RENAME TO r
 
-# Test REPARENT DATABASE
-statement error pq: feature REPARENT DATABASE is part of the schema change category, which was disabled by the database administrator
-ALTER DATABASE d CONVERT TO SCHEMA WITH PARENT test
-
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
 CREATE TABLE t();

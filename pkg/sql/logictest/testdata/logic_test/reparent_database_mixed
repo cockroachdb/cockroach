@@ -1,3 +1,8 @@
+# LogicTest: local-mixed-21.1-21.2
+# This version should really be 21.2-22.1, version hasn't been updated to
+# reflect yet.
+# This logic test passes in the mixed version but reparent_database should
+# fail in 22.1 completely.
 statement ok
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 CREATE DATABASE pgdatabase;
