@@ -1249,7 +1249,7 @@ func (r *OpTestOutput) Verify() error {
 		}
 		actual = append(actual, tup)
 	}
-	return assertTuplesOrderedEqual(r.expected, actual, r.evalCtx)
+	return AssertTuplesOrderedEqual(r.expected, actual, r.evalCtx)
 }
 
 // VerifyAnyOrder ensures that the input to this OpTestOutput produced the same
@@ -1399,12 +1399,12 @@ func AssertTuplesSetsEqual(expected Tuples, actual Tuples, evalCtx *tree.EvalCon
 		tupleFromOtherSet = actual[0]
 	}
 	expected = expected.sort(evalCtx, tupleFromOtherSet)
-	return assertTuplesOrderedEqual(expected, actual, evalCtx)
+	return AssertTuplesOrderedEqual(expected, actual, evalCtx)
 }
 
-// assertTuplesOrderedEqual asserts that two permutations of tuples are equal
+// AssertTuplesOrderedEqual asserts that two permutations of tuples are equal
 // in order.
-func assertTuplesOrderedEqual(expected Tuples, actual Tuples, evalCtx *tree.EvalContext) error {
+func AssertTuplesOrderedEqual(expected Tuples, actual Tuples, evalCtx *tree.EvalContext) error {
 	if len(expected) != len(actual) {
 		return errors.Errorf("expected %+v, actual %+v", expected, actual)
 	}

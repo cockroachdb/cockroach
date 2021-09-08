@@ -196,7 +196,7 @@ func TestExternalSortRandomized(t *testing.T) {
 				// TODO(asubiotto): Not implemented yet, currently we rely on the
 				//  flow tracking open FDs and releasing any leftovers.
 				var semsToCheck []semaphore.Semaphore
-				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
+				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols, 0 /* nPartialOrderingCols */)
 				colexectestutils.RunTests(
 					t,
 					testAllocator,
