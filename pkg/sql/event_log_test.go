@@ -465,18 +465,7 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `UPSERT INTO t(i) VALUES (-2), (-3), (-4)`,
 			errRe:       `pq: txn reached the number of rows written \(3\): TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"UPSERT INTO.*","TxnID":".*","SessionID":".*"`,
-			logExpected: true,
-			channel:     channel.SQL_PERF,
-		},
-		// The next two cases check that we log two events if both _log and _err
-		// limits are reached when the former is smaller.
-		{
-			setup:       `BEGIN`,
-			cleanup:     `ROLLBACK`,
-			query:       `INSERT INTO t(i) VALUES (15), (16); INSERT INTO t(i) VALUES (17);`,
-			errRe:       `pq: txn reached the number of rows written \(3\): TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*","Limit":2`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"UPSERT INTO.*","TxnID":".*","SessionID":".*","NumRows":3`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -485,7 +474,7 @@ func TestPerfLogging(t *testing.T) {
 			cleanup:     `ROLLBACK`,
 			query:       `INSERT INTO t(i) VALUES (15), (16); INSERT INTO t(i) VALUES (17);`,
 			errRe:       `pq: txn reached the number of rows written \(3\): TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*","Limit":3,"ViolatesTxnRowsLimitErr":true`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*","NumRows":2`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
