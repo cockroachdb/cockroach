@@ -900,7 +900,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					return tree.DNull, nil
 				}
 				maybeTypmod := args[1]
-				oid := oid.Oid(int(oidArg.(*tree.DOid).DInt))
+				oid := oid.Oid(oidArg.(*tree.DOid).DInt)
 				typ, ok := types.OidToType[oid]
 				if !ok {
 					// If the type wasn't statically known, try looking it up as a user
@@ -1935,6 +1935,49 @@ SELECT description
 	//  RETURN CASE WHEN $2.typtype = 'd' THEN $2.typtypmod ELSE $1.atttypmod END;
 	//
 	"information_schema._pg_truetypmod": pgTrueTypImpl("atttypmod", "typtypmod", types.Int4),
+
+	// NOTE: this could be defined as a user-defined function, like
+	// it is in Postgres:
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	//
+	//  CREATE FUNCTION _pg_char_max_length(typid oid, typmod int4) RETURNS integer
+	//      LANGUAGE sql
+	//      IMMUTABLE
+	//      PARALLEL SAFE
+	//      RETURNS NULL ON NULL INPUT
+	//  RETURN
+	//    CASE WHEN $2 = -1 /* default typmod */
+	//         THEN null
+	//         WHEN $1 IN (1042, 1043) /* char, varchar */
+	//         THEN $2 - 4
+	//         WHEN $1 IN (1560, 1562) /* bit, varbit */
+	//         THEN $2
+	//         ELSE null
+	//    END;
+	//
+	"information_schema._pg_char_max_length": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"typid", types.Oid},
+				{"typmod", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typid := oid.Oid(args[0].(*tree.DOid).DInt)
+				typmod := *args[1].(*tree.DInt)
+				if typmod == -1 {
+					return tree.DNull, nil
+				} else if typid == oid.T_bpchar || typid == oid.T_varchar {
+					return tree.NewDInt(typmod - 4), nil
+				} else if typid == oid.T_bit || typid == oid.T_varbit {
+					return tree.NewDInt(typmod), nil
+				}
+				return tree.DNull, nil
+			},
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 }
 
 func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (tree.Datum, error) {
