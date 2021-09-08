@@ -190,6 +190,13 @@ WHERE
               CREATE TEMP TABLE t(a int primary key, b int)`,
 			Stmt: `SELECT pg_my_temp_schema()`,
 		},
+
+		{
+			Name: "pg_is_other_temp_schema",
+			Setup: `SET experimental_enable_temp_tables = true;
+              CREATE TEMP TABLE t(a int primary key, b int)`,
+			Stmt: `SELECT pg_is_other_temp_schema('t'::regclass)`,
+		},
 	}
 
 	RunRoundTripBenchmark(b, tests)
