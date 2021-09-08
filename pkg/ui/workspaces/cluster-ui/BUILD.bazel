@@ -46,17 +46,22 @@ webpack(
         # single file as output.
     ],
     args = [
-        "--config $(execpath webpack.config.js)",
+        "$(execpath src/index.ts)",
+        "--config",
+        "$(execpath webpack.config.js)",
         "--env.is_bazel_build",
-        "--mode production",
+        "--mode",
+        "production",
         "-o $@",
+        "--env.output=$@",
     ],
-    data = [
+    data = glob([
+        "src/**",
+    ]) + [
+        ":node_modules",
         ".babelrc",
-        "src",
         "tsconfig.json",
         "webpack.config.js",
-        ":node_modules",
         "//pkg/ui:node_modules_cluster_ui",
         "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
         "@npm//@babel/parser",
