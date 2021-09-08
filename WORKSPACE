@@ -7,6 +7,7 @@ workspace(
           "pkg/ui/node_modules",
           "pkg/ui/workspaces/cluster-ui/node_modules",
           "pkg/ui/workspaces/db-console/node_modules",
+          "pkg/ui/workspaces/db-console/src/js/node_modules",
        ],
     },
 )
@@ -58,15 +59,18 @@ go_rules_dependencies()
 go_register_toolchains(go_version = "1.16.6")
 
 # Configure nodeJS.
-load("@build_bazel_rules_nodejs//:index.bzl", "yarn_install")
+load("@build_bazel_rules_nodejs//:index.bzl", "yarn_install", "node_repositories")
+
+node_repositories(package_json = ["//pkg/ui:package.json"])
 
 # install external dependencies for pkg/ui package
 yarn_install(
     name = "npm",
     package_json = "//pkg/ui:package.json",
     yarn_lock = "//pkg/ui:yarn.lock",
-    frozen_lockfile = False,
     strict_visibility = False,
+    # package_path = "pkg/ui/workspaces/a",
+    # data = ["@nodejs//:yarn_node_repositories"]
 )
 
 # Load gazelle dependencies.
