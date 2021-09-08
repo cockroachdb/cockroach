@@ -59,34 +59,45 @@ var uniqueStore = []*roachpb.StoreDescriptor{
 
 type mockNodeLiveness struct {
 	syncutil.Mutex
-	defaultNodeStatus livenesspb.NodeLivenessStatus
-	nodes             map[roachpb.NodeID]livenesspb.NodeLivenessStatus
+	defaultNodeStatus           NodeStatus
+	defaultNodeMembershipStatus NodeMembershipStatus
+	nodesStatus                 map[roachpb.NodeID]NodeStatus
+	nodesMembership             map[roachpb.NodeID]NodeMembershipStatus
 }
 
-func newMockNodeLiveness(defaultNodeStatus livenesspb.NodeLivenessStatus) *mockNodeLiveness {
+func newMockNodeLiveness(
+	defaultNodeStatus NodeStatus, defaultNodeMembershipStatus NodeMembershipStatus,
+) *mockNodeLiveness {
 	return &mockNodeLiveness{
-		defaultNodeStatus: defaultNodeStatus,
-		nodes:             map[roachpb.NodeID]livenesspb.NodeLivenessStatus{},
+		defaultNodeStatus:           defaultNodeStatus,
+		defaultNodeMembershipStatus: defaultNodeMembershipStatus,
+		nodesStatus:                 map[roachpb.NodeID]NodeStatus{},
+		nodesMembership:             map[roachpb.NodeID]NodeMembershipStatus{},
 	}
 }
 
 func (m *mockNodeLiveness) setNodeStatus(
-	nodeID roachpb.NodeID, status livenesspb.NodeLivenessStatus,
+	nodeID roachpb.NodeID, status NodeStatus, membership NodeMembershipStatus,
 ) {
 	m.Lock()
 	defer m.Unlock()
-	m.nodes[nodeID] = status
+	m.nodesStatus[nodeID] = status
+	m.nodesMembership[nodeID] = membership
 }
 
 func (m *mockNodeLiveness) nodeLivenessFunc(
 	nodeID roachpb.NodeID, now time.Time, threshold time.Duration,
-) livenesspb.NodeLivenessStatus {
+) (NodeStatus, NodeMembershipStatus) {
 	m.Lock()
 	defer m.Unlock()
-	if status, ok := m.nodes[nodeID]; ok {
-		return status
+	status, ok := m.nodesStatus[nodeID]
+	if !ok {
+		status = m.defaultNodeStatus
 	}
-	return m.defaultNodeStatus
+	if membership, ok := m.nodesMembership[nodeID]; ok {
+		return status, membership
+	}
+	return status, m.defaultNodeMembershipStatus
 }
 
 // createTestStorePool creates a stopper, gossip and storePool for use in
@@ -95,7 +106,8 @@ func createTestStorePool(
 	timeUntilStoreDeadValue time.Duration,
 	deterministic bool,
 	nodeCount NodeCountFunc,
-	defaultNodeStatus livenesspb.NodeLivenessStatus,
+	defaultNodeStatus NodeStatus,
+	defaultNodeMembershipStatus NodeMembershipStatus,
 ) (*stop.Stopper, *gossip.Gossip, *hlc.ManualClock, *StorePool, *mockNodeLiveness) {
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(123)
@@ -111,7 +123,7 @@ func createTestStorePool(
 	})
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
-	mnl := newMockNodeLiveness(defaultNodeStatus)
+	mnl := newMockNodeLiveness(defaultNodeStatus, defaultNodeMembershipStatus)
 
 	TimeUntilStoreDead.Override(context.Background(), &st.SV, timeUntilStoreDeadValue)
 	storePool := NewStorePool(
@@ -134,7 +146,8 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 0 }, /* NodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
@@ -202,7 +215,8 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	stopper, g, _, sp, mnl := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	constraints := []roachpb.ConstraintsConjunction{
@@ -274,11 +288,11 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		// absentStore is purposefully not gossiped.
 	}, t)
 	for i := 1; i <= 8; i++ {
-		mnl.setNodeStatus(roachpb.NodeID(i), livenesspb.NodeLivenessStatus_LIVE)
+		mnl.setNodeStatus(roachpb.NodeID(i), NodeStatusLive, NodeMembershipStatusActive)
 	}
 
 	// Set deadStore as dead.
-	mnl.setNodeStatus(deadStore.Node.NodeID, livenesspb.NodeLivenessStatus_DEAD)
+	mnl.setNodeStatus(deadStore.Node.NodeID, NodeStatusDead, NodeMembershipStatusActive)
 	sp.detailsMu.Lock()
 	// Set declinedStore as throttled.
 	sp.detailsMu.storeDetails[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
@@ -500,7 +514,8 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	stores := []*roachpb.StoreDescriptor{
@@ -622,7 +637,8 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	stopper, _, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(ctx)
 
 	// Create store.
@@ -673,7 +689,8 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
@@ -694,7 +711,8 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	stopper, g, _, sp, mnl := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
@@ -751,7 +769,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 
 	sg.GossipStores(stores, t)
 	for i := 1; i <= 5; i++ {
-		mnl.setNodeStatus(roachpb.NodeID(i), livenesspb.NodeLivenessStatus_LIVE)
+		mnl.setNodeStatus(roachpb.NodeID(i), NodeStatusLive, NodeMembershipStatusActive)
 	}
 
 	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(replicas, false /* includeSuspectAndDrainingStores */)
@@ -762,8 +780,8 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 		t.Fatalf("expected no dead replicas initially, found %d (%v)", len(deadReplicas), deadReplicas)
 	}
 	// Mark nodes 4 & 5 as dead.
-	mnl.setNodeStatus(4, livenesspb.NodeLivenessStatus_DEAD)
-	mnl.setNodeStatus(5, livenesspb.NodeLivenessStatus_DEAD)
+	mnl.setNodeStatus(4, NodeStatusDead, NodeMembershipStatusActive)
+	mnl.setNodeStatus(5, NodeStatusDead, NodeMembershipStatusActive)
 
 	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas, false /* includeSuspectNodes */)
 	if a, e := liveReplicas, replicas[:3]; !reflect.DeepEqual(a, e) {
@@ -774,7 +792,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	}
 
 	// Mark node 4 as merely unavailable.
-	mnl.setNodeStatus(4, livenesspb.NodeLivenessStatus_UNAVAILABLE)
+	mnl.setNodeStatus(4, NodeStatusUnavailable, NodeMembershipStatusActive)
 
 	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas, false /* includeSuspectAndDrainingStores */)
 	if a, e := liveReplicas, replicas[:3]; !reflect.DeepEqual(a, e) {
@@ -798,7 +816,8 @@ func TestStorePoolDefaultState(t *testing.T) {
 	stopper, _, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 
 	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(
@@ -827,7 +846,8 @@ func TestStorePoolThrottle(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 
 	sg := gossiputil.NewStoreGossiper(g)
@@ -866,7 +886,8 @@ func TestStorePoolSuspected(t *testing.T) {
 	stopper, g, _, sp, mnl := createTestStorePool(
 		TestTimeUntilStoreDeadOff, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 
 	sg := gossiputil.NewStoreGossiper(g)
@@ -879,7 +900,7 @@ func TestStorePoolSuspected(t *testing.T) {
 
 	// See state transition diagram in storeDetail.status() for a visual
 	// representation of what this test asserts.
-	mnl.setNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
+	mnl.setNodeStatus(store.Node.NodeID, NodeStatusLive, NodeMembershipStatusActive)
 	sp.detailsMu.Lock()
 	detail := sp.getStoreDetailLocked(store.StoreID)
 	s := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
@@ -888,7 +909,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	require.False(t, detail.lastAvailable.IsZero())
 	require.True(t, detail.lastUnavailable.IsZero())
 
-	mnl.setNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_UNAVAILABLE)
+	mnl.setNodeStatus(store.Node.NodeID, NodeStatusUnavailable, NodeMembershipStatusActive)
 	sp.detailsMu.Lock()
 	s = detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
 	sp.detailsMu.Unlock()
@@ -896,7 +917,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	require.False(t, detail.lastAvailable.IsZero())
 	require.False(t, detail.lastUnavailable.IsZero())
 
-	mnl.setNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
+	mnl.setNodeStatus(store.Node.NodeID, NodeStatusLive, NodeMembershipStatusActive)
 	sp.detailsMu.Lock()
 	s = detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
 	sp.detailsMu.Unlock()
@@ -908,7 +929,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	sp.detailsMu.Unlock()
 	require.Equal(t, s, storeStatusAvailable)
 
-	mnl.setNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_DRAINING)
+	mnl.setNodeStatus(store.Node.NodeID, NodeStatusLive, NodeMembershipStatusDraining)
 	sp.detailsMu.Lock()
 	s = detail.status(now,
 		timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
@@ -916,7 +937,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	require.Equal(t, s, storeStatusDraining)
 	require.True(t, detail.lastAvailable.IsZero())
 
-	mnl.setNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
+	mnl.setNodeStatus(store.Node.NodeID, NodeStatusLive, NodeMembershipStatusActive)
 	sp.detailsMu.Lock()
 	s = detail.status(now.Add(timeAfterStoreSuspect).Add(time.Millisecond),
 		timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
@@ -931,7 +952,8 @@ func TestGetLocalities(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
@@ -1011,7 +1033,8 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 	stopper, g, _, sp, mnl := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		livenesspb.NodeLivenessStatus_DEAD)
+		NodeStatusDead,
+		NodeMembershipStatusActive)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
@@ -1068,7 +1091,7 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 
 	sg.GossipStores(stores, t)
 	for i := 1; i <= 5; i++ {
-		mnl.setNodeStatus(roachpb.NodeID(i), livenesspb.NodeLivenessStatus_LIVE)
+		mnl.setNodeStatus(roachpb.NodeID(i), NodeStatusLive, NodeMembershipStatusActive)
 	}
 
 	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(replicas, false /* includeSuspectAndDrainingStores */)
@@ -1079,9 +1102,9 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 		t.Fatalf("expected no dead replicas initially, found %d (%v)", len(deadReplicas), deadReplicas)
 	}
 	// Mark node 4 as decommissioning.
-	mnl.setNodeStatus(4, livenesspb.NodeLivenessStatus_DECOMMISSIONING)
+	mnl.setNodeStatus(4, NodeStatusLive, NodeMembershipStatusDecommissioning)
 	// Mark node 5 as dead.
-	mnl.setNodeStatus(5, livenesspb.NodeLivenessStatus_DEAD)
+	mnl.setNodeStatus(5, NodeStatusDead, NodeMembershipStatusActive)
 
 	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas, false /* includeSuspectAndDrainingStores */)
 	// Decommissioning replicas are considered live.
@@ -1105,10 +1128,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 	threshold := 5 * time.Minute
 
 	for _, tc := range []struct {
-		liveness livenesspb.Liveness
-		expected livenesspb.NodeLivenessStatus
+		liveness           livenesspb.Liveness
+		expected           NodeStatus
+		expectedMembership NodeMembershipStatus
 	}{
-		// Valid status.
+		// 0. Valid status.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1118,8 +1142,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				},
 				Draining: false,
 			},
-			expected: livenesspb.NodeLivenessStatus_LIVE,
+			expected:           NodeStatusLive,
+			expectedMembership: NodeMembershipStatusActive,
 		},
+		// 1. Live expires slightly in the future.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1130,9 +1156,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				},
 				Draining: false,
 			},
-			expected: livenesspb.NodeLivenessStatus_LIVE,
+			expected:           NodeStatusLive,
+			expectedMembership: NodeMembershipStatusActive,
 		},
-		// Expired status.
+		// 2. Expired status.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1143,9 +1170,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				},
 				Draining: false,
 			},
-			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+			expected:           NodeStatusUnavailable,
+			expectedMembership: NodeMembershipStatusActive,
 		},
-		// Expired status.
+		// 3. Expired status.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1155,9 +1183,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				},
 				Draining: false,
 			},
-			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+			expected:           NodeStatusUnavailable,
+			expectedMembership: NodeMembershipStatusActive,
 		},
-		// Max bound of expired.
+		// 4. Max bound of expired.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1167,9 +1196,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				},
 				Draining: false,
 			},
-			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+			expected:           NodeStatusUnavailable,
+			expectedMembership: NodeMembershipStatusActive,
 		},
-		// Dead status.
+		// 5. Dead status.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1179,9 +1209,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				},
 				Draining: false,
 			},
-			expected: livenesspb.NodeLivenessStatus_DEAD,
+			expected:           NodeStatusDead,
+			expectedMembership: NodeMembershipStatusActive,
 		},
-		// Decommissioning.
+		// 6. Decommissioning.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1192,9 +1223,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
 				Draining:   false,
 			},
-			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			expected:           NodeStatusLive,
+			expectedMembership: NodeMembershipStatusDecommissioning,
 		},
-		// Decommissioning + expired.
+		// 7. Decommissioning + expired.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1205,9 +1237,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
 				Draining:   false,
 			},
-			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONED,
+			expected:           NodeStatusDead,
+			expectedMembership: NodeMembershipStatusDecommissioned,
 		},
-		// Decommissioned + live.
+		// 8. Decommissioned + live.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1218,12 +1251,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONED,
 				Draining:   false,
 			},
-			// Despite having marked the node as fully decommissioned, through
-			// this NodeLivenessStatus API we still surface the node as
-			// "Decommissioning". See #50707 for more details.
-			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			expected:           NodeStatusLive,
+			expectedMembership: NodeMembershipStatusDecommissioned,
 		},
-		// Decommissioned + expired.
+		// 9. Decommissioned + expired.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1234,9 +1265,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONED,
 				Draining:   false,
 			},
-			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONED,
+			expected:           NodeStatusDead,
+			expectedMembership: NodeMembershipStatusDecommissioned,
 		},
-		// Draining
+		// 10. Draining.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1246,9 +1278,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				},
 				Draining: true,
 			},
-			expected: livenesspb.NodeLivenessStatus_DRAINING,
+			expected:           NodeStatusLive,
+			expectedMembership: NodeMembershipStatusDraining,
 		},
-		// Decommissioning that is unavailable.
+		// 11. Decommissioning that is unavailable.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1259,9 +1292,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Draining:   false,
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
 			},
-			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+			expected:           NodeStatusUnavailable,
+			expectedMembership: NodeMembershipStatusDecommissioning,
 		},
-		// Draining that is unavailable.
+		// 12. Draining that is unavailable.
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1271,12 +1305,17 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				},
 				Draining: true,
 			},
-			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+			expected:           NodeStatusUnavailable,
+			expectedMembership: NodeMembershipStatusDraining,
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			if a, e := LivenessStatus(tc.liveness, now, threshold), tc.expected; a != e {
-				t.Errorf("liveness status was %s, wanted %s", a.String(), e.String())
+			s, m := LivenessStatus(tc.liveness, now, threshold)
+			if s != tc.expected {
+				t.Errorf("status was %s, wanted %s", s.String(), tc.expected.String())
+			}
+			if m != tc.expectedMembership {
+				t.Errorf("membership was %s, wanted %s", m.String(), tc.expectedMembership.String())
 			}
 		})
 	}

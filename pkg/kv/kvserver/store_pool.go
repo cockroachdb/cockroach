@@ -119,7 +119,7 @@ type NodeCountFunc func() int
 // expired by more than TimeUntilStoreDead.
 type NodeLivenessFunc func(
 	nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration,
-) livenesspb.NodeLivenessStatus
+) (NodeStatus, NodeMembershipStatus)
 
 // MakeStorePoolNodeLivenessFunc returns a function which determines
 // the status of a node based on information provided by the specified
@@ -127,16 +127,16 @@ type NodeLivenessFunc func(
 func MakeStorePoolNodeLivenessFunc(nodeLiveness *liveness.NodeLiveness) NodeLivenessFunc {
 	return func(
 		nodeID roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration,
-	) livenesspb.NodeLivenessStatus {
+	) (NodeStatus, NodeMembershipStatus) {
 		liveness, ok := nodeLiveness.GetLiveness(nodeID)
 		if !ok {
-			return livenesspb.NodeLivenessStatus_UNKNOWN
+			return NodeStatusUnknown, NodeMembershipStatusUnknown
 		}
 		return LivenessStatus(liveness.Liveness, now, timeUntilStoreDead)
 	}
 }
 
-// LivenessStatus returns a NodeLivenessStatus enumeration value for the
+// LivenessStatus returns a NodeStatus and NodeMembershipStatus values for the
 // provided Liveness based on the provided timestamp and threshold.
 //
 // See the note on IsLive() for considerations on what should be passed in as
@@ -152,37 +152,36 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *liveness.NodeLiveness) NodeLive
 //
 //  - Let's say a node write its liveness record at tWrite. It sets the
 //    Expiration field of the record as tExp=tWrite+livenessThreshold.
-//    The node is considered LIVE (or DECOMMISSIONING or DRAINING).
+//    The node is considered LIVE.
 //  - At tExp, the IsLive() method starts returning false. The state becomes
-//    UNAVAILABLE (or stays DECOMMISSIONING or DRAINING).
-//  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
+//    UNAVAILABLE.
+//  - Once threshold passes, the node is considered DEAD.
 //
-// NB: There's a bit of discrepancy between what "Decommissioned" represents, as
-// seen by NodeStatusLiveness, and what "Decommissioned" represents as
-// understood by MembershipStatus. Currently it's possible for a live node, that
-// was marked as fully decommissioned, to have a NodeLivenessStatus of
-// "Decommissioning". This was kept this way for backwards compatibility, and
-// ideally we should remove usage of NodeLivenessStatus altogether. See #50707
-// for more details.
+// The membership status of the node is reported separately and is based on the
+// MembershipStatus proto.
 func LivenessStatus(
 	l livenesspb.Liveness, now time.Time, deadThreshold time.Duration,
-) livenesspb.NodeLivenessStatus {
+) (NodeStatus, NodeMembershipStatus) {
 	if l.IsDead(now, deadThreshold) {
 		if !l.Membership.Active() {
-			return livenesspb.NodeLivenessStatus_DECOMMISSIONED
+			return NodeStatusDead, NodeMembershipStatusDecommissioned
 		}
-		return livenesspb.NodeLivenessStatus_DEAD
+		return NodeStatusDead, NodeMembershipStatusActive
 	}
+	nodeStatus := NodeStatusUnavailable
 	if l.IsLive(now) {
-		if !l.Membership.Active() {
-			return livenesspb.NodeLivenessStatus_DECOMMISSIONING
-		}
-		if l.Draining {
-			return livenesspb.NodeLivenessStatus_DRAINING
-		}
-		return livenesspb.NodeLivenessStatus_LIVE
+		nodeStatus = NodeStatusLive
 	}
-	return livenesspb.NodeLivenessStatus_UNAVAILABLE
+	if l.Membership.Decommissioned() {
+		return nodeStatus, NodeMembershipStatusDecommissioned
+	}
+	if l.Membership.Decommissioning() {
+		return nodeStatus, NodeMembershipStatusDecommissioning
+	}
+	if l.Draining {
+		return nodeStatus, NodeMembershipStatusDraining
+	}
+	return nodeStatus, NodeMembershipStatusActive
 }
 
 type storeDetail struct {
@@ -215,6 +214,50 @@ func (sd storeDetail) isThrottled(now time.Time) bool {
 func (sd storeDetail) isSuspect(now time.Time, suspectDuration time.Duration) bool {
 	return sd.lastUnavailable.Add(suspectDuration).After(now)
 }
+
+// NodeStatus is the current status of a node. This measures the health of the node.
+//go:generate stringer -type=NodeStatus
+type NodeStatus int
+
+const (
+	_ NodeStatus = iota
+	// NodeStatusDead describes a node that is dead, i.e. has been unavailable for
+	// longer than `server.time_until_store_dead`.
+	NodeStatusDead
+	// NodeStatusUnavailable describes a node that has been missing liveness
+	// heartbeats, but not for long enough to be declared dead.
+	NodeStatusUnavailable
+	// NodeStatusLive describes a node that is heartbeating and thus live.
+	NodeStatusLive
+	// NodeStatusUnknown communicates that the status of the node is unknown i.e.
+	// there was never a valid heartbeat or gossip message about the node.
+	NodeStatusUnknown
+)
+
+// NodeMembershipStatus describes the status of the node in the cluster, but not
+// its health. It determines if the node is an active participant in the cluster
+// or if it's trying to leave the cluster because it's being drained or
+// decommissioned. This is thus orthogonal to NodeStatus.
+//
+// Note that a decommissioning node may also be draining at the same time, and
+// different use cases may handle this situation differently.
+//go:generate stringer -type=NodeMembershipStatus
+type NodeMembershipStatus int
+
+const (
+	_ NodeMembershipStatus = iota
+	// NodeMembershipStatusActive describes a node is an active participant in the cluster.
+	NodeMembershipStatusActive
+	// NodeMembershipStatusDecommissioning describes a node is being decommissioned.
+	NodeMembershipStatusDecommissioning
+	// NodeMembershipStatusDecommissioned describes a node has been successfully decommissioned.
+	NodeMembershipStatusDecommissioned
+	// NodeMembershipStatusDraining describes a node that is draining.
+	NodeMembershipStatusDraining
+	// NodeMembershipStatusUnknown describes a node whose membership status is
+	// unknown because we have no record of a liveness heartbeat for it.
+	NodeMembershipStatusUnknown
+)
 
 // storeStatus is the current status of a store.
 type storeStatus int
@@ -291,21 +334,26 @@ func (sd *storeDetail) status(
 	//
 	// Store statuses checked in the following order:
 	// dead -> decommissioning -> unknown -> draining -> suspect -> available.
-	switch nl(sd.desc.Node.NodeID, now, threshold) {
-	case livenesspb.NodeLivenessStatus_DEAD, livenesspb.NodeLivenessStatus_DECOMMISSIONED:
+	nodeStatus, nodeMembershipStatus := nl(sd.desc.Node.NodeID, now, threshold)
+	if nodeStatus == NodeStatusDead || nodeMembershipStatus == NodeMembershipStatusDecommissioned {
 		return storeStatusDead
-	case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
-		return storeStatusDecommissioning
-	case livenesspb.NodeLivenessStatus_UNAVAILABLE:
+	}
+	if nodeStatus == NodeStatusLive && nodeMembershipStatus == NodeMembershipStatusDecommissioning {
+			return storeStatusDecommissioning
+	}
+	if nodeStatus == NodeStatusUnavailable {
 		// We don't want to suspect a node on startup or when it's first added to a
 		// cluster, because we dont know its liveness yet.
 		if !sd.lastAvailable.IsZero() {
 			sd.lastUnavailable = now
 		}
 		return storeStatusUnknown
-	case livenesspb.NodeLivenessStatus_UNKNOWN:
+	}
+	if nodeStatus == NodeStatusUnknown {
 		return storeStatusUnknown
-	case livenesspb.NodeLivenessStatus_DRAINING:
+	}
+
+	if nodeMembershipStatus == NodeMembershipStatusDraining {
 		// Wipe out the lastAvailable timestamp, so if this node comes back after a
 		// graceful restart it will not be considered as suspect. This is best effort
 		// and we may not see a store in this state. To help with that we perform
