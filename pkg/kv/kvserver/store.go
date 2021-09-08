@@ -835,11 +835,18 @@ func NewStore(
 		ctSender: cfg.ClosedTimestampSender,
 	}
 	if cfg.RPCContext != nil {
-		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
+		s.allocator = MakeAllocator(
+			cfg.StorePool,
+			cfg.RPCContext.RemoteClocks.Latency,
+			cfg.TestingKnobs.AllocatorKnobs,
+		)
 	} else {
-		s.allocator = MakeAllocator(cfg.StorePool, func(string) (time.Duration, bool) {
-			return 0, false
-		})
+		s.allocator = MakeAllocator(
+			cfg.StorePool, func(string) (time.Duration, bool) {
+				return 0, false
+			},
+			cfg.TestingKnobs.AllocatorKnobs,
+		)
 	}
 	s.replRankings = newReplicaRankings()
 
