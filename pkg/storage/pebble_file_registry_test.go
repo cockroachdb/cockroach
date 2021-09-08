@@ -60,6 +60,17 @@ func TestFileRegistryRelativePaths(t *testing.T) {
 	}
 }
 
+func TestFileRegistry_UpgradeEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mem := vfs.NewMem()
+	registry := &PebbleFileRegistry{FS: mem, DBDir: ""}
+	require.NoError(t, registry.Load())
+	require.NoError(t, registry.StopUsingOldRegistry())
+	require.NoError(t, registry.Close())
+}
+
 func TestFileRegistryOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

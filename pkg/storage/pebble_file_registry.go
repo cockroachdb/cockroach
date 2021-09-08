@@ -425,7 +425,10 @@ func (r *PebbleFileRegistry) upgradeToRecordsVersion() error {
 	if err := r.createNewRegistryFile(); err != nil {
 		return err
 	}
-	return r.FS.Remove(r.oldRegistryPath)
+	if err := r.FS.Remove(r.oldRegistryPath); err != nil && !oserror.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func (r *PebbleFileRegistry) processBatchLocked(batch *enginepb.RegistryUpdateBatch) error {
