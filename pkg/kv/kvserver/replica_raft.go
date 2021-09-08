@@ -864,6 +864,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	applicationElapsed := timeutil.Since(applicationStart).Nanoseconds()
 	r.store.metrics.RaftApplyCommittedLatency.RecordValue(applicationElapsed)
+	r.store.metrics.RaftCommandsApplied.Inc(int64(len(rd.CommittedEntries)))
 	if r.store.TestingKnobs().EnableUnconditionalRefreshesInRaftReady {
 		refreshReason = reasonNewLeaderOrConfigChange
 	}
