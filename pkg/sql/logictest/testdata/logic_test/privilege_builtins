@@ -1066,6 +1066,157 @@ SELECT has_type_privilege('bar', 'text'::REGTYPE::OID, 'USAGE')
 ----
 true
 
+
+## pg_has_role
+
+query BBBBBB
+SELECT pg_has_role(12345, 'USAGE'),
+       pg_has_role(12345, 'USAGE WITH GRANT OPTION'),
+       pg_has_role(12345, 'USAGE WITH ADMIN OPTION'),
+       pg_has_role(12345, 'MEMBER'),
+       pg_has_role(12345, 'MEMBER WITH GRANT OPTION'),
+       pg_has_role(12345, 'MEMBER WITH ADMIN OPTION')
+----
+NULL  NULL  NULL  NULL  NULL  NULL
+
+query BBBBBB
+SELECT pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'USAGE'),
+       pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'USAGE WITH GRANT OPTION'),
+       pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'USAGE WITH ADMIN OPTION'),
+       pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'MEMBER'),
+       pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'MEMBER WITH GRANT OPTION'),
+       pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+query error pgcode 42704 role 'does_not_exist' does not exist
+SELECT pg_has_role('does_not_exist', 'USAGE')
+
+query BBBBBB
+SELECT pg_has_role('root', 'USAGE'),
+       pg_has_role('root', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('root', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('root', 'MEMBER'),
+       pg_has_role('root', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('root', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+query error pgcode 22023 unrecognized privilege type: "SELECT"
+SELECT pg_has_role('root', 'SELECT')
+
+query error pgcode 22023 unrecognized privilege type: "SELECT"
+SELECT pg_has_role('root', 'SELECT, SELECT')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT pg_has_role('no_user', 'root', 'USAGE')
+
+query BBBBBB
+SELECT pg_has_role('root', 'root', 'USAGE'),
+       pg_has_role('root', 'root', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('root', 'root', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('root', 'root', 'MEMBER'),
+       pg_has_role('root', 'root', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('root', 'root', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+query BBBBBB
+SELECT pg_has_role('bar', 'root', 'USAGE'),
+       pg_has_role('bar', 'root', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('bar', 'root', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('bar', 'root', 'MEMBER'),
+       pg_has_role('bar', 'root', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('bar', 'root', 'MEMBER WITH ADMIN OPTION')
+----
+false  false  false  false  false  false
+
+statement ok
+CREATE ROLE some_users
+
+statement ok
+GRANT some_users TO bar
+
+query BBBBBB
+SELECT pg_has_role('testuser', 'some_users', 'USAGE'),
+       pg_has_role('testuser', 'some_users', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('testuser', 'some_users', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('testuser', 'some_users', 'MEMBER'),
+       pg_has_role('testuser', 'some_users', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('testuser', 'some_users', 'MEMBER WITH ADMIN OPTION')
+----
+false  false  false  false  false  false
+
+query BBBBBB
+SELECT pg_has_role('root', 'some_users', 'USAGE'),
+       pg_has_role('root', 'some_users', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('root', 'some_users', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('root', 'some_users', 'MEMBER'),
+       pg_has_role('root', 'some_users', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('root', 'some_users', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+query BBBBBB
+SELECT pg_has_role('bar', 'some_users', 'USAGE'),
+       pg_has_role('bar', 'some_users', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('bar', 'some_users', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('bar', 'some_users', 'MEMBER'),
+       pg_has_role('bar', 'some_users', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('bar', 'some_users', 'MEMBER WITH ADMIN OPTION')
+----
+true  false  false  true  false  false
+
+statement ok
+GRANT some_users TO bar WITH ADMIN OPTION
+
+query BBBBBB
+SELECT pg_has_role('bar', 'some_users', 'USAGE'),
+       pg_has_role('bar', 'some_users', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('bar', 'some_users', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('bar', 'some_users', 'MEMBER'),
+       pg_has_role('bar', 'some_users', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('bar', 'some_users', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+# WITH ADMIN OPTION is session-user dependent.
+
+query BBBBBB
+SELECT pg_has_role('testuser', 'testuser', 'USAGE'),
+       pg_has_role('testuser', 'testuser', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('testuser', 'testuser', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('testuser', 'testuser', 'MEMBER'),
+       pg_has_role('testuser', 'testuser', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('testuser', 'testuser', 'MEMBER WITH ADMIN OPTION')
+----
+true  false  false  true  false  false
+
+user testuser
+
+query BBBBBB
+SELECT pg_has_role('testuser', 'testuser', 'USAGE'),
+       pg_has_role('testuser', 'testuser', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('testuser', 'testuser', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('testuser', 'testuser', 'MEMBER'),
+       pg_has_role('testuser', 'testuser', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('testuser', 'testuser', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+query BBBBBB
+SELECT pg_has_role('testuser', 'USAGE'),
+       pg_has_role('testuser', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('testuser', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('testuser', 'MEMBER'),
+       pg_has_role('testuser', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('testuser', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+user root
+
+
 # Regression test for #39703.
 
 statement ok
