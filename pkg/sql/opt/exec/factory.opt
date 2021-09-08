@@ -362,6 +362,7 @@ define TopK {
     Input exec.Node
     K int64
     Ordering exec.OutputOrdering
+    AlreadyOrderedPrefix int
 }
 
 # Max1Row permits at most one row from the given input node, causing an error
