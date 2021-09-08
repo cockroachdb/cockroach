@@ -1462,7 +1462,7 @@ func (dsp *DistSQLPlanner) addSorters(
 			Sorter: &execinfrapb.SorterSpec{
 				OutputOrdering:   outputOrdering,
 				OrderingMatchLen: uint32(alreadyOrderedPrefix),
-				Limit: limit,
+				Limit:            limit,
 			},
 		},
 		execinfrapb.PostProcessSpec{},
@@ -2833,7 +2833,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		if n.k < 0 {
 			return nil, errors.New("negative value for LIMIT")
 		}
-		dsp.addSorters(plan, n.ordering, 0 /* alreadyOrderedPrefix */, n.k)
+		dsp.addSorters(plan, n.ordering, n.alreadyOrderedPrefix, n.k)
 
 	case *unaryNode:
 		plan, err = dsp.createPlanForUnary(planCtx, n)

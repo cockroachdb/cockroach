@@ -991,11 +991,14 @@ func (ef *execFactory) ConstructLimit(
 }
 
 // ConstructTopK is part of the execFactory interface.
-func (ef *execFactory) ConstructTopK(input exec.Node, k int64, ordering exec.OutputOrdering) (exec.Node, error) {
+func (ef *execFactory) ConstructTopK(
+	input exec.Node, k int64, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
+) (exec.Node, error) {
 	return &topKNode{
-		plan: input.(planNode),
-		k: k,
-		ordering: colinfo.ColumnOrdering(ordering),
+		plan:                 input.(planNode),
+		k:                    k,
+		ordering:             colinfo.ColumnOrdering(ordering),
+		alreadyOrderedPrefix: alreadyOrderedPrefix,
 	}, nil
 }
 
