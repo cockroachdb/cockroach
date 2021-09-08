@@ -180,10 +180,6 @@ type tenantSideCostController struct {
 		// time.
 		requestNeedsRetry bool
 
-		// notificationReceivedDuringRequest is set if we received a "low RU"
-		// notification while a request was in progress.
-		notificationReceivedDuringRequest bool
-
 		lastRequestTime         time.Time
 		lastReportedConsumption roachpb.TenantConsumption
 
@@ -196,6 +192,13 @@ type tenantSideCostController struct {
 		setupNotificationTimer     timeutil.TimerI
 		setupNotificationCh        <-chan time.Time
 		setupNotificationThreshold tenantcostmodel.RU
+
+		// backupRate is the refill rate we fall back to if the token bucket
+		// requests don't complete or take a long time.
+		backupRate float64
+		// backupRateStart is the time when we can switch to the backup rate; set
+		// only when we get a low RU notification.
+		backupRateStart time.Time
 
 		// avgRUPerSec is an exponentially-weighted moving average of the RU
 		// consumption per second; used to estimate the RU requirements for the next
@@ -361,8 +364,12 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 	ctx context.Context, resp *roachpb.TokenBucketResponse,
 ) {
 	if log.V(1) {
-		log.Infof(ctx, "TokenBucket response: %g RUs over %s", resp.GrantedRU, resp.TrickleDuration)
+		log.Infof(
+			ctx, "TokenBucket response: %g RUs over %s (backup rate %g)",
+			resp.GrantedRU, resp.TrickleDuration, resp.BackupRate,
+		)
 	}
+	c.run.backupRate = resp.BackupRate
 
 	if !c.run.initialRequestCompleted {
 		c.run.initialRequestCompleted = true
@@ -373,19 +380,20 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 
 	granted := resp.GrantedRU
 	if granted == 0 {
-		// We must have not requested any more RUs; nothing to do.
+		// We must have not requested any more RUs. The token bucket state doesn't
+		// need updating.
 		//
 		// It is possible that we got a low RU notification while the request was in
-		// flight. If that is the case, we must send another request.
-		if c.run.notificationReceivedDuringRequest {
-			c.run.notificationReceivedDuringRequest = false
+		// flight. If that is the case, backupRateStart will be set and we send
+		// another request.
+		if !c.run.backupRateStart.IsZero() {
 			c.sendTokenBucketRequest(ctx)
 		}
 		return
 	}
 	// It doesn't matter if we received a notification; we are going to
 	// reconfigure the bucket and set up a new notification as needed.
-	c.run.notificationReceivedDuringRequest = false
+	c.run.backupRateStart = time.Time{}
 
 	if !c.run.lastDeadline.IsZero() {
 		// If last request came with a trickle duration, we may have RUs that were
@@ -463,6 +471,15 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 		case <-tickerCh:
 			c.updateRunState(ctx)
 			c.updateAvgRUPerSec()
+
+			// Switch to the backup rate, if necessary.
+			if !c.run.backupRateStart.IsZero() && !c.run.now.Before(c.run.backupRateStart) {
+				log.Infof(ctx, "switching to backup rate %.10g", c.run.backupRate)
+				c.limiter.Reconfigure(c.run.now, tokenBucketReconfigureArgs{
+					NewRate: tenantcostmodel.RU(c.run.backupRate),
+				})
+				c.run.backupRateStart = time.Time{}
+			}
 			if c.run.requestNeedsRetry || c.shouldReportConsumption() {
 				c.run.requestNeedsRetry = false
 				c.sendTokenBucketRequest(ctx)
@@ -493,10 +510,10 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 
 		case <-c.lowRUNotifyChan:
 			c.updateRunState(ctx)
+			c.run.backupRateStart = c.run.now.Add(anticipation)
+			// If we have a request in flight, the token bucket will get reconfigured.
 			if !c.run.requestInProgress {
 				c.sendTokenBucketRequest(ctx)
-			} else {
-				c.run.notificationReceivedDuringRequest = true
 			}
 			if c.testInstr != nil {
 				c.testInstr.Event(c.run.now, LowRUNotification)
