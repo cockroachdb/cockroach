@@ -1577,29 +1577,13 @@ func (m *CommonTxnRowsLimitDetails) AppendJSONFields(printComma bool, b redact.R
 		b = append(b, '"')
 	}
 
-	if m.Limit != 0 {
+	if m.NumRows != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"Limit\":"...)
-		b = strconv.AppendInt(b, int64(m.Limit), 10)
-	}
-
-	if m.ViolatesTxnRowsLimitErr {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"ViolatesTxnRowsLimitErr\":true"...)
-	}
-
-	if m.IsRead {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"IsRead\":true"...)
+		b = append(b, "\"NumRows\":"...)
+		b = strconv.AppendInt(b, int64(m.NumRows), 10)
 	}
 
 	return printComma, b

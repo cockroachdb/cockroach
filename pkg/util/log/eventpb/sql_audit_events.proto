@@ -128,15 +128,9 @@ message CommonTxnRowsLimitDetails {
   string txn_id = 1 [(gogoproto.customname) = "TxnID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // SessionID is the ID of the session that initiated the transaction.
   string session_id = 2 [(gogoproto.customname) = "SessionID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
-  // Limit indicates the value of the transaction row count limit that was
-  // reached.
-  int64 limit = 3 [(gogoproto.jsontag) = ",omitempty"];
-  // ViolatesTxnRowsLimitErr if true indicates that
-  // 'transaction_rows_{written|read}_err' limit is violated.
-  bool violates_txn_rows_limit_err = 4 [(gogoproto.jsontag) = ",omitempty"];
-  // IsRead if true indicates that the "rows read" limit is reached and the
-  // "rows written" limit otherwise.
-  bool is_read = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // NumRows is the number of rows written/read (depending on the event type) by
+  // the transaction that reached the corresponding guardrail.
+  int64 num_rows = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // TxnRowsWrittenLimit is recorded when a transaction tries to write more rows
