@@ -109,7 +109,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 }
 
 func invokeBackup(ctx context.Context, backupFn sql.PlanHookRowFn) error {
-	resultCh := make(chan tree.Datums) // No need to close
+	resultCh := make(chan tree.Datums)
 	g := ctxgroup.WithContext(ctx)
 
 	g.GoCtx(func(ctx context.Context) error {
@@ -122,6 +122,7 @@ func invokeBackup(ctx context.Context, backupFn sql.PlanHookRowFn) error {
 	})
 
 	g.GoCtx(func(ctx context.Context) error {
+		defer close(resultCh)
 		return backupFn(ctx, nil, resultCh)
 	})
 
