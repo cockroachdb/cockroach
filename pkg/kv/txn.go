@@ -761,6 +761,30 @@ func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) erro
 	return nil
 }
 
+// DeadlineMightBeExpired returns true if there currently is a deadline and
+// that deadline is earlier than either the ProvisionalCommitTimestamp or
+// the current reading of the node's HLC clock. The second condition is a conservative
+// optimization to deal with the fact that the provisional commit timestamp may not represent
+// the true commit timestamp; the transaction may have been pushed but not yet discovered that fact.
+// Deadlines, in general, should not commonly be at risk of expiring near the current time, except in
+// extraordinary circumstances. In cases where considering it helps, it helps a lot. In cases where
+// considering it does not help, it does not hurt much.
+func (txn *Txn) DeadlineMightBeExpired() bool {
+	txn.mu.Lock()
+	txn.mu.sender.ProvisionalCommitTimestamp()
+	defer txn.mu.Unlock()
+	return txn.mu.deadline != nil &&
+		!txn.mu.deadline.IsEmpty() &&
+		// Avoids getting the txn mutex again by getting
+		// it off the sender.
+		(txn.mu.deadline.Less(txn.mu.sender.ProvisionalCommitTimestamp()) ||
+			// In case the transaction gets pushed and the push is not observed,
+			// we cautiously also indicate that a refresh is needed if the current
+			// HLC clock exceeds the deadline. Since a better lease may
+			// be available for us.
+			txn.mu.deadline.Less(txn.db.Clock().Now()))
+}
+
 // resetDeadlineLocked resets the deadline.
 func (txn *Txn) resetDeadlineLocked() {
 	txn.mu.deadline = nil
