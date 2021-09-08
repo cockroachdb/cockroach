@@ -102,6 +102,11 @@ func (m *MockTransactionalSender) ProvisionalCommitTimestamp() hlc.Timestamp {
 	return m.txn.WriteTimestamp
 }
 
+// GlobalUncertaintyLimit is part of the TxnSender interface.
+func (m *MockTransactionalSender) GlobalUncertaintyLimit() hlc.Timestamp {
+	return m.txn.GlobalUncertaintyLimit
+}
+
 // CommitTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) CommitTimestamp() hlc.Timestamp {
 	return m.txn.ReadTimestamp

@@ -231,6 +231,11 @@ type TxnSender interface {
 	// field on TxnMeta.
 	ProvisionalCommitTimestamp() hlc.Timestamp
 
+	// GlobalUncertaintyLimit returns the transaction's global uncertainty
+	// limit, which is the maximum clock drift observed across. This is used
+	// for dealing with clock time vs MVCC time for certain hueristics.
+	GlobalUncertaintyLimit() hlc.Timestamp
+
 	// RequiredFrontier returns the largest timestamp at which the
 	// transaction may read values when performing a read-only
 	// operation.

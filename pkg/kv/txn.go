@@ -761,6 +761,31 @@ func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) erro
 	return nil
 }
 
+// DeadlineMightBeExpired returns true if there currently is a deadline and
+// that deadline is earlier than either the ProvisionalCommitTimestamp or
+// the current timestamp.  If the expiration is past the current timestamp,
+// then its likely we took a long time for this transaction, so it is acceptable
+// to take a round trip to refresh the deadline in certain code paths.
+func (txn *Txn) DeadlineMightBeExpired() bool {
+	txn.mu.Lock()
+	txn.mu.sender.ProvisionalCommitTimestamp()
+	defer txn.mu.Unlock()
+	globalUncertaintyTime := txn.mu.sender.GlobalUncertaintyLimit().GoTime()
+	return txn.mu.deadline != nil &&
+		!txn.mu.deadline.IsEmpty() &&
+		// Avoids getting the txn mutex again by getting
+		// it off the sender.
+		(txn.mu.deadline.Less(txn.mu.sender.ProvisionalCommitTimestamp()) ||
+			// In case the transaction gets pushed and the push is not observed,
+			// we cautiously also indicate that a refresh is needed if the current
+			// wall time exceeds the deadline. Note: The MVCC timestamp is used for
+			// leases so the comparison here is between that and wall time, to be
+			// cautious we will add the global uncertainty limit of the txn.
+			txn.mu.deadline.GoTime().Before(txn.DB().Clock().PhysicalTime().Add(
+				(time.Second*time.Duration(globalUncertaintyTime.Second()))+
+					(time.Nanosecond*time.Duration(globalUncertaintyTime.Nanosecond())))))
+}
+
 // resetDeadlineLocked resets the deadline.
 func (txn *Txn) resetDeadlineLocked() {
 	txn.mu.deadline = nil

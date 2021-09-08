@@ -805,7 +805,8 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r43: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r43: sending batch 1 CPut to (n1,s1):1
+dist sender send  r43: sending batch 1 EndTxn to (n1,s1):1
 
 query error pq: txn has written 2 rows, which is above the limit
 INSERT INTO guardrails VALUES (2), (3)

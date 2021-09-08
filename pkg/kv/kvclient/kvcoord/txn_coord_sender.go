@@ -998,6 +998,13 @@ func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
 	return tc.mu.txn.WriteTimestamp
 }
 
+// GlobalUncertaintyLimit is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) GlobalUncertaintyLimit() hlc.Timestamp {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.GlobalUncertaintyLimit
+}
+
 // CommitTimestamp is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
