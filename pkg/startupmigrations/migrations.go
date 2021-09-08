@@ -284,7 +284,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// 21.1 version keys are deprecated and we are certainly not adding any new
 		// ones in those ranges. Until these deprecated version keys are all deleted
 		// we tie this migration to the last 20.2 version key.
-		includedInBootstrap: clusterversion.ByKey(clusterversion.V20_2),
+		includedInBootstrap: roachpb.Version{Major: 20, Minor: 2},
 		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
 	},
 	{

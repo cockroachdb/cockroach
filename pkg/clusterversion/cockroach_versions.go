@@ -154,28 +154,6 @@ type Key int
 const (
 	_ Key = iota - 1 // want first named one to start at zero
 
-	// v20.2 versions.
-	//
-	// Start20_2 demarcates work towards CockroachDB v20.2.
-	// If you're here to remove versions, please read the comment at the
-	// beginning of the const block. We cannot remove these versions until
-	// MinSupportedVersion=21.1, i.e. on the master branch *after* cutting
-	// the 21.1 release. This is because we now support tenants at the
-	// predecessor binary interacting with a fully upgraded KV cluster.
-	Start20_2
-	// MinPasswordLength adds the server.user_login.min_password_length setting.
-	MinPasswordLength
-	// CreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN are introduced.
-	//
-	// It represents adding authn principal management via CREATELOGIN role
-	// option.
-	CreateLoginPrivilege
-	// HBAForNonTLS is when the 'hostssl' and 'hostnossl' HBA configs are
-	// introduced.
-	HBAForNonTLS
-	// V20_2 is CockroachDB v20.2. It's used for all v20.2.x patch releases.
-	V20_2
-
 	// v21.1 versions.
 	//
 	// Start21_1 demarcates work towards CockroachDB v21.1.
@@ -320,28 +298,6 @@ const (
 // minor version until we are absolutely sure that no new migrations will need
 // to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions{
-
-	// v20.2 versions.
-	{
-		Key:     Start20_2,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 1},
-	},
-	{
-		Key:     MinPasswordLength,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 13},
-	},
-	{
-		Key:     CreateLoginPrivilege,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 20},
-	},
-	{
-		Key:     HBAForNonTLS,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 21},
-	},
-	{
-		Key:     V20_2,
-		Version: roachpb.Version{Major: 20, Minor: 2},
-	},
 
 	// v21.1 versions. Internal versions defined here-on-forth must be even.
 	{

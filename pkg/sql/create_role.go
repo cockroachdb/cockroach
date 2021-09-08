@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -325,11 +324,9 @@ func (p *planner) checkPasswordAndGetHash(
 	}
 
 	st := p.ExecCfg().Settings
-	if st.Version.IsActive(ctx, clusterversion.MinPasswordLength) {
-		if minLength := security.MinPasswordLength.Get(&st.SV); minLength >= 1 && int64(len(password)) < minLength {
-			return hashedPassword, errors.WithHintf(security.ErrPasswordTooShort,
-				"Passwords must be %d characters or longer.", minLength)
-		}
+	if minLength := security.MinPasswordLength.Get(&st.SV); minLength >= 1 && int64(len(password)) < minLength {
+		return hashedPassword, errors.WithHintf(security.ErrPasswordTooShort,
+			"Passwords must be %d characters or longer.", minLength)
 	}
 
 	hashedPassword, err = security.HashPassword(ctx, password)
