@@ -31,6 +31,28 @@ var HistogramClusterMode = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
+// HistogramVersion identifies histogram versions.
+type HistogramVersion uint32
+
+// ATTENTION: When updating this field, add a brief description of what
+// changed to the version history below.
+const HistVersion HistogramVersion = 1
+
+/*
+
+**  VERSION HISTORY **
+
+Please add new entries at the top.
+
+- Version: 1
+- The histogram creation logic was changed so the number of distinct values in
+  the histogram matched the estimated distinct count from the HyperLogLog sketch.
+
+- Version: 0
+- Initial histogram implementation.
+
+*/
+
 // EquiDepthHistogram creates a histogram where each bucket contains roughly
 // the same number of samples (though it can vary when a boundary value has
 // high frequency).
@@ -349,6 +371,7 @@ func (h histogram) toHistogramData(colType *types.T) (HistogramData, error) {
 	histogramData := HistogramData{
 		Buckets:    make([]HistogramData_Bucket, len(h.buckets)),
 		ColumnType: colType,
+		Version:    HistVersion,
 	}
 
 	for i := range h.buckets {
