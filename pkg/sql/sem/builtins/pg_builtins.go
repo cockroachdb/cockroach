@@ -1913,6 +1913,28 @@ SELECT description
 			Info:       "Return size in bytes of the column provided as an argument",
 			Volatility: tree.VolatilityImmutable,
 		}),
+
+	// NOTE: these two builtins could be defined as user-defined functions, like
+	// they are in Postgres:
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	//
+	//  CREATE FUNCTION _pg_truetypid(pg_attribute, pg_type) RETURNS oid
+	//    LANGUAGE sql
+	//    IMMUTABLE
+	//    PARALLEL SAFE
+	//    RETURNS NULL ON NULL INPUT
+	//  RETURN CASE WHEN $2.typtype = 'd' THEN $2.typbasetype ELSE $1.atttypid END;
+	//
+	"information_schema._pg_truetypid": pgTrueTypImpl("atttypid", "typbasetype", types.Oid),
+	//
+	//  CREATE FUNCTION _pg_truetypmod(pg_attribute, pg_type) RETURNS int4
+	//    LANGUAGE sql
+	//    IMMUTABLE
+	//    PARALLEL SAFE
+	//    RETURNS NULL ON NULL INPUT
+	//  RETURN CASE WHEN $2.typtype = 'd' THEN $2.typtypmod ELSE $1.atttypmod END;
+	//
+	"information_schema._pg_truetypmod": pgTrueTypImpl("atttypmod", "typtypmod", types.Int4),
 }
 
 func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (tree.Datum, error) {
@@ -2030,4 +2052,55 @@ func tableHasPrivilegeSpecifier(tableArg tree.Datum) (tree.HasPrivilegeSpecifier
 		return specifier, errors.AssertionFailedf("unknown privilege specifier: %#v", tableArg)
 	}
 	return specifier, nil
+}
+
+func pgTrueTypImpl(attrField, typField string, retType *types.T) builtinDefinition {
+	return makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"pg_attribute", types.AnyTuple},
+				{"pg_type", types.AnyTuple},
+			},
+			ReturnType: tree.FixedReturnType(retType),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// In Postgres, this builtin is statically typed to accept a
+				// pg_attribute record and a pg_type record. This isn't currently
+				// possible in CockroachDB, so instead, we accept any tuple and then
+				// perform a bit of dynamic typing to pull out the desired fields from
+				// the records.
+				// TODO DURING REVIEW: this may be wrong. Is there a better way to do
+				// this?
+				fieldIdx := func(t *tree.DTuple, field string) int {
+					for i, label := range t.ResolvedType().TupleLabels() {
+						if label == field {
+							return i
+						}
+					}
+					return -1
+				}
+
+				pgAttr, pgType := args[0].(*tree.DTuple), args[1].(*tree.DTuple)
+				pgAttrFieldIdx := fieldIdx(pgAttr, attrField)
+				pgTypeTypeIdx := fieldIdx(pgType, "typtype")
+				pgTypeFieldIdx := fieldIdx(pgType, typField)
+				if pgAttrFieldIdx == -1 || pgTypeTypeIdx == -1 || pgTypeFieldIdx == -1 {
+					return nil, pgerror.Newf(pgcode.UndefinedFunction,
+						"No function matches the given name and argument types.")
+				}
+
+				pgAttrField := pgAttr.D[pgAttrFieldIdx]
+				pgTypeType := pgType.D[pgTypeTypeIdx].(*tree.DString)
+				pgTypeField := pgType.D[pgTypeFieldIdx]
+
+				// If this is a domain type, return the field from pg_type, otherwise,
+				// return the field from pg_attribute.
+				if *pgTypeType == "d" {
+					return pgTypeField, nil
+				}
+				return pgAttrField, nil
+			},
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityImmutable,
+		},
+	)
 }
