@@ -3524,8 +3524,8 @@ ORDER BY rolname
 ----
 oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolreplication
 2310524507  admin     true      true        true           true         false         true         false
-1546506610  root      true      false       true           true         false         true         false
-2264919399  testuser  false     false       false          false        false         true         false
+1546506610  root      true      true        true           true         false         true         false
+2264919399  testuser  false     true        false          false        false         true         false
 
 query OTITTBT colnames
 SELECT oid, rolname, rolconnlimit, rolpassword, rolvaliduntil, rolbypassrls, rolconfig
@@ -5266,8 +5266,8 @@ ORDER BY rolname
 ----
 rolname    rolcreatedb  rolconfig                                          rolinherit  rolcanlogin  rolvaliduntil
 testrole1  false        NULL                                               true        false        NULL
-testuser1  true         {timezone=America/Los_Angeles,application_name=a}  false       true         NULL
-testuser2  false        NULL                                               false       true         3022-01-01 00:00:00 +0000 UTC
+testuser1  true         {timezone=America/Los_Angeles,application_name=a}  true        true         NULL
+testuser2  false        NULL                                               true        true         3022-01-01 00:00:00 +0000 UTC
 
 query TBBBBT colnames
 SELECT rolname, rolcreatedb, rolcreaterole, rolinherit, rolcanlogin, rolvaliduntil
@@ -5276,10 +5276,10 @@ WHERE rolname IN ('testuser1', 'testuser2', 'testrole1', 'root')
 ORDER BY rolname
 ----
 rolname    rolcreatedb  rolcreaterole  rolinherit  rolcanlogin  rolvaliduntil
-root       true         true           false       true         NULL
+root       true         true           true        true         NULL
 testrole1  false        false          true        false        NULL
-testuser1  true         false          false       true         NULL
-testuser2  false        true           false       true         3022-01-01 00:00:00 +0000 UTC
+testuser1  true         false          true        true         NULL
+testuser2  false        true           true        true         3022-01-01 00:00:00 +0000 UTC
 
 # Testing users that have admin role
 
