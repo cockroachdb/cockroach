@@ -1870,9 +1870,7 @@ are more statement within the transaction that haven't been executed yet.
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
 | `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
-| `Limit` | Limit indicates the value of the transaction row count limit that was reached. | no |
-| `ViolatesTxnRowsLimitErr` | ViolatesTxnRowsLimitErr if true indicates that 'transaction_rows_{written|read}_err' limit is violated. | no |
-| `IsRead` | IsRead if true indicates that the "rows read" limit is reached and the "rows written" limit otherwise. | no |
+| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
 
 ### `txn_rows_written_limit`
 
@@ -1899,9 +1897,7 @@ been executed yet.
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
 | `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
-| `Limit` | Limit indicates the value of the transaction row count limit that was reached. | no |
-| `ViolatesTxnRowsLimitErr` | ViolatesTxnRowsLimitErr if true indicates that 'transaction_rows_{written|read}_err' limit is violated. | no |
-| `IsRead` | IsRead if true indicates that the "rows read" limit is reached and the "rows written" limit otherwise. | no |
+| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
 
 ## SQL Slow Query Log (Internal)
 
@@ -1995,9 +1991,7 @@ mutation statements within the transaction that haven't been executed yet.
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
 | `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
-| `Limit` | Limit indicates the value of the transaction row count limit that was reached. | no |
-| `ViolatesTxnRowsLimitErr` | ViolatesTxnRowsLimitErr if true indicates that 'transaction_rows_{written|read}_err' limit is violated. | no |
-| `IsRead` | IsRead if true indicates that the "rows read" limit is reached and the "rows written" limit otherwise. | no |
+| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
 
 ### `txn_rows_written_limit_internal`
 
@@ -2025,9 +2019,7 @@ mutation statements within the transaction that haven't been executed yet.
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
 | `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
-| `Limit` | Limit indicates the value of the transaction row count limit that was reached. | no |
-| `ViolatesTxnRowsLimitErr` | ViolatesTxnRowsLimitErr if true indicates that 'transaction_rows_{written|read}_err' limit is violated. | no |
-| `IsRead` | IsRead if true indicates that the "rows read" limit is reached and the "rows written" limit otherwise. | no |
+| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
 
 ## SQL User and Role operations
 

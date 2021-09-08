@@ -795,7 +795,7 @@ true
 statement ok
 INSERT INTO guardrails VALUES (1)
 
-query error pq: txn exceeded the number of rows written \(1\)
+query error pq: txn has written 2 rows, which is above the limit
 INSERT INTO guardrails VALUES (2), (3)
 
 statement ok
