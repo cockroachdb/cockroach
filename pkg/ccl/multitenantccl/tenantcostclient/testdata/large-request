@@ -7,8 +7,8 @@ wait-for-event
 token-bucket-response
 ----
 
-throttle 
-1000
+configure 
+throttle: 1000
 ----
 
 # Fire off a write that needs significantly more than the 10000 initial RUs.

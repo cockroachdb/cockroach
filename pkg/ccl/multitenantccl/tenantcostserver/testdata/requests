@@ -10,13 +10,13 @@ token-bucket-request tenant=5
 instance_id: 1
 ru: 10000000
 ----
-10000000 RUs granted immediately.
+10000000 RUs granted immediately. Fallback rate: 2877.777778 RU/s
 
 token-bucket-request tenant=5
 instance_id: 1
 ru: 10
 ----
-10 RUs granted over 100ms.
+10 RUs granted over 100ms. Fallback rate: 100 RU/s
 
 inspect tenant=5
 ----
@@ -35,7 +35,7 @@ token-bucket-request tenant=5
 instance_id: 1
 ru: 500
 ----
-500 RUs granted immediately.
+500 RUs granted immediately. Fallback rate: 100.275 RU/s
 
 inspect tenant=5
 ----
@@ -49,7 +49,7 @@ token-bucket-request tenant=5
 instance_id: 2
 ru: 250
 ----
-250 RUs granted immediately.
+250 RUs granted immediately. Fallback rate: 100.1361111 RU/s
 
 # Verify that if the time goes backward, the tenant's last_updated does not go
 # back (which would result in some tokens being doubly refilled). Note that in
@@ -65,7 +65,7 @@ token-bucket-request tenant=5
 instance_id: 1
 ru: 10
 ----
-10 RUs granted immediately.
+10 RUs granted immediately. Fallback rate: 100.0666667 RU/s
 
 # Last update time for the tenant is unchanged. The per-instance time does get updated.
 inspect tenant=5

@@ -1,0 +1,55 @@
+# Tests in this file verify the enacting of the fallback rate when token bucket
+# requests are erroring out.
+
+configure
+fallback_rate: 1000
+----
+
+# Issue a large request, forcing fetching of more RUs.
+write bytes=50000000
+----
+
+configure
+error: true
+----
+
+advance
+1s
+----
+00:00:01.000
+
+# Issue a large request that requires more RUs.
+write bytes=100000000 label=w1
+----
+
+# Wait until we process the "low RU" notification (where we set the fallback rate
+# start time).
+wait-for-event
+low-ru
+----
+
+advance
+5s
+----
+00:00:06.000
+
+# The fallback rate should kick in when we process a tick at the current time.
+wait-for-event
+tick
+----
+
+advance
+10s
+----
+00:00:16.000
+
+not-completed label=w1
+----
+
+advance
+30s
+----
+00:00:46.000
+
+await label=w1
+----
