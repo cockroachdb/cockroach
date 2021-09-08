@@ -35,6 +35,14 @@ type State struct {
 	CurrentShareSum float64
 }
 
+// fallbackRateTimeFrame is a time frame used to calculate a fallback rate.
+//
+// The fallback rate is used when the tenant can't get a TokenBucket request
+// through. It is calculated so that all available (burst) RUs are used through
+// this time period. We assume that this time frame is enough to react to and
+// fix an infrastructure problem.
+const fallbackRateTimeFrame = time.Hour
+
 // Update accounts for passing of time, replenishing tokens according to the
 // rate.
 func (s *State) Update(since time.Duration) {
@@ -47,6 +55,12 @@ func (s *State) Update(since time.Duration) {
 // accordingly.
 func (s *State) Request(req *roachpb.TokenBucketRequest) roachpb.TokenBucketResponse {
 	var res roachpb.TokenBucketResponse
+
+	// Calculate the fallback rate.
+	res.FallbackRate = s.RURefillRate
+	if s.RUCurrent > 0 {
+		res.FallbackRate += s.RUCurrent / fallbackRateTimeFrame.Seconds()
+	}
 
 	needed := req.RequestedRU
 	if needed <= 0 {

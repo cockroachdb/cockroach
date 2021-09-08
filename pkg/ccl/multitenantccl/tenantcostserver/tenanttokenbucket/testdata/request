@@ -7,15 +7,17 @@ Current RUs: 1000
 request
 ru: 10
 ----
-Granted RUs: 10
+Granted: 10 RU
 Trickle duration: 0s
+Fallback rate: 100.2777778 RU/s
 Current RUs: 990
 
 request
 ru: 890
 ----
-Granted RUs: 890
+Granted: 890 RU
 Trickle duration: 0s
+Fallback rate: 100.275 RU/s
 Current RUs: 100
 
 # We have 100 available, and it will take 1s for another 100 to become
@@ -23,8 +25,9 @@ Current RUs: 100
 request
 ru: 200
 ----
-Granted RUs: 200
+Granted: 200 RU
 Trickle duration: 1s
+Fallback rate: 100.0277778 RU/s
 Current RUs: -100
 
 # Request a very large value. We only grant what we get over the next request
@@ -32,23 +35,26 @@ Current RUs: -100
 request
 ru: 10000
 ----
-Granted RUs: 1000
+Granted: 1000 RU
 Trickle duration: 10s
+Fallback rate: 100 RU/s
 Current RUs: -1100
 
 # If we keep requesting, we will enter into debt and less will be granted.
 request
 ru: 1000
 ----
-Granted RUs: 900
+Granted: 900 RU
 Trickle duration: 10s
+Fallback rate: 100 RU/s
 Current RUs: -2000
 
 request
 ru: 1000
 ----
-Granted RUs: 50
+Granted: 50 RU
 Trickle duration: 10s
+Fallback rate: 100 RU/s
 Current RUs: -2050
 
 update
@@ -59,8 +65,9 @@ Current RUs: -1050
 request
 ru: 100
 ----
-Granted RUs: 100
+Granted: 100 RU
 Trickle duration: 1.052631578s
+Fallback rate: 100 RU/s
 Current RUs: -1150
 
 update
@@ -71,6 +78,7 @@ Current RUs: -150
 request
 ru: 100
 ----
-Granted RUs: 100
+Granted: 100 RU
 Trickle duration: 1s
+Fallback rate: 100 RU/s
 Current RUs: -250
