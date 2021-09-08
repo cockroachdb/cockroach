@@ -2711,11 +2711,6 @@ func MVCCIterate(
 // committed in the event the transaction succeeds (all those with
 // epoch matching the commit epoch), and which intents get aborted,
 // even if the transaction succeeds.
-//
-// TODO(tschottdorf): encountered a bug in which a Txn committed with
-// its original timestamp after laying down intents at higher timestamps.
-// Doesn't look like this code here caught that. Shouldn't resolve intents
-// when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate,
 ) (bool, error) {
