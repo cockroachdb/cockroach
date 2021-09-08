@@ -2082,6 +2082,52 @@ SELECT description
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+
+	// Given an index's OID and an underlying-table column number,
+	// _pg_index_position return the column's position in the index
+	// (or NULL if not there).
+	//
+	// NOTE: this could be defined as a user-defined function, like
+	// it is in Postgres:
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	//
+	//  CREATE FUNCTION _pg_index_position(oid, smallint) RETURNS int
+	//      LANGUAGE sql STRICT STABLE
+	//  BEGIN ATOMIC
+	//  SELECT (ss.a).n FROM
+	//    (SELECT information_schema._pg_expandarray(indkey) AS a
+	//     FROM pg_catalog.pg_index WHERE indexrelid = $1) ss
+	//    WHERE (ss.a).x = $2;
+	//  END;
+	//
+	"information_schema._pg_index_position": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"oid", types.Oid},
+				{"col", types.Int2},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				r, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "information_schema._pg_index_position",
+					ctx.Txn,
+					`SELECT (ss.a).n FROM
+					  (SELECT information_schema._pg_expandarray(indkey) AS a
+					   FROM pg_catalog.pg_index WHERE indexrelid = $1) ss
+            WHERE (ss.a).x = $2`,
+					args[0], args[1])
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return tree.DNull, nil
+				}
+				return r[0], nil
+			},
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
+		},
+	),
 }
 
 func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (tree.Datum, error) {
