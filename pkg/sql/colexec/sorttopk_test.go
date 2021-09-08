@@ -67,13 +67,25 @@ func init() {
 			k: 3,
 		},
 		{
-			description: "partial order single col",
+			description: "partial order single col desc",
 			tuples:      colexectestutils.Tuples{{1, 5}, {0, 5}, {0, 4}, {0, 3}, {0, 2}, {0, 1}},
 			expected:    colexectestutils.Tuples{{0, 5}, {1, 5}, {0, 4}},
 			typs:        []*types.T{types.Int, types.Int},
 			ordCols: []execinfrapb.Ordering_Column{
 				{ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC},
 				{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC},
+			},
+			matchLen: 1,
+			k:        3,
+		},
+		{
+			description: "partial order single col asc",
+			tuples:      colexectestutils.Tuples{{0, 3}, {0, 5}, {0, 2}, {0, 1}, {0, 4}, {1, 5}},
+			expected:    colexectestutils.Tuples{{0, 5}, {0, 4}, {0, 3}},
+			typs:        []*types.T{types.Int, types.Int},
+			ordCols: []execinfrapb.Ordering_Column{
+				{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC},
+				{ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC},
 			},
 			matchLen: 1,
 			k:        3,
@@ -101,7 +113,7 @@ func TestTopKSorter(t *testing.T) {
 	for _, tc := range topKSortTestCases {
 		log.Infof(context.Background(), "%s", tc.description)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.k, execinfra.DefaultMemoryLimit), nil
+			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, tc.k, execinfra.DefaultMemoryLimit)
 		})
 	}
 }
@@ -142,9 +154,12 @@ func TestTopKSortRandomized(t *testing.T) {
 				for _, k := range []int{1, rng.Intn(nTups) + 1} {
 					name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/matchLen=%d/k=%d", nCols, nOrderingCols, matchLen, k)
 					log.Infof(ctx, "%s", name)
-					colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected[:k], colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, uint64(k), execinfra.DefaultMemoryLimit), nil
-					})
+					colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected[:k],
+						colexectestutils.OrderedVerifier,
+						func(input []colexecop.Operator) (colexecop.Operator, error) {
+							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, matchLen, uint64(k),
+								execinfra.DefaultMemoryLimit)
+						})
 				}
 			}
 		}
@@ -183,7 +198,7 @@ func BenchmarkSortTopK(b *testing.B) {
 								var sorter colexecop.Operator
 								var err error
 								source := colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, matchLen)
-								sorter, err = NewTopKSorter(testAllocator, source, typs, ordCols, k, execinfra.DefaultMemoryLimit), nil
+								sorter, err = NewTopKSorter(testAllocator, source, typs, ordCols, matchLen, k, execinfra.DefaultMemoryLimit)
 								if err != nil {
 									b.Fatal(err)
 								}
