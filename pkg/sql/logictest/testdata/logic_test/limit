@@ -344,3 +344,27 @@ SELECT * FROM t65171 WHERE x = 1 OR x = 2 ORDER BY y LIMIT 2
 ----
 1  2
 1  2
+
+query T
+EXPLAIN (distsql) SELECT * FROM t ORDER BY v, w LIMIT 3;
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ order: +v,+w
+│ k: 3
+│
+└── • scan
+      missing stats
+      table: t@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkMtO8zAQhff_U4zO6ocatWl3XhVokCLSC0kWIJSFSUZVpDQ2tstFVd4dJVlAkYpgOWf8nc-aA9xzDYnwfhNfRiv6v4jSLL2LzygN4_A6o3O6SdZL8rROFmFCVw_0IuiV4mgZZTSDQKNLXqkdO8hHBMgFjNUFO6dtFx36B1H5BjkRqBqz912cCxTaMuQBvvI1QyJTTzUnrEq24wkESvaqqvtaPze22in7DoHUqMZJukDeCui9_yx0Xm0ZMmjF76Wptp7tODj2zacjMZ-NIJBpcytpdlI2_YssYWd04_hIdqp50uYCXG55uKLTe1vwxuqi1wzjuuf6oGTnh20wDFEzrLoPfoWDH-HpNzhv_30EAAD___sGrpE=
+
+query III
+SELECT * FROM t ORDER BY v, w LIMIT 3;
+----
+6  -36  216
+4  -16  94
+2  -4   8

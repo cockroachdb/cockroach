@@ -23,6 +23,9 @@ type topKNode struct {
 	plan     planNode
 	k        int64
 	ordering colinfo.ColumnOrdering
+	// When alreadyOrderedPrefix is non-zero, the input is already ordered on
+	// the prefix ordering[:alreadyOrderedPrefix].
+	alreadyOrderedPrefix int
 }
 
 func (n *topKNode) startExec(params runParams) error {
