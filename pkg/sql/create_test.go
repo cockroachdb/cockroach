@@ -622,4 +622,40 @@ CREATE SEQUENCE d.s OWNED BY referenced_db.referenced_table.referenced_col;
 		)
 		validateCounts(tdb, FKs, seq_cols, seq_ownerships, views)
 	})
+
+	t.Run("alter", func(t *testing.T) {
+		tdb, cleanup := setUp()
+		defer cleanup()
+
+		// Create cross-db references.
+		tdb.Exec(t, `
+CREATE DATABASE d;
+CREATE TABLE d.t (modify_add_fk INT, modify_to_seq INT);
+
+-- Modify a table, adding a cross-db FK constraint to an existing column.
+ALTER TABLE d.t ADD CONSTRAINT cross_db_fk FOREIGN KEY (modify_add_fk) REFERENCES  referenced_db.referenced_table(referenced_col);
+
+-- Add a new column with cross-db FK constraint.
+ALTER TABLE d.t ADD COLUMN fk_col INT REFERENCES referenced_db.referenced_table(referenced_col);
+
+-- Modify a column, adding a references to a cross-db sequence.
+ALTER TABLE d.t ALTER COLUMN modify_to_seq SET DEFAULT nextval('referenced_db.referenced_sequence');
+
+-- Add a new column that references a cross-db sequence.
+ALTER TABLE d.t ADD COLUMN seq_col INT DEFAULT nextval('referenced_db.referenced_sequence');
+
+-- Create a sequence. ALTER it to have a cross-db owner.
+CREATE SEQUENCE d.s;
+ALTER SEQUENCE d.s OWNED BY referenced_db.referenced_table.referenced_col;
+`)
+		// Validate the counters.
+		const (
+			// Expected number of cross-db references for each type of reference.
+			FKs            = 2
+			seq_cols       = 2
+			seq_ownerships = 1
+			views          = 0
+		)
+		validateCounts(tdb, FKs, seq_cols, seq_ownerships, views)
+	})
 }
