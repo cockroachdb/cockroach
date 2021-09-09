@@ -710,6 +710,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		}
 
 		var dbDesc catalog.DatabaseDescriptor
+		var scDesc catalog.SchemaDescriptor
 		{
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -718,7 +719,13 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 					Required:    true,
 					AvoidCached: true,
 				})
+				if err != nil {
+					return err
+				}
+				publicSchemaID := dbDesc.GetSchemaID(tree.PublicSchema)
+				scDesc, err = descriptors.GetImmutableSchemaByID(ctx, txn, publicSchemaID, tree.SchemaLookupFlags{})
 				return err
+
 			}); err != nil {
 				return err
 			}
@@ -730,7 +737,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
 		if tableDescs, schemaDescs, err = parseAndCreateBundleTableDescs(
-			ctx, p, details, seqVals, skipFKs, dbDesc, files, format, walltime, owner,
+			ctx, p, details, seqVals, skipFKs, dbDesc, scDesc, files, format, walltime, owner,
 			r.job.ID()); err != nil {
 			return err
 		}
@@ -780,6 +787,7 @@ func parseAndCreateBundleTableDescs(
 	seqVals map[descpb.ID]int64,
 	skipFKs bool,
 	parentDB catalog.DatabaseDescriptor,
+	parentSchema catalog.SchemaDescriptor,
 	files []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -823,7 +831,7 @@ func parseAndCreateBundleTableDescs(
 		fks.resolver.format.Format = roachpb.IOFileFormat_Mysqldump
 		evalCtx := &p.ExtendedEvalContext().EvalContext
 		tableDescs, err = readMysqlCreateTable(
-			ctx, reader, evalCtx, p, defaultCSVTableID, parentDB, tableName, fks,
+			ctx, reader, evalCtx, p, defaultCSVTableID, parentDB, parentSchema, tableName, fks,
 			seqVals, owner, walltime,
 		)
 	case roachpb.IOFileFormat_PgDump:
@@ -836,7 +844,7 @@ func parseAndCreateBundleTableDescs(
 			p.ExecCfg().DistSQLSrv.ExternalStorage)
 
 		tableDescs, schemaDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName,
-			parentDB, walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
+			parentDB, parentSchema, walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
 
 		logErr := unsupportedStmtLogger.flush()
 		if logErr != nil {
