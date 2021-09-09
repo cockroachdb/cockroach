@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -225,6 +227,25 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 	} else {
 		// Output to files enabled.
 
+		// Split the STORAGE and HEALTH channels into separate files.
+		testConfig.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+			"storage": {
+				Channels: logconfig.SelectChannels(channel.STORAGE),
+			},
+			"health": {
+				Channels: logconfig.SelectChannels(channel.HEALTH),
+			},
+			// Also add the WARNING+ events from STORAGE and CHANNEL into the
+			// default file group.
+			"default": {
+				Channels: logconfig.ChannelFilters{
+					Filters: map[logpb.Severity]logconfig.ChannelList{
+						severity.WARNING: {Channels: []logpb.Channel{channel.STORAGE, channel.HEALTH}},
+					},
+				},
+			},
+		}
+
 		// Even though we use file output, make all logged fatal
 		// calls go to the external stderr, in addition to the log file.
 		//
@@ -248,6 +269,46 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 
 	err = testConfig.Validate(fileDir)
 	return testConfig, err
+}
+
+// SetupSingleFileLogging modifies the configuration of the Scope
+// to ensure all the logging output gets redirected to one file.
+//
+// Note: this is a no-op when the scope is currently redirected to
+// stderr, e.g. when instantiated via log.Scope() and run with
+// -show-logs.
+// To ensure that output always goes to one file, use
+// log.ScopeWithoutShowLogs().
+func (l *TestLogScope) SetupSingleFileLogging(
+	t interface{ Fatal(...interface{}) },
+) (cleanup func()) {
+	if l.logDir == "" {
+		// No log directory: no-op.
+		return func() {}
+	}
+
+	// Set up a logging configuration with just one file sink.
+	cfg := logconfig.DefaultConfig()
+	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"default": {
+			Channels: logconfig.SelectChannels(logconfig.SelectAllChannels()...)},
+	}
+	// Disable the -stderr.log output so there's really just 1 file.
+	cfg.CaptureFd2.Enable = false
+
+	// Derive a full config using the same directory as the
+	// TestLogScope.
+	if err := cfg.Validate(&l.logDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Apply the configuration.
+	TestingResetActive()
+	cleanup, err := ApplyConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cleanup
 }
 
 // GetDirectory retrieves the log directory for this scope.
