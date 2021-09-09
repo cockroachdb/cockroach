@@ -532,7 +532,10 @@ func importPlanHook(
 					return err
 				}
 			}
-			sc = schemadesc.GetPublicSchema()
+			sc, err = p.Accessor().GetSchemaByName(ctx, txn, db, tree.PublicSchema, tree.SchemaLookupFlags{})
+			if err != nil {
+				return err
+			}
 		}
 
 		format := roachpb.IOFileFormat{}
@@ -967,11 +970,11 @@ func importPlanHook(
 
 			// Due to how we generate and rewrite descriptor ID's for import, we run
 			// into problems when using user defined schemas.
-			if sc.GetID() != keys.PublicSchemaIDForBackup {
-				err := errors.New("cannot use IMPORT with a user defined schema")
-				hint := errors.WithHint(err, "create the table with CREATE TABLE and use IMPORT INTO instead")
-				return hint
-			}
+			//if sc.GetID() != keys.PublicSchemaIDForBackup {
+			//	err := errors.New("cannot use IMPORT with a user defined schema")
+			//	hint := errors.WithHint(err, "create the table with CREATE TABLE and use IMPORT INTO instead")
+			//	return hint
+			//}
 		}
 
 		telemetry.CountBucketed("import.files", int64(len(files)))
@@ -1511,6 +1514,9 @@ func (r *importResumer) prepareSchemasForIngestion(
 		}
 	}
 
+	publicSchemaID := dbDesc.GetSchemaID(tree.PublicSchema)
+	schemaMetadata.oldSchemaIDToName[publicSchemaID] = tree.PublicSchema
+	schemaMetadata.newSchemaIDToName[publicSchemaID] = tree.PublicSchema
 	return schemaMetadata, err
 }
 
@@ -1754,6 +1760,7 @@ func parseAndCreateBundleTableDescs(
 	seqVals map[descpb.ID]int64,
 	skipFKs bool,
 	parentDB catalog.DatabaseDescriptor,
+	parentSchema catalog.SchemaDescriptor,
 	files []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -1797,7 +1804,7 @@ func parseAndCreateBundleTableDescs(
 		fks.resolver.format.Format = roachpb.IOFileFormat_Mysqldump
 		evalCtx := &p.ExtendedEvalContext().EvalContext
 		tableDescs, err = readMysqlCreateTable(
-			ctx, reader, evalCtx, p, defaultCSVTableID, parentDB, tableName, fks,
+			ctx, reader, evalCtx, p, defaultCSVTableID, parentDB, parentSchema, tableName, fks,
 			seqVals, owner, walltime,
 		)
 	case roachpb.IOFileFormat_PgDump:
@@ -1810,7 +1817,7 @@ func parseAndCreateBundleTableDescs(
 			p.ExecCfg().DistSQLSrv.ExternalStorage)
 
 		tableDescs, schemaDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName,
-			parentDB, walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
+			parentDB, parentSchema, walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
 
 		logErr := unsupportedStmtLogger.flush()
 		if logErr != nil {
@@ -1858,6 +1865,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		}
 
 		var dbDesc catalog.DatabaseDescriptor
+		var scDesc catalog.SchemaDescriptor
 		{
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -1866,6 +1874,11 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 					Required:    true,
 					AvoidCached: true,
 				})
+				if err != nil {
+					return err
+				}
+				publicSchemaID := dbDesc.GetSchemaID(tree.PublicSchema)
+				scDesc, err = descriptors.GetImmutableSchemaByID(ctx, txn, publicSchemaID, tree.SchemaLookupFlags{})
 				return err
 			}); err != nil {
 				return err
@@ -1878,7 +1891,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
 		if tableDescs, schemaDescs, err = parseAndCreateBundleTableDescs(
-			ctx, p, details, seqVals, skipFKs, dbDesc, files, format, walltime, owner,
+			ctx, p, details, seqVals, skipFKs, dbDesc, scDesc, files, format, walltime, owner,
 			r.job.ID()); err != nil {
 			return err
 		}
@@ -1966,13 +1979,13 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				}
 				var err error
 				curDetails := details
-				if len(details.Schemas) != 0 {
-					schemaMetadata, err = r.prepareSchemasForIngestion(ctx, p, curDetails, txn, descsCol)
-					if err != nil {
-						return err
-					}
-					curDetails = schemaMetadata.schemaPreparedDetails
+				//if len(details.Schemas) != 0 {
+				schemaMetadata, err = r.prepareSchemasForIngestion(ctx, p, curDetails, txn, descsCol)
+				if err != nil {
+					return err
 				}
+				curDetails = schemaMetadata.schemaPreparedDetails
+				//}
 
 				preparedDetails, err = r.prepareTableDescsForIngestion(ctx, p, curDetails, txn, descsCol,
 					schemaMetadata)

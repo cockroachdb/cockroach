@@ -1080,8 +1080,7 @@ func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteM
 		typ.ModificationTime = hlc.Timestamp{}
 
 		typ.ID = rewrite.ID
-		typ.ParentSchemaID = maybeRewriteSchemaID(typ.ParentSchemaID, descriptorRewrites,
-			false /* isTemporaryDesc */)
+		typ.ParentSchemaID = maybeRewriteSchemaID(typ.ParentSchemaID, descriptorRewrites)
 		typ.ParentID = rewrite.ParentID
 		for i := range typ.ReferencingDescriptorIDs {
 			id := typ.ReferencingDescriptorIDs[i]
@@ -1124,14 +1123,7 @@ func rewriteSchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites DescRe
 	return nil
 }
 
-func maybeRewriteSchemaID(
-	curSchemaID descpb.ID, descriptorRewrites DescRewriteMap, isTemporaryDesc bool,
-) descpb.ID {
-	// If the current schema is the public schema, then don't attempt to
-	// do any rewriting.
-	if curSchemaID == keys.PublicSchemaIDForBackup && !isTemporaryDesc {
-		return curSchemaID
-	}
+func maybeRewriteSchemaID(curSchemaID descpb.ID, descriptorRewrites DescRewriteMap) descpb.ID {
 	rw, ok := descriptorRewrites[curSchemaID]
 	if !ok {
 		return curSchemaID
@@ -1168,7 +1160,7 @@ func RewriteTableDescs(
 
 		table.ID = tableRewrite.ID
 		table.UnexposedParentSchemaID = maybeRewriteSchemaID(table.GetParentSchemaID(),
-			descriptorRewrites, table.IsTemporary())
+			descriptorRewrites)
 		table.ParentID = tableRewrite.ParentID
 
 		// Remap type IDs and sequence IDs in all serialized expressions within the TableDescriptor.

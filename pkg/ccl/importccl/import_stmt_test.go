@@ -1810,7 +1810,6 @@ func TestImportRowLimit(t *testing.T) {
 }
 
 func TestImportCSVStmt(t *testing.T) {
-	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderShort(t)
@@ -6264,7 +6263,6 @@ func TestCreateStatsAfterImport(t *testing.T) {
 }
 
 func TestImportAvro(t *testing.T) {
-	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

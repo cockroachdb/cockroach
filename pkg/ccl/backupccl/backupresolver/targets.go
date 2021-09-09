@@ -85,9 +85,6 @@ func (r *DescriptorResolver) LookupSchema(
 	if scID, ok := schemas[scName]; ok {
 		dbDesc, dbOk := r.DescByID[dbID].(catalog.DatabaseDescriptor)
 		scDesc, scOk := r.DescByID[scID].(catalog.SchemaDescriptor)
-		if !scOk && scID == keys.PublicSchemaIDForBackup {
-			scDesc, scOk = schemadesc.GetPublicSchema(), true
-		}
 		if dbOk && scOk {
 			return true, catalog.ResolvedObjectPrefix{
 				Database: dbDesc,
@@ -162,9 +159,6 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 			r.DbsByName[desc.GetName()] = desc.GetID()
 			r.ObjsByName[desc.GetID()] = make(map[string]map[string]descpb.ID)
 			r.SchemasByName[desc.GetID()] = make(map[string]descpb.ID)
-			// Always add an entry for the public schema.
-			r.ObjsByName[desc.GetID()][tree.PublicSchema] = make(map[string]descpb.ID)
-			r.SchemasByName[desc.GetID()][tree.PublicSchema] = keys.PublicSchemaIDForBackup
 		}
 
 		// Incidentally, also remember all the descriptors by ID.
@@ -210,6 +204,8 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 		schemaMap := r.ObjsByName[parentDesc.GetID()]
 		scID := desc.GetParentSchemaID()
 		var scName string
+		// TODO(richardjcai): We can remove this in 22.2, still have to handle
+		//    this case in the mixed version cluster.
 		if scID == keys.PublicSchemaIDForBackup {
 			scName = tree.PublicSchema
 		} else {
