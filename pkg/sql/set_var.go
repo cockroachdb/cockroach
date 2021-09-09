@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -76,7 +77,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 				typedValue, err := p.analyzeExpr(
 					ctx, expr, nil, dummyHelper, types.String, false, "SET SESSION "+name)
 				if err != nil {
-					return nil, wrapSetVarError(name, expr.String(), "%v", err)
+					return nil, wrapSetVarError(name, expr.String(), err)
 				}
 				typedValues[i] = typedValue
 			}
@@ -224,13 +225,13 @@ func timeZoneVarGetStringVal(
 		)
 		if err != nil {
 			return "", wrapSetVarError("timezone", values[0].String(),
-				"cannot find time zone %q: %v", location, err)
+				fmt.Errorf("cannot find time zone %q: %v", location, err))
 		}
 
 	case *tree.DInterval:
 		offset, _, _, err = v.Duration.Encode()
 		if err != nil {
-			return "", wrapSetVarError("timezone", values[0].String(), "%v", err)
+			return "", wrapSetVarError("timezone", values[0].String(), err)
 		}
 		offset /= int64(time.Second)
 
@@ -248,7 +249,7 @@ func timeZoneVarGetStringVal(
 		offset = ed.Int64(sixty)
 		if ed.Err() != nil {
 			return "", wrapSetVarError("timezone", values[0].String(),
-				"time zone value %s would overflow an int64", sixty)
+				fmt.Errorf("time zone value %s would overflow an int64", sixty))
 		}
 
 	default:
@@ -267,7 +268,7 @@ func timeZoneVarSet(_ context.Context, m sessionDataMutator, s string) error {
 		timeutil.TimeZoneStringToLocationISO8601Standard,
 	)
 	if err != nil {
-		return wrapSetVarError("TimeZone", s, "%v", err)
+		return wrapSetVarError("TimeZone", s, err)
 	}
 
 	m.SetLocation(loc)
@@ -296,7 +297,7 @@ func makeTimeoutVarGetter(
 		case *tree.DInterval:
 			timeout, err = intervalToDuration(v)
 			if err != nil {
-				return "", wrapSetVarError(varName, values[0].String(), "%v", err)
+				return "", wrapSetVarError(varName, values[0].String(), err)
 			}
 		case *tree.DInt:
 			timeout = time.Duration(*v) * time.Millisecond
@@ -318,16 +319,16 @@ func validateTimeoutVar(
 		},
 	)
 	if err != nil {
-		return 0, wrapSetVarError(varName, timeString, "%v", err)
+		return 0, wrapSetVarError(varName, timeString, err)
 	}
 	timeout, err := intervalToDuration(interval)
 	if err != nil {
-		return 0, wrapSetVarError(varName, timeString, "%v", err)
+		return 0, wrapSetVarError(varName, timeString, err)
 	}
 
 	if timeout < 0 {
 		return 0, wrapSetVarError(varName, timeString,
-			"%v cannot have a negative duration", varName)
+			fmt.Errorf("%v cannot have a negative duration", varName))
 	}
 
 	return timeout, nil
@@ -404,10 +405,9 @@ func newSingleArgVarError(varName string) error {
 		"SET %s takes only one argument", varName)
 }
 
-func wrapSetVarError(varName, actualValue string, fmt string, args ...interface{}) error {
-	err := pgerror.Newf(pgcode.InvalidParameterValue,
-		"invalid value for parameter %q: %q", varName, actualValue)
-	return errors.WithDetailf(err, fmt, args...)
+func wrapSetVarError(varName, actualValue string, wrappedErr error) error {
+	msg := fmt.Sprintf("invalid value for parameter %q: %q", varName, actualValue)
+	return pgerror.Wrap(wrappedErr, pgcode.InvalidParameterValue, msg)
 }
 
 func newVarValueError(varName, actualVal string, allowedVals ...string) (err error) {
