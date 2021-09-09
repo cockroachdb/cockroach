@@ -658,4 +658,58 @@ ALTER SEQUENCE d.s OWNED BY referenced_db.referenced_table.referenced_col;
 		)
 		validateCounts(tdb, FKs, seq_cols, seq_ownerships, views)
 	})
+
+	t.Run("rename", func(t *testing.T) {
+		tdb, cleanup := setUp()
+		defer cleanup()
+
+		tdb.Exec(t, `
+CREATE DATABASE d;
+
+-- SEQ COLUMN: Change the database of a sequence, creating a column referencing to cross-db sequence.
+CREATE SEQUENCE d.same_db_seq;
+CREATE TABLE d.t (seq_col INT DEFAULT nextval('d.same_db_seq'));
+ALTER SEQUENCE d.same_db_seq RENAME TO referenced_db.cross_db_seq;
+
+-- SEQ COLUMN: Change the database of a table, creating a cross-db sequence column.
+CREATE TABLE referenced_db.to_move_seq_col (seq_col INT DEFAULT nextval('referenced_db.referenced_sequence'));
+ALTER TABLE referenced_db.to_move_seq_col RENAME TO d.have_seq_column;
+
+-- FK: Change the database of a referenced table, creating a cross-db FK.
+CREATE TABLE d.referenced_same_db (referenced_col INT PRIMARY KEY);
+CREATE TABLE d.t2 (fk_col INT REFERENCES d.referenced_same_db(referenced_col));
+ALTER TABLE d.referenced_same_db RENAME TO referenced_db.referenced_cross_db;
+
+-- FK: Change the database of a referencing table, creating a cross-db FK.
+CREATE TABLE referenced_db.to_move (fk_col INT REFERENCES referenced_db.referenced_table(referenced_col));
+ALTER TABLE referenced_db.to_move RENAME TO d.t3;
+
+-- VIEW: Change the database of a view, creating a cross-db view.
+CREATE VIEW referenced_db.v AS SELECT referenced_col FROM referenced_db.referenced_table;
+ALTER VIEW referenced_db.v RENAME TO d.v;
+
+-- VIEW: Change the db of a sequence, creating a cross-db view.
+CREATE SEQUENCE d.seq_for_view;
+CREATE VIEW d.dep_on_seq AS SELECT last_value FROM d.seq_for_view;
+ALTER SEQUENCE d.seq_for_view RENAME TO referenced_db.referenced_seq_for_view;
+
+-- SEQ OWNERSHIP: Change the database of a sequence, creating a cross-db sequence ownership.
+CREATE SEQUENCE referenced_db.to_move_seq OWNED BY referenced_db.referenced_table.referenced_col;
+ALTER SEQUENCE referenced_db.to_move_seq RENAME TO d.seq_owner_cross_db;
+
+-- SEQ OWNERSHIP: Change the database of a table, creating a cross-db sequence ownership.
+CREATE TABLE d.seq_owner (seq_owner_col INT);
+CREATE SEQUENCE d.seq_with_owner OWNED BY d.seq_owner.seq_owner_col;
+ALTER TABLE d.seq_owner RENAME TO referenced_db.seq_owner;
+`)
+		// Validate the counters.
+		const (
+			// Expected number of cross-db references for each type of reference.
+			FKs            = 2
+			seq_cols       = 2
+			seq_ownerships = 2
+			views          = 2
+		)
+		validateCounts(tdb, FKs, seq_cols, seq_ownerships, views)
+	})
 }
