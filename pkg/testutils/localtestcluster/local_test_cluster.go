@@ -188,15 +188,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	})
 	ctx := context.TODO()
 	kvserver.TimeUntilStoreDead.Override(ctx, &cfg.Settings.SV, kvserver.TestTimeUntilStoreDead)
-	cfg.StorePool = kvserver.NewStorePool(
-		cfg.AmbientCtx,
-		cfg.Settings,
-		cfg.Gossip,
-		cfg.Clock,
-		cfg.NodeLiveness.GetNodeCount,
-		kvserver.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
-		/* deterministic */ false,
-	)
+	cfg.StorePool = kvserver.NewStorePool(cfg.AmbientCtx, cfg.Settings, cfg.Gossip, cfg.Clock, cfg.NodeLiveness.GetNodeCount, nil, false)
 	cfg.Transport = transport
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 

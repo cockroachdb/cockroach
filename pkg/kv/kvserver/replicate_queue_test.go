@@ -20,7 +20,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -517,7 +516,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 
 	ctx := context.Background()
 
-	var livenessTrap atomic.Value
+	// var livenessTrap atomic.Value
 	setupFn := func(t *testing.T) (*testcluster.TestCluster, roachpb.RangeDescriptor) {
 		tc := testcluster.StartTestCluster(t, 5,
 			base.TestClusterArgs{
@@ -525,15 +524,17 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
 						NodeLiveness: kvserver.NodeLivenessTestingKnobs{
-							StorePoolNodeLivenessFn: func(
-								id roachpb.NodeID, now time.Time, duration time.Duration,
-							) (kvserver.NodeStatus, kvserver.NodeMembershipStatus) {
-								val := livenessTrap.Load()
-								if val == nil {
-									return kvserver.NodeStatusLive, kvserver.NodeMembershipStatusActive
-								}
-								return val.(func(nodeID roachpb.NodeID) kvserver.NodeStatus)(id), kvserver.NodeMembershipStatusActive
-							},
+							// XXX: Replace with custom testin knob for store pool.
+
+							// StorePoolNodeLivenessFn: func(
+							// 	id roachpb.NodeID, now time.Time, duration time.Duration,
+							// ) (kvserver.NodeStatus, kvserver.NodeMembershipStatus) {
+							// 	val := livenessTrap.Load()
+							// 	if val == nil {
+							// 		return kvserver.NodeStatusLive, kvserver.NodeMembershipStatusActive
+							// 	}
+							// 	return val.(func(nodeID roachpb.NodeID) kvserver.NodeStatus)(id), kvserver.NodeMembershipStatusActive
+							// },
 						},
 					},
 				},
@@ -558,14 +559,15 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 	}
 
 	markDead := func(nodeIDs []roachpb.NodeID) {
-		livenessTrap.Store(func(id roachpb.NodeID) kvserver.NodeStatus {
-			for _, dead := range nodeIDs {
-				if dead == id {
-					return kvserver.NodeStatusDead
-				}
-			}
-			return kvserver.NodeStatusLive
-		})
+		// XXX: Replace
+		// livenessTrap.Store(func(id roachpb.NodeID) kvserver.NodeStatus {
+		// 	for _, dead := range nodeIDs {
+		// 		if dead == id {
+		// 			return kvserver.NodeStatusDead
+		// 		}
+		// 	}
+		// 	return kvserver.NodeStatusLive
+		// })
 	}
 
 	// This subtest checks that non-voters on dead nodes are replaced by

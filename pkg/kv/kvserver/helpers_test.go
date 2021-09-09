@@ -205,20 +205,12 @@ func (s *Store) RaftSchedulerPriorityID() roachpb.RangeID {
 
 func NewTestStorePool(cfg StoreConfig) *StorePool {
 	TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, TestTimeUntilStoreDeadOff)
-	return NewStorePool(
-		cfg.AmbientCtx,
-		cfg.Settings,
-		cfg.Gossip,
-		cfg.Clock,
-		// NodeCountFunc
-		func() int {
-			return 1
-		},
-		func(roachpb.NodeID, time.Time, time.Duration) (NodeStatus, NodeMembershipStatus) {
-			return NodeStatusLive, NodeMembershipStatusActive
-		},
-		/* deterministic */ false,
-	)
+	sp := NewStorePool(cfg.AmbientCtx, cfg.Settings, cfg.Gossip, cfg.Clock, func() int { // XXX: Default to storeStatusAvailable.
+		return 1
+	}, nil, false)
+	s := storeStatusAvailable
+	sp.overrideStoreStatus = &s
+	return sp
 }
 
 func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {

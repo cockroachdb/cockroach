@@ -1835,7 +1835,7 @@ func livenessStatus(
 	return livenesspb.NodeLivenessStatus_UNAVAILABLE
 }
 
-// getLivenessStatusMap generates a map from NodeID to LivenessStatus for all
+// getLivenessStatusMap generates a map from NodeID to livenessStatus for all
 // nodes known to gossip. Nodes that haven't pinged their liveness record for
 // more than server.time_until_store_dead are considered dead.
 //
