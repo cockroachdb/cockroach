@@ -93,9 +93,12 @@ type instrumentationHelper struct {
 	finishCollectionDiagnostics func()
 	withStatementTrace          func(trace tracing.Recording, stmt string)
 
-	sp      *tracing.Span
-	origCtx context.Context
-	evalCtx *tree.EvalContext
+	sp *tracing.Span
+	// shouldFinishSpan determines whether sp needs to be finished in
+	// instrumentationHelper.Finish.
+	shouldFinishSpan bool
+	origCtx          context.Context
+	evalCtx          *tree.EvalContext
 
 	// If savePlanForStats is true, the explainPlan will be collected and returned
 	// via PlanForStats().
@@ -146,6 +149,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
 	ih.codec = cfg.Codec
+	ih.origCtx = ctx
 
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
@@ -179,7 +183,11 @@ func (ih *instrumentationHelper) Setup(
 			// collection is enabled so that stats are shown in the traces, but
 			// no extra work is needed by the instrumentationHelper.
 			ih.collectExecStats = true
-			return ctx, false
+			// We still, however, want to finish the instrumentationHelper in
+			// case we're collecting a bundle. We also capture the span in order
+			// to fetch the trace from it, but the span won't be finished.
+			ih.sp = sp
+			return ctx, ih.collectBundle
 		}
 	} else {
 		if util.CrdbTestBuild {
@@ -201,8 +209,8 @@ func (ih *instrumentationHelper) Setup(
 		if ih.collectExecStats {
 			// If we need to collect stats, create a non-verbose child span. Stats
 			// will be added as structured metadata and processed in Finish.
-			ih.origCtx = ctx
 			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithForceRealSpan())
+			ih.shouldFinishSpan = true
 			return newCtx, true
 		}
 		return ctx, false
@@ -210,9 +218,9 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.collectExecStats = true
 	ih.traceMetadata = make(execNodeTraceMetadata)
-	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
 	newCtx, ih.sp = tracing.StartVerboseTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
+	ih.shouldFinishSpan = true
 	return newCtx, true
 }
 
@@ -232,7 +240,9 @@ func (ih *instrumentationHelper) Finish(
 	if ih.sp == nil {
 		return retErr
 	}
-	ih.sp.Finish()
+	if ih.shouldFinishSpan {
+		ih.sp.Finish()
+	}
 
 	// Record the statement information that we've collected.
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
