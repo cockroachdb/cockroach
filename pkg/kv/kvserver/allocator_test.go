@@ -7286,17 +7286,9 @@ func TestAllocatorFullDisks(t *testing.T) {
 	const rangeSize = 16 << 20
 
 	mockNodeLiveness := newMockNodeLiveness(NodeStatusLive, NodeMembershipStatusActive)
-	sp := NewStorePool(
-		log.AmbientContext{Tracer: st.Tracer},
-		st,
-		g,
-		clock,
-		func() int {
-			return nodes
-		},
-		mockNodeLiveness.nodeLivenessFunc,
-		false, /* deterministic */
-	)
+	sp := NewStorePool(log.AmbientContext{Tracer: st.Tracer}, st, g, clock, func() int {
+		return nodes
+	}, nil, false)
 	alloc := MakeAllocator(
 		sp, func(string) (time.Duration, bool) {
 			return 0, false
@@ -7434,17 +7426,9 @@ func Example_rebalancing() {
 
 	// Deterministic must be set as this test is comparing the exact output
 	// after each rebalance.
-	sp := NewStorePool(
-		log.AmbientContext{Tracer: st.Tracer},
-		st,
-		g,
-		clock,
-		func() int {
-			return nodes
-		},
-		newMockNodeLiveness(NodeStatusLive, NodeMembershipStatusActive).nodeLivenessFunc,
-		/* deterministic */ true,
-	)
+	sp := NewStorePool(log.AmbientContext{Tracer: st.Tracer}, st, g, clock, func() int {
+		return nodes
+	}, nil, true)
 	alloc := MakeAllocator(
 		sp, func(string) (time.Duration, bool) {
 			return 0, false

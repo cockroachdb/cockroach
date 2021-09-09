@@ -126,15 +126,7 @@ func createTestStorePool(
 	mnl := newMockNodeLiveness(defaultNodeStatus, defaultNodeMembershipStatus)
 
 	TimeUntilStoreDead.Override(context.Background(), &st.SV, timeUntilStoreDeadValue)
-	storePool := NewStorePool(
-		log.AmbientContext{Tracer: st.Tracer},
-		st,
-		g,
-		clock,
-		nodeCount,
-		mnl.nodeLivenessFunc,
-		deterministic,
-	)
+	storePool := NewStorePool(log.AmbientContext{Tracer: st.Tracer}, st, g, clock, nodeCount, nil, deterministic)
 	return stopper, g, mc, storePool, mnl
 }
 
@@ -903,7 +895,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	mnl.setNodeStatus(store.Node.NodeID, NodeStatusLive, NodeMembershipStatusActive)
 	sp.detailsMu.Lock()
 	detail := sp.getStoreDetailLocked(store.StoreID)
-	s := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
+	s := detail.status(now, timeUntilStoreDead, nil, timeAfterStoreSuspect)
 	sp.detailsMu.Unlock()
 	require.Equal(t, s, storeStatusAvailable)
 	require.False(t, detail.lastAvailable.IsZero())
@@ -911,7 +903,7 @@ func TestStorePoolSuspected(t *testing.T) {
 
 	mnl.setNodeStatus(store.Node.NodeID, NodeStatusUnavailable, NodeMembershipStatusActive)
 	sp.detailsMu.Lock()
-	s = detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
+	s = detail.status(now, timeUntilStoreDead, nil, timeAfterStoreSuspect)
 	sp.detailsMu.Unlock()
 	require.Equal(t, s, storeStatusUnknown)
 	require.False(t, detail.lastAvailable.IsZero())
@@ -919,28 +911,25 @@ func TestStorePoolSuspected(t *testing.T) {
 
 	mnl.setNodeStatus(store.Node.NodeID, NodeStatusLive, NodeMembershipStatusActive)
 	sp.detailsMu.Lock()
-	s = detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
+	s = detail.status(now, timeUntilStoreDead, nil, timeAfterStoreSuspect)
 	sp.detailsMu.Unlock()
 	require.Equal(t, s, storeStatusSuspect)
 
 	sp.detailsMu.Lock()
-	s = detail.status(now.Add(timeAfterStoreSuspect).Add(time.Millisecond),
-		timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
+	s = detail.status(now.Add(timeAfterStoreSuspect).Add(time.Millisecond), timeUntilStoreDead, nil, timeAfterStoreSuspect)
 	sp.detailsMu.Unlock()
 	require.Equal(t, s, storeStatusAvailable)
 
 	mnl.setNodeStatus(store.Node.NodeID, NodeStatusLive, NodeMembershipStatusDraining)
 	sp.detailsMu.Lock()
-	s = detail.status(now,
-		timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
+	s = detail.status(now, timeUntilStoreDead, nil, timeAfterStoreSuspect)
 	sp.detailsMu.Unlock()
 	require.Equal(t, s, storeStatusDraining)
 	require.True(t, detail.lastAvailable.IsZero())
 
 	mnl.setNodeStatus(store.Node.NodeID, NodeStatusLive, NodeMembershipStatusActive)
 	sp.detailsMu.Lock()
-	s = detail.status(now.Add(timeAfterStoreSuspect).Add(time.Millisecond),
-		timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect)
+	s = detail.status(now.Add(timeAfterStoreSuspect).Add(time.Millisecond), timeUntilStoreDead, nil, timeAfterStoreSuspect)
 	sp.detailsMu.Unlock()
 	require.Equal(t, s, storeStatusAvailable)
 	require.False(t, detail.lastAvailable.IsZero())
@@ -1310,7 +1299,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			s, m := LivenessStatus(tc.liveness, now, threshold)
+			s, m := livenessStatus(tc.liveness, now, threshold)
 			if s != tc.expected {
 				t.Errorf("status was %s, wanted %s", s.String(), tc.expected.String())
 			}
