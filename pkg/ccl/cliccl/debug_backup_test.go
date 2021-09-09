@@ -393,7 +393,7 @@ func TestExportData(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			setDebugContextDefault()
 			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s %s",
-				strings.Join(tc.backupPaths, " "),
+				strings.Join(tc.backupPaths, " TestRestoreWithRecreatedDefaultDB\n "),
 				tc.tableName,
 				dir,
 				tc.flags))
