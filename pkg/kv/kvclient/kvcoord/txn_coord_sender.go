@@ -645,11 +645,16 @@ func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) er
 func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
-	if ba != nil && ba.IsSingleAbortTxnRequest() {
+	if ba != nil && ba.IsSingleAbortTxnRequest() && tc.mu.txn.Status != roachpb.COMMITTED {
 		// As a special case, we allow rollbacks to be sent at any time. Any
 		// rollback attempt moves the TxnCoordSender state to txnFinalized, but higher
 		// layers are free to retry rollbacks if they want (and they do, for
 		// example, when the context was canceled while txn.Rollback() was running).
+		//
+		// However, we reject this if we know that the transaction has been
+		// committed, to avoid sending the rollback concurrently with the
+		// txnCommitter asynchronously making the commit explicit. See:
+		// https://github.com/cockroachdb/cockroach/issues/68643
 		return nil
 	}
 
@@ -662,8 +667,9 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	case txnFinalized:
 		msg := fmt.Sprintf("client already committed or rolled back the transaction. "+
 			"Trying to execute: %s", ba.Summary())
-		stack := string(debug.Stack())
-		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
+		if !ba.IsSingleAbortTxnRequest() {
+			log.Errorf(ctx, "%s. stack:\n%s", msg, string(debug.Stack()))
+		}
 		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(msg), &tc.mu.txn)
 	}
 
