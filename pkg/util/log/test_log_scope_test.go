@@ -50,7 +50,7 @@ func TestDefaultTestLogConfig(t *testing.T) {
 		// Test configs without a directory send all channels at severity ERROR to stderr.
 		for _, c := range logconfig.AllChannels() {
 			require.True(t, testConfig.Sinks.Stderr.Channels.AllChannels.HasChannel(c))
-			require.Equal(t, severity.ERROR, testConfig.Sinks.Stderr.Channels.ChannelFilters[c])
+			require.Equal(t, severity.FATAL, testConfig.Sinks.Stderr.Channels.ChannelFilters[c])
 		}
 		// Redaction markers disabled on stderr.
 		require.False(t, *testConfig.Sinks.Stderr.Redactable)
