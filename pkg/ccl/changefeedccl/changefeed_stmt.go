@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -32,22 +31,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -75,12 +74,30 @@ func init() {
 	)
 }
 
+// annotatedChangefeedStatement is a tree.CreateChangefeed used for export, optionally
+// annotated with the scheduling information.
+type annotatedChangefeedStatement struct {
+	*tree.CreateChangefeed
+	*jobs.CreatedByInfo
+}
+
+func getChangefeedStatement(stmt tree.Statement) *annotatedChangefeedStatement {
+	switch changefeed := stmt.(type) {
+	case *annotatedChangefeedStatement:
+		return changefeed
+	case *tree.CreateChangefeed:
+		return &annotatedChangefeedStatement{CreateChangefeed: changefeed}
+	default:
+		return nil
+	}
+}
+
 // changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
-	changefeedStmt, ok := stmt.(*tree.CreateChangefeed)
-	if !ok {
+	changefeedStmt := getChangefeedStatement(stmt)
+	if changefeedStmt == nil {
 		return nil, nil, nil, false, nil
 	}
 
@@ -170,7 +187,7 @@ func changefeedPlanHook(
 			// Still serialize the experimental_ form for backwards compatibility
 		}
 
-		jobDescription, err := changefeedJobDescription(p, changefeedStmt, sinkURI, opts)
+		jobDescription, err := changefeedJobDescription(p, changefeedStmt.CreateChangefeed, sinkURI, opts)
 		if err != nil {
 			return err
 		}
@@ -190,27 +207,28 @@ func changefeedPlanHook(
 			statementTime = initialHighWater
 		}
 
-		// For now, disallow targeting a database or wildcard table selection.
-		// Getting it right as tables enter and leave the set over time is
-		// tricky.
-		if len(changefeedStmt.Targets.Databases) > 0 {
-			return errors.Errorf(`CHANGEFEED cannot target %s`,
-				tree.AsString(&changefeedStmt.Targets))
-		}
-		for _, t := range changefeedStmt.Targets.Tables {
-			p, err := t.NormalizeTablePattern()
-			if err != nil {
-				return err
-			}
-			if _, ok := p.(*tree.TableName); !ok {
-				return errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
-			}
+		if err := verifyChangefeedTargets(changefeedStmt.Targets); err != nil {
+			return err
 		}
 
+		// Resolve statement targets to the ChangefeedTargets.
 		// This grabs table descriptors once to get their ids.
-		targetDescs, _, err := backupresolver.ResolveTargetsToDescriptors(
-			ctx, p, statementTime, &changefeedStmt.Targets)
-		if err != nil {
+		nameQual := unqualifiedName
+		if _, wantQualified := opts[changefeedbase.OptFullTableName]; wantQualified {
+			nameQual = fullyQualifiedName
+		}
+
+		targets := make(jobspb.ChangefeedTargets)
+		var targetDescIDs []descpb.ID
+		if err := resolveChangefeedTargets(
+			ctx, p, changefeedStmt.Targets, statementTime, nameQual,
+			func(name tree.TablePattern, table catalog.TableDescriptor) error {
+				targets[table.GetID()] = jobspb.ChangefeedTarget{
+					StatementTimeName: name.String(),
+				}
+				targetDescIDs = append(targetDescIDs, table.GetID())
+				return nil
+			}); err != nil {
 			err = errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
 			if !initialHighWater.IsEmpty() {
 				// We specified cursor -- it is possible the targets do not exist at that time.
@@ -219,26 +237,6 @@ func changefeedPlanHook(
 					"do the targets exist at the specified cursor time %s?", initialHighWater)
 			}
 			return err
-		}
-
-		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
-		for _, desc := range targetDescs {
-			if table, isTable := desc.(catalog.TableDescriptor); isTable {
-				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-					return err
-				}
-				_, qualified := opts[changefeedbase.OptFullTableName]
-				name, err := getChangefeedTargetName(ctx, table, *p.ExecCfg(), p.ExtendedEvalContext().Txn, qualified)
-				if err != nil {
-					return err
-				}
-				targets[table.GetID()] = jobspb.ChangefeedTarget{
-					StatementTimeName: name,
-				}
-				if err := changefeedbase.ValidateTable(targets, table); err != nil {
-					return err
-				}
-			}
 		}
 
 		// TODO(yevgeniy): Validate options when running in export mode; most of the
@@ -412,18 +410,34 @@ func changefeedPlanHook(
 			}
 
 			jr := jobs.Record{
-				Description: jobDescription,
-				Username:    p.User(),
-				DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
-					for _, desc := range targetDescs {
-						sqlDescIDs = append(sqlDescIDs, desc.GetID())
-					}
-					return sqlDescIDs
-				}(),
-				Details:  details,
-				Progress: *progress.GetChangefeed(),
+				Description:   jobDescription,
+				Username:      p.User(),
+				DescriptorIDs: targetDescIDs,
+				Details:       details,
+				Progress:      *progress.GetChangefeed(),
+				CreatedBy:     changefeedStmt.CreatedByInfo,
 			}
 
+			if changefeedStmt.CreatedByInfo != nil {
+				// This changefeed statement invoked by the scheduler.  As such, the scheduler
+				// must have specified transaction to use, and is responsible for committing
+				// transaction.
+				txn := p.ExtendedEvalContext().Txn
+				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jobID, txn)
+				if err != nil {
+					return err
+				}
+
+				if ptr != nil {
+					if err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ptr); err != nil {
+						return err
+					}
+				}
+				resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
+				return nil
+			}
+
+			// TODO(yevgeniy): Use planner context instead of DB.Txn().
 			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr); err != nil {
 					return err
@@ -662,7 +676,9 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	if err != nil {
 		return b.handleChangefeedError(ctx, err, details, jobExec)
 	}
-	return nil
+
+	return b.maybeNotifyScheduledJobCompletion(
+		ctx, jobs.StatusSucceeded, execCtx.(sql.JobExecContext).ExecCfg())
 }
 
 func (b *changefeedResumer) handleChangefeedError(
@@ -777,6 +793,48 @@ func (b *changefeedResumer) resumeWithRetries(
 	return errors.Wrap(err, `ran out of retries`)
 }
 
+func (b *changefeedResumer) maybeNotifyScheduledJobCompletion(
+	ctx context.Context, jobStatus jobs.Status, exec *sql.ExecutorConfig,
+) error {
+	env := scheduledjobs.ProdJobSchedulerEnv
+	if knobs, ok := exec.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+		if knobs.JobSchedulerEnv != nil {
+			env = knobs.JobSchedulerEnv
+		}
+	}
+
+	err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// We cannot rely on b.job containing created_by_id because on job
+		// resumption the registry does not populate the resumer's CreatedByInfo.
+		datums, err := exec.InternalExecutor.QueryRowEx(
+			ctx,
+			"lookup-schedule-info",
+			txn,
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			fmt.Sprintf(
+				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
+				env.SystemJobsTableName()),
+			b.job.ID(), jobs.CreatedByScheduledJobs)
+
+		if err != nil {
+			return errors.Wrap(err, "schedule info lookup")
+		}
+		if datums == nil {
+			// Not a scheduled backup.
+			return nil
+		}
+
+		scheduleID := int64(tree.MustBeDInt(datums[0]))
+		if err := jobs.NotifyJobTermination(
+			ctx, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID, exec.InternalExecutor, txn); err != nil {
+			return errors.Wrapf(err,
+				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
+		}
+		return nil
+	})
+	return err
+}
+
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, jobExec interface{}) error {
 	exec := jobExec.(sql.JobExecContext)
@@ -794,6 +852,16 @@ func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, jobExec interfac
 		telemetry.Count(`changefeed.enterprise.fail`)
 		exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
 	}
+
+	// This should never return an error unless resolving the schedule that the
+	// job is being run under fails. This could happen if the schedule is dropped
+	// while the job is executing.
+	if err := b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusFailed,
+		jobExec.(sql.JobExecContext).ExecCfg()); err != nil {
+		log.Errorf(ctx, "failed to notify job %d on completion of OnFailOrCancel: %+v",
+			b.job.ID(), err)
+	}
+
 	return nil
 }
 
@@ -849,40 +917,4 @@ func (b *changefeedResumer) OnPauseRequest(
 	pts := execCfg.ProtectedTimestampProvider
 	return createProtectedTimestampRecord(ctx, execCfg.Codec, pts, txn, b.job.ID(),
 		details.Targets, *resolved, cp)
-}
-
-// getQualifiedTableName returns the database-qualified name of the table
-// or view represented by the provided descriptor.
-func getQualifiedTableName(
-	ctx context.Context, execCfg sql.ExecutorConfig, txn *kv.Txn, desc catalog.TableDescriptor,
-) (string, error) {
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, execCfg.Codec, desc.GetParentID())
-	if err != nil {
-		return "", err
-	}
-	schemaID := desc.GetParentSchemaID()
-	schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, desc.GetParentID(), schemaID)
-	if err != nil {
-		return "", err
-	}
-	tbName := tree.MakeTableNameWithSchema(
-		tree.Name(dbDesc.GetName()),
-		tree.Name(schemaName),
-		tree.Name(desc.GetName()),
-	)
-	return tbName.String(), nil
-}
-
-// getChangefeedTargetName gets a table name with or without the dots
-func getChangefeedTargetName(
-	ctx context.Context,
-	desc catalog.TableDescriptor,
-	execCfg sql.ExecutorConfig,
-	txn *kv.Txn,
-	qualified bool,
-) (string, error) {
-	if qualified {
-		return getQualifiedTableName(ctx, execCfg, txn, desc)
-	}
-	return desc.GetName(), nil
 }

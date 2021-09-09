@@ -1,0 +1,2 @@
+create_schedule_for_export_stmt ::=
+	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'EXPORT' 'TABLE' single_table_pattern_list opt_as_of_clause 'INTO' string_or_placeholder opt_with_options 'RECURRING' sconst_or_placeholder opt_with_schedule_options
