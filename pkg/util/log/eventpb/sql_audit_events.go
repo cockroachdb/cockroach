@@ -72,7 +72,7 @@ func (d *CommonTxnRowsLimitDetails) kind() string {
 // implements.
 func (d *CommonTxnRowsLimitDetails) Error() string {
 	return fmt.Sprintf(
-		"txn reached the number of rows %s (%d): TxnID %v SessionID %v",
+		"txn exceeded the number of rows %s (%d): TxnID %v SessionID %v",
 		d.kind(), d.Limit, redact.SafeString(d.TxnID), redact.SafeString(d.SessionID),
 	)
 }
@@ -94,7 +94,7 @@ func (d *CommonTxnRowsLimitDetails) Format(s fmt.State, verb rune) {
 func (d *CommonTxnRowsLimitDetails) SafeFormatError(p errors.Printer) (next error) {
 	if p.Detail() {
 		p.Printf(
-			"txn reached the number of rows %s (%d): TxnID %v SessionID %v",
+			"txn exceeded the number of rows %s (%d): TxnID %v SessionID %v",
 			d.kind(), d.Limit, redact.SafeString(d.TxnID), redact.SafeString(d.SessionID),
 		)
 	}

@@ -601,7 +601,7 @@ var dateStyleEnabled = settings.RegisterBoolSetting(
 var txnRowsWrittenLog = settings.RegisterIntSetting(
 	"sql.defaults.transaction_rows_written_log",
 	"the threshold for the number of rows written by a SQL transaction "+
-		"which - once reached - will trigger a logging event to SQL_PERF (or "+
+		"which - once exceeded - will trigger a logging event to SQL_PERF (or "+
 		"SQL_INTERNAL_PERF for internal transactions); use 0 to disable",
 	0,
 	settings.NonNegativeInt,
@@ -610,7 +610,7 @@ var txnRowsWrittenLog = settings.RegisterIntSetting(
 var txnRowsWrittenErr = settings.RegisterIntSetting(
 	"sql.defaults.transaction_rows_written_err",
 	"the limit for the number of rows written by a SQL transaction which - "+
-		"once reached - will fail the transaction (or will trigger a logging "+
+		"once exceeded - will fail the transaction (or will trigger a logging "+
 		"event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable",
 	0,
 	settings.NonNegativeInt,
@@ -619,7 +619,7 @@ var txnRowsWrittenErr = settings.RegisterIntSetting(
 var txnRowsReadLog = settings.RegisterIntSetting(
 	"sql.defaults.transaction_rows_read_log",
 	"the threshold for the number of rows read by a SQL transaction "+
-		"which - once reached - will trigger a logging event to SQL_PERF (or "+
+		"which - once exceeded - will trigger a logging event to SQL_PERF (or "+
 		"SQL_INTERNAL_PERF for internal transactions); use 0 to disable",
 	0,
 	settings.NonNegativeInt,
@@ -628,7 +628,7 @@ var txnRowsReadLog = settings.RegisterIntSetting(
 var txnRowsReadErr = settings.RegisterIntSetting(
 	"sql.defaults.transaction_rows_read_err",
 	"the limit for the number of rows read by a SQL transaction which - "+
-		"once reached - will fail the transaction (or will trigger a logging "+
+		"once exceeded - will fail the transaction (or will trigger a logging "+
 		"event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable",
 	0,
 	settings.NonNegativeInt,
