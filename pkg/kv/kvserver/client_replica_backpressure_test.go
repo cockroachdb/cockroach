@@ -302,6 +302,9 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		case err := <-upsertErrCh:
 			t.Fatalf("expected no error because the request should hang, got %v", err)
 		}
-		require.Equal(t, context.Canceled, errors.Unwrap(<-upsertErrCh))
+		// Unfortunately we can't match on the error (context canceled) here since we can also
+		// get random other errors such as:
+		// "write failed: write tcp 127.0.0.1:37720->127.0.0.1:44313: i/o timeout"
+		require.Error(t, <-upsertErrCh)
 	})
 }
