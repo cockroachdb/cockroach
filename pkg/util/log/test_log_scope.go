@@ -215,9 +215,16 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 	} else {
 		// Output to files enabled.
 
-		// Even though we use file output, make all logged errors/fatal
+		// Even though we use file output, make all logged fatal
 		// calls go to the external stderr, in addition to the log file.
-		testConfig.Sinks.Stderr.Filter = severity.ERROR
+		//
+		// We used to include events at severity ERROR as well, however
+		// experience tells us that many tests shut servers down
+		// ungracefully, resulting in a log of "error noise" which is
+		// inconsequential. Instead of pulling the attention of the person
+		// looking at the test output to that noise, we simply filter it
+		// out here.
+		testConfig.Sinks.Stderr.Filter = severity.FATAL
 	}
 
 	if skip.UnderBench() {
