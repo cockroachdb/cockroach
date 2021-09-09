@@ -39,7 +39,9 @@ var DefaultUserDBs = map[string]struct{}{
 
 // MaxDefaultDescriptorID is the maximum ID of a descriptor that exists in a
 // new cluster.
-var MaxDefaultDescriptorID = keys.MaxReservedDescID + descpb.ID(len(DefaultUserDBs))
+// For each DefaultUserDB, we also create a public schema in it, hence we
+// multiply the number of default user dbs by 2 to get the number of descriptors.
+var MaxDefaultDescriptorID = keys.MaxReservedDescID + descpb.ID(len(DefaultUserDBs))*2
 
 // IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
 // present at the time of starting a cluster.
