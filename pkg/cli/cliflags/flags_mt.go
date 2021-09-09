@@ -71,6 +71,8 @@ This rule must include the port of the SQL pod.`,
 		Description: "Directory address of the service doing resolution from backend id to IP.",
 	}
 
+	// TODO(chrisseto): Remove skip-verify as a CLI option. It should only be
+	// set internally for testing, rather than being exposed to consumers.
 	SkipVerify = FlagInfo{
 		Name:        "skip-verify",
 		Description: "If true, skip identity verification of backend. For testing only.",
