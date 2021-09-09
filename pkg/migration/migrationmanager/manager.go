@@ -106,6 +106,21 @@ func (m *Manager) Migrate(
 	clusterVersions := m.listBetween(from, to)
 	log.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)", from, to, clusterVersions)
 
+	if len(clusterVersions) == 0 && clusterversion.Is21Dot1Dot8Equiv(from.Version, to.Version) {
+		// Finally, bump the real version cluster-wide.
+		req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &to}
+		op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
+		if err := m.c.UntilClusterStable(ctx, func() error {
+			return m.c.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+				_, err := client.BumpClusterVersion(ctx, req)
+				return err
+			})
+		}); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	for _, clusterVersion := range clusterVersions {
 		log.Infof(ctx, "stepping through %s", clusterVersion)
 		// First, run the actual migration if any.

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -69,7 +70,7 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	// It would be a bit clearer to use negative internal versions, to be able
 	// to surface more obvious errors. Alternatively we could simply construct
 	// a better error message here.
-	if versionSetting.BinaryVersion().Less(targetCV.Version) {
+	if versionSetting.BinaryVersion().Less(targetCV.Version) && !clusterversion.Is21Dot1Dot8Equiv(versionSetting.BinaryVersion(), targetCV.Version) {
 		msg := fmt.Sprintf("binary version %s less than target cluster version %s",
 			versionSetting.BinaryVersion(), targetCV)
 		log.Warningf(ctx, "%s", msg)
@@ -105,7 +106,7 @@ func (m *migrationServer) BumpClusterVersion(
 	newCV := *req.ClusterVersion
 
 	if err := func() error {
-		if !prevCV.Less(newCV.Version) {
+		if !prevCV.Less(newCV.Version) && !clusterversion.Is21Dot1Dot8Equiv(newCV.Version, prevCV.Version) {
 			// Nothing to do.
 			return nil
 		}

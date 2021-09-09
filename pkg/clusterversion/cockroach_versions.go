@@ -578,3 +578,19 @@ func listBetweenInternal(from, to ClusterVersion, vs keyedVersions) []ClusterVer
 	}
 	return cvs
 }
+
+var (
+	// V21Dot1 is used in tests.
+	V21Dot1 = ByKey(V21_1)
+	// V21Dot1Dot8 is used in tests.
+	V21Dot1Dot8 = roachpb.Version{Major: 21, Minor: 1, Internal: 124}
+)
+
+// Is21Dot1Dot8Equiv checks if the passed versions are the two cluster versions
+// used by released 21.1 versions, that is, v21.1 and v21.1-124, which was added
+// to the 21.1 branch in a backport and released in v21.1.8. This check is used
+// to allow later versions of 21.1 to treat this later 21.1 variant as if it is
+// 21.1 when checking for x-version compatibility and banning downgrades.
+func Is21Dot1Dot8Equiv(cv1, cv2 roachpb.Version) bool {
+	return (cv1 == V21Dot1 && cv2 == V21Dot1Dot8) || (cv1 == V21Dot1Dot8 && cv2 == V21Dot1)
+}

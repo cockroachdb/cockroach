@@ -85,7 +85,7 @@ func (cv *clusterVersionSetting) initialize(
 		// It's also used in production code during bootstrap, where the version
 		// is first initialized to BinaryMinSupportedVersion and then
 		// re-initialized to BootstrapVersion (=BinaryVersion).
-		if version.Less(ver.Version) {
+		if version.Less(ver.Version) && !Is21Dot1Dot8Equiv(version, ver.Version) {
 			return errors.AssertionFailedf("cannot initialize version to %s because already set to: %s",
 				version, ver)
 		}
@@ -175,7 +175,7 @@ func (cv *clusterVersionSetting) Validate(
 	}
 
 	// Versions cannot be downgraded.
-	if newCV.Version.Less(oldCV.Version) {
+	if newCV.Version.Less(oldCV.Version) && !Is21Dot1Dot8Equiv(newCV.Version, oldCV.Version) {
 		return nil, errors.Errorf(
 			"versions cannot be downgraded (attempting to downgrade from %s to %s)",
 			oldCV.Version, newCV.Version)
@@ -225,7 +225,7 @@ func (cv *clusterVersionSetting) validateBinaryVersions(
 	if vh.BinaryMinSupportedVersion() == (roachpb.Version{}) {
 		panic("BinaryMinSupportedVersion not set")
 	}
-	if vh.BinaryVersion().Less(ver) {
+	if vh.BinaryVersion().Less(ver) && !Is21Dot1Dot8Equiv(vh.BinaryVersion(), ver) {
 		// TODO(tschottdorf): also ask gossip about other nodes.
 		return errors.Errorf("cannot upgrade to %s: node running %s",
 			ver, vh.BinaryVersion())
