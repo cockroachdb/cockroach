@@ -300,8 +300,10 @@ func (ds *ServerImpl) setupFlow(
 		// the whole evalContext, but that isn't free, so we choose to restore
 		// the original state in order to avoid performance regressions.
 		origMon := evalCtx.Mon
+		origTxn := evalCtx.Txn
 		onFlowCleanup = func() {
 			evalCtx.Mon = origMon
+			evalCtx.Txn = origTxn
 		}
 		evalCtx.Mon = monitor
 		if localState.HasConcurrency {
@@ -310,6 +312,9 @@ func (ds *ServerImpl) setupFlow(
 			if err != nil {
 				return nil, nil, nil, err
 			}
+			// Update the Txn field early (before f.SetTxn() below) since some
+			// processors capture the field in their constructor (see #41992).
+			evalCtx.Txn = leafTxn
 		}
 	} else {
 		if localState.IsLocal {
