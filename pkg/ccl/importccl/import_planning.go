@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -920,8 +921,12 @@ func importPlanHook(
 				// type resolver to protect against unexpected behavior on UDT
 				// resolution.
 				semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
+				tableID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+				if err != nil {
+					return err
+				}
 				tbl, err := MakeSimpleTableDescriptor(
-					ctx, semaCtxPtr, p.ExecCfg().Settings, create, db, sc, defaultCSVTableID, NoFKs, walltime)
+					ctx, semaCtxPtr, p.ExecCfg().Settings, create, db, sc, tableID, NoFKs, walltime)
 				if err != nil {
 					return err
 				}
@@ -954,7 +959,8 @@ func importPlanHook(
 
 			// Due to how we generate and rewrite descriptor ID's for import, we run
 			// into problems when using user defined schemas.
-			if sc.GetID() != keys.PublicSchemaID {
+			publicSchemaID := db.GetSchemaID(tree.PublicSchema)
+			if sc.GetID() != publicSchemaID && sc.GetID() != keys.PublicSchemaID {
 				err := errors.New("cannot use IMPORT with a user defined schema")
 				hint := errors.WithHint(err, "create the table with CREATE TABLE and use IMPORT INTO instead")
 				return hint

@@ -263,7 +263,11 @@ func createPostgresSchemas(
 
 		// We didn't allocate an ID above, so we must assign it a mock ID until it
 		// is assigned an actual ID later in the import.
-		desc.ID = getNextPlaceholderDescID()
+		id, err := catalogkv.GenerateUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
+		if err != nil {
+			return nil, err
+		}
+		desc.ID = id
 		desc.SetOffline("importing")
 		return desc, nil
 	}
@@ -304,10 +308,15 @@ func createPostgresSequences(
 	walltime int64,
 	owner security.SQLUsername,
 	schemaNameToDesc map[string]*schemadesc.Mutable,
+	execCfg *sql.ExecutorConfig,
 ) ([]*tabledesc.Mutable, error) {
 	ret := make([]*tabledesc.Mutable, 0)
 	for schemaAndTableName, seq := range createSeq {
 		schema, err := getSchemaByNameFromMap(schemaAndTableName, schemaNameToDesc)
+		if err != nil {
+			return nil, err
+		}
+		id, err := catalogkv.GenerateUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
 		if err != nil {
 			return nil, err
 		}
@@ -317,7 +326,7 @@ func createPostgresSequences(
 			seq.Options,
 			parentID,
 			schema.GetID(),
-			getNextPlaceholderDescID(),
+			id,
 			hlc.Timestamp{WallTime: walltime},
 			descpb.NewDefaultPrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
@@ -339,15 +348,10 @@ func getSchemaByNameFromMap(
 	schemaAndTableName schemaAndTableName, schemaNameToDesc map[string]*schemadesc.Mutable,
 ) (catalog.SchemaDescriptor, error) {
 	var schema catalog.SchemaDescriptor
-	switch schemaAndTableName.schema {
-	case "", "public":
-		schema = schemadesc.GetPublicSchema()
-	default:
-		var ok bool
-		if schema, ok = schemaNameToDesc[schemaAndTableName.schema]; !ok {
-			return nil, errors.Newf("schema %q not found in the schemas created from the pgdump",
-				schema)
-		}
+	var ok bool
+	if schema, ok = schemaNameToDesc[schemaAndTableName.schema]; !ok {
+		return nil, errors.Newf("schema %q not found in the schemas created from the pgdump",
+			schema)
 	}
 	return schema, nil
 }
@@ -375,8 +379,12 @@ func createPostgresTables(
 		// Bundle imports do not support user defined types, and so we nil out the
 		// type resolver to protect against unexpected behavior on UDT resolution.
 		semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
+		id, err := catalogkv.GenerateUniqueDescID(evalCtx.Ctx(), p.ExecCfg().DB, p.ExecCfg().Codec)
+		if err != nil {
+			return nil, err
+		}
 		desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), semaCtxPtr, p.ExecCfg().Settings,
-			create, parentDB, schema, getNextPlaceholderDescID(), fks, walltime)
+			create, parentDB, schema, id, fks, walltime)
 		if err != nil {
 			return nil, err
 		}
@@ -459,6 +467,7 @@ func readPostgresCreateTable(
 	p sql.JobExecContext,
 	match string,
 	parentDB catalog.DatabaseDescriptor,
+	publicSchema catalog.SchemaDescriptor,
 	walltime int64,
 	fks fkHandler,
 	max int,
@@ -503,6 +512,8 @@ func readPostgresCreateTable(
 	for _, schemaDesc := range schemaDescs {
 		schemaNameToDesc[schemaDesc.GetName()] = schemaDesc
 	}
+	schemaNameToDesc[tree.PublicSchema] =
+		schemadesc.NewBuilder(publicSchema.SchemaDesc()).BuildExistingMutableSchema()
 
 	// Construct sequence descriptors.
 	seqs, err := createPostgresSequences(
@@ -513,6 +524,7 @@ func readPostgresCreateTable(
 		walltime,
 		owner,
 		schemaNameToDesc,
+		p.ExecCfg(),
 	)
 	if err != nil {
 		return nil, nil, err
