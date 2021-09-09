@@ -106,6 +106,7 @@ func createAvroData(
 }
 
 func TestImportData(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1535,6 +1536,7 @@ ALTER TABLE ONLY public.b
 )
 
 func TestImportRowLimit(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1855,6 +1857,7 @@ func TestImportRowLimit(t *testing.T) {
 }
 
 func TestImportCSVStmt(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderShort(t)
@@ -2477,6 +2480,7 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 // TestImportFeatureFlag tests the feature flag logic that allows the IMPORT and
 // IMPORT INTO commands to be toggled off via cluster settings.
 func TestImportFeatureFlag(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
@@ -2510,6 +2514,7 @@ func TestImportFeatureFlag(t *testing.T) {
 }
 
 func TestImportObjectLevelRBAC(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const nodes = 3
@@ -2708,6 +2713,7 @@ func TestURIRequiresAdminRole(t *testing.T) {
 }
 
 func TestExportImportRoundTrip(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -4510,6 +4516,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 }
 
 func TestImportComputed(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -5047,6 +5054,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 // TestImportWorkerFailure tests that IMPORT retries after the failure of a
 // worker node.
 func TestImportWorkerFailure(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -5113,6 +5121,7 @@ func TestImportWorkerFailure(t *testing.T) {
 // computed by issuing a secondary index change that runs a CPut on the
 // index. See #23984.
 func TestImportMVCCChecksums(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -5140,6 +5149,7 @@ func TestImportMVCCChecksums(t *testing.T) {
 }
 
 func TestImportMysql(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -5297,6 +5307,7 @@ func TestImportIntoMysql(t *testing.T) {
 }
 
 func TestImportDelimited(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -5388,6 +5399,7 @@ func TestImportDelimited(t *testing.T) {
 }
 
 func TestImportPgCopy(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -6299,6 +6311,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 }
 
 func TestImportAvro(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -6966,6 +6979,7 @@ func TestDisallowsInvalidFormatOptions(t *testing.T) {
 }
 
 func TestImportInTenant(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -7058,6 +7072,7 @@ func waitForJobResult(
 }
 
 func TestDetachedImport(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -7122,6 +7137,7 @@ func TestDetachedImport(t *testing.T) {
 }
 
 func TestImportJobEventLogging(t *testing.T) {
+	skip.WithIssue(t, 69973)
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
@@ -7226,17 +7242,19 @@ CREATE TABLE default_int (
 			query: `IMPORT PGDUMP ($1)`,
 		},
 		{
-			name:  "import table from pgdump",
-			query: `IMPORT TABLE default_int FROM PGDUMP ($1)`,
-		},
-		{
 			name:  "import mysqldump",
 			query: `IMPORT MYSQLDUMP ($1)`,
 		},
-		{
-			name:  "import table from mysqldump",
-			query: `IMPORT TABLE default_int FROM MYSQLDUMP ($1)`,
-		},
+		// TODO(richardjcai): Skipping the following two tests due to issue
+		//     #69973.
+		//{
+		//	name:  "import table from pgdump",
+		//	query: `IMPORT TABLE default_int FROM PGDUMP ($1)`,
+		//},
+		//{
+		//	name:  "import table from mysqldump",
+		//	query: `IMPORT TABLE default_int FROM MYSQLDUMP ($1)`,
+		//},
 		{
 			name: "non-bundled csv format",
 			query: `
