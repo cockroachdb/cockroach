@@ -22,8 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -249,30 +247,16 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				switch state {
 				case parallelUnorderedSynchronizerStateRunning:
 					if err := colexecerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
-						if s.Ctx.Err() == nil && s.cancelLocalInput[inputIdx] != nil {
-							if errors.Is(err, context.Canceled) || errors.Is(err, cancelchecker.QueryCanceledError) {
-								// The input context has been canceled, yet the
-								// main context of the synchronizer has not.
-								// This indicates that the synchronizer has
-								// transitioned into draining state and wanted
-								// this goroutine to stop whatever it was doing.
-								// Therefore, we swallow the error and proceed
-								// to draining.
-								//
-								// Note that we need the second part of the
-								// conditional in case the context cancellation
-								// was observed by the CancelChecker and was
-								// propagated as a query canceled error.
-								if util.CrdbTestBuild {
-									if s.getState() != parallelUnorderedSynchronizerStateDraining {
-										colexecerror.InternalError(errors.AssertionFailedf(
-											"unexpectedly the input context is canceled, the main " +
-												"context is not, and not in the draining state",
-										))
-									}
-								}
-								continue
-							}
+						if s.getState() == parallelUnorderedSynchronizerStateDraining && s.Ctx.Err() == nil && s.cancelLocalInput[inputIdx] != nil {
+							// The synchronizer has just transitioned into the
+							// draining state and eagerly canceled work of this
+							// input. That cancellation is likely to manifest
+							// itself as the context.Canceled error, but it
+							// could be another error too; in any case, we will
+							// swallow the error because the user of the
+							// synchronizer is only interested in the metadata
+							// at this point.
+							continue
 						}
 						sendErr(err)
 						return
