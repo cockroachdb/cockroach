@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -249,8 +249,8 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				switch state {
 				case parallelUnorderedSynchronizerStateRunning:
 					if err := colexecerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
-						if s.Ctx.Err() == nil && s.cancelLocalInput[inputIdx] != nil {
-							if errors.Is(err, context.Canceled) || errors.Is(err, cancelchecker.QueryCanceledError) {
+						if s.getState() == parallelUnorderedSynchronizerStateDraining && s.Ctx.Err() == nil && s.cancelLocalInput[inputIdx] != nil {
+							if strings.Contains(err.Error(), context.Canceled.Error()) || errors.Is(err, cancelchecker.QueryCanceledError) {
 								// The input context has been canceled, yet the
 								// main context of the synchronizer has not.
 								// This indicates that the synchronizer has
@@ -259,18 +259,17 @@ func (s *ParallelUnorderedSynchronizer) init() {
 								// Therefore, we swallow the error and proceed
 								// to draining.
 								//
-								// Note that we need the second part of the
-								// conditional in case the context cancellation
-								// was observed by the CancelChecker and was
-								// propagated as a query canceled error.
-								if util.CrdbTestBuild {
-									if s.getState() != parallelUnorderedSynchronizerStateDraining {
-										colexecerror.InternalError(errors.AssertionFailedf(
-											"unexpectedly the input context is canceled, the main " +
-												"context is not, and not in the draining state",
-										))
-									}
-								}
+								// We cannot use errors.Is() to check against
+								// context.Canceled error because some
+								// components wrap the cancellation error, but
+								// we assume that the returned stringified error
+								// will still contain "context canceled"
+								// substring.
+								//
+								// The second part of the conditional is needed
+								// in case the context cancellation was observed
+								// by the CancelChecker and was propagated as a
+								// query canceled error.
 								continue
 							}
 						}
