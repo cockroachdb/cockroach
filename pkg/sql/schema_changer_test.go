@@ -7455,3 +7455,39 @@ func TestClockSyncErrorsAreNotPermanent(t *testing.T) {
 	// due to a permanent error.
 	tdb.Exec(t, `ALTER TABLE t ADD COLUMN j INT NOT NULL DEFAULT 42`)
 }
+
+// TestJobsWithoutMutationsAreCancelable validates that the jobs, which are created
+// when a schema-change does not have mutations, are cancelable.
+func TestJobsWithoutMutationsAreCancelable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var registry *jobs.Registry
+	var scJobID jobspb.JobID
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				job, err := registry.LoadJob(ctx, jobID)
+				assert.NoError(t, err)
+				pl := job.Payload()
+				// Validate that the job is cancelable and has an invalid mutation ID.
+				assert.False(t, pl.Noncancelable)
+				assert.Equal(t, pl.GetSchemaChange().TableMutationID, descpb.InvalidMutationID)
+				scJobID = jobID
+				return nil
+			},
+		}},
+	})
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	registry = s.JobRegistry().(*jobs.Registry)
+
+	// This query results in a schema-change job that doesn't have mutations.
+	tdb.Exec(t, "CREATE TABLE t (x PRIMARY KEY) AS VALUES (1)")
+	var id jobspb.JobID
+	tdb.QueryRow(t,
+		`SELECT job_id FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE'`,
+	).Scan(&id)
+	require.Equal(t, scJobID, id)
+}
