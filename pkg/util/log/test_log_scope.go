@@ -176,6 +176,32 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 	testConfig = logconfig.DefaultConfig()
 
+	forcePanicsToStderr := func(c *logconfig.Config) {
+		// Disable the internal fd2 capture to file, to ensure that panic
+		// objects get reported to stderr.
+		c.CaptureFd2.Enable = false
+		// Since we are letting fd2 writes go to the external stderr,
+		// we cannot keep redaction markers there.
+		*c.Sinks.Stderr.Redactable = false
+	}
+
+	if logging.testLogConfig != "" {
+		// The person running the test has requested a custom logging configuration.
+		// Use their choice.
+		h := logconfig.Holder{Config: testConfig}
+		if err := h.Set(logging.testLogConfig); err != nil {
+			return testConfig, err
+		}
+
+		forcePanicsToStderr(&h.Config)
+
+		// Validate the configuration. This also ensures that if the
+		// user's choice does not set a target directory, we use the
+		// test-specific target directory instead.
+		err = h.Config.Validate(fileDir)
+		return h.Config, err
+	}
+
 	if fileDir == nil {
 		// File output is disabled; we use stderr for everything.
 
@@ -203,12 +229,7 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 		testConfig.Sinks.Stderr.Filter = severity.NONE
 	}
 
-	// Disable the internal fd2 capture to file, to ensure that panic
-	// objects get reported to stderr.
-	testConfig.CaptureFd2.Enable = false
-	// Since we are letting writes go to the external stderr,
-	// we cannot keep redaction markers there.
-	*testConfig.Sinks.Stderr.Redactable = false
+	forcePanicsToStderr(&testConfig)
 
 	err = testConfig.Validate(fileDir)
 	return testConfig, err
