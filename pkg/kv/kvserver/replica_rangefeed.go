@@ -704,10 +704,10 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 			})
 		if err != nil {
 			if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
-				if r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.NewRetryableRangefeedErrors) {
-					err = &roachpb.RangeFeedRetryError{
-						Reason: roachpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER,
-					}
+				err = &roachpb.RangeFeedRetryError{
+					// This is really RangeFeedRetryError_REASON_NO_LEASEHOLDER,
+					// but some 21.1 versions will crash on unrecognized reasons.
+					Reason: roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 				}
 			}
 			return roachpb.NewError(err)
