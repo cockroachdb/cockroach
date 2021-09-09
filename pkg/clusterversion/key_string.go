@@ -42,11 +42,12 @@ func _() {
 	_ = x[SQLStatsCompactionScheduledJob-31]
 	_ = x[DateAndIntervalStyle-32]
 	_ = x[PebbleFormatVersioned-33]
+	_ = x[MarkerDataKeysRegistry-34]
 }
 
-const _Key_name = "Start21_1V21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTableDatabaseRoleSettingsTenantUsageTableSQLInstancesTableNewRetryableRangefeedErrorsAlterSystemWebSessionsCreateIndexesSeparatedIntentsMigrationPostSeparatedIntentsMigrationRetryJobsWithExponentialBackoffRecordsBasedRegistryAutoSpanConfigReconciliationJobPreventNewInterleavedTablesEnsureNoInterleavedTablesDefaultPrivilegesZonesTableForSecondaryTenantsUseKeyEncodeForHashShardedIndexesDatabasePlacementPolicyGeneratedAsIdentityOnUpdateExpressionsSpanConfigurationsTableBoundedStalenessSQLStatsCompactionScheduledJobDateAndIntervalStylePebbleFormatVersioned"
+const _Key_name = "Start21_1V21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTableDatabaseRoleSettingsTenantUsageTableSQLInstancesTableNewRetryableRangefeedErrorsAlterSystemWebSessionsCreateIndexesSeparatedIntentsMigrationPostSeparatedIntentsMigrationRetryJobsWithExponentialBackoffRecordsBasedRegistryAutoSpanConfigReconciliationJobPreventNewInterleavedTablesEnsureNoInterleavedTablesDefaultPrivilegesZonesTableForSecondaryTenantsUseKeyEncodeForHashShardedIndexesDatabasePlacementPolicyGeneratedAsIdentityOnUpdateExpressionsSpanConfigurationsTableBoundedStalenessSQLStatsCompactionScheduledJobDateAndIntervalStylePebbleFormatVersionedMarkerDataKeysRegistry"
 
-var _Key_index = [...]uint16{0, 9, 14, 27, 36, 51, 80, 97, 114, 163, 177, 190, 210, 226, 243, 270, 305, 330, 359, 390, 410, 441, 468, 493, 510, 539, 572, 595, 614, 633, 656, 672, 702, 722, 743}
+var _Key_index = [...]uint16{0, 9, 14, 27, 36, 51, 80, 97, 114, 163, 177, 190, 210, 226, 243, 270, 305, 330, 359, 390, 410, 441, 468, 493, 510, 539, 572, 595, 614, 633, 656, 672, 702, 722, 743, 765}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
