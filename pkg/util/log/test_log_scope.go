@@ -225,9 +225,14 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 	} else {
 		// Output to files enabled.
 
-		// Even though we use file output, make all logged errors/fatal
+		// Even though we use file output, make all logged fatal
 		// calls go to the external stderr, in addition to the log file.
-		testConfig.Sinks.Stderr.Filter = severity.ERROR
+		//
+		// We want FATAL messages because those don't pertain to a
+		// specific test, but rather to the whole package / go test
+		// invocation because they stop the execution. They elucidate
+		// why the 'go test' invocation fails prematurely.
+		testConfig.Sinks.Stderr.Filter = severity.FATAL
 	}
 
 	if skip.UnderBench() {
