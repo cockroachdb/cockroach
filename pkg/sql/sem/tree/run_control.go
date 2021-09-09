@@ -120,6 +120,21 @@ type ControlJobsForSchedules struct {
 	Command   JobCommand
 }
 
+// ControlJobsOfType represents PAUSE/RESUME/CANCEL clause which
+// applies the job command to the job matching a specified type
+type ControlJobsOfType struct {
+	Type    string
+	Command JobCommand
+}
+
+// Format implements the NodeFormatter interface.
+func (n *ControlJobsOfType) Format(ctx *FmtCtx) {
+	ctx.WriteString(JobCommandToStatement[n.Command])
+	ctx.WriteString(" ALL ")
+	ctx.WriteString(n.Type)
+	ctx.WriteString(" JOBS")
+}
+
 // Format implements NodeFormatter interface.
 func (n *ControlJobsForSchedules) Format(ctx *FmtCtx) {
 	ctx.WriteString(JobCommandToStatement[n.Command])
@@ -128,3 +143,4 @@ func (n *ControlJobsForSchedules) Format(ctx *FmtCtx) {
 }
 
 var _ Statement = &ControlJobsForSchedules{}
+var _ Statement = &ControlJobsOfType{}

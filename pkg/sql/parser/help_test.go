@@ -107,6 +107,7 @@ func TestContextualHelp(t *testing.T) {
 		{`CANCEL SESSIONS ??`, `CANCEL SESSIONS`},
 		{`CANCEL SESSIONS IF ??`, `CANCEL SESSIONS`},
 		{`CANCEL SESSIONS IF EXISTS ??`, `CANCEL SESSIONS`},
+		{`CANCEL ALL ??`, `CANCEL ALL JOBS`},
 
 		{`CREATE UNIQUE ??`, `CREATE`},
 		{`CREATE UNIQUE INDEX ??`, `CREATE INDEX`},
@@ -246,6 +247,7 @@ func TestContextualHelp(t *testing.T) {
 		{`PAUSE JOBS ??`, `PAUSE JOBS`},
 		{`PAUSE SCHEDULE ??`, `PAUSE SCHEDULES`},
 		{`PAUSE SCHEDULES ??`, `PAUSE SCHEDULES`},
+		{`PAUSE ALL ??`, `PAUSE ALL JOBS`},
 
 		{`REASSIGN OWNED BY ?? TO ??`, `REASSIGN OWNED BY`},
 		{`REASSIGN OWNED BY foo, bar TO ??`, `REASSIGN OWNED BY`},
@@ -256,6 +258,7 @@ func TestContextualHelp(t *testing.T) {
 		{`RESUME JOBS ??`, `RESUME JOBS`},
 		{`RESUME SCHEDULE ??`, `RESUME SCHEDULES`},
 		{`RESUME SCHEDULES ??`, `RESUME SCHEDULES`},
+		{`RESUME ALL ??`, `RESUME ALL JOBS`},
 
 		{`REVOKE ALL ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM ??`, `REVOKE`},

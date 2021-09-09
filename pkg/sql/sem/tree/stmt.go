@@ -19,7 +19,10 @@
 
 package tree
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Instructions for creating new types: If a type needs to satisfy an
 // interface, declare that function along with that interface. This
@@ -432,6 +435,17 @@ func (*ControlJobsForSchedules) StatementType() StatementType { return TypeTCL }
 // StatementTag returns a short string identifying the type of statement.
 func (n *ControlJobsForSchedules) StatementTag() string {
 	return fmt.Sprintf("%s JOBS FOR SCHEDULES", JobCommandToStatement[n.Command])
+}
+
+// StatementReturnType implements the Statement interface.
+func (*ControlJobsOfType) StatementReturnType() StatementReturnType { return RowsAffected }
+
+// StatementType implements the Statement interface.
+func (*ControlJobsOfType) StatementType() StatementType { return TypeTCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *ControlJobsOfType) StatementTag() string {
+	return fmt.Sprintf("%s ALL %s JOBS", JobCommandToStatement[n.Command], strings.ToUpper(n.Type))
 }
 
 // StatementReturnType implements the Statement interface.
@@ -1631,6 +1645,7 @@ func (n *BeginTransaction) String() string               { return AsString(n) }
 func (n *ControlJobs) String() string                    { return AsString(n) }
 func (n *ControlSchedules) String() string               { return AsString(n) }
 func (n *ControlJobsForSchedules) String() string        { return AsString(n) }
+func (n *ControlJobsOfType) String() string              { return AsString(n) }
 func (n *CancelQueries) String() string                  { return AsString(n) }
 func (n *CancelSessions) String() string                 { return AsString(n) }
 func (n *CannedOptPlan) String() string                  { return AsString(n) }

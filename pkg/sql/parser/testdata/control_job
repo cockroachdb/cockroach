@@ -564,3 +564,44 @@ EXPLAIN SHOW RUNNING SCHEDULES FOR SQL STATISTICS
 EXPLAIN SHOW RUNNING SCHEDULES FOR SQL STATISTICS -- fully parenthesized
 EXPLAIN SHOW RUNNING SCHEDULES FOR SQL STATISTICS -- literals removed
 EXPLAIN SHOW RUNNING SCHEDULES FOR SQL STATISTICS -- identifiers removed
+
+parse
+PAUSE ALL CHANGEFEED JOBS
+----
+PAUSE ALL changefeed JOBS -- normalized!
+PAUSE ALL changefeed JOBS -- fully parenthesized
+PAUSE ALL changefeed JOBS -- literals removed
+PAUSE ALL changefeed JOBS -- identifiers removed
+
+parse
+RESUME ALL BACKUP JOBS
+----
+RESUME ALL backup JOBS -- normalized!
+RESUME ALL backup JOBS -- fully parenthesized
+RESUME ALL backup JOBS -- literals removed
+RESUME ALL backup JOBS -- identifiers removed
+
+parse
+CANCEL ALL IMPORT JOBS
+----
+CANCEL ALL import JOBS -- normalized!
+CANCEL ALL import JOBS -- fully parenthesized
+CANCEL ALL import JOBS -- literals removed
+CANCEL ALL import JOBS -- identifiers removed
+
+parse
+PAUSE ALL RESTORE JOBS
+----
+PAUSE ALL restore JOBS -- normalized!
+PAUSE ALL restore JOBS -- fully parenthesized
+PAUSE ALL restore JOBS -- literals removed
+PAUSE ALL restore JOBS -- identifiers removed
+
+error
+PAUSE ALL JOBS
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+PAUSE ALL JOBS
+              ^
+HINT: try \h PAUSE ALL JOBS
