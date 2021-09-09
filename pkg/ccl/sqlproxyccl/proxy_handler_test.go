@@ -228,6 +228,86 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
 }
 
+func TestProxyTLSConf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("insecure", func(t *testing.T) {
+		ctx := context.Background()
+		te := newTester()
+		defer te.Close()
+
+		defer testutils.TestingHook(&BackendDial, func(
+			_ *pgproto3.StartupMessage, _ string, tlsConf *tls.Config,
+		) (net.Conn, error) {
+			require.Nil(t, tlsConf)
+			return nil, newErrorf(codeParamsRoutingFailed, "boom")
+		})()
+
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
+			Insecure:    true,
+			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+		})
+
+		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
+		te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
+	})
+
+	t.Run("skip-verify", func(t *testing.T) {
+		ctx := context.Background()
+		te := newTester()
+		defer te.Close()
+
+		defer testutils.TestingHook(&BackendDial, func(
+			_ *pgproto3.StartupMessage, _ string, tlsConf *tls.Config,
+		) (net.Conn, error) {
+			require.True(t, tlsConf.InsecureSkipVerify)
+			return nil, newErrorf(codeParamsRoutingFailed, "boom")
+		})()
+
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
+			Insecure:    false,
+			SkipVerify:  true,
+			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+		})
+
+		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
+		te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
+	})
+
+	t.Run("no-skip-verify", func(t *testing.T) {
+		ctx := context.Background()
+		te := newTester()
+		defer te.Close()
+
+		defer testutils.TestingHook(&BackendDial, func(
+			_ *pgproto3.StartupMessage, outgoingAddress string, tlsConf *tls.Config,
+		) (net.Conn, error) {
+			outgoingHost, _, err := net.SplitHostPort(outgoingAddress)
+			require.NoError(t, err)
+
+			require.False(t, tlsConf.InsecureSkipVerify)
+			require.Equal(t, tlsConf.ServerName, outgoingHost)
+			return nil, newErrorf(codeParamsRoutingFailed, "boom")
+		})()
+
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
+			Insecure:    false,
+			SkipVerify:  false,
+			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+		})
+
+		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
+		te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
+	})
+
+}
+
 func TestProxyTLSClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// NB: The leaktest call is an important part of this test. We're
