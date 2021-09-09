@@ -91,3 +91,43 @@ func (node ScheduledBackup) Coverage() DescriptorCoverage {
 	}
 	return RequestedDescriptors
 }
+
+// ScheduledExport represents scheduled export job.
+type ScheduledExport struct {
+	CreateChangefeed
+	ScheduleLabelSpec ScheduleLabelSpec
+	Recurrence        Expr
+	ScheduleOptions   KVOptions
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ScheduledExport) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE SCHEDULE")
+
+	if node.ScheduleLabelSpec.IfNotExists {
+		ctx.WriteString(" IF NOT EXISTS")
+	}
+	if node.ScheduleLabelSpec.Label != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(node.ScheduleLabelSpec.Label)
+	}
+
+	ctx.WriteString(" FOR EXPORT ")
+	ctx.FormatNode(&node.Targets)
+
+	ctx.WriteString(" INTO ")
+	ctx.FormatNode(node.SinkURI)
+
+	if node.Options != nil {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
+	}
+
+	ctx.WriteString(" RECURRING ")
+	ctx.FormatNode(node.Recurrence)
+
+	if node.ScheduleOptions != nil {
+		ctx.WriteString(" WITH SCHEDULE OPTIONS ")
+		ctx.FormatNode(&node.ScheduleOptions)
+	}
+}

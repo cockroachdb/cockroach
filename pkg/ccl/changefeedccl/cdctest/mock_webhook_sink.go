@@ -10,6 +10,7 @@ package cdctest
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -80,6 +81,12 @@ func makeMockWebhookSink() *MockWebhookSink {
 // URL returns the http address of this mock Webhook sink.
 func (s *MockWebhookSink) URL() string {
 	return s.server.URL
+}
+
+// TrustedEndpoint returns "webhook-https://" endpoint URI which skips
+// TLS verification.
+func (s *MockWebhookSink) TrustedEndpoint() string {
+	return fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", s.URL())
 }
 
 // GetNumCalls returns how many times the sink handler has been invoked.

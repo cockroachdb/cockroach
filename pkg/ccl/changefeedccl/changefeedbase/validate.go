@@ -9,19 +9,13 @@
 package changefeedbase
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/errors"
 )
 
-// ValidateTable validates that a table descriptor can be watched by a CHANGEFEED.
-func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor) error {
-	t, ok := targets[tableDesc.GetID()]
-	if !ok {
-		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
-	}
-
+// ValidateTableDescriptor validates that a table descriptor can be watched by a CHANGEFEED.
+func ValidateTableDescriptor(tableDesc catalog.TableDescriptor) error {
 	// Technically, the only non-user table known not to work is system.jobs
 	// (which creates a cycle since the resolved timestamp high-water mark is
 	// saved in it), but there are subtle differences in the way many of them
@@ -46,7 +40,7 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDesc
 	}
 
 	if tableDesc.Dropped() {
-		return errors.Errorf(`"%s" was dropped`, t.StatementTimeName)
+		return errors.Errorf(`"%s" was dropped`, tableDesc.GetName())
 	}
 
 	if tableDesc.Offline() {

@@ -979,7 +979,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> create_extension_stmt
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
-%type <tree.Statement> create_schedule_for_backup_stmt
+%type <tree.Statement> create_schedule_for_backup_stmt create_schedule_for_export_stmt
 %type <tree.Statement> create_schema_stmt
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
@@ -2701,7 +2701,7 @@ backup_options:
 // FOR BACKUP [<targets>] INTO <location...>
 // [WITH <backup_option>[=<value>] [, ...]]
 // RECURRING [crontab|NEVER] [FULL BACKUP <crontab|ALWAYS>]
-// [WITH EXPERIMENTAL SCHEDULE OPTIONS <schedule_option>[= <value>] [, ...] ]
+// [WITH SCHEDULE OPTIONS <schedule_option>[= <value>] [, ...] ]
 //
 // All backups run in UTC timezone.
 //
@@ -2781,7 +2781,7 @@ create_schedule_for_backup_stmt:
         ScheduleOptions:      $12.kvOptions(),
       }
   }
- | CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE FOR BACKUP
+| CREATE SCHEDULE schedule_label_spec FOR BACKUP error  // SHOW HELP: CREATE SCHEDULE FOR BACKUP
 
 opt_description:
   string_or_placeholder
@@ -3137,6 +3137,55 @@ export_stmt:
   }
 | EXPORT error // SHOW HELP: EXPORT
 
+// %Help: CREATE SCHEDULE FOR EXPORT - export table periodically
+// %Category: CCL
+// %Text:
+// CREATE SCHEDULE [IF NOT EXISTS]
+// [<description>]
+// FOR EXPORT TABLE <table> [AS OF SYSTEM TIME t] INTO <location...>
+// RECURRING <crontab> [WITH options]
+//
+// All exports run in UTC timezone.
+//
+// Description:
+//   Optional description (or name) for this schedule
+//
+// Location:
+//   "[scheme]://[host]/[path prefix to backup]?[parameters]"
+//   Backup schedule will create subdirectories under this location to store
+//   full and periodic backups.
+//
+// WITH <options>:
+//   Options specific to EXPORT TABLE: See Changefeed options
+//
+// RECURRING <crontab>:
+//   The RECURRING expression specifies when export runs
+//   Schedule specified as a string in crontab format.
+//   All times in UTC.
+//     "5 0 * * *": run schedule 5 minutes past midnight.
+//     "@daily": run daily, at midnight
+//   See https://en.wikipedia.org/wiki/Cron
+//
+// %SeeAlso: CREATE CHANGEFEED
+create_schedule_for_export_stmt:
+  CREATE SCHEDULE /*$3=*/schedule_label_spec FOR EXPORT TABLE
+  /* $7=*/single_table_pattern_list /*$8=*/opt_as_of_clause INTO /*10=*/string_or_placeholder
+  /*$11=*/opt_with_options RECURRING /*$13=*/sconst_or_placeholder  /*$14=*/opt_with_schedule_options
+  {
+     $$.val = &tree.ScheduledExport{
+        CreateChangefeed:   tree.CreateChangefeed{
+          Targets:    tree.TargetList{Tables: $7.tablePatterns()},
+          SinkURI:    $10.expr(),
+          Options:    $11.kvOptions(),
+          ExportSpec: &tree.ChangefeedExportSpec{AsOf: $8.asOfClause()},
+        },
+        ScheduleLabelSpec:  *($3.scheduleLabelSpec()),
+        Recurrence:         $13.expr(),
+        ScheduleOptions:    $14.kvOptions(),
+     }
+  }
+| CREATE SCHEDULE schedule_label_spec FOR EXPORT error   // SHOW HELP: CREATE SCHEDULE FOR EXPORT
+
 string_or_placeholder:
   non_reserved_word_or_sconst
   {
@@ -3456,6 +3505,7 @@ create_stmt:
 | create_ddl_stmt      // help texts in sub-rule
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
+| create_schedule_for_export_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR EXPORT
 | create_changefeed_stmt
 | create_replication_stream_stmt
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
@@ -5429,6 +5479,10 @@ opt_schedule_executor_type:
 | FOR BACKUP
   {
     $$.val = tree.ScheduledBackupExecutor
+  }
+| FOR EXPORT
+  {
+    $$.val = tree.ScheduledExportExecutor
   }
 | FOR SQL STATISTICS
   {
