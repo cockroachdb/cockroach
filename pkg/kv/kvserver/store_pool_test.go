@@ -1119,6 +1119,23 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 	if a, e := decommissioningReplicas, replicas[3:4]; !reflect.DeepEqual(a, e) {
 		t.Fatalf("expected decommissioning replicas %+v; got %+v", e, a)
 	}
+
+	// Mark node 4 as decommissioning and unavailable.
+	mnl.setNodeStatus(4, NodeStatusUnavailable, NodeMembershipStatusDecommissioning)
+
+	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas, false /* includeSuspectAndDrainingStores */)
+	// Decommissioning replicas are considered live.
+	if a, e := liveReplicas, replicas[:3]; !reflect.DeepEqual(a, e) {
+		t.Fatalf("expected live replicas %+v; got %+v", e, a)
+	}
+	if a, e := deadReplicas, replicas[4:]; !reflect.DeepEqual(a, e) {
+		t.Fatalf("expected dead replicas %+v; got %+v", e, a)
+	}
+
+	decommissioningReplicas = sp.decommissioningReplicas(replicas)
+	if a, e := decommissioningReplicas, replicas[3:4]; !reflect.DeepEqual(a, e) {
+		t.Fatalf("expected decommissioning replicas %+v; got %+v", e, a)
+	}
 }
 
 func TestNodeLivenessLivenessStatus(t *testing.T) {

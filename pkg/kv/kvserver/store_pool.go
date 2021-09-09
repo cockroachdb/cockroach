@@ -279,6 +279,8 @@ const (
 	storeStatusAvailable
 	// The store is decommissioning.
 	storeStatusDecommissioning
+	// The store is decommissioning, but has failed it's liveness heartbeat
+	storeStatusDecommissioningUnavailable
 	// The store failed it's liveness heartbeat recently and is considered
 	// suspect. Consequently, stores always move from `storeStatusUnknown`
 	// (indicating a node that has a non-live node liveness record) to
@@ -338,8 +340,11 @@ func (sd *storeDetail) status(
 	if nodeStatus == NodeStatusDead || nodeMembershipStatus == NodeMembershipStatusDecommissioned {
 		return storeStatusDead
 	}
-	if nodeStatus == NodeStatusLive && nodeMembershipStatus == NodeMembershipStatusDecommissioning {
+	if nodeMembershipStatus == NodeMembershipStatusDecommissioning {
+		if nodeStatus == NodeStatusLive {
 			return storeStatusDecommissioning
+		}
+		return storeStatusDecommissioningUnavailable
 	}
 	if nodeStatus == NodeStatusUnavailable {
 		// We don't want to suspect a node on startup or when it's first added to a
@@ -637,7 +642,7 @@ func (sp *StorePool) decommissioningReplicas(
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
 		switch detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, timeAfterStoreSuspect) {
-		case storeStatusDecommissioning:
+		case storeStatusDecommissioning, storeStatusDecommissioningUnavailable:
 			decommissioningReplicas = append(decommissioningReplicas, repl)
 		}
 	}
@@ -752,7 +757,7 @@ func (sp *StorePool) liveAndDeadReplicas(
 			// We count decommissioning replicas to be alive because they are readable
 			// and should be used for up-replication if necessary.
 			liveReplicas = append(liveReplicas, repl)
-		case storeStatusUnknown:
+		case storeStatusUnknown, storeStatusDecommissioningUnavailable:
 		// No-op.
 		case storeStatusSuspect, storeStatusDraining:
 			if includeSuspectAndDrainingStores {
@@ -949,7 +954,7 @@ func (sp *StorePool) getStoreListFromIDsLocked(
 			if filter != storeFilterThrottled && filter != storeFilterSuspect {
 				storeDescriptors = append(storeDescriptors, *detail.desc)
 			}
-		case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning:
+		case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning, storeStatusDecommissioningUnavailable:
 			// Do nothing; this store cannot be used.
 		default:
 			panic(fmt.Sprintf("unknown store status: %d", s))
@@ -1068,7 +1073,7 @@ func (sp *StorePool) isStoreReadyForRoutineReplicaTransferInternal(
 		log.VEventf(ctx, 3,
 			"s%d is a live target, candidate for rebalancing", targetStoreID)
 		return true
-	case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning, storeStatusSuspect, storeStatusDraining:
+	case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning, storeStatusSuspect, storeStatusDraining, storeStatusDecommissioningUnavailable:
 		log.VEventf(ctx, 3,
 			"not considering non-live store s%d (%v)", targetStoreID, status)
 		return false
