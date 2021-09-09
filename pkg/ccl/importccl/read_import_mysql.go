@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -300,6 +299,7 @@ func readMysqlCreateTable(
 	p sql.JobExecContext,
 	startingID descpb.ID,
 	parentDB catalog.DatabaseDescriptor,
+	parentSchema catalog.SchemaDescriptor,
 	match string,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
@@ -336,7 +336,7 @@ func readMysqlCreateTable(
 				continue
 			}
 			id := descpb.ID(int(startingID) + len(ret))
-			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentDB, id, name, i.TableSpec, fks, seqVals, owner, walltime)
+			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentDB, parentSchema, id, name, i.TableSpec, fks, seqVals, owner, walltime)
 			if err != nil {
 				return nil, err
 			}
@@ -378,6 +378,7 @@ func mysqlTableToCockroach(
 	evalCtx *tree.EvalContext,
 	p sql.JobExecContext,
 	parentDB catalog.DatabaseDescriptor,
+	parentSchema catalog.SchemaDescriptor,
 	id descpb.ID,
 	name string,
 	in *mysql.TableSpec,
@@ -431,7 +432,7 @@ func mysqlTableToCockroach(
 			seqName,
 			opts,
 			parentDB.GetID(),
-			keys.PublicSchemaIDForBackup,
+			parentSchema.GetID(),
 			id,
 			time,
 			privilegeDesc,
@@ -510,7 +511,7 @@ func mysqlTableToCockroach(
 	semaCtxPtr = makeSemaCtxWithoutTypeResolver(semaCtxPtr)
 	desc, err := MakeSimpleTableDescriptor(
 		ctx, semaCtxPtr, evalCtx.Settings, stmt, parentDB,
-		schemadesc.GetPublicSchema(), id, fks, time.WallTime,
+		parentSchema, id, fks, time.WallTime,
 	)
 	if err != nil {
 		return nil, nil, err

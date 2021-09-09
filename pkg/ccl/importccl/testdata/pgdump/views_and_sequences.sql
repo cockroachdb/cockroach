@@ -39,8 +39,8 @@ SET default_table_access_method = heap;
 --
 
 CREATE TABLE public.tbl (
-    a integer,
-    b integer
+                            a integer,
+                            b integer
 );
 
 
@@ -51,8 +51,8 @@ ALTER TABLE public.tbl OWNER TO otan;
 --
 
 CREATE VIEW public.v AS
- SELECT tbl.a
-   FROM public.tbl;
+SELECT tbl.a
+FROM public.tbl;
 
 
 ALTER TABLE public.v OWNER TO otan;
@@ -75,4 +75,3 @@ SELECT pg_catalog.setval('public.s', 1, false);
 --
 -- PostgreSQL database dump complete
 --
-

@@ -27,8 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -104,7 +106,8 @@ func TestMysqldumpDataReader(t *testing.T) {
 	}
 }
 
-const expectedParentID = 52
+const expectedParentID = 54
+const expectedSchemaID = 55
 
 func readFile(t *testing.T, name string) string {
 	body, err := ioutil.ReadFile(filepath.Join("testdata", "mysqldump", name))
@@ -126,8 +129,19 @@ func readMysqlCreateFrom(
 	walltime := testEvalCtx.StmtTimestamp.UnixNano()
 	expectedParent := dbdesc.NewInitial(
 		expectedParentID, "test", security.RootUserName(),
+		dbdesc.WithPublicSchemaID(expectedSchemaID),
 	)
-	tbl, err := readMysqlCreateTable(context.Background(), f, testEvalCtx, nil, id, expectedParent, name, fks, map[descpb.ID]int64{}, security.RootUserName(), walltime)
+	publicSchemaPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUserName())
+	publicSchemaPrivileges.Grant(security.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE})
+	expectedParentSchema := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		ParentID:   expectedParentID,
+		Name:       tree.PublicSchema,
+		ID:         expectedSchemaID,
+		Privileges: publicSchemaPrivileges,
+		Version:    1,
+	}).BuildCreatedMutableSchema()
+	tbl, err := readMysqlCreateTable(context.Background(), f, testEvalCtx, nil, id, expectedParent,
+		expectedParentSchema, name, fks, map[descpb.ID]int64{}, security.RootUserName(), walltime)
 	if err != nil {
 		t.Fatal(err)
 	}
