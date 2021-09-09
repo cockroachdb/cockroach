@@ -319,9 +319,6 @@ const (
 	ProtectedTsMetaPrivilegesMigration
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	V21_1
-
-	// Can return new retryable rangefeed errors without crashing the client
-	NewRetryableRangefeedErrors
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -529,10 +526,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     V21_1,
 		Version: roachpb.Version{Major: 21, Minor: 1},
-	},
-	{
-		Key:     NewRetryableRangefeedErrors,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
