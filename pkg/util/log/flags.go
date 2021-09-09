@@ -31,6 +31,10 @@ type config struct {
 	// used for testing.
 	showLogs bool
 
+	// testingLogConfig reflects the use of -test-log-config on the
+	// command line and is used for testing.
+	testLogConfig string
+
 	// flushWrites can be set asynchronously to force all file output to
 	// be flushed to disk immediately. This is set via SetAlwaysFlush()
 	// and used e.g. in start.go upon encountering errors.
@@ -42,6 +46,7 @@ var debugLog *loggerT
 func init() {
 	logflags.InitFlags(
 		&logging.showLogs,
+		&logging.testLogConfig,
 		&logging.vmoduleConfig.mu.vmodule,
 	)
 

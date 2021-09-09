@@ -139,6 +139,7 @@ go_test(
         "main_test.go",
         "redact_test.go",
         "secondary_log_test.go",
+        "test_log_scope_test.go",
         "trace_client_test.go",
         "trace_test.go",
     ],
