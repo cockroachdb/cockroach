@@ -270,20 +270,20 @@ type LocalOnlySessionData struct {
 	CopyPartitioningWhenDeinterleavingTable bool
 
 	// TxnRowsWrittenLog is the threshold for the number of rows written by a SQL
-	// transaction which - once reached - will trigger a logging event to SQL_PERF
+	// transaction which - once exceeded - will trigger a logging event to SQL_PERF
 	// (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
 	TxnRowsWrittenLog int64
 	// TxnRowsWrittenErr is the limit for the number of rows written by a SQL
-	// transaction which - once reached - will fail the transaction (or will
+	// transaction which - once exceeded - will fail the transaction (or will
 	// trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
 	// means disabled.
 	TxnRowsWrittenErr int64
 	// TxnRowsReadLog is the threshold for the number of rows read by a SQL
-	// transaction which - once reached - will trigger a logging event to SQL_PERF
+	// transaction which - once exceeded - will trigger a logging event to SQL_PERF
 	// (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
 	TxnRowsReadLog int64
 	// TxnRowsReadErr is the limit for the number of rows read by a SQL
-	// transaction which - once reached - will fail the transaction (or will
+	// transaction which - once exceeded - will fail the transaction (or will
 	// trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
 	// means disabled.
 	TxnRowsReadErr int64

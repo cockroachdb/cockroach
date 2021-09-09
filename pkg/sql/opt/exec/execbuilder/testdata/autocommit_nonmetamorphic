@@ -782,7 +782,7 @@ dist sender send  r36: sending batch 1 EndTxn to (n1,s1):1
 # erring guardrail is enabled.
 statement ok
 CREATE TABLE guardrails (i INT PRIMARY KEY);
-SET transaction_rows_written_err = 2
+SET transaction_rows_written_err = 1
 
 query B
 SELECT count(*) > 0 FROM [
@@ -795,7 +795,7 @@ true
 statement ok
 INSERT INTO guardrails VALUES (1)
 
-query error pq: txn reached the number of rows written \(2\)
+query error pq: txn exceeded the number of rows written \(1\)
 INSERT INTO guardrails VALUES (2), (3)
 
 statement ok

@@ -959,8 +959,8 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 	logCounter, errCounter *metric.Counter,
 ) error {
 	var err error
-	shouldLog := logLimit != 0 && numRows >= logLimit
-	shouldErr := errLimit != 0 && numRows >= errLimit
+	shouldLog := logLimit != 0 && numRows > logLimit
+	shouldErr := errLimit != 0 && numRows > errLimit
 	if !shouldLog && !shouldErr {
 		return nil
 	}
