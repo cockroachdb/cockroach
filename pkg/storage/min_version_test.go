@@ -161,9 +161,17 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 
 func fauxNewEncryptedEnvFunc(
 	fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
-) (vfs.FS, EncryptionStatsHandler, error) {
-	return fauxEncryptedFS{FS: fs}, nil, nil
+) (*EncryptionEnv, error) {
+	return &EncryptionEnv{
+		Closer:         nopCloser{},
+		FS:             fauxEncryptedFS{FS: fs},
+		UpgradeVersion: func() error { return nil },
+	}, nil
 }
+
+type nopCloser struct{}
+
+func (nopCloser) Close() error { return nil }
 
 type fauxEncryptedFS struct {
 	vfs.FS

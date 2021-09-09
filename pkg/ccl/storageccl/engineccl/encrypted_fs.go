@@ -305,13 +305,13 @@ func init() {
 // See the comment at the top of this file for the structure of this environment.
 func newEncryptedEnv(
 	fs vfs.FS, fr *storage.PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
-) (vfs.FS, storage.EncryptionStatsHandler, error) {
+) (*storage.EncryptionEnv, error) {
 	options := &baseccl.EncryptionOptions{}
 	if err := protoutil.Unmarshal(optionBytes, options); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if options.KeySource != baseccl.EncryptionKeySource_KeyFiles {
-		return nil, nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
+		return nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
 	}
 	storeKeyManager := &StoreKeyManager{
 		fs:                fs,
@@ -319,7 +319,7 @@ func newEncryptedEnv(
 		oldKeyFilename:    options.KeyFiles.OldKey,
 	}
 	if err := storeKeyManager.Load(context.TODO()); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	storeFS := &encryptedFS{
 		FS:           fs,
@@ -333,9 +333,10 @@ func newEncryptedEnv(
 		fs:             storeFS,
 		dbDir:          dbDir,
 		rotationPeriod: options.DataKeyRotationPeriod,
+		readOnly:       readOnly,
 	}
 	if err := dataKeyManager.Load(context.TODO()); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	dataFS := &encryptedFS{
 		FS:           fs,
@@ -349,13 +350,22 @@ func newEncryptedEnv(
 	if !readOnly {
 		key, err := storeKeyManager.ActiveKey(context.TODO())
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if err := dataKeyManager.SetActiveStoreKeyInfo(context.TODO(), key.Info); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
-	return dataFS, &encryptionStatsHandler{storeKM: storeKeyManager, dataKM: dataKeyManager}, nil
+
+	return &storage.EncryptionEnv{
+		Closer: dataKeyManager,
+		FS:     dataFS,
+		StatsHandler: &encryptionStatsHandler{
+			storeKM: storeKeyManager,
+			dataKM:  dataKeyManager,
+		},
+		UpgradeVersion: dataKeyManager.UseMarker,
+	}, nil
 }
 
 func canRegistryElide(entry *enginepb.FileEntry) bool {
