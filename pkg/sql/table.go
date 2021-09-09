@@ -150,7 +150,10 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			Progress: jobspb.SchemaChangeProgress{},
 			// Mark jobs without a mutation ID as non-cancellable,
 			// since we expect these to be trivial.
-			NonCancelable: mutationID == descpb.InvalidMutationID,
+			//
+			// The job should be cancelable when we are adding a table that doesn't
+			// have mutations, e.g., in CREATE TABLE AS VALUES.
+			NonCancelable: mutationID == descpb.InvalidMutationID && !tableDesc.Adding(),
 		}
 		p.extendedEvalCtx.SchemaChangeJobRecords[tableDesc.ID] = &newRecord
 		// Only add a MutationJob if there's an associated mutation.
