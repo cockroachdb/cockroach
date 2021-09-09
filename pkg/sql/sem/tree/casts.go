@@ -293,6 +293,9 @@ var validCasts = []castInfo{
 	{from: types.IntFamily, to: types.OidFamily, volatility: VolatilityStable, ignoreVolatilityCheck: true},
 	{from: types.OidFamily, to: types.OidFamily, volatility: VolatilityStable},
 
+	// Casts to UnknownFamily.
+	{from: types.UnknownFamily, to: types.UnknownFamily, volatility: VolatilityImmutable},
+
 	// Casts to UuidFamily.
 	{from: types.UnknownFamily, to: types.UuidFamily, volatility: VolatilityImmutable},
 	{from: types.StringFamily, to: types.UuidFamily, volatility: VolatilityImmutable},

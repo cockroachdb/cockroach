@@ -955,3 +955,14 @@ SELECT (ARRAY[t58439.*][2]).* FROM t58439
 NULL  NULL
 NULL  NULL
 NULL  NULL
+
+# Regression test for #68308. Do not internally error with a cast of unknown to
+# unknown in a tuple.
+subtest regression_68308
+
+query T
+SELECT (1::INT2, NULL)
+UNION
+SELECT (1::INT, NULL)
+----
+(1,)
