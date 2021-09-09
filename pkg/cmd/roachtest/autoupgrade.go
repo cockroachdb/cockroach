@@ -239,6 +239,23 @@ func registerAutoUpgrade(r *testRegistry) {
 
 		// Start n3 again to satisfy the dead node detector.
 		c.Start(ctx, t, c.Node(nodeDecommissioned))
+
+		// Test the 21.1.8 (Internal=124) to 21.1 downgrade, by first rolling back
+		// the cluster version (in case it is at -124), then adding a 21.1.0 node.
+		if _, err := db.ExecContext(ctx,
+			"SET CLUSTER SETTING version = '21.1'",
+		); err != nil {
+			t.Fatal(err)
+		}
+		if err := sleep(time.Second); err != nil {
+			t.Fatal(err)
+		}
+		rollbackNode := c.Node(nodes - 1)
+		c.Stop(ctx, rollbackNode)
+		if err := c.Stage(ctx, c.l, "release", "v21.1.0", "", rollbackNode); err != nil {
+			t.Fatal(err)
+		}
+		c.Start(ctx, t, rollbackNode)
 	}
 
 	r.Add(testSpec{
@@ -254,4 +271,5 @@ func registerAutoUpgrade(r *testRegistry) {
 			runAutoUpgrade(ctx, t, c, pred)
 		},
 	})
+
 }
