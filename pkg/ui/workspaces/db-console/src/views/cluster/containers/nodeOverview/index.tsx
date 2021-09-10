@@ -145,7 +145,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
           >
             Overview
           </Button>
-          <h2 className="base-heading">{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h2>
+          <h3 className="base-heading">{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h3>
         </div>
         <section className="section l-columns">
           <div className="l-columns__left">

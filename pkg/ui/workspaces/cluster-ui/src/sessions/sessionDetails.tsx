@@ -155,13 +155,13 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             Sessions
           </Button>
           <div className={cx("heading-with-controls")}>
-            <h1
+            <h3
               className={`${statementsPageCx("base-heading")} ${cx(
                 "page--header__title",
               )}`}
             >
               Session details
-            </h1>
+            </h3>
             {showActionButtons && (
               <div className={cx("heading-controls-group")}>
                 <Button

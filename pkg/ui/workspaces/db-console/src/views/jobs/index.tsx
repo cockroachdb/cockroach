@@ -142,9 +142,7 @@ export class JobsTable extends React.Component<JobsTableProps> {
     return (
       <div className="jobs-page">
         <Helmet title="Jobs" />
-        <section className="section">
-          <h1 className="base-heading">Jobs</h1>
-        </section>
+        <h3 className="base-heading">Jobs</h3>
         <div>
           <PageConfig>
             <PageConfigItem>

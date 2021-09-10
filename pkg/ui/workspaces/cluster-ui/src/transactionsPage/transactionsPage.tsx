@@ -253,9 +253,7 @@ export class TransactionsPage extends React.Component<
   renderTransactionsList() {
     return (
       <div className={cx("table-area")}>
-        <section className={baseHeadingClasses.wrapper}>
-          <h1 className={baseHeadingClasses.tableName}>Transactions</h1>
-        </section>
+        <h3 className={baseHeadingClasses.tableName}>Transactions</h3>
         <Loading
           loading={!this.props?.data}
           error={this.props?.error}
