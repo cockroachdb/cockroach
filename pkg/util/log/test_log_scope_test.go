@@ -11,6 +11,7 @@
 package log
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -23,7 +24,7 @@ import (
 func TestDefaultTestLogConfig(t *testing.T) {
 	t.Run("no-dir", func(t *testing.T) {
 		// No directory.
-		testConfig := getTestConfig(nil)
+		testConfig := getTestConfig(nil, true /* mostly inline */)
 
 		// Capturing fd2 writes is disabled.
 		require.False(t, testConfig.CaptureFd2.Enable)
@@ -39,45 +40,64 @@ func TestDefaultTestLogConfig(t *testing.T) {
 		require.False(t, *testConfig.Sinks.Stderr.Redactable)
 	})
 	t.Run("with-dir", func(t *testing.T) {
-		fakeDir := "/foo"
-		testConfig := getTestConfig(&fakeDir)
+		for _, mostlyInline := range []bool{false, true} {
+			t.Run(fmt.Sprintf("mostly-inline=%v", mostlyInline), func(t *testing.T) {
+				fakeDir := "/foo"
+				testConfig := getTestConfig(&fakeDir, mostlyInline)
 
-		// Capturing fd2 writes is disabled in any case, because we want
-		// panic in tests to show up on the test's stderr.
-		require.False(t, testConfig.CaptureFd2.Enable)
-		// Test configs without a directory send all channels at severity ERROR to stderr.
-		for _, c := range logconfig.AllChannels() {
-			require.True(t, testConfig.Sinks.Stderr.Channels.AllChannels.HasChannel(c))
-			require.Equal(t, severity.FATAL, testConfig.Sinks.Stderr.Channels.ChannelFilters[c])
-		}
-		// Redaction markers disabled on stderr.
-		require.False(t, *testConfig.Sinks.Stderr.Redactable)
+				// Capturing fd2 writes is disabled in any case, because we want
+				// panic in tests to show up on the test's stderr.
+				require.False(t, testConfig.CaptureFd2.Enable)
 
-		// Output to files enabled, with just 1 file sink for all channels at severity INFO.
-		require.Equal(t, 3, len(testConfig.Sinks.FileGroups))
-		fc1, ok := testConfig.Sinks.FileGroups["health"]
-		require.True(t, ok)
-		require.Equal(t, 1, len(fc1.Channels.ChannelFilters))
-		require.Equal(t, severity.INFO, fc1.Channels.ChannelFilters[channel.HEALTH])
-		require.Equal(t, fakeDir, *fc1.Dir)
-		fc2, ok := testConfig.Sinks.FileGroups["storage"]
-		require.True(t, ok)
-		require.Equal(t, 1, len(fc2.Channels.ChannelFilters))
-		require.Equal(t, severity.INFO, fc2.Channels.ChannelFilters[channel.STORAGE])
-		require.Equal(t, fakeDir, *fc2.Dir)
-		def, ok := testConfig.Sinks.FileGroups["default"]
-		require.True(t, ok)
-		require.Equal(t, fakeDir, *def.Dir)
-		for _, c := range logconfig.AllChannels() {
-			require.True(t, def.Channels.AllChannels.HasChannel(c), "channel %v", c)
-			if c == channel.HEALTH || c == channel.STORAGE {
-				// These two have been selected at severity WARNING.
-				require.Equal(t, severity.WARNING, def.Channels.ChannelFilters[c], "channel %v", c)
-			} else {
-				require.Equal(t, severity.INFO, def.Channels.ChannelFilters[c], "channel %v", c)
-			}
+				if mostlyInline {
+					// Test configs that prefer stderr send all channels to
+					// stderr at severity INFO, except for HEALTH and STORAGE.
+					for _, c := range logconfig.AllChannels() {
+						require.True(t, testConfig.Sinks.Stderr.Channels.AllChannels.HasChannel(c))
+						if c == channel.HEALTH || c == channel.STORAGE {
+							require.Equal(t, severity.WARNING, testConfig.Sinks.Stderr.Channels.ChannelFilters[c])
+						} else {
+							require.Equal(t, severity.INFO, testConfig.Sinks.Stderr.Channels.ChannelFilters[c])
+						}
+					}
+				} else {
+					// Test configs that prefer files send all channels at
+					// severity FATAL to stderr.
+					for _, c := range logconfig.AllChannels() {
+						require.True(t, testConfig.Sinks.Stderr.Channels.AllChannels.HasChannel(c))
+						require.Equal(t, severity.FATAL, testConfig.Sinks.Stderr.Channels.ChannelFilters[c])
+					}
+				}
+				// Redaction markers disabled on stderr.
+				require.False(t, *testConfig.Sinks.Stderr.Redactable)
+
+				// Output to files enabled, with just 1 file sink for all channels at severity INFO.
+				require.Equal(t, 3, len(testConfig.Sinks.FileGroups))
+				fc1, ok := testConfig.Sinks.FileGroups["health"]
+				require.True(t, ok)
+				require.Equal(t, 1, len(fc1.Channels.ChannelFilters))
+				require.Equal(t, severity.INFO, fc1.Channels.ChannelFilters[channel.HEALTH])
+				require.Equal(t, fakeDir, *fc1.Dir)
+				fc2, ok := testConfig.Sinks.FileGroups["storage"]
+				require.True(t, ok)
+				require.Equal(t, 1, len(fc2.Channels.ChannelFilters))
+				require.Equal(t, severity.INFO, fc2.Channels.ChannelFilters[channel.STORAGE])
+				require.Equal(t, fakeDir, *fc2.Dir)
+				def, ok := testConfig.Sinks.FileGroups["default"]
+				require.True(t, ok)
+				require.Equal(t, fakeDir, *def.Dir)
+				for _, c := range logconfig.AllChannels() {
+					require.True(t, def.Channels.AllChannels.HasChannel(c), "channel %v", c)
+					if c == channel.HEALTH || c == channel.STORAGE {
+						// These two have been selected at severity WARNING.
+						require.Equal(t, severity.WARNING, def.Channels.ChannelFilters[c], "channel %v", c)
+					} else {
+						require.Equal(t, severity.INFO, def.Channels.ChannelFilters[c], "channel %v", c)
+					}
+				}
+				require.True(t, *def.Redactable)
+			})
 		}
-		require.True(t, *def.Redactable)
 	})
 }
 
@@ -102,7 +122,7 @@ sinks:
 	t.Run("no-dir", func(t *testing.T) {
 		defer func(prev string) { logging.testLogConfig = prev }(logging.testLogConfig)
 		logging.testLogConfig = fakeConf
-		testConfig := getTestConfig(nil)
+		testConfig := getTestConfig(nil, true /* mostly inline */)
 
 		// Capturing fd2 writes is disabled by default.
 		// This is different from the default config for servers, where
@@ -129,7 +149,7 @@ sinks:
 		defer func(prev string) { logging.testLogConfig = prev }(logging.testLogConfig)
 		logging.testLogConfig = fakeConf
 		fakeDir := "/foo"
-		testConfig := getTestConfig(&fakeDir)
+		testConfig := getTestConfig(&fakeDir, false /* mostly inline */)
 
 		// Capturing fd2 writes is disabled by default.
 		// This is different from the default config for servers, where
