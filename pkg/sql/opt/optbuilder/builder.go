@@ -145,6 +145,10 @@ type Builder struct {
 	// (without ON CONFLICT) or false otherwise. All mutated tables will have an
 	// entry in the map.
 	areAllTableMutationsSimpleInserts map[cat.StableID]bool
+
+	// lastAlias is set to the last data source alias we've come across, if we
+	// are processing a data source with an alias.
+	lastAlias *tree.AliasClause
 }
 
 // New creates a new Builder structure initialized with the given

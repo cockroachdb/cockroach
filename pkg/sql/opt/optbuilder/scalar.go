@@ -549,7 +549,7 @@ func (b *Builder) buildFunction(
 	})
 
 	if isGenerator(def) {
-		return b.finishBuildGeneratorFunction(f, out, inScope, outScope, outCol)
+		return b.finishBuildGeneratorFunction(f, def, out, inScope, outScope, outCol)
 	}
 
 	// Add a dependency on sequences that are used as a string argument.

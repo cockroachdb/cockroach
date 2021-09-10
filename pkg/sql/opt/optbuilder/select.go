@@ -46,6 +46,11 @@ func (b *Builder) buildDataSource(
 		inScope.atRoot = prevAtRoot
 	}(inScope.atRoot)
 	inScope.atRoot = false
+	if b.lastAlias != nil {
+		// Make sure we reset the last alias state if it's been set, so we don't
+		// keep it past a single level of recursion.
+		defer func() { b.lastAlias = nil }()
+	}
 	// NB: The case statements are sorted lexicographically.
 	switch source := texpr.(type) {
 	case *tree.AliasedTableExpr:
@@ -55,6 +60,7 @@ func (b *Builder) buildDataSource(
 			indexFlags = source.IndexFlags
 		}
 		if source.As.Alias != "" {
+			b.lastAlias = &source.As
 			locking = locking.filter(source.As.Alias)
 		}
 
@@ -331,7 +337,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		// table name.
 		noColNameSpecified := len(colAlias) == 0
 		if scope.isAnonymousTable() && noColNameSpecified && scope.singleSRFColumn {
-			colAlias = tree.NameList{as.Alias}
+			colAlias = tree.ColumnDefList{tree.ColumnDef{Name: as.Alias}}
 		}
 
 		// If an alias was specified, use that to qualify the column names.
@@ -361,11 +367,11 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 				if col.visibility != visible {
 					continue
 				}
-				col.name = scopeColName(colAlias[aliasIdx])
+				col.name = scopeColName(colAlias[aliasIdx].Name)
 				if isScan {
 					// Override column metadata alias.
 					colMeta := b.factory.Metadata().ColumnMeta(col.id)
-					colMeta.Alias = string(colAlias[aliasIdx])
+					colMeta.Alias = string(colAlias[aliasIdx].Name)
 				}
 				aliasIdx++
 			}

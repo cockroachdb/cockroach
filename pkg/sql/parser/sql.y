@@ -362,8 +362,14 @@ func (u *sqlSymUnion) slct() *tree.Select {
 func (u *sqlSymUnion) selectStmt() tree.SelectStatement {
     return u.val.(tree.SelectStatement)
 }
-func (u *sqlSymUnion) colDef() *tree.ColumnTableDef {
+func (u *sqlSymUnion) colTableDef() *tree.ColumnTableDef {
     return u.val.(*tree.ColumnTableDef)
+}
+func (u *sqlSymUnion) colDef() tree.ColumnDef {
+    return u.val.(tree.ColumnDef)
+}
+func (u *sqlSymUnion) colDefList() tree.ColumnDefList {
+    return u.val.(tree.ColumnDefList)
 }
 func (u *sqlSymUnion) constraintDef() tree.ConstraintTableDef {
     return u.val.(tree.ConstraintTableDef)
@@ -1339,7 +1345,8 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <empty> first_or_next
 
 %type <tree.Statement> insert_rest
-%type <tree.NameList> opt_col_def_list
+%type <tree.ColumnDefList> opt_col_def_list col_def_list opt_col_def_list_no_types col_def_list_no_types
+%type <tree.ColumnDef> col_def
 %type <*tree.OnConflict> on_conflict
 
 %type <tree.Statement> begin_transaction
@@ -1348,7 +1355,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <tree.Expr> opt_hash_sharded_bucket_count
 %type <*tree.ShardedIndexDef> opt_hash_sharded
 %type <tree.NameList> opt_storing
-%type <*tree.ColumnTableDef> column_def
+%type <*tree.ColumnTableDef> column_table_def
 %type <tree.TableDef> table_elem
 %type <tree.Expr> where_clause opt_where_clause
 %type <*tree.ArraySubscript> array_subscript
@@ -1370,7 +1377,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <[]*tree.When> when_clause_list
 %type <treecmp.ComparisonOperator> sub_type
 %type <tree.Expr> numeric_only
-%type <tree.AliasClause> alias_clause opt_alias_clause
+%type <tree.AliasClause> alias_clause opt_alias_clause func_alias_clause opt_func_alias_clause
 %type <bool> opt_ordinality opt_compact
 %type <*tree.Order> sortby
 %type <tree.IndexElem> index_elem index_elem_options create_as_param
@@ -2320,24 +2327,24 @@ alter_table_cmd:
     $$.val = &tree.AlterTableRenameConstraint{Constraint: tree.Name($3), NewName: tree.Name($5) }
   }
   // ALTER TABLE <name> ADD <coldef>
-| ADD column_def
+| ADD column_table_def
   {
-    $$.val = &tree.AlterTableAddColumn{IfNotExists: false, ColumnDef: $2.colDef()}
+    $$.val = &tree.AlterTableAddColumn{IfNotExists: false, ColumnDef: $2.colTableDef()}
   }
   // ALTER TABLE <name> ADD IF NOT EXISTS <coldef>
-| ADD IF NOT EXISTS column_def
+| ADD IF NOT EXISTS column_table_def
   {
-    $$.val = &tree.AlterTableAddColumn{IfNotExists: true, ColumnDef: $5.colDef()}
+    $$.val = &tree.AlterTableAddColumn{IfNotExists: true, ColumnDef: $5.colTableDef()}
   }
   // ALTER TABLE <name> ADD COLUMN <coldef>
-| ADD COLUMN column_def
+| ADD COLUMN column_table_def
   {
-    $$.val = &tree.AlterTableAddColumn{IfNotExists: false, ColumnDef: $3.colDef()}
+    $$.val = &tree.AlterTableAddColumn{IfNotExists: false, ColumnDef: $3.colTableDef()}
   }
   // ALTER TABLE <name> ADD COLUMN IF NOT EXISTS <coldef>
-| ADD COLUMN IF NOT EXISTS column_def
+| ADD COLUMN IF NOT EXISTS column_table_def
   {
-    $$.val = &tree.AlterTableAddColumn{IfNotExists: true, ColumnDef: $6.colDef()}
+    $$.val = &tree.AlterTableAddColumn{IfNotExists: true, ColumnDef: $6.colTableDef()}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET DEFAULT <expr>|DROP DEFAULT}
 | ALTER opt_column column_name alter_column_default
@@ -7347,9 +7354,9 @@ table_elem_list:
   }
 
 table_elem:
-  column_def
+  column_table_def
   {
-    $$.val = $1.colDef()
+    $$.val = $1.colTableDef()
   }
 | index_def
 | family_def
@@ -7534,7 +7541,7 @@ range_partition:
 // Treat SERIAL pseudo-types as separate case so that types.T does not have to
 // support them as first-class types (e.g. they should not be supported as CAST
 // target types).
-column_def:
+column_table_def:
   column_name typename col_qual_list
   {
     typ := $2.typeReference()
@@ -10276,20 +10283,20 @@ materialize_clause:
   }
 
 common_table_expr:
-  table_alias_name opt_column_list AS '(' preparable_stmt ')'
+  table_alias_name opt_col_def_list_no_types AS '(' preparable_stmt ')'
     {
       $$.val = &tree.CTE{
-        Name: tree.AliasClause{Alias: tree.Name($1), Cols: $2.nameList() },
+        Name: tree.AliasClause{Alias: tree.Name($1), Cols: $2.colDefList() },
         Mtr: tree.MaterializeClause{
           Set: false,
         },
         Stmt: $5.stmt(),
       }
     }
-| table_alias_name opt_column_list AS materialize_clause '(' preparable_stmt ')'
+| table_alias_name opt_col_def_list_no_types AS materialize_clause '(' preparable_stmt ')'
     {
       $$.val = &tree.CTE{
-        Name: tree.AliasClause{Alias: tree.Name($1), Cols: $2.nameList() },
+        Name: tree.AliasClause{Alias: tree.Name($1), Cols: $2.colDefList() },
         Mtr: tree.MaterializeClause{
           Materialize: $4.bool(),
           Set: true,
@@ -10794,7 +10801,7 @@ table_ref:
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.ParenTableExpr{Expr: $2.tblExpr()}, Ordinality: $4.bool(), As: $5.aliasClause()}
   }
-| func_table opt_ordinality opt_alias_clause
+| func_table opt_ordinality opt_func_alias_clause
   {
     f := $1.tblExpr()
     $$.val = &tree.AliasedTableExpr{
@@ -10862,16 +10869,61 @@ rowsfrom_list:
   { $$.val = append($1.exprs(), $3.expr()) }
 
 rowsfrom_item:
-  func_expr_windowless opt_col_def_list
+  func_expr_windowless opt_func_alias_clause
   {
     $$.val = $1.expr()
   }
 
+opt_col_def_list_no_types:
+  '(' col_def_list_no_types ')'
+  {
+    $$.val = $2.colDefList()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.ColumnDefList(nil)
+  }
+
+col_def_list_no_types:
+  name
+  {
+    $$.val = tree.ColumnDefList{tree.ColumnDef{Name: tree.Name($1)}}
+  }
+| col_def_list_no_types ',' name
+  {
+    $$.val = append($1.colDefList(), tree.ColumnDef{Name: tree.Name($3)})
+  }
+
+
 opt_col_def_list:
   /* EMPTY */
-  { }
-| AS '(' error
-  { return unimplemented(sqllex, "ROWS FROM with col_def_list") }
+  {
+    $$.val = tree.ColumnDefList(nil)
+  }
+| '(' col_def_list ')'
+  {
+    $$.val = $2.colDefList()
+  }
+
+col_def_list:
+  col_def
+  {
+    $$.val = tree.ColumnDefList{$1.colDef()}
+  }
+| col_def_list ',' col_def
+  {
+    $$.val = append($1.colDefList(), $3.colDef())
+  }
+
+col_def:
+  name
+  {
+    $$.val = tree.ColumnDef{Name: tree.Name($1)}
+  }
+| name typename
+  {
+    $$.val = tree.ColumnDef{Name: tree.Name($1), Type: $2.typeReference()}
+  }
 
 opt_tableref_col_list:
   /* EMPTY */               { $$.val = nil }
@@ -10939,17 +10991,34 @@ joined_table:
   }
 
 alias_clause:
-  AS table_alias_name opt_column_list
+  AS table_alias_name opt_col_def_list_no_types
   {
-    $$.val = tree.AliasClause{Alias: tree.Name($2), Cols: $3.nameList()}
+    $$.val = tree.AliasClause{Alias: tree.Name($2), Cols: $3.colDefList()}
   }
-| table_alias_name opt_column_list
+| table_alias_name opt_col_def_list_no_types
   {
-    $$.val = tree.AliasClause{Alias: tree.Name($1), Cols: $2.nameList()}
+    $$.val = tree.AliasClause{Alias: tree.Name($1), Cols: $2.colDefList()}
   }
 
 opt_alias_clause:
   alias_clause
+| /* EMPTY */
+  {
+    $$.val = tree.AliasClause{}
+  }
+
+func_alias_clause:
+  AS table_alias_name opt_col_def_list
+  {
+    $$.val = tree.AliasClause{Alias: tree.Name($2), Cols: $3.colDefList()}
+  }
+| table_alias_name opt_col_def_list
+  {
+    $$.val = tree.AliasClause{Alias: tree.Name($1), Cols: $2.colDefList()}
+  }
+
+opt_func_alias_clause:
+  func_alias_clause
 | /* EMPTY */
   {
     $$.val = tree.AliasClause{}

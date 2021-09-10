@@ -83,6 +83,12 @@ type ValueGenerator interface {
 	Close(ctx context.Context)
 }
 
+// AliasAwareValueGenerator is a value generator that can inspect the alias with
+// which it was invoked. SetAlias will always be run before Start.
+type AliasAwareValueGenerator interface {
+	SetAlias(types []*types.T, labels []string) error
+}
+
 // streamingValueGenerator is a marker-type indicating that the wrapped
 // generator is of "streaming" nature, thus, projectSet processor must be
 // streaming too.
