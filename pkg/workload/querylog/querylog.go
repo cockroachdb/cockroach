@@ -493,12 +493,12 @@ func (w *worker) generatePlaceholders(
 
 // getTableNames fetches the names of all the tables in db and stores them in
 // w.state.
-func (w *querylog) getTableNames(db *gosql.DB) error {
+func (w *querylog) getTableNames(db *gosql.DB) (retErr error) {
 	rows, err := db.Query(`SELECT table_name FROM [SHOW TABLES] ORDER BY table_name`)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { retErr = errors.CombineErrors(retErr, rows.Close()) }()
 	w.state.tableNames = make([]string, 0)
 	for rows.Next() {
 		var tableName string
@@ -507,7 +507,7 @@ func (w *querylog) getTableNames(db *gosql.DB) error {
 		}
 		w.state.tableNames = append(w.state.tableNames, tableName)
 	}
-	return nil
+	return rows.Err()
 }
 
 // unzip unzips the zip file at src into dest. It was copied (with slight
@@ -726,7 +726,7 @@ func (w *querylog) processQueryLog(ctx context.Context) error {
 
 // getColumnsInfo populates the information about the columns of the tables
 // that at least one query was issued against.
-func (w *querylog) getColumnsInfo(db *gosql.DB) error {
+func (w *querylog) getColumnsInfo(db *gosql.DB) (retErr error) {
 	w.state.columnsByTableName = make(map[string][]columnInfo)
 	for _, tableName := range w.state.tableNames {
 		if !w.state.tableUsed[tableName] {
@@ -743,6 +743,9 @@ func (w *querylog) getColumnsInfo(db *gosql.DB) error {
 		if err != nil {
 			return err
 		}
+		defer func(rows *gosql.Rows) {
+			retErr = errors.CombineErrors(retErr, rows.Close())
+		}(rows)
 		for rows.Next() {
 			var columnName, dataType string
 			if err = rows.Scan(&columnName, &dataType); err != nil {
@@ -750,7 +753,7 @@ func (w *querylog) getColumnsInfo(db *gosql.DB) error {
 			}
 			columnTypeByColumnName[columnName] = dataType
 		}
-		if err = rows.Close(); err != nil {
+		if err = rows.Err(); err != nil {
 			return err
 		}
 
@@ -771,11 +774,13 @@ WHERE attrelid=$1`, relid)
 		if err != nil {
 			return err
 		}
+		defer func(rows *gosql.Rows) {
+			retErr = errors.CombineErrors(retErr, rows.Close())
+		}(rows)
 
 		var cols []columnInfo
 		var numCols = 0
 
-		defer rows.Close()
 		for rows.Next() {
 			var c columnInfo
 			c.dataPrecision = 0
@@ -797,7 +802,9 @@ WHERE attrelid=$1`, relid)
 			cols = append(cols, c)
 			numCols++
 		}
-
+		if err = rows.Err(); err != nil {
+			return err
+		}
 		if numCols == 0 {
 			return errors.Errorf("no columns detected")
 		}
@@ -809,7 +816,7 @@ WHERE attrelid=$1`, relid)
 // populateSamples selects at most w.numSamples of samples from each table that
 // at least one query was issued against the query log. The samples are stored
 // inside corresponding to the table columnInfo.
-func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) error {
+func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) (retErr error) {
 	log.Infof(ctx, "Populating samples started")
 	for _, tableName := range w.state.tableNames {
 		cols := w.state.columnsByTableName[tableName]
@@ -818,16 +825,9 @@ func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) error {
 			continue
 		}
 		log.Infof(ctx, "Sampling %s", tableName)
-		count, err := db.Query(fmt.Sprintf(`SELECT count(*) FROM %s`, tableName))
-		if err != nil {
-			return err
-		}
-		count.Next()
+		row := db.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s`, tableName))
 		var numRows int
-		if err = count.Scan(&numRows); err != nil {
-			return err
-		}
-		if err = count.Close(); err != nil {
+		if err := row.Scan(&numRows); err != nil {
 			return err
 		}
 
@@ -840,23 +840,24 @@ func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) error {
 		}
 		columnsOrdered := strings.Join(columnNames, ", ")
 
-		var samples *gosql.Rows
+		var samplesQuery string
 		if w.numSamples > numRows {
-			samples, err = db.Query(
-				fmt.Sprintf(`SELECT %s FROM %s`, columnsOrdered, tableName))
+			samplesQuery = fmt.Sprintf(`SELECT %s FROM %s`, columnsOrdered, tableName)
 		} else {
 			samplingProb := float64(w.numSamples) / float64(numRows)
 			if samplingProb < w.minSamplingProb {
 				// To speed up the query.
 				samplingProb = w.minSamplingProb
 			}
-			samples, err = db.Query(fmt.Sprintf(`SELECT %s FROM %s WHERE random() < %f LIMIT %d`,
-				columnsOrdered, tableName, samplingProb, w.numSamples))
+			samplesQuery = fmt.Sprintf(`SELECT %s FROM %s WHERE random() < %f LIMIT %d`,
+				columnsOrdered, tableName, samplingProb, w.numSamples)
 		}
 
+		samples, err := db.Query(samplesQuery)
 		if err != nil {
 			return err
 		}
+		defer func() { retErr = errors.CombineErrors(retErr, samples.Close()) }()
 		for samples.Next() {
 			rowOfSamples := make([]interface{}, len(cols))
 			for i := range rowOfSamples {
@@ -869,7 +870,7 @@ func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) error {
 				cols[i].samples = append(cols[i].samples, sample)
 			}
 		}
-		if err = samples.Close(); err != nil {
+		if err = samples.Err(); err != nil {
 			return err
 		}
 	}

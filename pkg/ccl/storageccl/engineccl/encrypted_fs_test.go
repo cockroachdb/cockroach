@@ -37,6 +37,7 @@ func TestEncryptedFS(t *testing.T) {
 
 	memFS := vfs.NewMem()
 
+	require.NoError(t, memFS.MkdirAll("/bar", os.ModePerm))
 	fileRegistry := &storage.PebbleFileRegistry{FS: memFS, DBDir: "/bar"}
 	require.NoError(t, fileRegistry.Load())
 

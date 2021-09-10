@@ -1,0 +1,266 @@
+check-no-registry-file
+----
+stat("COCKROACHDB_REGISTRY")
+OK
+
+# Open and close a registry on an empty store. Nothing should be written
+# to disk since there are no writes.
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY")
+open("STORAGE_MIN_VERSION")
+
+close
+----
+close("")
+
+check-no-registry-file
+----
+stat("COCKROACHDB_REGISTRY")
+OK
+
+# Open an empty store and immediately upgrade to the records-based
+# registry. The new registry file should be written, and then a marker
+# file should be written alongside it.
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY")
+open("STORAGE_MIN_VERSION")
+
+upgrade-to-records
+----
+open-dir("")
+create("COCKROACHDB_REGISTRY_000001")
+write("COCKROACHDB_REGISTRY_000001", <...16 bytes...>)
+sync("COCKROACHDB_REGISTRY_000001")
+create("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+close("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("")
+remove("COCKROACHDB_REGISTRY")
+sync("")
+close("")
+
+close
+----
+write("COCKROACHDB_REGISTRY_000001", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000001")
+close("")
+
+check-no-registry-file
+----
+stat("COCKROACHDB_REGISTRY")
+Error: file already exists
+
+# Re-opening the store should check for the old-style monolithic
+# registry, see that it doesn't exist and open the incremental,
+# records-based registry indicated by the marker file.
+#
+# No registry rotation should occur because nothing is written.
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY")
+open("COCKROACHDB_REGISTRY_000001")
+close("COCKROACHDB_REGISTRY_000001")
+
+close
+----
+close("")
+
+# Re-opening the store and writing something to the file registry should
+# cause the records-based registry to be rotated. The existing state
+# should be written to a new file and synced. Then the marker should be
+# updated to point to the new file, and the directory should be synced.
+# Finally, the new edit should be appended to the file.
+#
+# Subsequent writes should not trigger rotations.
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY")
+open("COCKROACHDB_REGISTRY_000001")
+close("COCKROACHDB_REGISTRY_000001")
+
+set filename=foo settings=bar
+----
+create("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000002", <...16 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
+create("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+close("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+remove("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("")
+remove("COCKROACHDB_REGISTRY_000001")
+write("COCKROACHDB_REGISTRY_000002", <...23 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
+
+get filename=foo
+----
+bar
+
+set filename=foo settings=helloworld
+----
+write("COCKROACHDB_REGISTRY_000002", <...30 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
+
+get filename=foo
+----
+helloworld
+
+close
+----
+write("COCKROACHDB_REGISTRY_000002", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000002")
+close("")
+
+# Re-opening the store again, while there are entries for files (`foo`)
+# that don't exist on the filesystem should trigger a rotation of the
+# registry in order to elide the obsolete entries.
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY")
+open("COCKROACHDB_REGISTRY_000002")
+close("COCKROACHDB_REGISTRY_000002")
+stat("foo")
+create("COCKROACHDB_REGISTRY_000003")
+write("COCKROACHDB_REGISTRY_000003", <...39 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+create("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+close("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+remove("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+sync("")
+remove("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000003", <...14 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+
+get filename=foo
+----
+
+close
+----
+write("COCKROACHDB_REGISTRY_000003", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000003")
+close("")
+
+# Reset the filesystem and start again. We should default to using both
+# the monolithic `COCKROACHDB_REGISTRY` file and the incremental file.
+
+reset
+----
+
+check-no-registry-file
+----
+stat("COCKROACHDB_REGISTRY")
+OK
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY")
+open("STORAGE_MIN_VERSION")
+
+set filename=foo settings=helloworld
+----
+create("COCKROACHDB_REGISTRY.crdbtmp")
+write("COCKROACHDB_REGISTRY.crdbtmp", <...23 bytes...>)
+sync("COCKROACHDB_REGISTRY.crdbtmp")
+close("COCKROACHDB_REGISTRY.crdbtmp")
+rename("COCKROACHDB_REGISTRY.crdbtmp", "COCKROACHDB_REGISTRY")
+open-dir("")
+sync("")
+close("")
+create("COCKROACHDB_REGISTRY_000001")
+write("COCKROACHDB_REGISTRY_000001", <...14 bytes...>)
+sync("COCKROACHDB_REGISTRY_000001")
+create("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+close("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("")
+write("COCKROACHDB_REGISTRY_000001", <...30 bytes...>)
+sync("COCKROACHDB_REGISTRY_000001")
+
+# A second write to the registry should again completely rewrite
+# `COCKROACHDB_REGISTRY`,  but only perform a single write and sync on
+# the incremental registry.
+
+set filename=bar settings=hi
+----
+create("COCKROACHDB_REGISTRY.crdbtmp")
+write("COCKROACHDB_REGISTRY.crdbtmp", <...38 bytes...>)
+sync("COCKROACHDB_REGISTRY.crdbtmp")
+close("COCKROACHDB_REGISTRY.crdbtmp")
+rename("COCKROACHDB_REGISTRY.crdbtmp", "COCKROACHDB_REGISTRY")
+open-dir("")
+sync("")
+close("")
+write("COCKROACHDB_REGISTRY_000001", <...22 bytes...>)
+sync("COCKROACHDB_REGISTRY_000001")
+
+close
+----
+write("COCKROACHDB_REGISTRY_000001", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000001")
+close("")
+
+check-no-registry-file
+----
+stat("COCKROACHDB_REGISTRY")
+Error: file already exists
+
+# Re-opening the registry should read the state from the monolithic
+# `COCKROACHDB_REGISTRY` file since it exists.
+
+touch
+foo
+bar
+----
+create("foo")
+close("foo")
+create("bar")
+close("bar")
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY")
+close("COCKROACHDB_REGISTRY")
+stat("bar")
+stat("foo")
+
+get filename=bar
+----
+hi
+
+set filename=bax settings=hello
+----
+create("COCKROACHDB_REGISTRY.crdbtmp")
+write("COCKROACHDB_REGISTRY.crdbtmp", <...56 bytes...>)
+sync("COCKROACHDB_REGISTRY.crdbtmp")
+close("COCKROACHDB_REGISTRY.crdbtmp")
+rename("COCKROACHDB_REGISTRY.crdbtmp", "COCKROACHDB_REGISTRY")
+open-dir("")
+sync("")
+close("")
+create("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000002", <...52 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
+create("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+close("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+remove("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("")
+remove("COCKROACHDB_REGISTRY_000001")
+write("COCKROACHDB_REGISTRY_000002", <...25 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
+
+close
+----
+write("COCKROACHDB_REGISTRY_000002", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000002")
+close("")

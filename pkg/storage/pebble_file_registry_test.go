@@ -11,6 +11,10 @@
 package storage
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"os"
 	"runtime/debug"
 	"strings"
 	"testing"
@@ -18,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -57,7 +62,19 @@ func TestFileRegistryRelativePaths(t *testing.T) {
 		if diff := pretty.Diff(entry, fileEntry); diff != nil {
 			t.Fatalf("filename: %s: %s\n%v", tc.filename, strings.Join(diff, "\n"), entry)
 		}
+		require.NoError(t, registry.Close())
 	}
+}
+
+func TestFileRegistry_UpgradeEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mem := vfs.NewMem()
+	registry := &PebbleFileRegistry{FS: mem, DBDir: ""}
+	require.NoError(t, registry.Load())
+	require.NoError(t, registry.StopUsingOldRegistry())
+	require.NoError(t, registry.Close())
 }
 
 func TestFileRegistryOps(t *testing.T) {
@@ -290,7 +307,6 @@ func TestFileRegistryRecordsReadAndWrite(t *testing.T) {
 	for filename, entry := range files {
 		require.Equal(t, entry, registry2.GetFileEntry(filename))
 	}
-	require.NoError(t, registry2.Close())
 
 	// Signal that we no longer need the monolithic one.
 	require.NoError(t, registry2.StopUsingOldRegistry())
@@ -303,4 +319,171 @@ func TestFileRegistryRecordsReadAndWrite(t *testing.T) {
 		require.Equal(t, entry, registry3.GetFileEntry(filename))
 	}
 	require.NoError(t, registry3.Close())
+}
+
+func TestFileRegistry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var buf bytes.Buffer
+	fs := loggingFS{FS: vfs.NewMem(), w: &buf}
+	var registry *PebbleFileRegistry
+
+	datadriven.RunTest(t, `testdata/file_registry`, func(t *testing.T, d *datadriven.TestData) string {
+		buf.Reset()
+
+		switch d.Cmd {
+		case "check-no-registry-file":
+			require.Nil(t, registry)
+			registry = &PebbleFileRegistry{FS: fs}
+			err := registry.CheckNoRegistryFile()
+			registry = nil
+			if err == nil {
+				fmt.Fprintf(&buf, "OK\n")
+			} else {
+				fmt.Fprintf(&buf, "Error: %s\n", err)
+			}
+			return buf.String()
+		case "close":
+			require.NotNil(t, registry)
+			require.NoError(t, registry.Close())
+			registry = nil
+			return buf.String()
+		case "get":
+			var filename string
+			d.ScanArgs(t, "filename", &filename)
+			entry := registry.GetFileEntry(filename)
+			if entry == nil {
+				return ""
+			}
+			return string(entry.EncryptionSettings)
+		case "load":
+			require.Nil(t, registry)
+			registry = &PebbleFileRegistry{FS: fs}
+			require.NoError(t, registry.Load())
+			return buf.String()
+		case "reset":
+			require.Nil(t, registry)
+			fs = loggingFS{FS: vfs.NewMem(), w: &buf}
+			return ""
+		case "set":
+			var filename, settings string
+			d.ScanArgs(t, "filename", &filename)
+			d.ScanArgs(t, "settings", &settings)
+
+			var entry *enginepb.FileEntry
+			if settings != "" {
+				entry = &enginepb.FileEntry{
+					EnvType:            enginepb.EnvType_Data,
+					EncryptionSettings: []byte(settings),
+				}
+			}
+			require.NoError(t, registry.SetFileEntry(filename, entry))
+			return buf.String()
+		case "touch":
+			for _, filename := range strings.Split(d.Input, "\n") {
+				f, err := fs.Create(filename)
+				require.NoError(t, err)
+				require.NoError(t, f.Close())
+			}
+			return buf.String()
+		case "upgrade-to-records":
+			require.NoError(t, registry.StopUsingOldRegistry())
+			return buf.String()
+		default:
+			panic("unrecognized command " + d.Cmd)
+		}
+	})
+}
+
+type loggingFS struct {
+	vfs.FS
+	w io.Writer
+}
+
+func (fs loggingFS) Create(name string) (vfs.File, error) {
+	fmt.Fprintf(fs.w, "create(%q)\n", name)
+	f, err := fs.FS.Create(name)
+	if err != nil {
+		return nil, err
+	}
+	return loggingFile{f, name, fs.w}, nil
+}
+
+func (fs loggingFS) Link(oldname, newname string) error {
+	fmt.Fprintf(fs.w, "link(%q, %q)\n", oldname, newname)
+	return fs.FS.Link(oldname, newname)
+}
+
+func (fs loggingFS) Open(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+	fmt.Fprintf(fs.w, "open(%q)\n", name)
+	f, err := fs.FS.Open(name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return loggingFile{f, name, fs.w}, nil
+}
+
+func (fs loggingFS) OpenDir(name string) (vfs.File, error) {
+	fmt.Fprintf(fs.w, "open-dir(%q)\n", name)
+	f, err := fs.FS.OpenDir(name)
+	if err != nil {
+		return nil, err
+	}
+	return loggingFile{f, name, fs.w}, nil
+}
+
+func (fs loggingFS) Remove(name string) error {
+	fmt.Fprintf(fs.w, "remove(%q)\n", name)
+	return fs.FS.Remove(name)
+}
+
+func (fs loggingFS) Rename(oldname, newname string) error {
+	fmt.Fprintf(fs.w, "rename(%q, %q)\n", oldname, newname)
+	return fs.FS.Rename(oldname, newname)
+}
+
+func (fs loggingFS) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+	fmt.Fprintf(fs.w, "reuseForWrite(%q, %q)\n", oldname, newname)
+	f, err := fs.FS.ReuseForWrite(oldname, newname)
+	if err == nil {
+		f = loggingFile{f, newname, fs.w}
+	}
+	return f, err
+}
+
+func (fs loggingFS) Stat(path string) (os.FileInfo, error) {
+	fmt.Fprintf(fs.w, "stat(%q)\n", path)
+	return fs.FS.Stat(path)
+}
+
+func (fs loggingFS) MkdirAll(dir string, perm os.FileMode) error {
+	fmt.Fprintf(fs.w, "mkdir-all(%q, %#o)\n", dir, perm)
+	return fs.FS.MkdirAll(dir, perm)
+}
+
+func (fs loggingFS) Lock(name string) (io.Closer, error) {
+	fmt.Fprintf(fs.w, "lock: %q\n", name)
+	return fs.FS.Lock(name)
+}
+
+type loggingFile struct {
+	vfs.File
+	name string
+	w    io.Writer
+}
+
+func (f loggingFile) Write(p []byte) (n int, err error) {
+	fmt.Fprintf(f.w, "write(%q, <...%d bytes...>)\n", f.name, len(p))
+	return f.File.Write(p)
+}
+
+func (f loggingFile) Close() error {
+	fmt.Fprintf(f.w, "close(%q)\n", f.name)
+	return f.File.Close()
+}
+
+func (f loggingFile) Sync() error {
+	fmt.Fprintf(f.w, "sync(%q)\n", f.name)
+	return f.File.Sync()
 }
