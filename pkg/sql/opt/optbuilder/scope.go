@@ -102,6 +102,10 @@ type scope struct {
 	// scopes.
 	ctes map[string]*cteSource
 
+	// alias is set to the last data source alias we've come across, if we
+	// are processing a data source with an alias.
+	alias *tree.AliasClause
+
 	// context is the current context in the SQL query (e.g., "SELECT" or
 	// "HAVING"). It is used for error messages and to identify scoping errors
 	// (e.g., aggregates are not allowed in the FROM clause of their own query

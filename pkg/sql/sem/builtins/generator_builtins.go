@@ -72,6 +72,14 @@ func genPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 	}
 }
 
+func recordGenProps() tree.FunctionProperties {
+	return tree.FunctionProperties{
+		Class:             tree.GeneratorClass,
+		Category:          builtinconstants.CategoryGenerator,
+		ReturnsRecordType: true,
+	}
+}
+
 var aclexplodeGeneratorType = types.MakeLabeledTuple(
 	[]*types.T{types.Oid, types.Oid, types.String, types.Bool},
 	[]string{"grantor", "grantee", "privilege_type", "is_grantable"},
@@ -377,6 +385,11 @@ var generators = map[string]builtinDefinition{
 		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
 	"jsonb_populate_recordset": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
 		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
+
+	"json_to_record":     makeBuiltin(recordGenProps(), jsonToRecordImpl),
+	"jsonb_to_record":    makeBuiltin(recordGenProps(), jsonToRecordImpl),
+	"json_to_recordset":  makeBuiltin(recordGenProps(), jsonToRecordSetImpl),
+	"jsonb_to_recordset": makeBuiltin(recordGenProps(), jsonToRecordSetImpl),
 
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
@@ -1381,6 +1394,26 @@ var jsonEachTextImpl = makeGeneratorOverload(
 	volatility.Immutable,
 )
 
+var jsonToRecordImpl = makeGeneratorOverload(
+	tree.ArgTypes{{"input", types.Jsonb}},
+	// NOTE: this type will never actually get used. It is replaced in the
+	// optimizer by looking at the most recent AS alias clause.
+	types.EmptyTuple,
+	makeJSONRecordGenerator,
+	"Builds an arbitrary record from a JSON object.",
+	volatility.Stable,
+)
+
+var jsonToRecordSetImpl = makeGeneratorOverload(
+	tree.ArgTypes{{"input", types.Jsonb}},
+	// NOTE: this type will never actually get used. It is replaced in the
+	// optimizer by looking at the most recent AS alias clause.
+	types.EmptyTuple,
+	makeJSONRecordSetGenerator,
+	"Builds an arbitrary set of records from a JSON array of objects.",
+	volatility.Stable,
+)
+
 var jsonEachGeneratorLabels = []string{"key", "value"}
 
 var jsonEachGeneratorType = types.MakeLabeledTuple(
@@ -1663,6 +1696,134 @@ func (j *jsonPopulateRecordSetGenerator) Values() (tree.Datums, error) {
 		return nil, err
 	}
 	return output.D, nil
+}
+
+func makeJSONRecordGenerator(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+	target := tree.MustBeDJSON(args[0])
+	return &jsonRecordGenerator{
+		evalCtx: evalCtx,
+		target:  target.JSON,
+	}, nil
+}
+
+type jsonRecordGenerator struct {
+	evalCtx *eval.Context
+	target  json.JSON
+
+	wasCalled bool
+	values    tree.Datums
+	types     []*types.T
+	labels    []string
+	// labelToRowIndexMap maps the column label to its position within the row.
+	labelToRowIndexMap map[string]int
+}
+
+func (j *jsonRecordGenerator) SetAlias(types []*types.T, labels []string) error {
+	j.types = types
+	j.labels = labels
+	j.labelToRowIndexMap = make(map[string]int)
+	for i := range types {
+		j.labelToRowIndexMap[j.labels[i]] = i
+	}
+	if len(types) != len(labels) {
+		return errors.AssertionFailedf("unexpected mismatched types/labels list in json record generator %v %v", types, labels)
+	}
+	return nil
+}
+
+func (j jsonRecordGenerator) ResolvedType() *types.T {
+	return types.AnyTuple
+}
+
+func (j *jsonRecordGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	j.values = make(tree.Datums, len(j.types))
+	if j.target.Type() != json.ObjectJSONType {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"invalid non-object argument to json_to_record")
+	}
+	return nil
+}
+
+func (j *jsonRecordGenerator) Next(ctx context.Context) (bool, error) {
+	if j.wasCalled {
+		return false, nil
+	}
+	for i := range j.values {
+		j.values[i] = tree.DNull
+	}
+	iter, err := j.target.ObjectIter()
+	if err != nil {
+		return false, err
+	}
+	for iter.Next() {
+		idx, ok := j.labelToRowIndexMap[iter.Key()]
+		if !ok {
+			continue
+		}
+		v := iter.Value()
+		datum, err := eval.PopulateDatumWithJSON(j.evalCtx, v, j.types[idx])
+		if err != nil {
+			return false, err
+		}
+		j.values[idx] = datum
+	}
+
+	j.wasCalled = true
+	return true, nil
+}
+
+func (j jsonRecordGenerator) Values() (tree.Datums, error) {
+	return j.values, nil
+}
+
+func (j jsonRecordGenerator) Close(ctx context.Context) {}
+
+type jsonRecordSetGenerator struct {
+	jsonRecordGenerator
+
+	arr       tree.DJSON
+	nextIndex int
+}
+
+func makeJSONRecordSetGenerator(
+	evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	arr := tree.MustBeDJSON(args[0])
+	return &jsonRecordSetGenerator{
+		arr: arr,
+		jsonRecordGenerator: jsonRecordGenerator{
+			evalCtx: evalCtx,
+		},
+	}, nil
+}
+
+func (j *jsonRecordSetGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	j.values = make(tree.Datums, len(j.types))
+	if j.arr.Type() != json.ArrayJSONType {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"argument to json_to_recordset must be an array of objects")
+	}
+	j.nextIndex = -1
+	return nil
+}
+
+func (j *jsonRecordSetGenerator) Next(ctx context.Context) (bool, error) {
+	j.nextIndex++
+	next, err := j.arr.FetchValIdx(j.nextIndex)
+	if err != nil || next == nil {
+		return false, err
+	}
+	if next.Type() != json.ObjectJSONType {
+		return false, pgerror.Newf(pgcode.InvalidParameterValue,
+			"argument to json_to_recordset must be an array of objects")
+	}
+	j.target = next
+	j.wasCalled = false
+	_, err = j.jsonRecordGenerator.Next(ctx)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 type checkConsistencyGenerator struct {
