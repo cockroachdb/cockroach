@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"encoding/hex"
 	"math"
 	"testing"
 
@@ -20,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStringifyWriteBatch(t *testing.T) {
@@ -40,6 +43,19 @@ func TestStringifyWriteBatch(t *testing.T) {
 	wb.Data = builder.Finish()
 	swb = stringifyWriteBatch(wb)
 	if str, expStr := swb.String(), "Put: 9223372036.854775807,0 \"/db1\" (0x2f646231007fffffffffffffff09): \"test value\"\n"; str != expStr {
+		t.Errorf("expected %q for stringified write batch; got %q", expStr, str)
+	}
+
+	var err error
+	batch := pebble.Batch{}
+	encodedKey, err := hex.DecodeString("017a6b12c089f704918df70bee8800010003623a9318c0384d07a6f22b858594df6012")
+	require.NoError(t, err)
+	err = batch.SingleDelete(encodedKey, nil)
+	require.NoError(t, err)
+	wb.Data = batch.Repr()
+	swb = stringifyWriteBatch(wb)
+	if str, expStr := swb.String(), "Single Delete: /Local/Lock/Intent/Table/56/1/1169/5/3054/0 "+
+		"03623a9318c0384d07a6f22b858594df60 (0x017a6b12c089f704918df70bee8800010003623a9318c0384d07a6f22b858594df6012): \n"; str != expStr {
 		t.Errorf("expected %q for stringified write batch; got %q", expStr, str)
 	}
 }

@@ -298,6 +298,9 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					// Calculating the Frechet distance is slow and testing it here
 					// is not worth it.
 					continue
+				case "crdb_internal.reset_sql_stats":
+					// Skipped due to long execution time.
+					continue
 				}
 				_, variations := builtins.GetBuiltinProperties(name)
 				for _, builtin := range variations {
