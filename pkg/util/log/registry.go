@@ -19,8 +19,6 @@ type loggerRegistry struct {
 	}
 }
 
-var allLoggers = loggerRegistry{}
-
 // put adds a logger into the registry.
 func (r *loggerRegistry) put(l *loggerT) {
 	r.mu.Lock()
@@ -50,8 +48,6 @@ type sinkInfoRegistry struct {
 		sinkInfos []*sinkInfo
 	}
 }
-
-var allSinkInfos = sinkInfoRegistry{}
 
 // iter iterates over all the sinks infos and stops at the first error
 // encountered.
