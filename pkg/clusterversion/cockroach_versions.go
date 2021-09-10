@@ -274,6 +274,9 @@ const (
 	SQLStatsCompactionScheduledJob
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
 	DateAndIntervalStyle
+	// PebbleFormatVersioned ratchets Pebble's format major version to
+	// the version FormatVersioned.
+	PebbleFormatVersioned
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -457,6 +460,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DateAndIntervalStyle,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1160},
+	},
+	{
+		Key:     PebbleFormatVersioned,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1162},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

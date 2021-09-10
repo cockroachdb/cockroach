@@ -15,9 +15,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -83,6 +85,39 @@ func TestMinVersion(t *testing.T) {
 	v, err = getMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, version2.Equal(v))
+}
+
+func TestSetMinVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	p, err := Open(context.Background(), InMemory(), CacheSize(0))
+	require.NoError(t, err)
+	defer p.Close()
+	require.Equal(t, pebble.FormatMostCompatible, p.db.FormatMajorVersion())
+
+	// Advancing the store cluster version to another cluster version
+	// that does not advance the Pebble format major version should
+	// leave the format major version unchanged.
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.DateAndIntervalStyle))
+	require.NoError(t, err)
+	require.Equal(t, pebble.FormatMostCompatible, p.db.FormatMajorVersion())
+
+	// Setting the same min version twice is okay.
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.DateAndIntervalStyle))
+	require.NoError(t, err)
+	require.Equal(t, pebble.FormatMostCompatible, p.db.FormatMajorVersion())
+
+	// Advancing the store cluster version to PebbleFormatVersioned
+	// should also advance the store's format major version.
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.PebbleFormatVersioned))
+	require.NoError(t, err)
+	require.Equal(t, pebble.FormatVersioned, p.db.FormatMajorVersion())
+
+	// Ensure the format version ratcheting is idempotent.
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.PebbleFormatVersioned))
+	require.NoError(t, err)
+	require.Equal(t, pebble.FormatVersioned, p.db.FormatMajorVersion())
 }
 
 func TestMinVersion_IsNotEncrypted(t *testing.T) {

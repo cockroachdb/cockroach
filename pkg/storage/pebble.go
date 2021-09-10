@@ -661,11 +661,39 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	p.eventListener = &cfg.Opts.EventListener
 	p.wrappedIntentWriter = wrapIntentWriter(ctx, p, cfg.DisableSeparatedIntents)
 
+	// Read the current store cluster version.
+	storeClusterVersion, err := getMinVersion(unencryptedFS, cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+
 	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
 	if err != nil {
 		return nil, err
 	}
 	p.db = db
+
+	if storeClusterVersion != (roachpb.Version{}) {
+		// The storage engine performs its own internal migrations
+		// through the setting of the store cluster version. When
+		// storage's min version is set, SetMinVersion writes to disk to
+		// commit to the new store cluster version. Then it idempotently
+		// applies any internal storage engine migrations necessitated
+		// or enabled by the new store cluster version. If we crash
+		// after committing the new store cluster version but before
+		// applying the internal migrations, we're left in an in-between
+		// state.
+		//
+		// To account for this, after the engine is open,
+		// unconditionally set the min cluster version again. If any
+		// storage engine state has not been updated, the call to
+		// SetMinVersion will update it.  If all storage engine state is
+		// already updated, SetMinVersion is a noop.
+		if err := p.SetMinVersion(storeClusterVersion); err != nil {
+			p.Close()
+			return nil, err
+		}
+	}
 
 	return p, nil
 }
@@ -1393,9 +1421,38 @@ func (p *Pebble) CreateCheckpoint(dir string) error {
 
 // SetMinVersion implements the Engine interface.
 func (p *Pebble) SetMinVersion(version roachpb.Version) error {
+	// NB: SetMinVersion must be idempotent. It may called multiple
+	// times with the same version.
+
+	// Writing the min version file commits this storage engine to the
+	// provided cluster version.
 	if err := writeMinVersionFile(p.unencryptedFS, p.path, version); err != nil {
 		return err
 	}
+
+	// Pebble has a concept of format major versions, similar to cluster
+	// versions. Backwards incompatible changes to Pebble's on-disk
+	// format are gated behind new format major versions. Bumping the
+	// storage engine's format major version is tied to a CockroachDB
+	// cluster version.
+	//
+	// Format major versions and cluster versions both only ratchet
+	// upwards. Here we map the persisted cluster version to the
+	// corresponding format major version, ratcheting Pebble's format
+	// major version if necessary.
+	formatVers := pebble.FormatMostCompatible
+	switch {
+	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatVersioned)):
+		if formatVers < pebble.FormatVersioned {
+			formatVers = pebble.FormatVersioned
+		}
+	}
+	if p.db.FormatMajorVersion() < formatVers {
+		if err := p.db.RatchetFormatMajorVersion(formatVers); err != nil {
+			return errors.Wrap(err, "ratcheting format major version")
+		}
+	}
+
 	if p.fileRegistry != nil {
 		recordsRegistryCV := clusterversion.ByKey(clusterversion.RecordsBasedRegistry)
 		if !version.Less(recordsRegistryCV) {
