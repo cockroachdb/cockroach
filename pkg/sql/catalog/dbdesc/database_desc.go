@@ -80,11 +80,6 @@ func (desc *immutable) DatabaseDesc() *descpb.DatabaseDescriptor {
 	return &desc.DatabaseDescriptor
 }
 
-// SetDrainingNames implements the MutableDescriptor interface.
-func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
-	desc.DrainingNames = names
-}
-
 // GetParentID implements the Descriptor interface.
 func (desc *immutable) GetParentID() descpb.ID {
 	return keys.RootNamespaceID
@@ -167,11 +162,9 @@ func (desc *Mutable) SetName(name string) {
 
 // ForEachSchemaInfo iterates f over each schema info mapping in the descriptor.
 // iterutil.StopIteration is supported.
-func (desc *immutable) ForEachSchemaInfo(
-	f func(id descpb.ID, name string, isDropped bool) error,
-) error {
+func (desc *immutable) ForEachSchemaInfo(f func(id descpb.ID, name string) error) error {
 	for name, info := range desc.Schemas {
-		if err := f(info.ID, name, info.Dropped); err != nil {
+		if err := f(info.ID, name); err != nil {
 			if iterutil.Done(err) {
 				return nil
 			}
@@ -185,9 +178,6 @@ func (desc *immutable) ForEachSchemaInfo(
 // given name, 0 otherwise.
 func (desc *immutable) GetSchemaID(name string) descpb.ID {
 	info := desc.Schemas[name]
-	if info.Dropped {
-		return descpb.InvalidID
-	}
 	return info.ID
 }
 
@@ -195,7 +185,7 @@ func (desc *immutable) GetSchemaID(name string) descpb.ID {
 // given ID, if it's not marked as dropped, empty string otherwise.
 func (desc *immutable) GetNonDroppedSchemaName(schemaID descpb.ID) string {
 	for name, info := range desc.Schemas {
-		if !info.Dropped && info.ID == schemaID {
+		if info.ID == schemaID {
 			return name
 		}
 	}
@@ -279,9 +269,6 @@ func (desc *immutable) ValidateTxnCommit(
 	// This could be done in ValidateCrossReferences but it can be quite expensive
 	// so we do it here instead.
 	for schemaName, schemaInfo := range desc.Schemas {
-		if schemaInfo.Dropped {
-			continue
-		}
 		report := func(err error) {
 			vea.Report(errors.Wrapf(err, "schema mapping entry %q (%d)",
 				errors.Safe(schemaName), schemaInfo.ID))
@@ -367,12 +354,6 @@ func (desc *Mutable) SetDropped() {
 func (desc *Mutable) SetOffline(reason string) {
 	desc.State = descpb.DescriptorState_OFFLINE
 	desc.OfflineReason = reason
-}
-
-// AddDrainingName adds a draining name to the DatabaseDescriptor's slice of
-// draining names.
-func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
-	desc.DrainingNames = append(desc.DrainingNames, name)
 }
 
 // UnsetMultiRegionConfig removes the stored multi-region config from the

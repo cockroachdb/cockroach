@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -207,25 +205,18 @@ func (p *planner) renameSchema(
 
 	// Set the new name for the descriptor.
 	oldName := desc.Name
-	desc.AddDrainingName(descpb.NameInfo{
-		ParentID:       desc.ParentID,
-		ParentSchemaID: keys.RootNamespaceID,
-		Name:           oldName,
-	})
+
 	desc.SetName(newName)
 
-	// Write a new namespace entry for the new name.
-	nameKey := catalogkeys.MakeSchemaNameKey(p.execCfg.Codec, desc.ParentID, newName)
-	b := p.txn.NewBatch()
-	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", nameKey, desc.ID)
+	// Update namespace entries.
+	oldNameKey := descpb.NameInfo{
+		ParentID:       desc.ParentID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           desc.Name,
 	}
-	b.CPut(nameKey, desc.ID, nil)
-	if err := p.txn.Run(ctx, b); err != nil {
+	if err := p.replaceNameKey(ctx, oldNameKey, desc); err != nil {
 		return err
 	}
-
-	// Update the schema mapping in the parent database.
 
 	// First, ensure that the new name isn't present, and that we have an entry
 	// for the old name.
@@ -245,15 +236,9 @@ func (p *planner) renameSchema(
 	}
 
 	// Mark the old schema name as dropped.
-	db.Schemas[oldName] = descpb.DatabaseDescriptor_SchemaInfo{
-		ID:      desc.ID,
-		Dropped: true,
-	}
+	delete(db.Schemas, oldName)
 	// Create an entry for the new schema name.
-	db.Schemas[newName] = descpb.DatabaseDescriptor_SchemaInfo{
-		ID:      desc.ID,
-		Dropped: false,
-	}
+	db.Schemas[newName] = descpb.DatabaseDescriptor_SchemaInfo{ID: desc.ID}
 	if err := p.writeNonDropDatabaseChange(
 		ctx, db,
 		fmt.Sprintf("updating parent database %s for %s", db.GetName(), jobDesc),

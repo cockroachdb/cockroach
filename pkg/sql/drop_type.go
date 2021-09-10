@@ -244,17 +244,13 @@ func (p *planner) dropTypeImpl(
 		return errors.Errorf("type %q is already being dropped", typeDesc.Name)
 	}
 
-	// Add a draining name.
-	typeDesc.AddDrainingName(descpb.NameInfo{
-		ParentID:       typeDesc.ParentID,
-		ParentSchemaID: typeDesc.ParentSchemaID,
-		Name:           typeDesc.Name,
-	})
-
 	// Actually mark the type as dropped.
 	typeDesc.State = descpb.DescriptorState_DROP
 	if queueJob {
 		return p.writeTypeSchemaChange(ctx, typeDesc, jobDesc)
+	}
+	if err := p.deleteNameKey(ctx, typeDesc); err != nil {
+		return err
 	}
 	return p.writeTypeDesc(ctx, typeDesc)
 }

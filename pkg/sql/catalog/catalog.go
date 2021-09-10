@@ -26,10 +26,6 @@ type MutableDescriptor interface {
 	// descriptor should increment the version on the mutable copy from the
 	// outset.
 	MaybeIncrementVersion()
-	// SetDrainingNames sets the draining names for the descriptor.
-	SetDrainingNames([]descpb.NameInfo)
-	// AddDrainingName adds a draining name to the descriptor.
-	AddDrainingName(name descpb.NameInfo)
 
 	// Accessors for the original state of the descriptor prior to the mutations.
 	OriginalName() string

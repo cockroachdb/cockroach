@@ -385,7 +385,7 @@ func (p *planner) dropTableImpl(
 		return droppedViews, err
 	}
 
-	err = p.initiateDropTable(ctx, tableDesc, !droppingParent, jobDesc, true /* drain name */)
+	err = p.initiateDropTable(ctx, tableDesc, !droppingParent, jobDesc)
 	return droppedViews, err
 }
 
@@ -418,12 +418,8 @@ func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledes
 	return nil
 }
 
-// drainName when set implies that the name needs to go through the draining
-// names process. This parameter is always passed in as true except from
-// TRUNCATE which directly deletes the old name to id map and doesn't need
-// drain the old map.
 func (p *planner) initiateDropTable(
-	ctx context.Context, tableDesc *tabledesc.Mutable, queueJob bool, jobDesc string, drainName bool,
+	ctx context.Context, tableDesc *tabledesc.Mutable, queueJob bool, jobDesc string,
 ) error {
 	if tableDesc.Dropped() {
 		return errors.Errorf("table %q is already being dropped", tableDesc.Name)
@@ -457,17 +453,11 @@ func (p *planner) initiateDropTable(
 		return err
 	}
 
-	tableDesc.State = descpb.DescriptorState_DROP
-	if drainName {
-		parentSchemaID := tableDesc.GetParentSchemaID()
-
-		// Queue up name for draining.
-		nameDetails := descpb.NameInfo{
-			ParentID:       tableDesc.ParentID,
-			ParentSchemaID: parentSchemaID,
-			Name:           tableDesc.Name}
-		tableDesc.AddDrainingName(nameDetails)
+	if err := p.deleteNameKey(ctx, tableDesc); err != nil {
+		return err
 	}
+
+	tableDesc.State = descpb.DescriptorState_DROP
 
 	// For this table descriptor, mark all previous jobs scheduled for schema changes as successful
 	// and delete them from the schema change job cache.

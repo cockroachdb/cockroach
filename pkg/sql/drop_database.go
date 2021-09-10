@@ -174,11 +174,6 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	n.dbDesc.AddDrainingName(descpb.NameInfo{
-		ParentID:       keys.RootNamespaceID,
-		ParentSchemaID: keys.RootNamespaceID,
-		Name:           n.dbDesc.Name,
-	})
 	n.dbDesc.State = descpb.DescriptorState_DROP
 
 	b := &kv.Batch{}
@@ -186,6 +181,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	if err := p.writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {
 		return err
 	}
+	b.Del(catalogkeys.EncodeNameKey(p.execCfg.Codec, n.dbDesc))
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}

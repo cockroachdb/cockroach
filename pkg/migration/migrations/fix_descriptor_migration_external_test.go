@@ -248,7 +248,6 @@ func TestFixDBDescriptorDroppedSchemaName(t *testing.T) {
 			return err
 		}
 		descID = desc.GetID()
-		desc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{dbName: {ID: descID, Dropped: true}}
 		builder := dbdesc.NewBuilder(desc.DatabaseDesc())
 		badDesc := builder.BuildCreatedMutable()
 		badDesc.MaybeIncrementVersion()
@@ -278,7 +277,7 @@ func TestFixDBDescriptorDroppedSchemaName(t *testing.T) {
 			return nil
 		}))
 		require.NoError(t, desc.ForEachSchemaInfo(
-			func(id descpb.ID, name string, isDropped bool) error {
+			func(id descpb.ID, name string) error {
 				if name == dbName {
 					exists = true
 				}

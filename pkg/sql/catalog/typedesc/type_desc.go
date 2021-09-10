@@ -262,11 +262,6 @@ func (desc *immutable) RegionNamesIncludingTransitioning() (descpb.RegionNames, 
 	return regions, nil
 }
 
-// SetDrainingNames implements the MutableDescriptor interface.
-func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
-	desc.DrainingNames = names
-}
-
 // GetAuditMode implements the DescriptorProto interface.
 func (desc *immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
 	return descpb.TableDescriptor_DISABLED
@@ -445,12 +440,6 @@ func (desc *Mutable) RemoveReferencingDescriptorID(remove descpb.ID) {
 // SetParentSchemaID sets the SchemaID of the type.
 func (desc *Mutable) SetParentSchemaID(schemaID descpb.ID) {
 	desc.ParentSchemaID = schemaID
-}
-
-// AddDrainingName adds a draining name to the TypeDescriptor's slice of
-// draining names.
-func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
-	desc.DrainingNames = append(desc.DrainingNames, name)
 }
 
 // EnumMembers is a sortable list of TypeDescriptor_EnumMember, sorted by the

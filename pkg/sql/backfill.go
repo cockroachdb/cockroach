@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -1988,18 +1987,6 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 func runSchemaChangesInTxn(
 	ctx context.Context, planner *planner, tableDesc *tabledesc.Mutable, traceKV bool,
 ) error {
-	if len(tableDesc.GetDrainingNames()) > 0 {
-		// Reclaim all the old names. Leave the data and descriptor
-		// cleanup for later.
-		for _, drain := range tableDesc.GetDrainingNames() {
-			key := catalogkeys.EncodeNameKey(planner.ExecCfg().Codec, drain)
-			if err := planner.Txn().Del(ctx, key); err != nil {
-				return err
-			}
-		}
-		tableDesc.SetDrainingNames(nil)
-	}
-
 	if tableDesc.Dropped() {
 		return nil
 	}

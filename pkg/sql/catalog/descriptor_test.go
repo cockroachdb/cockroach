@@ -65,13 +65,9 @@ func TestFormatSafeDescriptorProperties(t *testing.T) {
 					State:                   descpb.DescriptorState_PUBLIC,
 				}).BuildExistingMutableTable()
 				desc.MaybeIncrementVersion()
-				desc.AddDrainingName(descpb.NameInfo{
-					ParentID:       12,
-					ParentSchemaID: 51,
-				})
 				return desc.ImmutableCopy()
 			}(),
-			exp: "ID: 27, Version: 3, IsUncommitted: true, ModificationTime: \"0,0\", ParentID: 12, ParentSchemaID: 51, State: PUBLIC, NumDrainingNames: 1",
+			exp: "ID: 27, Version: 3, IsUncommitted: true, ModificationTime: \"0,0\", ParentID: 12, ParentSchemaID: 51, State: PUBLIC",
 		},
 	} {
 		t.Run("", func(t *testing.T) {

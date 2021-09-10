@@ -1018,9 +1018,6 @@ func rewriteDatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites DescRe
 		// Rewrite the name-to-ID mapping for the database's child schemas.
 		newSchemas := make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 		for schemaName, schemaInfo := range db.Schemas {
-			if schemaInfo.Dropped {
-				continue
-			}
 			rewrite, ok := descriptorRewrites[schemaInfo.ID]
 			if !ok {
 				return errors.Errorf("missing rewrite for schema %d", db.ID)

@@ -179,7 +179,7 @@ func (tc *Collection) getByName(
 	}
 
 	{
-		refuseFurtherLookup, ud := tc.uncommitted.getByName(parentID, parentSchemaID, name)
+		ud := tc.uncommitted.getByName(parentID, parentSchemaID, name)
 		if ud != nil {
 			log.VEventf(ctx, 2, "found uncommitted descriptor %d", ud.GetID())
 			if mutable {
@@ -189,9 +189,6 @@ func (tc *Collection) getByName(
 				}
 			}
 			return true, ud, nil
-		}
-		if refuseFurtherLookup {
-			return false, nil, nil
 		}
 	}
 

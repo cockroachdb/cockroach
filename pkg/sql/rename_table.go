@@ -232,24 +232,18 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	descID := tableDesc.GetID()
-	parentSchemaID := tableDesc.GetParentSchemaID()
-
-	renameDetails := descpb.NameInfo{
-		ParentID:       prevDBID,
-		ParentSchemaID: parentSchemaID,
-		Name:           oldTn.Table()}
-	tableDesc.AddDrainingName(renameDetails)
-
 	if err := p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
 
-	newTbKey := catalogkeys.NewNameKeyComponents(targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
-
-	if err := p.writeNameKey(ctx, newTbKey, descID); err != nil {
+	oldNameKey := descpb.NameInfo{
+		ParentID:       prevDBID,
+		ParentSchemaID: tableDesc.GetParentSchemaID(),
+		Name:           oldTn.Table(),
+	}
+	if err := p.replaceNameKey(ctx, oldNameKey, tableDesc); err != nil {
 		return err
 	}
 
@@ -494,14 +488,36 @@ func (n *renameTableNode) checkForCrossDbReferences(
 	return nil
 }
 
-// writeNameKey writes a name key to a batch and runs the batch.
-func (p *planner) writeNameKey(ctx context.Context, nameKey catalog.NameKey, ID descpb.ID) error {
-	marshalledKey := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, nameKey)
-	b := &kv.Batch{}
-	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", marshalledKey, ID)
-	}
-	b.CPut(marshalledKey, ID, nil)
+// deleteNameKey writes a name key deletion to a batch and runs the batch.
+func (p *planner) deleteNameKey(ctx context.Context, nameKey catalog.NameKey) error {
+	return p.replaceNameKey(ctx, nameKey, nil /* desc */)
+}
 
+// replaceNameKey calls replaceNameKeyInBatch and runs the batch
+func (p *planner) replaceNameKey(
+	ctx context.Context, oldNameKey catalog.NameKey, desc catalog.Descriptor,
+) error {
+	b := &kv.Batch{}
+	p.replaceNameKeyInBatch(ctx, b, oldNameKey, desc)
 	return p.txn.Run(ctx, b)
+}
+
+// replaceNameKeyInBatch writes a name key deletion and insertion to a batch.
+func (p *planner) replaceNameKeyInBatch(
+	ctx context.Context, b *kv.Batch, oldNameKey catalog.NameKey, desc catalog.Descriptor,
+) {
+	if oldNameKey != nil {
+		marshalledOldKey := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, oldNameKey)
+		if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
+			log.VEventf(ctx, 2, "Del %s", marshalledOldKey)
+		}
+		b.Del(marshalledOldKey)
+	}
+	if desc != nil {
+		marshalledNewKey := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, desc)
+		if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
+			log.VEventf(ctx, 2, "CPut %s -> %d", marshalledNewKey, desc.GetID())
+		}
+		b.CPut(marshalledNewKey, desc.GetID(), nil)
+	}
 }

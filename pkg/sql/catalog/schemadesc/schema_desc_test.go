@@ -113,9 +113,6 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 			},
 			dbDesc: descpb.DatabaseDescriptor{
 				ID: 51,
-				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"foo": {ID: 52, Dropped: true},
-				},
 			},
 		},
 		{ // 3
@@ -127,9 +124,6 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 			},
 			dbDesc: descpb.DatabaseDescriptor{
 				ID: 51,
-				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 52, Dropped: true},
-				},
 			},
 		},
 		{ // 4

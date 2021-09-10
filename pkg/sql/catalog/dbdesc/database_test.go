@@ -143,7 +143,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 52, Dropped: false},
+					"schema1": {ID: 52},
 				},
 			},
 			schemaDescs: []descpb.SchemaDescriptor{
@@ -158,9 +158,6 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
-				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 53, Dropped: true},
-				},
 			},
 		},
 		{ // 3
@@ -169,7 +166,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 500, Dropped: false},
+					"schema1": {ID: 500},
 				},
 			},
 		},
@@ -179,7 +176,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 52, Dropped: false},
+					"schema1": {ID: 52},
 				},
 			},
 			schemaDescs: []descpb.SchemaDescriptor{
@@ -314,9 +311,6 @@ func TestFixDroppedSchemaName(t *testing.T) {
 	dbDesc := descpb.DatabaseDescriptor{
 		Name: dbName,
 		ID:   dbID,
-		Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-			dbName: {ID: dbID, Dropped: true},
-		},
 	}
 	b := NewBuilder(&dbDesc)
 	require.NoError(t, b.RunPostDeserializationChanges(ctx, nil))

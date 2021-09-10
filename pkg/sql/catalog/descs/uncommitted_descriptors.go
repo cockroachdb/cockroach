@@ -72,20 +72,11 @@ type uncommittedDescriptors struct {
 	// uncommitted changes to the descriptor. These descriptors are local to this
 	// Collection and invisible to other transactions.
 	descs nstree.Map
-
-	// descNames is the set of names which a read or written
-	// descriptor took on at some point in its lifetime. Everything added to
-	// uncommittedDescriptors is added to descNames as well
-	// as all of the known draining names. The idea is that if we find that
-	// a name is not in the above map but is in the set, then we can avoid
-	// doing a lookup.
-	descNames nstree.Set
 }
 
 func makeUncommittedDescriptors() uncommittedDescriptors {
 	ud := uncommittedDescriptors{
-		descs:     nstree.MakeMap(),
-		descNames: nstree.MakeSet(),
+		descs: nstree.MakeMap(),
 	}
 	ud.reset()
 	return ud
@@ -93,7 +84,6 @@ func makeUncommittedDescriptors() uncommittedDescriptors {
 
 func (ud *uncommittedDescriptors) reset() {
 	ud.descs.Clear()
-	ud.descNames.Clear()
 }
 
 // add adds a descriptor to the set of uncommitted descriptors and returns
@@ -102,9 +92,6 @@ func (ud *uncommittedDescriptors) add(mut catalog.MutableDescriptor) (catalog.De
 	uNew, err := makeUncommittedDescriptor(mut)
 	if err != nil {
 		return nil, err
-	}
-	for _, n := range uNew.immutable.GetDrainingNames() {
-		ud.descNames.Add(n)
 	}
 	ud.descs.Upsert(uNew)
 	return uNew.immutable, err
@@ -180,23 +167,16 @@ func (ud *uncommittedDescriptors) getByID(id descpb.ID) catalog.Descriptor {
 // getByName returns a descriptor for the requested name if the requested name
 // is for a descriptor modified within the transaction affiliated with the
 // Collection.
-//
-// The first return value "hasKnownRename" is true when there is a known
-// rename of that descriptor, so it would be invalid to miss the cache and go to
-// KV (where the descriptor prior to the rename may still exist).
 func (ud *uncommittedDescriptors) getByName(
 	dbID descpb.ID, schemaID descpb.ID, name string,
-) (hasKnownRename bool, desc catalog.Descriptor) {
+) catalog.Descriptor {
 	// Walk latest to earliest so that a DROP followed by a CREATE with the same
 	// name will result in the CREATE being seen.
-	if got := ud.descs.GetByName(dbID, schemaID, name); got != nil {
-		return false, got.(*uncommittedDescriptor).immutable
+	got := ud.descs.GetByName(dbID, schemaID, name)
+	if got == nil {
+		return nil
 	}
-	return ud.descNames.Contains(descpb.NameInfo{
-		ParentID:       dbID,
-		ParentSchemaID: schemaID,
-		Name:           name,
-	}), nil
+	return got.(*uncommittedDescriptor).immutable
 }
 
 func (ud *uncommittedDescriptors) iterateNewVersionByID(

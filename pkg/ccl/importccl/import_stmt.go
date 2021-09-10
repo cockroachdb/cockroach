@@ -1485,7 +1485,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 
 		// Update the parent database with this schema information.
 		dbDesc.Schemas[newMutableSchemaDescriptor.Name] =
-			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID, Dropped: false}
+			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID}
 
 		schemaMetadata.schemaRewrites[desc.Desc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
 			ID: id,
@@ -2514,16 +2514,10 @@ func (r *importResumer) dropSchemas(
 			return nil, errors.Newf("unable to resolve schema desc with ID %d", schema.Desc.ID)
 		}
 
-		schemaDesc.AddDrainingName(
-			descpb.NameInfo{ParentID: details.ParentID, ParentSchemaID: keys.RootNamespaceID,
-				Name: schemaDesc.Name})
-
 		// Update the parent database with information about the dropped schema.
-		if dbDesc.Schemas == nil {
-			dbDesc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+		if dbDesc.Schemas != nil {
+			delete(dbDesc.Schemas, schemaDesc.GetName())
 		}
-		dbDesc.Schemas[schema.Desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: dbDesc.ID,
-			Dropped: true}
 
 		// Mark the descriptor as dropped and write it to the batch.
 		schemaDesc.SetDropped()
@@ -2534,6 +2528,7 @@ func (r *importResumer) dropSchemas(
 			schemaDesc, b); err != nil {
 			return nil, err
 		}
+		b.Del(catalogkeys.EncodeNameKey(p.ExecCfg().Codec, schemaDesc))
 		err = txn.Run(ctx, b)
 		if err != nil {
 			return nil, err

@@ -200,11 +200,6 @@ func validateNamespaceRow(row NamespaceTableRow, desc catalog.Descriptor) error 
 	if desc == nil {
 		return catalog.ErrDescriptorNotFound
 	}
-	for _, dn := range desc.GetDrainingNames() {
-		if dn == row.NameInfo {
-			return nil
-		}
-	}
 	if desc.Dropped() {
 		return errors.Newf("no matching name info in draining names of dropped %s",
 			desc.DescriptorType())

@@ -2378,12 +2378,6 @@ func (desc *Mutable) SetParentSchemaID(schemaID descpb.ID) {
 	desc.UnexposedParentSchemaID = schemaID
 }
 
-// AddDrainingName adds a draining name to the TableDescriptor's slice of
-// draining names.
-func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
-	desc.DrainingNames = append(desc.DrainingNames, name)
-}
-
 // SetPublic implements the MutableDescriptor interface.
 func (desc *Mutable) SetPublic() {
 	desc.State = descpb.DescriptorState_PUBLIC

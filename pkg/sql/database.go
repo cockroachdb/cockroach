@@ -16,14 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 //
@@ -48,24 +46,16 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
-	b := &kv.Batch{}
-	newKey := catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, newName)
-	descID := desc.GetID()
-	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, descID)
-	}
-	b.CPut(newKey, descID, nil)
-
-	desc.AddDrainingName(descpb.NameInfo{
+	oldNameKey := descpb.NameInfo{
 		ParentID:       keys.RootNamespaceID,
 		ParentSchemaID: keys.RootNamespaceID,
 		Name:           oldName,
-	})
-	if err := p.writeNonDropDatabaseChange(ctx, desc, stmt); err != nil {
+	}
+	if err := p.replaceNameKey(ctx, oldNameKey, desc); err != nil {
 		return err
 	}
 
-	return p.txn.Run(ctx, b)
+	return p.writeNonDropDatabaseChange(ctx, desc, stmt)
 }
 
 // writeNonDropDatabaseChange writes an updated database descriptor, and can

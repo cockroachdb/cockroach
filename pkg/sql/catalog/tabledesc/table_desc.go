@@ -126,11 +126,6 @@ func (desc *Mutable) IsUncommittedVersion() bool {
 	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
 }
 
-// SetDrainingNames implements the MutableDescriptor interface.
-func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
-	desc.DrainingNames = names
-}
-
 // RemovePublicNonPrimaryIndex removes a secondary index by ordinal.
 // indexOrdinal must be in range [1, len(desc.Indexes)], 0 denotes the primary
 // index.

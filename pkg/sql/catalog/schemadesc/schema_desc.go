@@ -82,17 +82,6 @@ type Mutable struct {
 
 var _ redact.SafeMessager = (*immutable)(nil)
 
-// SetDrainingNames implements the MutableDescriptor interface.
-func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
-	desc.DrainingNames = names
-}
-
-// AddDrainingName adds a draining name to the SchemaDescriptor's slice of
-// draining names.
-func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
-	desc.DrainingNames = append(desc.DrainingNames, name)
-}
-
 // GetParentSchemaID implements the Descriptor interface.
 func (desc *immutable) GetParentSchemaID() descpb.ID {
 	return keys.RootNamespaceID
@@ -178,15 +167,8 @@ func (desc *immutable) ValidateCrossReferences(
 
 	// Check that parent has correct entry in schemas mapping.
 	isInDBSchemas := false
-	_ = db.ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error {
+	_ = db.ForEachSchemaInfo(func(id descpb.ID, name string) error {
 		if id == desc.GetID() {
-			if isDropped {
-				if name == desc.GetName() {
-					vea.Report(errors.AssertionFailedf("present in parent database [%d] schemas mapping but marked as dropped",
-						desc.GetParentID()))
-				}
-				return nil
-			}
 			if name != desc.GetName() {
 				vea.Report(errors.AssertionFailedf("present in parent database [%d] schemas mapping but under name %q",
 					desc.GetParentID(), errors.Safe(name)))
@@ -195,7 +177,7 @@ func (desc *immutable) ValidateCrossReferences(
 			isInDBSchemas = true
 			return nil
 		}
-		if name == desc.GetName() && !isDropped {
+		if name == desc.GetName() {
 			vea.Report(errors.AssertionFailedf("present in parent database [%d] schemas mapping but name maps to other schema [%d]",
 				desc.GetParentID(), id))
 		}

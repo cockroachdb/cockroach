@@ -198,19 +198,13 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 func (p *planner) dropSchemaImpl(
 	ctx context.Context, parentDB *dbdesc.Mutable, sc *schemadesc.Mutable,
 ) error {
-	sc.AddDrainingName(descpb.NameInfo{
-		ParentID:       parentDB.ID,
-		ParentSchemaID: keys.RootNamespaceID,
-		Name:           sc.Name,
-	})
+	if err := p.deleteNameKey(ctx, sc); err != nil {
+		return err
+	}
 	// TODO (rohany): This can be removed once RESTORE installs schemas into
 	//  the parent database.
-	if parentDB.Schemas == nil {
-		parentDB.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-	}
-	parentDB.Schemas[sc.GetName()] = descpb.DatabaseDescriptor_SchemaInfo{
-		ID:      sc.GetID(),
-		Dropped: true,
+	if parentDB.Schemas != nil {
+		delete(parentDB.Schemas, sc.GetName())
 	}
 	// Mark the descriptor as dropped.
 	sc.State = descpb.DescriptorState_DROP

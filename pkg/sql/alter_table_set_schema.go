@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -129,12 +130,9 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	renameDetails := descpb.NameInfo{
-		ParentID:       databaseID,
-		ParentSchemaID: schemaID,
-		Name:           tableDesc.Name,
+	if err := p.txn.Del(ctx, catalogkeys.EncodeNameKey(p.execCfg.Codec, tableDesc)); err != nil {
+		return err
 	}
-	tableDesc.AddDrainingName(renameDetails)
 
 	// Set the tableDesc's new schema id to the desired schema's id.
 	tableDesc.SetParentSchemaID(desiredSchemaID)
@@ -145,7 +143,12 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := p.writeNameKey(ctx, tableDesc, tableDesc.ID); err != nil {
+	oldNameKey := descpb.NameInfo{
+		ParentID:       databaseID,
+		ParentSchemaID: schemaID,
+		Name:           tableDesc.Name,
+	}
+	if err := p.replaceNameKey(ctx, oldNameKey, tableDesc); err != nil {
 		return err
 	}
 

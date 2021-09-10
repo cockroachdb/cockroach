@@ -45,9 +45,6 @@ func (p synthetic) GetVersion() descpb.DescriptorVersion {
 func (p synthetic) GetModificationTime() hlc.Timestamp {
 	return hlc.Timestamp{}
 }
-func (p synthetic) GetDrainingNames() []descpb.NameInfo {
-	return nil
-}
 func (p synthetic) GetPrivileges() *descpb.PrivilegeDescriptor {
 	log.Fatalf(context.TODO(), "cannot access privileges on a %s descriptor", p.kindName())
 	return nil
