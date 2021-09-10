@@ -101,6 +101,10 @@ type scope struct {
 	// scopes.
 	ctes map[string]*cteSource
 
+	// lastAlias is set to the last data source alias we've come across, if we
+	// are processing a data source with an alias.
+	lastAlias *tree.AliasClause
+
 	// context is the current context in the SQL query (e.g., "SELECT" or
 	// "HAVING"). It is used for error messages and to identify scoping errors
 	// (e.g., aggregates are not allowed in the FROM clause of their own query
@@ -627,6 +631,17 @@ func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *sco
 		s.builder.trackReferencedColumnForViews(col)
 	}
 	return col
+}
+
+// getLastAlias gets the most recently seen AliasClause (e.g. AS t(a,b)) in this
+// statement, or nil if there was none.
+func (s *scope) getLastAlias() *tree.AliasClause {
+	for ; s != nil; s = s.parent {
+		if s.lastAlias != nil {
+			return s.lastAlias
+		}
+	}
+	return nil
 }
 
 // startAggFunc is called when the builder starts building an aggregate
