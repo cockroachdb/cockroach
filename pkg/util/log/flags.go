@@ -53,7 +53,8 @@ func init() {
 	// By default, we use and apply the test configuration.
 	// This can be overridden to use output to file in tests
 	// using TestLogScope.
-	cfg := getTestConfig(nil /* output to files disabled */)
+	cfg := getTestConfig(nil /* output to files disabled */, true /* mostly inline */)
+
 	if _, err := ApplyConfig(cfg); err != nil {
 		panic(err)
 	}
