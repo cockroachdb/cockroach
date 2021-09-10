@@ -42,7 +42,7 @@ type limiter struct {
 const initialRUs = 10000
 const initialRate = 100
 
-func (l *limiter) Init(timeSource timeutil.TimeSource, notifyChan chan<- struct{}) {
+func (l *limiter) Init(timeSource timeutil.TimeSource, notifyChan chan struct{}) {
 	*l = limiter{
 		timeSource: timeSource,
 	}
@@ -57,12 +57,22 @@ func (l *limiter) Init(timeSource timeutil.TimeSource, notifyChan chan<- struct{
 	) {
 		atomic.AddInt64(&l.waitingRU, -r.(*waitRequest).neededCeil())
 	}
+	// We use OnWaitStartLocked because otherwise we have a race between the token
+	// bucket noticing that it can't fulfill a request, and AvailableTokens()
+	// accounting for the RUs that are waiting.
+	//
+	// We have a similar problem on finish, but the consequences of overcounting
+	// waiting RUs are not very problematic.
 	l.qp = quotapool.New(
 		"tenant-side-limiter", l,
 		quotapool.WithTimeSource(timeSource),
-		quotapool.OnWaitStart(onWaitStartFn),
+		quotapool.OnWaitStartLocked(onWaitStartFn),
 		quotapool.OnWaitFinish(onWaitFinishFn),
 	)
+}
+
+func (l *limiter) Close() {
+	l.qp.Close("shutting down")
 }
 
 // Wait removes the needed RUs from the bucket, waiting as necessary until it is
@@ -113,13 +123,14 @@ func (l *limiter) AvailableTokens(now time.Time) tenantcostmodel.RU {
 	return result
 }
 
-// Update accounts for the passing of time; used to potentially trigger
-// a notification. See tokenBucket.Update.
-func (l *limiter) Update(now time.Time) {
+// SetupNotification is used to call tokenBucket.SetupNotification under the
+// pool's lock.
+func (l *limiter) SetupNotification(now time.Time, threshold tenantcostmodel.RU) {
 	l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {
-		l.tb.Update(now)
-		// Nothing changed.
-		return false
+		l.tb.SetupNotification(now, threshold)
+		// We return true so that if there is a request waiting, TryToFulfill gets
+		// called again which may produce a notification.
+		return true
 	})
 }
 

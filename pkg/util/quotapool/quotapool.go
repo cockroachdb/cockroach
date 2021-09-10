@@ -329,6 +329,9 @@ func (qp *AbstractPool) acquireFastPath(
 	if !r.ShouldWait() {
 		return false, nil, 0, ErrNotEnoughQuota
 	}
+	if qp.onWaitStartLocked != nil {
+		qp.onWaitStartLocked(ctx, qp.name, r)
+	}
 	c := chanSyncPool.Get().(chan struct{})
 	return false, qp.mu.q.enqueue(c), tryAgainAfter, nil
 }
