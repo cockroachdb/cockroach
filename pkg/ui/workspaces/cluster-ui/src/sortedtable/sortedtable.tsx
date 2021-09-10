@@ -246,21 +246,19 @@ export class SortedTable<T> extends React.Component<
       rollups: React.ReactNode[],
       columns: ColumnDescriptor<T>[],
     ) => {
-      return columns
-        .filter(col => col.alwaysShow || col.showByDefault !== false)
-        .map(
-          (cd, ii): SortableColumn => {
-            return {
-              name: cd.name,
-              title: cd.title,
-              cell: index => cd.cell(sorted[index]),
-              columnTitle: cd.sort ? cd.name : undefined,
-              rollup: rollups[ii],
-              className: cd.className,
-              titleAlign: cd.titleAlign,
-            };
-          },
-        );
+      return columns.map(
+        (cd, ii): SortableColumn => {
+          return {
+            name: cd.name,
+            title: cd.title,
+            cell: index => cd.cell(sorted[index]),
+            columnTitle: cd.sort ? cd.name : undefined,
+            rollup: rollups[ii],
+            className: cd.className,
+            titleAlign: cd.titleAlign,
+          };
+        },
+      );
     },
   );
 
