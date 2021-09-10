@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -242,36 +243,19 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 			firstRunTime = dependentScheduleFirstRun
 		}
 	}
+
 	if firstRunTime.IsZero() {
 		firstRunTime = env.Now()
 	}
-
-	firstRun, err := tree.MakeDTimestampTZ(firstRunTime, time.Microsecond)
-	if err != nil {
-		return "", err
+	opts := schedulebase.CommonScheduleOptions{
+		FirstRun: firstRunTime,
+		OnError:  sj.ScheduleDetails().OnError,
+		Wait:     sj.ScheduleDetails().Wait,
 	}
 
-	wait, err := parseOnPreviousRunningOption(sj.ScheduleDetails().Wait)
+	scheduleOptions, err := opts.KVOptions()
 	if err != nil {
 		return "", err
-	}
-	onError, err := parseOnErrorOption(sj.ScheduleDetails().OnError)
-	if err != nil {
-		return "", err
-	}
-	scheduleOptions := tree.KVOptions{
-		tree.KVOption{
-			Key:   optFirstRun,
-			Value: firstRun,
-		},
-		tree.KVOption{
-			Key:   optOnExecFailure,
-			Value: tree.NewDString(onError),
-		},
-		tree.KVOption{
-			Key:   optOnPreviousRunning,
-			Value: tree.NewDString(wait),
-		},
 	}
 
 	node := &tree.ScheduledBackup{

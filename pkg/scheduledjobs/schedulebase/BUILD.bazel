@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "schedulebase",
+    srcs = [
+        "options.go",
+        "util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/scheduledjobs",
+        "//pkg/security",
+        "//pkg/sql",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gorhill_cronexpr//:cronexpr",
+    ],
+)
