@@ -510,6 +510,11 @@ func (z *ZoneConfig) InheritFromParent(parent *ZoneConfig) {
 			z.NumVoters = proto.Int32(*parent.NumVoters)
 		}
 	}
+	if z.GlobalReads == nil {
+		if parent.GlobalReads != nil {
+			z.GlobalReads = proto.Bool(*parent.GlobalReads)
+		}
+	}
 	if z.RangeMinBytes == nil {
 		if parent.RangeMinBytes != nil {
 			z.RangeMinBytes = proto.Int64(*parent.RangeMinBytes)

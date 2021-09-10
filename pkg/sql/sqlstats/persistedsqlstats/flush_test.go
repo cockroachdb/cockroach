@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -218,6 +219,28 @@ func TestSQLStatsFlush(t *testing.T) {
 			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.fingerprint, fakeTime.getAggTimeTs(), firstServer.NodeID(), tc.count)
 		}
 	}
+}
+
+func TestSQLStatsInitialDelay(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, _, _ := serverutils.StartServer(t, params)
+
+	defer s.Stopper().Stop(context.Background())
+
+	initialNextFlushAt := s.SQLServer().(*sql.Server).
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).GetNextFlushAt()
+
+	// Since we introduced jitter in our flush interval, the next flush time
+	// is not entirely deterministic. However, we can still have an upperbound
+	// on this value.
+	maxNextRunAt :=
+		timeutil.Now().Add(persistedsqlstats.SQLStatsFlushInterval.Default() * 2)
+
+	require.True(t, maxNextRunAt.After(initialNextFlushAt),
+		"expected latest nextFlushAt to be %s, but found %s", maxNextRunAt, initialNextFlushAt)
 }
 
 type stubTime struct {
