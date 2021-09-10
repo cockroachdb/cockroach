@@ -16,6 +16,7 @@ package persistedsqlstats
 import (
 	"context"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -84,6 +85,10 @@ type PersistedSQLStats struct {
 
 	lastFlushStarted time.Time
 	jobMonitor       jobMonitor
+
+	atomic struct {
+		nextFlushAt atomic.Value
+	}
 }
 
 var _ sqlstats.Provider = &PersistedSQLStats{}
@@ -130,8 +135,15 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			}
 		})
 
-		log.Info(ctx, "starting sql-stats-worker")
-		for timer := timeutil.NewTimer(); ; timer.Reset(s.nextFlushInterval()) {
+		initialDelay := s.nextFlushInterval()
+		timer := timeutil.NewTimer()
+		timer.Reset(initialDelay)
+
+		log.Infof(ctx, "starting sql-stats-worker with initial delay: %s", initialDelay)
+		for {
+			waitInterval := s.nextFlushInterval()
+			timer.Reset(waitInterval)
+
 			select {
 			case <-timer.C:
 				timer.Read = true
@@ -161,12 +173,22 @@ func (s *PersistedSQLStats) GetLocalMemProvider() sqlstats.Provider {
 	return s.SQLStats
 }
 
+// GetNextFlushAt returns the time next flush is going to happen.
+func (s *PersistedSQLStats) GetNextFlushAt() time.Time {
+	return s.atomic.nextFlushAt.Load().(time.Time)
+}
+
 // nextFlushInterval calculates the wait interval that is between:
 // [(1 - SQLStatsFlushJitter) * SQLStatsFlushInterval),
 //  (1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
 func (s *PersistedSQLStats) nextFlushInterval() time.Duration {
 	baseInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
-	return s.jitterInterval(baseInterval)
+	waitInterval := s.jitterInterval(baseInterval)
+
+	nextFlushAt := s.getTimeNow().Add(waitInterval)
+	s.atomic.nextFlushAt.Store(nextFlushAt)
+
+	return waitInterval
 }
 
 func (s *PersistedSQLStats) jitterInterval(interval time.Duration) time.Duration {
