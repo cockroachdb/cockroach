@@ -156,13 +156,14 @@ func (b Overload) Signature(simplify bool) string {
 type overloadImpl interface {
 	params() TypeList
 	returnType() ReturnTyper
-	// allows manually resolving preference between multiple compatible overloads
+	// allows manually resolving preference between multiple compatible overloads.
 	preferred() bool
 }
 
 var _ overloadImpl = &Overload{}
 var _ overloadImpl = &UnaryOp{}
 var _ overloadImpl = &BinOp{}
+var _ overloadImpl = &CmpOp{}
 
 // GetParamsAndReturnType gets the parameters and return type of an
 // overloadImpl.
@@ -582,7 +583,8 @@ func typeCheckOverloadedExprs(
 		return typedExprs, fns, err
 	}
 
-	// The first heuristic is to prefer candidates that return the desired type.
+	// The first heuristic is to prefer candidates that return the desired type,
+	// if a desired type was provided.
 	if desired.Family() != types.AnyFamily {
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 			func(o overloadImpl) bool {
@@ -741,7 +743,17 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
-	// The fifth heuristic is to prefer candidates where all placeholders can be
+	// The fifth heuristic is to defer to preferred candidates, if one has been
+	// specified in the overload list.
+	if ok, typedExprs, fns, err := filterAttempt(ctx, semaCtx, &s, func() {
+		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs, func(o overloadImpl) bool {
+			return o.preferred()
+		})
+	}); ok {
+		return typedExprs, fns, err
+	}
+
+	// The sixth heuristic is to prefer candidates where all placeholders can be
 	// given the same type as all constants and resolvable expressions. This is
 	// only possible if all constants and resolvable expressions were resolved
 	// homogeneously up to this point.
@@ -849,15 +861,6 @@ func typeCheckOverloadedExprs(
 		}); ok {
 			return typedExprs, fns, err
 		}
-	}
-
-	// The final heuristic is to defer to preferred candidates, if available.
-	if ok, typedExprs, fns, err := filterAttempt(ctx, semaCtx, &s, func() {
-		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs, func(o overloadImpl) bool {
-			return o.preferred()
-		})
-	}); ok {
-		return typedExprs, fns, err
 	}
 
 	if err := defaultTypeCheck(ctx, semaCtx, &s, len(s.overloads) > 0); err != nil {

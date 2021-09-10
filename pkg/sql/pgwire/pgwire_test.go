@@ -821,6 +821,14 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"TRUNCATE TABLE d.str", []preparedQueryTest{
 			baseTest.SetArgs(),
 		}},
+		{"SELECT '{\"field\": 12}'::JSON->$1", []preparedQueryTest{
+			baseTest.SetArgs("field").Results("12"),
+			baseTest.SetArgs(0).Results(gosql.NullString{}),
+		}},
+		{"SELECT '{\"field\": 12}'::JSON->>$1", []preparedQueryTest{
+			baseTest.SetArgs("field").Results("12"),
+			baseTest.SetArgs(0).Results(gosql.NullString{}),
+		}},
 
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
 		//   Nested constants are not exposed to the same constant type resolution rules
