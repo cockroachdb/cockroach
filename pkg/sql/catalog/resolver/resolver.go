@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -332,6 +333,18 @@ func GetForDatabase(
 	}
 
 	ret := make(map[descpb.ID]SchemaEntryForDB, len(kvs)+1)
+
+	dbDesc, err := catalogkv.GetDatabaseDescByID(ctx, txn, codec, dbID)
+	if err != nil {
+		return nil, err
+	}
+	// This is needed at least for the temp system db during restores.
+	if !dbDesc.HasPublicSchemaWithDescriptor() {
+		ret[descpb.ID(keys.PublicSchemaID)] = SchemaEntryForDB{
+			Name:      tree.PublicSchema,
+			Timestamp: txn.ReadTimestamp(),
+		}
+	}
 
 	for _, kv := range kvs {
 		id := descpb.ID(kv.ValueInt())

@@ -1103,8 +1103,9 @@ func createImportingDescriptors(
 	tempSystemDBID := descpb.InvalidID
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		tempSystemDBID = getTempSystemDBID(details)
-		databases = append(databases, dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
-			security.AdminRoleName(), 0))
+		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
+			security.AdminRoleName(), keys.SystemPublicSchemaID)
+		databases = append(databases, tempSystemDB)
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
@@ -1174,10 +1175,12 @@ func createImportingDescriptors(
 	var writtenSchemas []catalog.SchemaDescriptor
 	for i := range schemas {
 		sc := schemas[i]
-		rw := details.DescriptorRewrites[sc.ID]
-		if !rw.ToExisting {
-			schemasToWrite = append(schemasToWrite, sc)
-			writtenSchemas = append(writtenSchemas, sc)
+		rw, ok := details.DescriptorRewrites[sc.ID]
+		if ok {
+			if !rw.ToExisting {
+				schemasToWrite = append(schemasToWrite, sc)
+				writtenSchemas = append(writtenSchemas, sc)
+			}
 		}
 	}
 
