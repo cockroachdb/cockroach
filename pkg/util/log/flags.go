@@ -128,6 +128,11 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		}
 	}()
 
+	// We're going to re-define loggers and sinks, so start with a fresh
+	// registry.
+	logging.allLoggers.clear()
+	logging.allSinkInfos.clear()
+
 	// If capture of internal fd2 writes is enabled, set it up here.
 	if config.CaptureFd2.Enable {
 		if logging.testingFd2CaptureLogger != nil {
