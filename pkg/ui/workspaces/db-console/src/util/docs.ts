@@ -24,7 +24,7 @@ function docsURLNoVersion(pageName: string): string {
 }
 
 export const adminUILoginNoVersion = docsURLNoVersion(
-  "admin-ui-overview.html#admin-ui-security",
+  "ui-overview.html#db-console-security",
 );
 export const startFlags = docsURL("start-a-node.html#flags");
 export const pauseJob = docsURL("pause-job.html");
@@ -36,12 +36,12 @@ export const configureReplicationZones = docsURL(
 export const transactionalPipelining = docsURL(
   "architecture/transaction-layer.html#transaction-pipelining",
 );
-export const adminUIAccess = docsURL("admin-ui-overview.html#admin-ui-access");
+export const adminUIAccess = docsURL("ui-overview.html#db-console-access");
 export const howAreCapacityMetricsCalculated = docsURL(
-  "admin-ui-storage-dashboard.html#capacity-metrics",
+  "ui-storage-dashboard.html#capacity-metrics",
 );
 export const howAreCapacityMetricsCalculatedOverview = docsURL(
-  "admin-ui-cluster-overview-page.html#capacity-metrics",
+  "ui-cluster-overview-page.html#capacity-metrics",
 );
 export const keyValuePairs = docsURL(
   "architecture/distribution-layer.html#table-data",
@@ -52,14 +52,14 @@ export const writeIntents = docsURL(
 export const metaRanges = docsURL(
   "architecture/distribution-layer.html#meta-ranges",
 );
-export const databaseTable = docsURL("admin-ui-databases-page.html");
-export const jobTable = docsURL("admin-ui-jobs-page.html");
-export const statementsTable = docsURL("admin-ui-statements-page.html");
+export const databaseTable = docsURL("ui-databases-page.html");
+export const jobTable = docsURL("ui-jobs-page.html");
+export const statementsTable = docsURL("ui-statements-page.html");
 export const statementDiagnostics = docsURL(
-  "admin-ui-statements-page.html#diagnostics",
+  "ui-statements-page.html#diagnostics",
 );
 export const statementsSql = docsURL(
-  "admin-ui-statements-page.html#sql-statement-fingerprints",
+  "ui-statements-page.html#sql-statement-fingerprints",
 );
 export const statementsRetries = docsURL(
   "transactions.html#transaction-retries",
@@ -68,10 +68,10 @@ export const transactionRetryErrorReference = docsURL(
   "transaction-retry-error-reference.html",
 );
 export const statementsTimeInterval = docsURL(
-  "admin-ui-statements-page.html#time-interval",
+  "ui-statements-page.html#time-interval",
 );
 export const capacityMetrics = docsURL(
-  "admin-ui-cluster-overview.html#capacity-metrics",
+  "ui-cluster-overview.html#capacity-metrics",
 );
 export const nodeLivenessIssues = docsURL(
   "cluster-setup-troubleshooting.html#node-liveness-issues",
@@ -81,7 +81,7 @@ export const clusterStore = docsURL("cockroach-start.html#store");
 export const clusterGlossary = docsURL("architecture/overview.html#glossary");
 export const clusterSettings = docsURL("cluster-settings.html");
 export const reviewOfCockroachTerminology = docsURL(
-  "admin-ui-replication-dashboard.html#review-of-cockroachdb-terminology",
+  "ui-replication-dashboard.html#review-of-cockroachdb-terminology",
 );
 export const privileges = docsURL("authorization.html#privileges");
 export const showSessions = docsURL("show-sessions.html");
