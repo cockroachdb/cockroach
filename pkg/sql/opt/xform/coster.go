@@ -511,6 +511,13 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	// preferable, all else being equal.
 	cost += cpuCostFactor
 
+	// Add a one-time cost for any operator with unbounded cardinality. This
+	// ensures we prefer plans that push limits as far down the tree as possible,
+	// all else being equal.
+	if candidate.Relational().Cardinality.IsUnbounded() {
+		cost += cpuCostFactor
+	}
+
 	if !cost.Less(memo.MaxCost) {
 		// Optsteps uses MaxCost to suppress nodes in the memo. When a node with
 		// MaxCost is added to the memo, it can lead to an obscure crash with an

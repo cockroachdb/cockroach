@@ -573,17 +573,18 @@ WHERE
 project
  ├── columns: s_symb:15!null
  ├── key: (15)
- └── inner-join (lookup industry)
+ └── inner-join (lookup security@secondary)
       ├── columns: in_id:1!null in_name:2!null co_id:5!null co_in_id:8!null s_symb:15!null s_co_id:20!null
-      ├── key columns: [8] = [1]
-      ├── lookup columns are key
+      ├── key columns: [5] = [20]
       ├── key: (15)
       ├── fd: ()-->(2), (5)-->(8), (15)-->(20), (5)==(20), (20)==(5), (1)==(8), (8)==(1)
-      ├── inner-join (lookup security@secondary)
-      │    ├── columns: co_id:5!null co_in_id:8!null s_symb:15!null s_co_id:20!null
-      │    ├── key columns: [5] = [20]
-      │    ├── key: (15)
-      │    ├── fd: (5)-->(8), (15)-->(20), (5)==(20), (20)==(5)
+      ├── inner-join (lookup industry)
+      │    ├── columns: in_id:1!null in_name:2!null co_id:5!null co_in_id:8!null
+      │    ├── key columns: [8] = [1]
+      │    ├── lookup columns are key
+      │    ├── cardinality: [0 - 5000]
+      │    ├── key: (5)
+      │    ├── fd: ()-->(2), (5)-->(8), (1)==(8), (8)==(1)
       │    ├── scan company
       │    │    ├── columns: co_id:5!null co_in_id:8!null
       │    │    ├── constraint: /5: [/1 - /5000]
@@ -591,9 +592,9 @@ project
       │    │    ├── key: (5)
       │    │    └── fd: (5)-->(8)
       │    └── filters
-      │         └── (s_co_id:20 >= 1) AND (s_co_id:20 <= 5000) [outer=(20), constraints=(/20: [/1 - /5000]; tight)]
+      │         └── in_name:2 = 'Software' [outer=(2), constraints=(/2: [/'Software' - /'Software']; tight), fd=()-->(2)]
       └── filters
-           └── in_name:2 = 'Software' [outer=(2), constraints=(/2: [/'Software' - /'Software']; tight), fd=()-->(2)]
+           └── (s_co_id:20 >= 1) AND (s_co_id:20 <= 5000) [outer=(20), constraints=(/20: [/1 - /5000]; tight)]
 
 # Q3
 opt
