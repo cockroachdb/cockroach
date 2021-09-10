@@ -10,7 +10,7 @@
 
 import React, { useState } from "react";
 import { Alert, DatePicker, Form, Input, Popover, TimePicker } from "antd";
-import { Moment } from "moment";
+import moment, { Moment } from "moment";
 import classNames from "classnames/bind";
 import { Time as TimeIcon, ErrorCircleFilled } from "@cockroachlabs/icons";
 import { Button } from "src/button";
@@ -66,7 +66,17 @@ function DateRangeMenu({
       }
     : null;
 
-  const isValid = startMoment.isBefore(endMoment);
+  let errorMessage;
+  if (startMoment.isAfter(endMoment)) {
+    errorMessage = "Select an end time that is after the start time.";
+  } else if (
+    // Add time to current timestamp to account for delays on requests
+    startMoment.isAfter(moment().add(5, "minutes")) ||
+    endMoment.isAfter(moment().add(5, "minutes"))
+  ) {
+    errorMessage = "Select a date and time that is not in the future.";
+  }
+  const isValid = errorMessage === undefined;
 
   const onApply = (): void => {
     onSubmit(startMoment, endMoment);
@@ -76,7 +86,7 @@ function DateRangeMenu({
   return (
     <div className={cx("popup-content")}>
       <Text className={cx("label")} textType={TextTypes.CaptionStrong}>
-        From
+        Start
       </Text>
       <DatePicker
         disabledDate={isDisabled}
@@ -94,7 +104,7 @@ function DateRangeMenu({
         value={startMoment}
       />
       <Text className={cx("label")} textType={TextTypes.CaptionStrong}>
-        To
+        End
       </Text>
       <DatePicker
         allowClear={false}
@@ -114,7 +124,7 @@ function DateRangeMenu({
       {!isValid && (
         <Alert
           icon={<ErrorCircleFilled fill="#FF3B4E" />}
-          message="Date interval not valid"
+          message={errorMessage}
           type="error"
           showIcon
         />
