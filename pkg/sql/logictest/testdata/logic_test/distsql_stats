@@ -1093,6 +1093,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
             }
         ],
         "histo_col_type": "INT8",
+        "histo_version": 1,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1141,6 +1142,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
             }
         ],
         "histo_col_type": "public.greeting",
+        "histo_version": 1,
         "name": "s",
         "null_count": 0,
         "row_count": 1
