@@ -1973,6 +1973,7 @@ func doRestorePlan(
 	tablesByID := make(map[descpb.ID]*tabledesc.Mutable)
 	typesByID := make(map[descpb.ID]*typedesc.Mutable)
 
+	fmt.Println(restoreStmt.String())
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case *dbdesc.Mutable:
@@ -2335,7 +2336,20 @@ func restoreCreateDefaultPrimaryRegionEnums(
 	for _, regionName := range regionConfig.Regions() {
 		regionLabels = append(regionLabels, tree.EnumValue(regionName))
 	}
-	sc := schemadesc.GetPublicSchema()
+	var sc catalog.SchemaDescriptor
+	if db.HasPublicSchemaWithDescriptor() {
+		publicSchemaID := db.GetSchemaID(tree.PublicSchema)
+		p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			desc, err := catalogkv.GetDescriptorByID(ctx, txn, p.ExecCfg().Codec, publicSchemaID)
+			if err != nil {
+				return err
+			}
+			sc = desc.(catalog.SchemaDescriptor)
+			return nil
+		})
+	} else {
+		sc = schemadesc.GetPublicSchema()
+	}
 	regionEnum, err := sql.CreateEnumTypeDesc(
 		p.RunParams(ctx),
 		regionConfig.RegionEnumID(),
