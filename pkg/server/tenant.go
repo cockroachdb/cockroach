@@ -137,23 +137,28 @@ func StartTenant(
 	pgLAddr := pgL.Addr().String()
 	httpLAddr := httpL.Addr().String()
 	args.advertiseAddr = baseCfg.AdvertiseAddr
+	// The tenantStatusServer needs access to the sqlServer,
+	// but we also need the same object to set up the sqlServer.
+	// So construct the tenant status server with a nil sqlServer,
+	// and then assign it once an SQL server gets created. We are
+	// going to assume that the tenant status server won't require
+	// the SQL server object.
+	tenantStatusServer := newTenantStatusServer(
+		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
+		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, nil,
+		args.rpcContext, args.stopper,
+	)
+	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
+	tenantStatusServer.sqlServer = s
+
 	if err != nil {
 		return nil, "", "", err
 	}
 
-	tenantStatusServer := newTenantStatusServer(
-		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
-		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, s,
-		args.rpcContext, args.stopper,
-	)
-
-	s.execCfg.SQLStatusServer = tenantStatusServer
-
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
-
 	workersCtx := tenantStatusServer.AnnotateCtx(context.Background())
 
 	// Register and start gRPC service on pod. This is separate from the
