@@ -67,14 +67,17 @@ func TestDialNoBreaker(t *testing.T) {
 	_, ln, _ := newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	defer stopper.Stop(ctx)
 
-	// Test that DialNoBreaker is successful normally.
 	nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, ln.Addr()))
+	_, err := nd.Dial(ctx, staticNodeID, rpc.DefaultClass)
+	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
 		return nd.ConnHealth(staticNodeID, rpc.DefaultClass)
 	})
 	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
 	assert.True(t, breaker.Ready())
-	_, err := nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
+
+	// Test that DialNoBreaker is successful normally.
+	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
 	assert.Nil(t, err, "failed to dial")
 	assert.True(t, breaker.Ready())
 	assert.Equal(t, breaker.Failures(), int64(0))
@@ -115,6 +118,144 @@ func TestDialNoBreaker(t *testing.T) {
 	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
 	assert.NotNil(t, err, "expected dial error")
 	assert.Equal(t, breaker.Failures(), int64(1))
+}
+
+func TestConnHealth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcCtx := newTestContext(clock, stopper)
+	rpcCtx.NodeID.Set(ctx, staticNodeID)
+	_, ln, hb := newTestServer(t, clock, stopper, true /* useHeartbeat */)
+	defer stopper.Stop(ctx)
+	nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, ln.Addr()))
+
+	// When no connection exists, we expect ConnHealth to return ErrNoConnection.
+	require.Equal(t, rpc.ErrNoConnection, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+
+	// After dialing the node, ConnHealth should return nil.
+	_, err := nd.Dial(ctx, staticNodeID, rpc.DefaultClass)
+	require.NoError(t, err)
+	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+
+	// ConnHealth should still error for other node ID and class.
+	require.Error(t, nd.ConnHealth(9, rpc.DefaultClass))
+	require.Equal(t, rpc.ErrNoConnection, nd.ConnHealth(staticNodeID, rpc.SystemClass))
+
+	// When the heartbeat errors, ConnHealth should eventually error too.
+	hb.setErr(errors.New("boom"))
+	require.Eventually(t, func() bool {
+		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) != nil
+	}, time.Second, 10*time.Millisecond)
+
+	// When the heartbeat recovers, ConnHealth should too.
+	hb.setErr(nil)
+	require.Eventually(t, func() bool {
+		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) == nil
+	}, time.Second, 10*time.Millisecond)
+
+	// Tripping the breaker should return ErrBreakerOpen.
+	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
+	br.Trip()
+	require.Equal(t, circuit.ErrBreakerOpen, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+
+	// Resetting the breaker should recover ConnHealth.
+	br.Reset()
+	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+
+	// Closing the remote connection should fail ConnHealth.
+	require.NoError(t, ln.popConn().Close())
+	require.Eventually(t, func() bool {
+		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) != nil
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestConnHealthTryDial(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcCtx := newTestContext(clock, stopper)
+	rpcCtx.NodeID.Set(ctx, staticNodeID)
+	_, ln, hb := newTestServer(t, clock, stopper, true /* useHeartbeat */)
+	defer stopper.Stop(ctx)
+	nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, ln.Addr()))
+
+	// When no connection exists, we expect ConnHealthTryDial to dial the node,
+	// which will return ErrNoHeartbeat at first but eventually succeed.
+	require.Equal(t, rpc.ErrNotHeartbeated, nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass))
+	require.Eventually(t, func() bool {
+		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
+	}, time.Second, 10*time.Millisecond)
+
+	// But it should error for other node ID.
+	require.Error(t, nd.ConnHealthTryDial(9, rpc.DefaultClass))
+
+	// When the heartbeat errors, ConnHealthTryDial should eventually error too.
+	hb.setErr(errors.New("boom"))
+	require.Eventually(t, func() bool {
+		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) != nil
+	}, time.Second, 10*time.Millisecond)
+
+	// When the heartbeat recovers, ConnHealthTryDial should too.
+	hb.setErr(nil)
+	require.Eventually(t, func() bool {
+		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
+	}, time.Second, 10*time.Millisecond)
+
+	// Tripping the breaker should return ErrBreakerOpen.
+	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
+	br.Trip()
+	require.Equal(t, circuit.ErrBreakerOpen, nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass))
+
+	// But it should eventually recover, when the breaker allows it.
+	require.Eventually(t, func() bool {
+		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
+	}, 5*time.Second, 10*time.Millisecond)
+
+	// Closing the remote connection should eventually recover.
+	require.NoError(t, ln.popConn().Close())
+	require.Eventually(t, func() bool {
+		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestConnHealthInternal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	stopper := stop.NewStopper()
+	localAddr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26657}
+
+	// Set up an internal server and relevant configuration. The RPC connection
+	// will then be considered internal, and we don't have to dial it.
+	rpcCtx := newTestContext(clock, stopper)
+	rpcCtx.SetLocalInternalServer(&internalServer{})
+	rpcCtx.NodeID.Set(ctx, staticNodeID)
+	rpcCtx.Config.AdvertiseAddr = localAddr.String()
+
+	nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, localAddr))
+	defer stopper.Stop(ctx)
+
+	// Even though we haven't dialed the node yet, the internal connection is
+	// always healthy.
+	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.SystemClass))
+
+	// However, it does respect the breaker.
+	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
+	br.Trip()
+	require.Equal(t, circuit.ErrBreakerOpen, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+
+	br.Reset()
+	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+
+	// Other nodes still fail though.
+	require.Error(t, nd.ConnHealth(7, rpc.DefaultClass))
 }
 
 func TestConcurrentCancellationAndTimeout(t *testing.T) {
@@ -182,7 +323,7 @@ func TestDisconnectsTrip(t *testing.T) {
 	// in to the breaker are interesting ones as determined by shouldTrip.
 	hb.setErr(fmt.Errorf("boom"))
 	underlyingNetConn := ln.popConn()
-	assert.Nil(t, underlyingNetConn.Close())
+	require.NoError(t, underlyingNetConn.Close())
 	const N = 1000
 	breakerEventChan := make(chan circuit.ListenerEvent, N)
 	breaker.AddListener(breakerEventChan)
@@ -226,12 +367,15 @@ func TestDisconnectsTrip(t *testing.T) {
 		}
 	}
 	// Ensure that all of the interesting errors were seen by the breaker.
-	assert.Equal(t, errorsSeen, failsSeen)
+	require.Equal(t, errorsSeen, failsSeen)
 
-	// Ensure that the connection becomes healthy soon now that the heartbeat
-	// service is not returning errors.
-	hb.setErr(nil) // reset in case there were no errors
+	// Ensure that the connection eventually becomes healthy if we fix the
+	// heartbeat and keep dialing.
+	hb.setErr(nil)
 	testutils.SucceedsSoon(t, func() error {
+		if _, err := nd.Dial(ctx, staticNodeID, rpc.DefaultClass); err != nil {
+			return err
+		}
 		return nd.ConnHealth(staticNodeID, rpc.DefaultClass)
 	})
 }
@@ -252,6 +396,8 @@ func setUpNodedialerTest(
 	rpcCtx.NodeID.Set(context.Background(), nodeID)
 	_, ln, hb = newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	nd = New(rpcCtx, newSingleNodeResolver(nodeID, ln.Addr()))
+	_, err := nd.Dial(context.Background(), nodeID, rpc.DefaultClass)
+	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
 		return nd.ConnHealth(nodeID, rpc.DefaultClass)
 	})
@@ -296,7 +442,7 @@ func newTestServer(
 func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
-	cfg.RPCHeartbeatInterval = 10 * time.Millisecond
+	cfg.RPCHeartbeatInterval = 100 * time.Millisecond
 	rctx := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
@@ -391,4 +537,62 @@ func (hb *heartbeatService) Ping(
 		ServerTime:    hb.clock.PhysicalNow(),
 		ServerVersion: hb.serverVersion,
 	}, nil
+}
+
+var _ roachpb.InternalServer = &internalServer{}
+
+type internalServer struct{}
+
+func (*internalServer) Batch(
+	context.Context, *roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	return nil, nil
+}
+
+func (*internalServer) RangeLookup(
+	context.Context, *roachpb.RangeLookupRequest,
+) (*roachpb.RangeLookupResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) RangeFeed(
+	*roachpb.RangeFeedRequest, roachpb.Internal_RangeFeedServer,
+) error {
+	panic("unimplemented")
+}
+
+func (*internalServer) GossipSubscription(
+	*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer,
+) error {
+	panic("unimplemented")
+}
+
+func (*internalServer) ResetQuorum(
+	context.Context, *roachpb.ResetQuorumRequest,
+) (*roachpb.ResetQuorumResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) Join(
+	context.Context, *roachpb.JoinNodeRequest,
+) (*roachpb.JoinNodeResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) GetSpanConfigs(
+	context.Context, *roachpb.GetSpanConfigsRequest,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) UpdateSpanConfigs(
+	context.Context, *roachpb.UpdateSpanConfigsRequest,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	panic("unimplemented")
 }
