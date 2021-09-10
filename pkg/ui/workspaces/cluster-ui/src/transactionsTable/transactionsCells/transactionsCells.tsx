@@ -56,7 +56,7 @@ export const textCell = ({
         placement="bottom"
         content={
           <pre className={descriptionClassName}>
-            {getHighlightedText(transactionText, search)}
+            {getHighlightedText(transactionText, search, true)}
           </pre>
         }
       >
@@ -70,6 +70,7 @@ export const textCell = ({
             {getHighlightedText(
               limitText(shortStatement(summary, transactionText), 200),
               search,
+              false,
               true,
             )}
           </div>

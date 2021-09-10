@@ -13,7 +13,7 @@
 
 .section {
   flex: 0 0 auto;
-  padding: 12px 24px;
+  padding: 12px 24px 12px 0px;
 
   &--heading {
     padding-top: 0;
@@ -47,6 +47,16 @@ h2.base-heading {
   padding: 12px 0;
   font-size: 24px;
   font-family: $font-family--base
+}
+
+h3.base-heading {
+  color: $colors--neutral-7;
+  font-family: $font-family--sans-serif;
+  font-weight: 600;
+  font-style: normal;
+  font-stretch: normal;
+  font-size: 20px;
+  padding-bottom: 12px;
 }
 
 .back-link {

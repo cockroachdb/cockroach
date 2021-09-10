@@ -105,7 +105,7 @@ export function makeSessionsColumns(
     {
       name: "sessionAge",
       title: SessionTableTitle.sessionAge,
-      className: cx("cl-table__col-session-age"),
+      className: cx("cl-table__col-session"),
       cell: session =>
         SessionLink({ session: session.session, onClick: onSessionClick }),
       sort: session => TimestampToMoment(session.session.start).valueOf(),
@@ -113,7 +113,7 @@ export function makeSessionsColumns(
     {
       name: "txnAge",
       title: SessionTableTitle.txnAge,
-      className: cx("cl-table__col-session-start"),
+      className: cx("cl-table__col-session"),
       cell: function(session: SessionInfo) {
         if (session.session.active_txn) {
           return AgeLabel({
@@ -128,7 +128,7 @@ export function makeSessionsColumns(
     {
       name: "statementAge",
       title: SessionTableTitle.statementAge,
-      className: cx("cl-table__col-session-start"),
+      className: cx("cl-table__col-session"),
       cell: function(session: SessionInfo) {
         if (session.session.active_queries?.length > 0) {
           return AgeLabel({
@@ -148,7 +148,7 @@ export function makeSessionsColumns(
     {
       name: "memUsage",
       title: SessionTableTitle.memUsage,
-      className: cx("cl-table__col-session-mem-usage"),
+      className: cx("cl-table__col-session"),
       cell: session =>
         BytesWithPrecision(session.session.alloc_bytes?.toNumber(), 0) +
         "/" +
@@ -158,7 +158,7 @@ export function makeSessionsColumns(
     {
       name: "statement",
       title: SessionTableTitle.statement,
-      className: cx("cl-table__col-query-text"),
+      className: cx("cl-table__col-session"),
       cell: session => {
         if (!(session.session.active_queries?.length > 0)) {
           return "N/A";
