@@ -1808,8 +1808,9 @@ func TestBackupRestoreResume(t *testing.T) {
 			jobspb.RestoreDetails{
 				DescriptorRewrites: map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite{
 					backupTableDesc.GetID(): {
-						ParentID: descpb.ID(restoreDatabaseID),
-						ID:       restoreTableID,
+						ParentID:       descpb.ID(restoreDatabaseID),
+						ParentSchemaID: descpb.ID(restoreDatabaseID + 1),
+						ID:             restoreTableID,
 					},
 				},
 				URIs: []string{restoreDir},
@@ -2138,9 +2139,13 @@ func TestRestoreFailCleanup(t *testing.T) {
 	// Check the same for data.myschema.
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'myschema'`, [][]string{{"1"}})
 
-	// Verify that the schema doesn't show up in the database's schema map.
+	// Verify that the only schema that appears is the public schema
 	dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "restore")
-	require.Empty(t, dbDesc.DatabaseDesc().Schemas, "unexpected schema map entries %v", dbDesc.DatabaseDesc().Schemas)
+	require.Empty(t, len(dbDesc.DatabaseDesc().Schemas), 1,
+		"only expected 1 entry for public, found unexpected schema map entries %v", dbDesc.DatabaseDesc().Schemas)
+	if _, found := dbDesc.DatabaseDesc().Schemas[tree.PublicSchema]; !found {
+		t.Error("public schema not found")
+	}
 }
 
 // TestRestoreFailDatabaseCleanup tests that a failed RESTORE is cleaned up
@@ -2530,7 +2535,7 @@ INSERT INTO sc4.tb VALUES (4);
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc3")
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc4")
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "existingschema")
-		require.Len(t, dbDesc.DatabaseDesc().Schemas, 5)
+		require.Len(t, dbDesc.DatabaseDesc().Schemas, 6)
 	})
 	// Test when we remap schemas to existing schemas in the cluster.
 	t.Run("remap", func(t *testing.T) {
@@ -3379,7 +3384,9 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		// Ensure that the views were not restored since they are missing the tables they reference.
 		db.CheckQueryResults(t, `USE storestats; SHOW TABLES;`, [][]string{})
 
-		db.Exec(t, `RESTORE store.early_customers, store.referencing_early_customers from $1 WITH OPTIONS (skip_missing_views)`, LocalFoo)
+		// Need to specify into_db otherwise the restore gives error:
+		//  a database named "store" needs to exist to restore schema "public".
+		db.Exec(t, `RESTORE store.early_customers, store.referencing_early_customers from $1 WITH OPTIONS (skip_missing_views, into_db='storestats')`, LocalFoo)
 		// Ensure that the views were not restored since they are missing the tables they reference.
 		db.CheckQueryResults(t, `SHOW TABLES;`, [][]string{})
 
@@ -5426,7 +5433,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 		newDB.Exec(t, `USE data`)
 
 		newDB.ExpectErr(
-			t, "pq: cannot restore table \"t\" without referenced sequence 54 \\(or \"skip_missing_sequences\" option\\)",
+			t, "pq: cannot restore table \"t\" without referenced sequence 57 \\(or \"skip_missing_sequences\" option\\)",
 			`RESTORE TABLE t FROM $1`, LocalFoo,
 		)
 
@@ -6707,7 +6714,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
 	require.Equal(t, 1, numExportRequests)
-	startingSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1"), EndKey: []byte("/Tenant/10/Table/53/2")}
+	startingSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/56/1"), EndKey: []byte("/Tenant/10/Table/56/2")}
 	require.Equal(t, exportRequestSpans, []string{startingSpan.String()})
 	resetStateVars()
 
@@ -6715,10 +6722,10 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='50b'`)
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test2'`)
 	require.Equal(t, 2, numExportRequests)
-	startingSpan = roachpb.Span{Key: []byte("/Tenant/10/Table/53/1"),
-		EndKey: []byte("/Tenant/10/Table/53/2")}
-	resumeSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/510/0"),
-		EndKey: []byte("/Tenant/10/Table/53/2")}
+	startingSpan = roachpb.Span{Key: []byte("/Tenant/10/Table/56/1"),
+		EndKey: []byte("/Tenant/10/Table/56/2")}
+	resumeSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/56/1/510/0"),
+		EndKey: []byte("/Tenant/10/Table/56/2")}
 	require.Equal(t, exportRequestSpans, []string{startingSpan.String(), resumeSpan.String()})
 	resetStateVars()
 
@@ -6728,11 +6735,11 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	require.Equal(t, 5, numExportRequests)
 	var expected []string
 	for _, resume := range []exportResumePoint{
-		{[]byte("/Tenant/10/Table/53/1"), []byte("/Tenant/10/Table/53/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/53/1/210/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/53/1/310/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/53/1/410/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/53/1/510/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/56/1"), []byte("/Tenant/10/Table/56/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/56/1/210/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/56/1/310/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/56/1/410/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/56/1/510/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
 	} {
 		expected = append(expected, requestSpanStr(roachpb.Span{resume.key, resume.endKey}, resume.timestamp))
 	}
@@ -7337,8 +7344,8 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/timeout'")
 	require.True(t, testutils.IsError(err,
-		"timeout: operation \"ExportRequest for span /Table/53/.*\" timed out after 3s: context"+
-			" deadline exceeded"))
+		fmt.Sprintf("timeout: operation \"ExportRequest for span /Table/%d/.*\" timed out after 3s: context"+
+			" deadline exceeded", 56)))
 }
 
 func TestBackupDoesNotHangOnIntent(t *testing.T) {
@@ -8295,7 +8302,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 
 	fullBackupSpans := getSpansFromManifest(t, locationToDir(fullBackup))
 	require.Equal(t, 1, len(fullBackupSpans))
-	require.Equal(t, "/Table/53/{1-2}", fullBackupSpans[0].String())
+	require.Equal(t, "/Table/56/{1-2}", fullBackupSpans[0].String())
 
 	// Now we're going to add an index. We should only see the index
 	// appear in the backup once it is PUBLIC.
@@ -8350,7 +8357,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		inc3Loc, fullBackup, inc1Loc, inc2Loc)
 	inc3Spans := getSpansFromManifest(t, locationToDir(inc3Loc))
 	require.Equal(t, 1, len(inc3Spans))
-	require.Equal(t, "/Table/53/{2-3}", inc3Spans[0].String())
+	require.Equal(t, "/Table/56/{2-3}", inc3Spans[0].String())
 
 	// Drop the index.
 	sqlDB.Exec(t, `DROP INDEX new_balance_idx`)
