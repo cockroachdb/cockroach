@@ -158,6 +158,7 @@
 <tr><td><code>sql.stats.post_events.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if set, an event is logged for every CREATE STATISTICS job</td></tr>
 <tr><td><code>sql.telemetry.query_sampling.enabled</code></td><td>boolean</td><td><code>false</code></td><td>when set to true, executed queries will emit an event on the telemetry logging channel</td></tr>
 <tr><td><code>sql.temp_object_cleaner.cleanup_interval</code></td><td>duration</td><td><code>30m0s</code></td><td>how often to clean up orphaned temporary objects</td></tr>
+<tr><td><code>sql.temp_object_cleaner.wait_interval</code></td><td>duration</td><td><code>30m0s</code></td><td>how long after creation a temporary object will be cleaned up</td></tr>
 <tr><td><code>sql.trace.log_statement_execute</code></td><td>boolean</td><td><code>false</code></td><td>set to true to enable logging of executed statements</td></tr>
 <tr><td><code>sql.trace.session_eventlog.enabled</code></td><td>boolean</td><td><code>false</code></td><td>set to true to enable session tracing. Note that enabling this may have a non-trivial negative performance impact.</td></tr>
 <tr><td><code>sql.trace.stmt.enable_threshold</code></td><td>duration</td><td><code>0s</code></td><td>duration beyond which all statements are traced (set to 0 to disable). This applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold.</td></tr>

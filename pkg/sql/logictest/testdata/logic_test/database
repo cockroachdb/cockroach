@@ -256,3 +256,32 @@ DROP DATABASE db1;
 
 statement error pq: database "db1" does not exist
 SELECT * FROM crdb_internal.session_variables;
+
+subtest missing-schema-error-69713
+
+statement ok
+CREATE DATABASE db69713;
+
+statement ok
+USE db69713;
+
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE TYPE s.testenum AS ENUM ('foo', 'bar', 'baz');
+
+statement ok
+CREATE TABLE db69713.s.pg_indexdef_test (
+    a INT PRIMARY KEY,
+    e s.testenum
+);
+
+statement ok
+CREATE TABLE db69713.s.pg_constraintdef_test (
+  a int,
+  FOREIGN KEY(a) REFERENCES db69713.s.pg_indexdef_test(a) ON DELETE CASCADE
+);
+
+statement ok
+DROP DATABASE db69713;

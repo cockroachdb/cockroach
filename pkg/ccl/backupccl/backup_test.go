@@ -168,6 +168,7 @@ func (d *datadrivenTestState) addServer(
 		}
 		settings := cluster.MakeTestingClusterSettings()
 		sql.TempObjectCleanupInterval.Override(context.Background(), &settings.SV, duration)
+		sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Millisecond)
 		params.ServerArgs.Settings = settings
 	}
 
@@ -8039,11 +8040,14 @@ func TestFullClusterTemporaryBackupAndRestore(t *testing.T) {
 
 	numNodes := 4
 	// Start a new server that shares the data directory.
+	settings := cluster.MakeTestingClusterSettings()
+	sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Microsecond*0)
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.UseDatabase = "defaultdb"
+	params.ServerArgs.Settings = settings
 	knobs := base.TestingKnobs{
 		SQLExecutor: &sql.ExecutorTestingKnobs{
 			DisableTempObjectsCleanupOnSessionExit: true,
@@ -8097,6 +8101,7 @@ func TestFullClusterTemporaryBackupAndRestore(t *testing.T) {
 		},
 	}
 	params.ServerArgs.Knobs = knobs
+	params.ServerArgs.Settings = settings
 	_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication,
 		params)
 	defer cleanupRestore()
