@@ -201,27 +201,21 @@ func (n *Dialer) dial(
 }
 
 // ConnHealth returns nil if we have an open connection of the request
-// class to the given node that succeeded on its most recent heartbeat. See the
-// method of the same name on rpc.Context for more details.
+// class to the given node that succeeded on its most recent heartbeat.
 func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
 	if n == nil || n.resolver == nil {
 		return errors.New("no node dialer configured")
 	}
-	if !n.getBreaker(nodeID, class).Ready() {
+	// NB: Don't call Ready(). The breaker protocol would require us to follow
+	// that up with a dial, which we won't do as this is called in hot paths.
+	if n.getBreaker(nodeID, class).Tripped() {
 		return circuit.ErrBreakerOpen
 	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
 		return err
 	}
-	// TODO(bdarnell): GRPCDialNode should detect local addresses and return
-	// a dummy connection instead of requiring callers to do this check.
-	if n.rpcContext.GetLocalInternalClientForAddr(addr.String(), nodeID) != nil {
-		// The local client is always considered healthy.
-		return nil
-	}
-	conn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, class)
-	return conn.Health()
+	return n.rpcContext.ConnHealth(addr.String(), nodeID, class)
 }
 
 // GetCircuitBreaker retrieves the circuit breaker for connections to the
