@@ -325,7 +325,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	cfg := ca.flowCtx.Cfg
 
 	var sf schemafeed.SchemaFeed
-	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore {
+	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore || ca.spec.Feed.ExportMode {
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
 		sf = schemafeed.New(ctx, cfg, schemaChangeEvents, ca.spec.Feed.Targets,
@@ -350,6 +350,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		SchemaChangeEvents: schemaChangeEvents,
 		SchemaChangePolicy: schemaChangePolicy,
 		SchemaFeed:         sf,
+		BackfillOnly:       ca.spec.Feed.ExportMode,
 		Knobs:              ca.knobs.FeedKnobs,
 	}
 }
@@ -1175,14 +1176,17 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		if cf.frontier.schemaChangeBoundaryReached() &&
 			(cf.frontier.boundaryType == jobspb.ResolvedSpan_EXIT ||
 				cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART) {
-			err := pgerror.Newf(pgcode.SchemaChangeOccurred,
-				"schema change occurred at %v", cf.frontier.boundaryTime.Next().AsOfSystemTime())
-
-			// Detect whether this boundary should be used to kill or restart the
-			// changefeed.
-			if cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART {
-				err = changefeedbase.MarkRetryableError(err)
+			var err error
+			if !cf.spec.Feed.ExportMode {
+				err = pgerror.Newf(pgcode.SchemaChangeOccurred,
+					"schema change occurred at %v", cf.frontier.boundaryTime.Next().AsOfSystemTime())
+				// Detect whether this boundary should be used to kill or restart the
+				// changefeed.
+				if cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART {
+					err = changefeedbase.MarkRetryableError(err)
+				}
 			}
+
 			// TODO(ajwerner): make this more useful by at least informing the client
 			// of which tables changed.
 			cf.MoveToDraining(err)
@@ -1638,7 +1642,11 @@ func (f *schemaChangeFrontier) getCheckpointSpans(maxBytes int64) (checkpoint []
 
 // schemaChangeBoundaryReached returns true if the schema change boundary has been reached.
 func (f *schemaChangeFrontier) schemaChangeBoundaryReached() (r bool) {
-	return !f.boundaryTime.IsEmpty() && f.boundaryTime.Equal(f.Frontier())
+	reached := !f.boundaryTime.IsEmpty() && f.boundaryTime.Equal(f.Frontier())
+	if reached {
+		_ = 1
+	}
+	return reached
 }
 
 // boundaryTypeAt returns boundary type applicable at the specified timestamp.

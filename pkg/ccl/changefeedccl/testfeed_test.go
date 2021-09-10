@@ -597,7 +597,7 @@ func (f *tableFeedFactory) Feed(
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI != nil {
+	if !createStmt.IsExportTable() && createStmt.SinkURI != nil {
 		return nil, errors.Errorf(
 			`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}
@@ -748,7 +748,7 @@ func (f *cloudFeedFactory) Feed(
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI != nil {
+	if !createStmt.IsExportTable() && createStmt.SinkURI != nil {
 		return nil, errors.Errorf(`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}
 	feedDir := strconv.Itoa(f.feedIdx)
@@ -1114,7 +1114,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 
 	// Set SinkURI if it wasn't provided.  It's okay if it is -- since we may
 	// want to set some kafka specific URI parameters.
-	if createStmt.SinkURI == nil {
+	if createStmt.SinkURI == nil || createStmt.IsExportTable() {
 		createStmt.SinkURI = tree.NewStrVal(
 			fmt.Sprintf("%s://does.not.matter/", changefeedbase.SinkSchemeKafka))
 	}
@@ -1294,7 +1294,7 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 		return nil, err
 	}
 
-	if createStmt.SinkURI == nil {
+	if createStmt.SinkURI == nil || createStmt.IsExportTable() {
 		createStmt.SinkURI = tree.NewStrVal(
 			fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", sinkDest.URL()))
 	}

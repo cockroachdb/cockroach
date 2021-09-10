@@ -461,6 +461,7 @@ create_schedule_for_backup_stmt ::=
 
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
+	| 'CREATE' 'EXPORT' 'CHANGEFEED' 'FOR' changefeed_targets opt_as_of_clause 'INTO' string_or_placeholder opt_with_options
 
 create_replication_stream_stmt ::=
 	'CREATE' 'REPLICATION' 'STREAM' 'FOR' targets opt_changefeed_sink opt_with_replication_options

@@ -3653,6 +3653,15 @@ create_changefeed_stmt:
       Options: $6.kvOptions(),
     }
   }
+| CREATE EXPORT CHANGEFEED FOR changefeed_targets opt_as_of_clause INTO string_or_placeholder opt_with_options
+  {
+     $$.val = &tree.CreateChangefeed{
+       Targets:    $5.targetList(),
+       SinkURI:    $8.expr(),
+       Options:    $9.kvOptions(),
+       ExportSpec: &tree.ChangefeedExportSpec{AsOf: $6.asOfClause()},
+     }
+  }
 | EXPERIMENTAL CHANGEFEED FOR changefeed_targets opt_with_options
   {
     /* SKIP DOC */
