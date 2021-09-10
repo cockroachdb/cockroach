@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -64,7 +65,8 @@ WHERE
 
 func newTestHelper(t *testing.T) (helper *testHelper, cleanup func()) {
 	helper = &testHelper{
-		env: jobstest.NewJobSchedulerTestEnv(jobstest.UseSystemTables, timeutil.Now()),
+		env: jobstest.NewJobSchedulerTestEnv(
+			jobstest.UseSystemTables, timeutil.Now(), tree.ScheduledSQLStatsCompactionExecutor),
 	}
 
 	knobs := jobs.NewTestingKnobsWithShortIntervals()
