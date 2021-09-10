@@ -2932,6 +2932,100 @@ func mvccGetIntent(
 		int64(len(iter.UnsafeValue())), nil
 }
 
+// With the separated lock table, we are employing a performance optimization:
+// when an intent metadata is removed, we preferably want to do so using a
+// SingleDel (as opposed to a Del). This is only safe if the previous operations
+// on the metadata key allow it. Due to practical limitations, at the time of
+// writing the condition we need is that the pebble history of the key consists
+// of a single SET. (#69891 tracks an improvement, to also make SingleDel safe
+// in the case of `<anything>; (DEL or legitimate SingleDel); SET; SingleDel`,
+// which will open up further optimizations).
+//
+// It is difficult to track the history of engine writes to a key precisely, in
+// particular when values are ever aborted. So we apply the optimization only to
+// the main case in which it is useful, namely that of a transaction committing
+// its intent that it never re-wrote in the initial epoch (i.e. no chance of it
+// ever being removed before as part of being pushed). Note that when a txn
+// refreshes, it stays in the original epoch, and the intents are moved, which
+// does *not* cause a write to the MVCC metadata key (for which the history has
+// to remain a single SET). So transactions that "only" refresh are covered by
+// the optimization as well.
+//
+// Note that a transaction can "partially abort" and still commit due to nested
+// SAVEPOINTs, such as in the below example:
+//
+//   BEGIN;
+//     SAVEPOINT foo;
+//       INSERT INTO kv VALUES(1, 1);
+//     ROLLBACK TO SAVEPOINT foo;
+//     INSERT INTO kv VALUES(1, 2);
+//   COMMIT;
+//
+// This would first remove the intent (1,1) during the ROLLBACK using a Del (the
+// anomaly below would occur the same if a SingleDel were used here), and thus
+// without an additional condition the INSERT (1,2) would be eligible for
+// committing via a SingleDel. This has to be avoided as well, since the
+// metadata key for k=1 has the following history:
+//
+// - Set // when (1,1) is written
+// - Del // during ROLLBACK
+// - Set // when (1,2) is written
+// - SingleDel // on COMMIT
+//
+// However, this sequence could compact as follows (at the time of writing, bound
+// to change with #69891):
+//
+// - Set (Del Set') SingleDel
+//          ↓
+// - Set   Set'     SingleDel
+// - Set  (Set'     SingleDel)
+//               ↓
+// - Set
+//
+// which means that a previously deleted intent metadata would erroneously
+// become visible again. So on top of restricting SingleDel to the COMMIT case,
+// we also restrict it to the case of having no ignored sequence number ranges
+// (i.e. no nested txn was rolled back before the commit).
+//
+// For a deeper discussion of these correctness problems (avoided using the
+// scoping down in this helper), see:
+//
+// https://github.com/cockroachdb/cockroach/issues/69891
+type singleDelOptimizationHelper struct {
+	// Internal state, don't access this, use the getters instead
+	// (that's what the _ prefix is trying to communicate).
+	_didNotUpdateMeta *bool
+	_hasIgnoredSeqs   bool
+	_epoch            enginepb.TxnEpoch
+}
+
+// v is the inferred value of the TxnDidNotUpdateMeta field.
+func (h singleDelOptimizationHelper) v() bool {
+	if h._didNotUpdateMeta == nil {
+		return false
+	}
+	return *h._didNotUpdateMeta
+}
+
+// onCommitIntent returns true if the SingleDel optimization is available
+// for committing an intent.
+func (h singleDelOptimizationHelper) onCommitIntent() bool {
+	// We're committing the intent at epoch zero, the meta tracking says we didn't
+	// rewrite the intent, and we also didn't previously remove the metadata for
+	// this key as part of a voluntary rollback of a nested txn. So we are safe to
+	// use a SingleDel here.
+	return h.v() && !h._hasIgnoredSeqs && h._epoch == 0
+}
+
+// onAbortIntent returns true if the SingleDel optimization is available
+// for removing an intent. It is always false.
+// Note that "removing an intent" can occur if we know that the epoch
+// changed, or when a savepoint is rolled back. It does not imply that
+// the transaction aborted.
+func (h singleDelOptimizationHelper) onAbortIntent() bool {
+	return false
+}
+
 // mvccResolveWriteIntent is the core logic for resolving an intent.
 // REQUIRES: iter is already seeked to intent.Key.
 // Returns whether an intent was found and resolved, false otherwise.
@@ -2958,9 +3052,12 @@ func mvccResolveWriteIntent(
 	if isIntentSeparated {
 		precedingIntentState = ExistingIntentSeparated
 	}
-	txnDidNotUpdateMeta := false
-	if meta.TxnDidNotUpdateMeta != nil {
-		txnDidNotUpdateMeta = *meta.TxnDidNotUpdateMeta
+	canSingleDelHelper := singleDelOptimizationHelper{
+		_didNotUpdateMeta: meta.TxnDidNotUpdateMeta,
+		_hasIgnoredSeqs:   len(intent.IgnoredSeqNums) > 0,
+		// NB: the value is only used if epochs match, so it doesn't
+		// matter if we use the one from meta or incoming request here.
+		_epoch: intent.Txn.Epoch,
 	}
 
 	// A commit with a newer epoch than the intent effectively means that we
@@ -3079,11 +3176,11 @@ func mvccResolveWriteIntent(
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
 			metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
-				ctx, rw, metaKey, precedingIntentState, txnDidNotUpdateMeta, &buf.newMeta)
+				ctx, rw, metaKey, precedingIntentState, canSingleDelHelper.v(), &buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
 			separatedIntentCountDelta, err =
-				rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID)
+				rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onCommitIntent(), meta.Txn.ID)
 		}
 		if err != nil {
 			return false, err
@@ -3209,7 +3306,7 @@ func mvccResolveWriteIntent(
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
 		if separatedIntentCountDelta, err =
-			rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
+			rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
@@ -3229,7 +3326,7 @@ func mvccResolveWriteIntent(
 		ValBytes: valueSize,
 	}
 	if separatedIntentCountDelta, err =
-		rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
+		rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 		return false, err
 	}
 	metaKeySize := int64(metaKey.EncodedSize())
