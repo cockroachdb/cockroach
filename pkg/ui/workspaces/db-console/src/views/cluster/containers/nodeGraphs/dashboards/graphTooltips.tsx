@@ -142,7 +142,12 @@ export const TransactionRestartsToolTip: React.FC<{
   <div>
     The number of transactions restarted broken down by errors{" "}
     {tooltipSelection}. Refer to the transaction retry error reference{" "}
-    <Anchor href={docsURL.transactionRetryErrorReference}>documentation</Anchor>{" "}
+    <Anchor
+      href={docsURL.transactionRetryErrorReference}
+      className={"anchor-light"}
+    >
+      documentation
+    </Anchor>{" "}
     for more details.
   </div>
 );

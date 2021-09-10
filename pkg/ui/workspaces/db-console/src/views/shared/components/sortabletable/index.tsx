@@ -349,6 +349,7 @@ export class SortableTable extends React.Component<TableProps> {
               {getHighlightedText(
                 drawerData.statement,
                 drawerData.search,
+                false,
                 true,
               )}
             </span>
