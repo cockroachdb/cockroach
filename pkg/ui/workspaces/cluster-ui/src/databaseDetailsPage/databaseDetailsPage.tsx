@@ -364,14 +364,14 @@ export class DatabaseDetailsPage extends React.Component<
             }
           />
 
-          <h1
+          <h3
             className={`${baseHeadingClasses.tableName} ${cx(
               "icon__container",
             )}`}
           >
             <StackIcon className={cx("icon--md", "icon--title")} />
             {this.props.name}
-          </h1>
+          </h3>
         </section>
 
         <PageConfig>

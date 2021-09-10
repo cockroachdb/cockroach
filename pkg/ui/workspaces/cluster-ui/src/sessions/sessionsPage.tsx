@@ -228,11 +228,7 @@ export class SessionsPage extends React.Component<
     return (
       <div className={sessionsPageCx("sessions-page")}>
         <Helmet title={app ? `${app} App | Sessions` : "Sessions"} />
-
-        <section className={statementsPageCx("section")}>
-          <h1 className={statementsPageCx("base-heading")}>Sessions</h1>
-        </section>
-
+        <h3 className={statementsPageCx("base-heading")}>Sessions</h3>
         <Loading
           loading={isNil(this.props.sessions)}
           error={this.props.sessionsError}
