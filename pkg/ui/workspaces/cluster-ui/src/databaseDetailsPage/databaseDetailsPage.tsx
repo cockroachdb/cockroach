@@ -314,21 +314,33 @@ export class DatabaseDetailsPage extends React.Component<
         name: "name",
       },
       {
-        title: "Users",
+        title: (
+          <Tooltip placement="bottom" title="The number of users of the table.">
+            Users
+          </Tooltip>
+        ),
         cell: table => table.details.userCount,
         sort: table => table.details.userCount,
         className: cx("database-table__col-user-count"),
         name: "userCount",
       },
       {
-        title: "Roles",
+        title: (
+          <Tooltip placement="bottom" title="The list of roles of the table.">
+            Roles
+          </Tooltip>
+        ),
         cell: table => _.join(table.details.roles, ", "),
         sort: table => _.join(table.details.roles, ", "),
         className: cx("database-table__col-roles"),
         name: "roles",
       },
       {
-        title: "Grants",
+        title: (
+          <Tooltip placement="bottom" title="The list of grants of the table.">
+            Grants
+          </Tooltip>
+        ),
         cell: table => _.join(table.details.grants, ", "),
         sort: table => _.join(table.details.grants, ", "),
         className: cx("database-table__col-grants"),
