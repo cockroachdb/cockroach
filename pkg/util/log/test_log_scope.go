@@ -41,6 +41,9 @@ type TestLogScope struct {
 		testingFd2CaptureLogger *loggerT
 		exitOverrideFn          func(exit.Code, error)
 		exitOverrideHideStack   bool
+
+		allSinkInfos []*sinkInfo
+		allLoggers   []*loggerT
 	}
 }
 
@@ -231,7 +234,7 @@ func (l *TestLogScope) Rotate(t tShim) {
 	// Ensure remaining logs are written.
 	Flush()
 
-	if err := allSinkInfos.iterFileSinks(func(l *fileSink) error {
+	if err := logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		return l.closeFileLocked()
