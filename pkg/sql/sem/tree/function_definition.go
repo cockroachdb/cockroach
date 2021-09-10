@@ -110,6 +110,16 @@ type FunctionProperties struct {
 	//
 	// See memo.CanBeCompositeSensitive.
 	CompositeInsensitive bool
+
+	// ReturnsRecordType indicates that this function is a record-returning
+	// function, which implies that it's unusable without a corresponding type
+	// alias.
+	//
+	// For example, consider the case of json_to_record('{"a":"b", "c":"d"}').
+	// This function returns an error unless it as an `AS t(a,b,c)` declaration,
+	// since its definition is to pick out the JSON attributes within the input
+	// that match, by name, to the columns in the aliased record type.
+	ReturnsRecordType bool
 }
 
 // ShouldDocument returns whether the built-in function should be included in

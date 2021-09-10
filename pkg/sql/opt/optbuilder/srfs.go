@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -140,12 +142,44 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 // (SRF) such as generate_series() or unnest(). It synthesizes new columns in
 // outScope for each of the SRF's output columns.
 func (b *Builder) finishBuildGeneratorFunction(
-	f *tree.FuncExpr, fn opt.ScalarExpr, inScope, outScope *scope, outCol *scopeColumn,
+	f *tree.FuncExpr,
+	def *tree.FunctionDefinition,
+	fn opt.ScalarExpr,
+	inScope, outScope *scope,
+	outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
+	if def.ReturnsRecordType {
+		if b.lastAlias == nil {
+			panic(pgerror.New(pgcode.Syntax, "a column definition list is required for functions returning \"record\""))
+		}
+	} else if b.lastAlias != nil {
+		// Non-record type return with a table alias that includes types is not
+		// permitted.
+		for _, c := range b.lastAlias.Cols {
+			if c.Type != nil {
+				panic(pgerror.Newf(pgcode.Syntax, "a column definition list is only allowed for functions returning \"record\""))
+			}
+		}
+	}
 	// Add scope columns.
 	if outCol != nil {
 		// Single-column return type.
 		b.populateSynthesizedColumn(outCol, fn)
+	} else if def.ReturnsRecordType && b.lastAlias != nil && len(b.lastAlias.Cols) > 0 {
+		// If we're building a generator function that returns a record type, like
+		// json_to_record, we need to know the alias that was assigned to the
+		// generator function - without that, we won't know the list of columns
+		// to output.
+		for _, c := range b.lastAlias.Cols {
+			if c.Type == nil {
+				panic(pgerror.Newf(pgcode.Syntax, "a column definition list is required for functions returning \"record\""))
+			}
+			typ, err := tree.ResolveType(b.ctx, c.Type, b.semaCtx.TypeResolver)
+			if err != nil {
+				panic(err)
+			}
+			b.synthesizeColumn(outScope, scopeColName(c.Name), typ, nil, fn)
+		}
 	} else {
 		// Multi-column return type. Use the tuple labels in the SRF's return type
 		// as column aliases.
