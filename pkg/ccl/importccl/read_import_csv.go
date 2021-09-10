@@ -35,6 +35,7 @@ type csvInputReader struct {
 var _ inputConverter = &csvInputReader{}
 
 func newCSVInputReader(
+	semaCtx *tree.SemaContext,
 	kvCh chan row.KVBatch,
 	opts roachpb.CSVOptions,
 	walltime int64,
@@ -51,6 +52,7 @@ func newCSVInputReader(
 
 	return &csvInputReader{
 		importCtx: &parallelImportContext{
+			semaCtx:          semaCtx,
 			walltime:         walltime,
 			numWorkers:       parallelism,
 			evalCtx:          evalCtx,
