@@ -514,6 +514,11 @@ func adjustMemEstimate(estimate int64) int64 {
 	return estimate*memEstimateMultiplier + memEstimateAdditive
 }
 
+// GetScanStats is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) GetScanStats() execinfra.ScanStats {
+	return execinfra.GetScanStats(s.Ctx)
+}
+
 // Release implements the execinfra.Releasable interface.
 func (s *ColIndexJoin) Release() {
 	s.rf.Release()

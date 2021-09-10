@@ -369,6 +369,18 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if s.KVBytesRead.HasValue() {
 			e.ob.AddField("KV bytes read", humanize.IBytes(s.KVBytesRead.Value()))
 		}
+		if e.ob.flags.Verbose {
+			if s.StepCount.HasValue() {
+				e.ob.AddField("MVCC step count (ext/int)", fmt.Sprintf("%s/%s",
+					humanizeutil.Count(s.StepCount.Value()), humanizeutil.Count(s.InternalStepCount.Value()),
+				))
+			}
+			if s.SeekCount.HasValue() {
+				e.ob.AddField("MVCC seek count (ext/int)", fmt.Sprintf("%s/%s",
+					humanizeutil.Count(s.SeekCount.Value()), humanizeutil.Count(s.InternalSeekCount.Value()),
+				))
+			}
+		}
 	}
 
 	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok {
