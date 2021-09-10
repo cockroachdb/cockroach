@@ -3035,3 +3035,11 @@ SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2
 SELECT (*) FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2 -- fully parenthesized
 SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2 -- literals removed
 SELECT * FROM ((_ NATURAL JOIN _ WITH ORDINALITY AS _)) WITH ORDINALITY AS _ -- identifiers removed
+
+parse
+SELECT * FROM json_to_record('') AS t(a INT, b TEXT, c foo)
+----
+SELECT * FROM ROWS FROM (json_to_record('')) AS t (a INT8, b STRING, c foo) -- normalized!
+SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t (a INT8, b STRING, c foo) -- fully parenthesized
+SELECT * FROM ROWS FROM (json_to_record('_')) AS t (a INT8, b STRING, c foo) -- literals removed
+SELECT * FROM ROWS FROM (json_to_record('')) AS _ (_ INT8, _ STRING, _ foo) -- identifiers removed
