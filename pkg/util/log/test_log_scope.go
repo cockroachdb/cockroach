@@ -106,6 +106,13 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 	// logic work properly.
 	sc.previous.appliedConfig = DescribeAppliedConfig()
 
+	logging.allSinkInfos.mu.Lock()
+	sc.previous.allSinkInfos = logging.allSinkInfos.mu.sinkInfos
+	logging.allSinkInfos.mu.Unlock()
+	logging.allLoggers.mu.Lock()
+	sc.previous.allLoggers = logging.allLoggers.mu.loggers
+	logging.allLoggers.mu.Unlock()
+
 	sc.previous.stderrSinkInfoTemplate = logging.stderrSinkInfoTemplate
 	logging.rmu.RLock()
 	sc.previous.stderrSinkInfo = logging.rmu.currentStderrSinkInfo
@@ -298,6 +305,13 @@ func (l *TestLogScope) Close(t tShim) {
 	logging.mu.exitOverride.f = l.previous.exitOverrideFn
 	logging.mu.exitOverride.hideStack = l.previous.exitOverrideHideStack
 	logging.mu.Unlock()
+
+	logging.allSinkInfos.mu.Lock()
+	logging.allSinkInfos.mu.sinkInfos = l.previous.allSinkInfos
+	logging.allSinkInfos.mu.Unlock()
+	logging.allLoggers.mu.Lock()
+	logging.allLoggers.mu.loggers = l.previous.allLoggers
+	logging.allLoggers.mu.Unlock()
 
 	// Sanity check: if the restore logic is complete, the applied
 	// configuration should be the same as when the scope started.
