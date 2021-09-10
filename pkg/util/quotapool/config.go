@@ -43,6 +43,15 @@ type OnWaitStartFunc func(
 	ctx context.Context, poolName string, r Request,
 )
 
+// OnWaitStartLocked creates an Option to configure a callback which is called
+// when a request blocks and has to wait for quota. It is synchronized with the
+// decision that the request needs to wait.
+func OnWaitStartLocked(onStart OnWaitStartFunc) Option {
+	return optionFunc(func(cfg *config) {
+		cfg.onWaitStartLocked = onStart
+	})
+}
+
 // OnWaitStart creates an Option to configure a callback which is called when a
 // request blocks and has to wait for quota.
 func OnWaitStart(onStart OnWaitStartFunc) Option {
@@ -120,6 +129,7 @@ func WithMinimumWait(duration time.Duration) Option {
 type config struct {
 	onAcquisition            AcquisitionFunc
 	onSlowAcquisition        SlowAcquisitionFunc
+	onWaitStartLocked        OnWaitStartFunc
 	onWaitStart              OnWaitStartFunc
 	onWaitFinish             AcquisitionFunc
 	slowAcquisitionThreshold time.Duration

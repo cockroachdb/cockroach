@@ -77,12 +77,14 @@ func newTenantSideCostController(
 	tenantID roachpb.TenantID,
 	provider kvtenant.TokenBucketProvider,
 	timeSource timeutil.TimeSource,
+	testInstr TestInstrumentation,
 ) (multitenant.TenantSideCostController, error) {
 	if tenantID == roachpb.SystemTenantID {
 		return nil, errors.AssertionFailedf("cost controller can't be used for system tenant")
 	}
 	c := &tenantSideCostController{
 		timeSource:      timeSource,
+		testInstr:       testInstr,
 		settings:        st,
 		tenantID:        tenantID,
 		provider:        provider,
@@ -101,7 +103,11 @@ func newTenantSideCostController(
 func NewTenantSideCostController(
 	st *cluster.Settings, tenantID roachpb.TenantID, provider kvtenant.TokenBucketProvider,
 ) (multitenant.TenantSideCostController, error) {
-	return newTenantSideCostController(st, tenantID, provider, timeutil.DefaultTimeSource{})
+	return newTenantSideCostController(
+		st, tenantID, provider,
+		timeutil.DefaultTimeSource{},
+		nil, /* testInstr */
+	)
 }
 
 // TestingTenantSideCostController is a testing variant of
@@ -111,8 +117,9 @@ func TestingTenantSideCostController(
 	tenantID roachpb.TenantID,
 	provider kvtenant.TokenBucketProvider,
 	timeSource timeutil.TimeSource,
+	testInstr TestInstrumentation,
 ) (multitenant.TenantSideCostController, error) {
-	return newTenantSideCostController(st, tenantID, provider, timeSource)
+	return newTenantSideCostController(st, tenantID, provider, timeSource, testInstr)
 }
 
 func init() {
@@ -121,6 +128,7 @@ func init() {
 
 type tenantSideCostController struct {
 	timeSource timeutil.TimeSource
+	testInstr  TestInstrumentation
 	settings   *cluster.Settings
 	costCfg    tenantcostmodel.Config
 	tenantID   roachpb.TenantID
@@ -168,13 +176,22 @@ type tenantSideCostController struct {
 		// time.
 		requestNeedsRetry bool
 
+		// notificationReceivedDuringRequest is set if we received a "low RU"
+		// notification while a request was in progress.
+		notificationReceivedDuringRequest bool
+
 		lastRequestTime         time.Time
 		lastReportedConsumption roachpb.TenantConsumption
 
 		lastDeadline time.Time
 		lastRate     float64
 
-		setupNotificationTimer timeutil.TimerI
+		// When we obtain tokens that are throttled over a period of time, we set up
+		// a low RU notification only when we get close to that period of time
+		// elapsing.
+		setupNotificationTimer     timeutil.TimerI
+		setupNotificationCh        <-chan time.Time
+		setupNotificationThreshold tenantcostmodel.RU
 
 		// avgRUPerSec is an exponentially-weighted moving average of the RU
 		// consumption per second; used to estimate the RU requirements for the next
@@ -205,7 +222,6 @@ func (c *tenantSideCostController) initRunState(ctx context.Context) {
 	c.run.now = now
 	c.run.cpuSecs = c.cpuSecsFn(ctx)
 	c.run.lastRequestTime = now
-	// Set up the initial avgRUPerSec so that the first request is for initialRUs.
 	c.run.avgRUPerSec = initialRUs / c.run.targetPeriod.Seconds()
 }
 
@@ -350,12 +366,22 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		c.limiter.AdjustTokens(c.run.now, -initialRUs)
 	}
 
-	if resp.GrantedRU == 0 {
+	granted := resp.GrantedRU
+	if granted == 0 {
 		// We must have not requested any more RUs; nothing to do.
+		//
+		// It is possible that we got a low RU notification while the request was in
+		// flight. If that is the case, we must send another request.
+		if c.run.notificationReceivedDuringRequest {
+			c.run.notificationReceivedDuringRequest = false
+			c.sendTokenBucketRequest(ctx)
+		}
 		return
 	}
+	// It doesn't matter if we received a notification; we are going to
+	// reconfigure the bucket and set up a new notification as needed.
+	c.run.notificationReceivedDuringRequest = false
 
-	granted := resp.GrantedRU
 	if !c.run.lastDeadline.IsZero() {
 		// If last request came with a trickle duration, we may have RUs that were
 		// not made available to the bucket yet; throw them together with the newly
@@ -365,9 +391,14 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		}
 	}
 
-	cfg := tokenBucketReconfigureArgs{
-		NotifyThreshold: tenantcostmodel.RU(granted * notifyFraction),
+	if c.run.setupNotificationTimer != nil {
+		c.run.setupNotificationTimer.Stop()
+		c.run.setupNotificationTimer = nil
+		c.run.setupNotificationCh = nil
 	}
+
+	notifyThreshold := tenantcostmodel.RU(granted * notifyFraction)
+	var cfg tokenBucketReconfigureArgs
 	if resp.TrickleDuration == 0 {
 		// We received a batch of tokens to use as needed. Set up the token bucket
 		// to notify us when the tokens are running low.
@@ -375,7 +406,7 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		// TODO(radu): if we don't get more tokens in time, fall back to a "backup"
 		// rate.
 		cfg.NewRate = 0
-		cfg.NotifyStartTime = c.run.now
+		cfg.NotifyThreshold = notifyThreshold
 
 		c.run.lastDeadline = time.Time{}
 	} else {
@@ -386,7 +417,16 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		deadline := c.run.now.Add(resp.TrickleDuration)
 
 		cfg.NewRate = tenantcostmodel.RU(granted / resp.TrickleDuration.Seconds())
-		cfg.NotifyStartTime = deadline.Add(-anticipation)
+
+		timerDuration := resp.TrickleDuration - anticipation
+		if timerDuration <= 0 {
+			timerDuration = (resp.TrickleDuration + 1) / 2
+		}
+
+		c.run.setupNotificationTimer = c.timeSource.NewTimer()
+		c.run.setupNotificationTimer.Reset(timerDuration)
+		c.run.setupNotificationCh = c.run.setupNotificationTimer.Ch()
+		c.run.setupNotificationThreshold = notifyThreshold
 
 		c.run.lastDeadline = deadline
 	}
@@ -415,10 +455,12 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 		case <-tickerCh:
 			c.updateRunState(ctx)
 			c.updateAvgRUPerSec()
-			c.limiter.Update(c.run.now)
 			if c.run.requestNeedsRetry || c.shouldReportConsumption() {
 				c.run.requestNeedsRetry = false
 				c.sendTokenBucketRequest(ctx)
+			}
+			if c.testInstr != nil {
+				c.testInstr.Event(c.run.now, TickProcessed)
 			}
 
 		case resp := <-c.responseChan:
@@ -426,18 +468,34 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 			if resp != nil {
 				c.updateRunState(ctx)
 				c.handleTokenBucketResponse(ctx, resp)
+				if c.testInstr != nil {
+					c.testInstr.Event(c.run.now, TokenBucketResponseProcessed)
+				}
 			} else {
 				// A nil response indicates a failure (which would have been logged).
 				c.run.requestNeedsRetry = true
 			}
 
+		case <-c.run.setupNotificationCh:
+			c.run.setupNotificationTimer = nil
+			c.run.setupNotificationCh = nil
+
+			c.updateRunState(ctx)
+			c.limiter.SetupNotification(c.run.now, c.run.setupNotificationThreshold)
+
 		case <-c.lowRUNotifyChan:
+			c.updateRunState(ctx)
 			if !c.run.requestInProgress {
-				c.updateRunState(ctx)
 				c.sendTokenBucketRequest(ctx)
+			} else {
+				c.run.notificationReceivedDuringRequest = true
+			}
+			if c.testInstr != nil {
+				c.testInstr.Event(c.run.now, LowRUNotification)
 			}
 
 		case <-c.stopper.ShouldQuiesce():
+			c.limiter.Close()
 			// TODO(radu): send one last request to update consumption.
 			return
 		}

@@ -82,7 +82,7 @@ func TestTokenBucket(t *testing.T) {
 		select {
 		case <-ch:
 		default:
-			t.Error("unexpected notification")
+			t.Error("expected notification")
 		}
 	}
 
@@ -90,29 +90,21 @@ func TestTokenBucket(t *testing.T) {
 	args := tokenBucketReconfigureArgs{
 		NewRate:         10,
 		NotifyThreshold: 5,
-		NotifyStartTime: ts.Now().Add(4 * time.Second),
 	}
 	tb.Reconfigure(ts.Now(), args)
 
 	checkNoNotification()
 	ts.Advance(1 * time.Second)
 	check(30)
-	fulfill(30)
-	// No notification; it's not after the start time.
-	checkNoNotification()
-	check(0)
-
-	ts.Advance(4 * time.Second)
-	check(40)
+	fulfill(20)
 	// No notification: we did not go below the threshold.
-	fulfill(30)
 	checkNoNotification()
 	// Now we should get a notification.
 	fulfill(8)
 	checkNotification()
 	check(2)
 
-	// We only get one notification (until we Reconfigure).
+	// We only get one notification (until we Reconfigure or StartNotification).
 	fulfill(1)
 	checkNoNotification()
 
@@ -122,7 +114,6 @@ func TestTokenBucket(t *testing.T) {
 		TokenAdjustment: 10,
 		NewRate:         10,
 		NotifyThreshold: 5,
-		NotifyStartTime: ts.Now(),
 	}
 	tb.Reconfigure(ts.Now(), args)
 	check(11)
@@ -131,18 +122,17 @@ func TestTokenBucket(t *testing.T) {
 	}
 	checkNotification()
 
-	// Verify that Update can trigger a notification.
 	args = tokenBucketReconfigureArgs{
+		TokenAdjustment: 80,
 		NewRate:         1,
-		NotifyThreshold: 100,
-		NotifyStartTime: ts.Now().Add(2 * time.Second),
 	}
 	tb.Reconfigure(ts.Now(), args)
+	check(91)
 	ts.Advance(1 * time.Second)
-	tb.Update(ts.Now())
-	checkNoNotification()
 
-	ts.Advance(2 * time.Second)
-	tb.Update(ts.Now())
+	checkNoNotification()
+	tb.SetupNotification(ts.Now(), 50)
+	checkNoNotification()
+	fulfill(60)
 	checkNotification()
 }
