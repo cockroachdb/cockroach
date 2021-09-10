@@ -72,7 +72,7 @@ type tShim interface {
 // restrictions.
 func Scope(t tShim) *TestLogScope {
 	if logging.showLogs {
-		return newLogScope(t, false /* use files */)
+		return newLogScope(t, false /* mostly inline */)
 	}
 
 	scope := ScopeWithoutShowLogs(t)
@@ -96,10 +96,10 @@ func Scope(t tShim) *TestLogScope {
 // TestLogScope.
 func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	t.Helper()
-	return newLogScope(t, true /* use files */)
+	return newLogScope(t, true /* mostly inline */)
 }
 
-func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
+func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	t.Helper()
 	sc = &TestLogScope{}
 
@@ -148,20 +148,16 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 		}
 	}()
 
-	var fileDir *string
-	if useFiles {
-		tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		// Remember the directory name for the Close() function.
-		sc.logDir = tempDir
-		fileDir = &sc.logDir
+	tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
+	if err != nil {
+		t.Fatal(err)
 	}
+	// Remember the directory name for the Close() function.
+	sc.logDir = tempDir
 
 	// Obtain the standard test configuration, with the configured
 	// destination directory.
-	cfg, err := getTestConfig(fileDir)
+	cfg, err := getTestConfig(&sc.logDir, mostlyInline)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,15 +173,13 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 		t.Fatal(err)
 	}
 
-	if useFiles {
-		t.Logf("test logs captured to: %s", *fileDir)
-	}
+	t.Logf("test logs captured to: %s", sc.logDir)
 	return sc
 }
 
 // getTestConfig initialize the logging configuration to parameters
 // suitable for use in tests.
-func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
+func getTestConfig(fileDir *string, mostlyInline bool) (testConfig logconfig.Config, err error) {
 	testConfig = logconfig.DefaultConfig()
 
 	forcePanicsToStderr := func(c *logconfig.Config) {
@@ -216,6 +210,7 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 
 	if fileDir == nil {
 		// File output is disabled; we use stderr for everything.
+		// This happens e.g. when a test is not using log.Scope().
 
 		// All messages go to stderr.
 		testConfig.Sinks.Stderr.Filter = severity.INFO
@@ -227,7 +222,13 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 	} else {
 		// Output to files enabled.
 
-		// Split the STORAGE and HEALTH channels into separate files.
+		// We have two desired cases: -show-logs (mostlyInline = true)
+		// and without -show-logs (default, mostlyInline = false).
+
+		// In both cases, we emit output to files, with the STORAGE and
+		// HEALTH channels split into separate files.  We do keep a copy
+		// of HEALTH and STORAGE warning and errors on the main file
+		// though.
 		testConfig.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
 			"storage": {
 				Channels: logconfig.SelectChannels(channel.STORAGE),
@@ -246,14 +247,29 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 			},
 		}
 
-		// Even though we use file output, make all logged fatal
-		// calls go to the external stderr, in addition to the log file.
-		//
-		// We want FATAL messages because those don't pertain to a
-		// specific test, but rather to the whole package / go test
-		// invocation because they stop the execution. They elucidate
-		// why the 'go test' invocation fails prematurely.
-		testConfig.Sinks.Stderr.Filter = severity.FATAL
+		// Then we need to choose what to do with the stderr sink.
+		if mostlyInline {
+			// User requested -show-logs.
+			//
+			// Include everything on stderr except STORAGE and HEALTH at
+			// severity below WARNING.
+			testConfig.Sinks.Stderr.Filter = severity.INFO
+			testConfig.Sinks.Stderr.Channels.Filters = map[logpb.Severity]logconfig.ChannelList{
+				logpb.Severity_INFO:    {Channels: selectAllChannelsExceptStorageAndHealth()},
+				logpb.Severity_WARNING: {Channels: []logpb.Channel{channel.HEALTH, channel.STORAGE}},
+			}
+		} else {
+			// Preferring file output only.
+			//
+			// Even though we use file output, make all logged fatal
+			// calls go to the external stderr, in addition to the log file.
+			//
+			// We want FATAL messages because those don't pertain to a
+			// specific test, but rather to the whole package / go test
+			// invocation because they stop the execution. They elucidate
+			// why the 'go test' invocation fails prematurely.
+			testConfig.Sinks.Stderr.Filter = severity.FATAL
+		}
 	}
 
 	if skip.UnderBench() {
@@ -269,6 +285,20 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 
 	err = testConfig.Validate(fileDir)
 	return testConfig, err
+}
+
+func selectAllChannelsExceptStorageAndHealth() []logpb.Channel {
+	res := logconfig.SelectAllChannels()
+	k := 0
+	for _, ch := range res {
+		if ch == channel.HEALTH || ch == channel.STORAGE {
+			continue
+		}
+		res[k] = ch
+		k++
+	}
+	res = res[:k]
+	return res
 }
 
 // SetupSingleFileLogging modifies the configuration of the Scope
