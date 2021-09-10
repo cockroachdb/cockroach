@@ -561,7 +561,7 @@ func (b *Builder) buildFunction(
 	})
 
 	if f.ResolvedOverload().Class == tree.GeneratorClass {
-		return b.finishBuildGeneratorFunction(f, out, inScope, outScope, outCol)
+		return b.finishBuildGeneratorFunction(f, def, out, inScope, outScope, outCol)
 	}
 
 	// Add a dependency on sequences that are used as a string argument.
