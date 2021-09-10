@@ -10,9 +10,9 @@ package tenantcostclient_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 // TestDataDriven tests the tenant-side cost controller in an isolated setting.
@@ -69,18 +70,41 @@ type testState struct {
 	cpuUsage time.Duration
 
 	requestDoneCh map[string]chan struct{}
+
+	eventsCh chan event
+}
+
+type event struct {
+	time time.Time
+	typ  tenantcostclient.TestEventType
+}
+
+var _ tenantcostclient.TestInstrumentation = (*testState)(nil)
+
+// Event is part of tenantcostclient.TestInstrumentation.
+func (ts *testState) Event(now time.Time, typ tenantcostclient.TestEventType) {
+	ev := event{
+		time: now,
+		typ:  typ,
+	}
+	select {
+	case ts.eventsCh <- ev:
+	default:
+		panic("events channel full")
+	}
 }
 
 const timeFormat = "15:04:05.000"
 
 var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
-const timeout = 2 * time.Second
+const timeout = 10 * time.Second
 
 func (ts *testState) start(t *testing.T) {
 	ctx := context.Background()
 
 	ts.requestDoneCh = make(map[string]chan struct{})
+	ts.eventsCh = make(chan event, 10000)
 
 	ts.timeSrc = timeutil.NewManualTime(t0)
 
@@ -97,6 +121,7 @@ func (ts *testState) start(t *testing.T) {
 		roachpb.MakeTenantID(5),
 		ts.provider,
 		ts.timeSrc,
+		ts,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -146,14 +171,16 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 var testStateCommands = map[string]func(
 	*testState, *testing.T, *datadriven.TestData, cmdArgs,
 ) string{
-	"read":          (*testState).read,
-	"write":         (*testState).write,
-	"await":         (*testState).await,
-	"not-completed": (*testState).notCompleted,
-	"advance":       (*testState).advance,
-	"cpu":           (*testState).cpu,
-	"usage":         (*testState).usage,
-	"throttle":      (*testState).throttle,
+	"read":           (*testState).read,
+	"write":          (*testState).write,
+	"await":          (*testState).await,
+	"not-completed":  (*testState).notCompleted,
+	"advance":        (*testState).advance,
+	"wait-for-event": (*testState).waitForEvent,
+	"timers":         (*testState).timers,
+	"cpu":            (*testState).cpu,
+	"usage":          (*testState).usage,
+	"throttle":       (*testState).throttle,
 }
 
 func (ts *testState) fireRequest(
@@ -235,12 +262,12 @@ func (ts *testState) write(t *testing.T, d *datadriven.TestData, args cmdArgs) s
 func (ts *testState) await(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
 	ch, ok := ts.requestDoneCh[args.label]
 	if !ok {
-		d.Fatalf(t, "unknown label %v", args.label)
+		d.Fatalf(t, "unknown label %q", args.label)
 	}
 	select {
 	case <-ch:
 	case <-time.After(timeout):
-		d.Fatalf(t, "await(%v) timed out", args.label)
+		d.Fatalf(t, "await(%q) timed out", args.label)
 	}
 	delete(ts.requestDoneCh, args.label)
 	return ""
@@ -278,6 +305,70 @@ func (ts *testState) advance(t *testing.T, d *datadriven.TestData, args cmdArgs)
 	}
 	ts.timeSrc.Advance(dur)
 	return ts.timeSrc.Now().Format(timeFormat)
+}
+
+// waitForEvent waits until the tenant controller reports the given event type,
+// at the current time.
+func (ts *testState) waitForEvent(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+	typs := map[string]tenantcostclient.TestEventType{
+		"tick":                  tenantcostclient.TickProcessed,
+		"low-ru":                tenantcostclient.LowRUNotification,
+		"token-bucket-response": tenantcostclient.TokenBucketResponseProcessed,
+	}
+	typ, ok := typs[d.Input]
+	if !ok {
+		d.Fatalf(t, "unknown event type %s (supported types: %v)", d.Input, typs)
+	}
+
+	now := ts.timeSrc.Now()
+	for {
+		select {
+		case ev := <-ts.eventsCh:
+			if ev.time == now && ev.typ == typ {
+				return ""
+			}
+			// Drop the event.
+
+		case <-time.After(timeout):
+			d.Fatalf(t, "did not receive event %s", d.Input)
+		}
+	}
+}
+
+// timers waits for the set of open timers to match the expected output.
+// timers is critical to avoid synchronization problems in testing. The command
+// outputs the set of timers in increasing order with each timer's deadline on
+// its own line.
+//
+// The following example would wait for there to be two outstanding timers at
+// 00:00:01.000 and 00:00:02.000.
+//
+//  timers
+//  ----
+//  00:00:01.000
+//  00:00:02.000
+//
+func (ts *testState) timers(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+	exp := strings.TrimSpace(d.Expected)
+	if err := testutils.SucceedsSoonError(func() error {
+		got := timesToStrings(ts.timeSrc.Timers())
+		gotStr := strings.Join(got, "\n")
+		if gotStr != exp {
+			return errors.Errorf("got: %q, exp: %q", gotStr, exp)
+		}
+		return nil
+	}); err != nil {
+		d.Fatalf(t, "failed to find expected timers: %v", err)
+	}
+	return d.Expected
+}
+
+func timesToStrings(times []time.Time) []string {
+	strs := make([]string, len(times))
+	for i, t := range times {
+		strs[i] = t.Format(timeFormat)
+	}
+	return strs
 }
 
 func (ts *testState) throttle(t *testing.T, d *datadriven.TestData, args cmdArgs) string {

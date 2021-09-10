@@ -21,9 +21,9 @@ import (
 type tokenBucket struct {
 	// -- Static fields --
 
-	// Once the current time is at or after notifyStartTime and the available RUs
-	// are below the notifyThreshold, we do a (non-blocking) send on the channel.
-	notifyCh chan<- struct{}
+	// Once the available RUs are below the notifyThreshold or a request cannot
+	// be immediately fulfilled, we do a (non-blocking) send on this channel.
+	notifyCh chan struct{}
 
 	// -- Dynamic fields --
 	// Protected by the AbstractPool's lock. All changes should happen either
@@ -31,7 +31,6 @@ type tokenBucket struct {
 
 	// See notifyCh. A threshold of zero disables notifications.
 	notifyThreshold tenantcostmodel.RU
-	notifyStartTime time.Time
 
 	// Refill rate, in RU/s.
 	rate tenantcostmodel.RU
@@ -42,36 +41,29 @@ type tokenBucket struct {
 }
 
 func (tb *tokenBucket) Init(
-	now time.Time, notifyCh chan<- struct{}, rate, available tenantcostmodel.RU,
+	now time.Time, notifyCh chan struct{}, rate, available tenantcostmodel.RU,
 ) {
 	*tb = tokenBucket{
 		notifyCh:        notifyCh,
 		notifyThreshold: 0,
-		notifyStartTime: time.Time{},
 		rate:            rate,
 		available:       available,
 		lastUpdated:     now,
 	}
 }
 
-// Update accounts for the passing of time. It is automatically called by other
-// methods, but can also be called directly to potentially trigger a
-// notification.
-func (tb *tokenBucket) Update(now time.Time) {
+// update accounts for the passing of time.
+func (tb *tokenBucket) update(now time.Time) {
 	if since := now.Sub(tb.lastUpdated); since > 0 {
 		tb.available += tb.rate * tenantcostmodel.RU(since.Seconds())
 		tb.lastUpdated = now
-		// The number of tokens didn't go down, but it's possible we just passed the
-		// notifyStartTime.
-		tb.maybeNotify(now)
 	}
 }
 
 // notify tries to send a non-blocking notification on notifyCh and disables
-// further notifications (until the next Reconfigure).
+// further notifications (until the next Reconfigure or StartNotification).
 func (tb *tokenBucket) notify() {
 	tb.notifyThreshold = 0
-	tb.notifyStartTime = time.Time{}
 	select {
 	case tb.notifyCh <- struct{}{}:
 	default:
@@ -81,7 +73,7 @@ func (tb *tokenBucket) notify() {
 // maybeNotify checks if it's time to send the notification and if so, performs
 // the notification.
 func (tb *tokenBucket) maybeNotify(now time.Time) {
-	if tb.notifyThreshold > 0 && tb.available < tb.notifyThreshold && !now.Before(tb.notifyStartTime) {
+	if tb.notifyThreshold > 0 && tb.available < tb.notifyThreshold {
 		tb.notify()
 	}
 }
@@ -90,7 +82,7 @@ func (tb *tokenBucket) maybeNotify(now time.Time) {
 // increasing or decreasing them. The amount can become negative (indicating
 // debt).
 func (tb *tokenBucket) AdjustTokens(now time.Time, delta tenantcostmodel.RU) {
-	tb.Update(now)
+	tb.update(now)
 	tb.available += delta
 	tb.maybeNotify(now)
 }
@@ -101,18 +93,29 @@ type tokenBucketReconfigureArgs struct {
 	NewRate tenantcostmodel.RU
 
 	NotifyThreshold tenantcostmodel.RU
-	NotifyStartTime time.Time
 }
 
 // Reconfigure changes the rate, optionally adjusts the available tokens and
 // configures the next notification.
 func (tb *tokenBucket) Reconfigure(now time.Time, args tokenBucketReconfigureArgs) {
-	tb.Update(now)
+	tb.update(now)
+	// If we already produced a notification that wasn't processed, drain it. This
+	// not racy as long as this code does not run in parallel with the code that
+	// receives from notifyCh.
+	select {
+	case <-tb.notifyCh:
+	default:
+	}
 	tb.available += args.TokenAdjustment
 	tb.rate = args.NewRate
 	tb.notifyThreshold = args.NotifyThreshold
-	tb.notifyStartTime = args.NotifyStartTime
 	tb.maybeNotify(now)
+}
+
+// SetupNotification enables the notification at the given threshold.
+func (tb *tokenBucket) SetupNotification(now time.Time, threshold tenantcostmodel.RU) {
+	tb.update(now)
+	tb.notifyThreshold = threshold
 }
 
 // TryToFulfill either removes the given amount if is available, or returns a
@@ -120,7 +123,7 @@ func (tb *tokenBucket) Reconfigure(now time.Time, args tokenBucketReconfigureArg
 func (tb *tokenBucket) TryToFulfill(
 	now time.Time, amount tenantcostmodel.RU,
 ) (fulfilled bool, tryAgainAfter time.Duration) {
-	tb.Update(now)
+	tb.update(now)
 
 	if amount <= tb.available {
 		tb.available -= amount
@@ -129,8 +132,8 @@ func (tb *tokenBucket) TryToFulfill(
 	}
 
 	// We have run out of available tokens; notify if we haven't already. This is
-	// necessary if the amount is larger than the notify threshold.
-	if tb.notifyThreshold > 0 && !now.Before(tb.notifyStartTime) {
+	// possible if we have more than the notifyThreshold available.
+	if tb.notifyThreshold > 0 {
 		tb.notify()
 	}
 
@@ -152,6 +155,6 @@ func (tb *tokenBucket) TryToFulfill(
 // AvailableTokens returns the current number of available RUs. This can be
 // negative if we accumulated debt.
 func (tb *tokenBucket) AvailableTokens(now time.Time) tenantcostmodel.RU {
-	tb.Update(now)
+	tb.update(now)
 	return tb.available
 }
