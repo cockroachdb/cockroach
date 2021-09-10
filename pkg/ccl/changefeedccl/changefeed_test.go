@@ -4581,3 +4581,56 @@ func TestChangefeedCaseInsensitiveOpts(t *testing.T) {
 	}
 	t.Run(`sinkless`, sinklessTest(testFn))
 }
+
+func TestExportAsChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		sqlDB.Exec(t, "CREATE TABLE tbl (a INT PRIMARY KEY, b STRING)")
+		sqlDB.Exec(t, "INSERT INTO tbl VALUES (1, 'one'), (2, 'two'), (3, 'three')")
+		var tsAfterInitialInsert string
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsAfterInitialInsert)
+
+		t.Run("now", func(t *testing.T) {
+			exportFeed := feed(t, f, "EXPORT TABLE tbl INTO '<placeholder>'")
+			// check for paused status on failure
+			defer closeFeed(t, exportFeed)
+			assertPayloads(t, exportFeed, []string{
+				`tbl: [1]->{"after": {"a": 1, "b": "one"}}`,
+				`tbl: [2]->{"after": {"a": 2, "b": "two"}}`,
+				`tbl: [3]->{"after": {"a": 3, "b": "three"}}`,
+			})
+
+			jf := exportFeed.(cdctest.EnterpriseTestFeed)
+			require.NoError(t, jf.WaitForStatus(func(s jobs.Status) bool {
+				return s == jobs.StatusSucceeded
+			}))
+		})
+
+		t.Run("asof", func(t *testing.T) {
+			sqlDB.Exec(t, "INSERT INTO tbl VALUES (4, 'four')")
+			exportFeed := feed(t, f,
+				fmt.Sprintf("EXPORT TABLE tbl AS OF SYSTEM TIME '%s' INTO '<placeholder>'",
+					tsAfterInitialInsert))
+			// check for paused status on failure
+			defer closeFeed(t, exportFeed)
+			assertPayloads(t, exportFeed, []string{
+				`tbl: [1]->{"after": {"a": 1, "b": "one"}}`,
+				`tbl: [2]->{"after": {"a": 2, "b": "two"}}`,
+				`tbl: [3]->{"after": {"a": 3, "b": "three"}}`,
+			})
+
+			jf := exportFeed.(cdctest.EnterpriseTestFeed)
+			require.NoError(t, jf.WaitForStatus(func(s jobs.Status) bool {
+				return s == jobs.StatusSucceeded
+			}))
+		})
+	}
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
+}

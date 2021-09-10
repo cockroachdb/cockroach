@@ -58,6 +58,9 @@ type Config struct {
 	// been seen.
 	NeedsInitialScan bool
 
+	// If true, stop kvfeed after completing backfill.
+	BackfillOnly bool
+
 	// InitialHighWater is the timestamp after which new events are guaranteed to
 	// be produced.
 	InitialHighWater hlc.Timestamp
@@ -90,6 +93,7 @@ func Run(ctx context.Context, cfg Config) error {
 			kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, cfg.Metrics))
 	}
 
+	// TODO(yevgeniy): This is a kitchen sink.  Refactor.
 	f := newKVFeed(
 		cfg.Writer, cfg.Spans, cfg.BackfillCheckpoint,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
@@ -97,6 +101,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.InitialHighWater,
 		cfg.Codec,
 		cfg.SchemaFeed,
+		cfg.BackfillOnly,
 		sc, pff, bf, cfg.Knobs)
 
 	g := ctxgroup.WithContext(ctx)
@@ -111,16 +116,21 @@ func Run(ctx context.Context, cfg Config) error {
 	// changefeedAggregator to exit even if all values haven't been read out of the
 	// provided buffer.
 	var scErr schemaChangeDetectedError
-	if !errors.As(err, &scErr) {
+	isBackfillCompleted := errors.Is(err, errBackfillCompleted)
+	if !(isBackfillCompleted || errors.As(err, &scErr)) {
 		// Regardless of whether we exited KV feed with or without an error, that error
-		// is not a schema change; so, close the writer and return.
+		// is not a schema change or backfill; so, close the writer and return.
 		return errors.CombineErrors(err, f.writer.Close(ctx))
 	}
 
-	log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
+	if isBackfillCompleted {
+		log.Info(ctx, "stopping kv feed: backfill completed")
+	} else {
+		log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
+	}
 
 	// Drain the writer before we close it so that all events emitted prior to schema change
-	// boundary are consumed by the change aggregator.
+	// or backfill completion boundary are consumed by the change aggregator.
 	// Regardless of whether drain succeeds, we must also close the buffer to release
 	// any resources, and to let the consumer (changeAggregator) know that no more writes
 	// are expected so that it can transition to a draining state.
@@ -158,6 +168,9 @@ type kvFeed struct {
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
+	// if true, exit kvfeed after completing backfill.
+	backfillOnly bool
+
 	// These dependencies are made available for test injection.
 	bufferFactory func() kvevent.Buffer
 	tableFeed     schemafeed.SchemaFeed
@@ -177,6 +190,7 @@ func newKVFeed(
 	initialHighWater hlc.Timestamp,
 	codec keys.SQLCodec,
 	tf schemafeed.SchemaFeed,
+	backfillOnly bool,
 	sc kvScanner,
 	pff physicalFeedFactory,
 	bf func() kvevent.Buffer,
@@ -192,6 +206,7 @@ func newKVFeed(
 		schemaChangeEvents:  schemaChangeEvents,
 		schemaChangePolicy:  schemaChangePolicy,
 		codec:               codec,
+		backfillOnly:        backfillOnly,
 		tableFeed:           tf,
 		scanner:             sc,
 		physicalFeed:        pff,
@@ -200,7 +215,18 @@ func newKVFeed(
 	}
 }
 
+var errBackfillCompleted = errors.New("backfill completed")
+
 func (f *kvFeed) run(ctx context.Context) (err error) {
+	emitResolved := func(ts hlc.Timestamp, boundary jobspb.ResolvedSpan_BoundaryType) error {
+		for _, sp := range f.spans {
+			if err := f.writer.Add(ctx, kvevent.MakeResolvedEvent(sp, ts, boundary)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	// highWater represents the point in time at or before which we know
 	// we've seen all events or is the initial starting time of the feed.
 	highWater := f.initialHighWater
@@ -210,7 +236,15 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 			return err
 		}
 
+		if f.backfillOnly {
+			if err := emitResolved(f.initialHighWater, jobspb.ResolvedSpan_EXIT); err != nil {
+				return err
+			}
+			return errBackfillCompleted
+		}
+
 		highWater, err = f.runUntilTableEvent(ctx, highWater)
+
 		if err != nil {
 			return err
 		}
@@ -227,13 +261,8 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		// we should do so.
 		if f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyNoBackfill ||
 			boundaryType == jobspb.ResolvedSpan_RESTART {
-			for _, sp := range f.spans {
-				if err := f.writer.Add(
-					ctx,
-					kvevent.MakeResolvedEvent(sp, highWater, boundaryType),
-				); err != nil {
-					return err
-				}
+			if err := emitResolved(highWater, boundaryType); err != nil {
+				return err
 			}
 		}
 

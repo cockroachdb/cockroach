@@ -241,11 +241,31 @@ func changefeedPlanHook(
 			}
 		}
 
+		// TODO(yevgeniy): Validate options when running in export mode; most of the
+		// options dealing with cursor/initial scan, etc are not applicable.
+		isRunningExport := false
+		if export := changefeedStmt.ExportSpec; export != nil {
+			isRunningExport = true
+
+			if export.AsOf.Expr != nil {
+				// If asOf clause specified, evaluate that and use that timestamp
+				// as the statement time.  This will cause the table to be backfilled,
+				// up to that time.
+				var err error
+				asOf, err := p.EvalAsOfTimestamp(ctx, export.AsOf)
+				if err != nil {
+					return err
+				}
+				statementTime = asOf.Timestamp
+			}
+		}
+
 		details := jobspb.ChangefeedDetails{
 			Targets:       targets,
 			Opts:          opts,
 			SinkURI:       sinkURI,
 			StatementTime: statementTime,
+			ExportMode:    isRunningExport,
 		}
 		progress := jobspb.Progress{
 			Progress: &jobspb.Progress_HighWater{},
@@ -461,8 +481,9 @@ func changefeedJobDescription(
 		return "", err
 	}
 	c := &tree.CreateChangefeed{
-		Targets: changefeed.Targets,
-		SinkURI: tree.NewDString(cleanedSinkURI),
+		Targets:    changefeed.Targets,
+		SinkURI:    tree.NewDString(cleanedSinkURI),
+		ExportSpec: changefeed.ExportSpec,
 	}
 	for k, v := range opts {
 		if k == changefeedbase.OptWebhookAuthHeader {
