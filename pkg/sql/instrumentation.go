@@ -568,6 +568,10 @@ func (m execNodeTraceMetadata) annotateExplain(
 				nodeStats.KVContentionTime.MaybeAdd(stats.KV.ContentionTime)
 				nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
 				nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
+				nodeStats.StepCount.MaybeAdd(stats.KV.NumInterfaceSteps)
+				nodeStats.InternalStepCount.MaybeAdd(stats.KV.NumInternalSteps)
+				nodeStats.SeekCount.MaybeAdd(stats.KV.NumInterfaceSeeks)
+				nodeStats.InternalSeekCount.MaybeAdd(stats.KV.NumInternalSeeks)
 				nodeStats.VectorizedBatchCount.MaybeAdd(stats.Output.NumBatches)
 			}
 			// If we didn't get statistics for all processors, we don't show the

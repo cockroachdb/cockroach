@@ -2577,3 +2577,14 @@ message ContentionEvent {
   google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
 }
+
+// ScanStats is a message that will be attached to BatchResponses containing
+// information about what happened during each scan and get in the request.
+message ScanStats {
+  option (gogoproto.goproto_stringer) = false;
+
+  uint64 num_interface_seeks = 1;
+  uint64 num_internal_seeks = 2;
+  uint64 num_interface_steps = 3;
+  uint64 num_internal_steps = 4;
+}

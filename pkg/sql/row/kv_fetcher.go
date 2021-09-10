@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -37,8 +37,8 @@ type KVFetcher struct {
 	newSpan       bool
 
 	// Observability fields.
-	mu struct {
-		syncutil.Mutex
+	// Note: these need to be read via an atomic op.
+	atomics struct {
 		bytesRead int64
 	}
 }
@@ -114,9 +114,7 @@ func (f *KVFetcher) GetBytesRead() int64 {
 	if f == nil {
 		return 0
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.mu.bytesRead
+	return atomic.LoadInt64(&f.atomics.bytesRead)
 }
 
 // MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
@@ -192,9 +190,12 @@ func (f *KVFetcher) NextKV(
 			return false, kv, false, nil
 		}
 		f.newSpan = true
-		f.mu.Lock()
-		f.mu.bytesRead += int64(len(f.batchResponse))
-		f.mu.Unlock()
+		nBytes := len(f.batchResponse)
+		for i := range f.kvs {
+			nBytes += len(f.kvs[i].Key)
+			nBytes += len(f.kvs[i].Value.RawBytes)
+		}
+		atomic.AddInt64(&f.atomics.bytesRead, int64(nBytes))
 	}
 }
 

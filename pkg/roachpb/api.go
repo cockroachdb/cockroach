@@ -1628,3 +1628,14 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 		c.SQLPodsCPUSeconds -= other.SQLPodsCPUSeconds
 	}
 }
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal)",
+		s.NumInterfaceSteps, s.NumInternalSteps, s.NumInterfaceSeeks, s.NumInternalSeeks)
+}
+
+// String implements fmt.Stringer.
+func (s *ScanStats) String() string {
+	return redact.StringWithoutMarkers(s)
+}

@@ -73,7 +73,7 @@ export const TableStatistics: React.FC<TableStatistics> = ({
   );
 
   let toolTipText = ` history is cleared once an hour by default, which can be configured with 
-  the cluster setting diagnostics.sql_stat_reset.interval. Clicking ‘Clear SQL stats’ will reset SQL stats 
+  the cluster setting diagnostics.sql_stat_reset.interval. Clicking ‘clear SQL stats’ will reset SQL stats 
   on the statements and transactions pages.`;
 
   switch (tooltipType) {
@@ -104,7 +104,9 @@ export const TableStatistics: React.FC<TableStatistics> = ({
         <div className={lastCleared}>
           {renderLastCleared(lastReset)}
           {"  "}-{"  "}
-          <a onClick={resetSQLStats}>Clear SQL Stats</a>
+          <a className={cxStats("action")} onClick={resetSQLStats}>
+            clear SQL stats
+          </a>
         </div>
       </div>
     </div>
