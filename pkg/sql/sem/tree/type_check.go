@@ -123,7 +123,7 @@ const (
 	// (RejectAggregates notwithstanding).
 	RejectNestedAggregates
 
-	// RejectNestedWindows rejects any use of window functions inside the
+	// RejectNestedWindowFunctions rejects any use of window functions inside the
 	// argument list of another window function.
 	RejectNestedWindowFunctions
 

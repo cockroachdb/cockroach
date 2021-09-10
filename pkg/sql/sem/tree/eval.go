@@ -284,12 +284,13 @@ type TwoArgFn func(*EvalContext, Datum, Datum) (Datum, error)
 
 // BinOp is a binary operator.
 type BinOp struct {
-	LeftType     *types.T
-	RightType    *types.T
-	ReturnType   *types.T
-	NullableArgs bool
-	Fn           TwoArgFn
-	Volatility   Volatility
+	LeftType          *types.T
+	RightType         *types.T
+	ReturnType        *types.T
+	NullableArgs      bool
+	Fn                TwoArgFn
+	Volatility        Volatility
+	PreferredOverload bool
 
 	types   TypeList
 	retType ReturnTyper
@@ -311,8 +312,8 @@ func (op *BinOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (*BinOp) preferred() bool {
-	return false
+func (op *BinOp) preferred() bool {
+	return op.PreferredOverload
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
@@ -1891,7 +1892,8 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
-			Volatility: VolatilityImmutable,
+			PreferredOverload: true,
+			Volatility:        VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -1952,7 +1954,8 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 				}
 				return NewDString(*text), nil
 			},
-			Volatility: VolatilityImmutable,
+			PreferredOverload: true,
+			Volatility:        VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -2026,7 +2029,7 @@ type CmpOp struct {
 
 	Volatility Volatility
 
-	isPreferred bool
+	PreferredOverload bool
 }
 
 func (op *CmpOp) params() TypeList {
@@ -2044,7 +2047,7 @@ func (op *CmpOp) returnType() ReturnTyper {
 }
 
 func (op *CmpOp) preferred() bool {
-	return op.isPreferred
+	return op.PreferredOverload
 }
 
 func cmpOpFixups(
@@ -2319,9 +2322,9 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 			RightType:    types.Unknown,
 			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
-			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
-			isPreferred: true,
-			Volatility:  VolatilityLeakProof,
+			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL.
+			PreferredOverload: true,
+			Volatility:        VolatilityLeakProof,
 		},
 		&CmpOp{
 			LeftType:     types.AnyArray,
