@@ -382,7 +382,7 @@ func (b *Builder) getCTECols(cteScope *scope, name tree.AliasClause) physical.Pr
 		))
 	}
 	for i := range presentation {
-		presentation[i].Alias = string(name.Cols[i])
+		presentation[i].Alias = string(name.Cols[i].Name)
 	}
 	return presentation
 }

@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -170,6 +171,9 @@ func (ps *projectSetProcessor) nextInputRow() (
 // values. It returns true if any of the generators produce new values.
 func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err error) {
 	colIdx := len(ps.input.OutputTypes())
+	for i, output := range ps.input.OutputTypes() {
+		fmt.Printf("output type: %d: %s\n", i+1, output.SQLString())
+	}
 	for i := range ps.exprHelpers {
 		// Do we have a SRF?
 		if gen := ps.gens[i]; gen != nil {

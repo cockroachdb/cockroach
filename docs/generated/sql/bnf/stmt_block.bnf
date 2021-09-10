@@ -1545,7 +1545,7 @@ kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
 
 table_elem ::=
-	column_def
+	column_table_def
 	| index_def
 	| family_def
 	| table_constraint opt_validate_behavior
@@ -2091,7 +2091,7 @@ kv_option ::=
 	| 'SCONST' '=' string_or_placeholder
 	| 'SCONST'
 
-column_def ::=
+column_table_def ::=
 	column_name typename col_qual_list
 
 index_def ::=
@@ -2186,7 +2186,7 @@ table_ref ::=
 	| 'LATERAL' select_with_parens opt_ordinality opt_alias_clause
 	| joined_table
 	| '(' joined_table ')' opt_ordinality alias_clause
-	| func_table opt_ordinality opt_alias_clause
+	| func_table opt_ordinality opt_func_alias_clause
 	| 'LATERAL' func_table opt_ordinality opt_alias_clause
 	| '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
 
@@ -2497,8 +2497,8 @@ replication_options ::=
 	| 'DETACHED'
 
 common_table_expr ::=
-	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
-	| table_alias_name opt_column_list 'AS' materialize_clause '(' preparable_stmt ')'
+	table_alias_name opt_col_def_list_no_types 'AS' '(' preparable_stmt ')'
+	| table_alias_name opt_col_def_list_no_types 'AS' materialize_clause '(' preparable_stmt ')'
 
 index_flags_param_list ::=
 	( index_flags_param ) ( ( ',' index_flags_param ) )*
@@ -2599,12 +2599,16 @@ joined_table ::=
 	| table_ref 'NATURAL' 'JOIN' table_ref
 
 alias_clause ::=
-	'AS' table_alias_name opt_column_list
-	| table_alias_name opt_column_list
+	'AS' table_alias_name opt_col_def_list_no_types
+	| table_alias_name opt_col_def_list_no_types
 
 func_table ::=
 	func_expr_windowless
 	| 'ROWS' 'FROM' '(' rowsfrom_list ')'
+
+opt_func_alias_clause ::=
+	func_alias_clause
+	| 
 
 row_source_extension_stmt ::=
 	delete_stmt
@@ -2672,10 +2676,10 @@ user_priority ::=
 alter_table_cmd ::=
 	'RENAME' opt_column column_name 'TO' column_name
 	| 'RENAME' 'CONSTRAINT' column_name 'TO' column_name
-	| 'ADD' column_def
-	| 'ADD' 'IF' 'NOT' 'EXISTS' column_def
-	| 'ADD' 'COLUMN' column_def
-	| 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def
+	| 'ADD' column_table_def
+	| 'ADD' 'IF' 'NOT' 'EXISTS' column_table_def
+	| 'ADD' 'COLUMN' column_table_def
+	| 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_table_def
 	| 'ALTER' opt_column column_name alter_column_default
 	| 'ALTER' opt_column column_name alter_column_on_update
 	| 'ALTER' opt_column column_name alter_column_visible
@@ -2794,6 +2798,10 @@ create_as_col_qual_list ::=
 create_as_constraint_def ::=
 	create_as_constraint_elem
 
+opt_col_def_list_no_types ::=
+	'(' col_def_list_no_types ')'
+	| 
+
 materialize_clause ::=
 	'MATERIALIZED'
 	| 'NOT' 'MATERIALIZED'
@@ -2875,6 +2883,10 @@ join_qual ::=
 
 rowsfrom_list ::=
 	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
+
+func_alias_clause ::=
+	'AS' table_alias_name opt_col_def_list
+	| table_alias_name opt_col_def_list
 
 type_function_name_no_crdb_extra ::=
 	'identifier'
@@ -3073,6 +3085,9 @@ create_as_col_qualification ::=
 create_as_constraint_elem ::=
 	'PRIMARY' 'KEY' '(' create_as_params ')'
 
+col_def_list_no_types ::=
+	( name ) ( ( ',' name ) )*
+
 col_qualification_elem ::=
 	'NOT' 'NULL'
 	| 'NULL'
@@ -3111,7 +3126,10 @@ join_outer ::=
 	| 
 
 rowsfrom_item ::=
-	func_expr_windowless
+	func_expr_windowless opt_func_alias_clause
+
+opt_col_def_list ::=
+	'(' col_def_list ')'
 
 opt_float ::=
 	'(' 'ICONST' ')'
@@ -3245,6 +3263,9 @@ reference_action ::=
 	| 'SET' 'NULL'
 	| 'SET' 'DEFAULT'
 
+col_def_list ::=
+	( col_def ) ( ( ',' col_def ) )*
+
 type_function_name ::=
 	'identifier'
 	| unreserved_keyword
@@ -3295,6 +3316,10 @@ opt_partition_by ::=
 
 create_as_param ::=
 	column_name
+
+col_def ::=
+	name
+	| name typename
 
 frame_extent ::=
 	frame_bound

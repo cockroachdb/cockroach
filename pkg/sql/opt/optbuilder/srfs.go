@@ -12,9 +12,12 @@ package optbuilder
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -72,7 +75,9 @@ var _ tree.TypedExpr = &srf{}
 //
 //    zip([1,2,3], ['a','b']) = [(1,'a'), (2,'b'), (3, null)]
 //
-func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
+func (b *Builder) buildZip(
+	exprs tree.Exprs, inScope *scope, sourceAlias *tree.AliasClause,
+) (outScope *scope) {
 	outScope = inScope.push()
 
 	// We need to save and restore the previous value of the field in
@@ -101,6 +106,13 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			if def, err = funcExpr.Func.Resolve(b.semaCtx.SearchPath); err != nil {
 				panic(err)
 			}
+			fmt.Println("Found a funcexpr in a zip: ", funcExpr.String())
+		}
+
+		if def.ReturnsRecordType {
+			if sourceAlias == nil {
+				panic(pgerror.New(pgcode.Syntax, "a column definition list is required for functions returning \"record\""))
+			}
 		}
 
 		var outCol *scopeColumn
@@ -121,6 +133,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		for j := startCols; j < len(outScope.cols); j++ {
 			cols[j-startCols] = outScope.cols[j].id
 		}
+		fmt.Printf("found %d cols, %#v", len(cols), cols)
 		zip[i] = b.factory.ConstructZipItem(scalar, cols)
 	}
 
@@ -146,6 +159,19 @@ func (b *Builder) finishBuildGeneratorFunction(
 	if outCol != nil {
 		// Single-column return type.
 		b.populateSynthesizedColumn(outCol, fn)
+	} else if b.lastAlias != nil {
+		// If we're building a generator function that returns a record type, like
+		// json_to_record, we need to know the alias that was assigned to the
+		// generator function - without that, we won't know the list of columns
+		// to output.
+		for _, c := range b.lastAlias.Cols {
+			typ, err := tree.ResolveType(b.ctx, c.Type, b.semaCtx.TypeResolver)
+			if err != nil {
+				panic(err)
+			}
+			b.synthesizeColumn(outScope, scopeColName(c.Name), typ, nil, fn)
+		}
+		//f.ResolvedOverload().Generator
 	} else {
 		// Multi-column return type. Use the tuple labels in the SRF's return type
 		// as column aliases.

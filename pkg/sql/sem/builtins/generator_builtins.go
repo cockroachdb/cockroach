@@ -13,6 +13,7 @@ package builtins
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -73,6 +74,14 @@ func genPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 		Class:        tree.GeneratorClass,
 		Category:     categoryGenerator,
 		ReturnLabels: returnLabels,
+	}
+}
+
+func recordGenProps() tree.FunctionProperties {
+	return tree.FunctionProperties{
+		Class:             tree.GeneratorClass,
+		Category:          categoryGenerator,
+		ReturnsRecordType: true,
 	}
 }
 
@@ -314,6 +323,9 @@ var generators = map[string]builtinDefinition{
 		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
 	"jsonb_populate_recordset": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
 		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
+
+	"json_to_record":  makeBuiltin(recordGenProps(), jsonToRecordImpl),
+	"jsonb_to_record": makeBuiltin(recordGenProps(), jsonToRecordImpl),
 
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
@@ -1168,6 +1180,15 @@ var jsonEachTextImpl = makeGeneratorOverload(
 	tree.VolatilityImmutable,
 )
 
+var jsonToRecordImpl = makeGeneratorOverload(
+	tree.ArgTypes{{"input", types.Jsonb}},
+	jsonEachTextGeneratorType,
+	makeJSONRecordGenerator,
+	"Expands the outermost JSON or JSONB object into a set of key/value pairs. "+
+		"The returned values will be of type text.",
+	tree.VolatilityImmutable,
+)
+
 var jsonEachGeneratorLabels = []string{"key", "value"}
 
 var jsonEachGeneratorType = types.MakeLabeledTuple(
@@ -1454,6 +1475,67 @@ func (j *jsonPopulateRecordSetGenerator) Values() (tree.Datums, error) {
 	}
 	return output.D, nil
 }
+
+func makeJSONRecordGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+	target := tree.MustBeDJSON(args[0])
+	return &jsonRecordGenerator{
+		target: target,
+	}, nil
+}
+
+type jsonRecordGenerator struct {
+	target tree.DJSON
+	iter   *json.ObjectIterator
+
+	wasCalled bool
+	values    tree.Datums
+}
+
+func (j jsonRecordGenerator) ResolvedType() *types.T {
+	return types.AnyTuple
+}
+
+func (j *jsonRecordGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	iter, err := j.target.ObjectIter()
+	if err != nil {
+		return err
+	}
+	j.iter = iter
+	return nil
+}
+
+func (j *jsonRecordGenerator) Next(ctx context.Context) (bool, error) {
+	j.values = nil
+	if j.wasCalled {
+		return false, nil
+	}
+	for j.iter.Next() {
+		switch j.iter.Value().Type() {
+		case json.StringJSONType:
+			t, err := j.iter.Value().AsText()
+			if err != nil {
+				return false, err
+			}
+			j.values = append(j.values, tree.NewDString(*t))
+		case json.NumberJSONType:
+			t, ok := j.iter.Value().AsDecimal()
+			if !ok {
+				return false, errors.Newf("not a number")
+			}
+			j.values = append(j.values, &tree.DDecimal{Decimal: *t})
+		}
+	}
+
+	j.wasCalled = true
+	return true, nil
+}
+
+func (j jsonRecordGenerator) Values() (tree.Datums, error) {
+	fmt.Printf("val %#v\n", j.values)
+	return j.values, nil
+}
+
+func (j jsonRecordGenerator) Close(ctx context.Context) {}
 
 type checkConsistencyGenerator struct {
 	db       *kv.DB
