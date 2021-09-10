@@ -404,9 +404,9 @@ export class StatementDetails extends React.Component<
           >
             Statements
           </Button>
-          <h1 className={cx("base-heading", "page--header__title")}>
+          <h3 className={cx("base-heading", "page--header__title")}>
             Statement Details
-          </h1>
+          </h3>
         </div>
         <section className={cx("section", "section--container")}>
           <Loading

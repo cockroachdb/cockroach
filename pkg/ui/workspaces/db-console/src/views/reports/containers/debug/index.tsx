@@ -90,7 +90,7 @@ export default function Debug() {
   return (
     <div className="section">
       <Helmet title="Debug" />
-      <h1 className="base-heading">Advanced Debugging</h1>
+      <h3 className="base-heading">Advanced Debugging</h3>
       <div className="debug-header">
         <InfoBox>
           <p>

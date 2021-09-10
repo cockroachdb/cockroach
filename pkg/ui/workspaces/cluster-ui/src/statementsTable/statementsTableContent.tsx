@@ -169,7 +169,7 @@ export const StatementLink = (props: StatementLinkProps) => {
           placement="bottom"
           content={
             <pre className={cx("cl-table-link__description")}>
-              {getHighlightedText(props.statement, props.search)}
+              {getHighlightedText(props.statement, props.search, true)}
             </pre>
           }
         >
@@ -177,6 +177,7 @@ export const StatementLink = (props: StatementLinkProps) => {
             {getHighlightedText(
               shortStatement(summary, props.statement),
               props.search,
+              false,
               true,
             )}
           </div>
