@@ -198,6 +198,7 @@ go_test(
         "//pkg/sql/rowflow",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlstats",
         "//pkg/sql/stats",
         "//pkg/storage",
         "//pkg/testutils",

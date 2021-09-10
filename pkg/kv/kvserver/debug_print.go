@@ -27,30 +27,67 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// PrintKeyValue attempts to pretty-print the specified MVCCKeyValue to
-// os.Stdout, falling back to '%q' formatting.
-func PrintKeyValue(kv storage.MVCCKeyValue) {
-	fmt.Println(SprintKeyValue(kv, true /* printKey */))
+// PrintEngineKeyValue attempts to print the given key-value pair to
+// os.Stdout, utilizing SprintMVCCKeyValue in the case of an MVCCKeyValue.
+func PrintEngineKeyValue(k storage.EngineKey, v []byte) {
+	fmt.Println(SprintEngineKeyValue(k, v))
 }
 
-// SprintKey pretty-prints the specified MVCCKey.
-func SprintKey(key storage.MVCCKey) string {
+// PrintMVCCKeyValue attempts to pretty-print the specified MVCCKeyValue to
+// os.Stdout, falling back to '%q' formatting.
+func PrintMVCCKeyValue(kv storage.MVCCKeyValue) {
+	fmt.Println(SprintMVCCKeyValue(kv, true /* printKey */))
+}
+
+// SprintEngineKey pretty-prints the specified EngineKey, using the correct
+// MVCC or Lock Table version formatting.
+func SprintEngineKey(key storage.EngineKey) string {
+	if key.IsMVCCKey() {
+		if mvccKey, err := key.ToMVCCKey(); err == nil {
+			return SprintMVCCKey(mvccKey)
+		}
+	}
+
+	return fmt.Sprintf("%s %x (%#x): ", key.Key, key.Version, key.Encode())
+}
+
+// SprintMVCCKey pretty-prints the specified MVCCKey.
+func SprintMVCCKey(key storage.MVCCKey) string {
 	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeKey(key))
 }
 
-// DebugSprintKeyValueDecoders allows injecting alternative debug decoders.
-var DebugSprintKeyValueDecoders []func(kv storage.MVCCKeyValue) (string, error)
+// SprintEngineKeyValue is like PrintEngineKeyValue, but returns a string.  In
+// the case of an MVCCKey, it will utilize SprintMVCCKeyValue for proper MVCC
+// formatting.
+func SprintEngineKeyValue(k storage.EngineKey, v []byte) string {
+	if k.IsMVCCKey() {
+		if key, err := k.ToMVCCKey(); err == nil {
+			return SprintMVCCKeyValue(storage.MVCCKeyValue{Key: key, Value: v}, true /* printKey */)
+		}
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s %x (%#x): ", k.Key, k.Version, k.Encode())
+	if out, err := tryIntent(storage.MVCCKeyValue{Value: v}); err == nil {
+		sb.WriteString(out)
+	} else {
+		fmt.Fprintf(&sb, "%x", v)
+	}
+	return sb.String()
+}
 
-// SprintKeyValue is like PrintKeyValue, but returns a string. If
+// DebugSprintMVCCKeyValueDecoders allows injecting alternative debug decoders.
+var DebugSprintMVCCKeyValueDecoders []func(kv storage.MVCCKeyValue) (string, error)
+
+// SprintMVCCKeyValue is like PrintMVCCKeyValue, but returns a string. If
 // printKey is true, prints the key and the value together; otherwise,
 // prints just the value.
-func SprintKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
+func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 	var sb strings.Builder
 	if printKey {
-		sb.WriteString(SprintKey(kv.Key))
+		sb.WriteString(SprintMVCCKey(kv.Key))
 	}
 
-	decoders := append(DebugSprintKeyValueDecoders,
+	decoders := append(DebugSprintMVCCKeyValueDecoders,
 		tryRaftLogEntry,
 		tryRangeDescriptor,
 		tryMeta,
@@ -126,46 +163,40 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 	for r.Next() {
 		switch r.BatchType() {
 		case storage.BatchTypeDeletion:
-			mvccKey, err := r.MVCCKey()
+			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Delete: %s\n", SprintKey(mvccKey)))
+			sb.WriteString(fmt.Sprintf("Delete: %s\n", SprintEngineKey(engineKey)))
 		case storage.BatchTypeValue:
-			mvccKey, err := r.MVCCKey()
+			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintKeyValue(storage.MVCCKeyValue{
-				Key:   mvccKey,
-				Value: r.Value(),
-			}, true /* printKey */)))
+			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintEngineKeyValue(engineKey, r.Value())))
 		case storage.BatchTypeMerge:
-			mvccKey, err := r.MVCCKey()
+			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintKeyValue(storage.MVCCKeyValue{
-				Key:   mvccKey,
-				Value: r.Value(),
-			}, true /* printKey */)))
+			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintEngineKeyValue(engineKey, r.Value())))
 		case storage.BatchTypeSingleDeletion:
-			mvccKey, err := r.MVCCKey()
+			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Single Delete: %s\n", SprintKey(mvccKey)))
+			sb.WriteString(fmt.Sprintf("Single Delete: %s\n", SprintEngineKey(engineKey)))
 		case storage.BatchTypeRangeDeletion:
-			mvccStartKey, err := r.MVCCKey()
+			engineStartKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			mvccEndKey, err := r.MVCCEndKey()
+			engineEndKey, err := r.EngineEndKey()
 			if err != nil {
 				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf(
-				"Delete Range: [%s, %s)\n", SprintKey(mvccStartKey), SprintKey(mvccEndKey),
+				"Delete Range: [%s, %s)\n", SprintEngineKey(engineStartKey), SprintEngineKey(engineEndKey),
 			))
 		default:
 			sb.WriteString(fmt.Sprintf("unsupported batch type: %d\n", r.BatchType()))
@@ -385,22 +416,4 @@ func (s *stringifyWriteBatch) String() string {
 		return wbStr
 	}
 	return fmt.Sprintf("failed to stringify write batch (%x): %s", s.Data, err)
-}
-
-// PrintEngineKeyValue attempts to print the given key-value pair.
-func PrintEngineKeyValue(k storage.EngineKey, v []byte) {
-	if k.IsMVCCKey() {
-		if key, err := k.ToMVCCKey(); err == nil {
-			PrintKeyValue(storage.MVCCKeyValue{Key: key, Value: v})
-			return
-		}
-	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "%s %x (%#x): ", k.Key, k.Version, k.Encode())
-	if out, err := tryIntent(storage.MVCCKeyValue{Value: v}); err == nil {
-		sb.WriteString(out)
-	} else {
-		fmt.Fprintf(&sb, "%x", v)
-	}
-	fmt.Println(sb.String())
 }

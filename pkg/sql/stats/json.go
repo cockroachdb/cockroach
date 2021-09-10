@@ -38,6 +38,7 @@ type JSONStatistic struct {
 	// tree.GetTypeFromValidSQLSyntax.
 	HistogramColumnType string            `json:"histo_col_type"`
 	HistogramBuckets    []JSONHistoBucket `json:"histo_buckets,omitempty"`
+	HistogramVersion    HistogramVersion  `json:"histo_version,omitempty"`
 }
 
 // JSONHistoBucket is a struct used for JSON marshaling and unmarshaling of
@@ -61,6 +62,7 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 	}
 	js.HistogramColumnType = typ.SQLString()
 	js.HistogramBuckets = make([]JSONHistoBucket, len(h.Buckets))
+	js.HistogramVersion = h.Version
 	var a rowenc.DatumAlloc
 	for i := range h.Buckets {
 		b := &h.Buckets[i]
@@ -87,7 +89,7 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 }
 
 // DecodeAndSetHistogram decodes a histogram marshaled as a Bytes datum and
-// fills in the HistogramColumnType and HistogramBuckets fields.
+// fills in the JSONStatistic histogram fields.
 func (js *JSONStatistic) DecodeAndSetHistogram(
 	ctx context.Context, semaCtx *tree.SemaContext, datum tree.Datum,
 ) error {
@@ -138,6 +140,7 @@ func (js *JSONStatistic) GetHistogram(
 		return nil, err
 	}
 	h.ColumnType = colType
+	h.Version = js.HistogramVersion
 	h.Buckets = make([]HistogramData_Bucket, len(js.HistogramBuckets))
 	for i := range h.Buckets {
 		hb := &js.HistogramBuckets[i]
