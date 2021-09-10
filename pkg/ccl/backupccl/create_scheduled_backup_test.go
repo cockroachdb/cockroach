@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1122,26 +1123,15 @@ func constructExpectedScheduledBackupNode(
 
 	backupNode, err := extractBackupNode(sj)
 	require.NoError(t, err)
-	firstRun, err := tree.MakeDTimestampTZ(sj.ScheduledRunTime(), time.Microsecond)
-	require.NoError(t, err)
-	wait, err := parseOnPreviousRunningOption(sj.ScheduleDetails().Wait)
-	require.NoError(t, err)
-	onError, err := parseOnErrorOption(sj.ScheduleDetails().OnError)
-	require.NoError(t, err)
-	scheduleOptions := tree.KVOptions{
-		tree.KVOption{
-			Key:   optFirstRun,
-			Value: firstRun,
-		},
-		tree.KVOption{
-			Key:   optOnExecFailure,
-			Value: tree.NewDString(onError),
-		},
-		tree.KVOption{
-			Key:   optOnPreviousRunning,
-			Value: tree.NewDString(wait),
-		},
+
+	opts := schedulebase.CommonScheduleOptions{
+		FirstRun: sj.ScheduledRunTime(),
+		OnError:  sj.ScheduleDetails().OnError,
+		Wait:     sj.ScheduleDetails().Wait,
 	}
+	scheduleOptions, err := opts.KVOptions()
+	require.NoError(t, err)
+
 	sb := &tree.ScheduledBackup{
 		ScheduleLabelSpec: tree.ScheduleLabelSpec{
 			IfNotExists: false,
