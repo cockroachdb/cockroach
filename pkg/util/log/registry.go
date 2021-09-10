@@ -19,6 +19,13 @@ type loggerRegistry struct {
 	}
 }
 
+// clear erases the registry.
+func (r *loggerRegistry) clear() {
+	r.mu.Lock()
+	r.mu.loggers = nil
+	r.mu.Unlock()
+}
+
 // put adds a logger into the registry.
 func (r *loggerRegistry) put(l *loggerT) {
 	r.mu.Lock()
@@ -47,6 +54,13 @@ type sinkInfoRegistry struct {
 		syncutil.Mutex
 		sinkInfos []*sinkInfo
 	}
+}
+
+// clear erases the registry.
+func (r *sinkInfoRegistry) clear() {
+	r.mu.Lock()
+	r.mu.sinkInfos = nil
+	r.mu.Unlock()
 }
 
 // iter iterates over all the sinks infos and stops at the first error
