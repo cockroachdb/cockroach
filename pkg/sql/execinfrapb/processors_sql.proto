@@ -925,6 +925,10 @@ message ProjectSetSpec {
 
   // The number of columns each expression returns. Same length as exprs.
   repeated uint32 num_cols_per_gen = 3;
+
+  // Column labels for the generated values. Needed for some builtin functions
+  // (like record_to_json) that require the column labels to do their jobs.
+  repeated string generated_column_labels = 4;
 }
 
 // WindowerSpec is the specification of a processor that performs computations
