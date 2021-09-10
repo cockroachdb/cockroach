@@ -184,20 +184,20 @@ type LocalOnlySessionData struct {
 	// is the same as the UserProto in SessionData.
 	SessionUserProto github_com_cockroachdb_cockroach_pkg_security.SQLUsernameProto `protobuf:"bytes,46,opt,name=session_user_proto,json=sessionUserProto,proto3,casttype=github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto" json:"session_user_proto,omitempty"`
 	// TxnRowsWrittenLog is the threshold for the number of rows written by a SQL
-	// transaction which - once reached - will trigger a logging event to SQL_PERF
+	// transaction which - once exceeded - will trigger a logging event to SQL_PERF
 	// (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
 	TxnRowsWrittenLog int64 `protobuf:"varint,47,opt,name=txn_rows_written_log,json=txnRowsWrittenLog,proto3" json:"txn_rows_written_log,omitempty"`
 	// TxnRowsWrittenErr is the limit for the number of rows written by a SQL
-	// transaction which - once reached - will fail the transaction (or will
+	// transaction which - once exceeded - will fail the transaction (or will
 	// trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
 	// means disabled.
 	TxnRowsWrittenErr int64 `protobuf:"varint,48,opt,name=txn_rows_written_err,json=txnRowsWrittenErr,proto3" json:"txn_rows_written_err,omitempty"`
 	// TxnRowsReadLog is the threshold for the number of rows read by a SQL
-	// transaction which - once reached - will trigger a logging event to SQL_PERF
+	// transaction which - once exceeded - will trigger a logging event to SQL_PERF
 	// (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
 	TxnRowsReadLog int64 `protobuf:"varint,49,opt,name=txn_rows_read_log,json=txnRowsReadLog,proto3" json:"txn_rows_read_log,omitempty"`
 	// TxnRowsReadErr is the limit for the number of rows read by a SQL
-	// transaction which - once reached - will fail the transaction (or will
+	// transaction which - once exceeded - will fail the transaction (or will
 	// trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
 	// means disabled.
 	TxnRowsReadErr int64 `protobuf:"varint,50,opt,name=txn_rows_read_err,json=txnRowsReadErr,proto3" json:"txn_rows_read_err,omitempty"`

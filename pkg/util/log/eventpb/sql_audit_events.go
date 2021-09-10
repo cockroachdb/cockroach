@@ -56,46 +56,28 @@ func (r *CommonLargeRowDetails) SafeFormatError(p errors.Printer) (next error) {
 	return nil
 }
 
-var _ error = &CommonTxnRowsLimitDetails{}
-var _ errors.SafeDetailer = &CommonTxnRowsLimitDetails{}
-var _ fmt.Formatter = &CommonTxnRowsLimitDetails{}
-var _ errors.SafeFormatter = &CommonTxnRowsLimitDetails{}
-
-func (d *CommonTxnRowsLimitDetails) kind() string {
-	if d.IsRead {
-		return "read"
-	}
-	return "written"
-}
-
-// Error is part of the error interface, which CommonTxnRowsLimitDetails
-// implements.
-func (d *CommonTxnRowsLimitDetails) Error() string {
+// Error helps other structs embedding CommonTxnRowsLimitDetails implement the
+// error interface.
+func (d *CommonTxnRowsLimitDetails) Error(kind string) string {
 	return fmt.Sprintf(
-		"txn reached the number of rows %s (%d): TxnID %v SessionID %v",
-		d.kind(), d.Limit, redact.SafeString(d.TxnID), redact.SafeString(d.SessionID),
+		"txn has %s %d rows, which is above the limit: TxnID %v SessionID %v",
+		kind, d.NumRows, redact.SafeString(d.TxnID), redact.SafeString(d.SessionID),
 	)
 }
 
-// SafeDetails is part of the errors.SafeDetailer interface, which
-// CommonTxnRowsLimitDetails implements.
-func (d *CommonTxnRowsLimitDetails) SafeDetails() []string {
-	return []string{d.TxnID, d.SessionID, fmt.Sprintf("%d", d.Limit), d.kind()}
+// SafeDetails helps other structs embedding CommonTxnRowsLimitDetails implement
+// the errors.SafeDetailer interface.
+func (d *CommonTxnRowsLimitDetails) SafeDetails(kind string) []string {
+	return []string{d.TxnID, d.SessionID, fmt.Sprintf("%d", d.NumRows), kind}
 }
 
-// Format is part of the fmt.Formatter interface, which
-// CommonTxnRowsLimitDetails implements.
-func (d *CommonTxnRowsLimitDetails) Format(s fmt.State, verb rune) {
-	errors.FormatError(d, s, verb)
-}
-
-// SafeFormatError is part of the errors.SafeFormatter interface, which
-// CommonTxnRowsLimitDetails implements.
-func (d *CommonTxnRowsLimitDetails) SafeFormatError(p errors.Printer) (next error) {
+// SafeFormatError helps other structs embedding CommonTxnRowsLimitDetails
+// implement the errors.SafeFormatter interface.
+func (d *CommonTxnRowsLimitDetails) SafeFormatError(p errors.Printer, kind string) (next error) {
 	if p.Detail() {
 		p.Printf(
-			"txn reached the number of rows %s (%d): TxnID %v SessionID %v",
-			d.kind(), d.Limit, redact.SafeString(d.TxnID), redact.SafeString(d.SessionID),
+			"txn has %s %d rows, which is above the limit: TxnID %v SessionID %v",
+			kind, d.NumRows, redact.SafeString(d.TxnID), redact.SafeString(d.SessionID),
 		)
 	}
 	return nil
