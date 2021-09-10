@@ -2514,7 +2514,7 @@ func (r *importResumer) dropSchemas(
 			return nil, errors.Newf("unable to resolve schema desc with ID %d", schema.Desc.ID)
 		}
 
-		schemaDesc.DrainingNames = append(schemaDesc.DrainingNames,
+		schemaDesc.AddDrainingName(
 			descpb.NameInfo{ParentID: details.ParentID, ParentSchemaID: keys.RootNamespaceID,
 				Name: schemaDesc.Name})
 

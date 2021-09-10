@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -206,6 +207,11 @@ func (p *planner) renameSchema(
 
 	// Set the new name for the descriptor.
 	oldName := desc.Name
+	desc.AddDrainingName(descpb.NameInfo{
+		ParentID:       desc.ParentID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           oldName,
+	})
 	desc.SetName(newName)
 
 	// Write a new namespace entry for the new name.

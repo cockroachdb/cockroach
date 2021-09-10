@@ -1988,16 +1988,16 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 func runSchemaChangesInTxn(
 	ctx context.Context, planner *planner, tableDesc *tabledesc.Mutable, traceKV bool,
 ) error {
-	if len(tableDesc.DrainingNames) > 0 {
+	if len(tableDesc.GetDrainingNames()) > 0 {
 		// Reclaim all the old names. Leave the data and descriptor
 		// cleanup for later.
-		for _, drain := range tableDesc.DrainingNames {
+		for _, drain := range tableDesc.GetDrainingNames() {
 			key := catalogkeys.EncodeNameKey(planner.ExecCfg().Codec, drain)
 			if err := planner.Txn().Del(ctx, key); err != nil {
 				return err
 			}
 		}
-		tableDesc.DrainingNames = nil
+		tableDesc.SetDrainingNames(nil)
 	}
 
 	if tableDesc.Dropped() {

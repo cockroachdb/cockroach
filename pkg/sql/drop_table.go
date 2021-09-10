@@ -466,7 +466,7 @@ func (p *planner) initiateDropTable(
 			ParentID:       tableDesc.ParentID,
 			ParentSchemaID: parentSchemaID,
 			Name:           tableDesc.Name}
-		tableDesc.DrainingNames = append(tableDesc.DrainingNames, nameDetails)
+		tableDesc.AddDrainingName(nameDetails)
 	}
 
 	// For this table descriptor, mark all previous jobs scheduled for schema changes as successful

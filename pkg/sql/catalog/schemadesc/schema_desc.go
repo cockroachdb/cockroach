@@ -87,6 +87,12 @@ func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }
 
+// AddDrainingName adds a draining name to the SchemaDescriptor's slice of
+// draining names.
+func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
+	desc.DrainingNames = append(desc.DrainingNames, name)
+}
+
 // GetParentSchemaID implements the Descriptor interface.
 func (desc *immutable) GetParentSchemaID() descpb.ID {
 	return keys.RootNamespaceID
@@ -272,14 +278,8 @@ func (desc *Mutable) SetOffline(reason string) {
 	desc.OfflineReason = reason
 }
 
-// SetName sets the name of the schema. It handles installing a draining name
-// for the old name of the descriptor.
+// SetName sets the name of the schema.
 func (desc *Mutable) SetName(name string) {
-	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
-		ParentID:       desc.ParentID,
-		ParentSchemaID: keys.RootNamespaceID,
-		Name:           desc.Name,
-	})
 	desc.Name = name
 }
 
