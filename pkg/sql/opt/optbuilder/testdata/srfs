@@ -1000,3 +1000,92 @@ project
  └── projections
       ├── (unnest:6).a [as=a:7]
       └── (unnest:6).b [as=b:8]
+
+# Test record-returning SRFs, which need to keep track of the most recently set
+# AS clause above them.
+
+exec-ddl
+CREATE TABLE j (j json)
+----
+
+build
+SELECT t.a, t.z FROM j, json_to_record(j.j) AS t(a text, z int)
+----
+project
+ ├── columns: a:5 z:6
+ └── inner-join-apply
+      ├── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 a:5 z:6
+      ├── scan j
+      │    └── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── project-set
+      │    ├── columns: a:5 z:6
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── json_to_record(j:1)
+      └── filters (true)
+
+# Test that outer AS clauses don't get incorrectly propagated down into
+# json_to_record.
+build
+SELECT blah.x || 'foo' FROM (SELECT t.a, t.z FROM j, json_to_record(j.j) AS t(a text, z int)) AS blah(x)
+----
+project
+ ├── columns: "?column?":7
+ ├── project
+ │    ├── columns: a:5 z:6
+ │    └── inner-join-apply
+ │         ├── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 a:5 z:6
+ │         ├── scan j
+ │         │    └── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         ├── project-set
+ │         │    ├── columns: a:5 z:6
+ │         │    ├── values
+ │         │    │    └── ()
+ │         │    └── zip
+ │         │         └── json_to_record(j:1)
+ │         └── filters (true)
+ └── projections
+      └── a:5 || 'foo' [as="?column?":7]
+
+# Test that outer AS clauses don't get incorrectly propagated down into
+# json_to_record, even if an inner one is missing.
+build
+SELECT * FROM (SELECT t.a, t.z FROM j, json_to_record(j.j)) AS blah(a)
+----
+error (42601): a column definition list is required for functions returning "record"
+
+# Test that nested AS clauses and json_to_record statements work okay.
+build
+SELECT blah.a || 'foo', * FROM
+(SELECT t.a, t.z, j.x FROM (SELECT * FROM j, json_to_record('{"foo": "bar"}') AS x(foo text)) j(j, x),
+                      json_to_record(j.j) AS t(a text, z int)) AS blah(a, z, x)
+----
+project
+ ├── columns: "?column?":8 a:6 z:7 x:5
+ ├── project
+ │    ├── columns: foo:5 a:6 z:7
+ │    └── inner-join-apply
+ │         ├── columns: j:1 foo:5 a:6 z:7
+ │         ├── project
+ │         │    ├── columns: j:1 foo:5
+ │         │    └── inner-join-apply
+ │         │         ├── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 foo:5
+ │         │         ├── scan j
+ │         │         │    └── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         │         ├── project-set
+ │         │         │    ├── columns: foo:5
+ │         │         │    ├── values
+ │         │         │    │    └── ()
+ │         │         │    └── zip
+ │         │         │         └── json_to_record('{"foo": "bar"}')
+ │         │         └── filters (true)
+ │         ├── project-set
+ │         │    ├── columns: a:6 z:7
+ │         │    ├── values
+ │         │    │    └── ()
+ │         │    └── zip
+ │         │         └── json_to_record(j:1)
+ │         └── filters (true)
+ └── projections
+      └── a:6 || 'foo' [as="?column?":8]

@@ -478,11 +478,11 @@ func (s *Smither) makeWith() (*tree.With, tableRefs) {
 		}
 		alias := s.name("with")
 		tblName := tree.NewUnqualifiedTableName(alias)
-		cols := make(tree.NameList, len(stmtRefs))
+		cols := make(tree.ColumnDefList, len(stmtRefs))
 		defs := make([]*tree.ColumnTableDef, len(stmtRefs))
 		for i, r := range stmtRefs {
 			var err error
-			cols[i] = r.item.ColumnName
+			cols[i].Name = r.item.ColumnName
 			defs[i], err = tree.NewColumnTableDef(r.item.ColumnName, r.typ, false /* isSerial */, nil)
 			if err != nil {
 				panic(err)
@@ -561,15 +561,15 @@ func makeSelectTable(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, co
 	}
 
 	table := s.name("tab")
-	names := make(tree.NameList, len(stmtRefs))
+	names := make(tree.ColumnDefList, len(stmtRefs))
 	clauseRefs := make(colRefs, len(stmtRefs))
 	for i, ref := range stmtRefs {
-		names[i] = s.name("col")
+		names[i].Name = s.name("col")
 		clauseRefs[i] = &colRef{
 			typ: ref.typ,
 			item: tree.NewColumnItem(
 				tree.NewUnqualifiedTableName(table),
-				names[i],
+				names[i].Name,
 			),
 		}
 	}
@@ -1163,15 +1163,15 @@ func makeValues(s *Smither, desiredTypes []*types.T, refs colRefs) (tree.TableEx
 		values.Rows[i] = tuple
 	}
 	table := s.name("tab")
-	names := make(tree.NameList, len(desiredTypes))
+	names := make(tree.ColumnDefList, len(desiredTypes))
 	valuesRefs := make(colRefs, len(desiredTypes))
 	for i, typ := range desiredTypes {
-		names[i] = s.name("col")
+		names[i].Name = s.name("col")
 		valuesRefs[i] = &colRef{
 			typ: typ,
 			item: tree.NewColumnItem(
 				tree.NewUnqualifiedTableName(table),
-				names[i],
+				names[i].Name,
 			),
 		}
 	}

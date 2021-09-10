@@ -76,7 +76,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:check_table_level.html",
   "//docs/generated/sql/bnf:close_cursor.html",
   "//docs/generated/sql/bnf:col_qualification.html",
-  "//docs/generated/sql/bnf:column_def.html",
+  "//docs/generated/sql/bnf:column_table_def.html",
   "//docs/generated/sql/bnf:comment.html",
   "//docs/generated/sql/bnf:commit_transaction.html",
   "//docs/generated/sql/bnf:copy_from.html",

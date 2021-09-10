@@ -89,7 +89,7 @@ DOCS_SRCS = [
   "//docs/generated/sql/bnf:check_table_level.bnf",
   "//docs/generated/sql/bnf:close_cursor_stmt.bnf",
   "//docs/generated/sql/bnf:col_qualification.bnf",
-  "//docs/generated/sql/bnf:column_def.bnf",
+  "//docs/generated/sql/bnf:column_table_def.bnf",
   "//docs/generated/sql/bnf:comment.bnf",
   "//docs/generated/sql/bnf:commit_transaction.bnf",
   "//docs/generated/sql/bnf:copy_from_stmt.bnf",
