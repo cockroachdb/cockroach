@@ -45,11 +45,12 @@ func _() {
 	_ = x[BoundedStaleness-34]
 	_ = x[SQLStatsCompactionScheduledJob-35]
 	_ = x[DateAndIntervalStyle-36]
+	_ = x[PebbleFormatVersioned-37]
 }
 
-const _Key_name = "Start21_1replacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTableDatabaseRoleSettingsTenantUsageTableSQLInstancesTableNewRetryableRangefeedErrorsAlterSystemWebSessionsCreateIndexesSeparatedIntentsMigrationPostSeparatedIntentsMigrationRetryJobsWithExponentialBackoffRecordsBasedRegistryAutoSpanConfigReconciliationJobPreventNewInterleavedTablesEnsureNoInterleavedTablesDefaultPrivilegesZonesTableForSecondaryTenantsUseKeyEncodeForHashShardedIndexesDatabasePlacementPolicyGeneratedAsIdentityOnUpdateExpressionsSpanConfigurationsTableBoundedStalenessSQLStatsCompactionScheduledJobDateAndIntervalStyle"
+const _Key_name = "Start21_1replacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTableDatabaseRoleSettingsTenantUsageTableSQLInstancesTableNewRetryableRangefeedErrorsAlterSystemWebSessionsCreateIndexesSeparatedIntentsMigrationPostSeparatedIntentsMigrationRetryJobsWithExponentialBackoffRecordsBasedRegistryAutoSpanConfigReconciliationJobPreventNewInterleavedTablesEnsureNoInterleavedTablesDefaultPrivilegesZonesTableForSecondaryTenantsUseKeyEncodeForHashShardedIndexesDatabasePlacementPolicyGeneratedAsIdentityOnUpdateExpressionsSpanConfigurationsTableBoundedStalenessSQLStatsCompactionScheduledJobDateAndIntervalStylePebbleFormatVersioned"
 
-var _Key_index = [...]uint16{0, 9, 55, 105, 143, 185, 190, 203, 212, 227, 256, 273, 290, 339, 353, 366, 386, 402, 419, 446, 481, 506, 535, 566, 586, 617, 644, 669, 686, 715, 748, 771, 790, 809, 832, 848, 878, 898}
+var _Key_index = [...]uint16{0, 9, 55, 105, 143, 185, 190, 203, 212, 227, 256, 273, 290, 339, 353, 366, 386, 402, 419, 446, 481, 506, 535, 566, 586, 617, 644, 669, 686, 715, 748, 771, 790, 809, 832, 848, 878, 898, 919}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
