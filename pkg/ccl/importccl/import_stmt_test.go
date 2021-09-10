@@ -1200,7 +1200,7 @@ CREATE TABLE t (a duration);
 	})
 }
 
-func TestImportUserDefinedTypes(t *testing.T) {
+func TestImportIntoUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1275,6 +1275,22 @@ func TestImportUserDefinedTypes(t *testing.T) {
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
+		// Test CSV default and computed column imports.
+		{
+			create: `
+a greeting, b greeting default 'hi', c greeting 
+AS (
+CASE a
+WHEN 'hello' THEN 'hi'
+WHEN 'hi' THEN 'hello'
+END
+) STORED`,
+			intoCols:    "a",
+			typ:         "CSV",
+			contents:    "hello\nhi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hi", "hi"}, {"hi", "hi", "hello"}},
+		},
 		// Test AVRO imports.
 		{
 			create:      "a greeting, b greeting",
@@ -1283,6 +1299,22 @@ func TestImportUserDefinedTypes(t *testing.T) {
 			contents:    avroData,
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
+		},
+		// Test AVRO default and computed column imports.
+		{
+			create: `
+a greeting, b greeting, c greeting 
+AS (
+CASE a
+WHEN 'hello' THEN 'hi'
+WHEN 'hi' THEN 'hello'
+END
+) STORED`,
+			intoCols:    "a, b",
+			typ:         "AVRO",
+			contents:    avroData,
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hello", "hi"}, {"hi", "hi", "hello"}},
 		},
 		// Test DELIMITED imports.
 		{
@@ -1293,6 +1325,22 @@ func TestImportUserDefinedTypes(t *testing.T) {
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
+		// Test DELIMITED default and computed column imports.
+		{
+			create: `
+a greeting, b greeting default 'hi', c greeting 
+AS (
+CASE a
+WHEN 'hello' THEN 'hi'
+WHEN 'hi' THEN 'hello'
+END
+) STORED`,
+			intoCols:    "a",
+			typ:         "DELIMITED",
+			contents:    "hello\nhi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hi", "hi"}, {"hi", "hi", "hello"}},
+		},
 		// Test PGCOPY imports.
 		{
 			create:      "a greeting, b greeting",
@@ -1302,13 +1350,21 @@ func TestImportUserDefinedTypes(t *testing.T) {
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
-		// Test table with default value.
+		// Test PGCOPY default and computed column imports.
 		{
-			create:    "a greeting, b greeting default 'hi'",
-			intoCols:  "a, b",
-			typ:       "PGCOPY",
-			contents:  "hello\nhi\thi\n",
-			errString: "type OID 100052 does not exist",
+			create: `
+a greeting, b greeting default 'hi', c greeting 
+AS (
+CASE a
+WHEN 'hello' THEN 'hi'
+WHEN 'hi' THEN 'hello'
+END
+) STORED`,
+			intoCols:    "a",
+			typ:         "PGCOPY",
+			contents:    "hello\nhi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hi", "hi"}, {"hi", "hi", "hello"}},
 		},
 		// Test table with an invalid enum value.
 		{
@@ -3685,6 +3741,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	}()
 
 	importCtx := &parallelImportContext{
+		semaCtx:   &semaCtx,
 		evalCtx:   &evalCtx,
 		tableDesc: tableDesc.ImmutableCopy().(catalog.TableDescriptor),
 		kvCh:      kvCh,
@@ -4681,7 +4738,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	for i, col := range tableDesc.Columns {
 		cols[i] = tree.Name(col.Name)
 	}
-	r, err := newMysqloutfileReader(roachpb.MySQLOutfileOptions{
+	r, err := newMysqloutfileReader(&semaCtx, roachpb.MySQLOutfileOptions{
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
 	}, kvCh, 0, 0,
@@ -4783,7 +4840,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	for i, col := range tableDesc.Columns {
 		cols[i] = tree.Name(col.Name)
 	}
-	r, err := newPgCopyReader(roachpb.PgCopyOptions{
+	r, err := newPgCopyReader(&semaCtx, roachpb.PgCopyOptions{
 		Delimiter:  '\t',
 		Null:       `\N`,
 		MaxRowSize: 4096,

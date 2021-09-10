@@ -297,6 +297,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
 	ctx context.Context,
+	baseSemaCtx *tree.SemaContext,
 	tableDesc catalog.TableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
@@ -331,12 +332,15 @@ func NewDatumRowConverter(
 	}
 
 	var txCtx transform.ExprTransformContext
-	semaCtx := tree.MakeSemaContext()
 	relevantColumns := func(col catalog.Column) bool {
 		return col.HasDefault() || col.IsComputed()
 	}
+
+	// We take a copy of the baseSemaCtx since this method is called by the parallel
+	// import workers.
+	semaCtxCopy := *baseSemaCtx
 	cols := schemaexpr.ProcessColumnSet(targetCols, tableDesc, relevantColumns)
-	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
+	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtxCopy)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default and computed columns")
 	}
@@ -445,7 +449,7 @@ func NewDatumRowConverter(
 		c.tableDesc,
 		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
 		c.EvalCtx,
-		&semaCtx)
+		&semaCtxCopy)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
 	}

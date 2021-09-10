@@ -937,6 +937,7 @@ var _ inputConverter = &pgDumpReader{}
 // newPgDumpReader creates a new inputConverter for pg_dump files.
 func newPgDumpReader(
 	ctx context.Context,
+	semaCtx *tree.SemaContext,
 	jobID int64,
 	kvCh chan row.KVBatch,
 	opts roachpb.PgDumpOptions,
@@ -958,7 +959,7 @@ func newPgDumpReader(
 			for i, col := range tableDesc.VisibleColumns() {
 				colSubMap[col.GetName()] = i
 			}
-			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, kvCh,
+			conv, err := row.NewDatumRowConverter(ctx, semaCtx, tableDesc, targetCols, evalCtx, kvCh,
 				nil /* seqChunkProvider */, nil /* metrics */)
 			if err != nil {
 				return nil, err
