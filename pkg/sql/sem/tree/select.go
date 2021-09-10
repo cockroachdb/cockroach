@@ -188,21 +188,52 @@ func (node *SelectExpr) Format(ctx *FmtCtx) {
 	}
 }
 
-// AliasClause represents an alias, optionally with a column list:
-// "AS name" or "AS name(col1, col2)".
+// AliasClause represents an alias, optionally with a column def list:
+// "AS name", "AS name(col1, col2)", or "AS name(col1 INT, col2 STRING)".
+// Note that the last form is only valid in the context of record-returning
+// functions, which also require the last form to define their output types.
 type AliasClause struct {
 	Alias Name
-	Cols  NameList
+	Cols  ColumnDefList
 }
 
 // Format implements the NodeFormatter interface.
-func (a *AliasClause) Format(ctx *FmtCtx) {
-	ctx.FormatNode(&a.Alias)
-	if len(a.Cols) != 0 {
+func (f *AliasClause) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&f.Alias)
+	if len(f.Cols) != 0 {
 		// Format as "alias (col1, col2, ...)".
 		ctx.WriteString(" (")
-		ctx.FormatNode(&a.Cols)
+		ctx.FormatNode(&f.Cols)
 		ctx.WriteByte(')')
+	}
+}
+
+// ColumnDef represents a column definition in the context of a record type
+// alias, like in select * from json_to_record(...) AS foo(a INT, b INT).
+type ColumnDef struct {
+	Name Name
+	Type ResolvableTypeReference
+}
+
+// Format implements the NodeFormatter interface.
+func (c *ColumnDef) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&c.Name)
+	if c.Type != nil {
+		ctx.WriteByte(' ')
+		ctx.WriteString(c.Type.SQLString())
+	}
+}
+
+// ColumnDefList represents a list of ColumnDefs.
+type ColumnDefList []ColumnDef
+
+// Format implements the NodeFormatter interface.
+func (c *ColumnDefList) Format(ctx *FmtCtx) {
+	for i := range *c {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNode(&(*c)[i])
 	}
 }
 

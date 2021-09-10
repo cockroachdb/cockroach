@@ -3832,9 +3832,6 @@ value if you rely on the HLC for accuracy.`,
 	// The behavior of both the JSON and JSONB data types in CockroachDB is
 	// similar to the behavior of the JSONB data type in Postgres.
 
-	"json_to_recordset":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Category: builtinconstants.CategoryJSON}),
-	"jsonb_to_recordset": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Category: builtinconstants.CategoryJSON}),
-
 	"jsonb_path_exists":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
 	"jsonb_path_exists_opr":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
 	"jsonb_path_match":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
