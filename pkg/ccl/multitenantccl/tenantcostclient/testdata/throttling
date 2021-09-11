@@ -28,7 +28,7 @@ write bytes=1024
 ----
 
 # Set up throttling at 1000 RU/s.
-throttle 
+throttle
 1000
 ----
 

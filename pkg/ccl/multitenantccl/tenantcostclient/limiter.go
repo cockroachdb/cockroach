@@ -31,6 +31,7 @@ type limiter struct {
 
 	// Total (rounded) RU needed for all currently waiting requests (or requests
 	// that are in the process of being fulfilled).
+	// Only accessed using atomics.
 	waitingRU int64
 }
 
@@ -50,12 +51,14 @@ func (l *limiter) Init(timeSource timeutil.TimeSource, notifyChan chan struct{})
 	l.tb.Init(timeSource.Now(), notifyChan, initialRate, initialRUs)
 
 	onWaitStartFn := func(ctx context.Context, poolName string, r quotapool.Request) {
-		atomic.AddInt64(&l.waitingRU, r.(*waitRequest).neededCeil())
-	}
-	onWaitFinishFn := func(
-		ctx context.Context, poolName string, r quotapool.Request, start time.Time,
-	) {
-		atomic.AddInt64(&l.waitingRU, -r.(*waitRequest).neededCeil())
+		req := r.(*waitRequest)
+		// Account for the RUs, unless we already did in waitRequest.Acquire.
+		// This is necessary because Acquire is only called for the head of the
+		// queue.
+		if !req.waitingRUAccounted {
+			req.waitingRUAccounted = true
+			atomic.AddInt64(&l.waitingRU, req.neededCeil())
+		}
 	}
 	// We use OnWaitStartLocked because otherwise we have a race between the token
 	// bucket noticing that it can't fulfill a request, and AvailableTokens()
@@ -66,8 +69,7 @@ func (l *limiter) Init(timeSource timeutil.TimeSource, notifyChan chan struct{})
 	l.qp = quotapool.New(
 		"tenant-side-limiter", l,
 		quotapool.WithTimeSource(timeSource),
-		quotapool.OnWaitStartLocked(onWaitStartFn),
-		quotapool.OnWaitFinish(onWaitFinishFn),
+		quotapool.OnWaitStart(onWaitStartFn),
 	)
 }
 
@@ -137,6 +139,10 @@ func (l *limiter) SetupNotification(now time.Time, threshold tenantcostmodel.RU)
 // waitRequest is used to wait for adequate resources in the tokenBucket.
 type waitRequest struct {
 	needed tenantcostmodel.RU
+
+	// waitingRUAccounted is true if we counted the needed RUs as "waiting RU".
+	// This flag is necessary because we want to account f
+	waitingRUAccounted bool
 }
 
 var _ quotapool.Request = (*waitRequest)(nil)
@@ -169,7 +175,28 @@ func (req *waitRequest) Acquire(
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	l := res.(*limiter)
 	now := l.timeSource.Now()
-	return l.tb.TryToFulfill(now, req.needed)
+	fulfilled, tryAgainAfter = l.tb.TryToFulfill(now, req.needed)
+
+	if !fulfilled {
+		// We want to account for the waiting RU here (under the quotapool lock)
+		// rather than in the OnWaitStart callback. This is to ensure that the
+		// waiting RUs for the head of the queue are reliably reflected in the next
+		// call to AvailableTokens(). If it is not reflected, a low RU notification
+		// might effectively be ignored because it looks like we have enough RUs.
+		//
+		// The waitingRUAccounted flag ensures we don't count the same request
+		// multiple times.
+		if !req.waitingRUAccounted {
+			req.waitingRUAccounted = true
+			atomic.AddInt64(&l.waitingRU, req.neededCeil())
+		}
+	} else {
+		if req.waitingRUAccounted {
+			req.waitingRUAccounted = false
+			atomic.AddInt64(&l.waitingRU, -req.neededCeil())
+		}
+	}
+	return fulfilled, tryAgainAfter
 }
 
 // ShouldWait is part of quotapool.Request.
