@@ -43,5 +43,7 @@ type TenantSideKVInterceptor interface {
 	// OnResponse accounts for the portion of the cost that can only be determined
 	// after-the-fact. It does not block, but it can push the rate limiting into
 	// "debt", causing future requests to be blocked.
-	OnResponse(ctx context.Context, info tenantcostmodel.ResponseInfo)
+	OnResponse(
+		ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
+	)
 }

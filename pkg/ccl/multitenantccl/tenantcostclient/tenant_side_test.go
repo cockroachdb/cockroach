@@ -98,11 +98,10 @@ func (ts *testState) stop() {
 }
 
 var testStateCommands = map[string]func(*testState, *testing.T, *datadriven.TestData) string{
-	"read-request":  (*testState).readRequest,
-	"read-response": (*testState).readResponse,
-	"write-request": (*testState).writeRequest,
-	"cpu":           (*testState).cpu,
-	"usage":         (*testState).usage,
+	"read":  (*testState).read,
+	"write": (*testState).write,
+	"cpu":   (*testState).cpu,
+	"usage": (*testState).usage,
 }
 
 func bytesArg(t *testing.T, d *datadriven.TestData) int64 {
@@ -122,25 +121,23 @@ func bytesArg(t *testing.T, d *datadriven.TestData) int64 {
 	return 0
 }
 
-func (ts *testState) readRequest(t *testing.T, d *datadriven.TestData) string {
-	info := tenantcostmodel.TestingRequestInfo(false /* isWrite */, 0 /* writeBytes */)
-	if err := ts.controller.OnRequestWait(context.Background(), info); err != nil {
+func (ts *testState) read(t *testing.T, d *datadriven.TestData) string {
+	reqInfo := tenantcostmodel.TestingRequestInfo(false /* isWrite */, 0 /* writeBytes */)
+	if err := ts.controller.OnRequestWait(context.Background(), reqInfo); err != nil {
 		d.Fatalf(t, "%v", err)
 	}
+	respInfo := tenantcostmodel.TestingResponseInfo(bytesArg(t, d))
+	ts.controller.OnResponse(context.Background(), reqInfo, respInfo)
 	return ""
 }
 
-func (ts *testState) readResponse(t *testing.T, d *datadriven.TestData) string {
-	info := tenantcostmodel.TestingResponseInfo(bytesArg(t, d))
-	ts.controller.OnResponse(context.Background(), info)
-	return ""
-}
-
-func (ts *testState) writeRequest(t *testing.T, d *datadriven.TestData) string {
-	info := tenantcostmodel.TestingRequestInfo(true /* isWrite */, bytesArg(t, d))
-	if err := ts.controller.OnRequestWait(context.Background(), info); err != nil {
+func (ts *testState) write(t *testing.T, d *datadriven.TestData) string {
+	reqInfo := tenantcostmodel.TestingRequestInfo(true /* isWrite */, bytesArg(t, d))
+	if err := ts.controller.OnRequestWait(context.Background(), reqInfo); err != nil {
 		d.Fatalf(t, "%v", err)
 	}
+	respInfo := tenantcostmodel.TestingResponseInfo(0 /* readBytes */)
+	ts.controller.OnResponse(context.Background(), reqInfo, respInfo)
 	return ""
 }
 
