@@ -108,7 +108,6 @@ message CommonLargeRowDetails {
   uint32 table_id = 2 [(gogoproto.customname) = "TableID", (gogoproto.jsontag) = ",omitempty"];
   uint32 family_id = 3 [(gogoproto.customname) = "FamilyID", (gogoproto.jsontag) = ",omitempty"];
   string primary_key = 4 [(gogoproto.jsontag) = ",omitempty"];
-  bool violates_max_row_size_err = 5 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // LargeRow is recorded when a statement tries to write a row larger than

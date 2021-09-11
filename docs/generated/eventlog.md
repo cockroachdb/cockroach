@@ -1900,7 +1900,6 @@ of transaction abort there will not be a corresponding row in the database.
 | `TableID` |  | no |
 | `FamilyID` |  | no |
 | `PrimaryKey` |  | yes |
-| `ViolatesMaxRowSizeErr` |  | no |
 
 ### `slow_query`
 
@@ -2024,7 +2023,6 @@ larger than cluster settings `sql.mutations.max_row_size.log` or
 | `TableID` |  | no |
 | `FamilyID` |  | no |
 | `PrimaryKey` |  | yes |
-| `ViolatesMaxRowSizeErr` |  | no |
 
 ### `slow_query_internal`
 
