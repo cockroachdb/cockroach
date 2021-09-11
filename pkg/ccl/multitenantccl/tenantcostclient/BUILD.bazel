@@ -2,7 +2,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tenantcostclient",
-    srcs = ["tenant_side.go"],
+    srcs = [
+        "limiter.go",
+        "tenant_side.go",
+        "test_utils.go",
+        "token_bucket.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostclient",
     visibility = ["//visibility:public"],
     deps = [
@@ -14,10 +19,12 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/log",
+        "//pkg/util/quotapool",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errorspb",
     ],
 )
 
@@ -26,6 +33,7 @@ go_test(
     srcs = [
         "main_test.go",
         "tenant_side_test.go",
+        "token_bucket_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":tenantcostclient"],
@@ -50,6 +58,8 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
