@@ -103,7 +103,7 @@ func checkVersion(ctx context.Context, st *cluster.Settings, peerVersion roachpb
 		!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
 		minVersion = st.Version.BinaryMinSupportedVersion()
 	}
-	if peerVersion.Less(minVersion) {
+	if peerVersion.Less(minVersion) && !clusterversion.Is21Dot1Dot8Equiv(peerVersion, minVersion) {
 		return errors.Errorf(
 			"cluster requires at least version %s, but peer has version %s",
 			minVersion, peerVersion)
