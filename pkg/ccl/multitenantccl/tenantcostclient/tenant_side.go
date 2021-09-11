@@ -155,30 +155,27 @@ func (c *tenantSideCostController) mainLoop(
 func (c *tenantSideCostController) OnRequestWait(
 	ctx context.Context, info tenantcostmodel.RequestInfo,
 ) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if isWrite, writeBytes := info.IsWrite(); isWrite {
-		c.mu.consumption.WriteRequests++
-		c.mu.consumption.WriteBytes += uint64(writeBytes)
-	} else {
-		c.mu.consumption.ReadRequests++
-	}
-	c.mu.consumption.RU += float64(c.mu.costCfg.RequestCost(info))
-
 	return nil
 }
 
 // OnResponse is part of the multitenant.TenantSideBatchInterceptor interface.
+//
+// TODO(radu): we don't get a callback in error cases (we should return the
+// RequestCost to the bucket).
 func (c *tenantSideCostController) OnResponse(
-	ctx context.Context, info tenantcostmodel.ResponseInfo,
+	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
 ) {
-	readBytes := info.ReadBytes()
-	if readBytes == 0 {
-		return
-	}
 	c.mu.Lock()
-	c.mu.consumption.ReadBytes += uint64(readBytes)
-	c.mu.consumption.RU += float64(c.mu.costCfg.ResponseCost(info))
-	c.mu.Unlock()
+	defer c.mu.Unlock()
+
+	if isWrite, writeBytes := req.IsWrite(); isWrite {
+		c.mu.consumption.WriteRequests++
+		c.mu.consumption.WriteBytes += uint64(writeBytes)
+		c.mu.consumption.RU += float64(c.mu.costCfg.KVWriteCost(writeBytes))
+	} else {
+		c.mu.consumption.ReadRequests++
+		readBytes := resp.ReadBytes()
+		c.mu.consumption.ReadBytes += uint64(readBytes)
+		c.mu.consumption.RU += float64(c.mu.costCfg.KVReadCost(readBytes))
+	}
 }
