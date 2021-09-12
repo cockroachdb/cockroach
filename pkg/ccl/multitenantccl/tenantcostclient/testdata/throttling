@@ -1,0 +1,97 @@
+# By default, the test provider grants all RUs immediately. Verify that
+# requests never block.
+
+wait-for-event
+token-bucket-response
+----
+
+read bytes=1024000
+----
+
+advance
+1s
+----
+00:00:01.000
+
+write bytes=1024
+----
+
+advance
+1s
+----
+00:00:02.000
+
+write bytes=1024
+----
+
+write bytes=1024
+----
+
+# Set up throttling at 1000 RU/s.
+throttle
+1000
+----
+
+# Fire off some writes that need significantly more than the 10000 initial RUs.
+write bytes=50000000 label=w1
+----
+
+wait-for-event
+token-bucket-response
+----
+
+timers
+----
+00:00:11.000
+00:00:11.089
+
+advance
+1s
+----
+00:00:03.000
+
+not-completed label=w1
+----
+
+write bytes=100000000 label=w2
+----
+
+# Advance time enough for w1 to complete.
+advance
+10s
+----
+00:00:13.000
+
+wait-for-event
+token-bucket-response
+----
+
+timers
+----
+00:00:22.000
+00:00:49.237
+
+advance
+20s
+----
+00:00:33.000
+
+await label=w1
+----
+
+timers
+----
+00:00:42.000
+00:00:49.237
+
+not-completed label=w2
+----
+
+# Advance time enough for w2 to complete.
+advance
+40s
+----
+00:01:13.000
+
+await label=w2
+----

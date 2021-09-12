@@ -17,6 +17,7 @@ import "time"
 type TimeSource interface {
 	Now() time.Time
 	NewTimer() TimerI
+	NewTicker(duration time.Duration) TickerI
 }
 
 // TimerI is an interface wrapping Timer.
@@ -37,6 +38,21 @@ type TimerI interface {
 	MarkRead()
 }
 
+// TickerI is an interface wrapping Ticker.
+type TickerI interface {
+	// Reset stops a ticker and resets its period to the specified duration. The
+	// next tick will arrive after the new period elapses.
+	Reset(duration time.Duration)
+
+	// Stop turns off a ticker. After Stop, no more ticks will be sent. Stop does
+	// not close the channel, to prevent a concurrent goroutine reading from the
+	// channel from seeing an erroneous "tick".
+	Stop()
+
+	// Ch returns the channel on which the ticks are delivered.
+	Ch() <-chan time.Time
+}
+
 // DefaultTimeSource is a TimeSource using the system clock.
 type DefaultTimeSource struct{}
 
@@ -50,6 +66,11 @@ func (DefaultTimeSource) Now() time.Time {
 // NewTimer returns a TimerI wrapping *Timer.
 func (DefaultTimeSource) NewTimer() TimerI {
 	return (*timer)(NewTimer())
+}
+
+// NewTicker creates a new ticker.
+func (DefaultTimeSource) NewTicker(duration time.Duration) TickerI {
+	return (*ticker)(time.NewTicker(duration))
 }
 
 type timer Timer
@@ -70,4 +91,23 @@ func (t *timer) Ch() <-chan time.Time {
 
 func (t *timer) MarkRead() {
 	t.Read = true
+}
+
+type ticker time.Ticker
+
+var _ TickerI = (*ticker)(nil)
+
+// Reset is part of the TickerI interface.
+func (t *ticker) Reset(duration time.Duration) {
+	(*time.Ticker)(t).Reset(duration)
+}
+
+// Stop is part of the TickerI interface.
+func (t *ticker) Stop() {
+	(*time.Ticker)(t).Stop()
+}
+
+// Ch is part of the TickerI interface.
+func (t *ticker) Ch() <-chan time.Time {
+	return (*time.Ticker)(t).C
 }

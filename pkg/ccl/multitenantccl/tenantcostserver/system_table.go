@@ -47,7 +47,14 @@ type tenantState struct {
 
 // defaultRefillRate is the default refill rate if it is never configured (via
 // the crdb_internal.update_tenant_resource_limits SQL built-in).
-const defaultRefillRate = 200
+const defaultRefillRate = 100
+
+// defaultInitialRUs is the default quantity of RUs available to use immediately
+// if it is never configured (via the
+// crdb_internal.update_tenant_resource_limits SQL built-in).
+// This value is intended to prevent short-running unit tests from being
+// throttled.
+const defaultInitialRUs = 10 * 1000 * 1000
 
 // update accounts for the passing of time since LastUpdate.
 // If the tenantState is not initialized (Present=false), it is initialized now.
@@ -59,6 +66,7 @@ func (ts *tenantState) update(now time.Time) {
 			FirstInstance: 0,
 			Bucket: tenanttokenbucket.State{
 				RURefillRate: defaultRefillRate,
+				RUCurrent:    defaultInitialRUs,
 			},
 		}
 		return
@@ -517,13 +525,13 @@ func InspectTenantMetadata(
 	}
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Bucket state: ru-burst-limit=%g  ru-refill-rate=%g  ru-current=%g  current-share-sum=%g\n",
+	fmt.Fprintf(&buf, "Bucket state: ru-burst-limit=%g  ru-refill-rate=%g  ru-current=%.12g  current-share-sum=%.12g\n",
 		tenant.Bucket.RUBurstLimit,
 		tenant.Bucket.RURefillRate,
 		tenant.Bucket.RUCurrent,
 		tenant.Bucket.CurrentShareSum,
 	)
-	fmt.Fprintf(&buf, "Consumption: ru=%g  reads=%d req/%d bytes  writes=%d req/%d bytes  pod-cpu-usage: %g\n",
+	fmt.Fprintf(&buf, "Consumption: ru=%.12g  reads=%d req/%d bytes  writes=%d req/%d bytes  pod-cpu-usage: %g\n",
 		tenant.Consumption.RU,
 		tenant.Consumption.ReadRequests,
 		tenant.Consumption.ReadBytes,
