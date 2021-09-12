@@ -161,6 +161,8 @@ type FlowBase struct {
 	//  - outboxes
 	waitGroup sync.WaitGroup
 
+	onFlowCleanup func()
+
 	doneFn func()
 
 	status flowStatus
@@ -223,12 +225,14 @@ func NewFlowBase(
 	flowReg *FlowRegistry,
 	syncFlowConsumer execinfra.RowReceiver,
 	localProcessors []execinfra.LocalProcessor,
+	onFlowCleanup func(),
 ) *FlowBase {
 	base := &FlowBase{
 		FlowCtx:          flowCtx,
 		flowRegistry:     flowReg,
 		syncFlowConsumer: syncFlowConsumer,
 		localProcessors:  localProcessors,
+		onFlowCleanup:    onFlowCleanup,
 	}
 	base.status = FlowNotStarted
 	return base
@@ -466,6 +470,9 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	}
 	f.status = FlowFinished
 	f.ctxCancel()
+	if f.onFlowCleanup != nil {
+		f.onFlowCleanup()
+	}
 	if f.doneFn != nil {
 		f.doneFn()
 	}
