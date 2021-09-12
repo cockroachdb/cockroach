@@ -12,6 +12,7 @@ package timeutil
 
 import (
 	"container/heap"
+	"container/list"
 	"sort"
 	"time"
 
@@ -24,6 +25,8 @@ type ManualTime struct {
 		syncutil.Mutex
 		now    time.Time
 		timers manualTimerQueue
+		// tickers is a list with element type *manualTicker.
+		tickers list.List
 	}
 }
 
@@ -34,6 +37,7 @@ func NewManualTime(initialTime time.Time) *ManualTime {
 	mt.mu.timers = manualTimerQueue{
 		m: make(map[*manualTimer]int),
 	}
+	mt.mu.tickers.Init()
 	return &mt
 }
 
@@ -46,9 +50,28 @@ func (m *ManualTime) Now() time.Time {
 	return m.mu.now
 }
 
-// NewTimer constructs a new Timer.
+// NewTimer constructs a new timer.
 func (m *ManualTime) NewTimer() TimerI {
 	return &manualTimer{m: m}
+}
+
+// NewTicker creates a new ticker.
+func (m *ManualTime) NewTicker(duration time.Duration) TickerI {
+	if duration <= 0 {
+		panic("non-positive interval for NewTicker")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	t := &manualTicker{
+		m:        m,
+		duration: duration,
+		nextTick: m.mu.now.Add(duration),
+		// We allocate a big buffer so that sending a tick never blocks.
+		ch: make(chan time.Time, 10000),
+	}
+	t.element = m.mu.tickers.PushBack(t)
+	return t
 }
 
 // Advance forwards the current time by the given duration.
@@ -58,20 +81,35 @@ func (m *ManualTime) Advance(duration time.Duration) {
 
 // AdvanceTo advances the current time to t. If t is earlier than the current
 // time then AdvanceTo is a no-op.
-func (m *ManualTime) AdvanceTo(t time.Time) {
+func (m *ManualTime) AdvanceTo(now time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !t.After(m.mu.now) {
+	if !now.After(m.mu.now) {
 		return
 	}
-	m.mu.now = t
+	m.mu.now = now
+
+	// Fire off any timers.
 	for m.mu.timers.Len() > 0 {
 		next := m.mu.timers.heap[0]
-		if next.at.After(m.mu.now) {
+		if next.at.After(now) {
 			break
 		}
 		next.ch <- next.at
 		heap.Pop(&m.mu.timers)
+	}
+
+	// Fire off any tickers.
+	for e := m.mu.tickers.Front(); e != nil; e = e.Next() {
+		t := e.Value.(*manualTicker)
+		for !t.nextTick.After(now) {
+			select {
+			case t.ch <- t.nextTick:
+			default:
+				panic("ticker channel full")
+			}
+			t.nextTick = t.nextTick.Add(t.duration)
+		}
 	}
 }
 
@@ -86,7 +124,7 @@ func (m *ManualTime) add(mt *manualTimer) {
 	}
 }
 
-func (m *ManualTime) remove(mt *manualTimer) bool {
+func (m *ManualTime) removeTimer(mt *manualTimer) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if idx, ok := m.mu.timers.m[mt]; ok {
@@ -94,6 +132,15 @@ func (m *ManualTime) remove(mt *manualTimer) bool {
 		return true
 	}
 	return false
+}
+
+func (m *ManualTime) removeTicker(t *manualTicker) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if t.element != nil {
+		m.mu.tickers.Remove(t.element)
+		t.element = nil
+	}
 }
 
 // Timers returns a snapshot of the timestamps of the pending timers.
@@ -162,7 +209,7 @@ func (m *manualTimer) Reset(duration time.Duration) {
 }
 
 func (m *manualTimer) Stop() bool {
-	removed := m.m.remove(m)
+	removed := m.m.removeTimer(m)
 	m.ch = nil
 	m.at = time.Time{}
 	return removed
@@ -173,3 +220,27 @@ func (m *manualTimer) Ch() <-chan time.Time {
 }
 
 func (m *manualTimer) MarkRead() {}
+
+type manualTicker struct {
+	m       *ManualTime
+	element *list.Element
+
+	duration time.Duration
+	nextTick time.Time
+	ch       chan time.Time
+}
+
+// Reset is part of the TickerI interface.
+func (t *manualTicker) Reset(duration time.Duration) {
+	panic("not implemented")
+}
+
+// Stop is part of the TickerI interface.
+func (t *manualTicker) Stop() {
+	t.m.removeTicker(t)
+}
+
+// Ch is part of the TickerI interface.
+func (t *manualTicker) Ch() <-chan time.Time {
+	return t.ch
+}

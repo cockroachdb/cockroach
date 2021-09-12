@@ -46,7 +46,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=200  ru-current=0  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
 Consumption: ru=1110  reads=2220 req/3330 bytes  writes=4440 req/5550 bytes  pod-cpu-usage: 6660
 Last update: 00:00:00.000
 First active instance: 1

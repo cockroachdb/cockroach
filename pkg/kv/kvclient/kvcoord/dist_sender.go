@@ -729,9 +729,10 @@ func (ds *DistSender) Send(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
 	defer sp.Finish()
 
+	var reqInfo tenantcostmodel.RequestInfo
 	if ds.kvInterceptor != nil {
-		info := tenantcostmodel.MakeRequestInfo(&ba)
-		if err := ds.kvInterceptor.OnRequestWait(ctx, info); err != nil {
+		reqInfo = tenantcostmodel.MakeRequestInfo(&ba)
+		if err := ds.kvInterceptor.OnRequestWait(ctx, reqInfo); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -829,8 +830,8 @@ func (ds *DistSender) Send(
 		reply.BatchResponse_Header = lastHeader
 
 		if ds.kvInterceptor != nil {
-			info := tenantcostmodel.MakeResponseInfo(reply)
-			ds.kvInterceptor.OnResponse(ctx, info)
+			respInfo := tenantcostmodel.MakeResponseInfo(reply)
+			ds.kvInterceptor.OnResponse(ctx, reqInfo, respInfo)
 		}
 	}
 

@@ -508,6 +508,6 @@ func (noopTenantSideCostController) OnRequestWait(
 }
 
 func (noopTenantSideCostController) OnResponse(
-	ctx context.Context, info tenantcostmodel.ResponseInfo,
+	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
 ) {
 }
