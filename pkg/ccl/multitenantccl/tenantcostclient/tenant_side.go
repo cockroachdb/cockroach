@@ -32,7 +32,7 @@ var TargetPeriodSetting = settings.RegisterDurationSetting(
 	"tenant_cost_control_period",
 	"target duration between token bucket requests from tenants (requires restart)",
 	10*time.Second,
-	settings.PositiveDuration,
+	checkDurationInRange(5*time.Second, 120*time.Second),
 )
 
 // CPUUsageAllowance is exported for testing purposes.
@@ -42,8 +42,21 @@ var CPUUsageAllowance = settings.RegisterDurationSetting(
 		"doesn't contribute to consumption; for example, if it is set to 10ms, "+
 		"that corresponds to 1% of a CPU",
 	10*time.Millisecond,
-	settings.NonNegativeDuration,
+	checkDurationInRange(0, 10*time.Millisecond),
 )
+
+// checkDurationInRange returns a function used to validate duration cluster
+// settings. Because these values are currently settable by the tenant, we need
+// to restrict the allowed values to avoid possible sabotage of the cost control
+// mechanisms.
+func checkDurationInRange(min, max time.Duration) func(v time.Duration) error {
+	return func(v time.Duration) error {
+		if v < min || v > max {
+			return errors.Errorf("value %s out of range (%s, %s)", v, min, max)
+		}
+		return nil
+	}
+}
 
 // mainLoopUpdateInterval is the period at which we collect CPU usage and
 // evaluate whether we need to send a new token request.
@@ -93,8 +106,10 @@ func newTenantSideCostController(
 	}
 	c.limiter.Init(c.timeSource, c.lowRUNotifyChan)
 
-	// TODO(radu): support changing the tenant configuration at runtime.
-	c.costCfg = tenantcostmodel.ConfigFromSettings(&st.SV)
+	// TODO(radu): these settings can currently be changed by the tenant (see
+	// #47918), which would made it very easy to evade cost control. For now, use
+	// the hardcoded default values.
+	c.costCfg = tenantcostmodel.DefaultConfig()
 	return c, nil
 }
 
