@@ -111,7 +111,7 @@ func (b *Builder) buildTypedExpr(
 }
 
 func (b *Builder) buildNull(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
-	if scalar.DataType().Family() == types.TupleFamily {
+	if scalar.DataType().Family() == types.TupleFamily && !scalar.DataType().UserDefined() {
 		// See comment in buildCast.
 		return tree.DNull, nil
 	}
@@ -336,7 +336,7 @@ func (b *Builder) buildCast(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Ty
 	if err != nil {
 		return nil, err
 	}
-	if cast.Typ.Family() == types.TupleFamily {
+	if cast.Typ.Family() == types.TupleFamily && !cast.Typ.UserDefined() {
 		// TODO(radu): casts to Tuple are not supported (they can't be serialized
 		// for distsql). This should only happen when the input is always NULL so
 		// the expression should still be valid without the cast (though there could

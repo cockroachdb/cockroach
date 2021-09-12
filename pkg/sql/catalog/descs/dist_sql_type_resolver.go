@@ -102,8 +102,15 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	typeDesc, isType := desc.(catalog.TypeDescriptor)
-	if !isType {
+	var typeDesc catalog.TypeDescriptor
+	switch t := desc.(type) {
+	case catalog.TypeDescriptor:
+		typeDesc = t
+		// User-defined type.
+	case catalog.TableDescriptor:
+		typeDesc = typedesc.CreateImmutableFromTableDesc(t)
+	// Table record type.
+	default:
 		return tree.TypeName{}, nil, pgerror.Newf(pgcode.WrongObjectType,
 			"descriptor %d is a %s not a %s", id, desc.DescriptorType(), catalog.Type)
 	}

@@ -73,10 +73,10 @@ func (b *buildContext) dropTypeDesc(
 		if ignoreAliases {
 			return
 		}
-		// The implicit array types are not directly droppable.
+		// The alias types are not directly droppable.
 		panic(pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
-			"%q is an implicit array type and cannot be modified",
+			"%q is an implicit type and cannot be modified",
 			typeDesc.GetName(),
 		))
 	case descpb.TypeDescriptor_MULTIREGION_ENUM:

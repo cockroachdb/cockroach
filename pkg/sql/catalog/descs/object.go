@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -86,12 +87,23 @@ func (tc *Collection) getObjectByName(
 	}
 	switch t := desc.(type) {
 	case catalog.TableDescriptor:
-		if flags.DesiredObjectKind != tree.TableObject {
+		switch flags.DesiredObjectKind {
+		case tree.TableObject, tree.TypeObject:
+		default:
 			return prefix, nil, nil
 		}
-		desc, err = tc.hydrateTypesInTableDesc(ctx, txn, t)
+		tableDesc, err := tc.hydrateTypesInTableDesc(ctx, txn, t)
 		if err != nil {
 			return prefix, nil, err
+		}
+		desc = tableDesc
+		if flags.DesiredObjectKind == tree.TypeObject {
+			// Resolving a table name as a type.
+			if flags.RequireMutable {
+				desc = typedesc.CreateMutableFromTableDesc(tableDesc)
+			} else {
+				desc = typedesc.CreateImmutableFromTableDesc(tableDesc)
+			}
 		}
 	case catalog.TypeDescriptor:
 		if flags.DesiredObjectKind != tree.TypeObject {

@@ -806,26 +806,38 @@ func (desc *immutable) HydrateTypeInfoWithName(
 			case types.ArrayFamily:
 				// Hydrate the element type.
 				elemType := typ.ArrayContents()
-				id, err := GetUserDefinedTypeDescID(elemType)
-				if err != nil {
-					return err
+				return hydrateElementType(ctx, elemType, res)
+			case types.TupleFamily:
+				for _, t := range typ.TupleContents() {
+					if t.UserDefined() {
+						if err := hydrateElementType(ctx, t, res); err != nil {
+							return err
+						}
+					}
 				}
-				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
-				if err != nil {
-					return err
-				}
-				if err := elemTypDesc.HydrateTypeInfoWithName(ctx, elemType, &elemTypName, res); err != nil {
-					return err
-				}
-				return nil
 			default:
-				return errors.AssertionFailedf("only array types aliases can be user defined")
+				return errors.AssertionFailedf("unhandled alias type family %s", typ.Family())
 			}
 		}
 		return nil
 	default:
 		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
 	}
+}
+
+func hydrateElementType(ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver) error {
+	id, err := GetUserDefinedTypeDescID(t)
+	if err != nil {
+		return err
+	}
+	elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := elemTypDesc.HydrateTypeInfoWithName(ctx, t, &elemTypName, res); err != nil {
+		return err
+	}
+	return nil
 }
 
 // NumEnumMembers returns the number of enum members if the type is an
@@ -959,7 +971,8 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 	ret := map[descpb.ID]struct{}{
 		id: {},
 	}
-	if typ.Family() == types.ArrayFamily {
+	switch typ.Family() {
+	case types.ArrayFamily:
 		// If we have an array type, then collect all types in the contents.
 		children, err := GetTypeDescriptorClosure(typ.ArrayContents())
 		if err != nil {
@@ -968,7 +981,22 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 		for id := range children {
 			ret[id] = struct{}{}
 		}
-	} else {
+	case types.TupleFamily:
+		// Table record types are not currently supported when stored in
+		// descriptors.
+		// TODO(schema): make this work.
+
+		// If we have a tuple type, collect all types in the contents.
+		for _, elt := range typ.TupleContents() {
+			children, err := GetTypeDescriptorClosure(elt)
+			if err != nil {
+				return nil, err
+			}
+			for id := range children {
+				ret[id] = struct{}{}
+			}
+		}
+	default:
 		// Otherwise, take the array type ID.
 		id, err := GetUserDefinedArrayTypeDescID(typ)
 		if err != nil {
@@ -983,4 +1011,52 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 // RunPostDeserializationChanges.
 func (desc *Mutable) HasPostDeserializationChanges() bool {
 	return desc.changed
+}
+
+func descBuilderFromTableDesc(descriptor catalog.TableDescriptor) TypeDescriptorBuilder {
+	cols := descriptor.VisibleColumns()
+	typs := make([]*types.T, len(cols))
+	names := make([]string, len(cols))
+	for i, col := range cols {
+		typs[i] = col.GetType()
+		names[i] = col.GetName()
+	}
+	typ := types.MakeLabeledTuple(typs, names)
+	tableID := descriptor.GetID()
+	typeOID := TypeIDToOID(tableID)
+	typ.InternalType.Oid = typeOID
+	typ.TypeMeta = types.UserDefinedTypeMetadata{
+		Name: &types.UserDefinedTypeName{
+			Name: descriptor.GetName(),
+		},
+		Version: uint32(descriptor.GetVersion()),
+	}
+	return NewBuilder(&descpb.TypeDescriptor{
+		Name:             descriptor.GetName(),
+		ID:               descpb.ID(typeOID),
+		Version:          descriptor.GetVersion(),
+		ModificationTime: descriptor.GetModificationTime(),
+		DrainingNames:    descriptor.GetDrainingNames(),
+		Privileges:       descriptor.GetPrivileges(),
+		ParentID:         descriptor.GetParentID(),
+		ParentSchemaID:   descriptor.GetParentSchemaID(),
+		State:            descriptor.GetState(),
+		OfflineReason:    descriptor.GetOfflineReason(),
+		Kind:             descpb.TypeDescriptor_ALIAS,
+
+		ReferencingDescriptorIDs: []descpb.ID{tableID},
+		Alias:                    typ,
+	})
+}
+
+// CreateMutableFromTableDesc creates a mutable TypeDescriptor that represents
+// the composite type of the visible columns of the input table.
+func CreateMutableFromTableDesc(descriptor catalog.TableDescriptor) catalog.TypeDescriptor {
+	return descBuilderFromTableDesc(descriptor).BuildCreatedMutableType()
+}
+
+// CreateImmutableFromTableDesc creates an immutable TypeDescriptor that represents
+// the composite type of the visible columns of the input table.
+func CreateImmutableFromTableDesc(descriptor catalog.TableDescriptor) catalog.TypeDescriptor {
+	return descBuilderFromTableDesc(descriptor).BuildImmutableType()
 }
