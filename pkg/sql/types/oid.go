@@ -211,6 +211,14 @@ func CalcArrayOid(elemTyp *T) oid.Oid {
 
 	case EnumFamily:
 		return elemTyp.UserDefinedArrayOID()
+
+	case TupleFamily:
+		if elemTyp.UserDefined() {
+			// We're currently not creating array types for implicitly-defined
+			// per-table record types. So, we cheat a little, and return, as the OID
+			// for an array of these things, the OID for a generic array of records.
+			return oid.T__record
+		}
 	}
 
 	// Map the OID of the array element type to the corresponding array OID.

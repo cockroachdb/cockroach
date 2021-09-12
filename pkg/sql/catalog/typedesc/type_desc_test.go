@@ -812,3 +812,19 @@ func TestOIDToIDConversion(t *testing.T) {
 		})
 	}
 }
+
+func TestTableImplicitTypeDescCannotBeSerializedOrValidated(t *testing.T) {
+	td := &descpb.TypeDescriptor{
+		Name:           "foo",
+		ID:             10,
+		ParentID:       1,
+		ParentSchemaID: 1,
+		Kind:           descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE,
+	}
+
+	desc := typedesc.NewBuilder(td).BuildImmutable()
+
+	ctx := context.Background()
+	err := catalog.Validate(ctx, nil, catalog.NoValidationTelemetry, catalog.ValidationLevelSelfOnly, desc).CombinedError()
+	require.Contains(t, err.Error(), "kind TABLE_IMPLICIT_RECORD_TYPE should never be serialized")
+}
