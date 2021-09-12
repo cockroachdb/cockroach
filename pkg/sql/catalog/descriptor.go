@@ -678,7 +678,9 @@ type TypeDescriptor interface {
 // types.T. Implementers of tree.TypeReferenceResolver should implement this
 // interface as well.
 type TypeDescriptorResolver interface {
-	// GetTypeDescriptor returns the type descriptor for the input ID.
+	// GetTypeDescriptor returns the type descriptor for the input ID. Note that
+	// the returned type descriptor may be the implicitly-defined record type for
+	// a table, if the input ID points to a table descriptor.
 	GetTypeDescriptor(ctx context.Context, id descpb.ID) (tree.TypeName, TypeDescriptor, error)
 }
 

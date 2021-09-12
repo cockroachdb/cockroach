@@ -1675,6 +1675,10 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		}
 		return fmt.Sprintf("timestamp(%d) with time zone", typmod)
 	case TupleFamily:
+		if t.UserDefined() {
+			// If we have a user-defined tuple type, use its user-defined name.
+			return t.TypeMeta.Name.Basename()
+		}
 		return "record"
 	case UnknownFamily:
 		return "unknown"

@@ -102,8 +102,25 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	typeDesc, isType := desc.(catalog.TypeDescriptor)
-	if !isType {
+	var typeDesc catalog.TypeDescriptor
+	switch t := desc.(type) {
+	case catalog.TypeDescriptor:
+		// User-defined type.
+		typeDesc = t
+	case catalog.TableDescriptor:
+		// If we find a table descriptor when we were expecting a type descriptor,
+		// we return the implicitly-created type descriptor that is created for each
+		// table. Make sure that we hydrate the table ahead of time, since we expect
+		// that the table's types are fully hydrated below.
+		t, err = dt.descriptors.hydrateTypesInTableDesc(ctx, dt.txn, t)
+		if err != nil {
+			return tree.TypeName{}, nil, err
+		}
+		typeDesc, err = typedesc.CreateImplicitRecordTypeFromTableDesc(t)
+		if err != nil {
+			return tree.TypeName{}, nil, err
+		}
+	default:
 		return tree.TypeName{}, nil, pgerror.Newf(pgcode.WrongObjectType,
 			"descriptor %d is a %s not a %s", id, desc.DescriptorType(), catalog.Type)
 	}

@@ -77,6 +77,12 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 		}
 	case descpb.TypeDescriptor_ENUM:
 		sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumAlter)
+	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
+		return nil, pgerror.Newf(
+			pgcode.WrongObjectType,
+			"%q is a table's record type and cannot be modified",
+			tree.AsStringWithFQNames(n.Type, &p.semaCtx.Annotations),
+		)
 	}
 
 	return &alterTypeNode{
