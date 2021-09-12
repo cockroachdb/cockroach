@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/util",
+        "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
         "//pkg/util/syncutil",
