@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -395,7 +396,15 @@ func (vdg *validationDescGetterImpl) GetTypeDescriptor(id descpb.ID) (TypeDescri
 	if !found || desc == nil {
 		return nil, WrapTypeDescRefErr(id, ErrDescriptorNotFound)
 	}
-	return AsTypeDescriptor(desc)
+	if _, ok := desc.(TableDescriptor); ok {
+		return nil, unimplemented.NewWithIssuef(70099, "table record type %q not allowed in definition",
+			desc.GetName())
+	}
+	descriptor, err := AsTypeDescriptor(desc)
+	if err != nil {
+		return nil, err
+	}
+	return descriptor, err
 }
 
 func (vdg *validationDescGetterImpl) addNamespaceEntries(

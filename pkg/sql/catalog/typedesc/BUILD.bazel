@@ -6,6 +6,7 @@ go_library(
         "safe_format.go",
         "type_desc.go",
         "type_desc_builder.go",
+        "virtual_table_record_type.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc",
     visibility = ["//visibility:public"],
