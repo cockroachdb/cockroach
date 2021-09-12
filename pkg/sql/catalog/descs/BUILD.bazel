@@ -90,8 +90,6 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/tabledesc",
-        "//pkg/sql/pgwire/pgcode",
-        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
         "//pkg/sql/tests",
@@ -102,6 +100,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -239,9 +239,12 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 	case *tree.CastExpr:
 		// TODO (rohany): I'm not sure why this CastExpr doesn't have a type
 		//  annotation at this stage of processing...
-		if typ, ok := tree.GetStaticallyKnownType(t.Type); ok && typ.Family() == types.OidFamily {
-			v.err = newQueryNotSupportedErrorf("cast to %s is not supported by distsql", t.Type)
-			return false, expr
+		if typ, ok := tree.GetStaticallyKnownType(t.Type); ok {
+			switch typ.Family() {
+			case types.OidFamily:
+				v.err = newQueryNotSupportedErrorf("cast to %s is not supported by distsql", t.Type)
+				return false, expr
+			}
 		}
 	case *tree.DArray:
 		// We need to check for arrays of untyped tuples here since constant-folding

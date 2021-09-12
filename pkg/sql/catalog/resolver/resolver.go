@@ -171,7 +171,16 @@ func ResolveMutableType(
 	if err != nil || desc == nil {
 		return catalog.ResolvedObjectPrefix{}, nil, err
 	}
-	return prefix, desc.(*typedesc.Mutable), nil
+	switch t := desc.(type) {
+	case *typedesc.Mutable:
+		return prefix, t, nil
+	case *typedesc.TableImplicitRecordType:
+		return catalog.ResolvedObjectPrefix{}, nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"cannot modify table record type %q", desc.GetName())
+	default:
+		return catalog.ResolvedObjectPrefix{}, nil,
+			errors.AssertionFailedf("unhandled type descriptor type %T during resolve mutable desc", t)
+	}
 }
 
 // ResolveExistingObject resolves an object with the given flags.
@@ -213,9 +222,6 @@ func ResolveExistingObject(
 		typ, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
 			return nil, prefix, sqlerrors.NewUndefinedTypeError(&resolvedTn)
-		}
-		if lookupFlags.RequireMutable {
-			return obj.(*typedesc.Mutable), prefix, nil
 		}
 		return typ, prefix, nil
 	case tree.TableObject:

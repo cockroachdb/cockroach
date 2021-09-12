@@ -237,6 +237,12 @@ const (
 
 var _ ValidationErrorAccumulator = &validationErrorAccumulator{}
 
+// NewValidationErrorAccumulator returns a fresh, empty validation error
+// accumulator.
+func NewValidationErrorAccumulator() ValidationErrorAccumulator {
+	return &validationErrorAccumulator{}
+}
+
 // Report implements the ValidationErrorAccumulator interface.
 func (vea *validationErrorAccumulator) Report(err error) {
 	if err == nil {
@@ -395,7 +401,11 @@ func (vdg *validationDescGetterImpl) GetTypeDescriptor(id descpb.ID) (TypeDescri
 	if !found || desc == nil {
 		return nil, WrapTypeDescRefErr(id, ErrDescriptorNotFound)
 	}
-	return AsTypeDescriptor(desc)
+	descriptor, err := AsTypeDescriptor(desc)
+	if err != nil {
+		return nil, err
+	}
+	return descriptor, err
 }
 
 func (vdg *validationDescGetterImpl) addNamespaceEntries(

@@ -84,6 +84,12 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 				"try ALTER DATABASE DROP REGION %s", name)
 		case descpb.TypeDescriptor_ENUM:
 			sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumDrop)
+		case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
+			return nil, pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop type %q because table %q requires it",
+				name, name,
+			)
 		}
 
 		// Check if we can drop the type.
