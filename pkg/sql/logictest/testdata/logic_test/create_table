@@ -598,3 +598,15 @@ gen_by_default_as_id_seqopt_cache  CREATE TABLE public.gen_by_default_as_id_seqo
                                    UNIQUE INDEX gen_by_default_as_id_seqopt_cache_a_key (a ASC),
                                    FAMILY f1 (a, b, rowid)
 )
+
+statement ok
+CREATE SEQUENCE serial_test_sequence start 1 increment 1
+
+statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+CREATE TABLE serial_test1 (id INT PRIMARY KEY DEFAULT nextval('serial_test_sequence'), temp string)
+
+statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+CREATE TABLE serial_test2 (id SERIAL PRIMARY KEY, temp string)
+
+statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+CREATE TABLE serial_test3 (id SERIAL , temp string, PRIMARY KEY (id))
