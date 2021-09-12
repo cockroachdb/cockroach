@@ -513,6 +513,8 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		if desc.GetArrayTypeID() != descpb.InvalidID {
 			vea.Report(errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.GetArrayTypeID()))
 		}
+	case descpb.TypeDescriptor_VIRTUAL_TABLE_RECORD_TYPE:
+		vea.Report(errors.AssertionFailedf("cannot persist type descriptor kind %s", desc.Kind.String()))
 	default:
 		vea.Report(errors.AssertionFailedf("invalid type descriptor kind %s", desc.Kind.String()))
 	}
@@ -806,26 +808,38 @@ func (desc *immutable) HydrateTypeInfoWithName(
 			case types.ArrayFamily:
 				// Hydrate the element type.
 				elemType := typ.ArrayContents()
-				id, err := GetUserDefinedTypeDescID(elemType)
-				if err != nil {
-					return err
+				return hydrateElementType(ctx, elemType, res)
+			case types.TupleFamily:
+				for _, t := range typ.TupleContents() {
+					if t.UserDefined() {
+						if err := hydrateElementType(ctx, t, res); err != nil {
+							return err
+						}
+					}
 				}
-				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
-				if err != nil {
-					return err
-				}
-				if err := elemTypDesc.HydrateTypeInfoWithName(ctx, elemType, &elemTypName, res); err != nil {
-					return err
-				}
-				return nil
 			default:
-				return errors.AssertionFailedf("only array types aliases can be user defined")
+				return errors.AssertionFailedf("unhandled alias type family %s", typ.Family())
 			}
 		}
 		return nil
 	default:
 		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
 	}
+}
+
+func hydrateElementType(ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver) error {
+	id, err := GetUserDefinedTypeDescID(t)
+	if err != nil {
+		return err
+	}
+	elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := elemTypDesc.HydrateTypeInfoWithName(ctx, t, &elemTypName, res); err != nil {
+		return err
+	}
+	return nil
 }
 
 // NumEnumMembers returns the number of enum members if the type is an
@@ -959,7 +973,8 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 	ret := map[descpb.ID]struct{}{
 		id: {},
 	}
-	if typ.Family() == types.ArrayFamily {
+	switch typ.Family() {
+	case types.ArrayFamily:
 		// If we have an array type, then collect all types in the contents.
 		children, err := GetTypeDescriptorClosure(typ.ArrayContents())
 		if err != nil {
@@ -968,7 +983,18 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 		for id := range children {
 			ret[id] = struct{}{}
 		}
-	} else {
+	case types.TupleFamily:
+		// If we have a tuple type, collect all types in the contents.
+		for _, elt := range typ.TupleContents() {
+			children, err := GetTypeDescriptorClosure(elt)
+			if err != nil {
+				return nil, err
+			}
+			for id := range children {
+				ret[id] = struct{}{}
+			}
+		}
+	default:
 		// Otherwise, take the array type ID.
 		id, err := GetUserDefinedArrayTypeDescID(typ)
 		if err != nil {

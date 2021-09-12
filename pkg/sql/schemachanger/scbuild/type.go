@@ -73,7 +73,7 @@ func (b *buildContext) dropTypeDesc(
 		if ignoreAliases {
 			return
 		}
-		// The implicit array types are not directly droppable.
+		// The implict array types are not directly droppable.
 		panic(pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
 			"%q is an implicit array type and cannot be modified",
