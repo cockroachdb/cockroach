@@ -59,10 +59,10 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 
 	switch desc.Kind {
 	case descpb.TypeDescriptor_ALIAS:
-		// The implicit array types are not modifiable.
+		// The alias types are not modifiable.
 		return nil, pgerror.Newf(
 			pgcode.WrongObjectType,
-			"%q is an implicit array type and cannot be modified",
+			"%q is an alias type and cannot be modified",
 			tree.AsStringWithFQNames(n.Type, &p.semaCtx.Annotations),
 		)
 	case descpb.TypeDescriptor_MULTIREGION_ENUM:

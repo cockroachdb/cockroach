@@ -67,10 +67,10 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 		}
 		switch typeDesc.Kind {
 		case descpb.TypeDescriptor_ALIAS:
-			// The implicit array types are not directly droppable.
+			// The alias types are not directly droppable.
 			return nil, pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
-				"%q is an implicit array type and cannot be modified",
+				"%q is an alias type and cannot be modified",
 				name,
 			)
 		case descpb.TypeDescriptor_MULTIREGION_ENUM:
