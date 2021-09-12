@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -86,12 +87,29 @@ func (tc *Collection) getObjectByName(
 	}
 	switch t := desc.(type) {
 	case catalog.TableDescriptor:
-		if flags.DesiredObjectKind != tree.TableObject {
+		// A given table name can resolve to either a type descriptor or a table
+		// descriptor, because every table descriptor also defines an implicit
+		// record type with the same name as the table. Thus, depending on the
+		// requested descriptor type, we return either the table descriptor itself,
+		// or the table descriptor's implicit record type.
+		switch flags.DesiredObjectKind {
+		case tree.TableObject, tree.TypeObject:
+		default:
 			return prefix, nil, nil
 		}
-		desc, err = tc.hydrateTypesInTableDesc(ctx, txn, t)
+		tableDesc, err := tc.hydrateTypesInTableDesc(ctx, txn, t)
 		if err != nil {
 			return prefix, nil, err
+		}
+		desc = tableDesc
+		if flags.DesiredObjectKind == tree.TypeObject {
+			// Since a type descriptor was requested, we need to return the implicitly
+			// created record type for the table that we found.
+			if flags.RequireMutable {
+				desc = typedesc.CreateMutableFromTableDesc(tableDesc)
+			} else {
+				desc = typedesc.CreateImmutableFromTableDesc(tableDesc)
+			}
 		}
 	case catalog.TypeDescriptor:
 		if flags.DesiredObjectKind != tree.TypeObject {

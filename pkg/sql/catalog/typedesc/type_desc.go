@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -513,6 +514,10 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		if desc.GetArrayTypeID() != descpb.InvalidID {
 			vea.Report(errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.GetArrayTypeID()))
 		}
+		if desc.Alias.Family() == types.TupleFamily {
+			vea.Report(unimplemented.NewWithIssuef(70099, "table record type %q not allowed in definition",
+				desc.GetName()))
+		}
 	default:
 		vea.Report(errors.AssertionFailedf("invalid type descriptor kind %s", desc.Kind.String()))
 	}
@@ -806,26 +811,38 @@ func (desc *immutable) HydrateTypeInfoWithName(
 			case types.ArrayFamily:
 				// Hydrate the element type.
 				elemType := typ.ArrayContents()
-				id, err := GetUserDefinedTypeDescID(elemType)
-				if err != nil {
-					return err
+				return hydrateElementType(ctx, elemType, res)
+			case types.TupleFamily:
+				for _, t := range typ.TupleContents() {
+					if t.UserDefined() {
+						if err := hydrateElementType(ctx, t, res); err != nil {
+							return err
+						}
+					}
 				}
-				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
-				if err != nil {
-					return err
-				}
-				if err := elemTypDesc.HydrateTypeInfoWithName(ctx, elemType, &elemTypName, res); err != nil {
-					return err
-				}
-				return nil
 			default:
-				return errors.AssertionFailedf("only array types aliases can be user defined")
+				return errors.AssertionFailedf("unhandled alias type family %s", typ.Family())
 			}
 		}
 		return nil
 	default:
 		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
 	}
+}
+
+func hydrateElementType(ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver) error {
+	id, err := GetUserDefinedTypeDescID(t)
+	if err != nil {
+		return err
+	}
+	elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := elemTypDesc.HydrateTypeInfoWithName(ctx, t, &elemTypName, res); err != nil {
+		return err
+	}
+	return nil
 }
 
 // NumEnumMembers returns the number of enum members if the type is an
@@ -959,7 +976,8 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 	ret := map[descpb.ID]struct{}{
 		id: {},
 	}
-	if typ.Family() == types.ArrayFamily {
+	switch typ.Family() {
+	case types.ArrayFamily:
 		// If we have an array type, then collect all types in the contents.
 		children, err := GetTypeDescriptorClosure(typ.ArrayContents())
 		if err != nil {
@@ -968,7 +986,22 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 		for id := range children {
 			ret[id] = struct{}{}
 		}
-	} else {
+	case types.TupleFamily:
+		// Table record types are not currently supported when stored in
+		// descriptors.
+		// TODO(schema): make this work.
+
+		// If we have a tuple type, collect all types in the contents.
+		for _, elt := range typ.TupleContents() {
+			children, err := GetTypeDescriptorClosure(elt)
+			if err != nil {
+				return nil, err
+			}
+			for id := range children {
+				ret[id] = struct{}{}
+			}
+		}
+	default:
 		// Otherwise, take the array type ID.
 		id, err := GetUserDefinedArrayTypeDescID(typ)
 		if err != nil {
@@ -983,4 +1016,70 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 // RunPostDeserializationChanges.
 func (desc *Mutable) HasPostDeserializationChanges() bool {
 	return desc.changed
+}
+
+// descBuilderFromTableDesc returns a fully-populated TypeDescriptorBuilder
+// that, when built, will produce a TypeDescriptor that represents the composite
+// type of all of the table's visible columns in order. This function is used
+// to produce a virtual type descriptor for every table, so that tuples can be
+// casted to a table type. This is important for Postgres compatibility, which
+// demands that every table have such a corresponding type.
+func descBuilderFromTableDesc(descriptor catalog.TableDescriptor) TypeDescriptorBuilder {
+	cols := descriptor.VisibleColumns()
+	typs := make([]*types.T, len(cols))
+	names := make([]string, len(cols))
+	for i, col := range cols {
+		typs[i] = col.GetType()
+		names[i] = col.GetName()
+	}
+	// The TypeDescriptor will be an alias to this Tuple type, which contains
+	// all of the table's visible columns in order, labeled by the table's column
+	// names.
+	typ := types.MakeLabeledTuple(typs, names)
+	tableID := descriptor.GetID()
+	typeOID := TypeIDToOID(tableID)
+	// Setting the type's OID allows us to properly report and display this type
+	// as having ID <tableID> + 100000 in the pg_type table and ::REGTYPE casts.
+	// It will also be used to serialize expressions casted to this type for
+	// distribution with DistSQL. The receiver of such a serialized expression
+	// will then be able to look up and rehydrate this type via the type cache.
+	typ.InternalType.Oid = typeOID
+	typ.TypeMeta = types.UserDefinedTypeMetadata{
+		Name: &types.UserDefinedTypeName{
+			Name: descriptor.GetName(),
+		},
+		Version: uint32(descriptor.GetVersion()),
+	}
+	return NewBuilder(&descpb.TypeDescriptor{
+		Name: descriptor.GetName(),
+		// The ID of the virtual type descriptor is the type OID, not the table
+		// descriptor ID. This is important: if the descriptor had the table's ID,
+		// and not its own, the descriptor caches would not have unique keys.
+		ID:               descpb.ID(tableID),
+		Version:          descriptor.GetVersion(),
+		ModificationTime: descriptor.GetModificationTime(),
+		DrainingNames:    descriptor.GetDrainingNames(),
+		Privileges:       descriptor.GetPrivileges(),
+		ParentID:         descriptor.GetParentID(),
+		ParentSchemaID:   descriptor.GetParentSchemaID(),
+		State:            descriptor.GetState(),
+		OfflineReason:    descriptor.GetOfflineReason(),
+
+		// The TypeDescriptor is set to an ALIAS of the tuple type, which is
+		// constructed above. This TypeDescriptor will never be persisted to disk.
+		Kind:  descpb.TypeDescriptor_ALIAS,
+		Alias: typ,
+	})
+}
+
+// CreateMutableFromTableDesc creates a mutable TypeDescriptor that represents
+// the composite type of the visible columns of the input table.
+func CreateMutableFromTableDesc(descriptor catalog.TableDescriptor) catalog.TypeDescriptor {
+	return descBuilderFromTableDesc(descriptor).BuildCreatedMutableType()
+}
+
+// CreateImmutableFromTableDesc creates an immutable TypeDescriptor that represents
+// the composite type of the visible columns of the input table.
+func CreateImmutableFromTableDesc(descriptor catalog.TableDescriptor) catalog.TypeDescriptor {
+	return descBuilderFromTableDesc(descriptor).BuildImmutableType()
 }

@@ -174,7 +174,7 @@ type Index interface {
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 }
 
-// Column is an interface around the index descriptor types.
+// Column is an interface around the column descriptor types.
 type Column interface {
 	TableElementMaybeMutation
 

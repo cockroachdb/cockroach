@@ -112,10 +112,14 @@ func (tc *Collection) getTypeByID(
 		}
 		return nil, err
 	}
-	typ, ok := desc.(catalog.TypeDescriptor)
-	if !ok {
-		return nil, pgerror.Newf(
-			pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
+	switch t := desc.(type) {
+	case catalog.TypeDescriptor:
+		// User-defined type.
+		return t, nil
+	case catalog.TableDescriptor:
+		// Table record type.
+		return typedesc.CreateMutableFromTableDesc(t), nil
 	}
-	return typ, nil
+	return nil, pgerror.Newf(
+		pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
 }

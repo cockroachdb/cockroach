@@ -27,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -422,7 +420,7 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 
 // Regression test to ensure that resolving a type descriptor which is not a
 // type using the DistSQLTypeResolver is properly handled.
-func TestDistSQLTypeResolver_GetTypeDescriptor_WrongType(t *testing.T) {
+func TestDistSQLTypeResolver_GetTypeDescriptor_FromTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -433,20 +431,31 @@ func TestDistSQLTypeResolver_GetTypeDescriptor_WrongType(t *testing.T) {
 	s := tc.Server(0)
 
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	tdb.Exec(t, `CREATE TABLE t()`)
+	tdb.Exec(t, `CREATE TABLE t(a INT PRIMARY KEY, b STRING)`)
 	var id descpb.ID
 	tdb.QueryRow(t, "SELECT $1::regclass::int", "t").Scan(&id)
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	var name tree.TypeName
+	var typedesc catalog.TypeDescriptor
 	err := sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		tr := descs.NewDistSQLTypeResolver(descriptors, txn)
-		_, _, err := tr.GetTypeDescriptor(ctx, id)
+		var err error
+		name, typedesc, err = tr.GetTypeDescriptor(ctx, id)
 		return err
 	})
-	require.Regexp(t, `descriptor \d+ is a relation not a type`, err)
-	require.Equal(t, pgcode.WrongObjectType, pgerror.GetPGCode(err))
+	require.NoError(t, err)
+	require.Equal(t, "t", name.ObjectName.String())
+	desc := typedesc.TypeDesc()
+	require.Equal(t, descpb.TypeDescriptor_ALIAS, desc.Kind)
+	require.Equal(t, "t", desc.Alias.TypeMeta.Name.Name)
+	require.Equal(t, types.TupleFamily, desc.Alias.Family())
+	require.Equal(t, []string{"a", "b"}, desc.Alias.TupleLabels())
+	require.Equal(t, types.IntFamily, desc.Alias.TupleContents()[0].Family())
+	require.Equal(t, types.StringFamily, desc.Alias.TupleContents()[1].Family())
+	require.Equal(t, id+100000, desc.ID)
 }
 
 // TestMaybeFixSchemaPrivilegesIntegration ensures that schemas that have
