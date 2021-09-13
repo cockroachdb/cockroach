@@ -174,6 +174,11 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 		}
 	}
 
+	version := hs.settings.Version.BinaryVersion()
+	if version.Equal(clusterversion.V21Dot1) {
+		version = clusterversion.V21Dot1Dot8
+	}
+
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
@@ -181,7 +186,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	return &PingResponse{
 		Pong:                           args.Ping,
 		ServerTime:                     hs.clock.PhysicalNow(),
-		ServerVersion:                  hs.settings.Version.BinaryVersion(),
+		ServerVersion:                  version,
 		ClusterName:                    hs.clusterName,
 		DisableClusterNameVerification: hs.disableClusterNameVerification,
 	}, nil
