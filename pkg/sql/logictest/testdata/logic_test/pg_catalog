@@ -5235,3 +5235,48 @@ datname     rolname   deptype
 sh_db       sh_owner  o
 sh_db       sh_role   a
 sh_db_root  sh_role   a
+
+# Testing settings and createDB from forEachRoles
+statement ok
+CREATE USER testuser1;
+CREATE USER testuser2;
+CREATE ROLE testrole1;
+CREATE DATABASE foreachroles;
+ALTER USER testuser1 WITH CREATEDB;
+ALTER USER testuser1 SET TimeZone = 'America/Los_Angeles';
+ALTER USER testuser1 SET application_name = 'a';
+ALTER USER testuser1 IN DATABASE foreachroles SET application_name = 'b';
+ALTER USER testuser2 WITH CREATEROLE PASSWORD '123' VALID UNTIL '3022-01-01';
+
+query TBT colnames
+SELECT usename, usecreatedb, useconfig
+FROM pg_user
+WHERE usename IN ('testuser1', 'testuser2')
+ORDER BY usename
+----
+usename    usecreatedb  useconfig
+testuser1  true         {timezone=America/Los_Angeles,application_name=a}
+testuser2  false        NULL
+
+query TBTBBT colnames
+SELECT rolname, rolcreatedb, rolconfig, rolinherit, rolcanlogin, rolvaliduntil
+FROM pg_roles
+WHERE rolname IN ('testuser1', 'testuser2', 'testrole1')
+ORDER BY rolname
+----
+rolname    rolcreatedb  rolconfig                                          rolinherit  rolcanlogin  rolvaliduntil
+testrole1  false        NULL                                               true        false        NULL
+testuser1  true         {timezone=America/Los_Angeles,application_name=a}  false       true         NULL
+testuser2  false        NULL                                               false       true         3022-01-01 00:00:00 +0000 UTC
+
+query TBBBBT colnames
+SELECT rolname, rolcreatedb, rolcreaterole, rolinherit, rolcanlogin, rolvaliduntil
+FROM pg_authid
+WHERE rolname IN ('testuser1', 'testuser2', 'testrole1', 'root')
+ORDER BY rolname
+----
+rolname    rolcreatedb  rolcreaterole  rolinherit  rolcanlogin  rolvaliduntil
+root       true         true           false       true         NULL
+testrole1  false        false          true        false        NULL
+testuser1  true         false          false       true         NULL
+testuser2  false        true           false       true         3022-01-01 00:00:00 +0000 UTC

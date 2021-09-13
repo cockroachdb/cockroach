@@ -260,7 +260,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 					}
 				default:
 					// Any other error is worth being logged visibly.
-					log.Warningf(ctx, "could not acquire lease for range gossip: %s", e)
+					log.Warningf(ctx, "could not acquire lease for range gossip: %s", pErr)
 				}
 			}
 		}); err != nil {
