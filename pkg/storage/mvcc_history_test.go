@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // TestMVCCHistories verifies that sequences of MVCC reads and writes
@@ -125,7 +126,8 @@ func TestMVCCHistories(t *testing.T) {
 					if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
 						fmt.Fprintf(buf, "meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
 					} else {
-						fmt.Fprintf(buf, "meta: %v -> %+v\n", r.Key, &meta)
+						s := redact.Sprintf("meta: %v -> %+v\n", r.Key, &meta)
+						fmt.Fprint(buf, s.StripMarkers())
 					}
 				} else {
 					fmt.Fprintf(buf, "data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
@@ -580,7 +582,8 @@ func cmdCheckIntent(e *evalCtx) error {
 		return errors.Newf("meta: %v -> expected intent, found none", key)
 	}
 	if ok {
-		fmt.Fprintf(e.results.buf, "meta: %v -> %+v\n", key, &meta)
+		s := redact.Sprintf("meta: %v -> %+v\n", key, &meta)
+		fmt.Fprint(e.results.buf, s.StripMarkers())
 		if !wantIntent {
 			return errors.Newf("meta: %v -> expected no intent, found one", key)
 		}
