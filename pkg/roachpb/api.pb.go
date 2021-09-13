@@ -757,9 +757,6 @@ type ConditionalPutRequest struct {
 	// Specify as true to put the value without a corresponding
 	// timestamp. This option should be used with care as it precludes
 	// the use of this value with transactions.
-	//
-	// Callers should check the version gate clusterversion.CPutInline to make
-	// sure this is supported.
 	Inline bool `protobuf:"varint,7,opt,name=inline,proto3" json:"inline,omitempty"`
 }
 
