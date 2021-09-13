@@ -303,6 +303,16 @@ var generators = map[string]builtinDefinition{
 	"jsonb_each":                makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
 	"json_each_text":            makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
 	"jsonb_each_text":           makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
+	"json_populate_record": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
+		"Expands the object in from_json to a row whose columns match the record type defined by base.",
+	)),
+	"jsonb_populate_record": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
+		"Expands the object in from_json to a row whose columns match the record type defined by base.",
+	)),
+	"json_populate_recordset": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
+		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
+	"jsonb_populate_recordset": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
+		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
 
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
@@ -1230,6 +1240,159 @@ func (g *jsonEachGenerator) Next(_ context.Context) (bool, error) {
 func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{g.key, g.value}, nil
 }
+
+var jsonPopulateProps = tree.FunctionProperties{
+	Class:    tree.GeneratorClass,
+	Category: categoryGenerator,
+	// The typical way to call json_populate_record is to send NULL::atype as the
+	// first argument, so we have to accept nullable args.
+	NullableArgs: true,
+}
+
+func makeJSONPopulateImpl(gen tree.GeneratorFactory, info string) tree.Overload {
+	return tree.Overload{
+		// The json{,b}_populate_record{,set} builtins all have a 2 argument
+		// structure. The first argument is an arbitrary tuple type, which is used
+		// to set the columns of the output when the builtin is used as a FROM
+		// source, or used as-is when it's used as an ordinary projection.
+		// The second argument is a JSON object or array of objects. The builtin
+		// transforms the JSON in the second argument into the tuple in the first
+		// argument, field by field, casting fields in key "k" to the type in the
+		// tuple slot "k". Any tuple fields that were missing in the JSON will be
+		// left as they are in the input argument.
+		// The first argument can be of the form NULL::<tupletype>, in which case
+		// the default values of each field will be NULL.
+		// The second argument can also be null, in which case the first argument
+		// is returned as-is.
+		Types: tree.ArgTypes{{"base", types.Any}, {"from_json", types.Jsonb}},
+		ReturnType: func(args []tree.TypedExpr) *types.T {
+			if len(args) != 2 {
+				return tree.UnknownReturnType
+			}
+			return args[0].ResolvedType()
+		},
+		Generator: gen,
+		EvalArgs: func(ctx *tree.EvalContext, exprs tree.Exprs) (tree.Datums, error) {
+			// We need to have a hook before the function arguments are executed,
+			// because of the lack of typed null in our Datums system. The common
+			// pattern is to cast NULL to a tuple type to communicate which tuple type
+			// should be populated. This type would be erased if we simply accepted
+			// the evaluated datums as normal.
+			te := exprs[0].(tree.TypedExpr)
+			targetType := te.ResolvedType()
+			datums := make(tree.Datums, len(exprs))
+			for i := range exprs {
+				var err error
+				datums[i], err = exprs[i].(tree.TypedExpr).Eval(ctx)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if datums[0] == tree.DNull {
+				// json_populate_record needs the dynamic type information in its first
+				// argument. Since we don't have typed null, and the only purpose of the
+				// first argument is to pass type information, we can synthesize an empty
+				// tuple.
+				elts := targetType.TupleContents()
+				tup := tree.NewDTupleWithLen(targetType, len(elts))
+				for i := range elts {
+					tup.D[i] = tree.DNull
+				}
+				datums[0] = tup
+			}
+			return datums, nil
+		},
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return nil, newUnsuitableUseOfGeneratorError()
+		},
+		Info:       info,
+		Volatility: tree.VolatilityStable,
+	}
+}
+
+func makeJSONPopulateRecordGenerator(
+	evalCtx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	d := args[1]
+	if args[1] != tree.DNull {
+		j := tree.MustBeDJSON(args[1])
+		if j.Type() != json.ObjectJSONType {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "argument of json_populate_record must be an object")
+		}
+		builder := json.ArrayBuilder{}
+		builder.Add(j.JSON)
+		jarr := builder.Build()
+		d = tree.NewDJSON(jarr)
+	}
+	return &jsonPopulateRecordGenerator{
+		evalCtx: evalCtx,
+		input:   tree.MustBeDTuple(args[0]),
+		target:  d,
+	}, nil
+}
+
+func makeJSONPopulateRecordSetGenerator(
+	evalCtx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	return &jsonPopulateRecordGenerator{
+		evalCtx: evalCtx,
+		input:   tree.MustBeDTuple(args[0]),
+		target:  args[1],
+	}, nil
+}
+
+type jsonPopulateRecordGenerator struct {
+	input  *tree.DTuple
+	target tree.Datum
+
+	curIdx    int
+	wasCalled bool
+	evalCtx   *tree.EvalContext
+}
+
+func (j jsonPopulateRecordGenerator) ResolvedType() *types.T {
+	return j.input.ResolvedType()
+}
+
+func (j *jsonPopulateRecordGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	if j.target != tree.DNull && j.target.(*tree.DJSON).JSON.Type() != json.ArrayJSONType {
+		return pgerror.Newf(pgcode.InvalidParameterValue, "argument of json_populate_recordset must be an array")
+	}
+	return nil
+}
+
+func (j *jsonPopulateRecordGenerator) Next(_ context.Context) (bool, error) {
+	if !j.wasCalled {
+		j.wasCalled = true
+		return true, nil
+	}
+	j.curIdx++
+	if j.target == tree.DNull || j.curIdx >= j.target.(*tree.DJSON).Len() {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (j jsonPopulateRecordGenerator) Values() (tree.Datums, error) {
+	if j.target == tree.DNull {
+		return j.input.D, nil
+	}
+	target := tree.MustBeDJSON(j.target)
+	obj, err := target.FetchValIdx(j.curIdx)
+	if err != nil {
+		return nil, err
+	}
+	output := tree.NewDTupleWithLen(j.input.ResolvedType(), j.input.D.Len())
+	for i := range j.input.D {
+		output.D[i] = j.input.D[i]
+	}
+	if err := tree.PopulateRecordWithJSON(j.evalCtx, obj, j.input.ResolvedType(), output); err != nil {
+		return nil, err
+	}
+	return output.D, nil
+}
+
+func (j jsonPopulateRecordGenerator) Close(_ context.Context) {}
 
 type checkConsistencyGenerator struct {
 	db       *kv.DB

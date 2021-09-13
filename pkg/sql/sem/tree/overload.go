@@ -70,6 +70,11 @@ type Overload struct {
 	Fn            func(*EvalContext, Datums) (Datum, error)
 	Generator     GeneratorFactory
 
+	// EvalArgs is a hook that allows builtins to preprocess arguments in a
+	// different way than simply evalling all of them. If set, the input to the
+	// builtins will be transformed into datums with this function.
+	EvalArgs func(*EvalContext, Exprs) (Datums, error)
+
 	// SQLFn must be set for overloads of type SQLClass. It should return a SQL
 	// statement which will be executed as a common table expression in the query.
 	SQLFn func(*EvalContext, Datums) (string, error)

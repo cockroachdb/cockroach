@@ -4158,6 +4158,11 @@ func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator,
 // evalArgs evaluates just the function application's arguments.
 // The returned bool indicates that the NULL should be propagated.
 func (expr *FuncExpr) evalArgs(ctx *EvalContext) (bool, Datums, error) {
+	evaller := expr.ResolvedOverload().EvalArgs
+	if evaller != nil {
+		datums, err := evaller(ctx, expr.Exprs)
+		return false, datums, err
+	}
 	args := make(Datums, len(expr.Exprs))
 	for i, e := range expr.Exprs {
 		arg, err := e.(TypedExpr).Eval(ctx)
