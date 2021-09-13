@@ -974,6 +974,8 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 
 // Epoch is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) Epoch() enginepb.TxnEpoch {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
 	return tc.mu.txn.Epoch
 }
 
