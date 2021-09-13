@@ -237,7 +237,8 @@ func (st statsTester) calculateActualStats(tableName string) ([]string, error) {
 	// Exclude stats for rowid since that column was added when the table was
 	// created by the saveTableNode. It would not have been part of the original
 	// relational expression represented by the table.
-	rows, err := c.QueryContext(ctx,
+	// Excluding from linter because of https://github.com/jingyugao/rowserrcheck/issues/19.
+	rows, err := c.QueryContext(ctx, //nolint:rowserrcheck
 		fmt.Sprintf("SELECT column_names, row_count, distinct_count, null_count FROM "+
 			"[SHOW STATISTICS FOR TABLE %s] WHERE statistics_name = '%s' "+
 			"AND column_names != '{rowid}'::string[] ORDER BY column_names::string", tableName, statName,

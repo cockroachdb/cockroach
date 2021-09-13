@@ -104,22 +104,25 @@ func TestingCreateMultiRegionCluster(
 // expected partitions.
 func TestingEnsureCorrectPartitioning(
 	sqlDB *gosql.DB, dbName string, tableName string, expectedIndexes []string,
-) error {
-	rows, err := sqlDB.Query("SELECT region FROM [SHOW REGIONS FROM DATABASE db] ORDER BY region")
+) (retErr error) {
+	regionRows, err := sqlDB.Query("SELECT region FROM [SHOW REGIONS FROM DATABASE db] ORDER BY region")
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { retErr = errors.CombineErrors(retErr, regionRows.Close()) }()
 	var expectedPartitions []string
-	for rows.Next() {
+	for regionRows.Next() {
 		var regionName string
-		if err := rows.Scan(&regionName); err != nil {
+		if err := regionRows.Scan(&regionName); err != nil {
 			return err
 		}
 		expectedPartitions = append(expectedPartitions, regionName)
 	}
+	if err := regionRows.Err(); err != nil {
+		return err
+	}
 
-	rows, err = sqlDB.Query(
+	indexPartitionRows, err := sqlDB.Query(
 		fmt.Sprintf(
 			"SELECT index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE %s.%s] ORDER BY partition_name",
 			dbName,
@@ -129,17 +132,20 @@ func TestingEnsureCorrectPartitioning(
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { retErr = errors.CombineErrors(retErr, indexPartitionRows.Close()) }()
 
 	indexPartitions := make(map[string][]string)
-	for rows.Next() {
+	for indexPartitionRows.Next() {
 		var indexName string
 		var partitionName string
-		if err := rows.Scan(&indexName, &partitionName); err != nil {
+		if err := indexPartitionRows.Scan(&indexName, &partitionName); err != nil {
 			return err
 		}
 
 		indexPartitions[indexName] = append(indexPartitions[indexName], partitionName)
+	}
+	if err := indexPartitionRows.Err(); err != nil {
+		return err
 	}
 
 	for _, expectedIndex := range expectedIndexes {

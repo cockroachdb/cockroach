@@ -1849,6 +1849,14 @@ def go_deps():
         version = "v1.4.2",
     )
     go_repository(
+        name = "com_github_gostaticanalysis_analysisutil",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/gostaticanalysis/analysisutil",
+        sum = "h1:JVnpOZS+qxli+rgVl98ILOXVNbW+kb5wcxeGx8ShUIw=",
+        version = "v0.0.0-20190318220348-4088753ea4d3",
+    )
+
+    go_repository(
         name = "com_github_goware_modvendor",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/goware/modvendor",
@@ -2312,6 +2320,14 @@ def go_deps():
         sum = "h1:dBmhjIVYJbfDDPGBvq/WLfi0mAMg5e2GGYzv9nW/Jxg=",
         version = "v1.8.3-0.20210302193947-8255811fc3c0",
     )
+    go_repository(
+        name = "com_github_jingyugao_rowserrcheck",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/jingyugao/rowserrcheck",
+        sum = "h1:u6h4eiNuCLqk73Ic5TXQq9yZS+uEXTdusn7c3w1Mr6A=",
+        version = "v1.1.0",
+    )
+
     go_repository(
         name = "com_github_jinzhu_inflection",
         build_file_proto_mode = "disable_global",

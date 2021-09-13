@@ -2349,6 +2349,12 @@ func (t *logicTest) processSubtest(
 			if rows.Next() {
 				return errors.Errorf("%s: more than one row returned by query  %s", stmt.pos, stmt.sql)
 			}
+			if err := rows.Err(); err != nil {
+				return errors.Wrapf(err, "%s: error after running query %s", stmt.pos, stmt.sql)
+			}
+			if err := rows.Close(); err != nil {
+				return errors.Wrapf(err, "%s: error closing query rows %s", stmt.pos, stmt.sql)
+			}
 			t.t().Logf("let %s = %s\n", varName, val)
 			t.varMap[varName] = val
 
@@ -3095,7 +3101,8 @@ func (t *logicTest) validateAfterTestCompletion() error {
 
 	// Ensure that all of the created descriptors can round-trip through json.
 	{
-		rows, err := t.db.Query(
+		// Excluding from linter because of https://github.com/jingyugao/rowserrcheck/issues/19.
+		rows, err := t.db.Query( //nolint:rowserrcheck
 			`
 SELECT encode(descriptor, 'hex') AS descriptor
   FROM system.descriptor

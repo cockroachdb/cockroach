@@ -78,7 +78,8 @@ func (m *sinklessReplicationClient) ConsumePartition(
 	if err != nil {
 		return nil, nil, err
 	}
-	rows, err := conn.QueryContext(ctx, streamTenantQuery)
+	// Excluding from linter because of https://github.com/jingyugao/rowserrcheck/issues/19.
+	rows, err := conn.QueryContext(ctx, streamTenantQuery) //nolint:rowserrcheck
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "creating source replication stream")
 	}
