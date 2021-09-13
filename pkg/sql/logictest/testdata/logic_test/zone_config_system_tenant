@@ -31,6 +31,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 22  RANGE liveness
 25  TABLE system.public.replication_constraint_stats
 27  TABLE system.public.replication_stats
+45  TABLE system.public.tenant_usage
 53  TABLE test.public.t
 
 # The tests below test semantics around named zone for the system tenant. The
