@@ -56,6 +56,12 @@ not-completed label=w1
 write bytes=100000000 label=w2
 ----
 
+# Wait until we count the request's RUs. Otherwise, we may request too few RUs
+# and mess up the timings.
+wait-for-event
+waiting-ru-accounted
+----
+
 # Advance time enough for w1 to complete.
 advance
 10s

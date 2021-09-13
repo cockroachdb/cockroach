@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -81,6 +82,13 @@ type event struct {
 
 var _ tenantcostclient.TestInstrumentation = (*testState)(nil)
 
+var eventTypeStr = map[tenantcostclient.TestEventType]string{
+	tenantcostclient.TickProcessed:                "tick",
+	tenantcostclient.LowRUNotification:            "low-ru",
+	tenantcostclient.TokenBucketResponseProcessed: "token-bucket-response",
+	tenantcostclient.WaitingRUAccountedInCallback: "waiting-ru-accounted",
+}
+
 // Event is part of tenantcostclient.TestInstrumentation.
 func (ts *testState) Event(now time.Time, typ tenantcostclient.TestEventType) {
 	ev := event{
@@ -89,6 +97,9 @@ func (ts *testState) Event(now time.Time, typ tenantcostclient.TestEventType) {
 	}
 	select {
 	case ts.eventsCh <- ev:
+		if testing.Verbose() {
+			log.Infof(context.Background(), "event %s at %s\n", eventTypeStr[typ], now.Format(timeFormat))
+		}
 	default:
 		panic("events channel full")
 	}
@@ -310,10 +321,9 @@ func (ts *testState) advance(t *testing.T, d *datadriven.TestData, args cmdArgs)
 // waitForEvent waits until the tenant controller reports the given event type,
 // at the current time.
 func (ts *testState) waitForEvent(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
-	typs := map[string]tenantcostclient.TestEventType{
-		"tick":                  tenantcostclient.TickProcessed,
-		"low-ru":                tenantcostclient.LowRUNotification,
-		"token-bucket-response": tenantcostclient.TokenBucketResponseProcessed,
+	typs := make(map[string]tenantcostclient.TestEventType)
+	for ev, evStr := range eventTypeStr {
+		typs[evStr] = ev
 	}
 	typ, ok := typs[d.Input]
 	if !ok {
