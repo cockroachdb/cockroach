@@ -109,6 +109,11 @@ func (to testOverload) preferred() bool {
 	return to.pref
 }
 
+func (to testOverload) withPreferred(pref bool) *testOverload {
+	to.pref = pref
+	return &to
+}
+
 func (to *testOverload) String() string {
 	typeNames := make([]string, len(to.paramTypes))
 	for i, param := range to.paramTypes {
@@ -117,7 +122,7 @@ func (to *testOverload) String() string {
 	return fmt.Sprintf("func(%s) %s", strings.Join(typeNames, ","), to.retType)
 }
 
-func makeTestOverload(retType *types.T, params ...*types.T) overloadImpl {
+func makeTestOverload(retType *types.T, params ...*types.T) *testOverload {
 	t := make(ArgTypes, len(params))
 	for i := range params {
 		t[i].Typ = params[i]
@@ -148,13 +153,14 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	}
 
 	unaryIntFn := makeTestOverload(types.Int, types.Int)
-	unaryIntFnPref := &testOverload{retType: types.Int, paramTypes: ArgTypes{}, pref: true}
+	unaryIntFnPref := makeTestOverload(types.Int, types.Int).withPreferred(true)
 	unaryFloatFn := makeTestOverload(types.Float, types.Float)
 	unaryDecimalFn := makeTestOverload(types.Decimal, types.Decimal)
 	unaryStringFn := makeTestOverload(types.String, types.String)
 	unaryIntervalFn := makeTestOverload(types.Interval, types.Interval)
 	unaryTimestampFn := makeTestOverload(types.Timestamp, types.Timestamp)
 	binaryIntFn := makeTestOverload(types.Int, types.Int, types.Int)
+	binaryIntFnPref := makeTestOverload(types.Int, types.Int, types.Int).withPreferred(true)
 	binaryFloatFn := makeTestOverload(types.Float, types.Float, types.Float)
 	binaryDecimalFn := makeTestOverload(types.Decimal, types.Decimal, types.Decimal)
 	binaryStringFn := makeTestOverload(types.String, types.String, types.String)
@@ -177,6 +183,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		inBinOp          bool
 	}{
 		// Unary constants.
+		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, unaryIntFn}, ambiguous, false},
 		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, unaryFloatFn}, unaryIntFn, false},
 		{nil, []Expr{decConst("1.0")}, []overloadImpl{unaryIntFn, unaryDecimalFn}, unaryDecimalFn, false},
 		{nil, []Expr{decConst("1.0")}, []overloadImpl{unaryIntFn, unaryFloatFn}, unsupported, false},
@@ -186,12 +193,13 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn}, unaryIntervalFn, false},
 		{nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryStringFn}, unaryStringFn, false},
 		{nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryTimestampFn}, unaryIntervalFn, false},
-		{nil, []Expr{}, []overloadImpl{unaryIntFn, unaryIntFnPref}, unaryIntFnPref, false},
-		{nil, []Expr{}, []overloadImpl{unaryIntFnPref, unaryIntFnPref}, ambiguous, false},
+		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, unaryIntFnPref}, unaryIntFnPref, false},
+		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFnPref, unaryIntFnPref}, ambiguous, false},
 		{nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryIntFn}, unaryIntervalFn, false},
 		// Unary unresolved Placeholders.
 		{nil, []Expr{placeholder(0)}, []overloadImpl{unaryStringFn, unaryIntFn}, shouldError, false},
 		{nil, []Expr{placeholder(0)}, []overloadImpl{unaryStringFn, binaryIntFn}, unaryStringFn, false},
+		{nil, []Expr{placeholder(0)}, []overloadImpl{unaryStringFn, unaryIntFnPref}, unaryIntFnPref, false},
 		// Unary values (not constants).
 		{nil, []Expr{NewDInt(1)}, []overloadImpl{unaryIntFn, unaryFloatFn}, unaryIntFn, false},
 		{nil, []Expr{NewDFloat(1)}, []overloadImpl{unaryIntFn, unaryFloatFn}, unaryFloatFn, false},
@@ -205,9 +213,12 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, []Expr{strConst("2010-09-28"), strConst("2010-09-29")}, []overloadImpl{binaryTimestampFn}, binaryTimestampFn, false},
 		{nil, []Expr{strConst("2010-09-28"), strConst("2010-09-29")}, []overloadImpl{binaryTimestampFn, binaryStringFn}, binaryStringFn, false},
 		{nil, []Expr{strConst("2010-09-28"), strConst("2010-09-29")}, []overloadImpl{binaryTimestampFn, binaryIntFn}, binaryTimestampFn, false},
+		{nil, []Expr{intConst("1"), intConst("1")}, []overloadImpl{binaryIntFn, binaryFloatFn, binaryIntFnPref}, binaryIntFnPref, false},
+		{nil, []Expr{intConst("1"), intConst("1")}, []overloadImpl{binaryIntFn, binaryIntFnPref, binaryIntFnPref}, ambiguous, false},
 		// Binary unresolved Placeholders.
 		{nil, []Expr{placeholder(0), placeholder(1)}, []overloadImpl{binaryIntFn, binaryFloatFn}, shouldError, false},
 		{nil, []Expr{placeholder(0), placeholder(1)}, []overloadImpl{binaryIntFn, unaryStringFn}, binaryIntFn, false},
+		{nil, []Expr{placeholder(0), placeholder(1)}, []overloadImpl{binaryIntFnPref, binaryFloatFn}, binaryIntFnPref, false},
 		{nil, []Expr{placeholder(0), NewDString("a")}, []overloadImpl{binaryIntFn, binaryStringFn}, binaryStringFn, false},
 		{nil, []Expr{placeholder(0), intConst("1")}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryIntFn, false},
 		{nil, []Expr{placeholder(0), intConst("1")}, []overloadImpl{binaryStringFn, binaryFloatFn}, binaryFloatFn, false},
