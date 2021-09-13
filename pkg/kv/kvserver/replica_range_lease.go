@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -346,8 +347,18 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		p.nextLease = roachpb.Lease{}
 	}
 
-	err := p.repl.store.Stopper().RunAsyncTask(
-		ctx, "storage.pendingLeaseRequest: requesting lease", func(ctx context.Context) {
+	err := p.repl.store.Stopper().RunAsyncTaskEx(
+		ctx,
+		stop.TaskOpts{
+			TaskName: "pendingLeaseRequest: requesting lease",
+			// Trace the lease acquisition as a child even though it might outlive the
+			// parent in case the parent's ctx is canceled. Other requests might
+			// later block on this lease acquisition too, and we can't include the
+			// acquisition's trace in all of them, but let's at least include it in
+			// the request that triggered it.
+			ChildSpan: true,
+		},
+		func(ctx context.Context) {
 			defer sp.Finish()
 
 			// If requesting an epoch-based lease & current state is expired,
