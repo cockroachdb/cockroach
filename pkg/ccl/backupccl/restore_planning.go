@@ -728,14 +728,26 @@ func allocateDescriptorRewrites(
 						"failed to lookup parent DB %d", errors.Safe(parentID))
 				}
 
-				publicSchemaID := parentDB.GetSchemaID(tree.PublicSchema)
 				// See if there is an existing type with the same name.
+				// We want to check the target db and schema to find if there is
+				// an existing type.
+				parentSchemaID := typ.GetParentSchemaID()
+				schemas, err := catalogkv.GetSchemaDescriptorsFromIDs(ctx, txn, p.ExecCfg().Codec, []descpb.ID{parentSchemaID})
+				if err != nil {
+					return err
+				}
+				if len(schemas) != 1 {
+					return errors.New("expected to find schema for restoring in target db")
+				}
+				schemaName := schemas[0].GetName()
+				// Lookup the corresponding schema in the new target database.
+				schemaID := parentDB.GetSchemaID(schemaName)
 				desc, err := catalogkv.GetDescriptorCollidingWithObject(
 					ctx,
 					txn,
 					p.ExecCfg().Codec,
 					parentID,
-					publicSchemaID,
+					schemaID,
 					typ.Name,
 				)
 				if err != nil {
