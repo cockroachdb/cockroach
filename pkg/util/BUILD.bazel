@@ -34,6 +34,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/envutil",
+        "//pkg/util/netutil/addr",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
