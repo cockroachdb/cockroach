@@ -215,7 +215,7 @@ func TestEncoders(t *testing.T) {
 			targets := jobspb.ChangefeedTargets{}
 			targets[tableDesc.GetID()] = target
 
-			e, err := getEncoder(context.Background(), o, targets)
+			e, err := getEncoder(o, targets)
 			if len(expected.err) > 0 {
 				require.EqualError(t, err, expected.err)
 				return
@@ -366,7 +366,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		targets := jobspb.ChangefeedTargets{}
 		targets[tableDesc.GetID()] = target
 
-		e, err := getEncoder(context.Background(), opts, targets)
+		e, err := getEncoder(opts, targets)
 		require.NoError(t, err)
 
 		rowInsert := encodeRow{
@@ -407,7 +407,9 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		defer noCertReg.Close()
 		opts[changefeedbase.OptConfluentSchemaRegistry] = noCertReg.URL()
 
-		_, err = getEncoder(context.Background(), opts, targets)
+		enc, err := getEncoder(opts, targets)
+		require.NoError(t, err)
+		err = enc.(Pinger).Ping(context.Background())
 		require.EqualError(t, err, fmt.Sprintf("schema registry unavailable: retryable changefeed error: "+
 			"Get \"%s/mode\": x509: certificate signed by unknown authority",
 			opts[changefeedbase.OptConfluentSchemaRegistry]))
@@ -420,7 +422,9 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		defer wrongCertReg.Close()
 		opts[changefeedbase.OptConfluentSchemaRegistry] = wrongCertReg.URL()
 
-		_, err = getEncoder(context.Background(), opts, targets)
+		enc, err = getEncoder(opts, targets)
+		require.NoError(t, err)
+		err = enc.(Pinger).Ping(context.Background())
 		require.EqualError(t, err, fmt.Sprintf("schema registry unavailable: retryable changefeed error: "+
 			"Get \"%s/mode\": x509: certificate signed by unknown authority",
 			opts[changefeedbase.OptConfluentSchemaRegistry]))
