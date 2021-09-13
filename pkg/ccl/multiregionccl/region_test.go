@@ -266,7 +266,7 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 							<-rbrOpFinished
 							if !regionAlterCmd.shouldSucceed {
 								// Trigger a roll-back.
-								return errors.New("boom")
+								return jobs.MarkAsPermanentJobError(errors.New("boom"))
 							}
 							// Trod on.
 							return nil
@@ -544,7 +544,7 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 			RunBeforeExec: func() error {
-				return errors.New("yikes")
+				return jobs.MarkAsPermanentJobError(errors.New("yikes"))
 			},
 			RunAfterOnFailOrCancel: func() error {
 				mu.Lock()
@@ -609,7 +609,7 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 			RunBeforeMultiRegionUpdates: func() error {
-				return errors.New("boom")
+				return jobs.MarkAsPermanentJobError(errors.New("boom"))
 			},
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
@@ -692,7 +692,7 @@ func TestRollbackDuringAddDropRegionPlacementRestricted(t *testing.T) {
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 			RunBeforeMultiRegionUpdates: func() error {
-				return errors.New("boom")
+				return jobs.MarkAsPermanentJobError(errors.New("boom"))
 			},
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
