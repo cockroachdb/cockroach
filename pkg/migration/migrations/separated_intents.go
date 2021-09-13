@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -538,7 +540,15 @@ func postSeparatedIntentsMigration(
 			if bytes.HasPrefix(start, keys.TimeseriesPrefix) && bytes.HasPrefix(end, keys.TimeseriesPrefix) {
 				continue
 			}
-			if err := deps.DB.Migrate(ctx, start, end, cv.Version); err != nil {
+			// Try running Migrate on each range 5 times before failing the migration.
+			err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), 5, func() error {
+				err := deps.DB.Migrate(ctx, start, end, cv.Version)
+				if err != nil {
+					log.Infof(ctx, "[batch %d/??] error when running no-op Migrate on range r%d: %s", batchIdx, desc.RangeID, err)
+				}
+				return err
+			})
+			if err != nil {
 				return err
 			}
 		}
