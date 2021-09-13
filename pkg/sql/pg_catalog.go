@@ -482,6 +482,13 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 	unimplemented: true,
 }
 
+func userIsSuper(
+	ctx context.Context, p *planner, username security.SQLUsername,
+) (tree.DBool, error) {
+	isSuper, err := p.UserHasAdminRole(ctx, username)
+	return tree.DBool(isSuper), err
+}
+
 var pgCatalogAuthIDTable = virtualSchemaTable{
 	comment: `authorization identifiers - differs from postgres as we do not display passwords, 
 and thus do not require admin privileges for access. 
@@ -510,10 +517,15 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				return err
 			}
 
+			isSuper, err := userIsSuper(ctx, p, username)
+			if err != nil {
+				return err
+			}
+
 			return addRow(
 				h.UserOid(username),                  // oid
 				tree.NewDName(username.Normalized()), // rolname
-				tree.MakeDBool(isRoot),               // rolsuper
+				tree.MakeDBool(isRoot || isSuper),    // rolsuper
 				tree.MakeDBool(isRoleDBool),          // rolinherit. Roles inherit by default.
 				tree.MakeDBool(isRoot || createRole), // rolcreaterole
 				tree.MakeDBool(isRoot || createDB),   // rolcreatedb
@@ -2349,11 +2361,15 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 				if err != nil {
 					return err
 				}
+				isSuper, err := userIsSuper(ctx, p, username)
+				if err != nil {
+					return err
+				}
 
 				return addRow(
 					h.UserOid(username),                  // oid
 					tree.NewDName(username.Normalized()), // rolname
-					tree.MakeDBool(isRoot),               // rolsuper
+					tree.MakeDBool(isRoot || isSuper),    // rolsuper
 					tree.MakeDBool(isRoleDBool),          // rolinherit. Roles inherit by default.
 					tree.MakeDBool(isRoot || createRole), // rolcreaterole
 					tree.MakeDBool(isRoot || createDB),   // rolcreatedb
@@ -2985,11 +3001,16 @@ https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 				if err != nil {
 					return err
 				}
+				isSuper, err := userIsSuper(ctx, p, username)
+				if err != nil {
+					return err
+				}
+
 				return addRow(
 					tree.NewDName(username.Normalized()), // usename
 					h.UserOid(username),                  // usesysid
 					tree.MakeDBool(isRoot || createDB),   // usecreatedb
-					tree.MakeDBool(isRoot),               // usesuper
+					tree.MakeDBool(isRoot || isSuper),    // usesuper
 					tree.DBoolFalse,                      // userepl
 					tree.DBoolFalse,                      // usebypassrls
 					passwdStarString,                     // passwd
