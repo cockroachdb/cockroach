@@ -30,15 +30,25 @@ import (
 func WaitFor3XReplication(t test.Test, db *gosql.DB) {
 	t.L().Printf("waiting for up-replication...")
 	tStart := timeutil.Now()
-	for ok := false; !ok; time.Sleep(time.Second) {
-		if err := db.QueryRow(
-			"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
-		).Scan(&ok); err != nil {
+	var oldN int
+	for {
+		ctx, cancel := context.WithTimeout(context.TODO(), 15*time.Second)
+		var n int
+		if err := db.QueryRowContext(
+			ctx,
+			"SELECT count(1) FROM crdb_internal.ranges WHERE array_length(replicas, 1) < 3 ",
+		).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
-		if timeutil.Since(tStart) > 30*time.Second {
-			t.L().Printf("still waiting for full replication")
+		if n == 0 {
+			return
 		}
+		cancel()
+		if timeutil.Since(tStart) > 30*time.Second || oldN != n {
+			t.L().Printf("still waiting for full replication (%d ranges left)", n)
+		}
+		oldN = n
+		time.Sleep(time.Second)
 	}
 }
 
