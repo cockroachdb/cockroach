@@ -12,6 +12,7 @@ package sqlsmith
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -60,6 +61,13 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
 		s.disableImpureFns = originalDisableImpureFns
 	}()
 
+	if rand.Int()%2 == 0 {
+		return s.GenerateWhereTLP()
+	}
+	return s.GenerateJoinTLP()
+}
+
+func (s *Smither) GenerateWhereTLP() (unpartitioned, partitioned string) {
 	f := tree.NewFmtCtx(tree.FmtParsable)
 
 	table, _, _, cols, ok := s.getSchemaTable()
@@ -78,6 +86,45 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
 	part1 := fmt.Sprintf("SELECT * FROM %s WHERE %s", tableName, predicate)
 	part2 := fmt.Sprintf("SELECT * FROM %s WHERE NOT (%s)", tableName, predicate)
 	part3 := fmt.Sprintf("SELECT * FROM %s WHERE (%s) IS NULL", tableName, predicate)
+
+	partitioned = fmt.Sprintf(
+		"SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)",
+		part1, part2, part3,
+	)
+
+	return unpartitioned, partitioned
+}
+
+func (s *Smither) GenerateJoinTLP() (unpartitioned, partitioned string) {
+	f := tree.NewFmtCtx(tree.FmtParsable)
+
+	table1, _, _, cols1, ok1 := s.getSchemaTable()
+	table2, _, _, cols2, ok2 := s.getSchemaTable()
+	if !ok1 || !ok2 {
+		panic(errors.AssertionFailedf("failed to find random table"))
+	}
+	table1.Format(f)
+	tableName1 := f.CloseAndGetString()
+	table2.Format(f)
+	tableName2 := f.CloseAndGetString()
+
+	leftJoinTrue := fmt.Sprintf("SELECT * FROM %s LEFT JOIN %s ON TRUE", tableName1, tableName2)
+	leftJoinFalse := fmt.Sprintf("SELECT * FROM %s LEFT JOIN %s ON FALSE", tableName1, tableName2)
+
+	unpartitioned = fmt.Sprintf("SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)", leftJoinTrue, leftJoinFalse, leftJoinFalse)
+
+	cols := cols1
+	for _, col := range cols2 {
+		cols.extend(col)
+	}
+
+	pred := makeBoolExpr(s, cols)
+	pred.Format(f)
+	predicate := f.CloseAndGetString()
+
+	part1 := fmt.Sprintf("SELECT * FROM %s LEFT JOIN %s ON %s", tableName1, tableName2, predicate)
+	part2 := fmt.Sprintf("SELECT * FROM %s LEFT JOIN %s ON NOT (%s)", tableName1, tableName2, predicate)
+	part3 := fmt.Sprintf("SELECT * FROM %s LEFT JOIN %s ON (%s) IS NULL", tableName1, tableName2, predicate)
 
 	partitioned = fmt.Sprintf(
 		"SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)",
