@@ -67,8 +67,19 @@ type Overload struct {
 
 	AggregateFunc func([]*types.T, *EvalContext, Datums) AggregateFunc
 	WindowFunc    func([]*types.T, *EvalContext) WindowFunc
-	Fn            func(*EvalContext, Datums) (Datum, error)
-	Generator     GeneratorFactory
+
+	// Only one of the following three attributes can be set.
+
+	// Fn is the normal builtin implementation function. It's for functions that
+	// take in datums and return a datum.
+	Fn func(*EvalContext, Datums) (Datum, error)
+
+	// Generator is for SRFs. SRFs take datums and return multiple rows of datums.
+	Generator GeneratorFactory
+
+	// GeneratorWithExprs is for SRFs that need access to their arguments as Exprs
+	// and not pre-evaluated Datums, but is otherwise identical to Generator.
+	GeneratorWithExprs GeneratorWithExprsFactory
 
 	// SQLFn must be set for overloads of type SQLClass. It should return a SQL
 	// statement which will be executed as a common table expression in the query.
