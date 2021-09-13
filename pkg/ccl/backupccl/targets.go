@@ -404,6 +404,14 @@ func fullClusterTargetsBackup(
 	return fullClusterDescs, fullClusterDBIDs, nil
 }
 
+// selectTargets loads all descriptors from the selected backup manifest(s), and
+// filters the descriptors based on the targets specified in the restore. Post
+// filtering, the method returns:
+//  - A list of all descriptors (table, type, database, schema) along with their
+//    parent databases.
+//  - A list of database descriptors IFF the user is restoring on the cluster or
+//    database level
+//  - A list of tenants to restore, if applicable.
 func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,

@@ -8792,3 +8792,57 @@ DROP TABLE foo;
 	defer cleanupEmptyCluster()
 	sqlDBRestore.Exec(t, "RESTORE FROM $1 AS OF SYSTEM TIME "+aost, LocalFoo)
 }
+
+// TestRestoreNewDatabaseName tests the new_db_name optional feature for single database
+//restores, which allows the user to rename the database they intend to restore.
+func TestRestoreNewDatabaseName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `CREATE DATABASE fkdb`)
+	sqlDB.Exec(t, `CREATE TABLE fkdb.fk (ind INT)`)
+
+	for i := 0; i < 10; i++ {
+		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, i)
+	}
+	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
+
+	// Ensure restore fails with new_db_name on cluster, table, and multiple database restores
+	t.Run("new_db_name syntax checks", func(t *testing.T) {
+
+		expectedErr := "new_db_name can only be used for RESTORE DATABASE with a single target database"
+
+		sqlDB.ExpectErr(t, expectedErr, "RESTORE FROM $1 with new_db_name = 'new_fkdb'", LocalFoo)
+
+		sqlDB.ExpectErr(t, expectedErr, "RESTORE DATABASE fkdb, "+
+			"data FROM $1 with new_db_name = 'new_fkdb'", LocalFoo)
+
+		sqlDB.ExpectErr(t, expectedErr, "RESTORE TABLE fkdb.fk FROM $1 with new_db_name = 'new_fkdb'",
+			LocalFoo)
+
+	})
+
+	// Should fail because 'fkbd' database is still in cluster
+	sqlDB.ExpectErr(t, `database "fkdb" already exists`,
+		"RESTORE DATABASE fkdb FROM $1", LocalFoo)
+
+	// Should pass because 'new_fkdb' is not in cluster
+	sqlDB.Exec(t, "RESTORE DATABASE fkdb FROM $1 WITH new_db_name = 'new_fkdb'", LocalFoo)
+
+	// Verify restored database is in cluster with new name
+	sqlDB.CheckQueryResults(t,
+		`SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'new_fkdb'`,
+		[][]string{{"new_fkdb"}})
+
+	// Verify table was properly restored
+	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM new_fkdb.fk`,
+		[][]string{{"10"}})
+
+	// Should fail because we just restored new_fkbd into cluster
+	sqlDB.ExpectErr(t, `database "new_fkdb" already exists`,
+		"RESTORE DATABASE fkdb FROM $1 WITH new_db_name = 'new_fkdb'", LocalFoo)
+}
