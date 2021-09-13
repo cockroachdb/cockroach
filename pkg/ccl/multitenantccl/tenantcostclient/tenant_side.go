@@ -85,6 +85,10 @@ const consumptionReportingThreshold = 100
 // The extended reporting period is this factor times the normal period.
 const extendedReportingPeriodFactor = 4
 
+// We try to maintain this many RUs in our local bucket, regardless of estimated
+// usage. This is intended to support usage spikes without blocking.
+const bufferRUs = 5000
+
 func newTenantSideCostController(
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
@@ -104,7 +108,7 @@ func newTenantSideCostController(
 		responseChan:    make(chan *roachpb.TokenBucketResponse, 1),
 		lowRUNotifyChan: make(chan struct{}, 1),
 	}
-	c.limiter.Init(c.timeSource, c.lowRUNotifyChan)
+	c.limiter.Init(timeSource, testInstr, c.lowRUNotifyChan)
 
 	// TODO(radu): these settings can currently be changed by the tenant (see
 	// #47918), which would made it very easy to evade cost control. For now, use
@@ -313,8 +317,9 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 	if !c.run.initialRequestCompleted {
 		requested = initialRUs
 	} else {
-		// Request what we expect to need over the next target period.
-		requested = c.run.avgRUPerSec * c.run.targetPeriod.Seconds()
+		// Request what we expect to need over the next target period plus the
+		// buffer amount.
+		requested = c.run.avgRUPerSec*c.run.targetPeriod.Seconds() + bufferRUs
 
 		// Adjust by the currently available amount. If we are in debt, we request
 		// more to cover the debt.
@@ -413,6 +418,9 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 	}
 
 	notifyThreshold := tenantcostmodel.RU(granted * notifyFraction)
+	if notifyThreshold < bufferRUs {
+		notifyThreshold = bufferRUs
+	}
 	var cfg tokenBucketReconfigureArgs
 	if resp.TrickleDuration == 0 {
 		// We received a batch of tokens to use as needed. Set up the token bucket
