@@ -1100,7 +1100,6 @@ type txnRowsWrittenLimitErr struct {
 }
 
 var _ error = &txnRowsWrittenLimitErr{}
-var _ errors.SafeDetailer = &txnRowsWrittenLimitErr{}
 var _ fmt.Formatter = &txnRowsWrittenLimitErr{}
 var _ errors.SafeFormatter = &txnRowsWrittenLimitErr{}
 
@@ -1108,12 +1107,6 @@ var _ errors.SafeFormatter = &txnRowsWrittenLimitErr{}
 // implements.
 func (e *txnRowsWrittenLimitErr) Error() string {
 	return e.CommonTxnRowsLimitDetails.Error("written")
-}
-
-// SafeDetails is part of the errors.SafeDetailer interface, which
-// txnRowsWrittenLimitErr implements.
-func (e *txnRowsWrittenLimitErr) SafeDetails() []string {
-	return e.CommonTxnRowsLimitDetails.SafeDetails("written")
 }
 
 // Format is part of the fmt.Formatter interface, which txnRowsWrittenLimitErr
@@ -1133,19 +1126,12 @@ type txnRowsReadLimitErr struct {
 }
 
 var _ error = &txnRowsReadLimitErr{}
-var _ errors.SafeDetailer = &txnRowsReadLimitErr{}
 var _ fmt.Formatter = &txnRowsReadLimitErr{}
 var _ errors.SafeFormatter = &txnRowsReadLimitErr{}
 
 // Error is part of the error interface, which txnRowsReadLimitErr implements.
 func (e *txnRowsReadLimitErr) Error() string {
 	return e.CommonTxnRowsLimitDetails.Error("read")
-}
-
-// SafeDetails is part of the errors.SafeDetailer interface, which
-// txnRowsReadLimitErr implements.
-func (e *txnRowsReadLimitErr) SafeDetails() []string {
-	return e.CommonTxnRowsLimitDetails.SafeDetails("read")
 }
 
 // Format is part of the fmt.Formatter interface, which txnRowsReadLimitErr

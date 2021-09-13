@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -392,16 +393,16 @@ func (h *sysTableHelper) accomodateNewInstance(tenant *tenantState, instance *in
 
 // maybeCheckInvariants checks the invariants for the system table with a random
 // probability and only if this is a test build.
-func (h *sysTableHelper) maybeCheckInvariants() error {
+func (h *sysTableHelper) maybeCheckInvariants(ctx context.Context) error {
 	if util.CrdbTestBuild && rand.Intn(10) == 0 {
-		return h.checkInvariants()
+		return h.checkInvariants(ctx)
 	}
 	return nil
 }
 
 // checkInvariants reads all rows in the system table for the given tenant and
 // checks that the state is consistent.
-func (h *sysTableHelper) checkInvariants() error {
+func (h *sysTableHelper) checkInvariants(ctx context.Context) error {
 	// Read the two rows for the per-tenant state (instance_id = 0) and the
 	// per-instance state.
 	rows, err := h.ex.QueryBufferedEx(
@@ -430,7 +431,12 @@ func (h *sysTableHelper) checkInvariants() error {
 		h.tenantID.ToUint64(),
 	)
 	if err != nil {
-		return err
+		if h.ctx.Err() == nil {
+			log.Warningf(ctx, "checkInvariants query failed: %v", err)
+		}
+		// We don't want to cause a panic for a query error (which is expected
+		// during shutdown).
+		return nil
 	}
 	if len(rows) == 0 {
 		return nil

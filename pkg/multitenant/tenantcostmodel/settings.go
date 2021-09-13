@@ -21,6 +21,10 @@ import (
 //
 // The KV operation parameters are set based on experiments, where 1000 Request
 // Units correspond to one CPU second of usage on the host cluster.
+//
+// TODO(radu): these settings are not currently used on the tenant side; there,
+// only the defaults are used. Ideally, the tenant would always get the values
+// from the host cluster.
 var (
 	readRequestCost = settings.RegisterFloatSetting(
 		"tenant_cost_model.kv_read_request_cost",
