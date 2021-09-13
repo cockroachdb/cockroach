@@ -12,6 +12,7 @@ import React from "react";
 import { Col, Row, Tabs } from "antd";
 import classNames from "classnames/bind";
 import _ from "lodash";
+import { Tooltip } from "antd";
 
 import { Breadcrumbs } from "src/breadcrumbs";
 import { CaretRight } from "src/icon/caretRight";
@@ -150,13 +151,21 @@ export class DatabaseTablePage extends React.Component<
   private columns: ColumnDescriptor<Grant>[] = [
     {
       name: "user",
-      title: "User",
+      title: (
+        <Tooltip placement="bottom" title="The user name.">
+          User
+        </Tooltip>
+      ),
       cell: grant => grant.user,
       sort: grant => grant.user,
     },
     {
       name: "privilege",
-      title: "Grants",
+      title: (
+        <Tooltip placement="bottom" title="The list of grants for the user.">
+          Grants
+        </Tooltip>
+      ),
       cell: grant => grant.privilege,
       sort: grant => grant.privilege,
     },
