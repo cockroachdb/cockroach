@@ -457,6 +457,9 @@ func (s *initServer) attemptJoinTo(
 	}()
 
 	binaryVersion := s.config.binaryVersion
+	if clusterversion.V21Dot1.Equal(binaryVersion) {
+		binaryVersion = clusterversion.V21Dot1Dot8 // claim to be 21.1.8 so any .8 nodes allow us in.
+	}
 	req := &roachpb.JoinNodeRequest{
 		BinaryVersion: &binaryVersion,
 	}

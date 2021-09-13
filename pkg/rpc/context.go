@@ -25,6 +25,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1151,6 +1152,9 @@ func (ctx *Context) runHeartbeat(
 				ClusterID:            &clusterID,
 				TargetNodeID:         conn.remoteNodeID,
 				ServerVersion:        ctx.Settings.Version.BinaryVersion(),
+			}
+			if request.ServerVersion.Equal(clusterversion.V21Dot1) {
+				request.ServerVersion = clusterversion.V21Dot1Dot8 // support talking to 21.1.8 clusters that demand their version.
 			}
 
 			interceptor := func(*PingRequest) error { return nil }
