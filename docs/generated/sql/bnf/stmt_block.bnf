@@ -998,6 +998,7 @@ unreserved_keyword ::=
 	| 'NAMES'
 	| 'NAN'
 	| 'NEVER'
+	| 'NEW_DB_NAME'
 	| 'NEXT'
 	| 'NO'
 	| 'NORMAL'
@@ -2110,6 +2111,7 @@ restore_options ::=
 	| 'DETACHED'
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
+	| 'NEW_DB_NAME' '=' string_or_placeholder
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*

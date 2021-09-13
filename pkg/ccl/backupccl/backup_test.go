@@ -8703,3 +8703,25 @@ DROP TABLE foo;
 	defer cleanupEmptyCluster()
 	sqlDBRestore.Exec(t, "RESTORE FROM $1 AS OF SYSTEM TIME "+aost, LocalFoo)
 }
+
+func TestRestoreNewDatabaseName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo)
+
+	// Should fail because 'data' database is still in cluster
+	sqlDB.ExpectErr(t, "database",
+		"RESTORE DATABASE data FROM $1", LocalFoo)
+
+	// Should pass because 'new_data' is not in cluster
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM $1 WITH new_db_name = 'new_data'", LocalFoo)
+
+	// Should fail because we just restored new_data into cluster
+	sqlDB.ExpectErr(t, "database",
+		"RESTORE DATABASE data FROM $1 WITH new_db_name = 'new_data'", LocalFoo)
+}

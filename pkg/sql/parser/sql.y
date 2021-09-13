@@ -809,9 +809,10 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED NOCONTROLJOB
-%token <str> NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING NO_INDEX_JOIN NO_ZIGZAG_JOIN
-%token <str> NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
+%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
+%token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
+%token <str> NO_INDEX_JOIN NO_ZIGZAG_JOIN NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL
+%token <str> NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
@@ -2884,6 +2885,7 @@ opt_with_schedule_options:
 //    detached: execute restore job asynchronously, without waiting for its completion
 //    skip_localities_check: ignore difference of zone configuration between restore cluster and backup cluster
 //    debug_pause_on: describes the events that the job should pause itself on for debugging purposes.
+//    new_db_name: renames the restored database. only applies to database restores
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
   RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
@@ -3023,6 +3025,10 @@ restore_options:
 | DEBUG_PAUSE_ON '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{DebugPauseOn: $3.expr()}
+  }
+| NEW_DB_NAME '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
   }
 
 import_format:
@@ -13287,6 +13293,7 @@ unreserved_keyword:
 | NAMES
 | NAN
 | NEVER
+| NEW_DB_NAME
 | NEXT
 | NO
 | NORMAL
