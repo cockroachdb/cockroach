@@ -728,6 +728,7 @@ func allocateDescriptorRewrites(
 					}
 					return
 				}
+				// Lookup the corresponding schema in the new target database.
 				desc, err := catalogkv.GetDescriptorCollidingWithObject(
 					ctx,
 					txn,
