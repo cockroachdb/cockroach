@@ -485,57 +485,128 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 	}
 }
 
-// privMap maps a privilege string to a list of privileges.
-type privMap map[string]privilege.List
+// priv represents a privilege parsed from an Access Privilege Inquiry
+// Function's privilege string argument. The structure is distinct from
+// privilege.Kind due to differences in how PostgreSQL and CockroachDB
+// handle the GRANT privilege.
+//
+// In PostgreSQL, each privilege (SELECT, INSERT, etc.) has an optional
+// "grant option" bit associated with it. A role can only grant a privilege
+// on an object to others if it is the owner of the object or if it itself
+// holds that privilege **with grant option** on the object. With this
+// construction, there is no need for a separate GRANT privilege.
+//
+// In CockroachDB, there exists a distinct GRANT privilege and no concept of
+// a "grant option" on other privileges. A role can only grant a privilege
+// on an object to others if it is the owner of the object or if it itself
+// holds both (1) that privilege on the object and (2) the GRANT privilege
+// on the object. However, this behavior may change in the future, see
+// https://github.com/cockroachdb/cockroach/issues/67410.
+//
+// For the sake of parsing the privilege argument of these builtins, it is
+// helpful to represent privileges more closely to how they are represented
+// in PostgreSQL. This allows us to represent a single priv with a fake
+// "grant option", which is later computed as a conjunction between that
+// priv's kind and the GRANT privilege, while also computing a disjunction
+// across all comma-separated privilege strings.
+//
+// For instance, consider the following argument string:
+//
+//  arg = "SELECT, UPDATE WITH GRANT OPTION, DELETE"
+//
+// This would be represented as the following list of priv structs:
+//
+//  privs = []priv{{SELECT, false}, {UPDATE, true}, {DELETE, false}}
+//
+// Which would be evaluated as:
+//
+//  res = check(SELECT) || (check(UPDATE) && check(GRANT)) || check(DELETE)
+//
+type priv struct {
+	kind        privilege.Kind
+	grantOption bool
+}
 
-// parsePrivilegeStr recognize privilege strings for has_foo_privilege builtins.
+// privMap maps a privilege string to a priv.
+type privMap map[string]priv
+
+// parsePrivilegeStr recognizes privilege strings for has_foo_privilege
+// builtins, which are known as Access Privilege Inquiry Functions.
 //
 // The function accept a comma-separated list of case-insensitive privilege
 // names, producing a list of privileges. It is liberal about whitespace between
 // items, not so much about whitespace within items. The allowed privilege names
 // and their corresponding privileges are given as a privMap.
-func parsePrivilegeStr(arg tree.Datum, m privMap) (privilege.List, error) {
+func parsePrivilegeStr(arg tree.Datum, m privMap) ([]priv, error) {
 	argStr := string(tree.MustBeDString(arg))
 	privStrs := strings.Split(argStr, ",")
-	var res privilege.List
-	for _, privStr := range privStrs {
+	res := make([]priv, len(privStrs))
+	for i, privStr := range privStrs {
 		// Privileges are case-insensitive.
 		privStr = strings.ToUpper(privStr)
 		// Extra whitespace is allowed between but not within privilege names.
 		privStr = strings.TrimSpace(privStr)
 		// Check the privilege map.
-		privs, ok := m[privStr]
+		p, ok := m[privStr]
 		if !ok {
 			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 				"unrecognized privilege type: %q", privStr)
 		}
-		res = append(res, privs...)
+		res[i] = p
 	}
 	return res, nil
 }
 
 // runPrivilegeChecks runs the provided function for each privilege in the list.
-// If any of the checks return False or NULL, the function short-circuits with
-// that result. Otherwise, it returns True.
+// If any of the checks return True or NULL, the function short-circuits with
+// that result. Otherwise, it returns False.
 func runPrivilegeChecks(
-	privs privilege.List, check func(privilege.Kind) (tree.Datum, error),
+	privs []priv, check func(privilege.Kind) (tree.Datum, error),
 ) (tree.Datum, error) {
 	for _, p := range privs {
-		d, err := check(p)
+		d, err := runSinglePrivilegeCheck(p, check)
 		if err != nil {
 			return nil, err
 		}
-		switch d {
-		case tree.DNull, tree.DBoolFalse:
+		if d == tree.DBoolTrue || d == tree.DNull {
 			return d, nil
-		case tree.DBoolTrue:
-			continue
-		default:
-			return nil, errors.AssertionFailedf(
-				"unexpected privilege check result %v", d)
 		}
 	}
-	return tree.DBoolTrue, nil
+	return tree.DBoolFalse, nil
+}
+
+// runSinglePrivilegeCheck runs the provided check function for the privilege.
+// If the privilege has the grantOption flag set to true, it also runs the
+// provided function with the GRANT privilege and only returns True if both
+// calls returns True. See the comment on priv for justification.
+func runSinglePrivilegeCheck(
+	priv priv, check func(privilege.Kind) (tree.Datum, error),
+) (tree.Datum, error) {
+	d, err := check(priv.kind)
+	if err != nil {
+		return nil, err
+	}
+	switch d {
+	case tree.DBoolFalse, tree.DNull:
+	case tree.DBoolTrue:
+		if priv.grantOption {
+			// grantOption is set, so AND the result with check(GRANT).
+			d, err = check(privilege.GRANT)
+			if err != nil {
+				return nil, err
+			}
+			switch d {
+			case tree.DBoolFalse, tree.DBoolTrue, tree.DNull:
+			default:
+				return nil, errors.AssertionFailedf(
+					"unexpected privilege check result %v", d)
+			}
+		}
+	default:
+		return nil, errors.AssertionFailedf(
+			"unexpected privilege check result %v", d)
+	}
+	return d, nil
 }
 
 // evalPrivilegeCheck performs a privilege check for the specified privilege.
@@ -1401,14 +1472,14 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"SELECT":                       {privilege.SELECT},
-				"SELECT WITH GRANT OPTION":     {privilege.SELECT, privilege.GRANT},
-				"INSERT":                       {privilege.INSERT},
-				"INSERT WITH GRANT OPTION":     {privilege.INSERT, privilege.GRANT},
-				"UPDATE":                       {privilege.UPDATE},
-				"UPDATE WITH GRANT OPTION":     {privilege.UPDATE, privilege.GRANT},
-				"REFERENCES":                   {privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {privilege.SELECT, privilege.GRANT},
+				"SELECT":                       {privilege.SELECT, false},
+				"SELECT WITH GRANT OPTION":     {privilege.SELECT, true},
+				"INSERT":                       {privilege.INSERT, false},
+				"INSERT WITH GRANT OPTION":     {privilege.INSERT, true},
+				"UPDATE":                       {privilege.UPDATE, false},
+				"UPDATE WITH GRANT OPTION":     {privilege.UPDATE, true},
+				"REFERENCES":                   {privilege.SELECT, false},
+				"REFERENCES WITH GRANT OPTION": {privilege.SELECT, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1444,14 +1515,14 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[2], privMap{
-				"SELECT":                       {privilege.SELECT},
-				"SELECT WITH GRANT OPTION":     {privilege.SELECT, privilege.GRANT},
-				"INSERT":                       {privilege.INSERT},
-				"INSERT WITH GRANT OPTION":     {privilege.INSERT, privilege.GRANT},
-				"UPDATE":                       {privilege.UPDATE},
-				"UPDATE WITH GRANT OPTION":     {privilege.UPDATE, privilege.GRANT},
-				"REFERENCES":                   {privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {privilege.SELECT, privilege.GRANT},
+				"SELECT":                       {privilege.SELECT, false},
+				"SELECT WITH GRANT OPTION":     {privilege.SELECT, true},
+				"INSERT":                       {privilege.INSERT, false},
+				"INSERT WITH GRANT OPTION":     {privilege.INSERT, true},
+				"UPDATE":                       {privilege.UPDATE, false},
+				"UPDATE WITH GRANT OPTION":     {privilege.UPDATE, true},
+				"REFERENCES":                   {privilege.SELECT, false},
+				"REFERENCES WITH GRANT OPTION": {privilege.SELECT, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1485,14 +1556,14 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"CREATE":                      {privilege.CREATE},
-				"CREATE WITH GRANT OPTION":    {privilege.CREATE, privilege.GRANT},
-				"CONNECT":                     {privilege.CONNECT},
-				"CONNECT WITH GRANT OPTION":   {privilege.CONNECT, privilege.GRANT},
-				"TEMPORARY":                   {privilege.CREATE},
-				"TEMPORARY WITH GRANT OPTION": {privilege.CREATE, privilege.GRANT},
-				"TEMP":                        {privilege.CREATE},
-				"TEMP WITH GRANT OPTION":      {privilege.CREATE, privilege.GRANT},
+				"CREATE":                      {privilege.CREATE, false},
+				"CREATE WITH GRANT OPTION":    {privilege.CREATE, true},
+				"CONNECT":                     {privilege.CONNECT, false},
+				"CONNECT WITH GRANT OPTION":   {privilege.CONNECT, true},
+				"TEMPORARY":                   {privilege.CREATE, false},
+				"TEMPORARY WITH GRANT OPTION": {privilege.CREATE, true},
+				"TEMP":                        {privilege.CREATE, false},
+				"TEMP WITH GRANT OPTION":      {privilege.CREATE, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1531,8 +1602,8 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"USAGE":                   {privilege.USAGE},
-				"USAGE WITH GRANT OPTION": {privilege.USAGE, privilege.GRANT},
+				"USAGE":                   {privilege.USAGE, false},
+				"USAGE WITH GRANT OPTION": {privilege.USAGE, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1580,8 +1651,8 @@ SELECT description
 				// TODO(nvanbenschoten): this privilege is incorrect, but we don't
 				// currently have an EXECUTE privilege and we aren't even checking
 				// this down below, so it's fine for now.
-				"EXECUTE":                   {privilege.USAGE},
-				"EXECUTE WITH GRANT OPTION": {privilege.USAGE, privilege.GRANT},
+				"EXECUTE":                   {privilege.USAGE, false},
+				"EXECUTE WITH GRANT OPTION": {privilege.USAGE, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1618,8 +1689,8 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"USAGE":                   {privilege.USAGE},
-				"USAGE WITH GRANT OPTION": {privilege.USAGE, privilege.GRANT},
+				"USAGE":                   {privilege.USAGE, false},
+				"USAGE WITH GRANT OPTION": {privilege.USAGE, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1660,10 +1731,10 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"CREATE":                   {privilege.CREATE},
-				"CREATE WITH GRANT OPTION": {privilege.CREATE, privilege.GRANT},
-				"USAGE":                    {privilege.USAGE},
-				"USAGE WITH GRANT OPTION":  {privilege.USAGE, privilege.GRANT},
+				"CREATE":                   {privilege.CREATE, false},
+				"CREATE WITH GRANT OPTION": {privilege.CREATE, true},
+				"USAGE":                    {privilege.USAGE, false},
+				"USAGE WITH GRANT OPTION":  {privilege.USAGE, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1717,12 +1788,12 @@ SELECT description
 			privs, err := parsePrivilegeStr(args[1], privMap{
 				// Sequences and other table objects cannot be given a USAGE privilege,
 				// so we check for SELECT here instead. See privilege.TablePrivileges.
-				"USAGE":                    {privilege.SELECT},
-				"USAGE WITH GRANT OPTION":  {privilege.SELECT, privilege.GRANT},
-				"SELECT":                   {privilege.SELECT},
-				"SELECT WITH GRANT OPTION": {privilege.SELECT, privilege.GRANT},
-				"UPDATE":                   {privilege.UPDATE},
-				"UPDATE WITH GRANT OPTION": {privilege.UPDATE, privilege.GRANT},
+				"USAGE":                    {privilege.SELECT, false},
+				"USAGE WITH GRANT OPTION":  {privilege.SELECT, true},
+				"SELECT":                   {privilege.SELECT, false},
+				"SELECT WITH GRANT OPTION": {privilege.SELECT, true},
+				"UPDATE":                   {privilege.UPDATE, false},
+				"UPDATE WITH GRANT OPTION": {privilege.UPDATE, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1760,8 +1831,8 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"USAGE":                   {privilege.USAGE},
-				"USAGE WITH GRANT OPTION": {privilege.USAGE, privilege.GRANT},
+				"USAGE":                   {privilege.USAGE, false},
+				"USAGE WITH GRANT OPTION": {privilege.USAGE, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1786,20 +1857,20 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"SELECT":                       {privilege.SELECT},
-				"SELECT WITH GRANT OPTION":     {privilege.SELECT, privilege.GRANT},
-				"INSERT":                       {privilege.INSERT},
-				"INSERT WITH GRANT OPTION":     {privilege.INSERT, privilege.GRANT},
-				"UPDATE":                       {privilege.UPDATE},
-				"UPDATE WITH GRANT OPTION":     {privilege.UPDATE, privilege.GRANT},
-				"DELETE":                       {privilege.DELETE},
-				"DELETE WITH GRANT OPTION":     {privilege.DELETE, privilege.GRANT},
-				"TRUNCATE":                     {privilege.DELETE},
-				"TRUNCATE WITH GRANT OPTION":   {privilege.DELETE, privilege.GRANT},
-				"REFERENCES":                   {privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {privilege.SELECT, privilege.GRANT},
-				"TRIGGER":                      {privilege.CREATE},
-				"TRIGGER WITH GRANT OPTION":    {privilege.CREATE, privilege.GRANT},
+				"SELECT":                       {privilege.SELECT, false},
+				"SELECT WITH GRANT OPTION":     {privilege.SELECT, true},
+				"INSERT":                       {privilege.INSERT, false},
+				"INSERT WITH GRANT OPTION":     {privilege.INSERT, true},
+				"UPDATE":                       {privilege.UPDATE, false},
+				"UPDATE WITH GRANT OPTION":     {privilege.UPDATE, true},
+				"DELETE":                       {privilege.DELETE, false},
+				"DELETE WITH GRANT OPTION":     {privilege.DELETE, true},
+				"TRUNCATE":                     {privilege.DELETE, false},
+				"TRUNCATE WITH GRANT OPTION":   {privilege.DELETE, true},
+				"REFERENCES":                   {privilege.SELECT, false},
+				"REFERENCES WITH GRANT OPTION": {privilege.SELECT, true},
+				"TRIGGER":                      {privilege.CREATE, false},
+				"TRIGGER WITH GRANT OPTION":    {privilege.CREATE, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1833,8 +1904,8 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"CREATE":                   {privilege.CREATE},
-				"CREATE WITH GRANT OPTION": {privilege.CREATE, privilege.GRANT},
+				"CREATE":                   {privilege.CREATE, false},
+				"CREATE WITH GRANT OPTION": {privilege.CREATE, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1879,8 +1950,8 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"USAGE":                   {privilege.USAGE},
-				"USAGE WITH GRANT OPTION": {privilege.USAGE, privilege.GRANT},
+				"USAGE":                   {privilege.USAGE, false},
+				"USAGE WITH GRANT OPTION": {privilege.USAGE, true},
 			})
 			if err != nil {
 				return nil, err
@@ -1920,18 +1991,18 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				// From Postgres: We use USAGE to denote whether the privileges of the
-				// role are accessible (has_privs), MEMBER to denote is_member, and
-				// MEMBER WITH GRANT OPTION (or ADMIN OPTION) to denote is_admin. There
-				// is no ACL bit corresponding to MEMBER so we cheat and use CREATE for
-				// that. This convention is shared only with the switch statement below.
-				"USAGE": {privilege.USAGE},
-				// The following two are not a mistake. See Postgres.
-				"USAGE WITH GRANT OPTION":  {privilege.CREATE, privilege.GRANT},
-				"USAGE WITH ADMIN OPTION":  {privilege.CREATE, privilege.GRANT},
-				"MEMBER":                   {privilege.CREATE},
-				"MEMBER WITH GRANT OPTION": {privilege.CREATE, privilege.GRANT},
-				"MEMBER WITH ADMIN OPTION": {privilege.CREATE, privilege.GRANT},
+				// This privMap is handled a little differently than in other cases
+				// (but similar to in PostgreSQL, see convert_role_priv_string and
+				// pg_role_aclcheck). We use USAGE to denote whether the privileges of
+				// the role are accessible (hasPrivsOfRole), CREATE to denote whether
+				// the user is a member of the role (isMemberOfRole), and GRANT to
+				// denote whether the user is an admin of the role (isAdminOfRole).
+				"USAGE":                    {privilege.USAGE, false},
+				"MEMBER":                   {privilege.CREATE, false},
+				"USAGE WITH GRANT OPTION":  {privilege.GRANT, false},
+				"USAGE WITH ADMIN OPTION":  {privilege.GRANT, false},
+				"MEMBER WITH GRANT OPTION": {privilege.GRANT, false},
+				"MEMBER WITH ADMIN OPTION": {privilege.GRANT, false},
 			})
 			if err != nil {
 				return nil, err
