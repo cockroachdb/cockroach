@@ -342,7 +342,7 @@ func GetForDatabase(
 	if !dbDesc.HasPublicSchemaWithDescriptor() {
 		ret[descpb.ID(keys.PublicSchemaID)] = SchemaEntryForDB{
 			Name:      tree.PublicSchema,
-			Timestamp: txn.ReadTimestamp(),
+			Timestamp: txn.CommitTimestamp(),
 		}
 	}
 

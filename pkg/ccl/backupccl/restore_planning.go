@@ -2246,6 +2246,15 @@ func planDatabaseModifiersForRestore(
 	}
 
 	var extraDescs []catalog.Descriptor
+	// Do one pass through the sql descs to map the database to its public schema.
+	dbToPublicSchema := make(map[descpb.ID]catalog.SchemaDescriptor)
+	for _, desc := range sqlDescs {
+		sc, isSc := desc.(*schemadesc.Mutable)
+		if !isSc {
+			continue
+		}
+		dbToPublicSchema[sc.GetParentID()] = sc
+	}
 	for _, desc := range sqlDescs {
 		// Only process database descriptors.
 		db, isDB := desc.(*dbdesc.Mutable)
@@ -2299,10 +2308,17 @@ func planDatabaseModifiersForRestore(
 		}
 
 		// Create the multi-region enums.
+		var sc catalog.SchemaDescriptor
+		if db.HasPublicSchemaWithDescriptor() {
+			sc = dbToPublicSchema[db.GetID()]
+		} else {
+			sc = schemadesc.GetPublicSchema()
+		}
 		regionEnum, regionArrayEnum, err := restoreCreateDefaultPrimaryRegionEnums(
 			ctx,
 			p,
 			db,
+			sc,
 			regionConfig,
 			regionEnumID,
 			regionEnumArrayID,
@@ -2328,6 +2344,7 @@ func restoreCreateDefaultPrimaryRegionEnums(
 	ctx context.Context,
 	p sql.PlanHookState,
 	db *dbdesc.Mutable,
+	sc catalog.SchemaDescriptor,
 	regionConfig multiregion.RegionConfig,
 	regionEnumID descpb.ID,
 	regionEnumArrayID descpb.ID,
@@ -2335,20 +2352,6 @@ func restoreCreateDefaultPrimaryRegionEnums(
 	regionLabels := make(tree.EnumValueList, 0, len(regionConfig.Regions()))
 	for _, regionName := range regionConfig.Regions() {
 		regionLabels = append(regionLabels, tree.EnumValue(regionName))
-	}
-	var sc catalog.SchemaDescriptor
-	if db.HasPublicSchemaWithDescriptor() {
-		publicSchemaID := db.GetSchemaID(tree.PublicSchema)
-		p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			desc, err := catalogkv.GetDescriptorByID(ctx, txn, p.ExecCfg().Codec, publicSchemaID)
-			if err != nil {
-				return err
-			}
-			sc = desc.(catalog.SchemaDescriptor)
-			return nil
-		})
-	} else {
-		sc = schemadesc.GetPublicSchema()
 	}
 	regionEnum, err := sql.CreateEnumTypeDesc(
 		p.RunParams(ctx),
