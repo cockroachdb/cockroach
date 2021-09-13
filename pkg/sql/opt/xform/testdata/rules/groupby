@@ -2552,6 +2552,22 @@ group-by
  └── aggregations
       └── count-rows [as=count_rows:8]
 
+# Rule applies for scalar group-by.
+opt expect=EliminateIndexJoinOrProjectInsideGroupBy
+SELECT count(1) FROM abcd@partial_ab WHERE c > 0
+----
+scalar-group-by
+ ├── columns: count:9!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(9)
+ ├── scan abcd@partial_ab,partial
+ │    ├── columns: rowid:5!null
+ │    ├── flags: force-index=partial_ab
+ │    └── key: (5)
+ └── aggregations
+      └── count-rows [as=count:9]
+
 # Rule applies for distinct-on.
 opt expect=EliminateIndexJoinOrProjectInsideGroupBy
 SELECT DISTINCT a, b FROM abcd WHERE c > 0
