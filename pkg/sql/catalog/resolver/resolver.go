@@ -333,7 +333,10 @@ func GetForDatabase(
 	}
 	// This is needed at least for the temp system db during restores.
 	if !dbDesc.HasPublicSchemaWithDescriptor() {
-		ret[descpb.ID(keys.PublicSchemaID)] = tree.PublicSchema
+		ret[descpb.ID(keys.PublicSchemaID)] = SchemaEntryForDB{
+			Name:      tree.PublicSchema,
+			Timestamp: txn.CommitTimestamp(),
+		}
 	}
 
 	for _, kv := range kvs {
