@@ -139,6 +139,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		alterSystemWebSessionsCreateIndexes,
 	),
+	migration.NewTenantMigration(
+		"set TTL on system.tenant_usage",
+		toCV(clusterversion.TenantUsageTableTTL),
+		NoPrecondition,
+		setTTLForTenantUsageTableMigration,
+	),
 }
 
 func init() {

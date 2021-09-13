@@ -277,6 +277,9 @@ const (
 	// PebbleFormatVersioned ratchets Pebble's format major version to
 	// the version FormatVersioned.
 	PebbleFormatVersioned
+	// TenantUsageTableTTL sets the TTL on the system table for tracking tenant
+	// usage.
+	TenantUsageTableTTL
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -464,6 +467,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatVersioned,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1162},
+	},
+	{
+		Key:     TenantUsageTableTTL,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1164},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

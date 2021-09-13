@@ -2137,6 +2137,9 @@ var (
 			},
 		))
 
+	// The tenant_usage table receives periodic updates from all SQL pods. We want
+	// to limit the amount of clutter in the table.
+	TenantUsageTableTTL = 2 * time.Hour
 	// TenantUsageTable is the descriptor for the tenant_usage table. It is used
 	// to coordinate throttling of tenant SQL pods and to track consumption.
 	TenantUsageTable = registerSystemTable(

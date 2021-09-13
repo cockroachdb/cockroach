@@ -12,12 +12,14 @@ package migrations
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
+	"github.com/cockroachdb/errors"
 )
 
 func tenantUsageTableMigration(
@@ -30,4 +32,19 @@ func tenantUsageTableMigration(
 	return startupmigrations.CreateSystemTable(
 		ctx, d.DB, d.Codec, d.Settings, systemschema.TenantUsageTable,
 	)
+}
+
+func setTTLForTenantUsageTableMigration(
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
+) error {
+	// The table is only relevant on the system tenant.
+	if !d.Codec.ForSystemTenant() {
+		return nil
+	}
+	stmt := fmt.Sprintf(
+		"ALTER TABLE system.tenant_usage CONFIGURE ZONE USING gc.ttlseconds = %d",
+		int(systemschema.TenantUsageTableTTL.Seconds()),
+	)
+	_, err := d.InternalExecutor.Exec(ctx, "set-tenant-usage-ttl", nil /* txn */, stmt)
+	return errors.Wrapf(err, "failed to set TTL on tenant_usage")
 }
