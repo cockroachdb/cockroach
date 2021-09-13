@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -68,6 +69,42 @@ func TestCloudStorageSink(t *testing.T) {
 			t.Fatal(err)
 		}
 		return decompressed
+	}
+
+	listLeafDirectories := func(root string) []string {
+		absRoot := filepath.Join(dir, root)
+
+		var folders []string
+
+		hasChildDirs := func(path string) bool {
+			files, err := ioutil.ReadDir(path)
+			if err != nil {
+				return false
+			}
+			for _, file := range files {
+				if file.IsDir() {
+					return true
+				}
+			}
+			return false
+		}
+
+		walkFn := func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if path == absRoot {
+				return nil
+			}
+			if info.IsDir() && !hasChildDirs(path) {
+				relPath, _ := filepath.Rel(absRoot, path)
+				folders = append(folders, relPath)
+			}
+			return nil
+		}
+
+		require.NoError(t, filepath.Walk(absRoot, walkFn))
+		return folders
 	}
 
 	// slurpDir returns the contents of every file under root (relative to the
@@ -475,6 +512,90 @@ func TestCloudStorageSink(t *testing.T) {
 			"v9\n",
 			`{"resolved":"6.0000000000"}`,
 		}, slurpDir(t, dir))
+	})
+
+	t.Run(`partition-formatting`, func(t *testing.T) {
+		t1 := makeTopic(`t1`)
+		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
+		const targetMaxFileSize = 6
+
+		opts := opts
+
+		timestamps := []time.Time{
+			time.Date(2000, time.January, 1, 1, 1, 1, 0, time.UTC),
+			time.Date(2000, time.January, 1, 1, 2, 1, 0, time.UTC),
+			time.Date(2000, time.January, 1, 2, 1, 1, 0, time.UTC),
+			time.Date(2000, time.January, 2, 1, 1, 1, 0, time.UTC),
+			time.Date(2000, time.January, 2, 6, 1, 1, 0, time.UTC),
+		}
+
+		for i, tc := range []struct {
+			format          string
+			expectedFolders []string
+		}{
+			{
+				"hourly",
+				[]string{
+					"2000-01-01/01",
+					"2000-01-01/02",
+					"2000-01-02/01",
+					"2000-01-02/06",
+				},
+			},
+			{
+				"daily",
+				[]string{
+					"2000-01-01",
+					"2000-01-02",
+				},
+			},
+			{
+				"flat",
+				[]string{},
+			},
+			{
+				"", // should fall back to default
+				[]string{
+					"2000-01-01",
+					"2000-01-02",
+				},
+			},
+		} {
+			t.Run(tc.format, func(t *testing.T) {
+				sf, err := span.MakeFrontier(testSpan)
+				require.NoError(t, err)
+				timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
+
+				dir := fmt.Sprintf(`partition-formatting-%d`, i)
+
+				sinkURIWithParam := sinkURI(dir, targetMaxFileSize)
+				sinkURIWithParam.addParam(changefeedbase.SinkParamPartitionFormat, tc.format)
+				s, err := makeCloudStorageSink(
+					ctx, sinkURIWithParam, 1,
+					settings, opts, timestampOracle, externalStorageFromURI, user,
+				)
+
+				require.NoError(t, err)
+				defer func() { require.NoError(t, s.Close()) }()
+				s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
+
+				for i, timestamp := range timestamps {
+					hlcTime := ts(timestamp.UnixNano())
+
+					// Move the frontier and flush to update the dataFilePartition value
+					_, err = sf.Forward(testSpan, hlcTime)
+					require.NoError(t, err)
+					require.NoError(t, s.Flush(ctx))
+
+					require.NoError(t, s.EmitRow(ctx, t1,
+						noKey, []byte(fmt.Sprintf(`v%d`, i)), hlcTime, zeroAlloc))
+				}
+
+				require.NoError(t, s.Flush(ctx)) // Flush the last file
+				require.ElementsMatch(t, tc.expectedFolders, listLeafDirectories(dir))
+				require.Equal(t, []string{"v0\n", "v1\n", "v2\n", "v3\n", "v4\n"}, slurpDir(t, dir))
+			})
+		}
 	})
 
 	t.Run(`file-ordering`, func(t *testing.T) {
