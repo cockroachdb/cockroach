@@ -456,7 +456,7 @@ func (s *initServer) attemptJoinTo(
 		_ = conn.Close() // nolint:grpcconnclose
 	}()
 
-	binaryVersion := s.config.binaryVersion
+	binaryVersion := clusterversion.V21Dot1Dot8 // s.config.binaryVersion
 	req := &roachpb.JoinNodeRequest{
 		BinaryVersion: &binaryVersion,
 	}

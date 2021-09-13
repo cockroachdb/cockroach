@@ -25,6 +25,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1150,7 +1151,7 @@ func (ctx *Context) runHeartbeat(
 				OriginMaxOffsetNanos: maxOffsetNanos,
 				ClusterID:            &clusterID,
 				TargetNodeID:         conn.remoteNodeID,
-				ServerVersion:        ctx.Settings.Version.BinaryVersion(),
+				ServerVersion:        clusterversion.V21Dot1Dot8, // hard-coded to support joining .8 clusters that demand -124.
 			}
 
 			interceptor := func(*PingRequest) error { return nil }
