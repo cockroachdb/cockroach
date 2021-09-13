@@ -12,6 +12,7 @@ package sqlsmith
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -31,11 +32,28 @@ import (
 // equal.
 //
 // This TLP implementation is also limited in the types of queries that are
-// tested. We currently only test basic SELECT query filters. It is possible to
-// use TLP to test aggregations, GROUP BY, HAVING, and JOINs, which have all
-// been implemented in SQLancer. See:
+// tested. We currently only test basic WHERE and JOIN query filters. It is
+// possible to use TLP to test aggregations, GROUP BY, and HAVING, which have
+// all been implemented in SQLancer. See:
 // https://github.com/sqlancer/sqlancer/tree/1.1.0/src/sqlancer/cockroachdb/oracle/tlp.
-//
+func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
+	// Set disableImpureFns to true so that generated predicates are immutable.
+	originalDisableImpureFns := s.disableImpureFns
+	s.disableImpureFns = true
+	defer func() {
+		s.disableImpureFns = originalDisableImpureFns
+	}()
+
+	if rand.Int()%2 == 0 {
+		return s.generateWhereTLP()
+	}
+	return s.generateJoinTLP()
+}
+
+// generateWhereTLP returns two SQL queries as strings that can be used by the
+// GenerateTLP function. These queries make use of the WHERE clause to partition
+// the original query into three.
+
 // The first query returned is an unpartitioned query of the form:
 //
 //   SELECT count(*) FROM table
@@ -52,14 +70,7 @@ import (
 //
 // If the resulting counts of the two queries are not equal, there is a logical
 // bug.
-func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
-	// Set disableImpureFns to true so that generated predicates are immutable.
-	originalDisableImpureFns := s.disableImpureFns
-	s.disableImpureFns = true
-	defer func() {
-		s.disableImpureFns = originalDisableImpureFns
-	}()
-
+func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string) {
 	f := tree.NewFmtCtx(tree.FmtParsable)
 
 	table, _, _, cols, ok := s.getSchemaTable()
@@ -78,6 +89,101 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
 	part1 := fmt.Sprintf("SELECT * FROM %s WHERE %s", tableName, predicate)
 	part2 := fmt.Sprintf("SELECT * FROM %s WHERE NOT (%s)", tableName, predicate)
 	part3 := fmt.Sprintf("SELECT * FROM %s WHERE (%s) IS NULL", tableName, predicate)
+
+	partitioned = fmt.Sprintf(
+		"SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)",
+		part1, part2, part3,
+	)
+
+	return unpartitioned, partitioned
+}
+
+// generateJoinTLP returns two SQL queries as strings that can be used by the
+// GenerateTLP function. These queries make use of LEFT JOIN to partition the
+// original query in two ways. The latter query is partitioned by a predicate p,
+// while the former is not.
+
+// The first query returned is an unpartitioned query of the form:
+//
+//   SELECT count(*) FROM (
+//     SELECT * FROM table1 LEFT JOIN table2 ON TRUE
+//     UNION ALL
+//     SELECT * FROM table1 LEFT JOIN table2 ON FALSE
+//     UNION ALL
+//     SELECT * FROM table1 LEFT JOIN table2 ON FALSE
+//   )
+//
+// The second query returned is a partitioned query of the form:
+//
+//   SELECT count(*) FROM (
+//     SELECT * FROM table1 LEFT JOIN table2 ON (p)
+//     UNION ALL
+//     SELECT * FROM table1 LEFT JOIN table2 ON NOT (p)
+//     UNION ALL
+//     SELECT * FROM table1 LEFT JOIN table2 ON (p) IS NULL
+//   )
+//
+// From the first query, we have a CROSS JOIN of the two tables (JOIN ON TRUE)
+// and then all rows concatenated with NULL values for the second and third
+// parts (JOIN ON FALSE). Recall our TLP logical guarantee that a given
+// predicate p always evaluates to either TRUE, FALSE, or NULL. It follows that
+// for any row in table1, exactly one of the expressions (p), NOT (p), or (p) is
+// NULL will resolve to TRUE. For a given row, when the expression resolves to
+// TRUE in table1, it matches with every row in table2. Otherwise, it is
+// concatenated with null values. So each row in table1 is matched with every
+// row in table2 exactly once (CROSS JOIN) and also matched with NULL values
+// exactly twice, as expected by the unpartitioned query.
+//
+// Note that this implementation is restricted to testing LEFT JOIN and only
+// uses the columns from the left table. This means that only CROSS JOIN is
+// tested and not other joins like MERGE JOIN. In the future, this JOIN testing
+// could be further expanded.
+//
+// If the resulting counts of the two queries are not equal, there is a logical
+// bug.
+func (s *Smither) generateJoinTLP() (unpartitioned, partitioned string) {
+	f := tree.NewFmtCtx(tree.FmtParsable)
+
+	table1, _, _, cols1, ok1 := s.getSchemaTable()
+	table2, _, _, _, ok2 := s.getSchemaTable()
+	if !ok1 || !ok2 {
+		panic(errors.AssertionFailedf("failed to find random tables"))
+	}
+	table1.Format(f)
+	tableName1 := f.CloseAndGetString()
+	table2.Format(f)
+	tableName2 := f.CloseAndGetString()
+
+	leftJoinTrue := fmt.Sprintf(
+		"SELECT * FROM %s LEFT JOIN %s ON TRUE",
+		tableName1, tableName2,
+	)
+	leftJoinFalse := fmt.Sprintf(
+		"SELECT * FROM %s LEFT JOIN %s ON FALSE",
+		tableName1, tableName2,
+	)
+
+	unpartitioned = fmt.Sprintf(
+		"SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)",
+		leftJoinTrue, leftJoinFalse, leftJoinFalse,
+	)
+
+	pred := makeBoolExpr(s, cols1)
+	pred.Format(f)
+	predicate := f.CloseAndGetString()
+
+	part1 := fmt.Sprintf(
+		"SELECT * FROM %s LEFT JOIN %s ON %s",
+		tableName1, tableName2, predicate,
+	)
+	part2 := fmt.Sprintf(
+		"SELECT * FROM %s LEFT JOIN %s ON NOT (%s)",
+		tableName1, tableName2, predicate,
+	)
+	part3 := fmt.Sprintf(
+		"SELECT * FROM %s LEFT JOIN %s ON (%s) IS NULL",
+		tableName1, tableName2, predicate,
+	)
 
 	partitioned = fmt.Sprintf(
 		"SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)",
