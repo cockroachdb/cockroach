@@ -31,4 +31,8 @@ const (
 	// TokenBucketResponseProcessed indicates that we have processed a
 	// (successful) request to the global token bucket.
 	TokenBucketResponseProcessed
+
+	// WaitingRUAccountedInCallback indicates that we have accounted for a new
+	// request's waiting RUs inside an OnWaitStart callback.
+	WaitingRUAccountedInCallback
 )
