@@ -1570,6 +1570,13 @@ func TestAdminAPIJobs(t *testing.T) {
 				expected = testCase.expectedIDsViaNonAdmin
 			}
 
+			sort.Slice(expected, func(i, j int) bool {
+				return expected[i] < expected[j]
+			})
+
+			sort.Slice(resIDs, func(i, j int) bool {
+				return resIDs[i] < resIDs[j]
+			})
 			if e, a := expected, resIDs; !reflect.DeepEqual(e, a) {
 				t.Errorf("%d: expected job IDs %v, but got %v", i, e, a)
 			}
