@@ -103,7 +103,6 @@ ALL_TESTS = [
     "//pkg/geo/geos:geos_test",
     "//pkg/geo/geotransform:geotransform_test",
     "//pkg/geo/twkb:twkb_test",
-    "//pkg/geo/wkt:wkt_test",
     "//pkg/geo:geo_test",
     "//pkg/gossip/resolver:resolver_test",
     "//pkg/gossip:gossip_test",
