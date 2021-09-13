@@ -257,9 +257,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
     return (
       <div style={{ paddingBottom }}>
         <Helmet title={title} />
-        <section className="section">
-          <h1 className="base-heading">{title}</h1>
-        </section>
+        <h3 className="base-heading">{title}</h3>
         <PageConfig>
           <PageConfigItem>
             <Dropdown

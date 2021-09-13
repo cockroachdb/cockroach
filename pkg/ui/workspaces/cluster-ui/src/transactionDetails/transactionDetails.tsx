@@ -125,7 +125,7 @@ export class TransactionDetails extends React.Component<
           >
             Transactions
           </Button>
-          <h1 className={baseHeadingClasses.tableName}>Transaction Details</h1>
+          <h3 className={baseHeadingClasses.tableName}>Transaction Details</h3>
         </section>
         <Loading
           error={error}

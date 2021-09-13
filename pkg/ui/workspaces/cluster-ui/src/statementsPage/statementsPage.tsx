@@ -593,11 +593,7 @@ export class StatementsPage extends React.Component<
     return (
       <div className={cx("root", "table-area")}>
         <Helmet title={app ? `${app} App | Statements` : "Statements"} />
-
-        <section className={cx("section")}>
-          <h1 className={cx("base-heading")}>Statements</h1>
-        </section>
-
+        <h3 className={cx("base-heading")}>Statements</h3>
         <Loading
           loading={isNil(this.props.statements)}
           error={this.props.statementsError}

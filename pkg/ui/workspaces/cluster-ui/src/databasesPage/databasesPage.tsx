@@ -253,10 +253,7 @@ export class DatabasesPage extends React.Component<
     );
     return (
       <div>
-        <section className={baseHeadingClasses.wrapper}>
-          <h1 className={baseHeadingClasses.tableName}>Databases</h1>
-        </section>
-
+        <h3 className={baseHeadingClasses.tableName}>Databases</h3>
         <section className={sortableTableCx("cl-table-container")}>
           <div className={statisticsClasses.statistic}>
             <h4 className={statisticsClasses.countTitle}>
