@@ -42,7 +42,7 @@ const initialState: LocalStorageState = {
     Boolean(JSON.parse(localStorage.getItem("adminUi/showDiagnosticsModal"))) ||
     false,
   "showColumns/StatementsPage":
-    JSON.parse(localStorage.getItem("showColumns/StatementsPage")) || "default",
+    JSON.parse(localStorage.getItem("showColumns/StatementsPage")) || null,
   "dateRange/StatementsPage":
     JSON.parse(localStorage.getItem("dateRange/StatementsPage")) ||
     defaultDateRange,
