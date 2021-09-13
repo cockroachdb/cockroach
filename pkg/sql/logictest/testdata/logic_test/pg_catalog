@@ -5280,3 +5280,52 @@ root       true         true           false       true         NULL
 testrole1  false        false          true        false        NULL
 testuser1  true         false          false       true         NULL
 testuser2  false        true           false       true         3022-01-01 00:00:00 +0000 UTC
+
+# Testing users that have admin role
+
+statement ok;
+CREATE USER super_user;
+GRANT admin TO super_user;
+CREATE USER regular_user;
+CREATE ROLE super_role;
+GRANT admin TO super_role;
+CREATE ROLE regular_role;
+
+query TB colnames
+SELECT rolname, rolsuper
+FROM pg_authid
+WHERE rolname IN ('super_user', 'super_role', 'regular_user', 'regular_role', 'root', 'admin')
+ORDER BY rolname
+----
+rolname       rolsuper
+admin         true
+regular_role  false
+regular_user  false
+root          true
+super_role    true
+super_user    true
+
+query TB colnames
+SELECT rolname, rolsuper
+FROM pg_roles
+WHERE rolname IN ('super_user', 'super_role', 'regular_user', 'regular_role', 'root', 'admin')
+ORDER BY rolname
+----
+rolname       rolsuper
+admin         true
+regular_role  false
+regular_user  false
+root          true
+super_role    true
+super_user    true
+
+query TB colnames
+SELECT usename, usesuper
+FROM pg_user
+WHERE usename IN ('super_user', 'regular_user', 'root')
+ORDER BY usename
+----
+usename       usesuper
+regular_user  false
+root          true
+super_user    true
