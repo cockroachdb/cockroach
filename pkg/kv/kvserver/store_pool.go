@@ -220,15 +220,16 @@ type NodeStatus int
 
 const (
 	_ NodeStatus = iota
-	// NodeStatusDead The node is dead.
+	// NodeStatusDead describes a node that is dead, i.e. has been unavailable for
+	// longer than `server.time_until_store_dead`.
 	NodeStatusDead
-	// NodeStatusUnavailable THe node missed a liveness heartbeat and is ths
-	// unavailable..
+	// NodeStatusUnavailable describes a node that has been missing liveness
+	// heartbeats, but not for long enough to be declared dead.
 	NodeStatusUnavailable
-	// NodeStatusLive The node is heartbeating and live.
+	// NodeStatusLive describes a node that is heartbeating and thus live.
 	NodeStatusLive
-	// NodeStatusUnknown The status of the node is unknown i.e. there was never
-	// a valid heartbeat or gossip message about the node.
+	// NodeStatusUnknown communicates that the status of the node is unknown i.e.
+	// there was never a valid heartbeat or gossip message about the node.
 	NodeStatusUnknown
 )
 
@@ -249,23 +250,26 @@ func (m NodeStatus) String() string {
 }
 
 // NodeMembershipStatus describes the status of the node in the cluster, but not
-// it's health. It determines if the node is an active participant in the cluster
-// or if it's trying to leave the cluster because it's being drained or decommissioned.
-// This is thus orthogonal to NodeStatus.
+// its health. It determines if the node is an active participant in the cluster
+// or if it's trying to leave the cluster because it's being drained or
+// decommissioned. This is thus orthogonal to NodeStatus.
+//
+// Note that a decommissioning node may also be draining at the same time, and
+// different use cases may handle this situation differently.
 type NodeMembershipStatus int
 
 const (
 	_ NodeMembershipStatus = iota
-	// NodeMembershipStatusActive The node is an active participant in the cluster.
+	// NodeMembershipStatusActive describes a node is an active participant in the cluster.
 	NodeMembershipStatusActive
-	// NodeMembershipStatusDecommissioning The node is being decommissioned.
+	// NodeMembershipStatusDecommissioning describes a node is being decommissioned.
 	NodeMembershipStatusDecommissioning
-	// NodeMembershipStatusDecommissioned The node has been successfully decommissioned.
+	// NodeMembershipStatusDecommissioned describes a node has been successfully decommissioned.
 	NodeMembershipStatusDecommissioned
-	// NodeMembershipStatusDraining The node is draining.
+	// NodeMembershipStatusDraining describes a node that is draining.
 	NodeMembershipStatusDraining
-	// NodeMembershipStatusUnknown The membership status of the node is unknown
-	// because we never received a liveness heartbeat for it.
+	// NodeMembershipStatusUnknown describes a node whose membership status is
+	// unknown because we have no record of a liveness heartbeat for it.
 	NodeMembershipStatusUnknown
 )
 
@@ -307,7 +311,7 @@ const (
 	storeStatusAvailable
 	// The store is decommissioning.
 	storeStatusDecommissioning
-	// The store is decommissioning, but has failed it's liveness heartbeat
+	// The store is decommissioning, but has failed its liveness heartbeat.
 	storeStatusDecommissioningUnavailable
 	// The store failed it's liveness heartbeat recently and is considered
 	// suspect. Consequently, stores always move from `storeStatusUnknown`
