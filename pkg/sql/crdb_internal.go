@@ -5000,7 +5000,7 @@ CREATE TABLE crdb_internal.default_privileges (
 					}
 					return nil
 				}
-				if err := forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, noLogin bool, rolValidUntil *time.Time) error {
+				if err := forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 					role := descpb.DefaultPrivilegesRole{
 						Role: username,
 					}
