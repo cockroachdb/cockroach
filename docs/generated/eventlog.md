@@ -1786,6 +1786,29 @@ are only emitted via external logging.
 Events in this category are logged to the `SQL_PERF` channel.
 
 
+### `large_row`
+
+An event of type `large_row` is recorded when a statement tries to write a row larger than
+cluster setting `sql.mutations.max_row_size.log` to the database. Multiple
+LargeRow events will be recorded for statements writing multiple large rows.
+LargeRow events are recorded before the transaction commits, so in the case
+of transaction abort there will not be a corresponding row in the database.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `RowSize` |  | no |
+| `TableID` |  | no |
+| `FamilyID` |  | no |
+| `PrimaryKey` |  | yes |
+| `ViolatesMaxRowSizeErr` |  | no |
+
 ### `slow_query`
 
 An event of type `slow_query` is recorded when a query triggers the "slow query" condition.
@@ -1835,6 +1858,27 @@ are only emitted via external logging.
 
 Events in this category are logged to the `SQL_INTERNAL_PERF` channel.
 
+
+### `large_row_internal`
+
+An event of type `large_row_internal` is recorded when an internal query tries to write a row
+larger than cluster settings `sql.mutations.max_row_size.log` or
+`sql.mutations.max_row_size.err` to the database.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `RowSize` |  | no |
+| `TableID` |  | no |
+| `FamilyID` |  | no |
+| `PrimaryKey` |  | yes |
+| `ViolatesMaxRowSizeErr` |  | no |
 
 ### `slow_query_internal`
 

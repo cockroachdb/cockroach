@@ -914,7 +914,7 @@ func newPgDumpReader(
 				colSubMap[col.GetName()] = i
 			}
 			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, kvCh,
-				nil /* seqChunkProvider */)
+				nil /* seqChunkProvider */, nil /* metrics */)
 			if err != nil {
 				return nil, err
 			}

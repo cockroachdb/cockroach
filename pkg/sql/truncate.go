@@ -429,6 +429,7 @@ func ClearTableDataInChunks(
 	ctx context.Context,
 	db *kv.DB,
 	codec keys.SQLCodec,
+	sv *settings.Values,
 	tableDesc catalog.TableDescriptor,
 	traceKV bool,
 ) error {
@@ -441,7 +442,7 @@ func ClearTableDataInChunks(
 			log.VEventf(ctx, 2, "table %s truncate at row: %d, span: %s", tableDesc.GetName(), rowIdx, resume)
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			rd := row.MakeDeleter(codec, tableDesc, nil /* requestedCols */)
+			rd := row.MakeDeleter(codec, tableDesc, nil /* requestedCols */, sv, true /* internal */, nil /* metrics */)
 			td := tableDeleter{rd: rd, alloc: alloc}
 			if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 				return err

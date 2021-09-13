@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/hydratedtables",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlliveness",
