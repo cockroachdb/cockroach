@@ -1450,7 +1450,7 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 
 // IsGeneratorApplication returns true iff the function applied is a generator (SRF).
 func (node *FuncExpr) IsGeneratorApplication() bool {
-	return node.fn != nil && node.fn.Generator != nil
+	return node.fn != nil && (node.fn.Generator != nil || node.fn.GeneratorWithExprs != nil)
 }
 
 // IsWindowFunctionApplication returns true iff the function is being applied as a window function.

@@ -852,3 +852,82 @@ query T
 SELECT '{}'::JSONB[]
 ----
 {}
+
+# json_populate_record
+query FIII colnames
+SELECT *, c FROM json_populate_record(((1.01, 2, 3) AS d, c, a), '{"a": 3, "c": 10, "d": 11.001}')
+----
+d       c   a c
+11.001  10  3 10
+
+query BTT colnames
+SELECT * FROM json_populate_record(((true, ARRAY[1], ARRAY['f']) AS a, b, c), '{"a": true, "b": [1,2], "c": ["a", "b"]}')
+----
+a     b      c
+true  {1,2}  {a,b}
+
+query BT colnames
+SELECT * FROM json_populate_record(((true, ((1, 'bar', ARRAY['a']) AS x, y, z)) AS a, b), '{"a": true, "b": {"x": "3", "y": "foo", "z": ["a", "b"]}}')
+----
+a     b
+true  (3,foo,"{a,b}")
+
+query BI colnames
+SELECT * FROM json_populate_record(((true, 3) AS a, b), '{"a": null, "b": null}')
+----
+a     b
+NULL  NULL
+
+query T colnames
+SELECT json_populate_record(((1.01, 2, 3) AS d, c, a), '{"a": 3, "c": 10, "d": 11.001}')
+----
+json_populate_record
+(11.001,10,3)
+
+query T colnames
+SELECT json_populate_record(((1.01, 2) AS a, b), '{"a": "1.2345", "b": "33"}')
+----
+json_populate_record
+(1.2345,33)
+
+query F colnames
+SELECT (json_populate_record(((1.01, 2, 3) AS d, c, a), '{"a": 3, "c": 10, "d": 11.001}')).d
+----
+d
+11.001
+
+query error could not parse \"foo\" as type int
+SELECT json_populate_record(((3,) AS a), '{"a": "foo"}')
+
+query error anonymous records cannot be used with json_populate_record
+SELECT * FROM json_populate_record((1,2,3,4), '{"a": 3, "c": 10, "d": 11.001}')
+
+query error anonymous records cannot be used with json_populate_record
+SELECT * FROM json_populate_record(NULL, '{"a": 3, "c": 10, "d": 11.001}')
+
+query I
+SELECT * FROM json_populate_record(((3,) AS a), NULL)
+----
+3
+
+query FIII colnames
+SELECT *, c FROM json_populate_recordset(((1.01, 2, 3) AS d, c, a), '[{"a": 3, "c": 10, "d": 11.001}, {}]')
+----
+d       c   a  c
+11.001  10  3  10
+1.01    2   3  2
+
+query FITI colnames
+SELECT *, c FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '[{"a": 3, "c": 10, "d": 11.001}, {}]')
+----
+d       c   a  c
+11.001  10  3  10
+NULL    2   3  2
+
+query FIT
+SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), NULL)
+----
+
+query FIT
+SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '[]')
+----
