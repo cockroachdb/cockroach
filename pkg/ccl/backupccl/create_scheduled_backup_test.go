@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -67,7 +66,8 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 
 	th := &testHelper{
-		env:   jobstest.NewJobSchedulerTestEnv(jobstest.UseSystemTables, timeutil.Now()),
+		env: jobstest.NewJobSchedulerTestEnv(
+			jobstest.UseSystemTables, timeutil.Now(), tree.ScheduledBackupExecutor),
 		iodir: dir,
 	}
 
@@ -91,9 +91,6 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 		ExternalIODir: dir,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: knobs,
-			SQLStatsKnobs: &sqlstats.TestingKnobs{
-				AOSTClause: "AS OF SYSTEM TIME '-1us'",
-			},
 		},
 	}
 	s, db, _ := serverutils.StartServer(t, args)

@@ -81,6 +81,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlutil",
