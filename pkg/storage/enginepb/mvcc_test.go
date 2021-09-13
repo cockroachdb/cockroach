@@ -11,13 +11,13 @@
 package enginepb_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -68,7 +68,7 @@ func TestFormatMVCCMetadata(t *testing.T) {
 		` ts=0,1 del=false klen=123 vlen=456 raw=/BYTES/foo ih={{11 /BYTES/bar}{22 /BYTES/baz}}` +
 		` mergeTs=<nil> txnDidNotUpdateMeta=true`
 
-	if str := fmt.Sprintf("%+v", meta); str != expV {
+	if str := redact.Sprintf("%+v", meta).StripMarkers(); str != expV {
 		t.Errorf(
 			"expected meta: %s\n"+
 				"got:           %s",
