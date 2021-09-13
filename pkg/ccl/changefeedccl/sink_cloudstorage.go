@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -53,6 +54,17 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 	const f = `20060102150405`
 	t := ts.GoTime()
 	return fmt.Sprintf(`%s%09d%010d`, t.Format(f), t.Nanosecond(), ts.Logical)
+}
+
+func generateDataFilePartition(format string, timestamp time.Time) string {
+	folderPath := format
+	folderPath = strings.ReplaceAll(folderPath, "%d", timestamp.Format("2006-01-02"))
+
+	hr, min, sec := timestamp.Clock()
+	folderPath = strings.ReplaceAll(folderPath, "%h", fmt.Sprintf("%02d", hr))
+	folderPath = strings.ReplaceAll(folderPath, "%m", fmt.Sprintf("%02d", min))
+	folderPath = strings.ReplaceAll(folderPath, "%s", fmt.Sprintf("%02d", sec))
+	return folderPath
 }
 
 type cloudStorageSinkFile struct {
@@ -323,7 +335,7 @@ func makeCloudStorageSink(
 
 	// Date partitioning is pretty standard, so no override for now, but we could
 	// plumb one down if someone needs it.
-	const defaultPartitionFormat = `2006-01-02`
+	const defaultPartitionFormat = `%d`
 
 	sinkID := atomic.AddInt64(&cloudStorageSinkIDAtomic, 1)
 	s := &cloudStorageSink{
@@ -337,9 +349,14 @@ func makeCloudStorageSink(
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
 		jobSessionID: generateChangefeedSessionID(),
 	}
-	if timestampOracle != nil {
-		s.dataFileTs = cloudStorageFormatTime(timestampOracle.inclusiveLowerBoundTS())
-		s.dataFilePartition = timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
+
+	if partitionFormat, ok := opts[changefeedbase.OptPartitionFormat]; ok && partitionFormat != "" {
+		s.partitionFormat = partitionFormat
+	}
+
+	if s.timestampOracle != nil {
+		s.dataFileTs = cloudStorageFormatTime(s.timestampOracle.inclusiveLowerBoundTS())
+		s.dataFilePartition = generateDataFilePartition(s.partitionFormat, s.timestampOracle.inclusiveLowerBoundTS().GoTime())
 	}
 
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
@@ -506,7 +523,7 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 	// to use for naming files until the next `Flush()`. See comment on cloudStorageSink
 	// for an overview of the naming convention and proof of correctness.
 	s.dataFileTs = cloudStorageFormatTime(s.timestampOracle.inclusiveLowerBoundTS())
-	s.dataFilePartition = s.timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
+	s.dataFilePartition = generateDataFilePartition(s.partitionFormat, s.timestampOracle.inclusiveLowerBoundTS().GoTime())
 	return nil
 }
 

@@ -42,6 +42,7 @@ const (
 	OptMVCCTimestamps           = `mvcc_timestamp`
 	OptDiff                     = `diff`
 	OptCompression              = `compression`
+	OptPartitionFormat          = `partition_format`
 	OptSchemaChangeEvents       = `schema_change_events`
 	OptSchemaChangePolicy       = `schema_change_policy`
 	OptProtectDataFromGCOnPause = `protect_data_from_gc_on_pause`
@@ -154,6 +155,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptUpdatedTimestamps:        sql.KVStringOptRequireNoValue,
 	OptMVCCTimestamps:           sql.KVStringOptRequireNoValue,
 	OptDiff:                     sql.KVStringOptRequireNoValue,
+	OptPartitionFormat:          sql.KVStringOptRequireValue,
 	OptCompression:              sql.KVStringOptRequireValue,
 	OptSchemaChangeEvents:       sql.KVStringOptRequireValue,
 	OptSchemaChangePolicy:       sql.KVStringOptRequireValue,
@@ -192,13 +194,13 @@ var SQLValidOptions map[string]struct{} = nil
 var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
-var CloudStorageValidOptions = makeStringSet(OptCompression)
+var CloudStorageValidOptions = makeStringSet(OptCompression, OptPartitionFormat)
 
 // WebhookValidOptions is options exclusive to webhook sink
 var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig)
 
 // CaseInsensitiveOpts options which supports case Insensitive value
-var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents, OptSchemaChangePolicy, OptOnError)
+var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptPartitionFormat, OptSchemaChangeEvents, OptSchemaChangePolicy, OptOnError)
 
 // NoLongerExperimental aliases options prefixed with experimental that no longer need to be
 var NoLongerExperimental = map[string]string{
