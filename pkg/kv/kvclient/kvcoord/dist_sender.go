@@ -1572,9 +1572,6 @@ func (ds *DistSender) sendPartialBatch(
 		}
 
 		if err != nil {
-			// Set pErr so that, if we don't perform any more retries, the
-			// deduceRetryEarlyExitError() call below the loop is inhibited.
-			pErr = roachpb.NewError(err)
 			switch {
 			case errors.HasType(err, sendError{}):
 				// We've tried all the replicas without success. Either they're all
@@ -1596,6 +1593,9 @@ func (ds *DistSender) sendPartialBatch(
 				routingTok.Evict(ctx)
 				continue
 			}
+			// Set pErr so that the deduceRetryEarlyExitError() call below the loop is
+			// inhibited.
+			pErr = roachpb.NewError(err)
 			break
 		}
 
@@ -1659,7 +1659,7 @@ func (ds *DistSender) sendPartialBatch(
 	// channels were closed.
 	if pErr == nil {
 		if err := ds.deduceRetryEarlyExitError(ctx); err == nil {
-			log.Fatal(ctx, "exited retry loop without an error")
+			pErr = roachpb.NewError(errors.AssertionFailedf("exited retry loop without an error"))
 		} else {
 			pErr = roachpb.NewError(err)
 		}
