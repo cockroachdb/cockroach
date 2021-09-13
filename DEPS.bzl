@@ -3912,15 +3912,15 @@ def go_deps():
         name = "com_github_twpayne_go_geom",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/twpayne/go-geom",
-        sum = "h1:SRMQNnhXCCgFBGAYFnM8iOSMYcOlOwkaTP3pwRCcuOY=",
-        version = "v1.3.7-0.20210228220813-9d9885b50d3e",
+        sum = "h1:LeivFqaGBRfyg0XJJ9pkudcptwhSSrYN9KZUW6HcgdA=",
+        version = "v1.4.1",
     )
     go_repository(
         name = "com_github_twpayne_go_kml",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/twpayne/go-kml",
-        sum = "h1:RI0JKh/VzdK/d+ZxdJzt8Ar921KMYPfg9qkw7vsbAGw=",
-        version = "v1.5.1",
+        sum = "h1:rFMw2/EwgkVssGS2MT6YfWSPZz6BgcJkLxQ53jnE8rQ=",
+        version = "v1.5.2",
     )
     go_repository(
         name = "com_github_twpayne_go_polyline",
