@@ -94,7 +94,7 @@ func jobSurvivesNodeShutdown(
 
 		// Shutdown a node after a bit, and keep it shutdown for the remainder
 		// of the job.
-		timeToWait := 10 * time.Second
+		timeToWait := 5 * time.Second
 		timer := timeutil.Timer{}
 		timer.Reset(timeToWait)
 		select {
