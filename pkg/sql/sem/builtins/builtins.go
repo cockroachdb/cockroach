@@ -3708,7 +3708,11 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"key", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				key := string(*(args[0].(*tree.DString)))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				key := string(s)
 				for i := range ctx.Locality.Tiers {
 					tier := &ctx.Locality.Tiers[i]
 					if tier.Key == key {
@@ -3985,8 +3989,16 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"errorCode", types.String}, {"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				errCode := string(*args[0].(*tree.DString))
-				msg := string(*args[1].(*tree.DString))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				errCode := string(s)
+				s, ok = tree.AsDString(args[1])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[1])
+				}
+				msg := string(s)
 				// We construct the errors below via %s as the
 				// message may contain PII.
 				if errCode == "" {
@@ -4007,7 +4019,11 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				msg := string(*args[0].(*tree.DString))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				msg := string(s)
 				return crdbInternalSendNotice(ctx, "NOTICE", msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -4017,8 +4033,16 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"severity", types.String}, {"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				severityString := string(*args[0].(*tree.DString))
-				msg := string(*args[1].(*tree.DString))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				severityString := string(s)
+				s, ok = tree.AsDString(args[1])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[1])
+				}
+				msg := string(s)
 				if _, ok := pgnotice.ParseDisplaySeverity(severityString); !ok {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "severity %s is invalid", severityString)
 				}
@@ -4037,7 +4061,11 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				msg := string(*args[0].(*tree.DString))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				msg := string(s)
 				return nil, errors.AssertionFailedf("%s", msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -4056,7 +4084,11 @@ may increase either contention or retry errors, or both.`,
 				if err := checkPrivilegedUser(ctx); err != nil {
 					return nil, err
 				}
-				msg := string(*args[0].(*tree.DString))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				msg := string(s)
 				// Use a special method to panic in order to go around the
 				// vectorized panic-catcher (which would catch the panic from
 				// Golang's 'panic' and would convert it into an internal
@@ -4081,7 +4113,11 @@ may increase either contention or retry errors, or both.`,
 				if err := checkPrivilegedUser(ctx); err != nil {
 					return nil, err
 				}
-				msg := string(*args[0].(*tree.DString))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				msg := string(s)
 				log.Fatalf(ctx.Ctx(), "force_log_fatal(): %s", msg)
 				return nil, nil
 			},
@@ -4316,7 +4352,12 @@ may increase either contention or retry errors, or both.`,
 				if err := checkPrivilegedUser(ctx); err != nil {
 					return nil, err
 				}
-				return tree.DZero, log.SetVModule(string(*args[0].(*tree.DString)))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				vmodule := string(s)
+				return tree.DZero, log.SetVModule(vmodule)
 			},
 			Info: "Set the equivalent of the `--vmodule` flag on the gateway node processing this request; " +
 				"it affords control over the logging verbosity of different files. " +
@@ -4912,7 +4953,11 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"feature", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				feature := string(*args[0].(*tree.DString))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				feature := string(s)
 				telemetry.Inc(sqltelemetry.HashedFeatureCounter(feature))
 				return tree.DBoolTrue, nil
 			},
