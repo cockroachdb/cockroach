@@ -503,8 +503,12 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRaftWorkingDurationNanos = metric.Metadata{
-		Name:        "raft.process.workingnanos",
-		Help:        "Nanoseconds spent in store.processRaft() working",
+		Name: "raft.process.workingnanos",
+		Help: `Nanoseconds spent in store.processRaft() working.
+
+This is the sum of the measurements passed to the raft.process.handleready.latency
+histogram.
+`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -515,38 +519,102 @@ var (
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftCommandsApplied = metric.Metadata{
-		Name:        "raft.commandsapplied",
-		Help:        "Count of Raft commands applied",
+		Name: "raft.commandsapplied",
+		Help: `Count of Raft commands applied.
+
+This measurement is taken on the Raft apply loops of all Replicas (leaders and
+followers alike), meaning that it does not measure the number of Raft commands
+*proposed* (in the hypothetical extreme case, all Replicas may apply all commands
+through snapshots, thus not increasing this metric at all).
+Instead, it is a proxy for how much work is being done advancing the Replica
+state machines on this node.`,
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRaftLogCommitLatency = metric.Metadata{
-		Name:        "raft.process.logcommit.latency",
-		Help:        "Latency histogram for committing Raft log entries",
+		Name: "raft.process.logcommit.latency",
+		Help: `Latency histogram for committing Raft log entries to stable storage
+
+This measures the latency of durably committing a group of newly received Raft
+entries as well as the HardState entry to disk. This excludes any data
+processing, i.e. we measure purely the commit latency of the resulting Engine
+write. Homogeneous bands of p50-p99 latencies (in the presence of regular Raft
+traffic), make it likely that the storage layer is healthy. Spikes in the
+latency bands can either hint at the presence of large sets of Raft entries
+being received, or at performance issues at the storage layer.
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftCommandCommitLatency = metric.Metadata{
-		Name:        "raft.process.commandcommit.latency",
-		Help:        "Latency histogram for committing Raft commands",
+		Name: "raft.process.commandcommit.latency",
+		Help: `Latency histogram for applying a batch of Raft commands to the state machine.
+
+This metric is misnamed: it measures the latency for *applying* a batch of
+committed Raft commands to a Replica state machine. This requires only
+non-durable I/O (except for replication configuration changes).
+
+Note that a "batch" in this context is really a sub-batch of the batch received
+for application during raft ready handling. The
+'raft.process.applycommitted.latency' histogram is likely more suitable in most
+cases, as it measures the total latency across all sub-batches (i.e. the sum of
+commandcommit.latency for a complete batch).
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	// TODO(tbg): I think this metric skews low because we will often handle Readies
+	// for which the result is that there is nothing to do. Do we want to change this
+	// metric to only record ready handling when there is a Ready? That seems more
+	// useful, experimentally it seems that we're recording 50% no-ops right now.
+	// Though they aren't really no-ops, they still have to get a mutex and check
+	// for a Ready, etc, but I still think it would be better to avoid those measure-
+	// ments and to count the number of noops instead if we really want to.
 	metaRaftHandleReadyLatency = metric.Metadata{
-		Name:        "raft.process.handleready.latency",
-		Help:        "Latency histogram for handling a Raft ready",
+		Name: "raft.process.handleready.latency",
+		Help: `Latency histogram for handling a Raft ready.
+
+This measures the end-to-end-latency of the Raft state advancement loop, and
+in particular includes:
+- snapshot application
+- SST ingestion
+- durably appending to the Raft log (i.e. includes fsync)
+- entry application (incl. replicated side effects, notably log truncation)
+as well as updates to in-memory structures.
+
+The above steps include the work measured in 'raft.process.commandcommit.latency',
+as well as 'raft.process.applycommitted.latency'. Note that matching percentiles
+of these metrics may nevertheless be *higher* than that of the handlready latency.
+This is because not every handleready cycle leads to an update to the applycommitted
+and commandcommit latencies. For example, under tpcc-100 on a single node, the
+handleready count is approximately twice the logcommit count (and logcommit count
+tracks closely with applycommitted count).
+
+High percentile outliers can be caused by individual large Raft commands or
+storage layer blips. An increase in lower (say the 50th) percentile is often
+driven by either CPU exhaustion or a slowdown at the storage layer.
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftApplyCommittedLatency = metric.Metadata{
-		Name:        "raft.process.applycommitted.latency",
-		Help:        "Latency histogram for applying all committed Raft commands in a Raft ready",
+		Name: "raft.process.applycommitted.latency",
+		Help: `Latency histogram for applying all committed Raft commands in a Raft ready.
+
+This measures the end-to-end latency of applying all commands in a Raft ready. Note that
+this closes over possibly multiple measurements of the 'raft.process.commandcommit.latency'
+metric, which receives datapoints for each sub-batch processed in the process.`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftSchedulerLatency = metric.Metadata{
-		Name:        "raft.scheduler.latency",
-		Help:        "Nanoseconds spent waiting for a range to be processed by the Raft scheduler",
+		Name: "raft.scheduler.latency",
+		Help: `Queueing durations for ranges waiting to be processed by the Raft scheduler.
+
+This histogram measures the delay from when a range is registered with the scheduler
+for processing to when it is actually processed. This does not include the duration
+of processing.
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -637,8 +705,11 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRaftEnqueuedPending = metric.Metadata{
-		Name:        "raft.enqueued.pending",
-		Help:        "Number of pending outgoing messages in the Raft Transport queue",
+		Name: "raft.enqueued.pending",
+		Help: `Number of pending outgoing messages in the Raft Transport queue.
+
+The queue is bounded in size, so instead of unbounded growth one would observe a
+ceiling value in the tens of thousands.`,
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -651,8 +722,15 @@ var (
 
 	// Raft log metrics.
 	metaRaftLogFollowerBehindCount = metric.Metadata{
-		Name:        "raftlog.behind",
-		Help:        "Number of Raft log entries followers on other stores are behind",
+		Name: "raftlog.behind",
+		Help: `Number of Raft log entries followers on other stores are behind.
+
+This gauge provides a view of the aggregate number of log entries the Raft leaders
+on this node think the followers are behind. Since a raft leader may not always
+have a good estimate for this information for all of its followers, and since
+followers are expected to be behind (when they are not required as part of a
+quorum) *and* the aggregate thus scales like the count of such followers, it is
+difficult to meaningfully interpret this metric.`,
 		Measurement: "Log Entries",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -999,28 +1077,59 @@ var (
 
 	// Slow request metrics.
 	metaLatchRequests = metric.Metadata{
-		Name:        "requests.slow.latch",
-		Help:        "Number of requests that have been stuck for a long time acquiring latches",
+		Name: "requests.slow.latch",
+		Help: `Number of requests that have been stuck for a long time acquiring latches.
+
+Latches moderate access to the KV keyspace for the purpose of evaluating and
+replicating commands. A slow latch acquisition attempt is often caused by
+another request holding and not releasing its latches in a timely manner. This
+in turn can either be caused by a long delay in evaluation (for example, under
+severe system overload) or by delays at the replication layer.
+
+This gauge registering a nonzero value usually indicates a serious problem and
+should be investigated.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSlowLeaseRequests = metric.Metadata{
-		Name:        "requests.slow.lease",
-		Help:        "Number of requests that have been stuck for a long time acquiring a lease",
+		Name: "requests.slow.lease",
+		Help: `Number of requests that have been stuck for a long time acquiring a lease.
+
+This gauge registering a nonzero value usually indicates range or replica
+unavailability, and should be investigated. In the common case, we also
+expect to see 'requests.slow.raft' to register a nonzero value, indicating
+that the lease requests are not getting a timely response from the replication
+layer.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSlowRaftRequests = metric.Metadata{
-		Name:        "requests.slow.raft",
-		Help:        "Number of requests that have been stuck for a long time in raft",
+		Name: "requests.slow.raft",
+		Help: `Number of requests that have been stuck for a long time in the replication layer.
+
+An (evaluated) request has to pass through the replication layer, notably the
+quota pool and raft. If it fails to do so within a highly permissive duration,
+the gauge is incremented (and decremented again once the request is either
+applied or returns an error).
+
+A nonzero value indicates range or replica unavailability, and should be investigated.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 
 	// Backpressure metrics.
 	metaBackpressuredOnSplitRequests = metric.Metadata{
-		Name:        "requests.backpressure.split",
-		Help:        "Number of backpressured writes waiting on a Range split",
+		Name: "requests.backpressure.split",
+		Help: `Number of backpressured writes waiting on a Range split.
+
+A Range will backpressure (roughly) non-system traffic when the range is above
+the configured size until the range splits. When the rate of this metric is
+nonzero over extended periods of time, it should be investigated why splits are
+not occurring.
+`,
 		Measurement: "Writes",
 		Unit:        metric.Unit_COUNT,
 	}
