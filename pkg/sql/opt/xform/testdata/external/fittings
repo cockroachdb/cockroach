@@ -2618,25 +2618,18 @@ project
       ├── key: (1)
       ├── fd: (1)-->(2,3,5-7,10)
       ├── ordering: -1
-      └── limit
+      └── top-k
            ├── columns: killmail:1!null
            ├── internal-ordering: -1
+           ├── k: 100
            ├── cardinality: [0 - 100]
            ├── stats: [rows=0.0023556407]
            ├── key: (1)
            ├── ordering: -1
-           ├── sort
-           │    ├── columns: killmail:1!null
-           │    ├── stats: [rows=0.0023556407, distinct(13)=0.0023556407, null(13)=0]
-           │    │   histogram(13)=
-           │    ├── key: (1)
-           │    ├── ordering: -1
-           │    ├── limit hint: 100.00
-           │    └── scan fits@fits_items_idx
-           │         ├── columns: killmail:1!null
-           │         ├── inverted constraint: /13/1
-           │         │    └── spans: ["7\x00\x03\x00\x01,\v_>\x00", "7\x00\x03\x00\x01,\v_>\x00"]
-           │         ├── stats: [rows=0.0023556407, distinct(13)=0.0023556407, null(13)=0]
-           │         │   histogram(13)=
-           │         └── key: (1)
-           └── 100
+           └── scan fits@fits_items_idx
+                ├── columns: killmail:1!null
+                ├── inverted constraint: /13/1
+                │    └── spans: ["7\x00\x03\x00\x01,\v_>\x00", "7\x00\x03\x00\x01,\v_>\x00"]
+                ├── stats: [rows=0.0023556407, distinct(13)=0.0023556407, null(13)=0]
+                │   histogram(13)=
+                └── key: (1)

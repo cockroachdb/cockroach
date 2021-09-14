@@ -299,6 +299,11 @@ func (h *hasher) HashInt(val int) {
 	h.hash *= prime64
 }
 
+func (h *hasher) HashInt64(val int64) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
 func (h *hasher) HashUint64(val uint64) {
 	h.hash ^= internHash(val)
 	h.hash *= prime64
@@ -731,6 +736,10 @@ func (h *hasher) IsBoolEqual(l, r bool) bool {
 }
 
 func (h *hasher) IsIntEqual(l, r int) bool {
+	return l == r
+}
+
+func (h *hasher) IsInt64Equal(l, r int64) bool {
 	return l == r
 }
 

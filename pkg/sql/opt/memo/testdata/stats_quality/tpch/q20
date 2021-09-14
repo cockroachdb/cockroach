@@ -179,142 +179,142 @@ sort
 
 ----Stats for q20_sort_1----
 column_names  row_count  distinct_count  null_count
-{s_address}   0          0               0
-{s_name}      0          0               0
+{s_address}   186        186             0
+{s_name}      186        186             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{s_address}   0.00           1.00           0.00                1.00                0.00            1.00
-{s_name}      0.00           1.00           0.00                1.00                0.00            1.00
+{s_address}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_name}      0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
 ----Stats for q20_project_2----
 column_names  row_count  distinct_count  null_count
-{s_address}   0          0               0
-{s_name}      0          0               0
+{s_address}   186        186             0
+{s_name}      186        186             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{s_address}   0.00           1.00           0.00                1.00                0.00            1.00
-{s_name}      0.00           1.00           0.00                1.00                0.00            1.00
+{s_address}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_name}      0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
 ----Stats for q20_lookup_join_3----
 column_names   row_count  distinct_count  null_count
-{n_name}       0          0               0
-{n_nationkey}  0          0               0
-{s_address}    0          0               0
-{s_name}       0          0               0
-{s_nationkey}  0          0               0
-{s_suppkey}    0          0               0
+{n_name}       186        1               0
+{n_nationkey}  186        1               0
+{s_address}    186        186             0
+{s_name}       186        186             0
+{s_nationkey}  186        1               0
+{s_suppkey}    186        186             0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}       0.00           1.00           0.00                1.00                0.00            1.00
-{n_nationkey}  0.00           1.00           0.00                1.00                0.00            1.00
-{s_address}    0.00           1.00           0.00                1.00                0.00            1.00
-{s_name}       0.00           1.00           0.00                1.00                0.00            1.00
-{s_nationkey}  0.00           1.00           0.00                1.00                0.00            1.00
-{s_suppkey}    0.00           1.00           0.00                1.00                0.00            1.00
+{n_name}       0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{n_nationkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_address}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_name}       0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_nationkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_suppkey}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
 ----Stats for q20_project_4----
 column_names   row_count  distinct_count  null_count
-{s_address}    0          0               0
-{s_name}       0          0               0
-{s_nationkey}  0          0               0
-{s_suppkey}    0          0               0
+{s_address}    4397       4369            0
+{s_name}       4397       4373            0
+{s_nationkey}  4397       25              0
+{s_suppkey}    4397       4434            0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{s_address}    0.00           1.00           0.00                1.00                0.00            1.00
-{s_name}       0.00           1.00           0.00                1.00                0.00            1.00
-{s_nationkey}  0.00           1.00           0.00                1.00                0.00            1.00
-{s_suppkey}    0.00           1.00           0.00                1.00                0.00            1.00
+{s_address}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_name}       0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_nationkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_suppkey}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
 ----Stats for q20_lookup_join_5----
 column_names   row_count  distinct_count  null_count
-{ps_suppkey}   0          0               0
-{s_address}    0          0               0
-{s_name}       0          0               0
-{s_nationkey}  0          0               0
-{s_suppkey}    0          0               0
+{ps_suppkey}   4397       4434            0
+{s_address}    4397       4369            0
+{s_name}       4397       4373            0
+{s_nationkey}  4397       25              0
+{s_suppkey}    4397       4434            0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_suppkey}   0.00           1.00           0.00                1.00                0.00            1.00
-{s_address}    0.00           1.00           0.00                1.00                0.00            1.00
-{s_name}       0.00           1.00           0.00                1.00                0.00            1.00
-{s_nationkey}  0.00           1.00           0.00                1.00                0.00            1.00
-{s_suppkey}    0.00           1.00           0.00                1.00                0.00            1.00
+{ps_suppkey}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_address}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_name}       0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_nationkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_suppkey}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
 ----Stats for q20_distinct_on_6----
 column_names  row_count  distinct_count  null_count
-{ps_suppkey}  0          0               0
+{ps_suppkey}  4397       4434            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_suppkey}  0.00           1.00           0.00                1.00                0.00            1.00
+{ps_suppkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
 ----Stats for q20_lookup_join_7----
 column_names   row_count  distinct_count  null_count
-{p_name}       0          0               0
-{p_partkey}    0          0               0
-{ps_availqty}  0          0               0
-{ps_partkey}   0          0               0
-{ps_suppkey}   0          0               0
-{sum}          0          0               0
+{p_name}       5833       2106            0
+{p_partkey}    5833       2106            0
+{ps_availqty}  5833       4441            0
+{ps_partkey}   5833       2106            0
+{ps_suppkey}   5833       4434            0
+{sum}          5833       164             0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_name}       0.00           1.00           0.00                1.00                0.00            1.00
-{p_partkey}    0.00           1.00           0.00                1.00                0.00            1.00
-{ps_availqty}  0.00           1.00           0.00                1.00                0.00            1.00
-{ps_partkey}   0.00           1.00           0.00                1.00                0.00            1.00
-{ps_suppkey}   0.00           1.00           0.00                1.00                0.00            1.00
-{sum}          0.00           1.00           0.00                1.00                0.00            1.00
+{p_name}       0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{p_partkey}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{ps_availqty}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{ps_partkey}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{ps_suppkey}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{sum}          0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
 ----Stats for q20_select_8----
 column_names   row_count  distinct_count  null_count
-{ps_availqty}  541940     9920            0
-{ps_partkey}   541940     197367          0
-{ps_suppkey}   541940     9920            0
-{sum}          541940     245             0
+{ps_availqty}  542095     9920            0
+{ps_partkey}   542095     197197          0
+{ps_suppkey}   542095     9920            0
+{sum}          542095     246             0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_availqty}  128.00         4233.91 <==    128.00              77.50 <==           0.00            1.00
-{ps_partkey}   128.00         4233.91 <==    128.00              1541.93 <==         0.00            1.00
-{ps_suppkey}   128.00         4233.91 <==    128.00              77.50 <==           0.00            1.00
-{sum}          128.00         4233.91 <==    128.00              1.91 <==            0.00            1.00
+{ps_availqty}  128.00         4235.12 <==    128.00              77.50 <==           0.00            1.00
+{ps_partkey}   128.00         4235.12 <==    128.00              1540.60 <==         0.00            1.00
+{ps_suppkey}   128.00         4235.12 <==    128.00              77.50 <==           0.00            1.00
+{sum}          128.00         4235.12 <==    128.00              1.92 <==            0.00            1.00
 
 ----Stats for q20_group_by_9----
 column_names   row_count  distinct_count  null_count
-{ps_availqty}  543101     9920            0
-{ps_partkey}   543101     197437          0
-{ps_suppkey}   543101     9920            0
-{sum}          543101     246             0
+{ps_availqty}  543210     9920            0
+{ps_partkey}   543210     197252          0
+{ps_suppkey}   543210     9920            0
+{sum}          543210     246             0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_availqty}  383.00         1418.02 <==    383.00              25.90 <==           0.00            1.00
-{ps_partkey}   383.00         1418.02 <==    383.00              515.50 <==          0.00            1.00
-{ps_suppkey}   383.00         1418.02 <==    383.00              25.90 <==           0.00            1.00
-{sum}          383.00         1418.02 <==    383.00              1.56                0.00            1.00
+{ps_availqty}  383.00         1418.30 <==    383.00              25.90 <==           0.00            1.00
+{ps_partkey}   383.00         1418.30 <==    383.00              515.02 <==          0.00            1.00
+{ps_suppkey}   383.00         1418.30 <==    383.00              25.90 <==           0.00            1.00
+{sum}          383.00         1418.30 <==    383.00              1.56                0.00            1.00
 
 ----Stats for q20_inner_join_10----
 column_names   row_count  distinct_count  null_count
-{l_partkey}    909665     197437          0
-{l_quantity}   909665     50              0
-{l_shipdate}   909665     365             0
-{l_suppkey}    909665     9920            0
-{ps_availqty}  909665     9920            0
-{ps_partkey}   909665     197437          0
-{ps_suppkey}   909665     9920            0
+{l_partkey}    909455     197252          0
+{l_quantity}   909455     50              0
+{l_shipdate}   909455     365             0
+{l_suppkey}    909455     9920            0
+{ps_availqty}  909455     9920            0
+{ps_partkey}   909455     197252          0
+{ps_suppkey}   909455     9920            0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_partkey}    383.00         2375.10 <==    383.00              515.50 <==          0.00            1.00
-{l_quantity}   383.00         2375.10 <==    50.00               1.00                0.00            1.00
-{l_shipdate}   383.00         2375.10 <==    237.00              1.54                0.00            1.00
-{l_suppkey}    383.00         2375.10 <==    383.00              25.90 <==           0.00            1.00
-{ps_availqty}  383.00         2375.10 <==    375.00              26.45 <==           0.00            1.00
-{ps_partkey}   383.00         2375.10 <==    383.00              515.50 <==          0.00            1.00
-{ps_suppkey}   383.00         2375.10 <==    383.00              25.90 <==           0.00            1.00
+{l_partkey}    383.00         2374.56 <==    383.00              515.02 <==          0.00            1.00
+{l_quantity}   383.00         2374.56 <==    50.00               1.00                0.00            1.00
+{l_shipdate}   383.00         2374.56 <==    237.00              1.54                0.00            1.00
+{l_suppkey}    383.00         2374.56 <==    383.00              25.90 <==           0.00            1.00
+{ps_availqty}  383.00         2374.56 <==    375.00              26.45 <==           0.00            1.00
+{ps_partkey}   383.00         2374.56 <==    383.00              515.02 <==          0.00            1.00
+{ps_suppkey}   383.00         2374.56 <==    383.00              25.90 <==           0.00            1.00
 
 ----Stats for q20_index_join_11----
 column_names  row_count  distinct_count  null_count
-{l_partkey}   909665     197437          0
-{l_quantity}  909665     50              0
-{l_shipdate}  909665     365             0
-{l_suppkey}   909665     9920            0
+{l_partkey}   909455     197252          0
+{l_quantity}  909455     50              0
+{l_shipdate}  909455     365             0
+{l_suppkey}   909455     9920            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {l_partkey}   945632.00      1.04           198102.00           1.00                0.00            1.00
@@ -324,9 +324,9 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 
 ----Stats for q20_scan_12----
 column_names    row_count  distinct_count  null_count
-{l_linenumber}  909665     7               0
-{l_orderkey}    909665     266316          0
-{l_shipdate}    909665     365             0
+{l_linenumber}  909455     7               0
+{l_orderkey}    909455     266035          0
+{l_shipdate}    909455     365             0
 ~~~~
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {l_linenumber}  945632.00      1.04           7.00                1.00                0.00            1.00

@@ -138,115 +138,115 @@ sort
 
 ----Stats for q16_sort_1----
 column_names    row_count  distinct_count  null_count
-{p_brand}       4794       24              0
-{p_size}        4794       8               0
-{p_type}        4794       25              0
-{supplier_cnt}  4794       35              0
+{p_brand}       18314      24              0
+{p_size}        18314      8               0
+{p_type}        18314      145             0
+{supplier_cnt}  18314      15              0
 ~~~~
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}       9971.00        2.08 <==       25.00               1.04                0.00            1.00
-{p_size}        9971.00        2.08 <==       8.00                1.00                0.00            1.00
-{p_type}        9971.00        2.08 <==       150.00              6.00 <==            0.00            1.00
-{supplier_cnt}  9971.00        2.08 <==       9971.00             284.89 <==          0.00            1.00
+{p_brand}       9971.00        1.84           25.00               1.04                0.00            1.00
+{p_size}        9971.00        1.84           8.00                1.00                0.00            1.00
+{p_type}        9971.00        1.84           150.00              1.03                0.00            1.00
+{supplier_cnt}  9971.00        1.84           9971.00             664.73 <==          0.00            1.00
 
 ----Stats for q16_group_by_2----
 column_names  row_count  distinct_count  null_count
-{count}       4794       35              0
-{p_brand}     4794       24              0
-{p_size}      4794       8               0
-{p_type}      4794       25              0
+{count}       18314      15              0
+{p_brand}     18314      24              0
+{p_size}      18314      8               0
+{p_type}      18314      145             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count}       9971.00        2.08 <==       9971.00             284.89 <==          0.00            1.00
-{p_brand}     9971.00        2.08 <==       25.00               1.04                0.00            1.00
-{p_size}      9971.00        2.08 <==       8.00                1.00                0.00            1.00
-{p_type}      9971.00        2.08 <==       150.00              6.00 <==            0.00            1.00
+{count}       9971.00        1.84           9971.00             664.73 <==          0.00            1.00
+{p_brand}     9971.00        1.84           25.00               1.04                0.00            1.00
+{p_size}      9971.00        1.84           8.00                1.00                0.00            1.00
+{p_type}      9971.00        1.84           150.00              1.03                0.00            1.00
 
 ----Stats for q16_distinct_on_3----
 column_names  row_count  distinct_count  null_count
-{p_brand}     124214     24              0
-{p_size}      124214     8               0
-{p_type}      124214     25              0
-{ps_suppkey}  124214     9920            0
+{p_brand}     118250     24              0
+{p_size}      118250     8               0
+{p_type}      118250     145             0
+{ps_suppkey}  118250     9916            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}     28918.00       4.30 <==       25.00               1.04                0.00            1.00
-{p_size}      28918.00       4.30 <==       8.00                1.00                0.00            1.00
-{p_type}      28918.00       4.30 <==       150.00              6.00 <==            0.00            1.00
-{ps_suppkey}  28918.00       4.30 <==       9382.00             1.06                0.00            1.00
+{p_brand}     28918.00       4.09 <==       25.00               1.04                0.00            1.00
+{p_size}      28918.00       4.09 <==       8.00                1.00                0.00            1.00
+{p_type}      28918.00       4.09 <==       150.00              1.03                0.00            1.00
+{ps_suppkey}  28918.00       4.09 <==       9382.00             1.06                0.00            1.00
 
 ----Stats for q16_anti_join_4----
 column_names  row_count  distinct_count  null_count
-{p_brand}     124384     24              0
-{p_partkey}   124384     30968           0
-{p_size}      124384     8               0
-{p_type}      124384     25              0
-{ps_partkey}  124384     30968           0
-{ps_suppkey}  124384     9920            0
+{p_brand}     118274     24              0
+{p_partkey}   118274     29433           0
+{p_size}      118274     8               0
+{p_type}      118274     145             0
+{ps_partkey}  118274     29433           0
+{ps_suppkey}  118274     9916            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}     28918.00       4.30 <==       25.00               1.04                0.00            1.00
-{p_partkey}   28918.00       4.30 <==       10702.00            2.89 <==            0.00            1.00
-{p_size}      28918.00       4.30 <==       8.00                1.00                0.00            1.00
-{p_type}      28918.00       4.30 <==       150.00              6.00 <==            0.00            1.00
-{ps_partkey}  28918.00       4.30 <==       10702.00            2.89 <==            0.00            1.00
-{ps_suppkey}  28918.00       4.30 <==       9382.00             1.06                0.00            1.00
+{p_brand}     28918.00       4.09 <==       25.00               1.04                0.00            1.00
+{p_partkey}   28918.00       4.09 <==       10702.00            2.75 <==            0.00            1.00
+{p_size}      28918.00       4.09 <==       8.00                1.00                0.00            1.00
+{p_type}      28918.00       4.09 <==       150.00              1.03                0.00            1.00
+{ps_partkey}  28918.00       4.09 <==       10702.00            2.75 <==            0.00            1.00
+{ps_suppkey}  28918.00       4.09 <==       9382.00             1.06                0.00            1.00
 
 ----Stats for q16_lookup_join_5----
 column_names  row_count  distinct_count  null_count
-{p_brand}     124384     24              0
-{p_partkey}   124384     30968           0
-{p_size}      124384     8               0
-{p_type}      124384     25              0
-{ps_partkey}  124384     30968           0
-{ps_suppkey}  124384     9920            0
+{p_brand}     118324     24              0
+{p_partkey}   118324     29433           0
+{p_size}      118324     8               0
+{p_type}      118324     145             0
+{ps_partkey}  118324     29433           0
+{ps_suppkey}  118324     9920            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}     42976.00       2.89 <==       25.00               1.04                0.00            1.00
-{p_partkey}   42976.00       2.89 <==       10702.00            2.89 <==            0.00            1.00
-{p_size}      42976.00       2.89 <==       8.00                1.00                0.00            1.00
-{p_type}      42976.00       2.89 <==       150.00              6.00 <==            0.00            1.00
-{ps_partkey}  42976.00       2.89 <==       10702.00            2.89 <==            0.00            1.00
-{ps_suppkey}  42976.00       2.89 <==       9790.00             1.01                0.00            1.00
+{p_brand}     42976.00       2.75 <==       25.00               1.04                0.00            1.00
+{p_partkey}   42976.00       2.75 <==       10702.00            2.75 <==            0.00            1.00
+{p_size}      42976.00       2.75 <==       8.00                1.00                0.00            1.00
+{p_type}      42976.00       2.75 <==       150.00              1.03                0.00            1.00
+{ps_partkey}  42976.00       2.75 <==       10702.00            2.75 <==            0.00            1.00
+{ps_suppkey}  42976.00       2.75 <==       9790.00             1.01                0.00            1.00
 
 ----Stats for q16_select_6----
 column_names  row_count  distinct_count  null_count
-{p_brand}     31096      24              0
-{p_partkey}   31096      30968           0
-{p_size}      31096      8               0
-{p_type}      31096      25              0
+{p_brand}     29581      24              0
+{p_partkey}   29581      29433           0
+{p_size}      29581      8               0
+{p_type}      29581      145             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}     10703.00       2.91 <==       25.00               1.04                0.00            1.00
-{p_partkey}   10703.00       2.91 <==       10702.00            2.89 <==            0.00            1.00
-{p_size}      10703.00       2.91 <==       8.00                1.00                0.00            1.00
-{p_type}      10703.00       2.91 <==       150.00              6.00 <==            0.00            1.00
+{p_brand}     10703.00       2.76 <==       25.00               1.04                0.00            1.00
+{p_partkey}   10703.00       2.76 <==       10702.00            2.75 <==            0.00            1.00
+{p_size}      10703.00       2.76 <==       8.00                1.00                0.00            1.00
+{p_type}      10703.00       2.76 <==       150.00              1.03                0.00            1.00
 
 ----Stats for q16_scan_7----
 column_names  row_count  distinct_count  null_count
 {p_brand}     200000     25              0
 {p_partkey}   200000     199241          0
 {p_size}      200000     50              0
-{p_type}      200000     25              0
+{p_type}      200000     150             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {p_brand}     200000.00      1.00           25.00               1.00                0.00            1.00
 {p_partkey}   200000.00      1.00           199241.00           1.00                0.00            1.00
 {p_size}      200000.00      1.00           50.00               1.00                0.00            1.00
-{p_type}      200000.00      1.00           150.00              6.00 <==            0.00            1.00
+{p_type}      200000.00      1.00           150.00              1.00                0.00            1.00
 
 ----Stats for q16_select_8----
 column_names  row_count  distinct_count  null_count
-{s_comment}   0          0               0
-{s_suppkey}   0          0               0
+{s_comment}   4          4               0
+{s_suppkey}   4          4               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{s_comment}   3333.00        +Inf <==       3333.00             +Inf <==            0.00            1.00
-{s_suppkey}   3333.00        +Inf <==       3328.00             +Inf <==            0.00            1.00
+{s_comment}   3333.00        833.25 <==     3333.00             833.25 <==          0.00            1.00
+{s_suppkey}   3333.00        833.25 <==     3328.00             832.00 <==          0.00            1.00
 
 ----Stats for q16_scan_9----
 column_names  row_count  distinct_count  null_count
-{s_comment}   10000      9903            0
+{s_comment}   10000      9934            0
 {s_suppkey}   10000      9920            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
