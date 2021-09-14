@@ -1328,7 +1328,7 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 		b := tabledesc.NewBuilder(&tableDesc)
 		err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
 		if err != nil {
-			log.Fatalf(ctx, "error when building a table descriptor", err)
+			log.Fatalf(ctx, "error when building a table descriptor: %v", err)
 		}
 		return b.BuildImmutableTable()
 	}

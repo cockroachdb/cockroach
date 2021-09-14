@@ -65,7 +65,7 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 		if err != nil {
 			panic(err)
 		}
-		_, err = db.Exec(ctx, string(f))
+		_, err = db.Exec(ctx, f)
 		if err == nil {
 			return false
 		}
