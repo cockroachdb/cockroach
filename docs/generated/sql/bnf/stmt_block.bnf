@@ -916,6 +916,7 @@ unreserved_keyword ::=
 	| 'FOLLOWING'
 	| 'FORCE'
 	| 'FORCE_INDEX'
+	| 'FORCE_ZIGZAG'
 	| 'FUNCTION'
 	| 'FUNCTIONS'
 	| 'GENERATED'
@@ -2784,6 +2785,8 @@ index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
 	| 'NO_ZIGZAG_JOIN'
+	| 'FORCE_ZIGZAG'
+	| 'FORCE_ZIGZAG' '=' index_name
 
 opt_asc_desc ::=
 	'ASC'

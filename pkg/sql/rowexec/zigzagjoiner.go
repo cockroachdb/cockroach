@@ -55,7 +55,7 @@ import (
 //
 // To see how this query would be executed, consider the equivalent query:
 //
-// SELECT t1.* FROM abcd@c_idx AS t1 JOIN abcd@d_idx ON t1.a = t2.a AND
+// SELECT t1.* FROM abcd@c_idx AS t1 JOIN abcd@d_idx AS t2 ON t1.a = t2.a AND
 // t1.b = t2.b WHERE t1.c = 2 AND t2.d = 3;
 //
 // A zigzag joiner takes 2 sides as input. In the example above, the join would

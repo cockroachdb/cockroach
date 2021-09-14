@@ -563,6 +563,45 @@ func (b *Builder) buildScan(
 			private.Flags.Index = idx
 			private.Flags.Direction = indexFlags.Direction
 		}
+		private.Flags.ForceZigzag = indexFlags.ForceZigzag
+		if len(indexFlags.ZigzagIndexes) > 0 {
+			private.Flags.ForceZigzag = true
+			for _, name := range indexFlags.ZigzagIndexes {
+				var found bool
+				for i := 0; i < tab.IndexCount(); i++ {
+					if tab.Index(i).Name() == tree.Name(name) {
+						if private.Flags.ZigzagIndexes.Contains(i) {
+							panic(pgerror.New(pgcode.DuplicateObject, "FORCE_ZIGZAG index duplicated"))
+						}
+						private.Flags.ZigzagIndexes.Add(i)
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic(pgerror.Newf(pgcode.UndefinedObject, "index %q not found", tree.ErrString(&name)))
+				}
+			}
+		}
+		if len(indexFlags.ZigzagIndexIDs) > 0 {
+			private.Flags.ForceZigzag = true
+			for _, id := range indexFlags.ZigzagIndexIDs {
+				var found bool
+				for i := 0; i < tab.IndexCount(); i++ {
+					if tab.Index(i).ID() == cat.StableID(id) {
+						if private.Flags.ZigzagIndexes.Contains(i) {
+							panic(pgerror.New(pgcode.DuplicateObject, "FORCE_ZIGZAG index duplicated"))
+						}
+						private.Flags.ZigzagIndexes.Add(i)
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic(pgerror.Newf(pgcode.UndefinedObject, "index [%d] not found", id))
+				}
+			}
+		}
 	}
 	if locking.isSet() {
 		private.Locking = locking.get()

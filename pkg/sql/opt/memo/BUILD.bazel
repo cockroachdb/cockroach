@@ -39,6 +39,7 @@ go_library(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/json",

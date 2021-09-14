@@ -2747,26 +2747,18 @@ project
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(10)
- │    ├── project
- │    │    ├── columns: tx_id:1!null tx_rate:3!null
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(3)
- │    │    └── project
- │    │         ├── columns: tx_id:1!null tx_rate:3!null cx_tx_id:6!null
- │    │         ├── key: (6)
- │    │         ├── fd: (1)-->(3), (1)==(6), (6)==(1)
- │    │         └── inner-join (lookup taxrate)
- │    │              ├── columns: tx_id:1!null tx_rate:3!null cx_tx_id:6!null cx_c_id:7!null
- │    │              ├── key columns: [6] = [1]
- │    │              ├── lookup columns are key
- │    │              ├── key: (6)
- │    │              ├── fd: ()-->(7), (1)-->(3), (1)==(6), (6)==(1)
- │    │              ├── scan customer_taxrate@secondary
- │    │              │    ├── columns: cx_tx_id:6!null cx_c_id:7!null
- │    │              │    ├── constraint: /7/6: [/0 - /0]
- │    │              │    ├── key: (6)
- │    │              │    └── fd: ()-->(7)
- │    │              └── filters (true)
+ │    ├── inner-join (lookup taxrate)
+ │    │    ├── columns: tx_id:1!null tx_rate:3!null cx_tx_id:6!null cx_c_id:7!null
+ │    │    ├── key columns: [6] = [1]
+ │    │    ├── lookup columns are key
+ │    │    ├── key: (6)
+ │    │    ├── fd: ()-->(7), (1)-->(3), (1)==(6), (6)==(1)
+ │    │    ├── scan customer_taxrate@secondary
+ │    │    │    ├── columns: cx_tx_id:6!null cx_c_id:7!null
+ │    │    │    ├── constraint: /7/6: [/0 - /0]
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: ()-->(7)
+ │    │    └── filters (true)
  │    └── aggregations
  │         └── sum [as=sum:10, outer=(3)]
  │              └── tx_rate:3
@@ -4003,26 +3995,18 @@ project
  │         │              │    │         ├── cardinality: [1 - 1]
  │         │              │    │         ├── key: ()
  │         │              │    │         ├── fd: ()-->(44)
- │         │              │    │         ├── project
- │         │              │    │         │    ├── columns: tx_id:35!null tx_rate:37!null
- │         │              │    │         │    ├── key: (35)
- │         │              │    │         │    ├── fd: (35)-->(37)
- │         │              │    │         │    └── project
- │         │              │    │         │         ├── columns: tx_id:35!null tx_rate:37!null cx_tx_id:40!null
- │         │              │    │         │         ├── key: (40)
- │         │              │    │         │         ├── fd: (35)-->(37), (35)==(40), (40)==(35)
- │         │              │    │         │         └── inner-join (lookup taxrate)
- │         │              │    │         │              ├── columns: tx_id:35!null tx_rate:37!null cx_tx_id:40!null cx_c_id:41!null
- │         │              │    │         │              ├── key columns: [40] = [35]
- │         │              │    │         │              ├── lookup columns are key
- │         │              │    │         │              ├── key: (40)
- │         │              │    │         │              ├── fd: ()-->(41), (35)-->(37), (35)==(40), (40)==(35)
- │         │              │    │         │              ├── scan customer_taxrate@secondary
- │         │              │    │         │              │    ├── columns: cx_tx_id:40!null cx_c_id:41!null
- │         │              │    │         │              │    ├── constraint: /41/40: [/0 - /0]
- │         │              │    │         │              │    ├── key: (40)
- │         │              │    │         │              │    └── fd: ()-->(41)
- │         │              │    │         │              └── filters (true)
+ │         │              │    │         ├── inner-join (lookup taxrate)
+ │         │              │    │         │    ├── columns: tx_id:35!null tx_rate:37!null cx_tx_id:40!null cx_c_id:41!null
+ │         │              │    │         │    ├── key columns: [40] = [35]
+ │         │              │    │         │    ├── lookup columns are key
+ │         │              │    │         │    ├── key: (40)
+ │         │              │    │         │    ├── fd: ()-->(41), (35)-->(37), (35)==(40), (40)==(35)
+ │         │              │    │         │    ├── scan customer_taxrate@secondary
+ │         │              │    │         │    │    ├── columns: cx_tx_id:40!null cx_c_id:41!null
+ │         │              │    │         │    │    ├── constraint: /41/40: [/0 - /0]
+ │         │              │    │         │    │    ├── key: (40)
+ │         │              │    │         │    │    └── fd: ()-->(41)
+ │         │              │    │         │    └── filters (true)
  │         │              │    │         └── aggregations
  │         │              │    │              └── sum [as=sum:44, outer=(37)]
  │         │              │    │                   └── tx_rate:37
