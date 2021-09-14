@@ -440,6 +440,22 @@ func (t *tenantStatusServer) ListDistSQLFlows(
 	return t.ListLocalDistSQLFlows(ctx, request)
 }
 
+// Profile implements the profiling endpoint by delegating the request
+// to the local handler. No facility for requesting profiles from
+// remote nodes is facilitated at this time. Requests for nodes other
+// than "local" will return an error.
+func (t *tenantStatusServer) Profile(
+	ctx context.Context, request *serverpb.ProfileRequest,
+) (*serverpb.JSONResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if request.NodeId != "local" {
+		return nil, status.Errorf(codes.Unimplemented, "profiling arbitrary tenants is unsupported")
+	}
+	return profileLocal(ctx, request, t.st)
+}
+
 func (t *tenantStatusServer) IndexUsageStatistics(
 	ctx context.Context, request *serverpb.IndexUsageStatisticsRequest,
 ) (*serverpb.IndexUsageStatisticsResponse, error) {
