@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -478,6 +479,14 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	log.Event(ctx, "initializing engines")
 
+	var tableCache *pebble.TableCache
+	openFileLimitPerStore -= pebble.NumNonTableCacheFiles
+	if openFileLimitPerStore < pebble.MinTableCacheSize {
+		openFileLimitPerStore = pebble.MinTableCacheSize
+	}
+	totalFileLimit := openFileLimitPerStore * uint64(physicalStores)
+	tableCache = pebble.NewTableCache(pebbleCache, runtime.GOMAXPROCS(0), int(totalFileLimit))
+
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
 		cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck
 	disableSeparatedIntents := cfg.TestingKnobs.Store != nil &&
@@ -564,6 +573,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				Opts:          storage.DefaultPebbleOptions(),
 			}
 			pebbleConfig.Opts.Cache = pebbleCache
+			pebbleConfig.Opts.TableCache = tableCache
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 			// If the spec contains Pebble options, set those too.
 			if len(spec.PebbleOptions) > 0 {
