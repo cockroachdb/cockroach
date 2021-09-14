@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment";
 import Long from "long";
 import { createMemoryHistory } from "history";
 import { noop } from "lodash";
@@ -137,6 +138,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       database: "defaultdb",
     },
   },
+  dateRange: [moment.utc("2021.08.08"), moment.utc("2021.08.12")],
   statement: {
     statement: "SELECT city, id FROM vehicles WHERE city = $1",
     stats: statementStats,

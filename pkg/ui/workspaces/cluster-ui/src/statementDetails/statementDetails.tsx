@@ -146,7 +146,7 @@ export interface StatementDetailsDispatchProps {
 export interface StatementDetailsStateProps {
   statement: SingleStatementStatistics;
   statementsError: Error | null;
-  dateRange?: [Moment, Moment];
+  dateRange: [Moment, Moment];
   nodeNames: { [nodeId: string]: string };
   nodeRegions: { [nodeId: string]: string };
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
@@ -163,8 +163,7 @@ const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 function statementsRequestFromProps(
   props: StatementDetailsProps,
-): cockroach.server.serverpb.StatementsRequest | null {
-  if (props.isTenant || props.dateRange == null) return null;
+): cockroach.server.serverpb.StatementsRequest {
   return new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(props.dateRange[0].unix()),
