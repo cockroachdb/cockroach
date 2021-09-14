@@ -159,25 +159,59 @@ WHERE
 			Setup: `CREATE TABLE t1(a int primary key, b int);`,
 			Stmt:  `SELECT * FROM pg_attribute`,
 		},
+
 		{
 			Name:  "has_table_privilege real table",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_table_privilege('t', 'SELECT')`,
 		},
+
 		{
 			Name:  "has_table_privilege virtual table",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_table_privilege('t', 'SELECT')`,
 		},
+
 		{
 			Name:  "has_column_privilege using attnum",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_column_privilege('t', 1, 'INSERT')`,
 		},
+
 		{
 			Name:  "has_column_privilege using column name",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_column_privilege('t', 'a', 'INSERT')`,
+		},
+
+		{
+			Name: "pg_my_temp_schema",
+			Setup: `SET experimental_enable_temp_tables = true;
+              CREATE TEMP TABLE t(a int primary key, b int)`,
+			Stmt: `SELECT pg_my_temp_schema()`,
+		},
+
+		{
+			Name: "pg_my_temp_schema multiple times",
+			Setup: `SET experimental_enable_temp_tables = true;
+              CREATE TEMP TABLE t(a int primary key, b int)`,
+			Stmt: `SELECT pg_my_temp_schema() FROM generate_series(1, 10)`,
+		},
+
+		{
+			Name: "pg_is_other_temp_schema",
+			Setup: `SET experimental_enable_temp_tables = true;
+              CREATE TEMP TABLE t(a int primary key, b int)`,
+			Stmt: `SELECT nspname, pg_is_other_temp_schema(oid) FROM
+               (SELECT * FROM pg_namespace WHERE nspname = 'public') n`,
+		},
+
+		{
+			Name: "pg_is_other_temp_schema multiple times",
+			Setup: `SET experimental_enable_temp_tables = true;
+              CREATE TEMP TABLE t(a int primary key, b int)`,
+			Stmt: `SELECT nspname, pg_is_other_temp_schema(oid) FROM
+               (SELECT * FROM pg_namespace LIMIT 5) n`,
 		},
 	}
 

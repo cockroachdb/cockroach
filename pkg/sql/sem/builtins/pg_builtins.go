@@ -802,17 +802,97 @@ var pgBuiltins = map[string]builtinDefinition{
 		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}, {"pretty_bool", types.Bool}}),
 	),
 
+	"pg_get_serial_sequence": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySequences,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"table_name", types.String}, {"column_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				tableName := tree.MustBeDString(args[0])
+				columnName := tree.MustBeDString(args[1])
+				qualifiedName, err := parser.ParseQualifiedTableName(string(tableName))
+				if err != nil {
+					return nil, err
+				}
+				res, err := ctx.Sequence.GetSerialSequenceNameFromColumn(ctx.Ctx(), qualifiedName, tree.Name(columnName))
+				if err != nil {
+					return nil, err
+				}
+				if res == nil {
+					return tree.DNull, nil
+				}
+				res.ExplicitCatalog = false
+				return tree.NewDString(fmt.Sprintf(`%s.%s`, res.Schema(), res.Object())), nil
+			},
+			Info:       "Returns the name of the sequence used by the given column_name in the table table_name.",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	// pg_my_temp_schema returns the OID of session's temporary schema, or 0 if
-	// none. CockroachDB doesn't support this, so it always returns 0.
+	// none.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_my_temp_schema": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Oid),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				return tree.NewDOid(0), nil
+			Fn: func(ctx *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				schema := ctx.SessionData().SearchPath.GetTemporarySchemaName()
+				if schema == "" {
+					// The session has not yet created a temporary schema.
+					return tree.NewDOid(0), nil
+				}
+				oid, err := ctx.Planner.ResolveOIDFromString(
+					ctx.Ctx(), types.RegNamespace, tree.NewDString(schema))
+				if err != nil {
+					// If the OID lookup returns an UndefinedObject error, return 0
+					// instead. We can hit this path if the session created a temporary
+					// schema in one database and then changed databases.
+					if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+						return tree.NewDOid(0), nil
+					}
+					return nil, err
+				}
+				return oid, nil
 			},
-			Info:       notUsableInfo,
+			Info: "Returns the OID of the current session's temporary schema, " +
+				"or zero if it has none (because it has not created any temporary tables).",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	// pg_is_other_temp_schema returns true if the given OID is the OID of another
+	// session's temporary schema.
+	// https://www.postgresql.org/docs/11/functions-info.html
+	"pg_is_other_temp_schema": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				schemaArg := tree.UnwrapDatum(ctx, args[0])
+				schema, err := getNameForArg(ctx, schemaArg, "pg_namespace", "nspname")
+				if err != nil {
+					return nil, err
+				}
+				if schema == "" {
+					// OID does not exist.
+					return tree.DBoolFalse, nil
+				}
+				if !strings.HasPrefix(schema, catconstants.PgTempSchemaName) {
+					// OID is not a reference to a temporary schema.
+					//
+					// This string matching is what Postgres does too. See isAnyTempNamespace.
+					return tree.DBoolFalse, nil
+				}
+				if schema == ctx.SessionData().SearchPath.GetTemporarySchemaName() {
+					// OID is a reference to this session's temporary schema.
+					return tree.DBoolFalse, nil
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "Returns true if the given OID is the OID of another session's temporary schema. (This can be useful, for example, to exclude other sessions' temporary tables from a catalog display.)",
 			Volatility: tree.VolatilityStable,
 		},
 	),
@@ -826,6 +906,30 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDString(args[0].ResolvedType().SQLStandardName()), nil
 			},
 			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	// https://www.postgresql.org/docs/10/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
+	"pg_collation_for": makeBuiltin(
+		tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"str", types.Any}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				var collation string
+				switch t := args[0].(type) {
+				case *tree.DString:
+					collation = "default"
+				case *tree.DCollatedString:
+					collation = t.Locale
+				default:
+					return tree.DNull, pgerror.Newf(pgcode.DatatypeMismatch,
+						"collations are not supported by type: %s", t.ResolvedType())
+				}
+				return tree.NewDString(fmt.Sprintf(`"%s"`, collation)), nil
+			},
+			Info:       "Returns the collation of the argument",
 			Volatility: tree.VolatilityStable,
 		},
 	),

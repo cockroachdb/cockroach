@@ -620,9 +620,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			oidZero,                        // reltoastrelid
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhasindex
 			tree.DBoolFalse, // relisshared
-			relPersistence,  // relPersistence
-			tree.DBoolFalse, // relistemp
-			relKind,         // relkind
+			relPersistence,  // relpersistence
+			tree.MakeDBool(tree.DBool(table.IsTemporary())), // relistemp
+			relKind, // relkind
 			tree.NewDInt(tree.DInt(len(table.AccessibleColumns()))), // relnatts
 			tree.NewDInt(tree.DInt(len(table.GetChecks()))),         // relchecks
 			tree.DBoolFalse, // relhasoids
