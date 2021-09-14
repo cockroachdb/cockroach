@@ -349,6 +349,8 @@ type TableDescriptor interface {
 	IsLocalityGlobal() bool
 	GetRegionalByTableRegion() (descpb.RegionName, error)
 	GetRegionalByRowTableRegionColumnName() (tree.Name, error)
+
+	GetTTL() *descpb.TableDescriptor_TTL
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
