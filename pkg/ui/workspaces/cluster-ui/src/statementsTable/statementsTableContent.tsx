@@ -22,7 +22,12 @@ import { Dropdown } from "src/dropdown";
 import { Button } from "src/button";
 
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { summarize, TimestampToMoment } from "src/util";
+import {
+  aggregatedTsAttr,
+  propsToQueryString,
+  summarize,
+  TimestampToMoment,
+} from "src/util";
 import { shortStatement } from "./statementsTable";
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
@@ -41,6 +46,7 @@ export const StatementTableCell = {
   ) => (stmt: any) => (
     <StatementLink
       statement={stmt.label}
+      aggregatedTs={stmt.aggregatedTs}
       database={stmt.database}
       implicitTxn={stmt.implicitTxn}
       search={search}
@@ -123,6 +129,7 @@ export const StatementTableCell = {
 
 interface StatementLinkProps {
   statement: string;
+  aggregatedTs?: number;
   app: string;
   implicitTxn: boolean;
   search: string;
@@ -133,7 +140,7 @@ interface StatementLinkProps {
 
 // StatementLinkTarget returns the link to the relevant statement page, given
 // the input statement details.
-export const StatementLinkTarget = (props: StatementLinkProps) => {
+export const StatementLinkTarget = (props: StatementLinkProps): string => {
   let base: string;
   if (props.app && props.app.length > 0) {
     base = `/statements/${props.app}`;
@@ -150,10 +157,17 @@ export const StatementLinkTarget = (props: StatementLinkProps) => {
   if (props.statementNoConstants) {
     linkStatement = props.statementNoConstants;
   }
-  return `${base}/${encodeURIComponent(linkStatement)}`;
+
+  const searchParams = propsToQueryString({
+    [aggregatedTsAttr]: props.aggregatedTs,
+  });
+
+  return `${base}/${encodeURIComponent(linkStatement)}?${searchParams}`;
 };
 
-export const StatementLink = (props: StatementLinkProps) => {
+export const StatementLink = (
+  props: StatementLinkProps,
+): React.ReactElement => {
   const summary = summarize(props.statement);
   const { onClick, statement } = props;
   const onStatementClick = React.useCallback(() => {
