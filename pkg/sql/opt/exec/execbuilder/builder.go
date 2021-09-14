@@ -157,7 +157,8 @@ func New(
 		// in such a scenario tableWriterBase.finalize is responsible for making
 		// sure that the rows written limit is not reached before the auto
 		// commit.
-		b.allowAutoCommit = b.allowAutoCommit && (sd.TxnRowsReadErr == 0 && !sd.Internal)
+		prohibitAutoCommit := sd.TxnRowsReadErr != 0 && !sd.Internal
+		b.allowAutoCommit = b.allowAutoCommit && !prohibitAutoCommit
 		b.initialAllowAutoCommit = b.allowAutoCommit
 		b.allowInsertFastPath = sd.InsertFastPath
 	}
