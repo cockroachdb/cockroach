@@ -1,0 +1,1428 @@
+
+state 0
+	$accept: .start $end 
+
+	POINT  shift 28
+	POINTM  shift 29
+	POINTZ  shift 30
+	POINTZM  shift 31
+	LINESTRING  shift 32
+	LINESTRINGM  shift 33
+	LINESTRINGZ  shift 34
+	LINESTRINGZM  shift 35
+	POLYGON  shift 36
+	POLYGONM  shift 37
+	POLYGONZ  shift 38
+	POLYGONZM  shift 39
+	MULTIPOINT  shift 40
+	MULTIPOINTM  shift 41
+	MULTIPOINTZ  shift 42
+	MULTIPOINTZM  shift 43
+	MULTILINESTRING  shift 44
+	MULTILINESTRINGM  shift 45
+	MULTILINESTRINGZ  shift 46
+	MULTILINESTRINGZM  shift 47
+	MULTIPOLYGON  shift 48
+	MULTIPOLYGONM  shift 49
+	MULTIPOLYGONZ  shift 50
+	MULTIPOLYGONZM  shift 51
+	GEOMETRYCOLLECTION  shift 52
+	GEOMETRYCOLLECTIONM  shift 53
+	GEOMETRYCOLLECTIONZ  shift 54
+	GEOMETRYCOLLECTIONZM  shift 55
+	.  error
+
+	geometry  goto 2
+	point  goto 3
+	linestring  goto 4
+	polygon  goto 5
+	multipoint  goto 6
+	multilinestring  goto 7
+	multipolygon  goto 8
+	geometry_collection  goto 9
+	start  goto 1
+	point_type  goto 10
+	point_base_type  goto 11
+	point_non_base_type  goto 12
+	linestring_type  goto 13
+	linestring_base_type  goto 14
+	linestring_non_base_type  goto 15
+	polygon_type  goto 16
+	polygon_base_type  goto 17
+	polygon_non_base_type  goto 18
+	multipoint_base_type  goto 19
+	multipoint_non_base_type  goto 20
+	multilinestring_base_type  goto 21
+	multilinestring_non_base_type  goto 22
+	multipolygon_base_type  goto 23
+	multipolygon_non_base_type  goto 24
+	geometry_collection_type  goto 25
+	geometry_collection_base_type  goto 26
+	geometry_collection_non_base_type  goto 27
+
+state 1
+	$accept:  start.$end 
+
+	$end  accept
+	.  error
+
+
+state 2
+	start:  geometry.    (1)
+
+	.  reduce 1 (src line 106)
+
+
+state 3
+	geometry:  point.    (2)
+
+	.  reduce 2 (src line 116)
+
+
+state 4
+	geometry:  linestring.    (3)
+
+	.  reduce 3 (src line 118)
+
+
+state 5
+	geometry:  polygon.    (4)
+
+	.  reduce 4 (src line 119)
+
+
+state 6
+	geometry:  multipoint.    (5)
+
+	.  reduce 5 (src line 120)
+
+
+state 7
+	geometry:  multilinestring.    (6)
+
+	.  reduce 6 (src line 121)
+
+
+state 8
+	geometry:  multipolygon.    (7)
+
+	.  reduce 7 (src line 122)
+
+
+state 9
+	geometry:  geometry_collection.    (8)
+
+	.  reduce 8 (src line 123)
+
+
+state 10
+	point:  point_type.flat_coords_point_with_parens 
+
+	'('  shift 58
+	.  error
+
+	flat_coords_point_with_parens  goto 56
+	geometry_opening_lparen  goto 57
+
+state 11
+	point:  point_base_type.empty_in_base_type 
+	point_type:  point_base_type.    (12)
+
+	EMPTY  shift 61
+	.  reduce 12 (src line 151)
+
+	empty_in_base_type  goto 59
+	flat_coords_empty  goto 60
+
+state 12
+	point:  point_non_base_type.empty_in_non_base_type 
+	point_type:  point_non_base_type.    (13)
+
+	EMPTY  shift 61
+	.  reduce 13 (src line 153)
+
+	empty_in_non_base_type  goto 62
+	flat_coords_empty  goto 63
+
+state 13
+	linestring:  linestring_type.flat_coords_linestring 
+
+	'('  shift 58
+	.  error
+
+	flat_coords_point_list_with_parens  goto 65
+	flat_coords_linestring  goto 64
+	geometry_opening_lparen  goto 66
+
+state 14
+	linestring:  linestring_base_type.empty_in_base_type 
+	linestring_type:  linestring_base_type.    (21)
+
+	EMPTY  shift 61
+	.  reduce 21 (src line 201)
+
+	empty_in_base_type  goto 67
+	flat_coords_empty  goto 60
+
+state 15
+	linestring:  linestring_non_base_type.empty_in_non_base_type 
+	linestring_type:  linestring_non_base_type.    (22)
+
+	EMPTY  shift 61
+	.  reduce 22 (src line 203)
+
+	empty_in_non_base_type  goto 68
+	flat_coords_empty  goto 63
+
+state 16
+	polygon:  polygon_type.flat_coords_polygon_ring_list_with_parens 
+
+	'('  shift 58
+	.  error
+
+	flat_coords_polygon_ring_list_with_parens  goto 69
+	geometry_opening_lparen  goto 70
+
+state 17
+	polygon:  polygon_base_type.empty_in_base_type 
+	polygon_type:  polygon_base_type.    (30)
+
+	EMPTY  shift 61
+	.  reduce 30 (src line 251)
+
+	empty_in_base_type  goto 71
+	flat_coords_empty  goto 60
+
+state 18
+	polygon:  polygon_non_base_type.empty_in_non_base_type 
+	polygon_type:  polygon_non_base_type.    (31)
+
+	EMPTY  shift 61
+	.  reduce 31 (src line 253)
+
+	empty_in_non_base_type  goto 72
+	flat_coords_empty  goto 63
+
+state 19
+	multipoint:  multipoint_base_type.multipoint_base_type_point_list_with_parens 
+	multipoint:  multipoint_base_type.empty_in_base_type 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_base_type  goto 74
+	flat_coords_empty  goto 60
+	multipoint_base_type_point_list_with_parens  goto 73
+	geometry_opening_lparen  goto 75
+
+state 20
+	multipoint:  multipoint_non_base_type.multipoint_non_base_type_point_list_with_parens 
+	multipoint:  multipoint_non_base_type.empty_in_non_base_type 
+
+	EMPTY  shift 61
+	'('  shift 78
+	.  error
+
+	empty_in_non_base_type  goto 77
+	flat_coords_empty  goto 63
+	multipoint_non_base_type_point_list_with_parens  goto 76
+
+state 21
+	multilinestring:  multilinestring_base_type.multilinestring_base_type_linestring_list_with_parens 
+	multilinestring:  multilinestring_base_type.empty_in_base_type 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_base_type  goto 80
+	flat_coords_empty  goto 60
+	multilinestring_base_type_linestring_list_with_parens  goto 79
+	geometry_opening_lparen  goto 81
+
+state 22
+	multilinestring:  multilinestring_non_base_type.multilinestring_non_base_type_linestring_list_with_parens 
+	multilinestring:  multilinestring_non_base_type.empty_in_non_base_type 
+
+	EMPTY  shift 61
+	'('  shift 84
+	.  error
+
+	empty_in_non_base_type  goto 83
+	flat_coords_empty  goto 63
+	multilinestring_non_base_type_linestring_list_with_parens  goto 82
+
+state 23
+	multipolygon:  multipolygon_base_type.multipolygon_base_type_polygon_list_with_parens 
+	multipolygon:  multipolygon_base_type.empty_in_base_type 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_base_type  goto 86
+	flat_coords_empty  goto 60
+	multipolygon_base_type_polygon_list_with_parens  goto 85
+	geometry_opening_lparen  goto 87
+
+state 24
+	multipolygon:  multipolygon_non_base_type.multipolygon_non_base_type_polygon_list_with_parens 
+	multipolygon:  multipolygon_non_base_type.empty_in_non_base_type 
+
+	EMPTY  shift 61
+	'('  shift 90
+	.  error
+
+	empty_in_non_base_type  goto 89
+	flat_coords_empty  goto 63
+	multipolygon_non_base_type_polygon_list_with_parens  goto 88
+
+state 25
+	geometry_collection:  geometry_collection_type.geometry_list_with_parens 
+
+	'('  shift 92
+	.  error
+
+	geometry_list_with_parens  goto 91
+
+state 26
+	geometry_collection:  geometry_collection_base_type.empty_in_base_type 
+	geometry_collection_type:  geometry_collection_base_type.    (66)
+
+	EMPTY  shift 61
+	.  reduce 66 (src line 477)
+
+	empty_in_base_type  goto 93
+	flat_coords_empty  goto 60
+
+state 27
+	geometry_collection:  geometry_collection_non_base_type.empty_in_non_base_type 
+	geometry_collection_type:  geometry_collection_non_base_type.    (67)
+
+	EMPTY  shift 61
+	.  reduce 67 (src line 479)
+
+	empty_in_non_base_type  goto 94
+	flat_coords_empty  goto 63
+
+state 28
+	point_base_type:  POINT.    (14)
+
+	.  reduce 14 (src line 155)
+
+
+state 29
+	point_non_base_type:  POINTM.    (15)
+
+	.  reduce 15 (src line 164)
+
+
+state 30
+	point_non_base_type:  POINTZ.    (16)
+
+	.  reduce 16 (src line 172)
+
+
+state 31
+	point_non_base_type:  POINTZM.    (17)
+
+	.  reduce 17 (src line 179)
+
+
+state 32
+	linestring_base_type:  LINESTRING.    (23)
+
+	.  reduce 23 (src line 205)
+
+
+state 33
+	linestring_non_base_type:  LINESTRINGM.    (24)
+
+	.  reduce 24 (src line 214)
+
+
+state 34
+	linestring_non_base_type:  LINESTRINGZ.    (25)
+
+	.  reduce 25 (src line 222)
+
+
+state 35
+	linestring_non_base_type:  LINESTRINGZM.    (26)
+
+	.  reduce 26 (src line 229)
+
+
+state 36
+	polygon_base_type:  POLYGON.    (32)
+
+	.  reduce 32 (src line 255)
+
+
+state 37
+	polygon_non_base_type:  POLYGONM.    (33)
+
+	.  reduce 33 (src line 264)
+
+
+state 38
+	polygon_non_base_type:  POLYGONZ.    (34)
+
+	.  reduce 34 (src line 272)
+
+
+state 39
+	polygon_non_base_type:  POLYGONZM.    (35)
+
+	.  reduce 35 (src line 279)
+
+
+state 40
+	multipoint_base_type:  MULTIPOINT.    (40)
+
+	.  reduce 40 (src line 309)
+
+
+state 41
+	multipoint_non_base_type:  MULTIPOINTM.    (41)
+
+	.  reduce 41 (src line 318)
+
+
+state 42
+	multipoint_non_base_type:  MULTIPOINTZ.    (42)
+
+	.  reduce 42 (src line 326)
+
+
+state 43
+	multipoint_non_base_type:  MULTIPOINTZM.    (43)
+
+	.  reduce 43 (src line 333)
+
+
+state 44
+	multilinestring_base_type:  MULTILINESTRING.    (48)
+
+	.  reduce 48 (src line 359)
+
+
+state 45
+	multilinestring_non_base_type:  MULTILINESTRINGM.    (49)
+
+	.  reduce 49 (src line 368)
+
+
+state 46
+	multilinestring_non_base_type:  MULTILINESTRINGZ.    (50)
+
+	.  reduce 50 (src line 376)
+
+
+state 47
+	multilinestring_non_base_type:  MULTILINESTRINGZM.    (51)
+
+	.  reduce 51 (src line 383)
+
+
+state 48
+	multipolygon_base_type:  MULTIPOLYGON.    (56)
+
+	.  reduce 56 (src line 409)
+
+
+state 49
+	multipolygon_non_base_type:  MULTIPOLYGONM.    (57)
+
+	.  reduce 57 (src line 418)
+
+
+state 50
+	multipolygon_non_base_type:  MULTIPOLYGONZ.    (58)
+
+	.  reduce 58 (src line 426)
+
+
+state 51
+	multipolygon_non_base_type:  MULTIPOLYGONZM.    (59)
+
+	.  reduce 59 (src line 433)
+
+
+state 52
+	geometry_collection_base_type:  GEOMETRYCOLLECTION.    (68)
+
+	.  reduce 68 (src line 481)
+
+
+state 53
+	geometry_collection_non_base_type:  GEOMETRYCOLLECTIONM.    (69)
+
+	.  reduce 69 (src line 490)
+
+
+state 54
+	geometry_collection_non_base_type:  GEOMETRYCOLLECTIONZ.    (70)
+
+	.  reduce 70 (src line 498)
+
+
+state 55
+	geometry_collection_non_base_type:  GEOMETRYCOLLECTIONZM.    (71)
+
+	.  reduce 71 (src line 505)
+
+
+state 56
+	point:  point_type flat_coords_point_with_parens.    (9)
+
+	.  reduce 9 (src line 137)
+
+
+state 57
+	flat_coords_point_with_parens:  geometry_opening_lparen.flat_coords_point ')' 
+
+	NUM  shift 97
+	.  error
+
+	flat_coords  goto 96
+	flat_coords_point  goto 95
+
+state 58
+	geometry_opening_lparen:  '('.    (72)
+
+	.  reduce 72 (src line 513)
+
+
+state 59
+	point:  point_base_type empty_in_base_type.    (10)
+
+	.  reduce 10 (src line 142)
+
+
+state 60
+	empty_in_base_type:  flat_coords_empty.    (123)
+
+	.  reduce 123 (src line 736)
+
+
+state 61
+	flat_coords_empty:  EMPTY.    (125)
+
+	.  reduce 125 (src line 748)
+
+
+state 62
+	point:  point_non_base_type empty_in_non_base_type.    (11)
+
+	.  reduce 11 (src line 146)
+
+
+state 63
+	empty_in_non_base_type:  flat_coords_empty.    (124)
+
+	.  reduce 124 (src line 745)
+
+
+state 64
+	linestring:  linestring_type flat_coords_linestring.    (18)
+
+	.  reduce 18 (src line 187)
+
+
+state 65
+	flat_coords_linestring:  flat_coords_point_list_with_parens.    (115)
+
+	.  reduce 115 (src line 691)
+
+
+state 66
+	flat_coords_point_list_with_parens:  geometry_opening_lparen.flat_coords_point_list ')' 
+
+	NUM  shift 97
+	.  error
+
+	flat_coords  goto 96
+	flat_coords_point  goto 99
+	flat_coords_point_list  goto 98
+
+state 67
+	linestring:  linestring_base_type empty_in_base_type.    (19)
+
+	.  reduce 19 (src line 192)
+
+
+state 68
+	linestring:  linestring_non_base_type empty_in_non_base_type.    (20)
+
+	.  reduce 20 (src line 196)
+
+
+state 69
+	polygon:  polygon_type flat_coords_polygon_ring_list_with_parens.    (27)
+
+	.  reduce 27 (src line 237)
+
+
+state 70
+	flat_coords_polygon_ring_list_with_parens:  geometry_opening_lparen.flat_coords_polygon_ring_list ')' 
+
+	'('  shift 58
+	.  error
+
+	flat_coords_point_list_with_parens  goto 102
+	flat_coords_polygon_ring  goto 101
+	flat_coords_polygon_ring_list  goto 100
+	geometry_opening_lparen  goto 66
+
+state 71
+	polygon:  polygon_base_type empty_in_base_type.    (28)
+
+	.  reduce 28 (src line 242)
+
+
+state 72
+	polygon:  polygon_non_base_type empty_in_non_base_type.    (29)
+
+	.  reduce 29 (src line 246)
+
+
+state 73
+	multipoint:  multipoint_base_type multipoint_base_type_point_list_with_parens.    (36)
+
+	.  reduce 36 (src line 287)
+
+
+state 74
+	multipoint:  multipoint_base_type empty_in_base_type.    (38)
+
+	.  reduce 38 (src line 300)
+
+
+state 75
+	multipoint_base_type_point_list_with_parens:  geometry_opening_lparen.multipoint_base_type_point_list ')' 
+
+	EMPTY  shift 61
+	NUM  shift 97
+	'('  shift 58
+	.  error
+
+	empty_in_base_type  goto 107
+	flat_coords_empty  goto 60
+	flat_coords  goto 96
+	flat_coords_point  goto 108
+	flat_coords_point_with_parens  goto 109
+	multipoint_point  goto 106
+	multipoint_base_type_point  goto 105
+	multipoint_base_type_point_flat_repr  goto 104
+	multipoint_base_type_point_list  goto 103
+	geometry_opening_lparen  goto 57
+
+state 76
+	multipoint:  multipoint_non_base_type multipoint_non_base_type_point_list_with_parens.    (37)
+
+	.  reduce 37 (src line 294)
+
+
+state 77
+	multipoint:  multipoint_non_base_type empty_in_non_base_type.    (39)
+
+	.  reduce 39 (src line 304)
+
+
+state 78
+	multipoint_non_base_type_point_list_with_parens:  '('.multipoint_non_base_type_point_list ')' 
+
+	EMPTY  shift 61
+	NUM  shift 97
+	'('  shift 58
+	.  error
+
+	empty_in_non_base_type  goto 114
+	flat_coords_empty  goto 63
+	flat_coords  goto 96
+	flat_coords_point  goto 108
+	flat_coords_point_with_parens  goto 109
+	multipoint_point  goto 113
+	multipoint_non_base_type_point  goto 112
+	multipoint_non_base_point_flat_repr  goto 111
+	multipoint_non_base_type_point_list  goto 110
+	geometry_opening_lparen  goto 57
+
+state 79
+	multilinestring:  multilinestring_base_type multilinestring_base_type_linestring_list_with_parens.    (44)
+
+	.  reduce 44 (src line 341)
+
+
+state 80
+	multilinestring:  multilinestring_base_type empty_in_base_type.    (46)
+
+	.  reduce 46 (src line 350)
+
+
+state 81
+	multilinestring_base_type_linestring_list_with_parens:  geometry_opening_lparen.multilinestring_base_type_linestring_list ')' 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_base_type  goto 119
+	flat_coords_empty  goto 60
+	flat_coords_point_list_with_parens  goto 65
+	flat_coords_linestring  goto 118
+	multilinestring_base_type_linestring  goto 117
+	multilinestring_base_type_linestring_flat_repr  goto 116
+	multilinestring_base_type_linestring_list  goto 115
+	geometry_opening_lparen  goto 66
+
+state 82
+	multilinestring:  multilinestring_non_base_type multilinestring_non_base_type_linestring_list_with_parens.    (45)
+
+	.  reduce 45 (src line 346)
+
+
+state 83
+	multilinestring:  multilinestring_non_base_type empty_in_non_base_type.    (47)
+
+	.  reduce 47 (src line 354)
+
+
+state 84
+	multilinestring_non_base_type_linestring_list_with_parens:  '('.multilinestring_non_base_type_linestring_list ')' 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_non_base_type  goto 124
+	flat_coords_empty  goto 63
+	flat_coords_point_list_with_parens  goto 65
+	flat_coords_linestring  goto 123
+	multilinestring_non_base_type_linestring  goto 122
+	multilinestring_non_base_type_linestring_flat_repr  goto 121
+	multilinestring_non_base_type_linestring_list  goto 120
+	geometry_opening_lparen  goto 66
+
+state 85
+	multipolygon:  multipolygon_base_type multipolygon_base_type_polygon_list_with_parens.    (52)
+
+	.  reduce 52 (src line 391)
+
+
+state 86
+	multipolygon:  multipolygon_base_type empty_in_base_type.    (54)
+
+	.  reduce 54 (src line 400)
+
+
+state 87
+	multipolygon_base_type_polygon_list_with_parens:  geometry_opening_lparen.multipolygon_base_type_polygon_list ')' 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_base_type  goto 129
+	flat_coords_empty  goto 60
+	flat_coords_polygon_ring_list_with_parens  goto 128
+	multipolygon_base_type_polygon  goto 127
+	multipolygon_base_type_polygon_multi_poly_repr  goto 126
+	multipolygon_base_type_polygon_list  goto 125
+	geometry_opening_lparen  goto 70
+
+state 88
+	multipolygon:  multipolygon_non_base_type multipolygon_non_base_type_polygon_list_with_parens.    (53)
+
+	.  reduce 53 (src line 396)
+
+
+state 89
+	multipolygon:  multipolygon_non_base_type empty_in_non_base_type.    (55)
+
+	.  reduce 55 (src line 404)
+
+
+state 90
+	multipolygon_non_base_type_polygon_list_with_parens:  '('.multipolygon_non_base_type_polygon_list ')' 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_non_base_type  goto 134
+	flat_coords_empty  goto 63
+	flat_coords_polygon_ring_list_with_parens  goto 133
+	multipolygon_non_base_type_polygon  goto 132
+	multipolygon_non_base_type_polygon_multi_poly_repr  goto 131
+	multipolygon_non_base_type_polygon_list  goto 130
+	geometry_opening_lparen  goto 70
+
+state 91
+	geometry_collection:  geometry_collection_type geometry_list_with_parens.    (60)
+
+	.  reduce 60 (src line 441)
+
+
+state 92
+	geometry_list_with_parens:  '('.geometry_list ')' 
+
+	POINT  shift 28
+	POINTM  shift 29
+	POINTZ  shift 30
+	POINTZM  shift 31
+	LINESTRING  shift 32
+	LINESTRINGM  shift 33
+	LINESTRINGZ  shift 34
+	LINESTRINGZM  shift 35
+	POLYGON  shift 36
+	POLYGONM  shift 37
+	POLYGONZ  shift 38
+	POLYGONZM  shift 39
+	MULTIPOINT  shift 40
+	MULTIPOINTM  shift 41
+	MULTIPOINTZ  shift 42
+	MULTIPOINTZM  shift 43
+	MULTILINESTRING  shift 44
+	MULTILINESTRINGM  shift 45
+	MULTILINESTRINGZ  shift 46
+	MULTILINESTRINGZM  shift 47
+	MULTIPOLYGON  shift 48
+	MULTIPOLYGONM  shift 49
+	MULTIPOLYGONZ  shift 50
+	MULTIPOLYGONZM  shift 51
+	GEOMETRYCOLLECTION  shift 52
+	GEOMETRYCOLLECTIONM  shift 53
+	GEOMETRYCOLLECTIONZ  shift 54
+	GEOMETRYCOLLECTIONZM  shift 55
+	.  error
+
+	geometry  goto 136
+	point  goto 3
+	linestring  goto 4
+	polygon  goto 5
+	multipoint  goto 6
+	multilinestring  goto 7
+	multipolygon  goto 8
+	geometry_collection  goto 9
+	geometry_list  goto 135
+	point_type  goto 10
+	point_base_type  goto 11
+	point_non_base_type  goto 12
+	linestring_type  goto 13
+	linestring_base_type  goto 14
+	linestring_non_base_type  goto 15
+	polygon_type  goto 16
+	polygon_base_type  goto 17
+	polygon_non_base_type  goto 18
+	multipoint_base_type  goto 19
+	multipoint_non_base_type  goto 20
+	multilinestring_base_type  goto 21
+	multilinestring_non_base_type  goto 22
+	multipolygon_base_type  goto 23
+	multipolygon_non_base_type  goto 24
+	geometry_collection_type  goto 25
+	geometry_collection_base_type  goto 26
+	geometry_collection_non_base_type  goto 27
+
+state 93
+	geometry_collection:  geometry_collection_base_type empty_in_base_type.    (61)
+
+	.  reduce 61 (src line 452)
+
+
+state 94
+	geometry_collection:  geometry_collection_non_base_type empty_in_non_base_type.    (62)
+
+	.  reduce 62 (src line 456)
+
+
+state 95
+	flat_coords_point_with_parens:  geometry_opening_lparen flat_coords_point.')' 
+
+	')'  shift 137
+	.  error
+
+
+state 96
+	flat_coords_point:  flat_coords.    (120)
+	flat_coords:  flat_coords.NUM 
+
+	NUM  shift 138
+	.  reduce 120 (src line 718)
+
+
+state 97
+	flat_coords:  NUM.    (122)
+
+	.  reduce 122 (src line 731)
+
+
+state 98
+	flat_coords_point_list_with_parens:  geometry_opening_lparen flat_coords_point_list.')' 
+	flat_coords_point_list:  flat_coords_point_list.',' flat_coords_point 
+
+	')'  shift 139
+	','  shift 140
+	.  error
+
+
+state 99
+	flat_coords_point_list:  flat_coords_point.    (118)
+
+	.  reduce 118 (src line 710)
+
+
+state 100
+	flat_coords_polygon_ring_list_with_parens:  geometry_opening_lparen flat_coords_polygon_ring_list.')' 
+	flat_coords_polygon_ring_list:  flat_coords_polygon_ring_list.',' flat_coords_polygon_ring 
+
+	')'  shift 141
+	','  shift 142
+	.  error
+
+
+state 101
+	flat_coords_polygon_ring_list:  flat_coords_polygon_ring.    (113)
+
+	.  reduce 113 (src line 680)
+
+
+state 102
+	flat_coords_polygon_ring:  flat_coords_point_list_with_parens.    (114)
+
+	.  reduce 114 (src line 682)
+
+
+state 103
+	multipoint_base_type_point_list_with_parens:  geometry_opening_lparen multipoint_base_type_point_list.')' 
+	multipoint_base_type_point_list:  multipoint_base_type_point_list.',' multipoint_base_type_point_flat_repr 
+
+	')'  shift 143
+	','  shift 144
+	.  error
+
+
+state 104
+	multipoint_base_type_point_list:  multipoint_base_type_point_flat_repr.    (100)
+
+	.  reduce 100 (src line 637)
+
+
+state 105
+	multipoint_base_type_point_flat_repr:  multipoint_base_type_point.    (103)
+
+	.  reduce 103 (src line 646)
+
+
+state 106
+	multipoint_base_type_point:  multipoint_point.    (105)
+
+	.  reduce 105 (src line 658)
+
+
+state 107
+	multipoint_base_type_point:  empty_in_base_type.    (106)
+
+	.  reduce 106 (src line 660)
+
+
+state 108
+	multipoint_point:  flat_coords_point.    (109)
+
+	.  reduce 109 (src line 665)
+
+
+state 109
+	multipoint_point:  flat_coords_point_with_parens.    (110)
+
+	.  reduce 110 (src line 667)
+
+
+state 110
+	multipoint_non_base_type_point_list_with_parens:  '(' multipoint_non_base_type_point_list.')' 
+	multipoint_non_base_type_point_list:  multipoint_non_base_type_point_list.',' multipoint_non_base_point_flat_repr 
+
+	')'  shift 145
+	','  shift 146
+	.  error
+
+
+state 111
+	multipoint_non_base_type_point_list:  multipoint_non_base_point_flat_repr.    (102)
+
+	.  reduce 102 (src line 644)
+
+
+state 112
+	multipoint_non_base_point_flat_repr:  multipoint_non_base_type_point.    (104)
+
+	.  reduce 104 (src line 652)
+
+
+state 113
+	multipoint_non_base_type_point:  multipoint_point.    (107)
+
+	.  reduce 107 (src line 662)
+
+
+state 114
+	multipoint_non_base_type_point:  empty_in_non_base_type.    (108)
+
+	.  reduce 108 (src line 664)
+
+
+state 115
+	multilinestring_base_type_linestring_list_with_parens:  geometry_opening_lparen multilinestring_base_type_linestring_list.')' 
+	multilinestring_base_type_linestring_list:  multilinestring_base_type_linestring_list.',' multilinestring_base_type_linestring_flat_repr 
+
+	')'  shift 147
+	','  shift 148
+	.  error
+
+
+state 116
+	multilinestring_base_type_linestring_list:  multilinestring_base_type_linestring_flat_repr.    (88)
+
+	.  reduce 88 (src line 591)
+
+
+state 117
+	multilinestring_base_type_linestring_flat_repr:  multilinestring_base_type_linestring.    (91)
+
+	.  reduce 91 (src line 600)
+
+
+state 118
+	multilinestring_base_type_linestring:  flat_coords_linestring.    (93)
+
+	.  reduce 93 (src line 612)
+
+
+state 119
+	multilinestring_base_type_linestring:  empty_in_base_type.    (94)
+
+	.  reduce 94 (src line 614)
+
+
+state 120
+	multilinestring_non_base_type_linestring_list_with_parens:  '(' multilinestring_non_base_type_linestring_list.')' 
+	multilinestring_non_base_type_linestring_list:  multilinestring_non_base_type_linestring_list.',' multilinestring_non_base_type_linestring_flat_repr 
+
+	')'  shift 149
+	','  shift 150
+	.  error
+
+
+state 121
+	multilinestring_non_base_type_linestring_list:  multilinestring_non_base_type_linestring_flat_repr.    (90)
+
+	.  reduce 90 (src line 598)
+
+
+state 122
+	multilinestring_non_base_type_linestring_flat_repr:  multilinestring_non_base_type_linestring.    (92)
+
+	.  reduce 92 (src line 606)
+
+
+state 123
+	multilinestring_non_base_type_linestring:  flat_coords_linestring.    (95)
+
+	.  reduce 95 (src line 616)
+
+
+state 124
+	multilinestring_non_base_type_linestring:  empty_in_non_base_type.    (96)
+
+	.  reduce 96 (src line 618)
+
+
+state 125
+	multipolygon_base_type_polygon_list_with_parens:  geometry_opening_lparen multipolygon_base_type_polygon_list.')' 
+	multipolygon_base_type_polygon_list:  multipolygon_base_type_polygon_list.',' multipolygon_base_type_polygon_multi_poly_repr 
+
+	')'  shift 151
+	','  shift 152
+	.  error
+
+
+state 126
+	multipolygon_base_type_polygon_list:  multipolygon_base_type_polygon_multi_poly_repr.    (78)
+
+	.  reduce 78 (src line 546)
+
+
+state 127
+	multipolygon_base_type_polygon_multi_poly_repr:  multipolygon_base_type_polygon.    (79)
+
+	.  reduce 79 (src line 548)
+
+
+state 128
+	multipolygon_base_type_polygon:  flat_coords_polygon_ring_list_with_parens.    (81)
+
+	.  reduce 81 (src line 560)
+
+
+state 129
+	multipolygon_base_type_polygon:  empty_in_base_type.    (82)
+
+	.  reduce 82 (src line 562)
+
+
+state 130
+	multipolygon_non_base_type_polygon_list_with_parens:  '(' multipolygon_non_base_type_polygon_list.')' 
+	multipolygon_non_base_type_polygon_list:  multipolygon_non_base_type_polygon_list.',' multipolygon_non_base_type_polygon_multi_poly_repr 
+
+	')'  shift 153
+	','  shift 154
+	.  error
+
+
+state 131
+	multipolygon_non_base_type_polygon_list:  multipolygon_non_base_type_polygon_multi_poly_repr.    (76)
+
+	.  reduce 76 (src line 539)
+
+
+state 132
+	multipolygon_non_base_type_polygon_multi_poly_repr:  multipolygon_non_base_type_polygon.    (80)
+
+	.  reduce 80 (src line 554)
+
+
+state 133
+	multipolygon_non_base_type_polygon:  flat_coords_polygon_ring_list_with_parens.    (83)
+
+	.  reduce 83 (src line 567)
+
+
+state 134
+	multipolygon_non_base_type_polygon:  empty_in_non_base_type.    (84)
+
+	.  reduce 84 (src line 569)
+
+
+state 135
+	geometry_list_with_parens:  '(' geometry_list.')' 
+	geometry_list:  geometry_list.',' geometry 
+
+	')'  shift 155
+	','  shift 156
+	.  error
+
+
+state 136
+	geometry_list:  geometry.    (65)
+
+	.  reduce 65 (src line 472)
+
+
+state 137
+	flat_coords_point_with_parens:  geometry_opening_lparen flat_coords_point ')'.    (119)
+
+	.  reduce 119 (src line 712)
+
+
+state 138
+	flat_coords:  flat_coords NUM.    (121)
+
+	.  reduce 121 (src line 726)
+
+
+state 139
+	flat_coords_point_list_with_parens:  geometry_opening_lparen flat_coords_point_list ')'.    (116)
+
+	.  reduce 116 (src line 699)
+
+
+state 140
+	flat_coords_point_list:  flat_coords_point_list ','.flat_coords_point 
+
+	NUM  shift 97
+	.  error
+
+	flat_coords  goto 96
+	flat_coords_point  goto 157
+
+state 141
+	flat_coords_polygon_ring_list_with_parens:  geometry_opening_lparen flat_coords_polygon_ring_list ')'.    (111)
+
+	.  reduce 111 (src line 669)
+
+
+state 142
+	flat_coords_polygon_ring_list:  flat_coords_polygon_ring_list ','.flat_coords_polygon_ring 
+
+	'('  shift 58
+	.  error
+
+	flat_coords_point_list_with_parens  goto 102
+	flat_coords_polygon_ring  goto 158
+	geometry_opening_lparen  goto 66
+
+state 143
+	multipoint_base_type_point_list_with_parens:  geometry_opening_lparen multipoint_base_type_point_list ')'.    (97)
+
+	.  reduce 97 (src line 620)
+
+
+state 144
+	multipoint_base_type_point_list:  multipoint_base_type_point_list ','.multipoint_base_type_point_flat_repr 
+
+	EMPTY  shift 61
+	NUM  shift 97
+	'('  shift 58
+	.  error
+
+	empty_in_base_type  goto 107
+	flat_coords_empty  goto 60
+	flat_coords  goto 96
+	flat_coords_point  goto 108
+	flat_coords_point_with_parens  goto 109
+	multipoint_point  goto 106
+	multipoint_base_type_point  goto 105
+	multipoint_base_type_point_flat_repr  goto 159
+	geometry_opening_lparen  goto 57
+
+state 145
+	multipoint_non_base_type_point_list_with_parens:  '(' multipoint_non_base_type_point_list ')'.    (98)
+
+	.  reduce 98 (src line 626)
+
+
+state 146
+	multipoint_non_base_type_point_list:  multipoint_non_base_type_point_list ','.multipoint_non_base_point_flat_repr 
+
+	EMPTY  shift 61
+	NUM  shift 97
+	'('  shift 58
+	.  error
+
+	empty_in_non_base_type  goto 114
+	flat_coords_empty  goto 63
+	flat_coords  goto 96
+	flat_coords_point  goto 108
+	flat_coords_point_with_parens  goto 109
+	multipoint_point  goto 113
+	multipoint_non_base_type_point  goto 112
+	multipoint_non_base_point_flat_repr  goto 160
+	geometry_opening_lparen  goto 57
+
+state 147
+	multilinestring_base_type_linestring_list_with_parens:  geometry_opening_lparen multilinestring_base_type_linestring_list ')'.    (85)
+
+	.  reduce 85 (src line 574)
+
+
+state 148
+	multilinestring_base_type_linestring_list:  multilinestring_base_type_linestring_list ','.multilinestring_base_type_linestring_flat_repr 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_base_type  goto 119
+	flat_coords_empty  goto 60
+	flat_coords_point_list_with_parens  goto 65
+	flat_coords_linestring  goto 118
+	multilinestring_base_type_linestring  goto 117
+	multilinestring_base_type_linestring_flat_repr  goto 161
+	geometry_opening_lparen  goto 66
+
+state 149
+	multilinestring_non_base_type_linestring_list_with_parens:  '(' multilinestring_non_base_type_linestring_list ')'.    (86)
+
+	.  reduce 86 (src line 580)
+
+
+state 150
+	multilinestring_non_base_type_linestring_list:  multilinestring_non_base_type_linestring_list ','.multilinestring_non_base_type_linestring_flat_repr 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_non_base_type  goto 124
+	flat_coords_empty  goto 63
+	flat_coords_point_list_with_parens  goto 65
+	flat_coords_linestring  goto 123
+	multilinestring_non_base_type_linestring  goto 122
+	multilinestring_non_base_type_linestring_flat_repr  goto 162
+	geometry_opening_lparen  goto 66
+
+state 151
+	multipolygon_base_type_polygon_list_with_parens:  geometry_opening_lparen multipolygon_base_type_polygon_list ')'.    (73)
+
+	.  reduce 73 (src line 522)
+
+
+state 152
+	multipolygon_base_type_polygon_list:  multipolygon_base_type_polygon_list ','.multipolygon_base_type_polygon_multi_poly_repr 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_base_type  goto 129
+	flat_coords_empty  goto 60
+	flat_coords_polygon_ring_list_with_parens  goto 128
+	multipolygon_base_type_polygon  goto 127
+	multipolygon_base_type_polygon_multi_poly_repr  goto 163
+	geometry_opening_lparen  goto 70
+
+state 153
+	multipolygon_non_base_type_polygon_list_with_parens:  '(' multipolygon_non_base_type_polygon_list ')'.    (74)
+
+	.  reduce 74 (src line 528)
+
+
+state 154
+	multipolygon_non_base_type_polygon_list:  multipolygon_non_base_type_polygon_list ','.multipolygon_non_base_type_polygon_multi_poly_repr 
+
+	EMPTY  shift 61
+	'('  shift 58
+	.  error
+
+	empty_in_non_base_type  goto 134
+	flat_coords_empty  goto 63
+	flat_coords_polygon_ring_list_with_parens  goto 133
+	multipolygon_non_base_type_polygon  goto 132
+	multipolygon_non_base_type_polygon_multi_poly_repr  goto 164
+	geometry_opening_lparen  goto 70
+
+state 155
+	geometry_list_with_parens:  '(' geometry_list ')'.    (63)
+
+	.  reduce 63 (src line 461)
+
+
+state 156
+	geometry_list:  geometry_list ','.geometry 
+
+	POINT  shift 28
+	POINTM  shift 29
+	POINTZ  shift 30
+	POINTZM  shift 31
+	LINESTRING  shift 32
+	LINESTRINGM  shift 33
+	LINESTRINGZ  shift 34
+	LINESTRINGZM  shift 35
+	POLYGON  shift 36
+	POLYGONM  shift 37
+	POLYGONZ  shift 38
+	POLYGONZM  shift 39
+	MULTIPOINT  shift 40
+	MULTIPOINTM  shift 41
+	MULTIPOINTZ  shift 42
+	MULTIPOINTZM  shift 43
+	MULTILINESTRING  shift 44
+	MULTILINESTRINGM  shift 45
+	MULTILINESTRINGZ  shift 46
+	MULTILINESTRINGZM  shift 47
+	MULTIPOLYGON  shift 48
+	MULTIPOLYGONM  shift 49
+	MULTIPOLYGONZ  shift 50
+	MULTIPOLYGONZM  shift 51
+	GEOMETRYCOLLECTION  shift 52
+	GEOMETRYCOLLECTIONM  shift 53
+	GEOMETRYCOLLECTIONZ  shift 54
+	GEOMETRYCOLLECTIONZM  shift 55
+	.  error
+
+	geometry  goto 165
+	point  goto 3
+	linestring  goto 4
+	polygon  goto 5
+	multipoint  goto 6
+	multilinestring  goto 7
+	multipolygon  goto 8
+	geometry_collection  goto 9
+	point_type  goto 10
+	point_base_type  goto 11
+	point_non_base_type  goto 12
+	linestring_type  goto 13
+	linestring_base_type  goto 14
+	linestring_non_base_type  goto 15
+	polygon_type  goto 16
+	polygon_base_type  goto 17
+	polygon_non_base_type  goto 18
+	multipoint_base_type  goto 19
+	multipoint_non_base_type  goto 20
+	multilinestring_base_type  goto 21
+	multilinestring_non_base_type  goto 22
+	multipolygon_base_type  goto 23
+	multipolygon_non_base_type  goto 24
+	geometry_collection_type  goto 25
+	geometry_collection_base_type  goto 26
+	geometry_collection_non_base_type  goto 27
+
+state 157
+	flat_coords_point_list:  flat_coords_point_list ',' flat_coords_point.    (117)
+
+	.  reduce 117 (src line 705)
+
+
+state 158
+	flat_coords_polygon_ring_list:  flat_coords_polygon_ring_list ',' flat_coords_polygon_ring.    (112)
+
+	.  reduce 112 (src line 675)
+
+
+state 159
+	multipoint_base_type_point_list:  multipoint_base_type_point_list ',' multipoint_base_type_point_flat_repr.    (99)
+
+	.  reduce 99 (src line 632)
+
+
+state 160
+	multipoint_non_base_type_point_list:  multipoint_non_base_type_point_list ',' multipoint_non_base_point_flat_repr.    (101)
+
+	.  reduce 101 (src line 639)
+
+
+state 161
+	multilinestring_base_type_linestring_list:  multilinestring_base_type_linestring_list ',' multilinestring_base_type_linestring_flat_repr.    (87)
+
+	.  reduce 87 (src line 586)
+
+
+state 162
+	multilinestring_non_base_type_linestring_list:  multilinestring_non_base_type_linestring_list ',' multilinestring_non_base_type_linestring_flat_repr.    (89)
+
+	.  reduce 89 (src line 593)
+
+
+state 163
+	multipolygon_base_type_polygon_list:  multipolygon_base_type_polygon_list ',' multipolygon_base_type_polygon_multi_poly_repr.    (77)
+
+	.  reduce 77 (src line 541)
+
+
+state 164
+	multipolygon_non_base_type_polygon_list:  multipolygon_non_base_type_polygon_list ',' multipolygon_non_base_type_polygon_multi_poly_repr.    (75)
+
+	.  reduce 75 (src line 534)
+
+
+state 165
+	geometry_list:  geometry_list ',' geometry.    (64)
+
+	.  reduce 64 (src line 467)
+
+
+36 terminals, 68 nonterminals
+126 grammar rules, 166/16000 states
+0 shift/reduce, 0 reduce/reduce conflicts reported
+117 working sets used
+memory: parser 326/240000
+83 extra closures
+161 shift entries, 1 exceptions
+138 goto entries
+95 entries saved by goto default
+Optimizer space used: output 218/240000
+218 table entries, 17 zero
+maximum spread: 36, maximum offset: 156
