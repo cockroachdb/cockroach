@@ -6632,7 +6632,7 @@ type exportResumePoint struct {
 	timestamp   hlc.Timestamp
 }
 
-var withTS = hlc.Timestamp{1, 0, false}
+var withTS = hlc.Timestamp{WallTime: 1}
 var withoutTS = hlc.Timestamp{}
 
 func TestPaginatedBackupTenant(t *testing.T) {
@@ -6734,7 +6734,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 		{[]byte("/Tenant/10/Table/53/1/410/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
 		{[]byte("/Tenant/10/Table/53/1/510/0"), []byte("/Tenant/10/Table/53/2"), withoutTS},
 	} {
-		expected = append(expected, requestSpanStr(roachpb.Span{resume.key, resume.endKey}, resume.timestamp))
+		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
 	}
 	require.Equal(t, expected, exportRequestSpans)
 	resetStateVars()
@@ -6761,7 +6761,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 		{[]byte("/Tenant/10/Table/57/1/410/0"), []byte("/Tenant/10/Table/57/2"), withoutTS},
 		{[]byte("/Tenant/10/Table/57/1/510/0"), []byte("/Tenant/10/Table/57/2"), withoutTS},
 	} {
-		expected = append(expected, requestSpanStr(roachpb.Span{resume.key, resume.endKey}, resume.timestamp))
+		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
 	}
 	require.Equal(t, expected, exportRequestSpans)
 	resetStateVars()
