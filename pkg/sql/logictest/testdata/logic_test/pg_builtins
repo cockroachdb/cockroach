@@ -340,3 +340,73 @@ SELECT pg_catalog.set_config('woo', 'woo', false)
 
 query error configuration setting.*not supported
 SELECT set_config('vacuum_cost_delay', '0', false)
+
+# information_schema._pg_truetypid and information_schema._pg_truetypmod
+#
+# We can't exhaustively test these until we support domain types.
+
+statement ok
+CREATE TABLE types (
+  a TEXT PRIMARY KEY,
+  b FLOAT,
+  c BPCHAR,
+  d VARCHAR(64),
+  e BIT,
+  f VARBIT(16),
+  g DECIMAL(12, 2)
+);
+
+query TOI
+SELECT typname,
+       information_schema._pg_truetypid(a.*, t.*),
+       information_schema._pg_truetypmod(a.*, t.*)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE attrelid = 'types'::regclass
+ORDER BY t.oid
+----
+text     25    -1
+float8   701   -1
+bpchar   1042  5
+varchar  1043  68
+bit      1560  1
+varbit   1562  16
+numeric  1700  786438
+
+# information_schema._pg_char_max_length
+
+query TI
+SELECT typname, information_schema._pg_char_max_length(a.atttypid, a.atttypmod)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE attrelid = 'types'::regclass
+ORDER BY t.oid
+----
+text     NULL
+float8   NULL
+bpchar   1
+varchar  64
+bit      1
+varbit   16
+numeric  NULL
+
+query TI
+SELECT typname, information_schema._pg_char_max_length(
+  information_schema._pg_truetypid(a.*, t.*),
+  information_schema._pg_truetypmod(a.*, t.*)
+)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE attrelid = 'types'::regclass
+ORDER BY t.oid
+----
+text     NULL
+float8   NULL
+bpchar   1
+varchar  64
+bit      1
+varbit   16
+numeric  NULL
