@@ -63,6 +63,7 @@ const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementDetailsDispatchProps => ({
   refreshStatements: () => dispatch(statementsActions.refresh()),
+  invalidateStatements: () => dispatch(statementsActions.invalidated()),
   refreshStatementDiagnosticsRequests: () =>
     dispatch(statementDiagnosticsActions.refresh()),
   refreshNodes: () => dispatch(nodesActions.refresh()),
