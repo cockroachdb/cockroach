@@ -281,7 +281,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 						default:
 							panic("Unexpected version number observed.")
 						}
-						return nil, false
 					},
 				},
 			},
