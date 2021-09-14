@@ -484,3 +484,56 @@ varchar  64
 bit      1
 varbit   16
 numeric  NULL
+
+# information_schema._pg_index_position
+
+statement ok
+CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX (b, d),
+  INDEX (c, a)
+);
+
+# NOTE, we cast indkey to an INT2[], because an INT2VECTOR's formatting appears
+# to be dependent on whether the result set spilled to disk or not. It was being
+# formatted differently with the "local" test config (and others) than with the
+# "fakedist-disk" test config.
+statement ok
+CREATE TEMPORARY VIEW indexes AS
+  SELECT i.relname, indkey::INT2[], indexrelid
+    FROM pg_catalog.pg_index
+    JOIN pg_catalog.pg_class AS t ON indrelid   = t.oid
+    JOIN pg_catalog.pg_class AS i ON indexrelid = i.oid
+   WHERE t.relname = 'indexed'
+ORDER BY i.relname
+
+query TT
+SELECT relname, indkey FROM indexes ORDER BY relname DESC
+----
+primary          {1}
+indexed_c_a_idx  {3,1}
+indexed_b_d_idx  {2,4}
+
+query TTII
+SELECT relname,
+       indkey,
+       generate_series(1, 4) input,
+       information_schema._pg_index_position(indexrelid, generate_series(1, 4))
+FROM indexes
+ORDER BY relname DESC, input
+----
+primary          {1}    1  1
+primary          {1}    2  NULL
+primary          {1}    3  NULL
+primary          {1}    4  NULL
+indexed_c_a_idx  {3,1}  1  2
+indexed_c_a_idx  {3,1}  2  NULL
+indexed_c_a_idx  {3,1}  3  1
+indexed_c_a_idx  {3,1}  4  NULL
+indexed_b_d_idx  {2,4}  1  NULL
+indexed_b_d_idx  {2,4}  2  1
+indexed_b_d_idx  {2,4}  3  NULL
+indexed_b_d_idx  {2,4}  4  2
