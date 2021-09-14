@@ -1441,6 +1441,7 @@ type CreateTable struct {
 	Defs     TableDefs
 	AsSource *Select
 	Locality *Locality
+	TTL      *TTL
 }
 
 // As returns true if this table represents a CREATE TABLE ... AS statement,
@@ -1507,6 +1508,10 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		if node.Locality != nil {
 			ctx.WriteString(" ")
 			ctx.FormatNode(node.Locality)
+		}
+		if node.TTL != nil {
+			ctx.WriteString(" ")
+			ctx.FormatNode(node.TTL)
 		}
 	}
 }
