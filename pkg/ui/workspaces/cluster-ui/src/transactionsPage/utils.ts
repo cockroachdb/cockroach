@@ -21,10 +21,8 @@ import _ from "lodash";
 import {
   addExecStats,
   aggregateNumericStats,
-  containAny,
   FixLong,
   longToInt,
-  unique,
 } from "../util";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
