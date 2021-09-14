@@ -23,11 +23,16 @@ import {
   aggregateNumericStats,
   FixLong,
   longToInt,
+  statementKey,
+  TimestampToNumber,
+  addStatementStats,
+  flattenStatementStats,
 } from "../util";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+type Timestamp = protos.google.protobuf.ITimestamp;
 
 export const getTrxAppFilterOptions = (
   transactions: Transaction[],
@@ -51,12 +56,17 @@ export const getTrxAppFilterOptions = (
 export const collectStatementsText = (statements: Statement[]): string =>
   statements.map(s => s.key.key_data.query).join("\n");
 
-export const getStatementsByFingerprintId = (
+export const getStatementsByFingerprintIdAndTime = (
   statementFingerprintIds: Long[],
+  timestamp: Timestamp | null,
   statements: Statement[],
 ): Statement[] => {
-  return statements.filter(s =>
-    statementFingerprintIds.some(id => id.eq(s.id)),
+  return statements.filter(
+    s =>
+      (timestamp == null ||
+        (s.key?.aggregated_ts != null &&
+          timestamp.seconds.eq(s.key.aggregated_ts.seconds))) &&
+      statementFingerprintIds.some(id => id.eq(s.id)),
   );
 };
 
@@ -69,17 +79,30 @@ export const statementFingerprintIdsToText = (
     .join("\n");
 };
 
+// Aggregate transaction statements from different nodes.
 export const aggregateStatements = (
   statements: Statement[],
-): AggregateStatistics[] =>
-  statements.map((s: Statement) => ({
-    label: s.key.key_data.query,
-    implicitTxn: s.key.key_data.implicit_txn,
-    database: s.key.key_data.database,
-    fullScan: s.key.key_data.full_scan,
-    stats: s.stats,
-  }));
+): AggregateStatistics[] => {
+  const statsKey: { [key: string]: AggregateStatistics } = {};
 
+  flattenStatementStats(statements).forEach(s => {
+    const key = statementKey(s);
+    if (!(key in statsKey)) {
+      statsKey[key] = {
+        label: s.statement,
+        aggregatedTs: s.aggregated_ts,
+        implicitTxn: s.implicit_txn,
+        database: s.database,
+        fullScan: s.full_scan,
+        stats: s.stats,
+      };
+    } else {
+      statsKey[key].stats = addStatementStats(statsKey[key].stats, s.stats);
+    }
+  });
+
+  return Object.values(statsKey);
+};
 export const searchTransactionsData = (
   search: string,
   transactions: Transaction[],
@@ -88,8 +111,9 @@ export const searchTransactionsData = (
   return transactions.filter((t: Transaction) =>
     search.split(" ").every(val =>
       collectStatementsText(
-        getStatementsByFingerprintId(
+        getStatementsByFingerprintIdAndTime(
           t.stats_data.statement_fingerprint_ids,
+          t.stats_data.aggregated_ts,
           statements,
         ),
       )
@@ -144,8 +168,9 @@ export const filterTransactions = (
       let foundRegion: boolean = regions.length == 0;
       let foundNode: boolean = nodes.length == 0;
 
-      getStatementsByFingerprintId(
+      getStatementsByFingerprintIdAndTime(
         t.stats_data.statement_fingerprint_ids,
+        t.stats_data.aggregated_ts,
         statements,
       ).some(stmt => {
         stmt.stats.nodes &&
@@ -188,8 +213,9 @@ export const generateRegionNode = (
   // nodes and regions of all the statements to a single list of `region: nodes`
   // for the transaction.
   // E.g. {"gcp-us-east1" : [1,3,4]}
-  getStatementsByFingerprintId(
+  getStatementsByFingerprintIdAndTime(
     transaction.stats_data.statement_fingerprint_ids,
+    transaction.stats_data.aggregated_ts,
     statements,
   ).forEach(stmt => {
     stmt.stats.nodes &&
@@ -238,7 +264,7 @@ const withFingerprint = function(
 };
 
 // addTransactionStats adds together two stat objects into one using their counts to compute a new
-// average for the numeric statistics. It's modeled after the similar `addStatementStats` function
+// average for the numeric statistics. It's modeled after the similar `addStatementStats` functionj
 function addTransactionStats(
   a: TransactionStats,
   b: TransactionStats,
@@ -317,7 +343,12 @@ export const aggregateAcrossNodeIDs = function(
 ): Transaction[] {
   return _.chain(t)
     .map(t => withFingerprint(t, stmts))
-    .groupBy(t => t.fingerprint + t.stats_data.app)
+    .groupBy(
+      t =>
+        t.fingerprint +
+        t.stats_data.app +
+        TimestampToNumber(t.stats_data.aggregated_ts),
+    )
     .mapValues(mergeTransactionStats)
     .values()
     .value();
