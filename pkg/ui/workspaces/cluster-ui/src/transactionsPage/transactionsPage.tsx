@@ -14,10 +14,18 @@ import classNames from "classnames/bind";
 import styles from "../statementsPage/statementsPage.module.scss";
 import moment, { Moment } from "moment";
 import { RouteComponentProps } from "react-router-dom";
-import { TransactionInfo, TransactionsTable } from "../transactionsTable";
+import {
+  makeTransactionsColumns,
+  TransactionInfo,
+  TransactionsTable,
+} from "../transactionsTable";
 import { DateRange } from "src/dateRange";
 import { TransactionDetails } from "../transactionDetails";
-import { ISortedTablePagination, SortSetting } from "../sortedtable";
+import {
+  ColumnDescriptor,
+  ISortedTablePagination,
+  SortSetting,
+} from "../sortedtable";
 import { Pagination } from "../pagination";
 import { TableStatistics } from "../tableStatistics";
 import {
@@ -48,8 +56,14 @@ import {
   defaultFilters,
   getFiltersFromQueryString,
 } from "../queryFilter";
-import { UIConfigState } from "../store/uiConfig";
+import { UIConfigState } from "../store";
 import { StatementsRequest } from "src/api/statementsApi";
+import ColumnsSelector from "../columnsSelector/columnsSelector";
+import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
+import {
+  getLabel,
+  StatisticTableColumnKeys,
+} from "../statsTableUtil/statsTableUtil";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
@@ -72,12 +86,14 @@ export interface TransactionsPageStateProps {
   error?: Error | null;
   pageSize?: number;
   isTenant?: UIConfigState["isTenant"];
+  columns: string[];
 }
 
 export interface TransactionsPageDispatchProps {
   refreshData: (req?: StatementsRequest) => void;
   resetSQLStats: () => void;
   onDateRangeChange?: (start: Moment, end: Moment) => void;
+  onColumnsChange?: (selectedColumns: string[]) => void;
 }
 
 export type TransactionsPageProps = TransactionsPageStateProps &
@@ -123,15 +139,15 @@ export class TransactionsPage extends React.Component<
     transactionStats: null,
   };
 
-  refreshData = () => {
+  refreshData = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
   };
 
-  componentDidMount() {
+  componentDidMount(): void {
     this.refreshData();
   }
-  componentDidUpdate() {
+  componentDidUpdate(): void {
     this.refreshData();
   }
 
@@ -151,7 +167,7 @@ export class TransactionsPage extends React.Component<
     history.replace(history.location);
   };
 
-  onChangeSortSetting = (ss: SortSetting) => {
+  onChangeSortSetting = (ss: SortSetting): void => {
     this.setState({
       sortSetting: ss,
     });
@@ -161,12 +177,12 @@ export class TransactionsPage extends React.Component<
     });
   };
 
-  onChangePage = (current: number) => {
+  onChangePage = (current: number): void => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
   };
 
-  resetPagination = () => {
+  resetPagination = (): void => {
     this.setState((prevState: TState) => {
       return {
         pagination: {
@@ -177,14 +193,14 @@ export class TransactionsPage extends React.Component<
     });
   };
 
-  onClearSearchField = () => {
+  onClearSearchField = (): void => {
     this.setState({ search: "" });
     this.syncHistory({
       q: undefined,
     });
   };
 
-  onSubmitSearchField = (search: string) => {
+  onSubmitSearchField = (search: string): void => {
     this.setState({ search });
     this.resetPagination();
     this.syncHistory({
@@ -192,7 +208,7 @@ export class TransactionsPage extends React.Component<
     });
   };
 
-  onSubmitFilters = (filters: Filters) => {
+  onSubmitFilters = (filters: Filters): void => {
     this.setState({
       filters: {
         ...this.state.filters,
@@ -209,7 +225,7 @@ export class TransactionsPage extends React.Component<
     });
   };
 
-  onClearFilters = () => {
+  onClearFilters = (): void => {
     this.setState({
       filters: {
         ...defaultFilters,
@@ -228,11 +244,11 @@ export class TransactionsPage extends React.Component<
   handleDetails = (
     statementFingerprintIds: Long[] | null,
     transactionStats: TransactionStats,
-  ) => {
+  ): void => {
     this.setState({ statementFingerprintIds, transactionStats });
   };
 
-  lastReset = () => {
+  lastReset = (): Date => {
     return new Date(Number(this.props.data?.last_reset.seconds) * 1000);
   };
 
@@ -258,7 +274,14 @@ export class TransactionsPage extends React.Component<
           loading={!this.props?.data}
           error={this.props?.error}
           render={() => {
-            const { data, resetSQLStats, nodeRegions, isTenant } = this.props;
+            const {
+              data,
+              resetSQLStats,
+              nodeRegions,
+              isTenant,
+              onColumnsChange,
+              columns: userSelectedColumnsToShow,
+            } = this.props;
             const { pagination, search, filters } = this.state;
             const { statements, internal_app_name_prefix } = data;
             const appNames = getTrxAppFilterOptions(
@@ -304,6 +327,50 @@ export class TransactionsPage extends React.Component<
             const { current, pageSize } = pagination;
             const hasData = data.transactions?.length > 0;
             const isUsedFilter = search?.length > 0;
+
+            // Creates a list of all possible columns,
+            // hiding nodeRegions if is not multi-region and
+            // hiding columns that won't be displayed for tenants.
+            const columns = makeTransactionsColumns(
+              transactionsToDisplay,
+              statements,
+              isTenant,
+              this.handleDetails,
+              search,
+            )
+              .filter(c => !(c.name === "regionNodes" && regions.length < 2))
+              .filter(c => !(isTenant && c.hideIfTenant));
+
+            const isColumnSelected = (c: ColumnDescriptor<TransactionInfo>) => {
+              return (
+                ((userSelectedColumnsToShow === null ||
+                  userSelectedColumnsToShow === undefined) &&
+                  c.showByDefault !== false) || // show column if list of visible was never defined and can be show by default.
+                (userSelectedColumnsToShow !== null &&
+                  userSelectedColumnsToShow.includes(c.name)) || // show column if user changed its visibility.
+                c.alwaysShow === true // show column if alwaysShow option is set explicitly.
+              );
+            };
+
+            // Iterate over all available columns and create list of SelectOptions with initial selection
+            // values based on stored user selections in local storage and default column configs.
+            // Columns that are set to alwaysShow are filtered from the list.
+            const tableColumns = columns
+              .filter(c => !c.alwaysShow)
+              .map(
+                (c): SelectOption => ({
+                  label: getLabel(
+                    c.name as StatisticTableColumnKeys,
+                    "transaction",
+                  ),
+                  value: c.name,
+                  isSelected: isColumnSelected(c),
+                }),
+              );
+
+            // List of all columns that will be displayed based on the column selection.
+            const displayColumns = columns.filter(c => isColumnSelected(c));
+
             return (
               <>
                 <PageConfig>
@@ -348,6 +415,10 @@ export class TransactionsPage extends React.Component<
                   )}
                 </PageConfig>
                 <section className={statisticsClasses.tableContainerClass}>
+                  <ColumnsSelector
+                    options={tableColumns}
+                    onSubmitColumns={onColumnsChange}
+                  />
                   <TableStatistics
                     pagination={pagination}
                     lastReset={this.lastReset()}
@@ -360,14 +431,10 @@ export class TransactionsPage extends React.Component<
                     resetSQLStats={resetSQLStats}
                   />
                   <TransactionsTable
+                    columns={displayColumns}
                     transactions={transactionsToDisplay}
-                    statements={statements}
-                    nodeRegions={nodeRegions}
-                    isTenant={isTenant}
                     sortSetting={this.state.sortSetting}
                     onChangeSortSetting={this.onChangeSortSetting}
-                    handleDetails={this.handleDetails}
-                    search={search}
                     pagination={pagination}
                     renderNoResult={
                       <EmptyTransactionsPlaceholder

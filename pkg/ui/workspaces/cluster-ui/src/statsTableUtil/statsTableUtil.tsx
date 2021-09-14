@@ -27,19 +27,21 @@ export type NodeNames = { [nodeId: string]: string };
 
 // Single place for column names. Used in table columns and in columns selector.
 export const statisticsColumnLabels = {
-  statements: "Statements",
-  database: "Database",
-  executionCount: "Execution Count",
-  rowsRead: "Rows Read",
   bytesRead: "Bytes Read",
-  time: "Time",
   contention: "Contention",
+  database: "Database",
+  diagnostics: "Diagnostics",
+  executionCount: "Execution Count",
   maxMemUsage: "Max Memory",
   networkBytes: "Network",
-  retries: "Retries",
-  workloadPct: "% of All Runtime",
   regionNodes: "Regions/Nodes",
-  diagnostics: "Diagnostics",
+  retries: "Retries",
+  rowsRead: "Rows Read",
+  statements: "Statements",
+  statementsCount: "Statements",
+  time: "Time",
+  transactions: "Transactions",
+  workloadPct: "% of All Runtime",
 };
 
 export const contentModifiers = {
@@ -111,6 +113,25 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("statements")}
+      </Tooltip>
+    );
+  },
+  transactions: (statType: StatisticType) => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <>
+            <p>
+              {`A transaction fingerprint represents one or more SQL transactions by replacing the literal values (e.g., numbers and strings) with 
+              underscores (_). To view additional details of a SQL transaction fingerprint, click the fingerprint to 
+              open the Transaction Details page.`}
+            </p>
+          </>
+        }
+      >
+        {getLabel("transactions")}
       </Tooltip>
     );
   },
@@ -561,6 +582,23 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("diagnostics")}
+      </Tooltip>
+    );
+  },
+  statementsCount: (statType: StatisticType) => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <>
+            <p>
+              {`The number of statements being executed on this transaction fingerprint`}
+            </p>
+          </>
+        }
+      >
+        {getLabel("statementsCount")}
       </Tooltip>
     );
   },
