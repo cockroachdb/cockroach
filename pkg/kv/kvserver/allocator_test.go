@@ -1436,7 +1436,7 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 			require.Equal(t, subtest.expectedAddTarget, add.StoreID)
 			require.Equal(t, subtest.expectedRemoveTarget, remove.StoreID)
 			// Verify shouldRebalanceBasedOnThresholds results.
-			if desc, ok := a.storePool.getStoreDescriptor(remove.StoreID); ok {
+			if desc, descOk := a.storePool.getStoreDescriptor(remove.StoreID); descOk {
 				sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 				result := options.shouldRebalanceBasedOnThresholds(ctx, desc, sl)
 				require.True(t, result)

@@ -423,7 +423,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 		// testTxnExecute executes a transaction for testTxn. It is a separate function
 		// so that any transaction errors can be retried as appropriate.
 		testTxnExecute := func(t *testing.T, spec testTxnSpec, txn *kv.Txn, txnKey roachpb.Key) error {
-			ctx, cancel := context.WithCancel(ctx)
+			tCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
 			if spec.finalize == "cancelAsync" && spec.abort != "" {
@@ -445,7 +445,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 				// meanwhile, returning when heartbeat was aborted.
 				abortedC := abortHeartbeat(t, txnKey)
 				readyC := blockPut(t, txnKey)
-				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "unblock", func(ctx context.Context) {
+				require.NoError(t, tc.Stopper().RunAsyncTask(tCtx, "unblock", func(_ context.Context) {
 					<-abortedC
 					unblockC := <-readyC
 					time.Sleep(100 * time.Millisecond)
@@ -456,7 +456,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 			case "push":
 				// Push txn with a high-priority write once put is blocked.
 				readyC := blockPut(t, txnKey)
-				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "push", func(ctx context.Context) {
+				require.NoError(t, tc.Stopper().RunAsyncTask(tCtx, "push", func(ctx context.Context) {
 					unblockC := <-readyC
 					defer close(unblockC)
 					defer close(abortErrC)
@@ -492,7 +492,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 			// evaluated in Raft.
 			if spec.finalize == "cancelAsync" {
 				readyC := blockPutEval(t, txnKey)
-				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "cancel", func(ctx context.Context) {
+				require.NoError(t, tc.Stopper().RunAsyncTask(tCtx, "cancel", func(_ context.Context) {
 					unblockC := <-readyC
 					defer close(unblockC)
 					cancel()
@@ -511,8 +511,8 @@ func TestReliableIntentCleanup(t *testing.T) {
 					}
 					batch.Put(key, []byte("value"))
 				}
-				err := txn.Run(ctx, batch)
-				if ctx.Err() != nil {
+				err := txn.Run(tCtx, batch)
+				if tCtx.Err() != nil {
 					// If context was canceled (see cancelAsync), we just bail
 					// out and ignore the error (as the client would).
 					break
@@ -529,13 +529,13 @@ func TestReliableIntentCleanup(t *testing.T) {
 			// Finalize the txn according to the spec.
 			switch spec.finalize {
 			case "commit":
-				return txn.Commit(ctx)
+				return txn.Commit(tCtx)
 			case "rollback":
-				return txn.Rollback(ctx)
+				return txn.Rollback(tCtx)
 			case "cancel", "cancelAsync":
 				// Rollback with canceled context, as the SQL connection would.
 				cancel()
-				if err := txn.Rollback(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				if err := txn.Rollback(tCtx); err != nil && !errors.Is(err, context.Canceled) {
 					return err
 				}
 			default:

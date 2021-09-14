@@ -348,10 +348,10 @@ INSERT INTO t.t VALUES (1);
 	// The log messages we are looking for are structured like
 	// [....,txn=<txnID>], so search for those and extract the id.
 	row := sqlDB.QueryRow(`
-SELECT 
-	string_to_array(regexp_extract(tag, 'txn=[a-zA-Z0-9]*'), '=')[2] 
-FROM 
-	[SHOW KV TRACE FOR SESSION] 
+SELECT
+	string_to_array(regexp_extract(tag, 'txn=[a-zA-Z0-9]*'), '=')[2]
+FROM
+	[SHOW KV TRACE FOR SESSION]
 WHERE
   tag LIKE '%txn=%' LIMIT 1`)
 	var txnID string
@@ -536,12 +536,11 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      params,
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer tc.Stopper().Stop(context.Background())
 
 	// Create a table with 3 rows, split them into 3 ranges with each node
 	// having one.
@@ -604,7 +603,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 			// maxRunningFlows is 0, the query eventually will error out because
 			// the remote flows don't connect in time; if maxRunningFlows is 1,
 			// the query will succeed once we close 'unblock' channel.
-			ctx, cancel := context.WithCancel(ctx)
+			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			g := ctxgroup.WithContext(ctx)
 			g.GoCtx(func(ctx context.Context) error {
