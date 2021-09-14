@@ -900,7 +900,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					return tree.DNull, nil
 				}
 				maybeTypmod := args[1]
-				oid := oid.Oid(int(oidArg.(*tree.DOid).DInt))
+				oid := oid.Oid(oidArg.(*tree.DOid).DInt)
 				typ, ok := types.OidToType[oid]
 				if !ok {
 					// If the type wasn't statically known, try looking it up as a user
@@ -1913,6 +1913,71 @@ SELECT description
 			Info:       "Return size in bytes of the column provided as an argument",
 			Volatility: tree.VolatilityImmutable,
 		}),
+
+	// NOTE: these two builtins could be defined as user-defined functions, like
+	// they are in Postgres:
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	//
+	//  CREATE FUNCTION _pg_truetypid(pg_attribute, pg_type) RETURNS oid
+	//    LANGUAGE sql
+	//    IMMUTABLE
+	//    PARALLEL SAFE
+	//    RETURNS NULL ON NULL INPUT
+	//  RETURN CASE WHEN $2.typtype = 'd' THEN $2.typbasetype ELSE $1.atttypid END;
+	//
+	"information_schema._pg_truetypid": pgTrueTypImpl("atttypid", "typbasetype", types.Oid),
+	//
+	//  CREATE FUNCTION _pg_truetypmod(pg_attribute, pg_type) RETURNS int4
+	//    LANGUAGE sql
+	//    IMMUTABLE
+	//    PARALLEL SAFE
+	//    RETURNS NULL ON NULL INPUT
+	//  RETURN CASE WHEN $2.typtype = 'd' THEN $2.typtypmod ELSE $1.atttypmod END;
+	//
+	"information_schema._pg_truetypmod": pgTrueTypImpl("atttypmod", "typtypmod", types.Int4),
+
+	// NOTE: this could be defined as a user-defined function, like
+	// it is in Postgres:
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	//
+	//  CREATE FUNCTION _pg_char_max_length(typid oid, typmod int4) RETURNS integer
+	//      LANGUAGE sql
+	//      IMMUTABLE
+	//      PARALLEL SAFE
+	//      RETURNS NULL ON NULL INPUT
+	//  RETURN
+	//    CASE WHEN $2 = -1 /* default typmod */
+	//         THEN null
+	//         WHEN $1 IN (1042, 1043) /* char, varchar */
+	//         THEN $2 - 4
+	//         WHEN $1 IN (1560, 1562) /* bit, varbit */
+	//         THEN $2
+	//         ELSE null
+	//    END;
+	//
+	"information_schema._pg_char_max_length": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"typid", types.Oid},
+				{"typmod", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typid := oid.Oid(args[0].(*tree.DOid).DInt)
+				typmod := *args[1].(*tree.DInt)
+				if typmod == -1 {
+					return tree.DNull, nil
+				} else if typid == oid.T_bpchar || typid == oid.T_varchar {
+					return tree.NewDInt(typmod - 4), nil
+				} else if typid == oid.T_bit || typid == oid.T_varbit {
+					return tree.NewDInt(typmod), nil
+				}
+				return tree.DNull, nil
+			},
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 }
 
 func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (tree.Datum, error) {
@@ -2030,4 +2095,53 @@ func tableHasPrivilegeSpecifier(tableArg tree.Datum) (tree.HasPrivilegeSpecifier
 		return specifier, errors.AssertionFailedf("unknown privilege specifier: %#v", tableArg)
 	}
 	return specifier, nil
+}
+
+func pgTrueTypImpl(attrField, typField string, retType *types.T) builtinDefinition {
+	return makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"pg_attribute", types.AnyTuple},
+				{"pg_type", types.AnyTuple},
+			},
+			ReturnType: tree.FixedReturnType(retType),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// In Postgres, this builtin is statically typed to accept a
+				// pg_attribute record and a pg_type record. This isn't currently
+				// possible in CockroachDB, so instead, we accept any tuple and then
+				// perform a bit of dynamic typing to pull out the desired fields from
+				// the records.
+				fieldIdx := func(t *tree.DTuple, field string) int {
+					for i, label := range t.ResolvedType().TupleLabels() {
+						if label == field {
+							return i
+						}
+					}
+					return -1
+				}
+
+				pgAttr, pgType := args[0].(*tree.DTuple), args[1].(*tree.DTuple)
+				pgAttrFieldIdx := fieldIdx(pgAttr, attrField)
+				pgTypeTypeIdx := fieldIdx(pgType, "typtype")
+				pgTypeFieldIdx := fieldIdx(pgType, typField)
+				if pgAttrFieldIdx == -1 || pgTypeTypeIdx == -1 || pgTypeFieldIdx == -1 {
+					return nil, pgerror.Newf(pgcode.UndefinedFunction,
+						"No function matches the given name and argument types.")
+				}
+
+				pgAttrField := pgAttr.D[pgAttrFieldIdx]
+				pgTypeType := pgType.D[pgTypeTypeIdx].(*tree.DString)
+				pgTypeField := pgType.D[pgTypeFieldIdx]
+
+				// If this is a domain type, return the field from pg_type, otherwise,
+				// return the field from pg_attribute.
+				if *pgTypeType == "d" {
+					return pgTypeField, nil
+				}
+				return pgAttrField, nil
+			},
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityImmutable,
+		},
+	)
 }
