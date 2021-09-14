@@ -244,13 +244,14 @@ func (p *planner) dropTypeImpl(
 		return errors.Errorf("type %q is already being dropped", typeDesc.Name)
 	}
 
+	if err := p.deleteNameKey(ctx, typeDesc); err != nil {
+		return err
+	}
+
 	// Actually mark the type as dropped.
 	typeDesc.State = descpb.DescriptorState_DROP
 	if queueJob {
 		return p.writeTypeSchemaChange(ctx, typeDesc, jobDesc)
-	}
-	if err := p.deleteNameKey(ctx, typeDesc); err != nil {
-		return err
 	}
 	return p.writeTypeDesc(ctx, typeDesc)
 }
