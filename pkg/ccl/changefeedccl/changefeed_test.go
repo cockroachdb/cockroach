@@ -4283,7 +4283,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		// Wait for the high water mark to be non-zero.
 		testutils.SucceedsSoon(t, func() error {
-			progress := loadProgress()
+			progress = loadProgress()
 			if p := progress.GetHighWater(); p != nil && !p.IsEmpty() {
 				return nil
 			}

@@ -203,7 +203,7 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 			var err error
 			testutils.SucceedsSoon(t, func() error {
 				// Reload schedule from DB.
-				sj := getSQLStatsCompactionSchedule(t, helper)
+				sj = getSQLStatsCompactionSchedule(t, helper)
 				err = persistedsqlstats.CheckScheduleAnomaly(sj)
 				if err == nil {
 					return errors.Newf("retry: next_run=%s, schedule_expr=%s", sj.NextRun(), sj.ScheduleExpr())

@@ -227,7 +227,6 @@ func TestCache(t *testing.T) {
 	byteSize.SetOnChange(sv, func(context.Context) { changes.byteSize++ })
 
 	t.Run("VersionSetting", func(t *testing.T) {
-		ctx := context.Background()
 		u := settings.NewUpdater(sv)
 		mB := settings.TestingRegisterVersionSetting("local.m", "foo", &dummyVersionSettingImpl{})
 		// Version settings don't have defaults, so we need to start by setting

@@ -107,13 +107,13 @@ func TestFileRegistryOps(t *testing.T) {
 			require.NoError(t, f.Close())
 		}
 
-		registry := &PebbleFileRegistry{FS: mem, DBDir: "/mydb"}
-		require.NoError(t, registry.Load())
-		registry.mu.Lock()
-		defer registry.mu.Unlock()
-		if diff := pretty.Diff(registry.mu.currProto.Files, expected); diff != nil {
+		reg := &PebbleFileRegistry{FS: mem, DBDir: "/mydb"}
+		require.NoError(t, reg.Load())
+		reg.mu.Lock()
+		defer reg.mu.Unlock()
+		if diff := pretty.Diff(reg.mu.currProto.Files, expected); diff != nil {
 			t.Log(string(debug.Stack()))
-			t.Fatalf("%s\n%v", strings.Join(diff, "\n"), registry.mu.currProto.Files)
+			t.Fatalf("%s\n%v", strings.Join(diff, "\n"), reg.mu.currProto.Files)
 		}
 	}
 
