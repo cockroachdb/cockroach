@@ -1784,7 +1784,7 @@ CREATE INDEX idx ON p (i) WHERE s = 'foo'
 memo expect-not=GenerateConstrainedScans
 SELECT i FROM p WHERE s = 'bar' AND i = 5
 ----
-memo (optimized, ~7KB, required=[presentation: i:2])
+memo (optimized, ~8KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
@@ -6067,6 +6067,122 @@ select
  └── filters
       └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
 
+# Zigzag join hinting tests
+exec-ddl
+CREATE TABLE zigzag
+(
+    n INT PRIMARY KEY,
+    a INT,
+    b INT,
+    c STRING,
+    INDEX a_idx(a),
+    INDEX b_idx(b),
+    UNIQUE INDEX c_idx(b,c),
+    INDEX bc_idx(b,c)
+)
+----
+
+# Verify naked hint.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with one index.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with other index.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with both indexes hinted.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify force selection when there's multiple valid choices.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=bc_idx} WHERE a = 3 AND b = 7;
+----
+select
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── scan zigzag
+ │    ├── columns: n:1!null a:2 b:3 c:4
+ │    ├── flags: force-zigzag=a_idx,bc_idx
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── filters
+      ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+      └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+
 # --------------------------------------------------
 # GenerateInvertedIndexZigzagJoins
 # --------------------------------------------------
@@ -6383,6 +6499,56 @@ project
       │              └── b
       └── filters
            └── j @> '{"a": 1, "b": 2}'
+
+# Generate a zigzag join with a hint.
+opt expect=GenerateInvertedIndexZigzagJoins
+SELECT k FROM inv_zz_partial@{FORCE_ZIGZAG} WHERE j @> '{"a": 1, "b": 2}' AND b AND s = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup inv_zz_partial)
+      ├── columns: k:1!null j:2!null b:3!null s:4!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3,4), (1)-->(2)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [7] = ['\x376100012a0200']
+      │    ├── right fixed columns: [7] = ['\x376200012a0400']
+      │    └── filters (true)
+      └── filters
+           ├── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Generate an inverted zigzag join with a hint.
+opt expect=GenerateInvertedIndexZigzagJoins
+SELECT k FROM inv_zz_partial@{FORCE_ZIGZAG=zz_idx} WHERE j @> '{"a": 1, "b": 2}' AND b AND s = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup inv_zz_partial)
+      ├── columns: k:1!null j:2!null b:3!null s:4!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3,4), (1)-->(2)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [7] = ['\x376100012a0200']
+      │    ├── right fixed columns: [7] = ['\x376200012a0400']
+      │    └── filters (true)
+      └── filters
+           ├── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 exec-ddl
 DROP INDEX zz_idx
@@ -7738,7 +7904,7 @@ JOIN t61795 AS t2 ON t1.c = t1.b AND t1.b = t2.b
 WHERE t1.a = 10 OR t2.b != abs(t2.b)
 ORDER BY t1.b ASC
 ----
-memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
+memo (optimized, ~29KB, required=[presentation: a:1] [ordering: +2])
  ├── G1: (project G2 G3 a b)
  │    ├── [presentation: a:1] [ordering: +2]
  │    │    ├── best: (sort G1)
@@ -8057,46 +8223,44 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(7)
- ├── project
- │    ├── columns: u:2 v:3
- │    └── distinct-on
- │         ├── columns: k:1!null u:2 v:3
- │         ├── grouping columns: k:1!null
- │         ├── internal-ordering: +1
- │         ├── key: (1)
- │         ├── fd: (1)-->(2,3)
- │         ├── union-all
- │         │    ├── columns: k:1!null u:2 v:3
- │         │    ├── left columns: k:8 u:9 v:10
- │         │    ├── right columns: k:14 u:15 v:16
- │         │    ├── ordering: +1
- │         │    ├── index-join d
- │         │    │    ├── columns: k:8!null u:9!null v:10
- │         │    │    ├── key: (8)
- │         │    │    ├── fd: ()-->(9), (8)-->(10)
- │         │    │    ├── ordering: +8 opt(9) [actual: +8]
- │         │    │    └── scan d@u
- │         │    │         ├── columns: k:8!null u:9!null
- │         │    │         ├── constraint: /9/8: [/1 - /1]
- │         │    │         ├── key: (8)
- │         │    │         ├── fd: ()-->(9)
- │         │    │         └── ordering: +8 opt(9) [actual: +8]
- │         │    └── index-join d
- │         │         ├── columns: k:14!null u:15 v:16!null
- │         │         ├── key: (14)
- │         │         ├── fd: ()-->(16), (14)-->(15)
- │         │         ├── ordering: +14 opt(16) [actual: +14]
- │         │         └── scan d@v
- │         │              ├── columns: k:14!null v:16!null
- │         │              ├── constraint: /16/14: [/1 - /1]
- │         │              ├── key: (14)
- │         │              ├── fd: ()-->(16)
- │         │              └── ordering: +14 opt(16) [actual: +14]
- │         └── aggregations
- │              ├── const-agg [as=u:2, outer=(2)]
- │              │    └── u:2
- │              └── const-agg [as=v:3, outer=(3)]
- │                   └── v:3
+ ├── distinct-on
+ │    ├── columns: k:1!null u:2 v:3
+ │    ├── grouping columns: k:1!null
+ │    ├── internal-ordering: +1
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── union-all
+ │    │    ├── columns: k:1!null u:2 v:3
+ │    │    ├── left columns: k:8 u:9 v:10
+ │    │    ├── right columns: k:14 u:15 v:16
+ │    │    ├── ordering: +1
+ │    │    ├── index-join d
+ │    │    │    ├── columns: k:8!null u:9!null v:10
+ │    │    │    ├── key: (8)
+ │    │    │    ├── fd: ()-->(9), (8)-->(10)
+ │    │    │    ├── ordering: +8 opt(9) [actual: +8]
+ │    │    │    └── scan d@u
+ │    │    │         ├── columns: k:8!null u:9!null
+ │    │    │         ├── constraint: /9/8: [/1 - /1]
+ │    │    │         ├── key: (8)
+ │    │    │         ├── fd: ()-->(9)
+ │    │    │         └── ordering: +8 opt(9) [actual: +8]
+ │    │    └── index-join d
+ │    │         ├── columns: k:14!null u:15 v:16!null
+ │    │         ├── key: (14)
+ │    │         ├── fd: ()-->(16), (14)-->(15)
+ │    │         ├── ordering: +14 opt(16) [actual: +14]
+ │    │         └── scan d@v
+ │    │              ├── columns: k:14!null v:16!null
+ │    │              ├── constraint: /16/14: [/1 - /1]
+ │    │              ├── key: (14)
+ │    │              ├── fd: ()-->(16)
+ │    │              └── ordering: +14 opt(16) [actual: +14]
+ │    └── aggregations
+ │         ├── const-agg [as=u:2, outer=(2)]
+ │         │    └── u:2
+ │         └── const-agg [as=v:3, outer=(3)]
+ │              └── v:3
  └── aggregations
       └── count-rows [as=count_rows:7]
 

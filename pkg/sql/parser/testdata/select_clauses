@@ -400,6 +400,131 @@ DETAIL: source SQL:
 SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
                                        ^
 
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG}
+----
+SELECT 'a' FROM t@{FORCE_ZIGZAG}
+SELECT ('a') FROM t@{FORCE_ZIGZAG} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_ZIGZAG} -- literals removed
+SELECT 'a' FROM _@{FORCE_ZIGZAG} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=idx}
+----
+SELECT 'a' FROM t@{FORCE_ZIGZAG=idx}
+SELECT ('a') FROM t@{FORCE_ZIGZAG=idx} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_ZIGZAG=idx} -- literals removed
+SELECT 'a' FROM _@{FORCE_ZIGZAG=_} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=idxa,FORCE_ZIGZAG=idxb}
+----
+SELECT 'a' FROM t@{FORCE_ZIGZAG=idxa,FORCE_ZIGZAG=idxb}
+SELECT ('a') FROM t@{FORCE_ZIGZAG=idxa,FORCE_ZIGZAG=idxb} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_ZIGZAG=idxa,FORCE_ZIGZAG=idxb} -- literals removed
+SELECT 'a' FROM _@{FORCE_ZIGZAG=_,FORCE_ZIGZAG=_} -- identifiers removed
+
+error
+SELECT 'a' FROM t@{FORCE_ZIGZAG=1}
+----
+at or near "1": syntax error
+DETAIL: source SQL:
+SELECT 'a' FROM t@{FORCE_ZIGZAG=1}
+                                ^
+HINT: try \h <SOURCE>
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[1]}
+----
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[1]}
+SELECT ('a') FROM t@{FORCE_ZIGZAG=[1]} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_ZIGZAG=[1]} -- literals removed
+SELECT 'a' FROM _@{FORCE_ZIGZAG=[1]} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[2]}
+----
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[2]}
+SELECT ('a') FROM t@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[2]} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[2]} -- literals removed
+SELECT 'a' FROM _@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[2]} -- identifiers removed
+
+error
+SELECT a FROM foo@{FORCE_ZIGZAG,NO_INDEX_JOIN}
+----
+at or near "}": syntax error: FORCE_ZIGZAG cannot be specified in conjunction with NO_INDEX_JOIN
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_ZIGZAG,NO_INDEX_JOIN}
+                                             ^
+
+error
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_INDEX=a}
+----
+at or near "}": syntax error: FORCE_ZIGZAG cannot be specified in conjunction with FORCE_INDEX
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_INDEX=a}
+                                             ^
+
+error
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_ZIGZAG}
+----
+at or near "}": syntax error: FORCE_ZIGZAG specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_ZIGZAG}
+                                            ^
+
+error
+SELECT 'a' FROM t@{FORCE_ZIGZAG="",IGNORE_FOREIGN_KEYS}
+----
+at or near "}": syntax error: FORCE_ZIGZAG index name cannot be empty string
+DETAIL: source SQL:
+SELECT 'a' FROM t@{FORCE_ZIGZAG="",IGNORE_FOREIGN_KEYS}
+                                                      ^
+
+error
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[],IGNORE_FOREIGN_KEYS}
+----
+at or near "]": syntax error
+DETAIL: source SQL:
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[],IGNORE_FOREIGN_KEYS}
+                                 ^
+HINT: try \h <SOURCE>
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=a,IGNORE_FOREIGN_KEYS}
+----
+SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a} -- normalized!
+SELECT ('a') FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a} -- fully parenthesized
+SELECT '_' FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a} -- literals removed
+SELECT 'a' FROM _@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=_} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=a,FORCE_ZIGZAG=b,IGNORE_FOREIGN_KEYS}
+----
+SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a,FORCE_ZIGZAG=b} -- normalized!
+SELECT ('a') FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a,FORCE_ZIGZAG=b} -- fully parenthesized
+SELECT '_' FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a,FORCE_ZIGZAG=b} -- literals removed
+SELECT 'a' FROM _@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=_,FORCE_ZIGZAG=_} -- identifiers removed
+
+error
+SELECT * FROM a@{FORCE_ZIGZAG=} WHERE a = 3 AND b = 7
+----
+at or near "}": syntax error
+DETAIL: source SQL:
+SELECT * FROM a@{FORCE_ZIGZAG=} WHERE a = 3 AND b = 7
+                              ^
+HINT: try \h <SOURCE>
+
+error
+SELECT * FROM a@{FORCE_ZIGZAG=foo,bar} WHERE a = 3 AND b = 7
+----
+at or near "bar": syntax error
+DETAIL: source SQL:
+SELECT * FROM a@{FORCE_ZIGZAG=foo,bar} WHERE a = 3 AND b = 7
+                                  ^
+HINT: try \h <SOURCE>
+
+
 error
 SELECT a FROM foo@{ASC}
 ----

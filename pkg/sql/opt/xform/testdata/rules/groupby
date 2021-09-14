@@ -1120,7 +1120,7 @@ group-by
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w) GROUP BY u,v
 ----
-memo (optimized, ~7KB, required=[presentation: array_agg:7])
+memo (optimized, ~8KB, required=[presentation: array_agg:7])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:7]
  │         ├── best: (project G2 G3 array_agg)
@@ -1385,7 +1385,7 @@ memo (optimized, ~12KB, required=[presentation: sum:7])
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w DESC) GROUP BY u,v
 ----
-memo (optimized, ~6KB, required=[presentation: array_agg:7])
+memo (optimized, ~7KB, required=[presentation: array_agg:7])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:7]
  │         ├── best: (project G2 G3 array_agg)
@@ -2551,6 +2551,22 @@ group-by
  │    └── ordering: +3
  └── aggregations
       └── count-rows [as=count_rows:8]
+
+# Rule applies for scalar group-by.
+opt expect=EliminateIndexJoinOrProjectInsideGroupBy
+SELECT count(1) FROM abcd@partial_ab WHERE c > 0
+----
+scalar-group-by
+ ├── columns: count:9!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(9)
+ ├── scan abcd@partial_ab,partial
+ │    ├── columns: rowid:5!null
+ │    ├── flags: force-index=partial_ab
+ │    └── key: (5)
+ └── aggregations
+      └── count-rows [as=count:9]
 
 # Rule applies for distinct-on.
 opt expect=EliminateIndexJoinOrProjectInsideGroupBy

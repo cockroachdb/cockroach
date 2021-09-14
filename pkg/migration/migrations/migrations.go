@@ -40,16 +40,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewSystemMigration(
-		"use unreplicated TruncatedState and RangeAppliedState for all ranges",
-		toCV(clusterversion.TruncatedAndRangeAppliedStateMigration),
-		truncatedStateMigration,
-	),
-	migration.NewSystemMigration(
-		"purge all replicas using the replicated TruncatedState",
-		toCV(clusterversion.PostTruncatedAndRangeAppliedStateMigration),
-		postTruncatedStateMigration,
-	),
-	migration.NewSystemMigration(
 		"stop using monolithic encryption-at-rest registry for all stores",
 		toCV(clusterversion.RecordsBasedRegistry),
 		recordsBasedRegistryMigration,

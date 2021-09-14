@@ -59,15 +59,6 @@ message ReplicaState {
   // not be served.
   util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold"];
   storage.enginepb.MVCCStats stats = 7;
-  // using_applied_state_key specifies whether the Range has been upgraded
-  // to begin using the RangeAppliedState key. This key holds a combination
-  // of the Raft applied index, the lease applied index, and the MVCC stats.
-  //
-  // When set to true in a ReplicatedEvalResult, the flag indicates that the
-  // range should begin using the RangeAppliedState key. Handling of this flag
-  // is idempotent by Replica state machines, meaning that it is ok for multiple
-  // Raft commands to set it to true.
-  bool using_applied_state_key = 11;
   // Version tells us which migrations can be assumed to have run against this
   // particular replica. When we introduce backwards incompatible changes to the
   // replica state (for example using the unreplicated truncated state instead
@@ -108,7 +99,7 @@ message ReplicaState {
   // "follower reads" at or below this timestamp.
   util.hlc.Timestamp raft_closed_timestamp = 13 [(gogoproto.nullable) = false];
 
-  reserved 8, 9, 10;
+  reserved 8, 9, 10, 11;
 }
 
 // RangeInfo is used for reporting status information about a range out through

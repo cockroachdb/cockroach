@@ -270,6 +270,8 @@ type IndexID uint32
 //  - NO_INDEX_JOIN
 //  - NO_ZIGZAG_JOIN
 //  - IGNORE_FOREIGN_KEYS
+//  - FORCE_ZIGZAG
+//  - FORCE_ZIGZAG=<index_name|index_id>*
 // It is used optionally after a table name in SELECT statements.
 type IndexFlags struct {
 	Index   UnrestrictedName
@@ -288,6 +290,14 @@ type IndexFlags struct {
 	// IgnoreUniqueWithoutIndexKeys disables optimizations based on unique without
 	// index constraints.
 	IgnoreUniqueWithoutIndexKeys bool
+	// Zigzag hinting fields are distinct:
+	// ForceZigzag means we saw a TABLE@{FORCE_ZIGZAG}
+	// ZigzagIndexes means we saw TABLE@{FORCE_ZIGZAG=name}
+	// ZigzagIndexIDs means we saw TABLE@{FORCE_ZIGZAG=[ID]}
+	// The only allowable combinations are when a valid id and name are combined.
+	ForceZigzag    bool
+	ZigzagIndexes  []UnrestrictedName
+	ZigzagIndexIDs []IndexID
 }
 
 // ForceIndex returns true if a forced index was specified, either using a name
@@ -333,6 +343,29 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 		result.IndexID = other.IndexID
 	}
 
+	if other.ForceZigzag {
+		if ih.ForceZigzag {
+			return errors.New("FORCE_ZIGZAG specified multiple times")
+		}
+		result.ForceZigzag = true
+	}
+
+	// We can have N zigzag indexes (in theory, we only support 2 now).
+	if len(other.ZigzagIndexes) > 0 {
+		if result.ForceZigzag {
+			return errors.New("FORCE_ZIGZAG hints not distinct")
+		}
+		result.ZigzagIndexes = append(result.ZigzagIndexes, other.ZigzagIndexes...)
+	}
+
+	// We can have N zigzag indexes (in theory, we only support 2 now).
+	if len(other.ZigzagIndexIDs) > 0 {
+		if result.ForceZigzag {
+			return errors.New("FORCE_ZIGZAG hints not distinct")
+		}
+		result.ZigzagIndexIDs = append(result.ZigzagIndexIDs, other.ZigzagIndexIDs...)
+	}
+
 	// We only set at the end to avoid a partially changed structure in one of the
 	// error cases above.
 	*ih = result
@@ -349,6 +382,21 @@ func (ih *IndexFlags) Check() error {
 	if ih.Direction != 0 && !ih.ForceIndex() {
 		return errors.New("ASC/DESC must be specified in conjunction with an index")
 	}
+	if ih.zigzagForced() && ih.NoIndexJoin {
+		return errors.New("FORCE_ZIGZAG cannot be specified in conjunction with NO_INDEX_JOIN")
+	}
+	if ih.zigzagForced() && ih.ForceIndex() {
+		return errors.New("FORCE_ZIGZAG cannot be specified in conjunction with FORCE_INDEX")
+	}
+	if ih.zigzagForced() && ih.NoZigzagJoin {
+		return errors.New("FORCE_ZIGZAG cannot be specified in conjunction with NO_ZIGZAG_JOIN")
+	}
+	for _, name := range ih.ZigzagIndexes {
+		if len(string(name)) == 0 {
+			return errors.New("FORCE_ZIGZAG index name cannot be empty string")
+		}
+	}
+
 	return nil
 }
 
@@ -356,7 +404,7 @@ func (ih *IndexFlags) Check() error {
 func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	ctx.WriteByte('@')
 	if !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.IgnoreForeignKeys &&
-		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 {
+		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.zigzagForced() {
 		if ih.Index != "" {
 			ctx.FormatNode(&ih.Index)
 		} else {
@@ -400,8 +448,37 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 			sep()
 			ctx.WriteString("IGNORE_UNIQUE_WITHOUT_INDEX_KEYS")
 		}
+
+		if ih.ForceZigzag || len(ih.ZigzagIndexes) > 0 || len(ih.ZigzagIndexIDs) > 0 {
+			sep()
+			if ih.ForceZigzag {
+				ctx.WriteString("FORCE_ZIGZAG")
+			} else {
+				needSep := false
+				for _, name := range ih.ZigzagIndexes {
+					if needSep {
+						sep()
+					}
+					ctx.WriteString("FORCE_ZIGZAG=")
+					ctx.FormatNode(&name)
+					needSep = true
+				}
+				for _, id := range ih.ZigzagIndexIDs {
+					if needSep {
+						sep()
+					}
+					ctx.WriteString("FORCE_ZIGZAG=")
+					ctx.Printf("[%d]", id)
+					needSep = true
+				}
+			}
+		}
 		ctx.WriteString("}")
 	}
+}
+
+func (ih *IndexFlags) zigzagForced() bool {
+	return ih.ForceZigzag || len(ih.ZigzagIndexes) > 0 || len(ih.ZigzagIndexIDs) > 0
 }
 
 // AliasedTableExpr represents a table expression coupled with an optional
