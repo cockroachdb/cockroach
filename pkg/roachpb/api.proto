@@ -2515,8 +2515,12 @@ message TokenBucketResponse {
   // TrickleDuration is at most the given TargetRequestPeriod.
   google.protobuf.Duration trickle_duration = 3 [(gogoproto.nullable) = false,
                                                  (gogoproto.stdduration) = true];
-}
 
+  // FallbackRate indicates a rate (in RU/s) that the instance will use once it
+  // runs out of tokens and a problem prevents TokenBucket requests from
+  // completing.
+  double fallback_rate = 4;
+}
 
 // JoinNodeRequest is used to specify to the server node what the client's
 // binary version is. If it's not compatible with the rest of the cluster, the
