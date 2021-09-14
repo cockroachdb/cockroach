@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
 
@@ -161,10 +162,7 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 
 	// Obtain the standard test configuration, with the configured
 	// destination directory.
-	cfg, err := getTestConfig(fileDir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cfg := getTestConfig(fileDir)
 
 	// Reset the server identifiers, so that new servers
 	// can report their IDs through logging.
@@ -172,6 +170,7 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 
 	// Switch to the new configuration.
 	TestingResetActive()
+	var err error
 	sc.cleanupFn, err = ApplyConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -185,7 +184,11 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 
 // getTestConfig initialize the logging configuration to parameters
 // suitable for use in tests.
-func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
+//
+// fileDir is nil when the function is called without an output
+// directory, e.g.  to construct the default log config upon init() or
+// when a test uses -show-logs.
+func getTestConfig(fileDir *string) (testConfig logconfig.Config) {
 	testConfig = logconfig.DefaultConfig()
 
 	forcePanicsToStderr := func(c *logconfig.Config) {
@@ -202,7 +205,7 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 		// Use their choice.
 		h := logconfig.Holder{Config: testConfig}
 		if err := h.Set(logging.testLogConfig); err != nil {
-			return testConfig, err
+			panic(errors.Wrap(err, "error in test log config spec"))
 		}
 
 		forcePanicsToStderr(&h.Config)
@@ -210,8 +213,11 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 		// Validate the configuration. This also ensures that if the
 		// user's choice does not set a target directory, we use the
 		// test-specific target directory instead.
-		err = h.Config.Validate(fileDir)
-		return h.Config, err
+		if err := h.Config.Validate(fileDir); err != nil {
+			panic(errors.Wrap(err, "error in test log config spec"))
+		}
+
+		return h.Config
 	}
 
 	if fileDir == nil {
@@ -267,8 +273,10 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 
 	forcePanicsToStderr(&testConfig)
 
-	err = testConfig.Validate(fileDir)
-	return testConfig, err
+	if err := testConfig.Validate(fileDir); err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error in predefined test log config"))
+	}
+	return testConfig
 }
 
 // SetupSingleFileLogging modifies the configuration of the Scope

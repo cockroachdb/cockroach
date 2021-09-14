@@ -23,8 +23,7 @@ import (
 func TestDefaultTestLogConfig(t *testing.T) {
 	t.Run("no-dir", func(t *testing.T) {
 		// No directory.
-		testConfig, err := getTestConfig(nil)
-		require.NoError(t, err)
+		testConfig := getTestConfig(nil)
 
 		// Capturing fd2 writes is disabled.
 		require.False(t, testConfig.CaptureFd2.Enable)
@@ -41,8 +40,7 @@ func TestDefaultTestLogConfig(t *testing.T) {
 	})
 	t.Run("with-dir", func(t *testing.T) {
 		fakeDir := "/foo"
-		testConfig, err := getTestConfig(&fakeDir)
-		require.NoError(t, err)
+		testConfig := getTestConfig(&fakeDir)
 
 		// Capturing fd2 writes is disabled in any case, because we want
 		// panic in tests to show up on the test's stderr.
@@ -104,8 +102,7 @@ sinks:
 	t.Run("no-dir", func(t *testing.T) {
 		defer func(prev string) { logging.testLogConfig = prev }(logging.testLogConfig)
 		logging.testLogConfig = fakeConf
-		testConfig, err := getTestConfig(nil)
-		require.NoError(t, err)
+		testConfig := getTestConfig(nil)
 
 		// Capturing fd2 writes is disabled by default.
 		// This is different from the default config for servers, where
@@ -132,8 +129,7 @@ sinks:
 		defer func(prev string) { logging.testLogConfig = prev }(logging.testLogConfig)
 		logging.testLogConfig = fakeConf
 		fakeDir := "/foo"
-		testConfig, err := getTestConfig(&fakeDir)
-		require.NoError(t, err)
+		testConfig := getTestConfig(&fakeDir)
 
 		// Capturing fd2 writes is disabled by default.
 		// This is different from the default config for servers, where
