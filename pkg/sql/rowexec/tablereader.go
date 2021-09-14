@@ -299,9 +299,6 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 
 func (tr *tableReader) close() {
 	if tr.InternalClose() {
-		// scanStats is collected from the trace after we finish doing work for this
-		// join.
-		tr.scanStats = execinfra.GetScanStats(tr.Ctx)
 		if tr.fetcher != nil {
 			tr.fetcher.Close(tr.Ctx)
 		}
@@ -319,6 +316,7 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
+	tr.scanStats = execinfra.GetScanStats(tr.Ctx)
 	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(tr.fetcher.GetBytesRead())),

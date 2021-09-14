@@ -883,11 +883,6 @@ func (jr *joinReader) ConsumerClosed() {
 }
 
 func (jr *joinReader) close() {
-	// Make sure to clone any tracing span so that stats can pick it up later.
-	// Stats are only collected after we finish closing the processor.
-	if !jr.Closed {
-		jr.scanStats = execinfra.GetScanStats(jr.Ctx)
-	}
 	if jr.InternalClose() {
 		if jr.fetcher != nil {
 			jr.fetcher.Close(jr.Ctx)
@@ -918,6 +913,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 
 	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
+	jr.scanStats = execinfra.GetScanStats(jr.Ctx)
 	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
