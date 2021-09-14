@@ -41,6 +41,9 @@ type TestLogScope struct {
 		testingFd2CaptureLogger *loggerT
 		exitOverrideFn          func(exit.Code, error)
 		exitOverrideHideStack   bool
+
+		allSinkInfos []*sinkInfo
+		allLoggers   []*loggerT
 	}
 }
 
@@ -102,6 +105,13 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 	// We'll use this as a double-check that our save and restore
 	// logic work properly.
 	sc.previous.appliedConfig = DescribeAppliedConfig()
+
+	logging.allSinkInfos.mu.Lock()
+	sc.previous.allSinkInfos = logging.allSinkInfos.mu.sinkInfos
+	logging.allSinkInfos.mu.Unlock()
+	logging.allLoggers.mu.Lock()
+	sc.previous.allLoggers = logging.allLoggers.mu.loggers
+	logging.allLoggers.mu.Unlock()
 
 	sc.previous.stderrSinkInfoTemplate = logging.stderrSinkInfoTemplate
 	logging.rmu.RLock()
@@ -231,7 +241,7 @@ func (l *TestLogScope) Rotate(t tShim) {
 	// Ensure remaining logs are written.
 	Flush()
 
-	if err := allSinkInfos.iterFileSinks(func(l *fileSink) error {
+	if err := logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		return l.closeFileLocked()
@@ -295,6 +305,13 @@ func (l *TestLogScope) Close(t tShim) {
 	logging.mu.exitOverride.f = l.previous.exitOverrideFn
 	logging.mu.exitOverride.hideStack = l.previous.exitOverrideHideStack
 	logging.mu.Unlock()
+
+	logging.allSinkInfos.mu.Lock()
+	logging.allSinkInfos.mu.sinkInfos = l.previous.allSinkInfos
+	logging.allSinkInfos.mu.Unlock()
+	logging.allLoggers.mu.Lock()
+	logging.allLoggers.mu.loggers = l.previous.allLoggers
+	logging.allLoggers.mu.Unlock()
 
 	// Sanity check: if the restore logic is complete, the applied
 	// configuration should be the same as when the scope started.
