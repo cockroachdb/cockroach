@@ -184,6 +184,11 @@ func ShowCreateTable(
 		}
 	}
 
+	if ttl := desc.GetTTL(); ttl != nil {
+		f.WriteString(" TTL ")
+		f.WriteString(ttl.DurationExpr)
+	}
+
 	return f.CloseAndGetString(), nil
 }
 

@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1405,6 +1406,50 @@ func NewTableDesc(
 		// Leading region column of REGIONAL BY ROW is part of the primary
 		// index column set.
 		primaryIndexColumnSet[string(regionalByRowCol)] = struct{}{}
+	}
+
+	if n.TTL != nil {
+		ttlExpr, err := n.TTL.IntervalExpr.TypeCheck(ctx, semaCtx, types.Interval)
+		if err != nil {
+			return nil, err
+		}
+		ttlExprDatum, err := ttlExpr.Eval(evalCtx)
+		if err != nil {
+			return nil, err
+		}
+
+		ttlInterval, ok := ttlExprDatum.(*tree.DInterval)
+		if !ok {
+			return nil, errors.Newf("ttl interval must be an interval")
+		}
+		if ttlInterval.Duration.Compare(duration.MakeDuration(0, 0, 0)) < 0 {
+			return nil, errors.Newf("ttl interval must be greater or equal to 0")
+		}
+		// TODO(XXX): check whether columns exists
+		def := &tree.ColumnTableDef{
+			Name: tree.TTLExpirationColumn,
+			Type: types.TimestampTZ,
+			// TODO(XXX): hidden?
+			Hidden: true,
+		}
+		// TODO(XXX): should we allow NULL? does that mean no TTL?
+		def.DefaultExpr.Expr = &tree.BinaryExpr{
+			Operator: tree.MakeBinaryOperator(tree.Plus),
+			Left:     &tree.FuncExpr{Func: tree.WrapFunction("current_timestamp")},
+			Right:    ttlExprDatum,
+		}
+		// TODO(XXX): we can't self reference the same column in an update expr,
+		// but we probably *don't* want to update a TTL if the existing entry is NULL.
+		def.OnUpdateExpr.Expr = &tree.BinaryExpr{
+			Operator: tree.MakeBinaryOperator(tree.Plus),
+			Left:     &tree.FuncExpr{Func: tree.WrapFunction("current_timestamp")},
+			Right:    ttlExprDatum,
+		}
+		n.Defs = append(n.Defs, def)
+		cdd = append(cdd, nil)
+		desc.TTL = &descpb.TableDescriptor_TTL{
+			DurationExpr: ttlExprDatum.String(),
+		}
 	}
 
 	if n.PartitionByTable.ContainsPartitioningClause() {

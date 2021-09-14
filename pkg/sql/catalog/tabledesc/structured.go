@@ -2389,6 +2389,11 @@ func (desc *wrapper) GetRegionalByRowTableRegionColumnName() (tree.Name, error) 
 	return tree.Name(*colName), nil
 }
 
+// GetTTL returns the TTL metadata of the table.
+func (desc *wrapper) GetTTL() *descpb.TableDescriptor_TTL {
+	return desc.TTL
+}
+
 // GetMultiRegionEnumDependency returns true if the given table has an "implicit"
 // dependency on the multi-region enum. An implicit dependency exists for
 // REGIONAL BY TABLE table's which are homed in an explicit region

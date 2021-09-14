@@ -1250,6 +1250,14 @@ message TableDescriptor {
   // This means that all indexes implicitly inherit all partitioning
   // from the PARTITION ALL BY clause.
   optional bool partition_all_by = 44 [(gogoproto.nullable)=false];
+
+  message TTL {
+    option (gogoproto.equal) = true;
+    // TODO(XXX): we store this twice. duplicates the timestamp info.
+    // Not sure what we should do about this here.
+    optional string duration_expr = 1 [(gogoproto.nullable)=false];
+  }
+  optional TTL ttl = 47 [(gogoproto.customname)="TTL"];
 }
 
 // SurvivalGoal is the survival goal for a database.

@@ -10,6 +10,10 @@
 
 package tree
 
+// TTLExpirationColumn is the system allocated name of the column which contains
+// the expiration timestamp of each row.
+const TTLExpirationColumn = "crdb_internal_ttl_expiration"
+
 // TTL represents a table's TTL metadata.
 type TTL struct {
 	// IntervalExpr is an unchecked expression which contains the TTL duration.
