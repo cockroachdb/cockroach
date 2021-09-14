@@ -1179,6 +1179,7 @@ unreserved_keyword ::=
 	| 'TRIGGER'
 	| 'TRUNCATE'
 	| 'TRUSTED'
+	| 'TTL'
 	| 'TYPE'
 	| 'TYPES'
 	| 'THROTTLING'
@@ -1426,8 +1427,8 @@ create_schema_stmt ::=
 	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' opt_schema_name 'AUTHORIZATION' role_spec
 
 create_table_stmt ::=
-	'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality
-	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality
+	'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality opt_ttl
+	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality opt_ttl
 
 create_table_as_stmt ::=
 	'CREATE' opt_persistence_temp_table 'TABLE' table_name create_as_opt_col_list opt_table_with 'AS' select_stmt opt_create_table_on_commit
@@ -2015,6 +2016,10 @@ opt_create_table_on_commit ::=
 
 opt_locality ::=
 	locality
+	| 
+
+opt_ttl ::=
+	'TTL' b_expr
 	| 
 
 create_as_opt_col_list ::=

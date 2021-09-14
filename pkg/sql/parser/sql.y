@@ -716,6 +716,9 @@ func (u *sqlSymUnion) survivalGoal() tree.SurvivalGoal {
 func (u *sqlSymUnion) dataPlacement() tree.DataPlacement {
   return u.val.(tree.DataPlacement)
 }
+func (u *sqlSymUnion) ttl() *tree.TTL {
+  return u.val.(*tree.TTL)
+}
 func (u *sqlSymUnion) objectNamePrefix() tree.ObjectNamePrefix {
 	return u.val.(tree.ObjectNamePrefix)
 }
@@ -845,7 +848,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
 %token <str> TRANSACTION TRANSACTIONS TREAT TRIGGER TRIM TRUE
-%token <str> TRUNCATE TRUSTED TYPE TYPES
+%token <str> TRUNCATE TRUSTED TTL TYPE TYPES
 %token <str> TRACING
 
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
@@ -1227,6 +1230,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.ReturningClause> returning_clause
 %type <empty> opt_using_clause
 %type <tree.RefreshDataOption> opt_clear_data
+%type <*tree.TTL> opt_ttl
 
 %type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list
 %type <tree.SequenceOption> sequence_option_elem
@@ -6494,7 +6498,7 @@ alter_schema_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality
+  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality opt_ttl
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -6507,9 +6511,10 @@ create_table_stmt:
       StorageParams: $10.storageParams(),
       OnCommit: $11.createTableOnCommitSetting(),
       Locality: $12.locality(),
+      TTL: $13.ttl(),
     }
   }
-| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality
+| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_partition_by_table opt_table_with opt_create_table_on_commit opt_locality opt_ttl
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -6522,7 +6527,20 @@ create_table_stmt:
       StorageParams: $13.storageParams(),
       OnCommit: $14.createTableOnCommitSetting(),
       Locality: $15.locality(),
+      TTL: $16.ttl(),
     }
+  }
+
+opt_ttl:
+  TTL b_expr
+  {
+    $$.val = &tree.TTL{
+      IntervalExpr: $2.expr(),
+    }
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.TTL)(nil)
   }
 
 opt_locality:
@@ -13574,6 +13592,7 @@ unreserved_keyword:
 | TRIGGER
 | TRUNCATE
 | TRUSTED
+| TTL
 | TYPE
 | TYPES
 | THROTTLING
