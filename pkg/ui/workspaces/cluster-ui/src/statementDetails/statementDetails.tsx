@@ -34,6 +34,7 @@ import {
   formatNumberForDisplay,
   calculateTotalWorkload,
   unique,
+  queryByName,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -62,6 +63,7 @@ import { NodeSummaryStats } from "../nodes";
 import { UIConfigState } from "../store/uiConfig";
 import moment, { Moment } from "moment";
 import { StatementsRequest } from "src/api/statementsApi";
+import { aggregatedTsAttr } from "../util/constants";
 
 const { TabPane } = Tabs;
 
@@ -128,6 +130,7 @@ export type NodesSummary = {
 
 export interface StatementDetailsDispatchProps {
   refreshStatements: (req?: StatementsRequest) => void;
+  invalidateStatements: () => void;
   refreshStatementDiagnosticsRequests: () => void;
   refreshNodes: () => void;
   refreshNodesLiveness: () => void;
@@ -164,7 +167,15 @@ const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 function statementsRequestFromProps(
   props: StatementDetailsProps,
 ): cockroach.server.serverpb.StatementsRequest | null {
-  if (props.isTenant || props.dateRange == null) return null;
+  // If there was no aggregated_ts requested in the search parameters, we show
+  // the latest statement from in-memory stats. This is mostly relevant for displaying
+  // statement details from active queries from the session details page.
+  const aggregatedTs = queryByName(props.location, aggregatedTsAttr);
+  if (aggregatedTs == null)
+    return new cockroach.server.serverpb.StatementsRequest({
+      combined: false,
+    });
+
   return new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(props.dateRange[0].unix()),
@@ -351,6 +362,10 @@ export class StatementDetails extends React.Component<
   };
 
   componentDidMount() {
+    const req = statementsRequestFromProps(this.props);
+    if (!req.combined) {
+      this.props.invalidateStatements();
+    }
     this.refreshStatements();
     if (!this.props.isTenant) {
       this.props.refreshStatementDiagnosticsRequests();
@@ -365,6 +380,16 @@ export class StatementDetails extends React.Component<
       this.props.refreshStatementDiagnosticsRequests();
       this.props.refreshNodes();
       this.props.refreshNodesLiveness();
+    }
+  }
+
+  componentWillUnmount() {
+    // If we had to fetch in-memory statement statistics for this statement,
+    // we should invalidate the statements response in the cache, since the other
+    // pages will expect combined statements.
+    const req = statementsRequestFromProps(this.props);
+    if (!req.combined) {
+      this.props.invalidateStatements();
     }
   }
 

@@ -16,6 +16,7 @@ import _ from "lodash";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 import { uniqueLong } from "src/util/arrays";
+import { TimestampToNumber } from "src/util/convert";
 
 export type ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
@@ -181,6 +182,7 @@ export function aggregateStatementStats(
 
 export interface ExecutionStatistics {
   statement: string;
+  aggregated_ts: number;
   app: string;
   database: string;
   distSQL: boolean;
@@ -198,6 +200,7 @@ export function flattenStatementStats(
 ): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
     statement: stmt.key.key_data.query,
+    aggregated_ts: TimestampToNumber(stmt.key.aggregated_ts),
     app: stmt.key.key_data.app,
     database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
@@ -221,5 +224,7 @@ export function combineStatementStats(
 // that should be used to group statements.
 // Parameters being used: node_id, implicit_txn and database.
 export function statementKey(stmt: ExecutionStatistics): string {
-  return stmt.statement + stmt.implicit_txn + stmt.database;
+  return (
+    stmt.statement + stmt.implicit_txn + stmt.database + stmt.aggregated_ts
+  );
 }

@@ -26,7 +26,6 @@ import { Button } from "../button";
 import { tableClasses } from "../transactionsTable/transactionsTableClasses";
 import { SqlBox } from "../sql";
 import { aggregateStatements } from "../transactionsPage/utils";
-import Long from "long";
 import { Loading } from "../loading";
 import { SummaryCard } from "../summaryCard";
 import { Bytes, Duration, formatNumberForDisplay } from "src/util";
@@ -42,6 +41,7 @@ import {
   populateRegionNodeForStatements,
   makeStatementFingerprintColumn,
 } from "src/statementsTable/statementsTable";
+import { TransactionInfo } from "src/transactionsTable";
 
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
@@ -58,10 +58,7 @@ interface TransactionDetailsProps {
   nodeRegions: { [nodeId: string]: string };
   transactionStats?: TransactionStats;
   lastReset?: string | Date;
-  handleDetails: (
-    statementFingerprintIds: Long[] | null,
-    transactionStats: TransactionStats | null,
-  ) => void;
+  handleDetails: (txn?: TransactionInfo) => void;
   error?: Error | null;
   resetSQLStats: () => void;
   isTenant: UIConfigState["isTenant"];
@@ -117,7 +114,7 @@ export class TransactionDetails extends React.Component<
       <div>
         <section className={baseHeadingClasses.wrapper}>
           <Button
-            onClick={() => handleDetails(null, null)}
+            onClick={() => handleDetails()}
             type="unstyled-link"
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}

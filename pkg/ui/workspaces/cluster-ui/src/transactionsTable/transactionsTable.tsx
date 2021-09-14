@@ -26,28 +26,30 @@ import {
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
 } from "./transactionsBarCharts";
-import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
+import {
+  formatStartIntervalColumn,
+  statisticsTableTitles,
+} from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
 import { textCell } from "./transactionsCells";
-import { FixLong, longToInt } from "src/util";
+import { FixLong, longToInt, TimestampToNumber } from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
-  getStatementsByFingerprintId,
+  getStatementsByFingerprintIdAndTime,
   collectStatementsText,
   statementFingerprintIdsToText,
 } from "../transactionsPage/utils";
-import Long from "long";
 import classNames from "classnames/bind";
 import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
 
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
-type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 interface TransactionsTable {
   transactions: TransactionInfo[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
+  handleDetails: (txn?: TransactionInfo) => void;
   pagination: ISortedTablePagination;
   renderNoResult?: React.ReactNode;
   columns: ColumnDescriptor<TransactionInfo>[];
@@ -65,10 +67,7 @@ export function makeTransactionsColumns(
   transactions: TransactionInfo[],
   statements: Statement[],
   isTenant: boolean,
-  handleDetails: (
-    statementFingerprintIds: Long[] | null,
-    transactionStats: TransactionStats,
-  ) => void,
+  handleDetails: (txn?: TransactionInfo) => void,
   search?: string,
 ): ColumnDescriptor<TransactionInfo>[] {
   const defaultBarChartOptions = {
@@ -122,19 +121,28 @@ export function makeTransactionsColumns(
             item.stats_data.statement_fingerprint_ids,
             statements,
           ),
-          transactionFingerprintIds: item.stats_data.statement_fingerprint_ids,
-          transactionStats: item.stats_data.stats,
-          handleDetails,
+          onClick: () => handleDetails(item),
           search,
         }),
       sort: (item: TransactionInfo) =>
         collectStatementsText(
-          getStatementsByFingerprintId(
+          getStatementsByFingerprintIdAndTime(
             item.stats_data.statement_fingerprint_ids,
+            item.stats_data.aggregated_ts,
             statements,
           ),
         ),
       alwaysShow: true,
+    },
+    {
+      name: "interval start time",
+      title: statisticsTableTitles.intervalStartTime("transaction"),
+      cell: (item: TransactionInfo) =>
+        formatStartIntervalColumn(
+          TimestampToNumber(item.stats_data?.aggregated_ts),
+        ),
+      sort: (item: TransactionInfo) =>
+        TimestampToNumber(item.stats_data?.aggregated_ts),
     },
     {
       name: "executionCount",

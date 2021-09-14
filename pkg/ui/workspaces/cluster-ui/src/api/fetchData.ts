@@ -11,7 +11,6 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RequestError } from "../util";
 import { getBasePath } from "./basePath";
-import { stringify } from "querystring";
 
 interface ProtoBuilder<
   P extends ConstructorType,
@@ -28,18 +27,6 @@ export function toArrayBuffer(encodedRequest: Uint8Array): ArrayBuffer {
     encodedRequest.byteOffset,
     encodedRequest.byteOffset + encodedRequest.byteLength,
   );
-}
-
-// propsToQueryString is a helper function that converts a set of object
-// properties to a query string
-// - keys with null or undefined values will be skipped
-// - non-string values will be toString'd
-export function propsToQueryString(props: { [k: string]: any }) {
-  const params = new URLSearchParams();
-  Object.entries(props).forEach(
-    ([k, v]: [string, any]) => v != null && params.set(k, v.toString()),
-  );
-  return params.toString();
 }
 
 /**

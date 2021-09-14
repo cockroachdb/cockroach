@@ -41,7 +41,7 @@ import {
 import {
   searchTransactionsData,
   filterTransactions,
-  getStatementsByFingerprintId,
+  getStatementsByFingerprintIdAndTime,
 } from "./utils";
 import { forIn } from "lodash";
 import Long from "long";
@@ -76,6 +76,7 @@ interface TState {
   search?: string;
   filters?: Filters;
   statementFingerprintIds: Long[] | null;
+  aggregatedTs: protos.google.protobuf.ITimestamp | null;
   transactionStats: TransactionStats | null;
 }
 
@@ -135,6 +136,7 @@ export class TransactionsPage extends React.Component<
     },
     search: this.trxSearchParams("q", "").toString(),
     filters: this.filters,
+    aggregatedTs: null,
     statementFingerprintIds: null,
     transactionStats: null,
   };
@@ -241,11 +243,13 @@ export class TransactionsPage extends React.Component<
     });
   };
 
-  handleDetails = (
-    statementFingerprintIds: Long[] | null,
-    transactionStats: TransactionStats,
-  ): void => {
-    this.setState({ statementFingerprintIds, transactionStats });
+  handleDetails = (transaction?: TransactionInfo): void => {
+    this.setState({
+      statementFingerprintIds:
+        transaction?.stats_data?.statement_fingerprint_ids,
+      transactionStats: transaction?.stats_data?.stats,
+      aggregatedTs: transaction?.stats_data?.aggregated_ts,
+    });
   };
 
   lastReset = (): Date => {
@@ -459,10 +463,18 @@ export class TransactionsPage extends React.Component<
 
   renderTransactionDetails() {
     const { statements } = this.props.data;
-    const { statementFingerprintIds } = this.state;
+    const {
+      aggregatedTs,
+      statementFingerprintIds,
+      transactionStats,
+    } = this.state;
     const transactionDetails =
       statementFingerprintIds &&
-      getStatementsByFingerprintId(statementFingerprintIds, statements);
+      getStatementsByFingerprintIdAndTime(
+        statementFingerprintIds,
+        aggregatedTs,
+        statements,
+      );
     const transactionText =
       statementFingerprintIds &&
       statementFingerprintIdsToText(statementFingerprintIds, statements);
@@ -472,7 +484,7 @@ export class TransactionsPage extends React.Component<
         transactionText={transactionText}
         statements={transactionDetails}
         nodeRegions={this.props.nodeRegions}
-        transactionStats={this.state.transactionStats}
+        transactionStats={transactionStats}
         lastReset={this.lastReset()}
         handleDetails={this.handleDetails}
         error={this.props.error}
