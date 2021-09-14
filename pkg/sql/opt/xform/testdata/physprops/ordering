@@ -1775,20 +1775,15 @@ sort
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
       │    ├── key: (1-3)
-      │    └── limit
+      │    └── top-k
       │         ├── columns: x:6!null y:7!null z:8!null
       │         ├── internal-ordering: +7,+8
+      │         ├── k: 2
       │         ├── cardinality: [0 - 2]
       │         ├── key: (6-8)
-      │         ├── sort
-      │         │    ├── columns: x:6!null y:7!null z:8!null
-      │         │    ├── key: (6-8)
-      │         │    ├── ordering: +7,+8
-      │         │    ├── limit hint: 2.00
-      │         │    └── scan xyz
-      │         │         ├── columns: x:6!null y:7!null z:8!null
-      │         │         └── key: (6-8)
-      │         └── 2
+      │         └── scan xyz
+      │              ├── columns: x:6!null y:7!null z:8!null
+      │              └── key: (6-8)
       └── with-scan &1
            ├── columns: a:11!null b:12!null c:13!null
            ├── mapping:
@@ -2124,20 +2119,15 @@ sort
       │         │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │         │    │    ├── cardinality: [0 - 2]
       │         │    │    ├── key: (6-8)
-      │         │    │    └── limit
+      │         │    │    └── top-k
       │         │    │         ├── columns: x:6!null y:7!null z:8!null
       │         │    │         ├── internal-ordering: +7,+8
+      │         │    │         ├── k: 2
       │         │    │         ├── cardinality: [0 - 2]
       │         │    │         ├── key: (6-8)
-      │         │    │         ├── sort
-      │         │    │         │    ├── columns: x:6!null y:7!null z:8!null
-      │         │    │         │    ├── key: (6-8)
-      │         │    │         │    ├── ordering: +7,+8
-      │         │    │         │    ├── limit hint: 2.00
-      │         │    │         │    └── scan xyz
-      │         │    │         │         ├── columns: x:6!null y:7!null z:8!null
-      │         │    │         │         └── key: (6-8)
-      │         │    │         └── 2
+      │         │    │         └── scan xyz
+      │         │    │              ├── columns: x:6!null y:7!null z:8!null
+      │         │    │              └── key: (6-8)
       │         │    └── filters (true)
       │         └── projections
       │              ├── CASE WHEN abc.a:11 IS NULL THEN x:6 ELSE 10 END [as=upsert_a:17, outer=(6,11)]

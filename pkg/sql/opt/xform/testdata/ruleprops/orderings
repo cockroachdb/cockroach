@@ -204,30 +204,22 @@ index-join abc
 opt
 SELECT * FROM abc ORDER BY b LIMIT 10
 ----
-limit
+top-k
  ├── columns: a:1 b:2 c:3
  ├── internal-ordering: +2
+ ├── k: 10
  ├── cardinality: [0 - 10]
  ├── lax-key: (1-3)
  ├── fd: (3)~~>(1,2)
  ├── ordering: +2
  ├── prune: (1,3)
  ├── interesting orderings: (+2)
- ├── sort
- │    ├── columns: a:1 b:2 c:3
- │    ├── lax-key: (1-3)
- │    ├── fd: (3)~~>(1,2)
- │    ├── ordering: +2
- │    ├── limit hint: 10.00
- │    ├── prune: (1-3)
- │    ├── interesting orderings: (+1,+2) (+3)
- │    └── scan abc
- │         ├── columns: a:1 b:2 c:3
- │         ├── lax-key: (1-3)
- │         ├── fd: (3)~~>(1,2)
- │         ├── prune: (1-3)
- │         └── interesting orderings: (+1,+2) (+3)
- └── 10
+ └── scan abc
+      ├── columns: a:1 b:2 c:3
+      ├── lax-key: (1-3)
+      ├── fd: (3)~~>(1,2)
+      ├── prune: (1-3)
+      └── interesting orderings: (+1,+2) (+3)
 
 opt
 SELECT * FROM abc ORDER BY a OFFSET 10

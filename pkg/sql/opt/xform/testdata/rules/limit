@@ -154,22 +154,16 @@ scan a@s_idx
 opt
 SELECT s FROM (SELECT s, i FROM a ORDER BY s LIMIT 10) a ORDER BY s, i LIMIT 1
 ----
-limit
+top-k
  ├── columns: s:4  [hidden: i:2]
  ├── internal-ordering: +4,+2
+ ├── k: 1
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,4)
- ├── sort (segmented)
- │    ├── columns: i:2 s:4
- │    ├── cardinality: [0 - 10]
- │    ├── ordering: +4,+2
- │    ├── limit hint: 1.00
- │    └── scan a@s_idx
- │         ├── columns: i:2 s:4
- │         ├── limit: 10
- │         └── ordering: +4
- └── 1
+ └── scan a@s_idx
+      ├── columns: i:2 s:4
+      └── limit: 10
 
 # Limit an unconstrained partial index scan.
 opt
@@ -206,19 +200,15 @@ project
 opt
 SELECT s FROM a ORDER BY f LIMIT 1
 ----
-limit
+top-k
  ├── columns: s:4  [hidden: f:3]
  ├── internal-ordering: +3
+ ├── k: 1
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3,4)
- ├── sort
- │    ├── columns: f:3 s:4
- │    ├── ordering: +3
- │    ├── limit hint: 1.00
- │    └── scan a@s_idx
- │         └── columns: f:3 s:4
- └── 1
+ └── scan a@s_idx
+      └── columns: f:3 s:4
 
 # Don't push when limit is not a constant.
 opt
@@ -335,22 +325,18 @@ index-join kuv
 opt expect-not=PushLimitIntoIndexJoin
 SELECT * FROM kuv WHERE u > 1 AND u < 10 ORDER BY u, v LIMIT 5
 ----
-limit
+top-k
  ├── columns: k:1 u:2!null v:3
  ├── internal-ordering: +2,+3
+ ├── k: 5
  ├── cardinality: [0 - 5]
  ├── ordering: +2,+3
- ├── sort
- │    ├── columns: k:1 u:2!null v:3
- │    ├── ordering: +2,+3
- │    ├── limit hint: 5.00
- │    └── select
- │         ├── columns: k:1 u:2!null v:3
- │         ├── scan kuv
- │         │    └── columns: k:1 u:2 v:3
- │         └── filters
- │              └── (u:2 > 1) AND (u:2 < 10) [outer=(2), constraints=(/2: [/2 - /9]; tight)]
- └── 5
+ └── select
+      ├── columns: k:1 u:2!null v:3
+      ├── scan kuv
+      │    └── columns: k:1 u:2 v:3
+      └── filters
+           └── (u:2 > 1) AND (u:2 < 10) [outer=(2), constraints=(/2: [/2 - /9]; tight)]
 
 exec-ddl
 CREATE TABLE abcd (
@@ -706,6 +692,59 @@ GenerateConstrainedScans (no changes)
 --------------------------------------------------------------------------------
 GenerateZigzagJoins (no changes)
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateTopK (higher cost)
+--------------------------------------------------------------------------------
+   explain
+    ├── columns: info:7
+  - └── limit
+  + └── top-k
+         ├── columns: a:1!null b:2 c:3 d:4
+         ├── internal-ordering: -2
+  +      ├── k: 5
+         ├── cardinality: [0 - 5]
+         ├── key: (1)
+         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+         ├── ordering: -2
+  -      ├── select
+  -      │    ├── columns: a:1!null b:2 c:3 d:4
+  -      │    ├── cardinality: [0 - 11]
+  -      │    ├── key: (1)
+  -      │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+  -      │    ├── ordering: -2
+  -      │    ├── limit hint: 5.00
+  -      │    ├── index-join abcd
+  -      │    │    ├── columns: a:1!null b:2 c:3 d:4
+  -      │    │    ├── key: (1)
+  -      │    │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+  -      │    │    ├── ordering: -2
+  -      │    │    ├── limit hint: 454.55
+  -      │    │    └── scan abcd@b,rev
+  -      │    │         ├── columns: a:1!null b:2
+  -      │    │         ├── flags: force-index=b
+  -      │    │         ├── key: (1)
+  -      │    │         ├── fd: (1)-->(2)
+  -      │    │         ├── ordering: -2
+  -      │    │         └── limit hint: 454.55
+  -      │    └── filters
+  -      │         └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+  -      └── 5
+  +      └── select
+  +           ├── columns: a:1!null b:2 c:3 d:4
+  +           ├── cardinality: [0 - 11]
+  +           ├── key: (1)
+  +           ├── fd: (1)-->(2-4), (2-4)~~>(1)
+  +           ├── index-join abcd
+  +           │    ├── columns: a:1!null b:2 c:3 d:4
+  +           │    ├── key: (1)
+  +           │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+  +           │    └── scan abcd@b
+  +           │         ├── columns: a:1!null b:2
+  +           │         ├── flags: force-index=b
+  +           │         ├── key: (1)
+  +           │         └── fd: (1)-->(2)
+  +           └── filters
+  +                └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
 ================================================================================
 Final best expression
   Cost: 3571.71
@@ -803,22 +842,17 @@ offset
 opt
 SELECT * FROM kuv ORDER BY u LIMIT 5 FOR UPDATE
 ----
-limit
+top-k
  ├── columns: k:1 u:2 v:3
  ├── internal-ordering: +2
+ ├── k: 5
  ├── cardinality: [0 - 5]
  ├── volatile
  ├── ordering: +2
- ├── sort
- │    ├── columns: k:1 u:2 v:3
- │    ├── volatile
- │    ├── ordering: +2
- │    ├── limit hint: 5.00
- │    └── scan kuv
- │         ├── columns: k:1 u:2 v:3
- │         ├── locking: for-update
- │         └── volatile
- └── 5
+ └── scan kuv
+      ├── columns: k:1 u:2 v:3
+      ├── locking: for-update
+      └── volatile
 
 # -------------------------
 # SplitLimitedScanIntoUnionScans
@@ -1168,62 +1202,46 @@ OR (latitude = 10 AND longitude > 10 AND longitude < 14)
 ORDER BY data1, data2
 LIMIT 10
 ----
-limit
+top-k
  ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
  ├── internal-ordering: +6,+7
+ ├── k: 10
  ├── cardinality: [0 - 10]
  ├── ordering: +6,+7
- ├── union-all
- │    ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
- │    ├── left columns: latitude:81 longitude:82 data1:83 data2:84
- │    ├── right columns: latitude:92 longitude:93 data1:94 data2:95
- │    ├── ordering: +6,+7
- │    ├── limit hint: 10.00
- │    ├── union-all
- │    │    ├── columns: latitude:81!null longitude:82!null data1:83!null data2:84!null
- │    │    ├── left columns: latitude:59 longitude:60 data1:61 data2:62
- │    │    ├── right columns: latitude:70 longitude:71 data1:72 data2:73
- │    │    ├── cardinality: [0 - 30]
- │    │    ├── ordering: +83,+84
- │    │    ├── limit hint: 10.00
- │    │    ├── union-all
- │    │    │    ├── columns: latitude:59!null longitude:60!null data1:61!null data2:62!null
- │    │    │    ├── left columns: latitude:37 longitude:38 data1:39 data2:40
- │    │    │    ├── right columns: latitude:48 longitude:49 data1:50 data2:51
- │    │    │    ├── cardinality: [0 - 20]
- │    │    │    ├── ordering: +61,+62
- │    │    │    ├── limit hint: 10.00
- │    │    │    ├── scan index_tab@d
- │    │    │    │    ├── columns: latitude:37!null longitude:38!null data1:39!null data2:40!null
- │    │    │    │    ├── constraint: /37/38/39/40/34: [/10/11 - /10/11]
- │    │    │    │    ├── limit: 10
- │    │    │    │    ├── fd: ()-->(37,38)
- │    │    │    │    ├── ordering: +39,+40 opt(37,38) [actual: +39,+40]
- │    │    │    │    └── limit hint: 10.00
- │    │    │    └── scan index_tab@d
- │    │    │         ├── columns: latitude:48!null longitude:49!null data1:50!null data2:51!null
- │    │    │         ├── constraint: /48/49/50/51/45: [/10/12 - /10/12]
- │    │    │         ├── limit: 10
- │    │    │         ├── fd: ()-->(48,49)
- │    │    │         ├── ordering: +50,+51 opt(48,49) [actual: +50,+51]
- │    │    │         └── limit hint: 10.00
- │    │    └── scan index_tab@d
- │    │         ├── columns: latitude:70!null longitude:71!null data1:72!null data2:73!null
- │    │         ├── constraint: /70/71/72/73/67: [/10/13 - /10/13]
- │    │         ├── limit: 10
- │    │         ├── fd: ()-->(70,71)
- │    │         ├── ordering: +72,+73 opt(70,71) [actual: +72,+73]
- │    │         └── limit hint: 10.00
- │    └── sort
- │         ├── columns: latitude:92!null longitude:93 data1:94!null data2:95!null
- │         ├── ordering: +94,+95
- │         ├── limit hint: 10.00
- │         └── scan index_tab@d
- │              ├── columns: latitude:92!null longitude:93 data1:94!null data2:95!null
- │              └── constraint: /92/93/94/95/89
- │                   ├── [/-5 - /-5]
- │                   └── [/0 - /0]
- └── 10
+ └── union-all
+      ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
+      ├── left columns: latitude:81 longitude:82 data1:83 data2:84
+      ├── right columns: latitude:92 longitude:93 data1:94 data2:95
+      ├── union-all
+      │    ├── columns: latitude:81!null longitude:82!null data1:83!null data2:84!null
+      │    ├── left columns: latitude:59 longitude:60 data1:61 data2:62
+      │    ├── right columns: latitude:70 longitude:71 data1:72 data2:73
+      │    ├── cardinality: [0 - 30]
+      │    ├── union-all
+      │    │    ├── columns: latitude:59!null longitude:60!null data1:61!null data2:62!null
+      │    │    ├── left columns: latitude:37 longitude:38 data1:39 data2:40
+      │    │    ├── right columns: latitude:48 longitude:49 data1:50 data2:51
+      │    │    ├── cardinality: [0 - 20]
+      │    │    ├── scan index_tab@d
+      │    │    │    ├── columns: latitude:37!null longitude:38!null data1:39!null data2:40!null
+      │    │    │    ├── constraint: /37/38/39/40/34: [/10/11 - /10/11]
+      │    │    │    ├── limit: 10
+      │    │    │    └── fd: ()-->(37,38)
+      │    │    └── scan index_tab@d
+      │    │         ├── columns: latitude:48!null longitude:49!null data1:50!null data2:51!null
+      │    │         ├── constraint: /48/49/50/51/45: [/10/12 - /10/12]
+      │    │         ├── limit: 10
+      │    │         └── fd: ()-->(48,49)
+      │    └── scan index_tab@d
+      │         ├── columns: latitude:70!null longitude:71!null data1:72!null data2:73!null
+      │         ├── constraint: /70/71/72/73/67: [/10/13 - /10/13]
+      │         ├── limit: 10
+      │         └── fd: ()-->(70,71)
+      └── scan index_tab@d
+           ├── columns: latitude:92!null longitude:93 data1:94!null data2:95!null
+           └── constraint: /92/93/94/95/89
+                ├── [/-5 - /-5]
+                └── [/0 - /0]
 
 # Case with index join.
 opt expect=SplitLimitedScanIntoUnionScans
@@ -1440,25 +1458,19 @@ SELECT id, latitude, longitude FROM index_tab
 WHERE latitude IS NOT NULL AND latitude < 4
 ORDER BY longitude LIMIT 10
 ----
-limit
+top-k
  ├── columns: id:1!null latitude:4!null longitude:5
  ├── internal-ordering: +5
+ ├── k: 10
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(4,5)
  ├── ordering: +5
- ├── sort
- │    ├── columns: id:1!null latitude:4!null longitude:5
- │    ├── key: (1)
- │    ├── fd: (1)-->(4,5)
- │    ├── ordering: +5
- │    ├── limit hint: 10.00
- │    └── scan index_tab@d
- │         ├── columns: id:1!null latitude:4!null longitude:5
- │         ├── constraint: /4/5/6/7/1: (/NULL - /3]
- │         ├── key: (1)
- │         └── fd: (1)-->(4,5)
- └── 10
+ └── scan index_tab@d
+      ├── columns: id:1!null latitude:4!null longitude:5
+      ├── constraint: /4/5/6/7/1: (/NULL - /3]
+      ├── key: (1)
+      └── fd: (1)-->(4,5)
 
 # No-op case because the scan has an inverted index.
 opt expect-not=SplitLimitedScanIntoUnionScans
@@ -1606,3 +1618,170 @@ scalar-group-by
  └── aggregations
       └── max [as=max:12, outer=(6)]
            └── data1:6
+
+# ---------------------------------------------------
+# GenerateTopK
+# ---------------------------------------------------
+
+opt expect=GenerateTopK
+SELECT * FROM a ORDER BY i LIMIT 1
+----
+top-k
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── internal-ordering: +2
+ ├── k: 1
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── scan a
+      ├── columns: k:1!null i:2 f:3 s:4 j:5
+      ├── key: (1)
+      └── fd: (1)-->(2-5)
+
+opt expect=GenerateTopK
+SELECT * FROM a ORDER BY i LIMIT 10
+----
+top-k
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── internal-ordering: +2
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── ordering: +2
+ └── scan a
+      ├── columns: k:1!null i:2 f:3 s:4 j:5
+      ├── key: (1)
+      └── fd: (1)-->(2-5)
+
+memo expect=GenerateTopK
+SELECT * FROM a ORDER BY k LIMIT 1
+----
+memo (optimized, ~3KB, required=[presentation: k:1,i:2,f:3,s:4,j:5])
+ ├── G1: (limit G2 G3 ordering=+1) (scan a,cols=(1-5),lim=1) (top-k G2 &{1 +1})
+ │    └── [presentation: k:1,i:2,f:3,s:4,j:5]
+ │         ├── best: (scan a,cols=(1-5),lim=1)
+ │         └── cost: 5.11
+ ├── G2: (scan a,cols=(1-5))
+ │    ├── [ordering: +1] [limit hint: 1.00]
+ │    │    ├── best: (scan a,cols=(1-5))
+ │    │    └── cost: 15.12
+ │    └── []
+ │         ├── best: (scan a,cols=(1-5))
+ │         └── cost: 1125.02
+ └── G3: (const 1)
+
+# GenerateTopK is not triggered when the limit is not constant
+opt expect-not=GenerateTopK
+SELECT * FROM a ORDER BY i LIMIT (SELECT count(*) FROM a WHERE i < 10)
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── internal-ordering: +2
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── ordering: +2
+ │    └── scan a
+ │         ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-5)
+ └── subquery
+      └── scalar-group-by
+           ├── columns: count_rows:15!null
+           ├── cardinality: [1 - 1]
+           ├── key: ()
+           ├── fd: ()-->(15)
+           ├── select
+           │    ├── columns: i:9!null
+           │    ├── scan a@s_idx
+           │    │    └── columns: i:9
+           │    └── filters
+           │         └── i:9 < 10 [outer=(9), constraints=(/9: (/NULL - /9]; tight)]
+           └── aggregations
+                └── count-rows [as=count_rows:15]
+
+# Nested GenerateTopK expressions
+opt expect=GenerateTopK
+SELECT * FROM (SELECT s,i FROM a ORDER BY f LIMIT 5) ORDER BY i LIMIT 2
+----
+project
+ ├── columns: s:4 i:2
+ ├── cardinality: [0 - 2]
+ ├── ordering: +2
+ └── top-k
+      ├── columns: i:2 f:3 s:4
+      ├── internal-ordering: +2
+      ├── k: 2
+      ├── cardinality: [0 - 2]
+      ├── ordering: +2
+      └── top-k
+           ├── columns: i:2 f:3 s:4
+           ├── internal-ordering: +3
+           ├── k: 5
+           ├── cardinality: [0 - 5]
+           └── scan a@s_idx
+                └── columns: i:2 f:3 s:4
+
+# GenerateTopK is not triggered when the limit is a negative integer
+opt expect-not=GenerateTopK
+SELECT * FROM a ORDER BY i LIMIT -1
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── sort
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── ordering: +2
+ │    ├── limit hint: 1.00
+ │    └── scan a
+ │         ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-5)
+ └── -1
+
+# GenerateTopK is not triggered when there is no ordering
+opt expect-not=GenerateTopK
+SELECT * FROM a LIMIT 10
+----
+scan a
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── limit: 10
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+# GenerateTopK triggered with offset.
+opt
+SELECT * FROM a ORDER BY i LIMIT 5 OFFSET 3
+----
+offset
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── ordering: +2
+ ├── top-k
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── internal-ordering: +2
+ │    ├── k: 8
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── ordering: +2
+ │    └── scan a
+ │         ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-5)
+ └── 3

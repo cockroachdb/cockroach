@@ -503,7 +503,7 @@ memo (optimized, ~5KB, required=[presentation: min:7])
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G2 G7 ordering=+1) (scan abc,cols=(1),lim=1)
+ ├── G4: (limit G2 G7 ordering=+1) (scan abc,cols=(1),lim=1) (top-k G2 &{1 +1})
  │    └── []
  │         ├── best: (scan abc,cols=(1),lim=1)
  │         └── cost: 5.06
@@ -529,10 +529,10 @@ memo (optimized, ~6KB, required=[presentation: min:7])
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G7 G8 ordering=+2)
+ ├── G4: (limit G7 G8 ordering=+2) (top-k G7 &{1 +2})
  │    └── []
- │         ├── best: (limit G7="[ordering: +2] [limit hint: 1.00]" G8 ordering=+2)
- │         └── cost: 1304.06
+ │         ├── best: (top-k G7 &{1 +2})
+ │         └── cost: 1104.37
  ├── G5: (aggregations G9)
  ├── G6: (min G10)
  ├── G7: (select G2 G11)
@@ -565,7 +565,7 @@ memo (optimized, ~5KB, required=[presentation: max:7])
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G2 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev))
+ ├── G4: (limit G2 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev)) (top-k G2 &{1 -1})
  │    └── []
  │         ├── best: (scan abc,rev,cols=(1),lim=1(rev))
  │         └── cost: 5.06
@@ -591,10 +591,10 @@ memo (optimized, ~6KB, required=[presentation: max:7])
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G7 G8 ordering=-2)
+ ├── G4: (limit G7 G8 ordering=-2) (top-k G7 &{1 -2})
  │    └── []
- │         ├── best: (limit G7="[ordering: -2] [limit hint: 1.00]" G8 ordering=-2)
- │         └── cost: 1304.06
+ │         ├── best: (top-k G7 &{1 -2})
+ │         └── cost: 1104.37
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
  ├── G7: (select G2 G11)
@@ -699,10 +699,10 @@ memo (optimized, ~6KB, required=[presentation: max:7])
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G7 G8 ordering=-2)
+ ├── G4: (limit G7 G8 ordering=-2) (top-k G7 &{1 -2})
  │    └── []
- │         ├── best: (limit G7="[ordering: -2] [limit hint: 1.00]" G8 ordering=-2)
- │         └── cost: 1304.06
+ │         ├── best: (top-k G7 &{1 -2})
+ │         └── cost: 1104.37
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
  ├── G7: (select G2 G11)

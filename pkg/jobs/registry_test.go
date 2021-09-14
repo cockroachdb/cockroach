@@ -875,3 +875,50 @@ func TestRegistryUsePartialIndex(t *testing.T) {
 		})
 	}
 }
+
+// TestJitterCalculation tests the correctness of jitter calculation function
+// in jobs/config.go.
+func TestJitterCalculation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		minFactor = 1 - (1.0 / 6.0)
+		maxFactor = 1 + (1.0 / 6.0)
+	)
+
+	outputRange := func(input time.Duration) (time.Duration, time.Duration) {
+		return time.Duration(float64(input) * minFactor), time.Duration(float64(input) * maxFactor)
+	}
+
+	for _, test := range []struct {
+		name  string
+		input time.Duration
+	}{
+		{
+			"zero",
+			0,
+		},
+		{
+			"small",
+			time.Millisecond,
+		},
+		{
+			"large",
+			100 * time.Hour,
+		},
+		{
+			"default",
+			defaultAdoptInterval,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			interval := jitter(test.input)
+			rangeMin, rangeMax := outputRange(test.input)
+			require.GreaterOrEqual(t, rangeMax, interval)
+			require.LessOrEqual(t, rangeMin, interval)
+			if test.input != 0 {
+				require.NotEqual(t, test.input, interval)
+			}
+		})
+	}
+}

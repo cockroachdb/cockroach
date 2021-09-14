@@ -2008,6 +2008,28 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 	sb.finalizeFromCardinality(relProps)
 }
 
+func (sb *statisticsBuilder) buildTopK(topK *TopKExpr, relProps *props.Relational) {
+	s := &relProps.Stats
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(topK)
+
+	inputStats := &topK.Input.Relational().Stats
+
+	// Copy row count from input.
+	s.RowCount = inputStats.RowCount
+
+	// Update row count if row count and k are non-zero.
+	if inputStats.RowCount > 0 && topK.K > 0 {
+		s.RowCount = min(float64(topK.K), inputStats.RowCount)
+		s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
+	}
+
+	sb.finalizeFromCardinality(relProps)
+}
+
 func (sb *statisticsBuilder) colStatLimit(
 	colSet opt.ColSet, limit *LimitExpr,
 ) *props.ColumnStatistic {
