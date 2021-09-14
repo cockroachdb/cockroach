@@ -43,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -929,6 +931,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.extraTxnState.rowsRead += stats.rowsRead
 	ex.extraTxnState.bytesRead += stats.bytesRead
+	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
@@ -940,7 +943,183 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
 	}
 
+	if limitsErr := ex.handleTxnRowsWrittenReadLimits(ctx); limitsErr != nil && res.Err() == nil {
+		res.SetError(limitsErr)
+	}
+
 	return err
+}
+
+type txnRowsWrittenLimitErr struct {
+	eventpb.CommonTxnRowsLimitDetails
+}
+
+var _ error = &txnRowsWrittenLimitErr{}
+var _ errors.SafeDetailer = &txnRowsWrittenLimitErr{}
+var _ fmt.Formatter = &txnRowsWrittenLimitErr{}
+var _ errors.SafeFormatter = &txnRowsWrittenLimitErr{}
+
+// Error is part of the error interface, which txnRowsWrittenLimitErr
+// implements.
+func (e *txnRowsWrittenLimitErr) Error() string {
+	return e.CommonTxnRowsLimitDetails.Error("written")
+}
+
+// SafeDetails is part of the errors.SafeDetailer interface, which
+// txnRowsWrittenLimitErr implements.
+func (e *txnRowsWrittenLimitErr) SafeDetails() []string {
+	return e.CommonTxnRowsLimitDetails.SafeDetails("written")
+}
+
+// Format is part of the fmt.Formatter interface, which txnRowsWrittenLimitErr
+// implements.
+func (e *txnRowsWrittenLimitErr) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+// SafeFormatError is part of the errors.SafeFormatter interface, which
+// txnRowsWrittenLimitErr implements.
+func (e *txnRowsWrittenLimitErr) SafeFormatError(p errors.Printer) (next error) {
+	return e.CommonTxnRowsLimitDetails.SafeFormatError(p, "written")
+}
+
+type txnRowsReadLimitErr struct {
+	eventpb.CommonTxnRowsLimitDetails
+}
+
+var _ error = &txnRowsReadLimitErr{}
+var _ errors.SafeDetailer = &txnRowsReadLimitErr{}
+var _ fmt.Formatter = &txnRowsReadLimitErr{}
+var _ errors.SafeFormatter = &txnRowsReadLimitErr{}
+
+// Error is part of the error interface, which txnRowsReadLimitErr implements.
+func (e *txnRowsReadLimitErr) Error() string {
+	return e.CommonTxnRowsLimitDetails.Error("read")
+}
+
+// SafeDetails is part of the errors.SafeDetailer interface, which
+// txnRowsReadLimitErr implements.
+func (e *txnRowsReadLimitErr) SafeDetails() []string {
+	return e.CommonTxnRowsLimitDetails.SafeDetails("read")
+}
+
+// Format is part of the fmt.Formatter interface, which txnRowsReadLimitErr
+// implements.
+func (e *txnRowsReadLimitErr) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+// SafeFormatError is part of the errors.SafeFormatter interface, which
+// txnRowsReadLimitErr implements.
+func (e *txnRowsReadLimitErr) SafeFormatError(p errors.Printer) (next error) {
+	return e.CommonTxnRowsLimitDetails.SafeFormatError(p, "read")
+}
+
+// handleTxnRowsGuardrails handles either "written" or "read" rows guardrails.
+func (ex *connExecutor) handleTxnRowsGuardrails(
+	ctx context.Context,
+	numRows, logLimit, errLimit int64,
+	alreadyLogged *bool,
+	isRead bool,
+	logCounter, errCounter *metric.Counter,
+) error {
+	var err error
+	shouldLog := logLimit != 0 && numRows > logLimit
+	shouldErr := errLimit != 0 && numRows > errLimit
+	if !shouldLog && !shouldErr {
+		return nil
+	}
+	commonTxnRowsLimitDetails := eventpb.CommonTxnRowsLimitDetails{
+		TxnID:     ex.state.mu.txn.ID().String(),
+		SessionID: ex.sessionID.String(),
+		NumRows:   numRows,
+	}
+	if shouldErr && ex.executorType == executorTypeInternal {
+		// Internal work should never err and always log if violating either
+		// limit.
+		shouldLog = true
+		shouldErr = false
+	}
+	if *alreadyLogged {
+		// We have already logged this kind of event about this transaction.
+		shouldLog = false
+	} else {
+		*alreadyLogged = shouldLog
+	}
+	if shouldLog {
+		commonSQLEventDetails := ex.planner.getCommonSQLEventDetails()
+		var event eventpb.EventPayload
+		if ex.executorType == executorTypeInternal {
+			if isRead {
+				event = &eventpb.TxnRowsReadLimitInternal{
+					CommonSQLEventDetails:     commonSQLEventDetails,
+					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
+				}
+			} else {
+				event = &eventpb.TxnRowsWrittenLimitInternal{
+					CommonSQLEventDetails:     commonSQLEventDetails,
+					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
+				}
+			}
+		} else {
+			if isRead {
+				event = &eventpb.TxnRowsReadLimit{
+					CommonSQLEventDetails:     commonSQLEventDetails,
+					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
+				}
+			} else {
+				event = &eventpb.TxnRowsWrittenLimit{
+					CommonSQLEventDetails:     commonSQLEventDetails,
+					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
+				}
+			}
+			log.StructuredEvent(ctx, event)
+			logCounter.Inc(1)
+		}
+	}
+	if shouldErr {
+		if isRead {
+			err = &txnRowsReadLimitErr{CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails}
+		} else {
+			err = &txnRowsWrittenLimitErr{CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails}
+		}
+		err = pgerror.WithCandidateCode(err, pgcode.ProgramLimitExceeded)
+		errCounter.Inc(1)
+	}
+	return err
+}
+
+// handleTxnRowsWrittenReadLimits checks whether the current transaction has
+// reached the limits on the number of rows written/read and logs the
+// corresponding event or returns an error. It should be called after executing
+// a single statement.
+func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) error {
+	// Note that in many cases, the internal executor doesn't have the
+	// sessionData properly set (i.e. the default values are used), so we'll
+	// never log anything then. This seems acceptable since the focus of these
+	// guardrails is on the externally initiated queries.
+	sd := ex.sessionData
+	writtenErr := ex.handleTxnRowsGuardrails(
+		ctx,
+		ex.extraTxnState.rowsWritten,
+		sd.TxnRowsWrittenLog,
+		sd.TxnRowsWrittenErr,
+		&ex.extraTxnState.rowsWrittenLogged,
+		false, /* isRead */
+		ex.metrics.GuardrailMetrics.TxnRowsWrittenLogCount,
+		ex.metrics.GuardrailMetrics.TxnRowsWrittenErrCount,
+	)
+	readErr := ex.handleTxnRowsGuardrails(
+		ctx,
+		ex.extraTxnState.rowsRead,
+		sd.TxnRowsReadLog,
+		sd.TxnRowsReadErr,
+		&ex.extraTxnState.rowsReadLogged,
+		true, /* isRead */
+		ex.metrics.GuardrailMetrics.TxnRowsReadLogCount,
+		ex.metrics.GuardrailMetrics.TxnRowsReadErrCount,
+	)
+	return errors.CombineErrors(writtenErr, readErr)
 }
 
 // makeExecPlan creates an execution plan and populates planner.curPlan using
@@ -983,6 +1162,8 @@ type topLevelQueryStats struct {
 	bytesRead int64
 	// rowsRead is the number of rows read from disk.
 	rowsRead int64
+	// rowsWritten is the number of rows written.
+	rowsWritten int64
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -1053,7 +1234,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
 		) {
-			return recv.stats, recv.commErr
+			return *recv.stats, recv.commErr
 		}
 	}
 	recv.discardRows = planner.instrumentation.ShouldDiscardRows()
@@ -1066,14 +1247,14 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// need to have access to the main query tree.
 	defer cleanup()
 	if recv.commErr != nil || res.Err() != nil {
-		return recv.stats, recv.commErr
+		return *recv.stats, recv.commErr
 	}
 
 	ex.server.cfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
 		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv,
 	)
 
-	return recv.stats, recv.commErr
+	return *recv.stats, recv.commErr
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and
@@ -1525,6 +1706,9 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 	ex.extraTxnState.rowsRead = 0
 	ex.extraTxnState.bytesRead = 0
+	ex.extraTxnState.rowsWritten = 0
+	ex.extraTxnState.rowsWrittenLogged = false
+	ex.extraTxnState.rowsReadLogged = false
 	if txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); txnExecStatsSampleRate > 0 {
 		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
 	}
@@ -1545,6 +1729,7 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 		ex.extraTxnState.rowsRead = 0
 		ex.extraTxnState.bytesRead = 0
+		ex.extraTxnState.rowsWritten = 0
 	}
 	return onTxnFinish, onTxnRestart
 }

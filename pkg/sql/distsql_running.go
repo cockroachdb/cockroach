@@ -611,7 +611,7 @@ type DistSQLReceiver struct {
 	// this node's clock.
 	clockUpdater clockUpdater
 
-	stats topLevelQueryStats
+	stats *topLevelQueryStats
 
 	expectedRowsRead int64
 	progressAtomic   *uint64
@@ -733,6 +733,7 @@ func MakeDistSQLReceiver(
 		rangeCache:         rangeCache,
 		txn:                txn,
 		clockUpdater:       clockUpdater,
+		stats:              &topLevelQueryStats{},
 		stmtType:           stmtType,
 		tracing:            tracing,
 		contentionRegistry: contentionRegistry,
@@ -758,6 +759,7 @@ func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 		rangeCache:         r.rangeCache,
 		txn:                r.txn,
 		clockUpdater:       r.clockUpdater,
+		stats:              r.stats,
 		stmtType:           tree.Rows,
 		tracing:            r.tracing,
 		contentionRegistry: r.contentionRegistry,
@@ -859,6 +861,7 @@ func (r *DistSQLReceiver) Push(
 		if meta.Metrics != nil {
 			r.stats.bytesRead += meta.Metrics.BytesRead
 			r.stats.rowsRead += meta.Metrics.RowsRead
+			r.stats.rowsWritten += meta.Metrics.RowsWritten
 			if r.progressAtomic != nil && r.expectedRowsRead != 0 {
 				progress := float64(r.stats.rowsRead) / float64(r.expectedRowsRead)
 				atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))

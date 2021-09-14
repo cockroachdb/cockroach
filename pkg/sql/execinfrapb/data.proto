@@ -286,6 +286,8 @@ message RemoteProducerMetadata {
     optional int64 bytes_read = 1 [(gogoproto.nullable) = false];
     // Total number of rows read while executing a statement.
     optional int64 rows_read = 2 [(gogoproto.nullable) = false];
+    // Total number of rows modified while executing a statement.
+    optional int64 rows_written = 3 [(gogoproto.nullable) = false];
   }
   oneof value {
     RangeInfos range_info = 1;

@@ -102,9 +102,9 @@ type Builder struct {
 // catalog is only needed if the statement contains an EXPLAIN (OPT, CATALOG).
 //
 // If allowAutoCommit is true, mutation operators can pass the auto commit flag
-// to the factory (when the optimizer determines it is correct to do so). It
-// should be false if the statement is executed as part of an explicit
-// transaction.
+// to the factory (when the optimizer determines it is correct to do so and
+// `transaction_rows_read_err` guardrail is disabled.). It should be false if
+// the statement is executed as part of an explicit transaction.
 func New(
 	factory exec.Factory,
 	optimizer *xform.Optimizer,
@@ -125,10 +125,23 @@ func New(
 		initialAllowAutoCommit: allowAutoCommit,
 	}
 	if evalCtx != nil {
-		if evalCtx.SessionData.SaveTablesPrefix != "" {
-			b.nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
+		sd := evalCtx.SessionData
+		if sd.SaveTablesPrefix != "" {
+			b.nameGen = memo.NewExprNameGenerator(sd.SaveTablesPrefix)
 		}
-		b.allowInsertFastPath = evalCtx.SessionData.InsertFastPath
+		// If we have the limits on the number of rows read by a single txn, we
+		// cannot auto commit if the query is not internal.
+		//
+		// Note that we don't impose such a requirement on the number of rows
+		// written by a single txn because Builder.canAutoCommit ensures that we
+		// try to auto commit iff there is a single mutation in the query, and
+		// in such a scenario tableWriterBase.finalize is responsible for making
+		// sure that the rows written limit is not reached before the auto
+		// commit.
+		prohibitAutoCommit := sd.TxnRowsReadErr != 0 && !sd.Internal
+		b.allowAutoCommit = b.allowAutoCommit && !prohibitAutoCommit
+		b.initialAllowAutoCommit = b.allowAutoCommit
+		b.allowInsertFastPath = sd.InsertFastPath
 	}
 	return b
 }

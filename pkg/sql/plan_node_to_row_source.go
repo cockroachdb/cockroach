@@ -84,7 +84,21 @@ func (p *planNodeToRowSource) InitWithOutput(
 		0, /* processorID */
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{},
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				var meta []execinfrapb.ProducerMetadata
+				if p.InternalClose() {
+					// Check if we're wrapping a mutation and emit the rows
+					// written metric if so.
+					if m, ok := p.node.(mutationPlanNode); ok {
+						metrics := execinfrapb.GetMetricsMeta()
+						metrics.RowsWritten = m.rowsWritten()
+						meta = []execinfrapb.ProducerMetadata{{Metrics: metrics}}
+					}
+				}
+				return meta
+			},
+		},
 	)
 }
 

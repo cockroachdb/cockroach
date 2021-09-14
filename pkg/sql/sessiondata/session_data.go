@@ -269,6 +269,25 @@ type LocalOnlySessionData struct {
 	// of that interleave should be applied to the new primary index.
 	CopyPartitioningWhenDeinterleavingTable bool
 
+	// TxnRowsWrittenLog is the threshold for the number of rows written by a SQL
+	// transaction which - once exceeded - will trigger a logging event to SQL_PERF
+	// (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
+	TxnRowsWrittenLog int64
+	// TxnRowsWrittenErr is the limit for the number of rows written by a SQL
+	// transaction which - once exceeded - will fail the transaction (or will
+	// trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
+	// means disabled.
+	TxnRowsWrittenErr int64
+	// TxnRowsReadLog is the threshold for the number of rows read by a SQL
+	// transaction which - once exceeded - will trigger a logging event to SQL_PERF
+	// (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
+	TxnRowsReadLog int64
+	// TxnRowsReadErr is the limit for the number of rows read by a SQL
+	// transaction which - once exceeded - will fail the transaction (or will
+	// trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
+	// means disabled.
+	TxnRowsReadErr int64
+
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //

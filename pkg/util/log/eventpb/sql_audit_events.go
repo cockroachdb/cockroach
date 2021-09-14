@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var _ error = &CommonLargeRowDetails{}
@@ -50,6 +51,33 @@ func (r *CommonLargeRowDetails) SafeFormatError(p errors.Printer) (next error) {
 		p.Printf(
 			"row larger than max row size: table %v family %v size %v",
 			errors.Safe(r.TableID), errors.Safe(r.FamilyID), errors.Safe(r.RowSize),
+		)
+	}
+	return nil
+}
+
+// Error helps other structs embedding CommonTxnRowsLimitDetails implement the
+// error interface.
+func (d *CommonTxnRowsLimitDetails) Error(kind string) string {
+	return fmt.Sprintf(
+		"txn has %s %d rows, which is above the limit: TxnID %v SessionID %v",
+		kind, d.NumRows, redact.SafeString(d.TxnID), redact.SafeString(d.SessionID),
+	)
+}
+
+// SafeDetails helps other structs embedding CommonTxnRowsLimitDetails implement
+// the errors.SafeDetailer interface.
+func (d *CommonTxnRowsLimitDetails) SafeDetails(kind string) []string {
+	return []string{d.TxnID, d.SessionID, fmt.Sprintf("%d", d.NumRows), kind}
+}
+
+// SafeFormatError helps other structs embedding CommonTxnRowsLimitDetails
+// implement the errors.SafeFormatter interface.
+func (d *CommonTxnRowsLimitDetails) SafeFormatError(p errors.Printer, kind string) (next error) {
+	if p.Detail() {
+		p.Printf(
+			"txn has %s %d rows, which is above the limit: TxnID %v SessionID %v",
+			kind, d.NumRows, redact.SafeString(d.TxnID), redact.SafeString(d.SessionID),
 		)
 	}
 	return nil

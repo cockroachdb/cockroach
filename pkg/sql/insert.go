@@ -45,6 +45,8 @@ type insertNode struct {
 	run insertRun
 }
 
+var _ mutationPlanNode = &insertNode{}
+
 // insertRun contains the run-time state of insertNode during local execution.
 type insertRun struct {
 	ti         tableInserter
@@ -255,6 +257,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
+		n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData)
 		if err := n.run.ti.finalize(params.ctx); err != nil {
 			return false, err
 		}
@@ -284,4 +287,8 @@ func (n *insertNode) Close(ctx context.Context) {
 // See planner.autoCommit.
 func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
+}
+
+func (n *insertNode) rowsWritten() int64 {
+	return n.run.ti.rowsWritten
 }
