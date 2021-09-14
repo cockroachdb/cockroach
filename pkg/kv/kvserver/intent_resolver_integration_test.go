@@ -422,7 +422,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 
 		// testTxnExecute executes a transaction for testTxn. It is a separate function
 		// so that any transaction errors can be retried as appropriate.
-		testTxnExecute := func(t *testing.T, spec testTxnSpec, txn *kv.Txn, txnKey roachpb.Key) error {
+		testTxnExecute := func(t *testing.T, ctx context.Context, spec testTxnSpec, txn *kv.Txn, txnKey roachpb.Key) error {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
@@ -445,7 +445,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 				// meanwhile, returning when heartbeat was aborted.
 				abortedC := abortHeartbeat(t, txnKey)
 				readyC := blockPut(t, txnKey)
-				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "unblock", func(ctx context.Context) {
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "unblock", func(_ context.Context) {
 					<-abortedC
 					unblockC := <-readyC
 					time.Sleep(100 * time.Millisecond)
@@ -492,7 +492,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 			// evaluated in Raft.
 			if spec.finalize == "cancelAsync" {
 				readyC := blockPutEval(t, txnKey)
-				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "cancel", func(ctx context.Context) {
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "cancel", func(_ context.Context) {
 					unblockC := <-readyC
 					defer close(unblockC)
 					cancel()
@@ -560,7 +560,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 				txnKey := genKey(spec.singleRange)
 				txns[txn.ID()] = txnKey // before testTxnExecute, id may change on errors
 				retryErr := &roachpb.TransactionRetryWithProtoRefreshError{}
-				err := testTxnExecute(t, spec, txn, txnKey)
+				err := testTxnExecute(t, ctx, spec, txn, txnKey)
 				if err == nil {
 					break
 				} else if spec.abort != "" {
