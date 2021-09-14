@@ -784,6 +784,10 @@ statement ok
 CREATE TABLE guardrails (i INT PRIMARY KEY);
 SET transaction_rows_written_err = 1
 
+# Get the range id.
+let $rangeid
+SELECT range_id FROM [ SHOW RANGES FROM TABLE guardrails ]
+
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) INSERT INTO guardrails VALUES (1)
@@ -793,7 +797,17 @@ true
 
 # Now verify that writing a single row succeeds, but writing two doesn't.
 statement ok
-INSERT INTO guardrails VALUES (1)
+SET tracing = on;
+  INSERT INTO guardrails VALUES (1);
+SET tracing = off;
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message     LIKE '%r$rangeid: sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
+----
+dist sender send  r43: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 
 query error pq: txn has written 2 rows, which is above the limit
 INSERT INTO guardrails VALUES (2), (3)
