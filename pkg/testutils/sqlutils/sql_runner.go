@@ -16,15 +16,18 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // SQLRunner wraps a testutils.TB and *gosql.DB connection and provides
 // convenience functions to run SQL statements and fail the test on any errors.
 type SQLRunner struct {
-	DB DBHandle
+	DB                   DBHandle
+	SucceedsSoonDuration time.Duration // defaults to testutils.DefaultSucceedsSoonDuration
 }
 
 // DBHandle is an interface that applies to *gosql.DB, *gosql.Conn, and
@@ -61,11 +64,20 @@ func (sr *SQLRunner) Exec(t testutils.TB, query string, args ...interface{}) gos
 	return r
 }
 
+func (sr *SQLRunner) succeedsWithin(t testutils.TB, f func() error) {
+	t.Helper()
+	d := sr.SucceedsSoonDuration
+	if d == 0 {
+		d = testutils.DefaultSucceedsSoonDuration
+	}
+	require.NoError(t, testutils.SucceedsWithinError(f, d))
+}
+
 // ExecSucceedsSoon is a wrapper around gosql.Exec that wraps
 // the exec in a succeeds soon.
 func (sr *SQLRunner) ExecSucceedsSoon(t testutils.TB, query string, args ...interface{}) {
 	t.Helper()
-	testutils.SucceedsSoon(t, func() error {
+	sr.succeedsWithin(t, func() error {
 		_, err := sr.DB.ExecContext(context.Background(), query, args...)
 		return err
 	})
@@ -102,7 +114,7 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 	t testutils.TB, errRE string, query string, args ...interface{},
 ) {
 	t.Helper()
-	testutils.SucceedsSoon(t, func() error {
+	sr.succeedsWithin(t, func() error {
 		_, err := sr.DB.ExecContext(context.Background(), query, args...)
 		if !testutils.IsError(err, errRE) {
 			return errors.Newf("expected error '%s', got: %v", errRE, err)
@@ -219,7 +231,7 @@ func (sr *SQLRunner) CheckQueryResults(t testutils.TB, query string, expected []
 // using testutils.SucceedsSoon.
 func (sr *SQLRunner) CheckQueryResultsRetry(t testutils.TB, query string, expected [][]string) {
 	t.Helper()
-	testutils.SucceedsSoon(t, func() error {
+	sr.succeedsWithin(t, func() error {
 		res := sr.QueryStr(t, query)
 		if !reflect.DeepEqual(res, expected) {
 			return errors.Errorf("query '%s': expected:\n%v\ngot:\n%v\n",
