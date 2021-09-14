@@ -10,11 +10,6 @@ query T
 SELECT aclexplode(ARRAY['foo'])
 ----
 
-query O
-SELECT pg_my_temp_schema()
-----
-0
-
 # Regression test for #43166.
 statement ok
 SELECT has_table_privilege('root'::NAME, 0, 'select')
@@ -340,6 +335,85 @@ SELECT pg_catalog.set_config('woo', 'woo', false)
 
 query error configuration setting.*not supported
 SELECT set_config('vacuum_cost_delay', '0', false)
+
+# pg_my_temp_schema
+#
+# Before a temporary schema is created, it returns 0. Afterwards, it returns the
+# OID of session's temporary schema.
+
+query O
+SELECT pg_my_temp_schema()
+----
+0
+
+statement ok
+SET experimental_enable_temp_tables = true;
+
+statement ok
+CREATE TEMP TABLE temp1 (a int);
+
+query B
+SELECT pg_my_temp_schema()::TEXT LIKE 'pg_temp_%'
+----
+true
+
+# If the user changes databases, it no longer has access to its temp tables.
+# pg_my_temp_schema reverts to returning 0 again.
+
+statement ok
+SET DATABASE = db2;
+
+query O
+SELECT pg_my_temp_schema()
+----
+0
+
+statement ok
+CREATE TEMP TABLE temp2 (a int);
+
+query B
+SELECT pg_my_temp_schema()::TEXT LIKE 'pg_temp_%'
+----
+true
+
+statement ok
+SET DATABASE = test;
+
+# pg_is_other_temp_schema
+#
+# Returns true if the provided OID meets the following conditions:
+# - is a reference to a schema
+# - that is temporary
+# - and is owned by a different session
+
+query B
+SELECT pg_is_other_temp_schema((SELECT oid FROM pg_type LIMIT 1))
+----
+false
+
+query B
+SELECT pg_is_other_temp_schema((SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog'))
+----
+false
+
+query TB
+SELECT user, pg_is_other_temp_schema((SELECT oid FROM pg_namespace WHERE nspname LIKE 'pg_temp_%'))
+----
+root  false
+
+# Switch users as a means of switching sessions. GRANT to ensure visibility.
+
+statement ok
+GRANT root TO testuser
+
+user testuser
+
+query TB
+SELECT user, pg_is_other_temp_schema((SELECT oid FROM pg_namespace WHERE nspname LIKE 'pg_temp_%'))
+----
+testuser  true
+
+user root
 
 # information_schema._pg_truetypid and information_schema._pg_truetypmod
 #
