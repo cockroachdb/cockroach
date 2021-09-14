@@ -3228,7 +3228,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 						sysCfg.RaftLock()
 						require.NoError(t, sysCfg.MaybeGossipSystemConfigRaftMuLocked(ctx))
 						sysCfg.RaftUnlock()
-						return errors.Errorf("expected %d, got %d", exp, c.TTL().Seconds())
+						return errors.Errorf("expected %d, got %f", exp, c.TTL().Seconds())
 					}
 				}
 				return nil
