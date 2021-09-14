@@ -141,7 +141,7 @@ func reduceSQL(
 		chunkReducer = reducesql.NewSQLChunkReducer(chunkReductions)
 	}
 
-	interesting := func(ctx context.Context, f string) bool {
+	interesting := func(ctx context.Context, sql string) bool {
 		// Disable telemetry and license generation.
 		cmd := exec.CommandContext(ctx, binary,
 			"demo",
@@ -149,7 +149,6 @@ func reduceSQL(
 			"--disable-demo-license",
 		)
 		cmd.Env = []string{"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", "true"}
-		sql := string(f)
 		if !strings.HasSuffix(sql, ";") {
 			sql += ";"
 		}

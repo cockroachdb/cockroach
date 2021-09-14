@@ -38,9 +38,11 @@ func WaitFor3XReplication(t test.Test, db *gosql.DB) {
 			ctx,
 			"SELECT count(1) FROM crdb_internal.ranges WHERE array_length(replicas, 1) < 3 ",
 		).Scan(&n); err != nil {
+			cancel()
 			t.Fatal(err)
 		}
 		if n == 0 {
+			cancel()
 			return
 		}
 		cancel()

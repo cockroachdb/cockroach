@@ -1169,7 +1169,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not find span config for range %s", err)
 	}
-	tc.manualClock.Increment(int64(conf.TTL().Nanoseconds()) + 1)
+	tc.manualClock.Increment(conf.TTL().Nanoseconds() + 1)
 	gcQ := newGCQueue(tc.store)
 	processed, err := gcQ.process(ctx, tc.repl, confReader)
 	if err != nil {

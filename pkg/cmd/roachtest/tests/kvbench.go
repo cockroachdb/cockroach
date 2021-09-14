@@ -196,9 +196,9 @@ func makeKVLoadGroup(c cluster.Cluster, numRoachNodes, numLoadNodes int) loadGro
 // performance characteristics of using hash sharded indexes, for sequential workloads
 // which would've otherwise created a single-range hotspot.
 func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSpec) {
-	loadGroup := makeKVLoadGroup(c, b.Nodes, 1)
-	roachNodes := loadGroup.roachNodes
-	loadNodes := loadGroup.loadNodes
+	loadGrp := makeKVLoadGroup(c, b.Nodes, 1)
+	roachNodes := loadGrp.roachNodes
+	loadNodes := loadGrp.loadNodes
 
 	if err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", roachNodes); err != nil {
 		t.Fatal(err)

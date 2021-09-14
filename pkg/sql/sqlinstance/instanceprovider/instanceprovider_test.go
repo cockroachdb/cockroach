@@ -81,7 +81,7 @@ func TestInstanceProvider(t *testing.T) {
 		slInstance.ClearSessionForTest(ctx)
 		// Verify that the SQL instance is shutdown on session expiry.
 		testutils.SucceedsSoon(t, func() error {
-			if _, err = instanceProvider.Instance(ctx); err != stop.ErrUnavailable {
+			if _, err = instanceProvider.Instance(ctx); !errors.Is(err, stop.ErrUnavailable) {
 				return errors.Errorf("sql instance is not shutdown on session expiry")
 			}
 			return nil

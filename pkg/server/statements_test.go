@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 // TestStatements ensures that the Statements endpoint is accessible
@@ -41,9 +40,6 @@ func TestStatements(t *testing.T) {
 		testServer.RPCAddr(), testServer.NodeID(), rpc.DefaultClass,
 	).Connect(ctx)
 	require.NoError(t, err)
-	defer func(conn *grpc.ClientConn) {
-		_ = conn.Close()
-	}(conn)
 
 	client := serverpb.NewStatusClient(conn)
 

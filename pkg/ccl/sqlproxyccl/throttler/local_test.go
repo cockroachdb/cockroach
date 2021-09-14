@@ -107,13 +107,13 @@ func TestPoolRefills(t *testing.T) {
 	}
 
 	// The bucket is initialized to its max size.
-	require.Equal(t, int(policy.Capacity), countSuccess())
+	require.Equal(t, policy.Capacity, countSuccess())
 
 	s.clock.advance(10 * time.Second)
 	require.Equal(t, 10, countSuccess())
 
 	s.clock.advance(time.Minute)
-	require.Equal(t, int(policy.Capacity), countSuccess())
+	require.Equal(t, policy.Capacity, countSuccess())
 }
 
 func TestReportSuccessDisablesThrottle(t *testing.T) {

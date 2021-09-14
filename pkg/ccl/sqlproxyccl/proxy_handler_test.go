@@ -975,7 +975,7 @@ func newTester() *tester {
 	originalSendErrToClient := SendErrToClient
 	te.restoreSendErrToClient =
 		testutils.TestingHook(&SendErrToClient, func(conn net.Conn, err error) {
-			if codeErr, ok := err.(*codeError); ok {
+			if codeErr := (*codeError)(nil); errors.As(err, &codeErr) {
 				te.setErrToClient(codeErr)
 			}
 			originalSendErrToClient(conn, err)

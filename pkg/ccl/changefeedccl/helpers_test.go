@@ -189,7 +189,7 @@ func assertPayloadsBaseErr(
 		// format again with timestamps stripped
 		actualFormatted, err = stripTsFromPayloads(actual)
 		if err != nil {
-			return nil
+			return err
 		}
 	}
 

@@ -2064,25 +2064,23 @@ func TestLint(t *testing.T) {
 		}, ",")
 
 		nakedGoroutineExceptions := `(` + strings.Join([]string{
-			`pkg/.*_test.go`,
-			`pkg/workload/`,
-			`pkg/cli/systembench/`,
-			`pkg/cmd/roachprod/`,
-			`pkg/cmd/roachtest/`,
-			`pkg/cmd/roachprod-stress/`,
-			`pkg/cmd/urlcheck/`,
-			`pkg/acceptance/`,
-			`pkg/cli/syncbench/`,
-			`pkg/workload/`,
-			`pkg/cmd/cmp-protocol/`,
-			`pkg/cmd/cr2pg/`,
-			`pkg/cmd/smithtest/`,
-			`pkg/cmd/reduce/`,
-			`pkg/cmd/zerosum/`,
-			`pkg/cmd/allocsim/`,
-			`pkg/testutils/`,
-		}, ")|(") + `)`
-
+			`pkg/.*_test\.go`,
+			`pkg/acceptance/.*\.go`,
+			`pkg/cli/syncbench/.*\.go`,
+			`pkg/cli/systembench/.*\.go`,
+			`pkg/cmd/allocsim/.*\.go`,
+			`pkg/cmd/cmp-protocol/.*\.go`,
+			`pkg/cmd/cr2pg/.*\.go`,
+			`pkg/cmd/reduce/.*\.go`,
+			`pkg/cmd/roachprod-stress/.*\.go`,
+			`pkg/cmd/roachprod/.*\.go`,
+			`pkg/cmd/roachtest/.*\.go`,
+			`pkg/cmd/smithtest/.*\.go`,
+			`pkg/cmd/urlcheck/.*\.go`,
+			`pkg/cmd/zerosum/.*\.go`,
+			`pkg/testutils/.*\.go`,
+			`pkg/workload/.*\.go`,
+		}, "|") + `)`
 		filters := []stream.Filter{
 			// Ignore generated files.
 			stream.GrepNot(`pkg/.*\.pb\.go:`),
@@ -2132,7 +2130,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepth\(\): format argument is not a constant expression`),
 			// roachtest is not collecting redactable logs so we don't care
 			// about printf hygiene there as much.
-			stream.GrepNot(`pkg/cmd/roachtest/log\.go:.*format argument is not a constant expression`),
+			stream.GrepNot(`pkg/cmd/roachtest/logger/log\.go:.*format argument is not a constant expression`),
 			// We purposefully produce nil dereferences in this file to test crash conditions
 			stream.GrepNot(`pkg/util/log/logcrash/crash_reporting_test\.go:.*nil dereference in type assertion`),
 			// Spawning naked goroutines is ok when it's not as part of the main CRDB

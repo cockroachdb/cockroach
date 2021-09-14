@@ -91,7 +91,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 
 			for i := 1; i <= c.Spec().NodeCount; i++ {
 				if elapsed := timeutil.Since(start); elapsed >= 20*time.Second {
-					t.Fatalf("gossip did not stabilize in %.1fs", deadNode, elapsed.Seconds())
+					t.Fatalf("gossip did not stabilize (dead node %d) in %.1fs", deadNode, elapsed.Seconds())
 				}
 
 				if i == deadNode {

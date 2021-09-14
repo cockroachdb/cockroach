@@ -39,7 +39,7 @@ func columnByteSize(col coldata.Vec) int64 {
 		return int64(len(col.Float64()) * 8)
 	case types.BytesFamily:
 		// We subtract the overhead to be in line with Int64 and Float64 cases.
-		return int64(col.Bytes().Size() - coldata.FlatBytesOverhead)
+		return col.Bytes().Size() - coldata.FlatBytesOverhead
 	default:
 		panic(fmt.Sprintf(`unhandled type %s`, t))
 	}
