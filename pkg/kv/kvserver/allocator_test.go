@@ -1436,13 +1436,13 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 			require.Equal(t, subtest.expectedAddTarget, add.StoreID)
 			require.Equal(t, subtest.expectedRemoveTarget, remove.StoreID)
 			// Verify shouldRebalanceBasedOnThresholds results.
-			desc, ok := a.storePool.getStoreDescriptor(remove.StoreID)
-			if !ok {
+			if desc, descOk := a.storePool.getStoreDescriptor(remove.StoreID); descOk {
+				sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+				result := options.shouldRebalanceBasedOnThresholds(ctx, desc, sl)
+				require.True(t, result)
+			} else {
 				t.Fatalf("unable to get store %d descriptor", remove.StoreID)
 			}
-			sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
-			result := options.shouldRebalanceBasedOnThresholds(ctx, desc, sl)
-			require.True(t, result)
 		} else {
 			require.False(t, ok)
 		}
@@ -1488,19 +1488,6 @@ func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
 		},
 	}
 
-	replicas := func(ids ...roachpb.StoreID) (repls []roachpb.ReplicaDescriptor) {
-		for _, id := range ids {
-			repls = append(
-				repls,
-				roachpb.ReplicaDescriptor{
-					NodeID:    roachpb.NodeID(id),
-					StoreID:   id,
-					ReplicaID: roachpb.ReplicaID(id),
-				},
-			)
-		}
-		return repls
-	}
 	type testCase struct {
 		testStores           []*roachpb.StoreDescriptor
 		existingRepls        []roachpb.ReplicaDescriptor

@@ -1243,7 +1243,10 @@ func TestAssertEnginesEmpty(t *testing.T) {
 	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
 
 	batch := eng.NewBatch()
-	key := storage.MVCCKey{[]byte{0xde, 0xad, 0xbe, 0xef}, hlc.Timestamp{WallTime: 100}}
+	key := storage.MVCCKey{
+		Key:       []byte{0xde, 0xad, 0xbe, 0xef},
+		Timestamp: hlc.Timestamp{WallTime: 100},
+	}
 	require.NoError(t, batch.PutMVCC(key, []byte("foo")))
 	require.NoError(t, batch.Commit(false))
 	require.Error(t, assertEnginesEmpty([]storage.Engine{eng}))

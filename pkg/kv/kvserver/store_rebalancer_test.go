@@ -42,7 +42,7 @@ var (
 			Node: roachpb.NodeDescriptor{
 				NodeID: 1,
 				Locality: roachpb.Locality{
-					[]roachpb.Tier{
+					Tiers: []roachpb.Tier{
 						{
 							Key:   "region",
 							Value: "a",
@@ -59,7 +59,7 @@ var (
 			Node: roachpb.NodeDescriptor{
 				NodeID: 2,
 				Locality: roachpb.Locality{
-					[]roachpb.Tier{
+					Tiers: []roachpb.Tier{
 						{
 							Key:   "region",
 							Value: "a",
@@ -76,7 +76,7 @@ var (
 			Node: roachpb.NodeDescriptor{
 				NodeID: 3,
 				Locality: roachpb.Locality{
-					[]roachpb.Tier{
+					Tiers: []roachpb.Tier{
 						{
 							Key:   "region",
 							Value: "a",
@@ -93,7 +93,7 @@ var (
 			Node: roachpb.NodeDescriptor{
 				NodeID: 4,
 				Locality: roachpb.Locality{
-					[]roachpb.Tier{
+					Tiers: []roachpb.Tier{
 						{
 							Key:   "region",
 							Value: "b",
@@ -110,7 +110,7 @@ var (
 			Node: roachpb.NodeDescriptor{
 				NodeID: 5,
 				Locality: roachpb.Locality{
-					[]roachpb.Tier{
+					Tiers: []roachpb.Tier{
 						{
 							Key:   "region",
 							Value: "b",
@@ -127,7 +127,7 @@ var (
 			Node: roachpb.NodeDescriptor{
 				NodeID: 6,
 				Locality: roachpb.Locality{
-					[]roachpb.Tier{
+					Tiers: []roachpb.Tier{
 						{
 							Key:   "region",
 							Value: "b",
@@ -144,7 +144,7 @@ var (
 			Node: roachpb.NodeDescriptor{
 				NodeID: 7,
 				Locality: roachpb.Locality{
-					[]roachpb.Tier{
+					Tiers: []roachpb.Tier{
 						{
 							Key:   "region",
 							Value: "c",
@@ -161,7 +161,7 @@ var (
 			Node: roachpb.NodeDescriptor{
 				NodeID: 8,
 				Locality: roachpb.Locality{
-					[]roachpb.Tier{
+					Tiers: []roachpb.Tier{
 						{
 							Key:   "region",
 							Value: "c",
@@ -178,7 +178,7 @@ var (
 			Node: roachpb.NodeDescriptor{
 				NodeID: 9,
 				Locality: roachpb.Locality{
-					[]roachpb.Tier{
+					Tiers: []roachpb.Tier{
 						{
 							Key:   "region",
 							Value: "c",
