@@ -1383,10 +1383,10 @@ github.com/toqueteos/webbrowser v1.2.0/go.mod h1:XWoZq4cyp9WeUeak7w7LXRUQf1F1ATJ
 github.com/tv42/httpunix v0.0.0-20150427012821-b75d8614f926/go.mod h1:9ESjWnEqriFuLhtthL60Sar/7RFoluCcXsuvEwTV5KM=
 github.com/twitchtv/twirp v7.1.1+incompatible h1:VgwjwtPtKRwVt80FRXNCSkm30+n4YhqroQMkjLEbtik=
 github.com/twitchtv/twirp v7.1.1+incompatible/go.mod h1:RRJoFSAmTEh2weEqWtpPE3vFK5YBhA6bqp2l1kfCC5A=
-github.com/twpayne/go-geom v1.3.7-0.20210228220813-9d9885b50d3e h1:SRMQNnhXCCgFBGAYFnM8iOSMYcOlOwkaTP3pwRCcuOY=
-github.com/twpayne/go-geom v1.3.7-0.20210228220813-9d9885b50d3e/go.mod h1:XTyWHR6+l9TUYONbbK4ImUTYbWDCu2ySSPrZmmiA0Pg=
-github.com/twpayne/go-kml v1.5.1 h1:RI0JKh/VzdK/d+ZxdJzt8Ar921KMYPfg9qkw7vsbAGw=
-github.com/twpayne/go-kml v1.5.1/go.mod h1:kz8jAiIz6FIdU2Zjce9qGlVtgFYES9vt7BTPBHf5jl4=
+github.com/twpayne/go-geom v1.4.1 h1:LeivFqaGBRfyg0XJJ9pkudcptwhSSrYN9KZUW6HcgdA=
+github.com/twpayne/go-geom v1.4.1/go.mod h1:k/zktXdL+qnA6OgKsdEGUTA17jbQ2ZPTUa3CCySuGpE=
+github.com/twpayne/go-kml v1.5.2 h1:rFMw2/EwgkVssGS2MT6YfWSPZz6BgcJkLxQ53jnE8rQ=
+github.com/twpayne/go-kml v1.5.2/go.mod h1:kz8jAiIz6FIdU2Zjce9qGlVtgFYES9vt7BTPBHf5jl4=
 github.com/twpayne/go-polyline v1.0.0/go.mod h1:ICh24bcLYBX8CknfvNPKqoTbe+eg+MX1NPyJmSBo7pU=
 github.com/twpayne/go-waypoint v0.0.0-20200706203930-b263a7f6e4e8/go.mod h1:qj5pHncxKhu9gxtZEYWypA/z097sxhFlbTyOyt9gcnU=
 github.com/uber-go/atomic v1.4.0/go.mod h1:/Ct5t2lcmbJ4OSe/waGBoaVvVqtO0bmtfVNex1PFV8g=
