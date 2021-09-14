@@ -1047,12 +1047,11 @@ func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
 
 	case opt.ProjectOp:
 		// Allow Project on top, as long as the expressions are not side-effecting.
-		//
-		// TODO(radu): for now, we only allow passthrough projections because not all
-		// builtins that can error out are marked as side-effecting.
 		proj := rel.(*memo.ProjectExpr)
-		if len(proj.Projections) != 0 {
-			return false
+		for i := 0; i < len(proj.Projections); i++ {
+			if !proj.Projections[i].ScalarProps().VolatilitySet.IsLeakProof() {
+				return false
+			}
 		}
 		return b.canAutoCommit(proj.Input)
 
