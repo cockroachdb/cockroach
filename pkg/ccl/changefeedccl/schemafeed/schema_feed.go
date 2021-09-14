@@ -525,9 +525,14 @@ func (tf *schemaFeed) validateDescriptor(
 		// manager to acquire the freshest version of the type.
 		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID())
 	case catalog.TableDescriptor:
-		if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
-			return err
+		if t, ok := tf.targets[desc.GetID()]; ok {
+			if err := changefeedbase.ValidateTableDescriptor(desc); err != nil {
+				return errors.WithDetailf(err, "(statement time name was %s)", t.StatementTimeName)
+			}
+		} else {
+			return errors.Errorf(`unwatched table: %s`, desc.GetName())
 		}
+
 		log.VEventf(ctx, 1, "validate %v", formatDesc(desc))
 		if lastVersion, ok := tf.mu.previousTableVersion[desc.GetID()]; ok {
 			// NB: Writes can occur to a table

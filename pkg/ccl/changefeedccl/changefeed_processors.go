@@ -449,6 +449,13 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 				// ErrBufferClosed is a signal that
 				// our kvfeed has exited expectedly.
 				err = nil
+				if ca.spec.Feed.ExportMode {
+					// Flush any buffered data in the sink.
+					if err := ca.sink.Flush(ca.Ctx); err != nil {
+						ca.MoveToDraining(changefeedbase.MarkRetryableError(err))
+						break
+					}
+				}
 			}
 
 			select {

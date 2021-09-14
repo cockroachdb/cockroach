@@ -74,6 +74,7 @@ genrule(
         "create_replication_stream_stmt.bnf",
         "create_role_stmt.bnf",
         "create_schedule_for_backup_stmt.bnf",
+        "create_schedule_for_export_stmt.bnf",
         "create_schema_stmt.bnf",
         "create_sequence_stmt.bnf",
         "create_stats_stmt.bnf",

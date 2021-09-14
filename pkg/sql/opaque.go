@@ -299,6 +299,7 @@ func init() {
 		&tree.CreateChangefeed{},
 		&tree.Import{},
 		&tree.ScheduledBackup{},
+		&tree.ScheduledExport{},
 		&tree.StreamIngestion{},
 		&tree.ReplicationStream{},
 	} {
