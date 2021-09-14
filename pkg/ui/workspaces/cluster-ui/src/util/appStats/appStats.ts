@@ -10,7 +10,7 @@
 
 import _ from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { FixLong, uniqueLong } from "src/util";
+import { FixLong, TimestampToNumber, uniqueLong } from "src/util";
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type ExecStats = protos.cockroach.sql.IExecStats;
@@ -21,15 +21,15 @@ export interface NumericStat {
   squared_diffs?: number;
 }
 
-export function variance(stat: NumericStat, count: number) {
+export function variance(stat: NumericStat, count: number): number {
   return (stat?.squared_diffs || 0) / (count - 1);
 }
 
-export function stdDev(stat: NumericStat, count: number) {
+export function stdDev(stat: NumericStat, count: number): number {
   return Math.sqrt(variance(stat, count)) || 0;
 }
 
-export function stdDevLong(stat: NumericStat, count: number | Long) {
+export function stdDevLong(stat: NumericStat, count: number | Long): number {
   return stdDev(stat, Number(FixLong(count)));
 }
 
@@ -40,7 +40,7 @@ export function aggregateNumericStats(
   b: NumericStat,
   countA: number,
   countB: number,
-) {
+): { mean: number; squared_diffs: number } {
   const total = countA + countB;
   const delta = b.mean - a.mean;
 
@@ -198,6 +198,7 @@ export function aggregateStatementStats(
 
 export interface ExecutionStatistics {
   statement: string;
+  aggregated_ts: number;
   app: string;
   database: string;
   distSQL: boolean;
@@ -214,6 +215,7 @@ export function flattenStatementStats(
 ): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
     statement: stmt.key.key_data.query,
+    aggregated_ts: TimestampToNumber(stmt.key.aggregated_ts),
     app: stmt.key.key_data.app,
     database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
@@ -240,7 +242,9 @@ export const getSearchParams = (searchParams: string) => {
 
 // This function returns a key based on all parameters
 // that should be used to group statements.
-// Parameters being used: node_id, implicit_txn and database.
+// Parameters being used: query, implicit_txn, database, and aggregated_ts.
 export function statementKey(stmt: ExecutionStatistics): string {
-  return stmt.statement + stmt.implicit_txn + stmt.database;
+  return (
+    stmt.statement + stmt.implicit_txn + stmt.database + stmt.aggregated_ts
+  );
 }
