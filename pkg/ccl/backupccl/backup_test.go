@@ -318,12 +318,12 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				ret := ds.noticeBuffer
 				if err != nil {
 					ret = append(ds.noticeBuffer, err.Error())
-					if err, ok := err.(*pq.Error); ok {
-						if err.Detail != "" {
-							ret = append(ret, "DETAIL: "+err.Detail)
+					if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+						if pqErr.Detail != "" {
+							ret = append(ret, "DETAIL: "+pqErr.Detail)
 						}
-						if err.Hint != "" {
-							ret = append(ret, "HINT: "+err.Hint)
+						if pqErr.Hint != "" {
+							ret = append(ret, "HINT: "+pqErr.Hint)
 						}
 					}
 				}

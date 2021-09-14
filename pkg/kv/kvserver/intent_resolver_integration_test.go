@@ -559,16 +559,19 @@ func TestReliableIntentCleanup(t *testing.T) {
 			for attempt := 1; ; attempt++ {
 				txnKey := genKey(spec.singleRange)
 				txns[txn.ID()] = txnKey // before testTxnExecute, id may change on errors
-
+				retryErr := &roachpb.TransactionRetryWithProtoRefreshError{}
 				err := testTxnExecute(t, spec, txn, txnKey)
 				if err == nil {
 					break
 				} else if spec.abort != "" {
 					require.Error(t, err)
-					require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err, "err: %v", err)
-					require.True(t, err.(*roachpb.TransactionRetryWithProtoRefreshError).PrevTxnAborted())
+					if errors.As(err, retryErr) {
+						require.True(t, retryErr.PrevTxnAborted())
+					} else {
+						require.Fail(t, "expected TransactionRetryWithProtoRefreshError, got %v", err)
+					}
 					break
-				} else if retryErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); !ok {
+				} else if !errors.As(err, retryErr) {
 					require.NoError(t, err)
 				} else if attempt >= 3 {
 					require.Fail(t, "too many txn retries", "attempt %v errored: %v", attempt, err)
