@@ -1174,6 +1174,7 @@ unreserved_keyword ::=
 	| 'TRIGGER'
 	| 'TRUNCATE'
 	| 'TRUSTED'
+	| 'TTL'
 	| 'TYPE'
 	| 'TYPES'
 	| 'THROTTLING'
