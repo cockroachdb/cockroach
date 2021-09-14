@@ -81,7 +81,7 @@ interface TState {
 
 export interface TransactionsPageStateProps {
   data: IStatementsResponse;
-  dateRange?: [Moment, Moment];
+  dateRange: [Moment, Moment];
   nodeRegions: { [nodeId: string]: string };
   error?: Error | null;
   pageSize?: number;
@@ -102,8 +102,7 @@ export type TransactionsPageProps = TransactionsPageStateProps &
 
 function statementsRequestFromProps(
   props: TransactionsPageProps,
-): protos.cockroach.server.serverpb.StatementsRequest | null {
-  if (props.isTenant || props.dateRange == null) return null;
+): protos.cockroach.server.serverpb.StatementsRequest {
   return new protos.cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(props.dateRange[0].unix()),
@@ -394,25 +393,21 @@ export class TransactionsPage extends React.Component<
                       showNodes={nodes.length > 1}
                     />
                   </PageConfigItem>
-                  {this.props.dateRange && (
-                    <>
-                      <PageConfigItem>
-                        <DateRange
-                          start={this.props.dateRange[0]}
-                          end={this.props.dateRange[1]}
-                          onSubmit={this.changeDateRange}
-                        />
-                      </PageConfigItem>
-                      <PageConfigItem>
-                        <button
-                          className={cx("reset-btn")}
-                          onClick={this.resetTime}
-                        >
-                          reset time
-                        </button>
-                      </PageConfigItem>
-                    </>
-                  )}
+                  <PageConfigItem>
+                    <DateRange
+                      start={this.props.dateRange[0]}
+                      end={this.props.dateRange[1]}
+                      onSubmit={this.changeDateRange}
+                    />
+                  </PageConfigItem>
+                  <PageConfigItem>
+                    <button
+                      className={cx("reset-btn")}
+                      onClick={this.resetTime}
+                    >
+                      reset time
+                    </button>
+                  </PageConfigItem>
                 </PageConfig>
                 <section className={statisticsClasses.tableContainerClass}>
                   <ColumnsSelector
