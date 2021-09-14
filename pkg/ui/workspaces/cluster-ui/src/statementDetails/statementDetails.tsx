@@ -334,7 +334,7 @@ export class StatementDetails extends React.Component<
     isTenant: false,
   };
 
-  changeSortSetting = (ss: SortSetting) => {
+  changeSortSetting = (ss: SortSetting): void => {
     this.setState({
       sortSetting: ss,
     });
@@ -343,12 +343,12 @@ export class StatementDetails extends React.Component<
     }
   };
 
-  refreshStatements = () => {
+  refreshStatements = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshStatements(req);
   };
 
-  componentDidMount() {
+  componentDidMount(): void {
     this.refreshStatements();
     if (!this.props.isTenant) {
       this.props.refreshStatementDiagnosticsRequests();
@@ -357,7 +357,7 @@ export class StatementDetails extends React.Component<
     }
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(): void {
     this.refreshStatements();
     if (!this.props.isTenant) {
       this.props.refreshStatementDiagnosticsRequests();
@@ -366,7 +366,7 @@ export class StatementDetails extends React.Component<
     }
   }
 
-  onTabChange = (tabId: string) => {
+  onTabChange = (tabId: string): void => {
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
     searchParams.set("tab", tabId);
@@ -380,7 +380,7 @@ export class StatementDetails extends React.Component<
     this.props.onTabChanged && this.props.onTabChanged(tabId);
   };
 
-  backToStatementsClick = () => {
+  backToStatementsClick = (): void => {
     this.props.history.push("/statements");
     if (this.props.onBackToStatementsClick) {
       this.props.onBackToStatementsClick();

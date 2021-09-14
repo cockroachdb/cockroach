@@ -13,6 +13,7 @@ import {
   match as Match,
   withRouter,
 } from "react-router-dom";
+import { Location } from "history";
 import { createSelector } from "reselect";
 import _ from "lodash";
 
@@ -35,13 +36,14 @@ import {
   StatementStatistics,
 } from "src/util/appStats";
 import {
+  aggregatedTsAttr,
   appAttr,
   databaseAttr,
   implicitTxnAttr,
   statementAttr,
 } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
-import { getMatchParamByName } from "src/util/query";
+import { getMatchParamByName, queryByName } from "src/util/query";
 import { selectDiagnosticsReportsByStatementFingerprint } from "src/redux/statements/statementsSelectors";
 import {
   StatementDetails,
@@ -65,6 +67,7 @@ interface Fraction {
 
 interface StatementDetailsData {
   nodeId: number;
+  aggregatedTs: number;
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;
@@ -81,6 +84,7 @@ function coalesceNodeStats(
     if (!(key in statsKey)) {
       statsKey[key] = {
         nodeId: stmt.node_id,
+        aggregatedTs: stmt.aggregated_ts,
         implicitTxn: stmt.implicit_txn,
         fullScan: stmt.full_scan,
         database: stmt.database,
@@ -94,6 +98,7 @@ function coalesceNodeStats(
     const stmt = statsKey[key];
     return {
       label: stmt.nodeId.toString(),
+      aggregatedTs: stmt.aggregatedTs,
       implicitTxn: stmt.implicitTxn,
       fullScan: stmt.fullScan,
       database: stmt.database,
@@ -122,15 +127,19 @@ function fractionMatching(
 
 function filterByRouterParamsPredicate(
   match: Match<any>,
+  location: Location,
   internalAppNamePrefix: string,
 ): (stat: ExecutionStatistics) => boolean {
   const statement = getMatchParamByName(match, statementAttr);
   const implicitTxn = getMatchParamByName(match, implicitTxnAttr) === "true";
   const database = getMatchParamByName(match, databaseAttr);
+  // If the aggregatedTs is unset, we will aggregate across the current date range.
+  const aggregatedTs = queryByName(location, aggregatedTsAttr);
   let app = getMatchParamByName(match, appAttr);
 
   const filterByKeys = (stmt: ExecutionStatistics) =>
     stmt.statement === statement &&
+    (aggregatedTs == null || stmt.aggregated_ts.toString() === aggregatedTs) &&
     stmt.implicit_txn === implicitTxn &&
     (stmt.database === database || database === null);
 
@@ -163,9 +172,12 @@ export const selectStatement = createSelector(
     const internalAppNamePrefix =
       statementsState.data?.internal_app_name_prefix;
     const flattened = flattenStatementStats(statements);
-    const results = _.filter(
-      flattened,
-      filterByRouterParamsPredicate(props.match, internalAppNamePrefix),
+    const results = flattened.filter(
+      filterByRouterParamsPredicate(
+        props.match,
+        props.location,
+        internalAppNamePrefix,
+      ),
     );
     const statement = getMatchParamByName(props.match, statementAttr);
     return {
