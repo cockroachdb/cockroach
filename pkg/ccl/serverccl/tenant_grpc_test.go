@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 // TestTenantGRPCServices tests that the gRPC servers that are externally
@@ -67,9 +66,6 @@ func TestTenantGRPCServices(t *testing.T) {
 		nodeID := roachpb.NodeID(tenant.SQLInstanceID())
 		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, rpc.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
-		defer func(conn *grpc.ClientConn) {
-			_ = conn.Close()
-		}(conn)
 
 		client := serverpb.NewStatusClient(conn)
 
@@ -134,9 +130,6 @@ func TestTenantGRPCServices(t *testing.T) {
 		nodeID := roachpb.NodeID(tenant.SQLInstanceID())
 		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, rpc.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
-		defer func(conn *grpc.ClientConn) {
-			_ = conn.Close()
-		}(conn)
 
 		client := serverpb.NewStatusClient(conn)
 
@@ -151,9 +144,6 @@ func TestTenantGRPCServices(t *testing.T) {
 
 		conn, err := rpcCtx.GRPCDialNode(grpcAddr, server.NodeID(), rpc.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
-		defer func(conn *grpc.ClientConn) {
-			_ = conn.Close()
-		}(conn)
 
 		client := serverpb.NewStatusClient(conn)
 
