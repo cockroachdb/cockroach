@@ -1,0 +1,67 @@
+# Tests in this file verify the enacting of the fallback rate when token bucket
+# requests start erroring out while we are being throttled.
+
+wait-for-event
+token-bucket-response
+----
+
+configure
+throttle: 100
+fallback_rate: 1000
+----
+
+# Large request that requires more than the initial RUs.
+write bytes=100000000 label=w2
+----
+
+wait-for-event
+low-ru
+----
+
+wait-for-event
+token-bucket-response
+----
+
+# We were granted 10s worth of tokens at 100 RU/s.
+timers
+----
+00:00:09.000
+00:04:41.479
+
+
+configure
+error: true
+----
+
+advance
+10s
+----
+00:00:10.000
+
+# Wait until we process the "low RU" notification (where we set the fallback rate
+# start time).
+wait-for-event
+low-ru
+----
+
+advance
+2s
+----
+00:00:12.000
+
+# We would set up the fallback rate now, which should allow the request to go
+# through much sooner than 4 minutes.
+wait-for-event
+tick
+----
+
+not-completed label=w2
+----
+
+advance
+30s
+----
+00:00:42.000
+
+await label=w2
+----

@@ -26,6 +26,7 @@ import (
 // are used to adjust/reconfigure/replenish the local token bucket.
 type limiter struct {
 	timeSource timeutil.TimeSource
+	testInstr  TestInstrumentation
 	tb         tokenBucket
 	qp         *quotapool.AbstractPool
 
@@ -43,9 +44,12 @@ type limiter struct {
 const initialRUs = 10000
 const initialRate = 100
 
-func (l *limiter) Init(timeSource timeutil.TimeSource, notifyChan chan struct{}) {
+func (l *limiter) Init(
+	timeSource timeutil.TimeSource, testInstr TestInstrumentation, notifyChan chan struct{},
+) {
 	*l = limiter{
 		timeSource: timeSource,
+		testInstr:  testInstr,
 	}
 
 	l.tb.Init(timeSource.Now(), notifyChan, initialRate, initialRUs)
@@ -58,6 +62,9 @@ func (l *limiter) Init(timeSource timeutil.TimeSource, notifyChan chan struct{})
 		if !req.waitingRUAccounted {
 			req.waitingRUAccounted = true
 			atomic.AddInt64(&l.waitingRU, req.neededCeil())
+			if l.testInstr != nil {
+				l.testInstr.Event(l.timeSource.Now(), WaitingRUAccountedInCallback)
+			}
 		}
 	}
 	// We use OnWaitStartLocked because otherwise we have a race between the token
