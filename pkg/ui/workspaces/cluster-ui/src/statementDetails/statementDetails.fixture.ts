@@ -117,6 +117,8 @@ const statementStats: any = {
   exec_stats: execStats,
 };
 
+const aggregatedTs = Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3;
+
 export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   history,
   location: {
@@ -144,6 +146,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
     byNode: [
       {
         label: "4",
+        aggregatedTs,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -151,6 +154,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       },
       {
         label: "3",
+        aggregatedTs,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -158,6 +162,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       },
       {
         label: "2",
+        aggregatedTs,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -165,6 +170,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       },
       {
         label: "1",
+        aggregatedTs,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -208,6 +214,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
     "4": "gcp-europe-west1",
   },
   refreshStatements: noop,
+  invalidateStatements: noop,
   refreshStatementDiagnosticsRequests: noop,
   refreshNodes: noop,
   refreshNodesLiveness: noop,
