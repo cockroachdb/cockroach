@@ -137,6 +137,15 @@ ALTER TYPE multi_region_test_db.public.crdb_internal_region ADD VALUE 'us-east-1
 statement error "multi_region_test_db.public.crdb_internal_region" is a multi-region enum and can't be modified using the alter type command
 ALTER TYPE multi_region_test_db.public.crdb_internal_region DROP VALUE 'us-east-1'
 
+statement ok
+GRANT ALL ON DATABASE multi_region_test_db TO testuser;
+ALTER TYPE multi_region_test_db.public.crdb_internal_region OWNER TO testuser
+
+query T
+SELECT owner FROM [SHOW TYPES] WHERE name = 'crdb_internal_region' AND schema = 'public'
+----
+testuser
+
 statement error region "region_no_exists" does not exist\nHINT:.*valid regions: ap-southeast-2, ca-central-1, us-east-1
 CREATE DATABASE invalid_region_db PRIMARY REGION "region_no_exists" REGION "region_no_exists"
 
