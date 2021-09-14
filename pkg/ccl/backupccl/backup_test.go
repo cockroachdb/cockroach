@@ -1273,6 +1273,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	fullDir := sanitizedFullDir + "moarSecretsHere"
 
 	backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
+	backupSchemaID := sqlutils.QuerySchemaID(t, conn, "data", "public")
 	backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
 
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
@@ -1298,6 +1299,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		),
 		DescriptorIDs: descpb.IDs{
 			descpb.ID(backupDatabaseID),
+			descpb.ID(backupSchemaID),
 			descpb.ID(backupTableID),
 		},
 	}); err != nil {
@@ -1313,6 +1315,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		),
 		DescriptorIDs: descpb.IDs{
 			descpb.ID(restoreDatabaseID + 1),
+			descpb.ID(restoreDatabaseID + 2),
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -1385,6 +1388,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 			sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 			backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
 			backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
+			backupSchemaID := sqlutils.QuerySchemaID(t, conn, "data", "public")
 			restoreDatabaseID := sqlutils.QueryDatabaseID(t, conn, "restoredb")
 
 			// Take an encrypted BACKUP.
@@ -1400,6 +1404,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 						backupLoc1, sanitizedEncryptionOption1),
 					DescriptorIDs: descpb.IDs{
 						descpb.ID(backupDatabaseID),
+						descpb.ID(backupSchemaID),
 						descpb.ID(backupTableID),
 					},
 				}); err != nil {
@@ -1419,6 +1424,7 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 				),
 				DescriptorIDs: descpb.IDs{
 					descpb.ID(restoreDatabaseID + 1),
+					descpb.ID(restoreDatabaseID + 2),
 				},
 			}); err != nil {
 				t.Fatal(err)
@@ -3989,7 +3995,8 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[3])
 
 	sqlDB.Exec(t, `DELETE FROM data.bank WHERE id >= $1 / 2`, numAccounts)
-	sqlDB.Exec(t, `ALTER TABLE other.sometable RENAME TO data.sometable`)
+	sqlDB.Exec(t, `CREATE TABLE data.sometable AS SELECT * FROM other.sometable`)
+	sqlDB.Exec(t, `DROP TABLE other.sometable`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[4])
 
 	sqlDB.Exec(t, `INSERT INTO data.sometable VALUES (2, 2), (4, 5), (6, 3)`)
@@ -3999,7 +4006,8 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
-	sqlDB.Exec(t, `ALTER TABLE data.sometable RENAME TO other.sometable`)
+	sqlDB.Exec(t, `CREATE TABLE other.sometable AS SELECT * FROM data.sometable`)
+	sqlDB.Exec(t, `DROP TABLE data.sometable`)
 	sqlDB.Exec(t, `CREATE INDEX ON data.teller (name)`)
 	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (2, 2), (4, 4)`)
 	sqlDB.Exec(t, `INSERT INTO data.teller VALUES (2, 'craig')`)
@@ -5167,7 +5175,7 @@ func TestPointInTimeRecovery(t *testing.T) {
 		// newbackup.bank could be done here by the operator.
 
 		sqlDB.Exec(t, `DROP TABLE data.bank`)
-		sqlDB.Exec(t, `ALTER TABLE newbackup.bank RENAME TO data.bank`)
+		sqlDB.Exec(t, `CREATE TABLE data.bank AS SELECT * FROM newbackup.bank`)
 		sqlDB.Exec(t, `DROP DATABASE newbackup`)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM data.bank ORDER BY id`, beforeBadThingData)
 	})
@@ -5192,7 +5200,7 @@ func TestPointInTimeRecovery(t *testing.T) {
 		// incbackup.bank could be done here by the operator.
 
 		sqlDB.Exec(t, `DROP TABLE data.bank`)
-		sqlDB.Exec(t, `ALTER TABLE incbackup.bank RENAME TO data.bank`)
+		sqlDB.Exec(t, `CREATE TABLE data.bank AS SELECT * FROM incbackup.bank`)
 		sqlDB.Exec(t, `DROP DATABASE incbackup`)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM data.bank ORDER BY id`, beforeBadThingData)
 	})
@@ -6861,13 +6869,13 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	expected = nil
 	for _, resume := range []exportResumePoint{
 		{[]byte("/Tenant/10/Table/3"), []byte("/Tenant/10/Table/4"), withoutTS},
-		{[]byte("/Tenant/10/Table/57/1"), []byte("/Tenant/10/Table/57/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/57/1/210/0"), []byte("/Tenant/10/Table/57/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/61/1"), []byte("/Tenant/10/Table/61/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/61/1/210/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
 		// We have two entries for 210 because of history and super small table size
-		{[]byte("/Tenant/10/Table/57/1/210/0"), []byte("/Tenant/10/Table/57/2"), withTS},
-		{[]byte("/Tenant/10/Table/57/1/310/0"), []byte("/Tenant/10/Table/57/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/57/1/410/0"), []byte("/Tenant/10/Table/57/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/57/1/510/0"), []byte("/Tenant/10/Table/57/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/61/1/210/0"), []byte("/Tenant/10/Table/61/2"), withTS},
+		{[]byte("/Tenant/10/Table/61/1/310/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/61/1/410/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
+		{[]byte("/Tenant/10/Table/61/1/510/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
 	} {
 		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
 	}
@@ -7721,6 +7729,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 	})
 
 	t.Run("restore-into-existing-database", func(t *testing.T) {
+		t.Skip(70168)
 		ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 		defer cleanupFn()
 		ctx, cancel := context.WithCancel(ctx)
