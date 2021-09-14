@@ -831,20 +831,22 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.MigrationTestingKnobs = knobs
 	}
 
-	// Instantiate a span config manager; it exposes a hook to idempotently
-	// create the span config reconciliation job and captures all relevant job
-	// dependencies.
-	knobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-	spanconfigMgr := spanconfigmanager.New(
-		cfg.db,
-		jobRegistry,
-		cfg.circularInternalExecutor,
-		cfg.stopper,
-		cfg.Settings,
-		cfg.spanConfigAccessor,
-		knobs,
-	)
-	execCfg.SpanConfigReconciliationJobDeps = spanconfigMgr
+	var spanConfigMgr *spanconfigmanager.Manager
+	if !codec.ForSystemTenant() || cfg.SpanConfigsEnabled {
+		// Instantiate a span config manager. If we're the host tenant we'll
+		// only do it if COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is set.
+		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+		spanConfigMgr = spanconfigmanager.New(
+			cfg.db,
+			jobRegistry,
+			cfg.circularInternalExecutor,
+			cfg.stopper,
+			cfg.Settings,
+			cfg.spanConfigAccessor,
+			spanConfigKnobs,
+		)
+		execCfg.SpanConfigReconciliationJobDeps = spanConfigMgr
+	}
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
@@ -906,7 +908,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlInstanceProvider:     cfg.sqlInstanceProvider,
 		metricsRegistry:         cfg.registry,
 		diagnosticsReporter:     reporter,
-		spanconfigMgr:           spanconfigMgr,
+		spanconfigMgr:           spanConfigMgr,
 		settingsWatcher:         settingsWatcher,
 	}, nil
 }
@@ -1045,8 +1047,10 @@ func (s *SQLServer) preStart(
 		return err
 	}
 
-	if err := s.spanconfigMgr.Start(ctx); err != nil {
-		return err
+	if s.spanconfigMgr != nil {
+		if err := s.spanconfigMgr.Start(ctx); err != nil {
+			return err
+		}
 	}
 
 	var bootstrapVersion roachpb.Version

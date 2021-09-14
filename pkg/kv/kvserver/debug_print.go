@@ -139,7 +139,7 @@ func tryIntent(kv storage.MVCCKeyValue) (string, error) {
 	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
 		return "", err
 	}
-	s := fmt.Sprintf("%+v", meta)
+	s := fmt.Sprintf("%+v", &meta)
 	if meta.Txn != nil {
 		s = meta.Txn.WriteTimestamp.String() + " " + s
 	}
