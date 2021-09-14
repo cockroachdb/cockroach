@@ -120,8 +120,7 @@ export type StatementsPageProps = StatementsPageDispatchProps &
 
 function statementsRequestFromProps(
   props: StatementsPageProps,
-): cockroach.server.serverpb.StatementsRequest | null {
-  if (props.isTenant || props.dateRange == null) return null;
+): cockroach.server.serverpb.StatementsRequest {
   return new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(props.dateRange[0].unix()),

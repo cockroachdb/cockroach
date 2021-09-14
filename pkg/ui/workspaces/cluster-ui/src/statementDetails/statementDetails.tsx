@@ -163,8 +163,7 @@ const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 function statementsRequestFromProps(
   props: StatementDetailsProps,
-): cockroach.server.serverpb.StatementsRequest | null {
-  if (props.isTenant || props.dateRange == null) return null;
+): cockroach.server.serverpb.StatementsRequest {
   return new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(props.dateRange[0].unix()),
