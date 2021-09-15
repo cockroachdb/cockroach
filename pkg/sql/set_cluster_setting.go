@@ -403,21 +403,6 @@ func runVersionUpgradeHook(
 	targetVersionStr := string(*value.(*tree.DString))
 	to.Version = roachpb.MustParseVersion(targetVersionStr)
 
-	start21_1 := clusterversion.ByKey(clusterversion.Start21_1)
-	if !params.extendedEvalCtx.Codec.ForSystemTenant() && from.Less(start21_1) {
-
-		// In the case that we're setting the cluster version to something that
-		// precedes the start of 21.1, which is permitted, if only because it's
-		// complex to prevent, then there's definitely no migrations to run and
-		// it may be hazardous due to assumptions about versions being even.
-		if to.Less(start21_1) {
-			return nil
-		}
-		// Otherwise, tell the migration layer that we're starting from the lowest
-		// allowable version.
-		from.Version = start21_1
-	}
-
 	// toSettingString already validated the input, and checked to
 	// see that we are allowed to transition. Let's call into our
 	// upgrade hook to run migrations, if any.
