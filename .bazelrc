@@ -14,6 +14,8 @@ build:ci --host_crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
 test:ci --test_env=GO_TEST_WRAP_TESTV=1
 # Dump all output for failed tests to the build log.
 test:ci --test_output=errors
+# Put all tmp artifacts in /artifacts/tmp.
+test:ci --test_tmpdir=/artifacts/tmp
 
 # cross-compilation configurations. Add e.g. --config=crosslinux to turn these on
 # TODO(ricky): Having to specify both the `platform` and the `crosstool_top` is
