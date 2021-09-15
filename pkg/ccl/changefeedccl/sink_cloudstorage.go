@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 )
@@ -397,6 +399,15 @@ func (s *cloudStorageSink) getOrCreateFile(topic TopicDescriptor) *cloudStorageS
 	return f
 }
 
+func warnIfSlow(ctx context.Context, msg string) func() {
+	start := timeutil.Now()
+	return func() {
+		if timeutil.Now().Sub(start) > 5*time.Second {
+			log.Warningf(ctx, "Excessively slow cloudsink %s took more than 5 seconds", msg)
+		}
+	}
+}
+
 // EmitRow implements the Sink interface.
 func (s *cloudStorageSink) EmitRow(
 	ctx context.Context,
@@ -408,6 +419,8 @@ func (s *cloudStorageSink) EmitRow(
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
+
+	defer warnIfSlow(ctx, "write")()
 
 	file := s.getOrCreateFile(topic)
 	file.alloc.Merge(&alloc)
@@ -434,6 +447,8 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
+
+	defer warnIfSlow(ctx, "resolved write")()
 
 	var noTopic string
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, noTopic, resolved)
@@ -491,6 +506,8 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 	if s.files == nil {
 		return errors.New(`cannot Flush on a closed sink`)
 	}
+
+	defer warnIfSlow(ctx, "flush")()
 
 	var err error
 	s.files.Ascend(func(i btree.Item) (wantMore bool) {
