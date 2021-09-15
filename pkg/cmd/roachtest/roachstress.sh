@@ -12,9 +12,9 @@ set -euo pipefail
 
 
 # Read user input.
-if [ ! -v TEST ]; then read -r -e -p "Test regexp: " TEST; fi
-if [ ! -v COUNT ]; then read -r -e -i "10" -p "Count: " COUNT; fi
-if [ ! -v LOCAL ]; then read -r -e -i "n" -p "Local: " LOCAL; fi
+if [ -z "${TEST-}" ]; then read -r -e -p "Test regexp: " TEST; fi
+if [ -z "${COUNT-}" ]; then read -r -e -i "10" -p "Count: " COUNT; fi
+if [ -z "${LOCAL-}" ]; then read -r -e -i "n" -p "Local: " LOCAL; fi
 case $LOCAL in
   [Nn]* | false | "") LOCAL="";;
   *) LOCAL=".local";;
