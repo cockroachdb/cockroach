@@ -18,6 +18,7 @@ subtest root_always_enabled
 set_hba
 host all root 0.0.0.0/0 cert
 ----
+----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
@@ -27,6 +28,12 @@ host all root 0.0.0.0/0 cert
 # TYPE DATABASE USER ADDRESS   METHOD        OPTIONS
 host   all      root all       cert-password
 host   all      root 0.0.0.0/0 cert
+
+
+# Active identity mapping on this node:
+# (empty configuration)
+----
+----
 
 connect user=root sslmode=disable
 ----

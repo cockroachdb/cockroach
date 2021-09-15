@@ -14,6 +14,7 @@ set_hba
 host all testuser all reject
 host all all all cert-password
 ----
+----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
@@ -25,6 +26,12 @@ host all all all cert-password
 host   all      root     all     cert-password
 host   all      testuser all     reject
 host   all      all      all     cert-password
+
+
+# Active identity mapping on this node:
+# (empty configuration)
+----
+----
 
 connect user=testuser
 ----
@@ -47,6 +54,7 @@ set_hba
 host all nocert all trust
 host all all all cert
 ----
+----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
@@ -58,6 +66,12 @@ host all all all cert
 host   all      root   all     cert-password
 host   all      nocert all     trust
 host   all      all    all     cert
+
+
+# Active identity mapping on this node:
+# (empty configuration)
+----
+----
 
 
 connect user=nocert sslcert= sslmode=require

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -66,6 +67,13 @@ import (
 // <hba config>
 //       Load the provided HBA configuration via the cluster setting
 //       server.host_based_authentication.configuration.
+//       The expected output is the configuration after parsing
+//       and reloading in the server.
+//
+// set_identity_map
+// <identity map>
+//       Load the provided identity map via the cluster setting
+//       server.identity_map.configuration.
 //       The expected output is the configuration after parsing
 //       and reloading in the server.
 //
@@ -248,10 +256,51 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						}
 					}
 					testutils.SucceedsSoon(t, func() error {
-						curConf := pgServer.GetAuthenticationConfiguration()
+						curConf, _ := pgServer.GetAuthenticationConfiguration()
 						if expConf.String() != curConf.String() {
 							return errors.Newf(
 								"HBA config not yet loaded\ngot:\n%s\nexpected:\n%s",
+								curConf, expConf)
+						}
+						return nil
+					})
+
+					// Verify the HBA configuration was processed properly by
+					// reporting the resulting cached configuration.
+					resp, err := httpClient.Get(httpHBAUrl)
+					if err != nil {
+						return "", err
+					}
+					defer resp.Body.Close()
+					body, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						return "", err
+					}
+					return string(body), nil
+
+				case "set_identity_map":
+					_, err := conn.ExecContext(context.Background(),
+						`SET CLUSTER SETTING server.identity_map.configuration = $1`, td.Input)
+					if err != nil {
+						return "", err
+					}
+
+					// Wait until the configuration has propagated back to the
+					// test client. We need to wait because the cluster setting
+					// change propagates asynchronously.
+					expConf := identmap.Empty()
+					if td.Input != "" {
+						expConf, err = identmap.From(strings.NewReader(td.Input))
+						if err != nil {
+							// The SET above succeeded so we don't expect a problem here.
+							t.Fatal(err)
+						}
+					}
+					testutils.SucceedsSoon(t, func() error {
+						_, curConf := pgServer.GetAuthenticationConfiguration()
+						if expConf.String() != curConf.String() {
+							return errors.Newf(
+								"identity map not yet loaded\ngot:\n%s\nexpected:\n%s",
 								curConf, expConf)
 						}
 						return nil
@@ -545,7 +594,7 @@ func TestClientAddrOverride(t *testing.T) {
 				t.Fatal(err)
 			}
 			testutils.SucceedsSoon(t, func() error {
-				curConf := pgServer.GetAuthenticationConfiguration()
+				curConf, _ := pgServer.GetAuthenticationConfiguration()
 				if expConf.String() != curConf.String() {
 					return errors.Newf(
 						"HBA config not yet loaded\ngot:\n%s\nexpected:\n%s",

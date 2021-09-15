@@ -50,6 +50,7 @@ hostnossl all all  all reject
 host      all all  all cert-password
 local     all all      password
 ----
+----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
@@ -63,6 +64,12 @@ host      all      root all     cert-password
 hostnossl all      all  all     reject
 host      all      all  all     cert-password
 local     all      all          password
+
+
+# Active identity mapping on this node:
+# (empty configuration)
+----
+----
 
 # Now testuser cannot log in any more (rejected by HBA).
 

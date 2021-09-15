@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -81,8 +82,8 @@ var connAuthConf = func() *settings.StringSetting {
 }()
 
 // loadLocalAuthConfigUponRemoteSettingChange initializes the local
-// node's cache of the auth configuration each time the cluster
-// setting is updated.
+// node's cache of the auth configuration and identity maps each time
+// the cluster setting is updated.
 func loadLocalAuthConfigUponRemoteSettingChange(
 	ctx context.Context, server *Server, st *cluster.Settings,
 ) {
@@ -90,20 +91,29 @@ func loadLocalAuthConfigUponRemoteSettingChange(
 
 	// An empty HBA configuration is special and means "use the
 	// default".
-	conf := DefaultHBAConfig
+	hbaConfig := DefaultHBAConfig
 	if val != "" {
 		var err error
-		conf, err = ParseAndNormalize(val)
+		hbaConfig, err = ParseAndNormalize(val)
 		if err != nil {
 			// The default is also used if the node is unable to load the
 			// config from the cluster setting.
 			log.Ops.Warningf(ctx, "invalid %s: %v", serverHBAConfSetting, err)
-			conf = DefaultHBAConfig
+			hbaConfig = DefaultHBAConfig
 		}
 	}
+
+	val = connIdentityMapConf.Get(&st.SV)
+	idMap, err := identmap.From(strings.NewReader(val))
+	if err != nil {
+		log.Ops.Warningf(ctx, "invalid %s: %v", serverIdentityMapSetting, err)
+		idMap = identmap.Empty()
+	}
+
 	server.auth.Lock()
 	defer server.auth.Unlock()
-	server.auth.conf = conf
+	server.auth.conf = hbaConfig
+	server.auth.identityMap = idMap
 }
 
 // checkHBASyntaxBeforeUpdatingSetting is run by the SQL gateway each
@@ -241,8 +251,8 @@ var rootEntry = hba.Entry{
 var DefaultHBAConfig = func() *hba.Conf {
 	loadDefaultMethods()
 	conf, err := ParseAndNormalize(`
-host  all all  all cert-password # built-in CockroachDB default
-local all all      password      # built-in CockroachDB default
+host  all all  all cert-password map=cockroach-default # built-in CockroachDB default
+local all all      password      map=cockroach-default # built-in CockroachDB default
 `)
 	if err != nil {
 		panic(err)
@@ -260,9 +270,10 @@ local all all      password      # built-in CockroachDB default
 //
 // The data returned by this method is also observable via the debug
 // endpoint /debug/hba_conf.
-func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
+func (s *Server) GetAuthenticationConfiguration() (*hba.Conf, *identmap.Conf) {
 	s.auth.RLock()
 	auth := s.auth.conf
+	idMap := s.auth.identityMap
 	s.auth.RUnlock()
 
 	if auth == nil {
@@ -270,7 +281,10 @@ func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
 		// the cluster setting has ever been set.
 		auth = DefaultHBAConfig
 	}
-	return auth
+	if idMap == nil {
+		idMap = identmap.Empty()
+	}
+	return auth, idMap
 }
 
 // RegisterAuthMethod registers an AuthMethod for pgwire
@@ -332,9 +346,11 @@ func (s *Server) HBADebugFn() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-		auth := s.GetAuthenticationConfiguration()
+		auth, usernames := s.GetAuthenticationConfiguration()
 
 		_, _ = w.Write([]byte("# Active authentication configuration on this node:\n"))
 		_, _ = w.Write([]byte(auth.String()))
+		_, _ = w.Write([]byte("\n\n# Active identity mapping on this node:\n"))
+		_, _ = w.Write([]byte(usernames.String()))
 	}
 }

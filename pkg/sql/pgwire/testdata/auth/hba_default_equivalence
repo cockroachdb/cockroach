@@ -14,6 +14,7 @@ host  all root all cert-password
 host  all all  all cert-password
 local all all      password
 ----
+----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password
@@ -25,6 +26,12 @@ local all all      password
 host   all      root all     cert-password
 host   all      all  all     cert-password
 local  all      all          password
+
+
+# Active identity mapping on this node:
+# (empty configuration)
+----
+----
 
 subtest root
 

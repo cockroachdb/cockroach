@@ -17,6 +17,7 @@ subtest root_user_cannot_use_password
 set_hba
 host all root 0.0.0.0/0 password
 ----
+----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
@@ -26,6 +27,12 @@ host all root 0.0.0.0/0 password
 # TYPE DATABASE USER ADDRESS   METHOD        OPTIONS
 host   all      root all       cert-password
 host   all      root 0.0.0.0/0 password
+
+
+# Active identity mapping on this node:
+# (empty configuration)
+----
+----
 
 connect user=root password=abc sslmode=verify-ca sslcert=
 ----
@@ -49,6 +56,7 @@ subtest user_has_both_cert_and_passwd/only_cert_implies_reject_password
 set_hba
 host all testuser 0.0.0.0/0 cert
 ----
+----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
@@ -58,6 +66,12 @@ host all testuser 0.0.0.0/0 cert
 # TYPE DATABASE USER     ADDRESS   METHOD        OPTIONS
 host   all      root     all       cert-password
 host   all      testuser 0.0.0.0/0 cert
+
+
+# Active identity mapping on this node:
+# (empty configuration)
+----
+----
 
 connect user=testuser password=pass sslmode=verify-ca sslcert=
 ----
@@ -70,6 +84,7 @@ subtest user_has_both_cert_and_passwd/only_password_implies_reject_cert
 set_hba
 host all testuser 0.0.0.0/0 password
 ----
+----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
@@ -79,6 +94,12 @@ host all testuser 0.0.0.0/0 password
 # TYPE DATABASE USER     ADDRESS   METHOD        OPTIONS
 host   all      root     all       cert-password
 host   all      testuser 0.0.0.0/0 password
+
+
+# Active identity mapping on this node:
+# (empty configuration)
+----
+----
 
 connect user=testuser
 ----
@@ -109,6 +130,7 @@ ok
 set_hba
 host all nopassword 0.0.0.0/0 password
 ----
+----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
@@ -118,6 +140,12 @@ host all nopassword 0.0.0.0/0 password
 # TYPE DATABASE USER       ADDRESS   METHOD        OPTIONS
 host   all      root       all       cert-password
 host   all      nopassword 0.0.0.0/0 password
+
+
+# Active identity mapping on this node:
+# (empty configuration)
+----
+----
 
 connect user=nopassword
 ----
