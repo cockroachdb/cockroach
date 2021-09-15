@@ -425,39 +425,21 @@ func mysqlTableToCockroach(
 			seqVals[id] = startingValue
 		}
 		var err error
-		if p != nil {
-			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
-			seqDesc, err = sql.NewSequenceTableDesc(
-				ctx,
-				seqName,
-				opts,
-				parentDB.GetID(),
-				keys.PublicSchemaID,
-				id,
-				time,
-				priv,
-				tree.PersistencePermanent,
-				nil, /* params */
-				// If this is multi-region, this will get added by WriteDescriptors.
-				false, /* isMultiRegion */
-			)
-		} else {
-			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
-			seqDesc, err = sql.NewSequenceTableDesc(
-				ctx,
-				seqName,
-				opts,
-				parentDB.GetID(),
-				keys.PublicSchemaID,
-				id,
-				time,
-				priv,
-				tree.PersistencePermanent,
-				nil, /* params */
-				// If this is multi-region, this will get added by WriteDescriptors.
-				false, /* isMultiRegion */
-			)
-		}
+		privilegeDesc := descpb.NewDefaultPrivilegeDescriptor(owner)
+		seqDesc, err = sql.NewSequenceTableDesc(
+			ctx,
+			seqName,
+			opts,
+			parentDB.GetID(),
+			keys.PublicSchemaID,
+			id,
+			time,
+			privilegeDesc,
+			tree.PersistencePermanent,
+			nil, /* params */
+			// If this is multi-region, this will get added by WriteDescriptors.
+			false, /* isMultiRegion */
+		)
 		if err != nil {
 			return nil, nil, err
 		}
