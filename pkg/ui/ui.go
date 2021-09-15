@@ -137,7 +137,7 @@ func Handler(cfg Config) http.Handler {
 			LoginEnabled:         cfg.LoginEnabled,
 			LoggedInUser:         cfg.GetUser(r.Context()),
 			Tag:                  buildInfo.Tag,
-			Version:              build.VersionPrefix(),
+			Version:              build.BinaryVersionPrefix(),
 			NodeID:               cfg.NodeID.String(),
 			OIDCAutoLogin:        oidcConf.AutoLogin,
 			OIDCLoginEnabled:     oidcConf.Enabled,

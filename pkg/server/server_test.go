@@ -1045,7 +1045,7 @@ Binary built without web UI.
 				fmt.Sprintf(
 					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					build.BinaryVersionPrefix(),
 					1,
 				),
 			)
@@ -1080,7 +1080,7 @@ Binary built without web UI.
 				fmt.Sprintf(
 					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					build.BinaryVersionPrefix(),
 					1,
 				),
 			},
@@ -1089,7 +1089,7 @@ Binary built without web UI.
 				fmt.Sprintf(
 					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					build.BinaryVersionPrefix(),
 					1,
 				),
 			},
