@@ -77,14 +77,6 @@ func StartTenant(
 		settings:                args.Settings,
 	})
 
-	connManager := netutil.MakeServer(
-		args.stopper,
-		// The SQL server only uses connManager.ServeWith. The both below
-		// are unused.
-		nil, // tlsConfig
-		nil, // handler
-	)
-
 	// Initialize gRPC server for use on shared port with pg
 	grpcMain := newGRPCServer(args.rpcContext)
 	grpcMain.setMode(modeOperational)
@@ -92,7 +84,7 @@ func StartTenant(
 	// TODO(davidh): Do we need to force this to be false?
 	baseCfg.SplitListenSQL = false
 
-	background := baseCfg.AmbientCtx.AnnotateCtx(context.Background())
+	workersCtx := baseCfg.AmbientCtx.AnnotateCtx(context.Background())
 
 	// StartListenRPCAndSQL will replace the SQLAddr fields if we choose
 	// to share the SQL and gRPC port so here, since the tenant config
@@ -101,7 +93,7 @@ func StartTenant(
 	// correctly.
 	baseCfg.Addr = baseCfg.SQLAddr
 	baseCfg.AdvertiseAddr = baseCfg.SQLAdvertiseAddr
-	pgL, startRPCServer, err := StartListenRPCAndSQL(ctx, background, baseCfg, stopper, grpcMain)
+	pgL, startRPCServer, err := StartListenRPCAndSQL(ctx, workersCtx, baseCfg, stopper, grpcMain)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -115,8 +107,8 @@ func StartTenant(
 			// quiescing starts to allow that worker to shut down.
 			_ = pgL.Close()
 		}
-		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-pgl", waitQuiesce); err != nil {
-			waitQuiesce(ctx)
+		if err := args.stopper.RunAsyncTask(workersCtx, "wait-quiesce-pgl", waitQuiesce); err != nil {
+			waitQuiesce(workersCtx)
 			return nil, "", "", err
 		}
 	}
@@ -138,7 +130,7 @@ func StartTenant(
 			<-args.stopper.ShouldQuiesce()
 			_ = httpL.Close()
 		}
-		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-http", waitQuiesce); err != nil {
+		if err := args.stopper.RunAsyncTask(workersCtx, "wait-quiesce-http", waitQuiesce); err != nil {
 			waitQuiesce(ctx)
 			return nil, "", "", err
 		}
@@ -168,7 +160,6 @@ func StartTenant(
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
-	workersCtx := tenantStatusServer.AnnotateCtx(context.Background())
 
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
@@ -201,28 +192,28 @@ func StartTenant(
 		pgLAddr,   // sql addr
 	)
 
-	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
-		mux := http.NewServeMux()
-		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
-		mux.Handle("/", debugServer)
-		mux.Handle("/_status/", gwMux)
-		mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
-			// Return Bad Request if called with arguments.
-			if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
-				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-				return
-			}
-		})
-		f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
-		mux.Handle(statusVars, http.HandlerFunc(f))
+	mux := http.NewServeMux()
+	debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
+	mux.Handle("/", debugServer)
+	mux.Handle("/_status/", gwMux)
+	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
+		// Return Bad Request if called with arguments.
+		if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+	})
+	f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
+	mux.Handle(statusVars, http.HandlerFunc(f))
 
-		tlsConnManager := netutil.MakeServer(
-			args.stopper,
-			serverTLSConfig, // tlsConfig
-			mux,             // handler
-		)
+	connManager := netutil.MakeServer(
+		args.stopper,
+		serverTLSConfig, // tlsConfig
+		mux,             // handler
+	)
 
-		netutil.FatalIfUnexpected(tlsConnManager.Serve(httpL))
+	if err := args.stopper.RunAsyncTask(workersCtx, "serve-http", func(ctx context.Context) {
+		netutil.FatalIfUnexpected(connManager.Serve(httpL))
 	}); err != nil {
 		return nil, "", "", err
 	}
