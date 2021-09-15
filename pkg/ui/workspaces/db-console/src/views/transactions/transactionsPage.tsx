@@ -25,6 +25,7 @@ import { TransactionsPage } from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
 import { setCombinedStatementsDateRangeAction } from "src/redux/statements";
+import { LocalSetting } from "src/redux/localsettings";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
@@ -60,6 +61,12 @@ export const selectDateRange = createSelector(
   },
 );
 
+export const transactionColumnsLocalSetting = new LocalSetting(
+  "showColumns/TransactionPage",
+  (state: AdminUIState) => state.localSettings,
+  null,
+);
+
 const TransactionsPageConnected = withRouter(
   connect(
     (state: AdminUIState) => ({
@@ -69,11 +76,20 @@ const TransactionsPageConnected = withRouter(
       lastReset: selectLastReset(state),
       error: selectLastError(state),
       nodeRegions: nodeRegionsByIDSelector(state),
+      columns: transactionColumnsLocalSetting.selectorToArray(state),
     }),
     {
       refreshData: refreshStatements,
       resetSQLStats: resetSQLStatsAction,
       onDateRangeChange: setCombinedStatementsDateRangeAction,
+      // We use `null` when the value was never set and it will show all columns.
+      // If the user modifies the selection and no columns are selected,
+      // the function will save the value as a blank space, otherwise
+      // it gets saved as `null`.
+      onColumnsChange: (value: string[]) =>
+        transactionColumnsLocalSetting.set(
+          value.length === 0 ? " " : value.join(","),
+        ),
     },
   )(TransactionsPage),
 );

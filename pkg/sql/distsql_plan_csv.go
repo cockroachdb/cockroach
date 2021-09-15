@@ -121,6 +121,7 @@ func makeImportReaderSpecs(
 	walltime int64,
 	user security.SQLUsername,
 ) []*execinfrapb.ReadImportDataSpec {
+	details := job.Details().(jobspb.ImportDetails)
 	// For each input file, assign it to a node.
 	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, len(nodes))
 	progress := job.Progress()
@@ -137,10 +138,11 @@ func makeImportReaderSpecs(
 					JobID: job.ID(),
 					Slot:  int32(i),
 				},
-				WalltimeNanos: walltime,
-				Uri:           make(map[int32]string),
-				ResumePos:     make(map[int32]int64),
-				UserProto:     user.EncodeProto(),
+				WalltimeNanos:         walltime,
+				Uri:                   make(map[int32]string),
+				ResumePos:             make(map[int32]int64),
+				UserProto:             user.EncodeProto(),
+				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}

@@ -25,11 +25,13 @@ import {
 import {
   selectTransactionsData,
   selectTransactionsLastError,
+  selectTxnColumns,
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { selectDateRange } from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
+import { actions as localStorageActions } from "../store/localStorage";
 
 export const TransactionsPageConnected = withRouter(
   connect<
@@ -43,6 +45,7 @@ export const TransactionsPageConnected = withRouter(
       error: selectTransactionsLastError(state),
       isTenant: selectIsTenant(state),
       dateRange: selectIsTenant(state) ? null : selectDateRange(state),
+      columns: selectTxnColumns(state),
     }),
     (dispatch: Dispatch) => ({
       refreshData: (req?: StatementsRequest) =>
@@ -56,6 +59,18 @@ export const TransactionsPageConnected = withRouter(
           }),
         );
       },
+      // We use `null` when the value was never set and it will show all columns.
+      // If the user modifies the selection and no columns are selected,
+      // the function will save the value as a blank space, otherwise
+      // it gets saved as `null`.
+      onColumnsChange: (selectedColumns: string[]) =>
+        dispatch(
+          localStorageActions.update({
+            key: "showColumns/TransactionPage",
+            value:
+              selectedColumns.length === 0 ? " " : selectedColumns.join(","),
+          }),
+        ),
     }),
   )(TransactionsPage),
 );

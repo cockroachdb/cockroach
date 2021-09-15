@@ -86,7 +86,7 @@ function makeCommonColumns(
   );
   const retryBar = retryBarChart(statements, defaultBarChartOptions);
 
-  const columns: ColumnDescriptor<AggregateStatistics>[] = [
+  return [
     {
       name: "executionCount",
       title: statisticsTableTitles.executionCount(statType),
@@ -173,11 +173,9 @@ function makeCommonColumns(
         return longListWithTooltip(stmt.regionNodes.sort().join(", "), 50);
       },
       sort: (stmt: AggregateStatistics) => stmt.regionNodes.sort().join(", "),
-      showByDefault: false,
       hideIfTenant: true,
     },
   ];
-  return columns;
 }
 
 export interface AggregateStatistics {
@@ -309,12 +307,14 @@ export function makeNodesColumns(
  * node it was executed on.
  * @param nodeRegions: object with keys being the node id and the value
  * which region it belongs to.
+ * @param isTenant: boolean indicating if the cluster is tenant, since
+ * node information doesn't need to be populated on this case.
  */
 export function populateRegionNodeForStatements(
   statements: AggregateStatistics[],
   nodeRegions: { [p: string]: string },
   isTenant: boolean,
-) {
+): void {
   statements.forEach(stmt => {
     if (isTenant) {
       stmt.regionNodes = [];
