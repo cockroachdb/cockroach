@@ -460,8 +460,9 @@ type testClusterConfig struct {
 	// If true, a sql tenant server will be started and pointed at a node in the
 	// cluster. Connections on behalf of the logic test will go to that tenant.
 	useTenant bool
-	// If true, XXX:
-	useSpanConfigs bool
+	// If set, the span configs infrastructure will be enabled. This is
+	// equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
+	enableSpanConfigs bool
 	// isCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	isCCLConfig bool
@@ -728,9 +729,9 @@ var logicTestConfigs = []testClusterConfig{
 		overrideVectorize: "off",
 	},
 	{
-		name:           "experimental-span-configs",
-		numNodes:       1,
-		useSpanConfigs: true,
+		name:              "experimental-span-configs",
+		numNodes:          1,
+		enableSpanConfigs: true,
 	},
 }
 
@@ -1394,7 +1395,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 	}
 
 	cfg := t.cfg
-	if cfg.useSpanConfigs {
+	if cfg.enableSpanConfigs {
 		params.ServerArgs.EnableSpanConfigs = true
 	}
 	distSQLKnobs := &execinfra.TestingKnobs{
