@@ -1008,17 +1008,20 @@ func (ti *Index) addColumn(
 // reused. Otherwise, a new column is added to the table.
 func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 	exprStr := serializeTableDefExpr(expr)
+
 	// Add a new virtual computed column with a unique name.
-	var name tree.Name
-	for n, done := 1, false; !done; n++ {
-		done = true
-		name = tree.Name(fmt.Sprintf("crdb_internal_idx_expr_%d", n))
+	prefix := "crdb_internal_idx_expr"
+	nameExistsFn := func(n tree.Name) bool {
 		for _, col := range tt.Columns {
-			if col.ColName() == name {
-				done = false
-				break
+			if col.ColName() == n {
+				return true
 			}
 		}
+		return false
+	}
+	name := tree.Name(prefix)
+	for i := 1; nameExistsFn(name); i++ {
+		name = tree.Name(fmt.Sprintf("%s_%d", prefix, i))
 	}
 
 	typ := typeCheckTableExpr(expr, tt.Columns)
