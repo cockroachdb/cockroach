@@ -155,10 +155,8 @@ const (
 	_ Key = iota - 1 // want first named one to start at zero
 
 	// v21.1 versions.
-	//
-	// Start21_1 demarcates work towards CockroachDB v21.1.
-	Start21_1
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
+	// TODO(irfansharif): This can be removed as part of once #69828 lands (bumping the min cluster version.
 	V21_1
 
 	// v21.1PLUS release. This is a special v21.1.x release with extra changes,
@@ -251,6 +249,7 @@ const (
 	// PebbleFormatVersioned ratchets Pebble's format major version to
 	// the version FormatVersioned.
 	PebbleFormatVersioned
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -275,17 +274,14 @@ const (
 // minor version until we are absolutely sure that no new migrations will need
 // to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions{
-
-	// v21.1 versions. Internal versions defined here-on-forth must be even.
-	{
-		Key:     Start21_1,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
-	},
+	// v21.1 versions.
 	{
 		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 		Key:     V21_1,
 		Version: roachpb.Version{Major: 21, Minor: 1},
 	},
+
+	// Internal versions must be even.
 
 	// v21.1PLUS version. This is a special v21.1.x release with extra changes,
 	// used internally for the 2021 Serverless offering.
@@ -436,7 +432,8 @@ var (
 	// binaryMinSupportedVersion is the earliest version of data supported by
 	// this binary. If this binary is started using a store marked with an older
 	// version than binaryMinSupportedVersion, then the binary will exit with
-	// an error.
+	// an error. This typically trails the current release by one (see top-level
+	// comment).
 	binaryMinSupportedVersion = ByKey(V21_1)
 
 	// binaryVersion is the version of this binary.
