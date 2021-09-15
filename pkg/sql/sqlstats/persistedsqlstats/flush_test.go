@@ -72,7 +72,7 @@ func TestSQLStatsFlush(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					StubTimeNow: fakeTime.StubTimeNow,
+					StubTimeNow: fakeTime.Now,
 				},
 			},
 		},
@@ -170,7 +170,7 @@ func TestSQLStatsFlush(t *testing.T) {
 
 	// We change the time to be in a different aggregation window.
 	{
-		fakeTime.setTime(fakeTime.StubTimeNow().Add(time.Hour * 3))
+		fakeTime.setTime(fakeTime.Now().Add(time.Hour * 3))
 
 		for _, tc := range testQueries {
 			for i := int64(0); i < tc.count; i++ {
@@ -261,8 +261,8 @@ func (s *stubTime) getAggTimeTs() time.Time {
 	return s.t.Truncate(s.aggInterval)
 }
 
-// StubTimeNow implements the testing knob interface for persistedsqlstats.Provider.
-func (s *stubTime) StubTimeNow() time.Time {
+// Now implements the testing knob interface for persistedsqlstats.Provider.
+func (s *stubTime) Now() time.Time {
 	s.RWMutex.RLock()
 	defer s.RWMutex.RUnlock()
 	return s.t
