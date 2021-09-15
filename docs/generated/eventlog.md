@@ -1740,7 +1740,8 @@ Events of this type are only emitted when the cluster setting
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
 | `Transport` | The connection type after transport negotiation. | no |
-| `User` | The username the session is for. This is the username passed by the client, after case-folding and Unicode normalization. | yes |
+| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
+| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
 
 ### `client_authentication_info`
 
@@ -1767,7 +1768,8 @@ Events of this type are only emitted when the cluster setting
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
 | `Transport` | The connection type after transport negotiation. | no |
-| `User` | The username the session is for. This is the username passed by the client, after case-folding and Unicode normalization. | yes |
+| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
+| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
 
 ### `client_authentication_ok`
 
@@ -1793,7 +1795,8 @@ Events of this type are only emitted when the cluster setting
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
 | `Transport` | The connection type after transport negotiation. | no |
-| `User` | The username the session is for. This is the username passed by the client, after case-folding and Unicode normalization. | yes |
+| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
+| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
 
 ### `client_connection_end`
 
@@ -1866,7 +1869,8 @@ Events of this type are only emitted when the cluster setting
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
 | `Transport` | The connection type after transport negotiation. | no |
-| `User` | The username the session is for. This is the username passed by the client, after case-folding and Unicode normalization. | yes |
+| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
+| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
 
 ## SQL Slow Query Log
 
