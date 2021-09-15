@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // New returns an instance of SQLStats.
@@ -192,30 +190,6 @@ func (s *SQLStats) IterateAggregatedTransactionStats(
 	}
 
 	return nil
-}
-
-// GetStatementStats implements sqlstats.Provider interface.
-func (s *SQLStats) GetStatementStats(
-	key *roachpb.StatementStatisticsKey,
-) (*roachpb.CollectedStatementStatistics, error) {
-	statsContainer := s.getStatsForApplication(key.App)
-	if statsContainer == nil {
-		return nil, errors.Errorf("no stats found for appName: %s", key.App)
-	}
-
-	return statsContainer.GetStatementStats(key)
-}
-
-// GetTransactionStats implements sqlstats.Provider interface.
-func (s *SQLStats) GetTransactionStats(
-	appName string, key roachpb.TransactionFingerprintID,
-) (*roachpb.CollectedTransactionStatistics, error) {
-	statsContainer := s.getStatsForApplication(appName)
-	if statsContainer == nil {
-		return nil, errors.Errorf("no stats found for appName: %s", appName)
-	}
-
-	return statsContainer.GetTransactionStats(appName, key)
 }
 
 // Reset implements sqlstats.Provider interface.
