@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -644,6 +645,12 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				StickyEngineRegistry: stickyEngineRegistry,
+			},
+			JobsTestingKnobs: &jobs.TestingKnobs{
+				// Allow the scheduler daemon to start earlier in demo.
+				SchedulerDaemonInitialScanDelay: func() time.Duration {
+					return time.Second * 15
+				},
 			},
 		},
 	}
