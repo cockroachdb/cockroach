@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // TODO(arul): The fields on stmtKey should really be immutable fields on
@@ -152,54 +151,6 @@ func (s *Container) IterateAggregatedTransactionStats(
 	}
 
 	return nil
-}
-
-// GetStatementStats implements sqlstats.Provider interface.
-func (s *Container) GetStatementStats(
-	key *roachpb.StatementStatisticsKey,
-) (*roachpb.CollectedStatementStatistics, error) {
-	statementStats, _, stmtFingerprintID, _, _ := s.getStatsForStmt(
-		key.Query, key.ImplicitTxn, key.Database, key.Failed, false /* createIfNonexistent */)
-
-	if statementStats == nil {
-		return nil, errors.Errorf("no stats found for the provided key")
-	}
-
-	statementStats.mu.Lock()
-	defer statementStats.mu.Unlock()
-	data := statementStats.mu.data
-
-	collectedStats := &roachpb.CollectedStatementStatistics{
-		ID:    stmtFingerprintID,
-		Key:   *key,
-		Stats: data,
-	}
-
-	return collectedStats, nil
-}
-
-// GetTransactionStats implements sqlstats.Provider interface.
-func (s *Container) GetTransactionStats(
-	appName string, key roachpb.TransactionFingerprintID,
-) (*roachpb.CollectedTransactionStatistics, error) {
-	txnStats, _, _ :=
-		s.getStatsForTxnWithKey(key, nil /* stmtFingerprintIDs */, false /* createIfNonexistent */)
-
-	if txnStats == nil {
-		return nil, errors.Errorf("no stats found for the provided key")
-	}
-
-	txnStats.mu.Lock()
-	defer txnStats.mu.Unlock()
-	data := txnStats.mu.data
-
-	collectedStats := &roachpb.CollectedTransactionStatistics{
-		StatementFingerprintIDs: txnStats.statementFingerprintIDs,
-		App:                     appName,
-		Stats:                   data,
-	}
-
-	return collectedStats, nil
 }
 
 // StmtStatsIterator returns an instance of StmtStatsIterator.

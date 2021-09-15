@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -54,10 +55,52 @@ func TestSampledStatsCollection(t *testing.T) {
 				Database:    database,
 				Failed:      false,
 			}
-			stats, err := server.SQLServer().(*Server).sqlStats.GetStatementStats(&key)
-			require.NoError(t, err)
+			var stats *roachpb.CollectedStatementStatistics
+			require.NoError(t, server.SQLServer().(*Server).sqlStats.
+				GetLocalMemProvider().
+				IterateStatementStats(
+					ctx,
+					&sqlstats.IteratorOptions{},
+					func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+						if statistics.Key.Query == key.Query &&
+							statistics.Key.ImplicitTxn == key.ImplicitTxn &&
+							statistics.Key.Database == key.Database &&
+							statistics.Key.Failed == key.Failed {
+							stats = statistics
+						}
+
+						return nil
+					},
+				))
+			require.NotNil(t, stats)
 			return stats
 		}
+
+	getTxnStats := func(
+		t *testing.T,
+		server serverutils.TestServerInterface,
+		key roachpb.TransactionFingerprintID,
+	) *roachpb.CollectedTransactionStatistics {
+		t.Helper()
+		var stats *roachpb.CollectedTransactionStatistics
+
+		require.NoError(t, server.SQLServer().(*Server).sqlStats.
+			GetLocalMemProvider().
+			IterateTransactionStats(
+				ctx,
+				&sqlstats.IteratorOptions{},
+				func(ctx context.Context, statistics *roachpb.CollectedTransactionStatistics) error {
+					if statistics.TransactionFingerprintID == key {
+						stats = statistics
+					}
+
+					return nil
+				},
+			))
+
+		require.NotNil(t, stats)
+		return stats
+	}
 
 	toggleSampling := func(enable bool) {
 		var v float64
@@ -125,8 +168,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		key := util.MakeFNV64()
 		key.Add(uint64(aggStats.ID))
 		key.Add(uint64(selectStats.ID))
-		txStats, err := s.SQLServer().(*Server).sqlStats.GetTransactionStats("", roachpb.TransactionFingerprintID(key.Sum()))
-		require.NoError(t, err)
+		txStats := getTxnStats(t, s, roachpb.TransactionFingerprintID(key.Sum()))
 
 		require.Equal(t, int64(2), txStats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(1), txStats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")

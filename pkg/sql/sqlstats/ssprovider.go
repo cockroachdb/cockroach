@@ -70,13 +70,6 @@ type Reader interface {
 	// IterateAggregatedTransactionStats iterates through all the collected app-level
 	// transactions statistics. It behaves similarly to IterateStatementStats.
 	IterateAggregatedTransactionStats(context.Context, *IteratorOptions, AggregatedTransactionVisitor) error
-
-	// GetStatementStats performs a point lookup of statement statistics for a
-	// given key.
-	GetStatementStats(key *roachpb.StatementStatisticsKey) (*roachpb.CollectedStatementStatistics, error)
-
-	// GetTransactionStats performs a point lookup of a transaction fingerprint key.
-	GetTransactionStats(appName string, key roachpb.TransactionFingerprintID) (*roachpb.CollectedTransactionStatistics, error)
 }
 
 // ApplicationStats is an interface to read from or write to the statistics
