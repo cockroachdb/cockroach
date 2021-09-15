@@ -258,6 +258,8 @@ func main() {
 				args = append(args, "--run_under", fmt.Sprintf("stress -stderr -maxfails 1 -maxtime %s -p %d", duration, parallelism))
 				if target == "stressrace" {
 					args = append(args, "--config=race")
+				} else {
+					args = append(args, "--test_sharding_strategy=disabled")
 				}
 				cmd := exec.Command("bazci", args...)
 				cmd.Stdout = os.Stdout
