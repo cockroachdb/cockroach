@@ -102,6 +102,8 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 	}
 	if race {
 		args = append(args, "--config=race")
+	} else if stress {
+		args = append(args, "--test_sharding_strategy=disabled")
 	}
 
 	for _, pkg := range pkgs {
