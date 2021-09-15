@@ -44,13 +44,21 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := t.job.Details().(jobspb.TTLDetails)
 	cn := tree.Name(details.ColumnName)
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := ie.Exec(
-			ctx,
-			"ttl_delete",
-			txn,
-			fmt.Sprintf("DELETE FROM [%d AS t] WHERE %s < now()", details.TableID, cn.String()),
-		)
-		return err
+		numAffected := 1
+		for numAffected > 0 {
+			// TODO(XXX): prevent full table scans?
+			var err error
+			numAffected, err = ie.Exec(
+				ctx,
+				"ttl_delete",
+				txn,
+				fmt.Sprintf("DELETE FROM [%d AS t] WHERE %s < now() LIMIT %d", details.TableID, cn.String(), 1000),
+			)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}); err != nil {
 		return err
 	}
