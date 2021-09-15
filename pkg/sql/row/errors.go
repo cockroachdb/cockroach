@@ -187,7 +187,7 @@ func DecodeRowInfo(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	indexID, _, err := rowenc.DecodeIndexKeyPrefix(codec, tableDesc, key)
+	_, _, indexID, err := rowenc.DecodePartialTableIDIndexID(key)
 	if err != nil {
 		return nil, nil, nil, err
 	}

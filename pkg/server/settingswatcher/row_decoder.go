@@ -52,12 +52,9 @@ func (d *RowDecoder) DecodeRow(
 	{
 		types := []*types.T{tbl.PublicColumns()[0].GetType()}
 		nameRow := make([]rowenc.EncDatum, 1)
-		_, matches, _, err := rowenc.DecodeIndexKey(d.codec, tbl, tbl.GetPrimaryIndex(), types, nameRow, nil, kv.Key)
+		_, _, err := rowenc.DecodeIndexKey(d.codec, types, nameRow, nil, kv.Key)
 		if err != nil {
 			return "", "", "", false, errors.Wrap(err, "failed to decode key")
-		}
-		if !matches {
-			return "", "", "", false, errors.Errorf("unexpected non-settings KV with settings prefix: %v", kv.Key)
 		}
 		if err := nameRow[0].EnsureDecoded(types[0], &d.alloc); err != nil {
 			return "", "", "", false, err

@@ -697,12 +697,9 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
 		// Skip decoding!
 		rf.keyRemainingBytes = rf.kv.Key[len(rf.indexKey):]
 	} else if rf.mustDecodeIndexKey || rf.traceKV {
-		rf.keyRemainingBytes, moreKVs, foundNull, err = rf.ReadIndexKey(rf.kv.Key)
+		rf.keyRemainingBytes, foundNull, err = rf.ReadIndexKey(rf.kv.Key)
 		if err != nil {
 			return false, err
-		}
-		if !moreKVs {
-			return false, errors.AssertionFailedf("key did not match any of the table descriptors")
 		}
 	} else {
 		// We still need to consume the key until the family
@@ -782,15 +779,10 @@ func (rf *Fetcher) prettyEncDatums(types []*types.T, vals []rowenc.EncDatum) str
 }
 
 // ReadIndexKey decodes an index key for a given table.
-// It returns whether or not the key is for any of the tables initialized
-// in Fetcher, and the remaining part of the key if it is.
+// It returns the remaining part of the key if it is.
 // ReadIndexKey additionally returns whether or not it encountered a null while decoding.
-func (rf *Fetcher) ReadIndexKey(
-	key roachpb.Key,
-) (remaining []byte, ok bool, foundNull bool, err error) {
-	return rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-		rf.table.desc,
-		rf.table.index,
+func (rf *Fetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, foundNull bool, err error) {
+	return rowenc.DecodeKeyVals(
 		rf.table.keyValTypes,
 		rf.table.keyVals,
 		rf.table.indexColumnDirs,
@@ -804,7 +796,7 @@ func (rf *Fetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	if len(key) < rf.table.knownPrefixLength {
 		return nil, false
 	}
-	if _, ok, _, err := rf.ReadIndexKey(key); !ok || err != nil {
+	if _, _, err := rf.ReadIndexKey(key); err != nil {
 		return nil, false
 	}
 	return rf.table.desc, true

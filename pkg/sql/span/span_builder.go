@@ -116,7 +116,8 @@ func (s *Builder) SpanFromEncDatums(
 	values rowenc.EncDatumRow, prefixLen int,
 ) (_ roachpb.Span, containsNull bool, _ error) {
 	return rowenc.MakeSpanFromEncDatums(
-		values[:prefixLen], s.indexColTypes[:prefixLen], s.indexColDirs[:prefixLen], s.table, s.index, &s.alloc, s.KeyPrefix)
+		values[:prefixLen], s.indexColTypes[:prefixLen], s.indexColDirs[:prefixLen], &s.alloc, s.KeyPrefix,
+	)
 }
 
 // SpanFromEncDatumsWithRange encodes a range span. The inequality is assumed to
@@ -140,8 +141,9 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 	}
 
 	makeKeyFromRow := func(r rowenc.EncDatumRow, l int) (k roachpb.Key, cn bool, e error) {
-		k, _, cn, e = rowenc.MakeKeyFromEncDatums(r[:l], s.indexColTypes[:l], s.indexColDirs[:l],
-			s.table, s.index, &s.alloc, s.KeyPrefix)
+		k, cn, e = rowenc.MakeKeyFromEncDatums(
+			r[:l], s.indexColTypes[:l], s.indexColDirs[:l], &s.alloc, s.KeyPrefix,
+		)
 		return
 	}
 
@@ -196,7 +198,7 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 func (s *Builder) SpanFromDatumRow(
 	values tree.Datums, prefixLen int, colMap catalog.TableColMap,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	return rowenc.EncodePartialIndexSpan(s.table, s.index, prefixLen, colMap, values, s.KeyPrefix)
+	return rowenc.EncodePartialIndexSpan(s.index, prefixLen, colMap, values, s.KeyPrefix)
 }
 
 // SpanToPointSpan converts a span into a span that represents a point lookup on a

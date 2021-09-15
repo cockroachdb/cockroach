@@ -969,14 +969,6 @@ func EncodeNotNullDescending(b []byte) []byte {
 	return append(b, encodedNotNullDesc)
 }
 
-// EncodeInterleavedSentinel encodes an interleavedSentinel that is necessary
-// for interleaved indexes and their index keys.
-// The interleavedSentinel has a byte value 0xfe and is equivalent to
-// encodedNotNullDesc.
-func EncodeInterleavedSentinel(b []byte) []byte {
-	return append(b, interleavedSentinel)
-}
-
 // DecodeIfNull decodes a NULL value from the input buffer. If the input buffer
 // contains a null at the start of the buffer then it is removed from the
 // buffer and true is returned for the second result. Otherwise, the buffer is

@@ -446,12 +446,10 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 				// new roachpb.Key. Many rows will share the same prefix or
 				// encode to the same length roachpb.Key. We can optimize this
 				// by reusing a pre-allocated key.
-				prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
+				prefixKey, _, err := rowenc.MakeKeyFromEncDatums(
 					ij.indexRow[:len(ij.prefixEqualityCols)],
 					ij.indexRowTypes[:len(ij.prefixEqualityCols)],
 					ij.index.IndexDesc().KeyColumnDirections,
-					ij.desc,
-					ij.index,
 					&ij.alloc,
 					nil, /* keyPrefix */
 				)
@@ -540,12 +538,10 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			// new roachpb.Key. Many rows will share the same prefix or
 			// encode to the same length roachpb.Key. We can optimize this
 			// by reusing a pre-allocated key.
-			prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
+			prefixKey, _, err := rowenc.MakeKeyFromEncDatums(
 				ij.indexRow[:len(ij.prefixEqualityCols)],
 				ij.indexRowTypes[:len(ij.prefixEqualityCols)],
 				ij.index.IndexDesc().KeyColumnDirections,
-				ij.desc,
-				ij.index,
 				&ij.alloc,
 				nil, /* keyPrefix */
 			)

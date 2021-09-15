@@ -90,7 +90,7 @@ func (d *rowCodec) decodeRow(
 	{
 		types := []*types.T{tbl.PublicColumns()[0].GetType()}
 		row := make([]rowenc.EncDatum, 1)
-		_, _, _, err := rowenc.DecodeIndexKey(d.codec, tbl, tbl.GetPrimaryIndex(), types, row, nil, kv.Key)
+		_, _, err := rowenc.DecodeIndexKey(d.codec, types, row, nil, kv.Key)
 		if err != nil {
 			return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, errors.Wrap(err, "failed to decode key")
 		}
