@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -51,6 +52,10 @@ type authOptions struct {
 	// auth is the current HBA configuration as returned by
 	// (*Server).GetAuthenticationConfiguration().
 	auth *hba.Conf
+	// identMap is used in conjunction with the HBA configuration to
+	// allow system usernames (e.g. GSSAPI principals or X.509 CN's) to
+	// be dynamically mapped to database usernames.
+	identMap *identmap.Conf
 	// ie is the server-wide internal executor, used to
 	// retrieve entries from system.users.
 	ie *sql.InternalExecutor
@@ -89,6 +94,16 @@ func (c *conn) handleAuthentication(
 		return err
 	}
 
+	// Retrieve the authentication method.
+	tlsState, hbaEntry, methodFn, err := c.findAuthenticationMethod(authOpt)
+	if err != nil {
+		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
+		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+	}
+
+	ac.SetAuthMethod(hbaEntry.Method.String())
+	ac.LogAuthInfof(ctx, "HBA rule: %s", hbaEntry.Input)
+
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
 	exists, canLogin, isSuperuser, validUntil, defaultSettings, pwRetrievalFn, err := sql.GetUserSessionInitInfo(
@@ -123,16 +138,6 @@ func (c *conn) handleAuthentication(
 		))
 	}
 
-	// Retrieve the authentication method.
-	tlsState, hbaEntry, methodFn, err := c.findAuthenticationMethod(authOpt)
-	if err != nil {
-		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
-		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
-	}
-
-	ac.SetAuthMethod(hbaEntry.Method.String())
-	ac.LogAuthInfof(ctx, "HBA rule: %s", hbaEntry.Input)
-
 	// Ask the method to authenticate.
 	authenticationHook, err := methodFn(ctx, ac, tlsState, pwRetrievalFn,
 		validUntil, execCfg, hbaEntry)
@@ -146,6 +151,13 @@ func (c *conn) handleAuthentication(
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
 		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
+	originalSystemIdentity := c.sessionArgs.User
+	if err := c.applyIdentityMapping(hbaEntry, authOpt.identMap); err != nil {
+		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
+		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+	}
+	// Reflect mapping in future log entries.
+	ac.SetIdentityMapping(originalSystemIdentity, c.sessionArgs.User)
 
 	// Add all the defaults to this session's defaults. If there is an
 	// error (e.g., a setting that no longer exists, or bad input),
@@ -175,6 +187,29 @@ func (c *conn) handleAuthentication(
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
 	return connClose, c.msgBuilder.finishMsg(c.conn)
+}
+
+// applyIdentityMapping uses the active HBA entry to map an incoming
+// system identity (e.g.: GSSAPI principal or X.509 Common Name) to an
+// actual database user. If a mapping is present, the sessionArgs.User
+// field will be updated.
+//
+// TODO(#sql-security): The docs for the pg_ident.conf file state that
+// if there are multiple mappings for an incoming system-user, the
+// session should act with the union of all roles granted to the mapped
+// database users. We're going to go with a first-one-wins approach
+// until the session can have multiple roles.
+func (c *conn) applyIdentityMapping(hbaEntry *hba.Entry, identMap *identmap.Conf) error {
+	if mapName := hbaEntry.GetOption("map"); mapName != "" {
+		alts, err := identMap.Map(mapName, c.sessionArgs.User.Normalized())
+		if err != nil {
+			return err
+		}
+		if len(alts) > 0 {
+			c.sessionArgs.User = alts[0]
+		}
+	}
+	return nil
 }
 
 func (c *conn) findAuthenticationMethod(
@@ -301,6 +336,10 @@ type AuthConn interface {
 	// SetAuthMethod sets the authentication method for subsequent
 	// logging messages.
 	SetAuthMethod(method string)
+	// SetIdentityMapping updates the AuthConn with the original system
+	// identity (e.g.: GSSAPI principal, X.509 Common Name) and the actual
+	// database user that it mapped to.
+	SetIdentityMapping(systemIdentity, dbUser security.SQLUsername)
 	// LogAuthInfof logs details about the progress of the
 	// authentication.
 	LogAuthInfof(ctx context.Context, format string, args ...interface{})
@@ -332,14 +371,16 @@ type authRes struct {
 	err error
 }
 
-func newAuthPipe(c *conn, logAuthn bool, authOpt authOptions, user security.SQLUsername) *authPipe {
+func newAuthPipe(
+	c *conn, logAuthn bool, authOpt authOptions, systemIdentity security.SQLUsername,
+) *authPipe {
 	ap := &authPipe{
 		c:           c,
 		log:         logAuthn,
 		connDetails: authOpt.connDetails,
 		authDetails: eventpb.CommonSessionDetails{
-			Transport: authOpt.connType.String(),
-			User:      user.Normalized(),
+			SystemIdentity: systemIdentity.Normalized(),
+			Transport:      authOpt.connType.String(),
 		},
 		ch:         make(chan []byte),
 		writerDone: make(chan struct{}),
@@ -390,6 +431,17 @@ func (p *authPipe) AuthFail(err error) {
 
 func (p *authPipe) SetAuthMethod(method string) {
 	p.authMethod = method
+}
+
+func (p *authPipe) SetIdentityMapping(systemIdentity, dbUser security.SQLUsername) {
+	d := dbUser.Normalized()
+	p.authDetails.User = d
+
+	s := systemIdentity.Normalized()
+	if s == d {
+		s = ""
+	}
+	p.authDetails.SystemIdentity = s
 }
 
 func (p *authPipe) LogAuthOK(ctx context.Context) {
