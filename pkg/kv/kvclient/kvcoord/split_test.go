@@ -175,7 +175,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Override default span config.
-	cfg := kvserver.TestingDefaultSpanConfig()
+	cfg := roachpb.TestingDefaultSpanConfig()
 	cfg.RangeMaxBytes = 1 << 18
 
 	// Manually create the local test cluster so that the split queue
