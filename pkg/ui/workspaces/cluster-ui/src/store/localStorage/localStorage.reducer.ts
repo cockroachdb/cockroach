@@ -20,6 +20,7 @@ type StatementsDateRangeState = {
 export type LocalStorageState = {
   "adminUi/showDiagnosticsModal": boolean;
   "showColumns/StatementsPage": string;
+  "showColumns/TransactionPage": string;
   "dateRange/StatementsPage": StatementsDateRangeState;
 };
 
@@ -43,6 +44,8 @@ const initialState: LocalStorageState = {
     false,
   "showColumns/StatementsPage":
     JSON.parse(localStorage.getItem("showColumns/StatementsPage")) || null,
+  "showColumns/TransactionPage":
+    JSON.parse(localStorage.getItem("showColumns/TransactionPage")) || null,
   "dateRange/StatementsPage":
     JSON.parse(localStorage.getItem("dateRange/StatementsPage")) ||
     defaultDateRange,

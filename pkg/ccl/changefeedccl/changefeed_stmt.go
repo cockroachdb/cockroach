@@ -734,7 +734,7 @@ func (b *changefeedResumer) resumeWithRetries(
 			return err
 		}
 
-		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
+		log.Warningf(ctx, `WARNING: CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
 		b.setJobRunningStatus(ctx, "retryable error: %s", err)
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			metrics.ErrorRetries.Inc(1)

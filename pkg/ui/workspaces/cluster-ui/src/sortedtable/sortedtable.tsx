@@ -285,7 +285,7 @@ export class SortedTable<T> extends React.Component<
     return this.props.expandableConfig.expansionKey(this.getItemAt(rowIndex));
   }
 
-  onChangeExpansion = (rowIndex: number, expanded: boolean) => {
+  onChangeExpansion = (rowIndex: number, expanded: boolean): void => {
     const key = this.getKeyAt(rowIndex);
     const expandedRows = this.state.expandedRows;
     if (expanded) {
@@ -308,7 +308,7 @@ export class SortedTable<T> extends React.Component<
     return this.props.expandableConfig.expandedContent(item);
   };
 
-  paginatedData = (sortData?: T[]) => {
+  paginatedData = (sortData?: T[]): T[] => {
     const { pagination, data } = this.props;
     if (!pagination) {
       return sortData || data;

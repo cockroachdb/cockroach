@@ -143,7 +143,14 @@ message ReadImportDataSpec {
 
   repeated sqlbase.TypeDescriptor types = 16;
 
-  // NEXTID: 17
+  // If the database being imported into is a multi-region database, then this
+  // field stores the databases' primary region.
+  optional string database_primary_region = 17 [
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.RegionName"
+  ];
+
+  // NEXTID: 18
 }
 
 message StreamIngestionDataSpec {
