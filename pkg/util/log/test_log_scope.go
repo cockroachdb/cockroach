@@ -20,8 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
 
@@ -70,7 +73,7 @@ type tShim interface {
 // restrictions.
 func Scope(t tShim) *TestLogScope {
 	if logging.showLogs {
-		return newLogScope(t, false /* use files */)
+		return newLogScope(t, false /* mostlyInline */)
 	}
 
 	scope := ScopeWithoutShowLogs(t)
@@ -94,10 +97,10 @@ func Scope(t tShim) *TestLogScope {
 // TestLogScope.
 func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	t.Helper()
-	return newLogScope(t, true /* use files */)
+	return newLogScope(t, true /* mostlyInline */)
 }
 
-func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
+func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	t.Helper()
 	sc = &TestLogScope{}
 
@@ -146,23 +149,16 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 		}
 	}()
 
-	var fileDir *string
-	if useFiles {
-		tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		// Remember the directory name for the Close() function.
-		sc.logDir = tempDir
-		fileDir = &sc.logDir
-	}
-
-	// Obtain the standard test configuration, with the configured
-	// destination directory.
-	cfg, err := getTestConfig(fileDir)
+	tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Remember the directory name for the Close() function.
+	sc.logDir = tempDir
+
+	// Obtain the standard test configuration, with the configured
+	// destination directory.
+	cfg := getTestConfig(&sc.logDir, mostlyInline)
 
 	// Reset the server identifiers, so that new servers
 	// can report their IDs through logging.
@@ -175,37 +171,110 @@ func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 		t.Fatal(err)
 	}
 
-	if useFiles {
-		t.Logf("test logs captured to: %s", *fileDir)
-	}
+	t.Logf("test logs captured to: %s", sc.logDir)
 	return sc
 }
 
 // getTestConfig initialize the logging configuration to parameters
 // suitable for use in tests.
-func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
+//
+// fileDir is nil when the function is called without an output
+// directory, to construct the default log config upon init().
+// mostlyInline is true when -show-logs is specified.
+func getTestConfig(fileDir *string, mostlyInline bool) (testConfig logconfig.Config) {
 	testConfig = logconfig.DefaultConfig()
 
-	if err := testConfig.Validate(fileDir); err != nil {
-		return testConfig, err
+	forcePanicsToStderr := func(c *logconfig.Config) {
+		// Disable the internal fd2 capture to file, to ensure that panic
+		// objects get reported to stderr.
+		c.CaptureFd2.Enable = false
+		// Since we are letting fd2 writes go to the external stderr,
+		// we cannot keep redaction markers there.
+		*c.Sinks.Stderr.Redactable = false
+	}
+
+	if logging.testLogConfig != "" {
+		// The person running the test has requested a custom logging configuration.
+		// Use their choice.
+		h := logconfig.Holder{Config: testConfig}
+		if err := h.Set(logging.testLogConfig); err != nil {
+			panic(errors.Wrap(err, "error in test log config spec"))
+		}
+
+		forcePanicsToStderr(&h.Config)
+
+		// Validate the configuration. This also ensures that if the
+		// user's choice does not set a target directory, we use the
+		// test-specific target directory instead.
+		if err := h.Config.Validate(fileDir); err != nil {
+			panic(errors.Wrap(err, "error in test log config spec"))
+		}
+
+		return h.Config
 	}
 
 	if fileDir == nil {
 		// File output is disabled; we use stderr for everything.
+		// This happens e.g. when a test is not using log.Scope().
 
 		// All messages go to stderr.
 		testConfig.Sinks.Stderr.Filter = severity.INFO
 		// Ensure all channels go to stderr.
-		testConfig.Sinks.Stderr.Channels.Channels = logconfig.SelectAllChannels()
+		testConfig.Sinks.Stderr.Channels = logconfig.SelectChannels(logconfig.AllChannels()...)
 		// Remove all sinks other than stderr.
 		testConfig.Sinks.FluentServers = nil
 		testConfig.Sinks.FileGroups = nil
 	} else {
 		// Output to files enabled.
 
-		// Even though we use file output, make all logged errors/fatal
-		// calls go to the external stderr, in addition to the log file.
-		testConfig.Sinks.Stderr.Filter = severity.ERROR
+		// We have two desired cases: -show-logs (mostlyInline = true)
+		// and without -show-logs (default, mostlyInline = false).
+
+		// In both cases, we emit output to files, with the STORAGE and
+		// HEALTH channels split into separate files.  We do keep a copy
+		// of HEALTH and STORAGE warning and errors on the main file
+		// though.
+		testConfig.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+			"storage": {
+				Channels: logconfig.SelectChannels(channel.STORAGE),
+			},
+			"health": {
+				Channels: logconfig.SelectChannels(channel.HEALTH),
+			},
+			// Also add the WARNING+ events from STORAGE and CHANNEL into the
+			// default file group.
+			"default": {
+				Channels: logconfig.ChannelFilters{
+					Filters: map[logpb.Severity]logconfig.ChannelList{
+						severity.WARNING: {Channels: []logpb.Channel{channel.STORAGE, channel.HEALTH}},
+					},
+				},
+			},
+		}
+
+		// Then we need to choose what to do with the stderr sink.
+		if mostlyInline {
+			// User requested -show-logs.
+			//
+			// Include everything on stderr except STORAGE and HEALTH at
+			// severity below WARNING.
+			testConfig.Sinks.Stderr.Filter = severity.INFO
+			testConfig.Sinks.Stderr.Channels.Filters = map[logpb.Severity]logconfig.ChannelList{
+				logpb.Severity_INFO:    {Channels: selectAllChannelsExceptStorageAndHealth()},
+				logpb.Severity_WARNING: {Channels: []logpb.Channel{channel.HEALTH, channel.STORAGE}},
+			}
+		} else {
+			// Preferring file output only.
+			//
+			// Even though we use file output, make all logged fatal
+			// calls go to the external stderr, in addition to the log file.
+			//
+			// We want FATAL messages because those don't pertain to a
+			// specific test, but rather to the whole package / go test
+			// invocation because they stop the execution. They elucidate
+			// why the 'go test' invocation fails prematurely.
+			testConfig.Sinks.Stderr.Filter = severity.FATAL
+		}
 	}
 
 	if skip.UnderBench() {
@@ -217,14 +286,69 @@ func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
 		testConfig.Sinks.Stderr.Filter = severity.NONE
 	}
 
-	// Disable the internal fd2 capture to file, to ensure that panic
-	// objects get reported to stderr.
-	testConfig.CaptureFd2.Enable = false
-	// Since we are letting writes go to the external stderr,
-	// we cannot keep redaction markers there.
-	*testConfig.Sinks.Stderr.Redactable = false
+	forcePanicsToStderr(&testConfig)
 
-	return testConfig, nil
+	if err := testConfig.Validate(fileDir); err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error in predefined test log config"))
+	}
+	return testConfig
+}
+
+func selectAllChannelsExceptStorageAndHealth() []logpb.Channel {
+	res := logconfig.AllChannels()
+	k := 0
+	for _, ch := range res {
+		if ch == channel.HEALTH || ch == channel.STORAGE {
+			continue
+		}
+		res[k] = ch
+		k++
+	}
+	res = res[:k]
+	return res
+}
+
+// SetupSingleFileLogging modifies the configuration of the Scope
+// to ensure all the logging output gets redirected to one file.
+// By default, the logging output in tests gets split into
+// multiple files to avoid noise on the main logging output.
+//
+// This facility exists for tests like TestStatusLogsAPI which
+// inspect/assert the number of generated log files.
+//
+// Note: this is a no-op when the scope is currently redirected to
+// stderr, e.g. when instantiated via log.Scope() and run with
+// -show-logs.
+// To ensure that output always goes to one file, use
+// log.ScopeWithoutShowLogs().
+func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
+	if l.logDir == "" {
+		// No log directory: no-op.
+		return func() {}
+	}
+
+	// Set up a logging configuration with just one file sink.
+	cfg := logconfig.DefaultConfig()
+	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"default": {
+			Channels: logconfig.SelectChannels(logconfig.AllChannels()...)},
+	}
+	// Disable the -stderr.log output so there's really just 1 file.
+	cfg.CaptureFd2.Enable = false
+
+	// Derive a full config using the same directory as the
+	// TestLogScope.
+	if err := cfg.Validate(&l.logDir); err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error in predefined log config"))
+	}
+
+	// Apply the configuration.
+	TestingResetActive()
+	cleanup, err := ApplyConfig(cfg)
+	if err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error in predefined log config"))
+	}
+	return cleanup
 }
 
 // GetDirectory retrieves the log directory for this scope.

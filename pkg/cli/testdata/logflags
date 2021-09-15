@@ -366,7 +366,7 @@ init
 config: {<fileDefaultsNoMaxSize(/mypath)>,
 <fluentDefaults>,
 <httpDefaults>,
-sinks: {file-groups: {default: {channels: all,
+sinks: {file-groups: {default: {channels: {INFO: all},
 dir: /mypath,
 file-permissions: "0644",
 buffered-writes: true,

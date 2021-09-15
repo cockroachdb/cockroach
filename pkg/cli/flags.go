@@ -315,7 +315,7 @@ func init() {
 			// Same as httptest, but for the datadriven package.
 			flag.Hidden = true
 		}
-		if flag.Name == logflags.ShowLogsName {
+		if flag.Name == logflags.ShowLogsName || flag.Name == logflags.TestLogConfigName {
 			// test-only flag
 			flag.Hidden = true
 		}

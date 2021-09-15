@@ -4,10 +4,9 @@ yaml
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -24,10 +23,9 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -46,11 +44,10 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: {INFO: all}
       dir: /custom
       filter: INFO
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -70,10 +67,9 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: {WARNING: all}
       filter: WARNING
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -91,11 +87,11 @@ sinks:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   fluent-servers:
     custom:
-      channels: [DEV]
+      channels: {INFO: [DEV]}
       net: tcp
       address: 127.0.0.1:5170
       filter: INFO
@@ -104,7 +100,6 @@ sinks:
       redactable: true
       exit-on-error: false
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -121,10 +116,9 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -142,11 +136,10 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: {INFO: all}
       buffered-writes: false
       filter: INFO
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -165,11 +158,11 @@ sinks:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   fluent-servers:
     custom:
-      channels: [DEV]
+      channels: {INFO: [DEV]}
       net: tcp
       address: localhost:5170
       filter: INFO
@@ -178,7 +171,6 @@ sinks:
       redactable: true
       exit-on-error: true
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -196,10 +188,9 @@ sinks:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: {INFO: all}
       filter: INFO
   stderr:
-    channels: [DEV]
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -212,7 +203,6 @@ file-defaults: {filter: NONE}
 ----
 sinks:
   stderr:
-    channels: all
     filter: NONE
 capture-stray-errors:
   enable: true
@@ -226,7 +216,6 @@ sinks:
      custom:
 ----
 ERROR: fluent server "custom": address cannot be empty
-fluent server "custom": no channel selected
 
 # Check that invalid proto is rejected.
 yaml
@@ -270,3 +259,180 @@ sinks:
 ----
 ERROR: file group "example": log directory cannot start with '~': ~/bar
 file group "example": no channel selected
+
+# Check that duplicate channel use in filter spec is refused.
+yaml
+sinks:
+  stderr:
+    channels: {INFO: DEV, WARNING: DEV}
+----
+ERROR: stderr sink: cannot use channel DEV at severity WARNING: already listed at severity INFO
+
+# Check that missing DEV sink gets added.
+# The new sink that gets added does not include
+# channels that have sinks already.
+yaml
+sinks:
+  file-groups:
+    custom1:
+      channels: HEALTH
+    custom2:
+      channels: STORAGE
+----
+sinks:
+  file-groups:
+    custom1:
+      channels: {INFO: [HEALTH]}
+      filter: INFO
+    custom2:
+      channels: {INFO: [STORAGE]}
+      filter: INFO
+    default:
+      channels: {INFO: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS,
+          SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY]}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that a single channel can appear in multiple sinks.
+yaml
+sinks:
+  file-groups:
+    custom1:
+      channels: {WARNING: HEALTH}
+    custom2:
+      channels: {INFO: HEALTH}
+----
+sinks:
+  file-groups:
+    custom1:
+      channels: {WARNING: [HEALTH]}
+      filter: INFO
+    custom2:
+      channels: {INFO: [HEALTH]}
+      filter: INFO
+    default:
+      channels: {INFO: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
+          SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY]}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that if there is a DEV sink already, missing channels get
+# added to it at the configured default filter severity.
+yaml
+sinks:
+  file-groups:
+    custom:
+      channels: {WARNING: DEV}
+      filter: ERROR
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {WARNING: [DEV], ERROR: [OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA,
+          USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF,
+          TELEMETRY]}
+      filter: ERROR
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that if there are multiple DEV sinks, the "default" sink gets
+# the missing channels.
+yaml
+sinks:
+  file-groups:
+    default:
+      channels: DEV
+    custom:
+      channels: {WARNING: DEV}
+      filter: ERROR
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {WARNING: [DEV]}
+      filter: ERROR
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that if there are multiple DEV sinks but the "default" sink
+# does not have DEV, the first sink that captures DEV in lexicographic
+# order is used.
+yaml
+sinks:
+  file-groups:
+    default:
+      channels: HEALTH
+    custom2:
+      channels: {WARNING: DEV}
+      filter: ERROR
+    custom1:
+      channels: {ERROR: DEV}
+      filter: ERROR
+----
+sinks:
+  file-groups:
+    custom1:
+      channels: {ERROR: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
+          SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY]}
+      filter: ERROR
+    custom2:
+      channels: {WARNING: [DEV]}
+      filter: ERROR
+    default:
+      channels: {INFO: [HEALTH]}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that if there is no sink that captures DEV yet, but there is a "default"
+# sink that has some channels yet, DEV is added to it and the previous
+# configuration is retained.
+yaml
+sinks:
+  file-groups:
+    default:
+      channels: {WARNING: HEALTH}
+      filter: ERROR
+    custom:
+      channels: STORAGE
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {INFO: [STORAGE]}
+      filter: INFO
+    default:
+      channels: {WARNING: [HEALTH], ERROR: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN,
+          PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY]}
+      filter: ERROR
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
