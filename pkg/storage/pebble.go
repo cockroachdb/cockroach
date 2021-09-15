@@ -1010,6 +1010,11 @@ func (p *Pebble) PutEngineKey(key EngineKey, value []byte) error {
 	return p.db.Set(key.Encode(), value, pebble.Sync)
 }
 
+// OverrideTxnDidNotUpdateMetaToFalse implements the Engine interface.
+func (p *Pebble) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
+	return overrideTxnDidNotUpdateMetaToFalse(ctx, p.settings)
+}
+
 // IsSeparatedIntentsEnabledForTesting implements the Engine interface.
 func (p *Pebble) IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool {
 	return !p.disableSeparatedIntents
@@ -1265,7 +1270,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 func (p *Pebble) NewBatch() Batch {
 	return newPebbleBatch(
 		p.db, p.db.NewIndexedBatch(), false, /* writeOnly */
-		p.disableSeparatedIntents)
+		p.disableSeparatedIntents, overrideTxnDidNotUpdateMetaToFalse(context.TODO(), p.settings))
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1275,7 +1280,8 @@ func (p *Pebble) NewReadOnly() ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly, p.disableSeparatedIntents)
+	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly, p.disableSeparatedIntents,
+		overrideTxnDidNotUpdateMetaToFalse(context.TODO(), p.settings))
 }
 
 // NewSnapshot implements the Engine interface.
@@ -1806,6 +1812,10 @@ func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 	panic("not implemented")
 }
 
+func (p *pebbleReadOnly) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
+	panic("not implemented")
+}
+
 // pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().
 type pebbleSnapshot struct {
 	snapshot *pebble.Snapshot
@@ -2096,4 +2106,12 @@ func pebbleExportToSst(
 	}
 
 	return rows.BulkOpSummary, MVCCKey{Key: resumeKey, Timestamp: resumeTS}, nil
+}
+
+// See the comment for Writer.OverrideTxnDidNotUpdateMetaToFalse.
+func overrideTxnDidNotUpdateMetaToFalse(ctx context.Context, st *cluster.Settings) bool {
+	// The fix to the single delete bug in 21.2 has nothing to do with
+	// PebbleFormatVersioned, but both are part of the 21.2 beta, which will be
+	// the earliest production version of 21.2.
+	return !st.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.PebbleFormatVersioned)
 }
