@@ -390,7 +390,6 @@ INSERT INTO foo VALUES (1), (10), (100);
 			&alloc,
 			mm.Monitor(),
 			row.FetcherTableArgs{
-				Spans:            spans,
 				Desc:             table,
 				Index:            idx,
 				ColIdxMap:        colIdxMap,
