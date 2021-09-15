@@ -181,14 +181,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		if spec.Core.JoinReader.LookupColumns != nil || !spec.Core.JoinReader.LookupExpr.Empty() {
 			return errLookupJoinUnsupported
 		}
-		for i := range spec.Core.JoinReader.Table.Indexes {
-			if spec.Core.JoinReader.Table.Indexes[i].IsInterleaved() {
-				// Interleaved indexes are going to be removed anyway, so there is no
-				// point in handling the extra complexity. Just let the row engine
-				// handle this.
-				return errInterleavedIndexJoin
-			}
-		}
 		return nil
 
 	case spec.Core.Filterer != nil:
@@ -263,7 +255,6 @@ var (
 	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader and non-LocalPlanNode cores is prohibited in vectorize=experimental_always")
 	errWrappedCast                    = errors.New("mismatched types in NewColOperator and unsupported casts")
 	errLookupJoinUnsupported          = errors.New("lookup join reader is unsupported in vectorized")
-	errInterleavedIndexJoin           = errors.New("vectorized join reader is unsupported for interleaved indexes")
 )
 
 func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
