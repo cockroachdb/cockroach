@@ -1711,7 +1711,6 @@ func (ef *execFactory) ConstructDeleteRange(
 	table cat.Table,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
-	interleavedTables []cat.Table,
 	autoCommit bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
@@ -1729,19 +1728,11 @@ func (ef *execFactory) ConstructDeleteRange(
 	}
 
 	dr := &deleteRangeNode{
-		interleavedFastPath: false,
-		spans:               spans,
-		desc:                tabDesc,
-		autoCommitEnabled:   autoCommit,
+		spans:             spans,
+		desc:              tabDesc,
+		autoCommitEnabled: autoCommit,
 	}
 
-	if len(interleavedTables) > 0 {
-		dr.interleavedFastPath = true
-		dr.interleavedDesc = make([]catalog.TableDescriptor, len(interleavedTables))
-		for i := range dr.interleavedDesc {
-			dr.interleavedDesc[i] = interleavedTables[i].(*optTable).desc
-		}
-	}
 	return dr, nil
 }
 
