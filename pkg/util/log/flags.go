@@ -17,6 +17,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -199,7 +200,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 
 		// Force a log entry. This does two things: it forces the creation
 		// of a file and it also introduces a timestamp marker.
-		entry := makeUnstructuredEntry(secLoggersCtx, severity.INFO, channel.DEV, 0,
+		entry := makeUnstructuredEntry(secLoggersCtx, severity.INFO, channel.DEV, build.Version(), 0,
 			// Note: we need this entry to be marked as non-redactable since
 			// it's going to be followed by junk printed by the go runtime.
 			false, /* redactable */

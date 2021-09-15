@@ -34,7 +34,13 @@ type Channel = logpb.Channel
 // logfDepth emits a log entry on the specified channel at specified
 // severity.
 func logfDepth(
-	ctx context.Context, depth int, sev Severity, ch Channel, format string, args ...interface{},
+	ctx context.Context,
+	depth int,
+	sev Severity,
+	ch Channel,
+	version string,
+	format string,
+	args ...interface{},
 ) {
 	if sev == severity.FATAL {
 		if MaybeSendCrashReport != nil {
@@ -43,14 +49,14 @@ func logfDepth(
 		}
 		if ch != channel.OPS {
 			// Tell the OPS channel about this termination.
-			logfDepth(ctx, depth+1, severity.INFO, channel.OPS,
+			logfDepth(ctx, depth+1, severity.INFO, channel.OPS, version,
 				"the server is terminating due to a fatal error (see the %s channel for details)", ch)
 		}
 	}
 
 	logger := logging.getLogger(ch)
 	entry := makeUnstructuredEntry(
-		ctx, sev, ch,
+		ctx, sev, ch, version,
 		depth+1, true /* redactable */, format, args...)
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
 		eventInternal(sp, el, (sev >= severity.ERROR), entry.convertToLegacy())
@@ -60,7 +66,13 @@ func logfDepth(
 
 // shoutfDepth shouts to the specified channel.
 func shoutfDepth(
-	ctx context.Context, depth int, sev Severity, ch Channel, format string, args ...interface{},
+	ctx context.Context,
+	depth int,
+	sev Severity,
+	ch Channel,
+	version string,
+	format string,
+	args ...interface{},
 ) {
 	if sev == severity.FATAL {
 		// Fatal error handling later already tries to exit even if I/O should
@@ -79,7 +91,7 @@ func shoutfDepth(
 				FormatWithContextTags(ctx, format, args...),
 				"\n", "\n* ", -1))
 	}
-	logfDepth(ctx, depth+1, sev, ch, format, args...)
+	logfDepth(ctx, depth+1, sev, ch, version, format, args...)
 }
 
 func (l *loggingT) setChannelLoggers(m map[Channel]*loggerT, stderrSinkInfo *sinkInfo) {

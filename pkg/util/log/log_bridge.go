@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/redact"
@@ -83,6 +84,7 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 		// DEV channel because we can't assume anything about the sensitivity
 		// of the information.
 		channel.DEV,
+		build.Version(),
 		0,    /* depth */
 		true, /* redactable */
 		"")

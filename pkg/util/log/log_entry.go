@@ -60,6 +60,8 @@ type logEntry struct {
 	// The channel on which the entry was sent. This is not reported by
 	// formatters when the header boolean is set.
 	ch Channel
+	// The CockroachDB binary version with which the event was generated.
+	version string
 
 	// The goroutine where the event was generated.
 	gid int64
@@ -108,7 +110,9 @@ func makeUnsafePayload(m string) entryPayload {
 }
 
 // makeEntry creates a logEntry.
-func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEntry) {
+func makeEntry(
+	ctx context.Context, s Severity, c Channel, version string, depth int,
+) (res logEntry) {
 	logging.idMu.RLock()
 	ids := logging.idMu.idPayload
 	logging.idMu.RUnlock()
@@ -118,6 +122,7 @@ func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEn
 		ts:        timeutil.Now().UnixNano(),
 		sev:       s,
 		ch:        c,
+		version:   version,
 		gid:       goid.Get(),
 		tags:      logtags.FromContext(ctx),
 	}
@@ -130,9 +135,14 @@ func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEn
 
 // makeStructuredEntry creates a logEntry using a structured payload.
 func makeStructuredEntry(
-	ctx context.Context, s Severity, c Channel, depth int, payload eventpb.EventPayload,
+	ctx context.Context,
+	s Severity,
+	c Channel,
+	version string,
+	depth int,
+	payload eventpb.EventPayload,
 ) (res logEntry) {
-	res = makeEntry(ctx, s, c, depth+1)
+	res = makeEntry(ctx, s, c, version, depth+1)
 
 	res.structured = true
 	_, b := payload.AppendJSONFields(false, nil)
@@ -145,12 +155,13 @@ func makeUnstructuredEntry(
 	ctx context.Context,
 	s Severity,
 	c Channel,
+	version string,
 	depth int,
 	redactable bool,
 	format string,
 	args ...interface{},
 ) (res logEntry) {
-	res = makeEntry(ctx, s, c, depth+1)
+	res = makeEntry(ctx, s, c, version, depth+1)
 
 	res.structured = false
 
@@ -183,8 +194,9 @@ func makeStartLine(formatter logFormatter, format string, args ...interface{}) *
 		context.Background(),
 		severity.UNKNOWN, /* header - ignored */
 		0,                /* header - ignored */
-		2,                /* depth */
-		true,             /* redactable */
+		build.Version(),
+		2,    /* depth */
+		true, /* redactable */
 		format,
 		args...)
 	entry.header = true
@@ -282,10 +294,11 @@ func MakeLegacyEntry(
 	ctx context.Context,
 	s Severity,
 	c Channel,
+	version string,
 	depth int,
 	redactable bool,
 	format string,
 	args ...interface{},
 ) (res logpb.Entry) {
-	return makeUnstructuredEntry(ctx, s, c, depth+1, redactable, format, args...).convertToLegacy()
+	return makeUnstructuredEntry(ctx, s, c, version, depth+1, redactable, format, args...).convertToLegacy()
 }

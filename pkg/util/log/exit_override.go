@@ -13,6 +13,7 @@ package log
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -78,7 +79,7 @@ func (l *loggerT) exitLocked(err error, code exit.Code) {
 func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// Make a valid log entry for this error.
 	entry := makeUnstructuredEntry(
-		ctx, severity.ERROR, channel.OPS,
+		ctx, severity.ERROR, channel.OPS, build.Version(),
 		2,    /* depth */
 		true, /* redactable */
 		"logging error: %v", err)

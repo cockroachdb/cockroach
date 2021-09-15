@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -35,10 +36,12 @@ func TestJSONFormats(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "s", "1")
 	ctx = logtags.AddTag(ctx, "long", "2")
 
+	version := build.Version()
+
 	testCases := []logEntry{
 		// Header entry.
 		func() logEntry {
-			e := makeUnstructuredEntry(ctx, 0, 0, 0, true, "hello %s", "world")
+			e := makeUnstructuredEntry(ctx, 0, 0, version, 0, true, "hello %s", "world")
 			e.header = true
 			return e
 		}(),
@@ -46,7 +49,7 @@ func TestJSONFormats(t *testing.T) {
 		{},
 		{idPayload: idPayload{clusterID: "abc", nodeID: 123}},
 		{idPayload: idPayload{tenantID: "abc", sqlInstanceID: 123}},
-		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &eventpb.RenameDatabase{
+		makeStructuredEntry(ctx, severity.INFO, channel.DEV, version, 0, &eventpb.RenameDatabase{
 			CommonEventDetails: eventpb.CommonEventDetails{
 				Timestamp: 123,
 				EventType: "rename_database",
@@ -54,8 +57,8 @@ func TestJSONFormats(t *testing.T) {
 			DatabaseName:    "hello",
 			NewDatabaseName: "world",
 		}),
-		makeUnstructuredEntry(ctx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
-		makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "world"),
+		makeUnstructuredEntry(ctx, severity.WARNING, channel.OPS, version, 0, false, "hello %s", "world"),
+		makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, version, 0, true, "hello %s", "world"),
 	}
 
 	formats := []logFormatter{

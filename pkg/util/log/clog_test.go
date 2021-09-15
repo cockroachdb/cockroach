@@ -27,6 +27,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -186,7 +187,7 @@ func TestV(t *testing.T) {
 	_ = logging.vmoduleConfig.verbosity.Set("2")
 	defer func() { _ = logging.vmoduleConfig.verbosity.Set("0") }()
 	if V(2) {
-		logfDepth(context.Background(), 1, severity.INFO, channel.DEV, "test")
+		logfDepth(context.Background(), 1, severity.INFO, channel.DEV, build.Version(), "test")
 	}
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -215,7 +216,7 @@ func TestVmoduleOn(t *testing.T) {
 		t.Error("V enabled for 3")
 	}
 	if V(2) {
-		logfDepth(context.Background(), 1, severity.INFO, channel.DEV, "test")
+		logfDepth(context.Background(), 1, severity.INFO, channel.DEV, build.Version(), "test")
 	}
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -240,7 +241,7 @@ func TestVmoduleOff(t *testing.T) {
 		}
 	}
 	if V(2) {
-		logfDepth(context.Background(), 1, severity.INFO, channel.DEV, "test")
+		logfDepth(context.Background(), 1, severity.INFO, channel.DEV, build.Version(), "test")
 	}
 	if contents() != "" {
 		t.Error("V logged incorrectly")

@@ -52,6 +52,15 @@ func SeemsOfficial() bool {
 	return channel == "official-binary" || channel == "source-archive"
 }
 
+// Version returns the version prefix, patch number and metadata of the current build.
+func Version() string {
+	v, err := version.Parse(tag)
+	if err != nil {
+		return "dev"
+	}
+	return v.String()
+}
+
 // VersionPrefix returns the version prefix of the current build.
 func VersionPrefix() string {
 	v, err := version.Parse(tag)

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -197,7 +198,8 @@ func Event(ctx context.Context, msg string) {
 	entry := MakeLegacyEntry(ctx,
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
-		1,             /* depth */
+		build.Version(),
+		1, /* depth */
 		// redactable is false because we want to flatten the data in traces
 		// -- we don't have infrastructure yet for trace redaction.
 		false, /* redactable */
@@ -220,7 +222,8 @@ func Eventf(ctx context.Context, format string, args ...interface{}) {
 	entry := MakeLegacyEntry(ctx,
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
-		1,             /* depth */
+		build.Version(),
+		1, /* depth */
 		// redactable is false because we want to flatten the data in traces
 		// -- we don't have infrastructure yet for trace redaction.
 		false, /* redactable */
@@ -237,7 +240,7 @@ func vEventf(
 		if isErr {
 			sev = severity.ERROR
 		}
-		logfDepth(ctx, 1+depth, sev, channel.DEV, format, args...)
+		logfDepth(ctx, 1+depth, sev, channel.DEV, build.Version(), format, args...)
 	} else {
 		sp, el, ok := getSpanOrEventLog(ctx)
 		if !ok {
@@ -247,6 +250,7 @@ func vEventf(
 		entry := MakeLegacyEntry(ctx,
 			severity.INFO, /* unused for trace events */
 			channel.DEV,   /* unused for trace events */
+			build.Version(),
 			depth+1,
 			// redactable is false because we want to flatten the data in traces
 			// -- we don't have infrastructure yet for trace redaction.

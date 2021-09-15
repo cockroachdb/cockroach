@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -242,9 +243,9 @@ func SetNodeIDs(clusterID string, nodeID int32) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	logfDepth(ctx, 1, severity.INFO, channel.OPS, "clusterID: %s", clusterID)
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, build.Version(), "clusterID: %s", clusterID)
 	if nodeID != 0 {
-		logfDepth(ctx, 1, severity.INFO, channel.OPS, "nodeID: n%d", nodeID)
+		logfDepth(ctx, 1, severity.INFO, channel.OPS, build.Version(), "nodeID: n%d", nodeID)
 	}
 
 	// Perform the change proper.
@@ -265,8 +266,8 @@ func SetTenantIDs(tenantID string, sqlInstanceID int32) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	logfDepth(ctx, 1, severity.INFO, channel.OPS, "tenantID: %s", tenantID)
-	logfDepth(ctx, 1, severity.INFO, channel.OPS, "instanceID: %d", sqlInstanceID)
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, build.Version(), "tenantID: %s", tenantID)
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, build.Version(), "instanceID: %d", sqlInstanceID)
 
 	// Perform the change proper.
 	logging.idMu.Lock()

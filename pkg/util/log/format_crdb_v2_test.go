@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -62,10 +63,12 @@ func TestFormatCrdbV2(t *testing.T) {
 		NewDatabaseName: "world",
 	}
 
+	version := build.Version()
+
 	testCases := []logEntry{
 		// Header entry.
 		func() logEntry {
-			e := makeUnstructuredEntry(ctx, 0, 0, 0, true, "hello %s", "world")
+			e := makeUnstructuredEntry(ctx, 0, 0, version, 0, true, "hello %s", "world")
 			e.header = true
 			return e
 		}(),
@@ -75,34 +78,34 @@ func TestFormatCrdbV2(t *testing.T) {
 		// Empty entry.
 		{},
 		// Structured entry.
-		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, ev),
+		makeStructuredEntry(ctx, severity.INFO, channel.DEV, build.Version(), 0, ev),
 		// Structured entry, with a stack trace.
-		withStack(makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, ev)),
+		withStack(makeStructuredEntry(ctx, severity.INFO, channel.DEV, build.Version(), 0, ev)),
 
 		// Single-line unstructured entries, with and without redaction markers.
-		makeUnstructuredEntry(ctx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
-		makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "world"),
+		makeUnstructuredEntry(ctx, severity.WARNING, channel.OPS, version, 0, false, "hello %s", "world"),
+		makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, version, 0, true, "hello %s", "world"),
 
 		// Unstructured entry, with a counter.
 		func() logEntry {
-			e := makeUnstructuredEntry(ctx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world")
+			e := makeUnstructuredEntry(ctx, severity.WARNING, channel.OPS, version, 0, false, "hello %s", "world")
 			e.counter = 123
 			return e
 		}(),
 
 		// Single-line unstructured, followed by a stack trace.
-		withStack(makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "stack")),
+		withStack(makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, version, 0, true, "hello %s", "stack")),
 
 		// Multi-line unstructured.
-		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 0, false, "maybe %s", "multi\nline"),
-		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 0, true, "maybe %s", "multi\nline"),
+		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, version, 0, false, "maybe %s", "multi\nline"),
+		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, version, 0, true, "maybe %s", "multi\nline"),
 		// Multi-line unstructured, with a stack tace.
-		withStack(makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 0, true, "maybe %s", "multi\nline with stack")),
+		withStack(makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, version, 0, true, "maybe %s", "multi\nline with stack")),
 
 		// Many-byte unstructured.
-		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 0, false, "%s", longLine),
+		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, version, 0, false, "%s", longLine),
 		// Many-byte structured.
-		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &eventpb.RenameDatabase{
+		makeStructuredEntry(ctx, severity.INFO, channel.DEV, version, 0, &eventpb.RenameDatabase{
 			CommonEventDetails: eventpb.CommonEventDetails{
 				Timestamp: 123,
 				EventType: "rename_database",
@@ -110,7 +113,7 @@ func TestFormatCrdbV2(t *testing.T) {
 			DatabaseName: longLine,
 		}),
 		// Unstructured with long stack trace.
-		withBigStack(makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "stack")),
+		withBigStack(makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, build.Version(), 0, true, "hello %s", "stack")),
 	}
 
 	// We only use the datadriven framework for the ability to rewrite the output.
