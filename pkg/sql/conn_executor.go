@@ -325,6 +325,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool,
 		nil, /* resetInterval */
 		nil, /* reportedProvider */
+		cfg.SQLStatsTestingKnobs,
 	)
 	reportedSQLStatsController :=
 		reportedSQLStats.GetController(cfg.SQLStatusServer, cfg.DB, cfg.InternalExecutor)
@@ -337,6 +338,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool,
 		sqlstats.SQLStatReset,
 		reportedSQLStats,
+		cfg.SQLStatsTestingKnobs,
 	)
 	s := &Server{
 		cfg:                     cfg,
@@ -802,7 +804,12 @@ func (s *Server) newConnExecutor(
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
 	ex.applicationStats = applicationStats
-	ex.statsCollector = sslocal.NewStatsCollector(applicationStats, ex.phaseTimes)
+	ex.statsCollector = sslocal.NewStatsCollector(
+		s.cfg.Settings,
+		applicationStats,
+		ex.phaseTimes,
+		s.cfg.SQLStatsTestingKnobs,
+	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
 		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName)

@@ -291,10 +291,8 @@ func TestNodeLocalInMemoryViewDoesNotReturnPersistedStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	ctx := context.Background()
+
 	params, _ := tests.CreateTestServerParams()
 	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: params,
@@ -305,7 +303,6 @@ func TestNodeLocalInMemoryViewDoesNotReturnPersistedStats(t *testing.T) {
 	// Open two connections so that we can run statements without messing up
 	// the SQL stats.
 	testConn := cluster.ServerConn(0 /* idx */)
-
 	sqlDB := sqlutils.MakeSQLRunner(testConn)
 	defer cluster.Stopper().Stop(ctx)
 
