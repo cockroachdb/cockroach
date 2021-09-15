@@ -3958,9 +3958,6 @@ func checkScanParallelizationIfLocal(
 				}
 				return true, nil
 			case *indexJoinNode:
-				// Vectorized index join is only supported for non-interleaved
-				// tables.
-				prohibitParallelization = n.table.desc.TableDesc().PrimaryIndex.IsInterleaved()
 				return true, nil
 			case *joinNode:
 				prohibitParallelization = n.pred.onCond != nil
