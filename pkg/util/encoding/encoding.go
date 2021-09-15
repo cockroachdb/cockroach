@@ -3040,6 +3040,29 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 	}
 }
 
+// DecomposeKeyTokens breaks apart a key into its individual key-encoded values
+// and returns a slice of byte slices, one for each key-encoded value.
+// It also returns whether the key contains a NULL value.
+func DecomposeKeyTokens(b []byte) (tokens [][]byte, containsNull bool, err error) {
+	var out [][]byte
+
+	for len(b) > 0 {
+		tokenLen, err := PeekLength(b)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if PeekType(b) == Null {
+			containsNull = true
+		}
+
+		out = append(out, b[:tokenLen])
+		b = b[tokenLen:]
+	}
+
+	return out, containsNull, nil
+}
+
 // getInvertedIndexKeyLength finds the length of an inverted index key
 // encoded as a byte array.
 func getInvertedIndexKeyLength(b []byte) (int, error) {

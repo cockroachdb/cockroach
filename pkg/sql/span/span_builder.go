@@ -42,11 +42,6 @@ type Builder struct {
 	KeyPrefix []byte
 	alloc     rowenc.DatumAlloc
 
-	// TODO (rohany): The interstices are used to convert opt constraints into spans. In future work,
-	//  we should unify the codepaths and use the allocation free method used on datums.
-	//  This work is tracked in #42738.
-	interstices [][]byte
-
 	neededFamilies []descpb.FamilyID
 }
 
@@ -68,7 +63,6 @@ func MakeBuilder(
 		table:          table,
 		index:          index,
 		KeyPrefix:      rowenc.MakeIndexKeyPrefix(codec, table, index.GetID()),
-		interstices:    make([][]byte, index.NumKeyColumns()+index.NumKeySuffixColumns()+1),
 		neededFamilies: nil,
 	}
 
@@ -82,9 +76,6 @@ func MakeBuilder(
 			s.indexColTypes[i] = col.GetType()
 		}
 	}
-
-	// Set up the interstices for encoding interleaved tables later.
-	s.interstices[0] = s.KeyPrefix
 
 	return s
 }
@@ -341,9 +332,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	if err != nil {
 		return nil, err
 	}
-	if cs.StartBoundary() == constraint.IncludeBoundary {
-		span.Key = append(span.Key, s.interstices[cs.StartKey().Length()]...)
-	} else {
+	if cs.StartBoundary() == constraint.ExcludeBoundary {
 		// We need to exclude the value this logical part refers to.
 		span.Key = span.Key.PrefixEnd()
 	}
@@ -352,7 +341,6 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	if err != nil {
 		return nil, err
 	}
-	span.EndKey = append(span.EndKey, s.interstices[cs.EndKey().Length()]...)
 
 	// Optimization: for single row lookups on a table with one or more column
 	// families, only scan the relevant column families, and use GetRequests
@@ -367,25 +355,22 @@ func (s *Builder) appendSpansFromConstraintSpan(
 		}
 	}
 
-	// We need to ensure that the end key is exclusive.
-	if s.index.GetType() == descpb.IndexDescriptor_INVERTED || cs.EndBoundary() == constraint.IncludeBoundary {
-		span.EndKey = span.EndKey.PrefixEnd()
-	}
-	return append(appendTo, span), nil
+	endInclusive := cs.EndBoundary() == constraint.IncludeBoundary
+	span.EndKey, err = adjustEndKey(s.codec, s.table, s.index, span.EndKey, endInclusive)
+	return append(appendTo, span), err
 }
 
 // encodeConstraintKey encodes each logical part of a constraint.Key into a
-// roachpb.Key; interstices[i] is inserted before the i-th value.
+// roachpb.Key.
 func (s *Builder) encodeConstraintKey(
 	ck constraint.Key,
 ) (_ roachpb.Key, containsNull bool, _ error) {
-	var key []byte
+	key := append([]byte(nil), s.KeyPrefix...)
 	for i := 0; i < ck.Length(); i++ {
 		val := ck.Value(i)
 		if val == tree.DNull {
 			containsNull = true
 		}
-		key = append(key, s.interstices[i]...)
 
 		var err error
 		// For extra columns (like implicit columns), the direction
@@ -404,6 +389,69 @@ func (s *Builder) encodeConstraintKey(
 		}
 	}
 	return key, containsNull, nil
+}
+
+// maxKeyTokens returns the maximum number of key tokens in an index's key,
+// including the table ID, index ID, and index column values (including extra
+// columns that may be stored in the key).
+// It requires knowledge of whether the key will or might contain a NULL value:
+// if uncertain, pass in true to 'overestimate' the maxKeyTokens.
+func maxKeyTokens(index catalog.Index, containsNull bool) int {
+	nKeyCols := index.NumKeyColumns()
+	// Non-unique secondary indexes or unique secondary indexes with a NULL
+	// value have additional columns in the key that may appear in a span
+	// (e.g. primary key columns not part of the index).
+	// See EncodeSecondaryIndex.
+	if !index.IsUnique() || containsNull {
+		nKeyCols += index.NumKeySuffixColumns()
+	}
+	return 2 + nKeyCols
+}
+
+// TODO:
+// AdjustEndKeyForInterleave returns an exclusive end key. It does two things:
+//    - determines the end key based on the prior: inclusive vs exclusive
+//    - adjusts the end key to skip unnecessary interleaved sections
+//
+// For example, the parent span composed from the filter PK >= 1 and PK < 3 is
+//    /1 - /3
+// This reads all keys up to the first parent key for PK = 3. If parent had
+// interleaved tables and keys, it would unnecessarily scan over interleaved
+// rows under PK2 (e.g. /2/#/5).
+// We can instead "tighten" or adjust the end key from /3 to /2/#.
+// DO NOT pass in any keys that have been invoked with PrefixEnd: this may
+// cause issues when trying to decode the key tokens.
+// AdjustEndKeyForInterleave is idempotent upon successive invocation(s).
+func adjustEndKey(
+	codec keys.SQLCodec,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	end roachpb.Key,
+	inclusive bool,
+) (roachpb.Key, error) {
+	if index.GetType() == descpb.IndexDescriptor_INVERTED {
+		return end.PrefixEnd(), nil
+	}
+
+	// Remove the tenant prefix before decomposing.
+	strippedEnd, err := codec.StripTenantPrefix(end)
+	if err != nil {
+		return roachpb.Key{}, err
+	}
+
+	keyTokens, containsNull, err := encoding.DecomposeKeyTokens(strippedEnd)
+	if err != nil {
+		return roachpb.Key{}, err
+	}
+	nIndexTokens := maxKeyTokens(index, containsNull)
+
+	if index.GetID() != table.GetPrimaryIndexID() || len(keyTokens) < nIndexTokens {
+		if inclusive {
+			end = end.PrefixEnd()
+		}
+	}
+
+	return end, nil
 }
 
 // InvertedSpans represent inverted index spans that can be encoded into
