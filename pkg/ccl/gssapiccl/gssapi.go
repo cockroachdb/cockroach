@@ -10,6 +10,7 @@
 // linux-gnu targets (i.e., not musl). Since go doesn't have a builtin way
 // to do that, we have to set this in the top-level Makefile.
 
+//go:build gss
 // +build gss
 
 package gssapiccl
@@ -25,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,97 +44,116 @@ const (
 // authGSS performs GSS authentication. See:
 // https://github.com/postgres/postgres/blob/0f9cdd7dca694d487ab663d463b308919f591c02/src/backend/libpq/auth.c#L1090
 func authGSS(
-	ctx context.Context,
+	_ context.Context,
 	c pgwire.AuthConn,
-	tlsState tls.ConnectionState,
-	_ pgwire.PasswordRetrievalFn,
-	_ *tree.DTimestamp,
+	_ tls.ConnectionState,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
-) (security.UserAuthHook, error) {
-	return func(ctx context.Context, requestedUser security.SQLUsername, clientConnection bool) (func(), error) {
-		var (
-			majStat, minStat, lminS, gflags C.OM_uint32
-			gbuf                            C.gss_buffer_desc
-			contextHandle                   C.gss_ctx_id_t  = C.GSS_C_NO_CONTEXT
-			acceptorCredHandle              C.gss_cred_id_t = C.GSS_C_NO_CREDENTIAL
-			srcName                         C.gss_name_t
-			outputToken                     C.gss_buffer_desc
+	identMap *identmap.Conf,
+) (behaviors pgwire.AuthBehaviors, err error) {
+	var (
+		majStat, minStat, lminS, gflags C.OM_uint32
+		gbuf                            C.gss_buffer_desc
+		contextHandle                   C.gss_ctx_id_t  = C.GSS_C_NO_CONTEXT
+		acceptorCredHandle              C.gss_cred_id_t = C.GSS_C_NO_CREDENTIAL
+		srcName                         C.gss_name_t
+		outputToken                     C.gss_buffer_desc
 
-			token []byte
-			err   error
+		token []byte
+	)
+
+	if err = c.SendAuthRequest(authTypeGSS, nil); err != nil {
+		return
+	}
+
+	// This cleanup function must be called at the
+	// "completion of a communications session", not
+	// merely at the end of an authentication init. See
+	// https://tools.ietf.org/html/rfc2744.html, section
+	// `1. Introduction`, stage `d`:
+	//
+	//   At the completion of a communications session (which
+	//   may extend across several transport connections),
+	//   each application calls a GSS-API routine to delete
+	//   the security context.
+	//
+	// See https://github.com/postgres/postgres/blob/f4d59369d2ddf0ad7850112752ec42fd115825d4/src/backend/libpq/pqcomm.c#L269
+	behaviors.ConnClose = func() {
+		C.gss_delete_sec_context(&lminS, &contextHandle, C.GSS_C_NO_BUFFER)
+	}
+
+	for {
+		token, err = c.GetPwdData()
+		if err != nil {
+			return
+		}
+
+		gbuf.length = C.ulong(len(token))
+		gbuf.value = C.CBytes([]byte(token))
+
+		majStat = C.gss_accept_sec_context(
+			&minStat,
+			&contextHandle,
+			acceptorCredHandle,
+			&gbuf,
+			C.GSS_C_NO_CHANNEL_BINDINGS,
+			&srcName,
+			nil,
+			&outputToken,
+			&gflags,
+			nil,
+			nil,
 		)
+		C.free(unsafe.Pointer(gbuf.value))
 
-		if err = c.SendAuthRequest(authTypeGSS, nil); err != nil {
-			return nil, err
-		}
-
-		// This cleanup function must be called at the
-		// "completion of a communications session", not
-		// merely at the end of an authentication init. See
-		// https://tools.ietf.org/html/rfc2744.html, section
-		// `1. Introduction`, stage `d`:
-		//
-		//   At the completion of a communications session (which
-		//   may extend across several transport connections),
-		//   each application calls a GSS-API routine to delete
-		//   the security context.
-		//
-		// See https://github.com/postgres/postgres/blob/f4d59369d2ddf0ad7850112752ec42fd115825d4/src/backend/libpq/pqcomm.c#L269
-		connClose := func() {
-			C.gss_delete_sec_context(&lminS, &contextHandle, C.GSS_C_NO_BUFFER)
-		}
-
-		for {
-			token, err = c.GetPwdData()
-			if err != nil {
-				return connClose, err
-			}
-
-			gbuf.length = C.ulong(len(token))
-			gbuf.value = C.CBytes([]byte(token))
-
-			majStat = C.gss_accept_sec_context(
-				&minStat,
-				&contextHandle,
-				acceptorCredHandle,
-				&gbuf,
-				C.GSS_C_NO_CHANNEL_BINDINGS,
-				&srcName,
-				nil,
-				&outputToken,
-				&gflags,
-				nil,
-				nil,
-			)
-			C.free(unsafe.Pointer(gbuf.value))
-
-			if outputToken.length != 0 {
-				outputBytes := C.GoBytes(outputToken.value, C.int(outputToken.length))
-				C.gss_release_buffer(&lminS, &outputToken)
-				if err = c.SendAuthRequest(authTypeGSSContinue, outputBytes); err != nil {
-					return connClose, err
-				}
-			}
-			if majStat != C.GSS_S_COMPLETE && majStat != C.GSS_S_CONTINUE_NEEDED {
-				return connClose, gssError("accepting GSS security context failed", majStat, minStat)
-			}
-			if majStat != C.GSS_S_CONTINUE_NEEDED {
-				break
+		if outputToken.length != 0 {
+			outputBytes := C.GoBytes(outputToken.value, C.int(outputToken.length))
+			C.gss_release_buffer(&lminS, &outputToken)
+			if err = c.SendAuthRequest(authTypeGSSContinue, outputBytes); err != nil {
+				return
 			}
 		}
-
-		majStat = C.gss_display_name(&minStat, srcName, &gbuf, nil)
-		if majStat != C.GSS_S_COMPLETE {
-			return connClose, gssError("retrieving GSS user name failed", majStat, minStat)
+		if majStat != C.GSS_S_COMPLETE && majStat != C.GSS_S_CONTINUE_NEEDED {
+			err = gssError("accepting GSS security context failed", majStat, minStat)
+			return
 		}
-		gssUser := C.GoStringN((*C.char)(gbuf.value), C.int(gbuf.length))
-		C.gss_release_buffer(&lminS, &gbuf)
+		if majStat != C.GSS_S_CONTINUE_NEEDED {
+			break
+		}
+	}
 
-		realms := entry.GetOptions("krb_realm")
+	majStat = C.gss_display_name(&minStat, srcName, &gbuf, nil)
+	if majStat != C.GSS_S_COMPLETE {
+		err = gssError("retrieving GSS user name failed", majStat, minStat)
+		return
+	}
+	gssUser := C.GoStringN((*C.char)(gbuf.value), C.int(gbuf.length))
+	C.gss_release_buffer(&lminS, &gbuf)
 
-		if idx := strings.IndexByte(gssUser, '@'); idx >= 0 {
-			if len(realms) > 0 {
+	// Update the incoming connection with the GSS username. We'll expect
+	// to see this value come back to the mapper function below.
+	behaviors.ReplaceSystemIdentity, err = security.MakeSQLUsernameFromUserInput(gssUser, security.UsernameValidation)
+	if err != nil {
+		return
+	}
+
+	// We enforce that the "map" xor "include_realm=0" options are set
+	// in the HBA validation function below.
+	if entry.GetOption("map") != "" {
+		behaviors.RoleMapper = pgwire.HbaMapper(entry, identMap)
+	} else if entry.GetOption("include_realm") == "0" {
+		// Strip the trailing realm information, if any, from the gssapi username.
+		behaviors.RoleMapper = stripRealmMapper
+	} else {
+		err = errors.New("unsupported HBA entry configuration")
+	}
+
+	behaviors.Authorizer = func(
+		_ context.Context, _ security.SQLUsername, _ bool, _ pgwire.PasswordRetrievalFn,
+	) error {
+		// Enforce krb_realm option, if any.
+		if realms := entry.GetOptions("krb_realm"); len(realms) > 0 {
+			if idx := strings.IndexByte(gssUser, '@'); idx >= 0 {
 				realm := gssUser[idx+1:]
 				matched := false
 				for _, krbRealm := range realms {
@@ -143,27 +163,20 @@ func authGSS(
 					}
 				}
 				if !matched {
-					return connClose, errors.Errorf("GSSAPI realm (%s) didn't match any configured realm", realm)
+					return errors.Errorf("GSSAPI realm (%s) didn't match any configured realm", realm)
 				}
+			} else {
+				return errors.New("GSSAPI did not return realm but realm matching was requested")
 			}
-			if entry.GetOption("include_realm") != "1" {
-				gssUser = gssUser[:idx]
-			}
-		} else if len(realms) > 0 {
-			return connClose, errors.New("GSSAPI did not return realm but realm matching was requested")
-		}
-
-		gssUsername, _ := security.MakeSQLUsernameFromUserInput(gssUser, security.UsernameValidation)
-		if gssUsername != requestedUser {
-			return connClose, errors.Errorf("requested user is %s, but GSSAPI auth is for %s", requestedUser, gssUser)
 		}
 
 		// Do the license check last so that administrators are able to test whether
 		// their GSS configuration is correct. That is, the presence of this error
 		// message means they have a correctly functioning GSS/Kerberos setup,
 		// but now need to enable enterprise features.
-		return connClose, utilccl.CheckEnterpriseEnabled(execCfg.Settings, execCfg.ClusterID(), execCfg.Organization(), "GSS authentication")
-	}, nil
+		return utilccl.CheckEnterpriseEnabled(execCfg.Settings, execCfg.ClusterID(), execCfg.Organization(), "GSS authentication")
+	}
+	return
 }
 
 func gssError(msg string, majStat, minStat C.OM_uint32) error {
@@ -185,8 +198,24 @@ func gssError(msg string, majStat, minStat C.OM_uint32) error {
 	return errors.Errorf("%s: %s: %s", msg, msgMajor, msgMinor)
 }
 
+// stripRealmMapper is a pgwire.RoleMapper that just strips the trailing
+// realm information, if any, from the gssapi username.
+func stripRealmMapper(
+	_ context.Context, systemIdentity security.SQLUsername,
+) ([]security.SQLUsername, error) {
+	norm := systemIdentity.Normalized()
+	if idx := strings.Index(norm, "@"); idx != -1 {
+		norm = norm[:idx]
+	}
+	ret, err := security.MakeSQLUsernameFromUserInput(norm, security.UsernameValidation)
+	return []security.SQLUsername{ret}, err
+}
+
+// checkEntry validates that the HBA entry contains exactly one of the
+// include_realm=0 directive or an identity-mapping configuration.
 func checkEntry(entry hba.Entry) error {
 	hasInclude0 := false
+	hasMap := false
 	for _, op := range entry.Options {
 		switch op[0] {
 		case "include_realm":
@@ -196,12 +225,16 @@ func checkEntry(entry hba.Entry) error {
 				return errors.Errorf("include_realm must be set to 0: %s", op[1])
 			}
 		case "krb_realm":
+		// OK.
+		case "map":
+			hasMap = true
 		default:
 			return errors.Errorf("unsupported option %s", op[0])
 		}
 	}
-	if !hasInclude0 {
-		return errors.New(`missing "include_realm=0" option in GSS entry`)
+	// There's no boolean xor in go, but this does the job.
+	if hasInclude0 == hasMap {
+		return errors.New(`exactly one of "include_realm=0" or "map" options required`)
 	}
 	return nil
 }
