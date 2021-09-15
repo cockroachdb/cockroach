@@ -180,6 +180,7 @@ ALL_TESTS = [
     "//pkg/settings:settings_test",
     "//pkg/spanconfig/spanconfigkvaccessor:spanconfigkvaccessor_test",
     "//pkg/spanconfig/spanconfigmanager:spanconfigmanager_test",
+    "//pkg/spanconfig/spanconfigstore:spanconfigstore_test",
     "//pkg/sql/catalog/catalogkeys:catalogkeys_test",
     "//pkg/sql/catalog/catalogkv:catalogkv_test",
     "//pkg/sql/catalog/catformat:catformat_test",
