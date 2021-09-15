@@ -32,6 +32,7 @@ import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
 import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
 
 // Error is a generic representation including a string message.
 message Error {

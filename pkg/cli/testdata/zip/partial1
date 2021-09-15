@@ -10,6 +10,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [cluster] requesting data for debug/settings... received response... converting to JSON... writing binary output: debug/settings.json... done
 [cluster] requesting data for debug/reports/problemranges... received response... converting to JSON... writing binary output: debug/reports/problemranges.json... done
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/crdb_internal.cluster_contention_events.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/crdb_internal.cluster_distsql_flows.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_queries... writing output: debug/crdb_internal.cluster_queries.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_sessions... writing output: debug/crdb_internal.cluster_sessions.txt... done
@@ -42,6 +43,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/1/crdb_internal.node_contention_events.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_distsql_flows... writing output: debug/nodes/1/crdb_internal.node_distsql_flows.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing output: debug/nodes/1/crdb_internal.node_inflight_trace_spans.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_metrics... writing output: debug/nodes/1/crdb_internal.node_metrics.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_queries... writing output: debug/nodes/1/crdb_internal.node_queries.txt... done
@@ -130,6 +132,9 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 2] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/2/crdb_internal.node_contention_events.txt...
 [node 2] retrieving SQL data for crdb_internal.node_contention_events: last request failed: dial tcp ...
 [node 2] retrieving SQL data for crdb_internal.node_contention_events: creating error output: debug/nodes/2/crdb_internal.node_contention_events.txt.err.txt... done
+[node 2] retrieving SQL data for crdb_internal.node_distsql_flows... writing output: debug/nodes/2/crdb_internal.node_distsql_flows.txt...
+[node 2] retrieving SQL data for crdb_internal.node_distsql_flows: last request failed: dial tcp ...
+[node 2] retrieving SQL data for crdb_internal.node_distsql_flows: creating error output: debug/nodes/2/crdb_internal.node_distsql_flows.txt.err.txt... done
 [node 2] retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing output: debug/nodes/2/crdb_internal.node_inflight_trace_spans.txt...
 [node 2] retrieving SQL data for crdb_internal.node_inflight_trace_spans: last request failed: dial tcp ...
 [node 2] retrieving SQL data for crdb_internal.node_inflight_trace_spans: creating error output: debug/nodes/2/crdb_internal.node_inflight_trace_spans.txt.err.txt... done
@@ -197,6 +202,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 3] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/3/crdb_internal.leases.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/3/crdb_internal.node_build_info.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/3/crdb_internal.node_contention_events.txt... done
+[node 3] retrieving SQL data for crdb_internal.node_distsql_flows... writing output: debug/nodes/3/crdb_internal.node_distsql_flows.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing output: debug/nodes/3/crdb_internal.node_inflight_trace_spans.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_metrics... writing output: debug/nodes/3/crdb_internal.node_metrics.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_queries... writing output: debug/nodes/3/crdb_internal.node_queries.txt... done

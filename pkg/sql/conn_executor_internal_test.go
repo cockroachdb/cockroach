@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -257,8 +258,9 @@ func startConnExecutor(
 		return nil, nil, nil, nil, nil, err
 	}
 	defer tempEngine.Close()
+	ambientCtx := testutils.MakeAmbientCtx()
 	cfg := &ExecutorConfig{
-		AmbientCtx:      testutils.MakeAmbientCtx(),
+		AmbientCtx:      ambientCtx,
 		Settings:        st,
 		Clock:           clock,
 		DB:              db,
@@ -272,15 +274,19 @@ func startConnExecutor(
 		DistSQLPlanner: NewDistSQLPlanner(
 			ctx, execinfra.Version, st, roachpb.NodeID(1),
 			nil, /* rpcCtx */
-			distsql.NewServer(ctx, execinfra.ServerConfig{
-				AmbientContext:    testutils.MakeAmbientCtx(),
-				Settings:          st,
-				Stopper:           stopper,
-				Metrics:           &distSQLMetrics,
-				NodeID:            nodeID,
-				TempFS:            tempFS,
-				ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
-			}),
+			distsql.NewServer(
+				ctx,
+				execinfra.ServerConfig{
+					AmbientContext:    ambientCtx,
+					Settings:          st,
+					Stopper:           stopper,
+					Metrics:           &distSQLMetrics,
+					NodeID:            nodeID,
+					TempFS:            tempFS,
+					ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
+				},
+				flowinfra.NewFlowScheduler(ambientCtx, stopper, st),
+			),
 			nil, /* distSender */
 			nil, /* nodeDescs */
 			gw,

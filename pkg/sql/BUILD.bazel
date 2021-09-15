@@ -542,6 +542,7 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/execstats",
+        "//pkg/sql/flowinfra",
         "//pkg/sql/gcjob",
         "//pkg/sql/lex",
         "//pkg/sql/mutations",

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,15 +31,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -486,4 +491,195 @@ UPDATE system.namespace SET id = 12345 WHERE id = 53;
 	require.Equal(t, `mutation job 123456: job not found`, errStr)
 
 	require.False(t, rows.Next())
+}
+
+func TestDistSQLFlowsVirtualTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numNodes = 3
+	const gatewayNodeID = 0
+
+	var queryRunningAtomic, stallAtomic int64
+	unblock := make(chan struct{})
+
+	tableKey := keys.SystemSQLCodec.TablePrefix(keys.MinNonPredefinedUserDescID + 1)
+	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+
+	// Install a store filter which, if both queryRunningAtomic and stallAtomic
+	// are 1, will block the scan requests until 'unblock' channel is closed.
+	//
+	// The filter is needed in order to pause the execution of the running flows
+	// in order to observe them in the virtual tables.
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(_ context.Context, req roachpb.BatchRequest) *roachpb.Error {
+					if atomic.LoadInt64(&stallAtomic) == 1 {
+						if req.IsSingleRequest() {
+							scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
+							if ok && tableSpan.ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {
+								t.Logf("stalling on scan at %s and waiting for test to unblock...", scan.Key)
+								<-unblock
+							}
+						}
+					}
+					return nil
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      params,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a table with 3 rows, split them into 3 ranges with each node
+	// having one.
+	db := tc.ServerConn(gatewayNodeID)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlutils.CreateTable(
+		t, db, "foo",
+		"k INT PRIMARY KEY, v INT",
+		3,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(2)),
+	)
+	sqlDB.Exec(t, "ALTER TABLE test.foo SPLIT AT VALUES (1), (2)")
+	sqlDB.Exec(
+		t,
+		fmt.Sprintf("ALTER TABLE test.foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 0), (ARRAY[%d], 1), (ARRAY[%d], 2)",
+			tc.Server(0).GetFirstStoreID(),
+			tc.Server(1).GetFirstStoreID(),
+			tc.Server(2).GetFirstStoreID(),
+		),
+	)
+
+	// When maxRunningFlows is 0, we expect the remote flows to be queued up and
+	// the test query will error out; when it is 1, we block the execution of
+	// running flows.
+	for maxRunningFlows := range []int{0, 1} {
+		t.Run(fmt.Sprintf("MaxRunningFlows=%d", maxRunningFlows), func(t *testing.T) {
+			// Limit the execution of remote flows and shorten the timeout.
+			const flowStreamTimeout = 1 // in seconds
+			sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.max_running_flows=$1", maxRunningFlows)
+			sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_stream_timeout=$1", fmt.Sprintf("%ds", flowStreamTimeout))
+
+			// Wait for all nodes to get the updated values of these cluster
+			// settings.
+			testutils.SucceedsSoon(t, func() error {
+				for nodeID := 0; nodeID < numNodes; nodeID++ {
+					conn := tc.ServerConn(nodeID)
+					db := sqlutils.MakeSQLRunner(conn)
+					var flows int
+					db.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.max_running_flows").Scan(&flows)
+					if flows != maxRunningFlows {
+						return errors.New("old max_running_flows value")
+					}
+					var timeout string
+					db.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.flow_stream_timeout").Scan(&timeout)
+					if timeout != fmt.Sprintf("00:00:0%d", flowStreamTimeout) {
+						return errors.Errorf("old flow_stream_timeout value")
+					}
+				}
+				return nil
+			})
+
+			if maxRunningFlows == 1 {
+				atomic.StoreInt64(&stallAtomic, 1)
+				defer func() {
+					atomic.StoreInt64(&stallAtomic, 0)
+				}()
+			}
+
+			// Spin up a separate goroutine that will run the query. If
+			// maxRunningFlows is 0, the query eventually will error out because
+			// the remote flows don't connect in time; if maxRunningFlows is 1,
+			// the query will succeed once we close 'unblock' channel.
+			newCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			g := ctxgroup.WithContext(newCtx)
+			g.GoCtx(func(ctx context.Context) error {
+				conn := tc.ServerConn(gatewayNodeID)
+				atomic.StoreInt64(&queryRunningAtomic, 1)
+				_, err := conn.ExecContext(ctx, "SELECT * FROM test.foo")
+				atomic.StoreInt64(&queryRunningAtomic, 0)
+				return err
+			})
+
+			t.Log("waiting for remote flows to be scheduled or run")
+			testutils.SucceedsSoon(t, func() error {
+				for idx, s := range []*distsql.ServerImpl{
+					tc.Server(1).DistSQLServer().(*distsql.ServerImpl),
+					tc.Server(2).DistSQLServer().(*distsql.ServerImpl),
+				} {
+					numQueued := s.NumRemoteFlowsInQueue()
+					if numQueued != 1-maxRunningFlows {
+						return errors.Errorf("%d flows are found in the queue of node %d, %d expected", numQueued, idx+1, 1-maxRunningFlows)
+					}
+					numRunning := s.NumRemoteRunningFlows()
+					if numRunning != maxRunningFlows {
+						return errors.Errorf("%d flows are found in the queue of node %d, %d expected", numRunning, idx+1, maxRunningFlows)
+					}
+				}
+				return nil
+			})
+
+			t.Log("checking the virtual tables")
+			const (
+				clusterScope  = "cluster"
+				nodeScope     = "node"
+				runningStatus = "running"
+				queuedStatus  = "queued"
+			)
+			getNum := func(db *sqlutils.SQLRunner, scope, status string) int {
+				var num int
+				db.QueryRow(t, fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s_distsql_flows WHERE status = '%s'", scope, status)).Scan(&num)
+				return num
+			}
+			for nodeID := 0; nodeID < numNodes; nodeID++ {
+				conn := tc.ServerConn(nodeID)
+				db := sqlutils.MakeSQLRunner(conn)
+
+				// Check cluster level table.
+				expRunning, expQueued := 0, 2
+				if maxRunningFlows == 1 {
+					expRunning, expQueued = expQueued, expRunning
+				}
+				if getNum(db, clusterScope, runningStatus) != expRunning || getNum(db, clusterScope, queuedStatus) != expQueued {
+					t.Fatalf("unexpected output from cluster_distsql_flows on node %d", nodeID+1)
+				}
+
+				// Check node level table.
+				if nodeID == gatewayNodeID {
+					if getNum(db, nodeScope, runningStatus) != 0 || getNum(db, nodeScope, queuedStatus) != 0 {
+						t.Fatal("unexpectedly non empty output from node_distsql_flows on the gateway")
+					}
+				} else {
+					expRunning, expQueued = 0, 1
+					if maxRunningFlows == 1 {
+						expRunning, expQueued = expQueued, expRunning
+					}
+					if getNum(db, nodeScope, runningStatus) != expRunning || getNum(db, nodeScope, queuedStatus) != expQueued {
+						t.Fatalf("unexpected output from node_distsql_flows on node %d", nodeID+1)
+					}
+				}
+			}
+
+			if maxRunningFlows == 1 {
+				// Unblock the scan requests.
+				close(unblock)
+			}
+
+			t.Log("waiting for query to finish")
+			err := g.Wait()
+			if maxRunningFlows == 0 {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

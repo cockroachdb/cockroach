@@ -16,6 +16,9 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null --timeout=.5s
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/crdb_internal.cluster_contention_events.txt...
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events: last request failed: pq: query execution canceled due to statement timeout
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events: creating error output: debug/crdb_internal.cluster_contention_events.txt.err.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/crdb_internal.cluster_distsql_flows.txt...
+[cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows: last request failed: pq: query execution canceled due to statement timeout
+[cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows: creating error output: debug/crdb_internal.cluster_distsql_flows.txt.err.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_queries... writing output: debug/crdb_internal.cluster_queries.txt...
 [cluster] retrieving SQL data for crdb_internal.cluster_queries: last request failed: pq: query execution canceled due to statement timeout
@@ -86,6 +89,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null --timeout=.5s
 [node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/1/crdb_internal.node_contention_events.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_distsql_flows... writing output: debug/nodes/1/crdb_internal.node_distsql_flows.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing output: debug/nodes/1/crdb_internal.node_inflight_trace_spans.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_metrics... writing output: debug/nodes/1/crdb_internal.node_metrics.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_queries... writing output: debug/nodes/1/crdb_internal.node_queries.txt... done

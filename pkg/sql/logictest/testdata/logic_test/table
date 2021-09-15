@@ -539,6 +539,7 @@ backward_dependencies                  NULL
 builtin_functions                      NULL
 cluster_contention_events              NULL
 cluster_database_privileges            NULL
+cluster_distsql_flows                  NULL
 cluster_queries                        NULL
 cluster_sessions                       NULL
 cluster_settings                       NULL
@@ -562,6 +563,7 @@ leases                                 NULL
 lost_descriptors_with_data             NULL
 node_build_info                        NULL
 node_contention_events                 NULL
+node_distsql_flows                     NULL
 node_inflight_trace_spans              NULL
 node_metrics                           NULL
 node_queries                           NULL

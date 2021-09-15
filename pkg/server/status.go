@@ -54,7 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
-	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -141,6 +141,7 @@ type baseStatusServer struct {
 	privilegeChecker   *adminPrivilegeChecker
 	sessionRegistry    *sql.SessionRegistry
 	contentionRegistry *contention.Registry
+	flowScheduler      *flowinfra.FlowScheduler
 	st                 *cluster.Settings
 	sqlServer          *SQLServer
 }
@@ -299,10 +300,10 @@ func (b *baseStatusServer) checkCancelPrivilege(
 	return nil
 }
 
-// hasContentionEventsPermissions checks whether the session user is allowed to
-// query contention events (which is the case when it is a superuser or has
-// VIEWACTIVITY permission) and returns an error if not.
-func (b *baseStatusServer) hasContentionEventsPermissions(ctx context.Context) error {
+// hasViewActivityPermissions checks whether the session user has permissions to
+// view the activity on the server (which is the case when it is a superuser or
+// has VIEWACTIVITY permission) and returns an error if not.
+func (b *baseStatusServer) hasViewActivityPermissions(ctx context.Context) error {
 	sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
 	if err != nil {
 		return err
@@ -313,26 +314,79 @@ func (b *baseStatusServer) hasContentionEventsPermissions(ctx context.Context) e
 	}
 	if !isAdmin && !hasViewActivity {
 		// Only superusers and users with VIEWACTIVITY permission are allowed
-		// to query contention information.
+		// to view the activity on the server.
 		return status.Errorf(
 			codes.PermissionDenied,
-			"client user %q does not have permission to view contention events",
+			"client user %q does not have permission to view the activity",
 			sessionUser)
 	}
 	return nil
 }
 
-func (b *baseStatusServer) getLocalContentionEvents(
+// ListLocalContentionEvents returns a list of contention events on this node.
+func (b *baseStatusServer) ListLocalContentionEvents(
 	ctx context.Context, _ *serverpb.ListContentionEventsRequest,
-) (contentionpb.SerializedRegistry, error) {
+) (*serverpb.ListContentionEventsResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
 
-	if err := b.hasContentionEventsPermissions(ctx); err != nil {
-		return contentionpb.SerializedRegistry{}, err
+	if err := b.hasViewActivityPermissions(ctx); err != nil {
+		return nil, err
 	}
 
-	return b.contentionRegistry.Serialize(), nil
+	return &serverpb.ListContentionEventsResponse{
+		Events: b.contentionRegistry.Serialize(),
+	}, nil
+}
+
+func (b *baseStatusServer) ListLocalDistSQLFlows(
+	ctx context.Context, _ *serverpb.ListDistSQLFlowsRequest,
+) (*serverpb.ListDistSQLFlowsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = b.AnnotateCtx(ctx)
+
+	if err := b.hasViewActivityPermissions(ctx); err != nil {
+		return nil, err
+	}
+
+	nodeIDOrZero, _ := b.sqlServer.sqlIDContainer.OptionalNodeID()
+
+	running, runningSince, queued, queuedSince := b.flowScheduler.Serialize()
+	if len(running) != len(runningSince) {
+		return nil, errors.Errorf("mismatched lengths of running and runningSince")
+	}
+	if len(queued) != len(queuedSince) {
+		return nil, errors.Errorf("mismatched lengths of queued and queuedSince")
+	}
+	response := &serverpb.ListDistSQLFlowsResponse{
+		Flows: make([]serverpb.DistSQLRemoteFlows, 0, len(running)+len(queued)),
+	}
+	for i, f := range running {
+		response.Flows = append(response.Flows, serverpb.DistSQLRemoteFlows{
+			FlowID: f,
+			Infos: []serverpb.DistSQLRemoteFlows_Info{{
+				NodeID:    nodeIDOrZero,
+				Timestamp: runningSince[i],
+				Status:    serverpb.DistSQLRemoteFlows_RUNNING,
+			}},
+		})
+	}
+	for i, f := range queued {
+		response.Flows = append(response.Flows, serverpb.DistSQLRemoteFlows{
+			FlowID: f,
+			Infos: []serverpb.DistSQLRemoteFlows_Info{{
+				NodeID:    nodeIDOrZero,
+				Timestamp: queuedSince[i],
+				Status:    serverpb.DistSQLRemoteFlows_QUEUED,
+			}},
+		})
+	}
+	// Per the contract of serverpb.ListDistSQLFlowsResponse, sort the flows
+	// lexicographically by FlowID.
+	sort.Slice(response.Flows, func(i, j int) bool {
+		return bytes.Compare(response.Flows[i].FlowID.GetBytes(), response.Flows[j].FlowID.GetBytes()) < 0
+	})
+	return response, nil
 }
 
 // A statusServer provides a RESTful status API.
@@ -381,6 +435,7 @@ func newStatusServer(
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
 	contentionRegistry *contention.Registry,
+	flowScheduler *flowinfra.FlowScheduler,
 	internalExecutor *sql.InternalExecutor,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
@@ -390,6 +445,7 @@ func newStatusServer(
 			privilegeChecker:   adminServer.adminPrivilegeChecker,
 			sessionRegistry:    sessionRegistry,
 			contentionRegistry: contentionRegistry,
+			flowScheduler:      flowScheduler,
 			st:                 st,
 		},
 		cfg:              cfg,
@@ -1925,17 +1981,6 @@ func (s *statusServer) ListLocalSessions(
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
 }
 
-// ListLocalContentionEvents returns a list of contention events on this node.
-func (s *statusServer) ListLocalContentionEvents(
-	ctx context.Context, req *serverpb.ListContentionEventsRequest,
-) (*serverpb.ListContentionEventsResponse, error) {
-	events, err := s.getLocalContentionEvents(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return &serverpb.ListContentionEventsResponse{Events: events}, nil
-}
-
 // iterateNodes iterates nodeFn over all non-removed nodes concurrently.
 // It then calls nodeResponse for every valid result of nodeFn, and
 // nodeError on every error result.
@@ -2240,7 +2285,7 @@ func (s *statusServer) ListContentionEvents(
 	ctx = s.AnnotateCtx(ctx)
 
 	// Check permissions early to avoid fan-out to all nodes.
-	if err := s.hasContentionEventsPermissions(ctx); err != nil {
+	if err := s.hasViewActivityPermissions(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2268,7 +2313,7 @@ func (s *statusServer) ListContentionEvents(
 		response.Events = contention.MergeSerializedRegistries(response.Events, events)
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
-		errResponse := serverpb.ListContentionEventsError{NodeID: nodeID, Message: err.Error()}
+		errResponse := serverpb.ListActivityError{NodeID: nodeID, Message: err.Error()}
 		response.Errors = append(response.Errors, errResponse)
 	}
 
@@ -2276,6 +2321,96 @@ func (s *statusServer) ListContentionEvents(
 		return nil, err
 	}
 	return &response, nil
+}
+
+func (s *statusServer) ListDistSQLFlows(
+	ctx context.Context, request *serverpb.ListDistSQLFlowsRequest,
+) (*serverpb.ListDistSQLFlowsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	if err := s.hasViewActivityPermissions(ctx); err != nil {
+		return nil, err
+	}
+
+	var response serverpb.ListDistSQLFlowsResponse
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListLocalDistSQLFlows(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		if len(resp.Errors) > 0 {
+			return nil, errors.Errorf("%s", resp.Errors[0].Message)
+		}
+		return resp, nil
+	}
+	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		if nodeResp == nil {
+			return
+		}
+		flows := nodeResp.(*serverpb.ListDistSQLFlowsResponse).Flows
+		response.Flows = mergeDistSQLRemoteFlows(response.Flows, flows)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errResponse := serverpb.ListActivityError{NodeID: nodeID, Message: err.Error()}
+		response.Errors = append(response.Errors, errResponse)
+	}
+
+	if err := s.iterateNodes(ctx, "distsql flows list", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+// mergeDistSQLRemoteFlows takes in two slices of DistSQL remote flows (that
+// satisfy the contract of serverpb.ListDistSQLFlowsResponse) and merges them
+// together while adhering to the same contract.
+//
+// It is assumed that if serverpb.DistSQLRemoteFlows for a particular FlowID
+// appear in both arguments - let's call them flowsA and flowsB for a and b,
+// respectively - then there are no duplicate NodeIDs among flowsA and flowsB.
+func mergeDistSQLRemoteFlows(a, b []serverpb.DistSQLRemoteFlows) []serverpb.DistSQLRemoteFlows {
+	maxLength := len(a)
+	if len(b) > len(a) {
+		maxLength = len(b)
+	}
+	result := make([]serverpb.DistSQLRemoteFlows, 0, maxLength)
+	aIter, bIter := 0, 0
+	for aIter < len(a) && bIter < len(b) {
+		cmp := bytes.Compare(a[aIter].FlowID.GetBytes(), b[bIter].FlowID.GetBytes())
+		if cmp < 0 {
+			result = append(result, a[aIter])
+			aIter++
+		} else if cmp > 0 {
+			result = append(result, b[bIter])
+			bIter++
+		} else {
+			r := a[aIter]
+			// No need to perform any kind of de-duplication because a
+			// particular flow will be reported at most once by each node in the
+			// cluster.
+			r.Infos = append(r.Infos, b[bIter].Infos...)
+			sort.Slice(r.Infos, func(i, j int) bool {
+				return r.Infos[i].NodeID < r.Infos[j].NodeID
+			})
+			result = append(result, r)
+			aIter++
+			bIter++
+		}
+	}
+	if aIter < len(a) {
+		result = append(result, a[aIter:]...)
+	}
+	if bIter < len(b) {
+		result = append(result, b[bIter:]...)
+	}
+	return result
 }
 
 // SpanStats requests the total statistics stored on a node for a given key
