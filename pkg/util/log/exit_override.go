@@ -96,7 +96,7 @@ func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 
 	for _, s := range l.sinkInfos {
 		sink := s.sink
-		if logpb.Severity_ERROR >= s.threshold && sink.active() {
+		if logpb.Severity_ERROR >= s.threshold.get(entry.ch) && sink.active() {
 			buf := s.formatter.formatEntry(entry)
 			sink.emergencyOutput(buf.Bytes())
 			putBuffer(buf)

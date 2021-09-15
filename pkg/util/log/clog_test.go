@@ -562,7 +562,7 @@ func TestFileSeverityFilter(t *testing.T) {
 
 	var debugFileSinkInfo *sinkInfo
 	for _, si := range debugLog.sinkInfos {
-		si.threshold = severity.ERROR
+		si.threshold.set(channel.DEV, severity.ERROR)
 		if _, ok := si.sink.(*fileSink); ok {
 			debugFileSinkInfo = si
 		}
@@ -672,7 +672,7 @@ func TestLogEntryPropagation(t *testing.T) {
 	l := logging.getLogger(channel.DEV)
 	for _, si := range l.sinkInfos {
 		if si.sink == &logging.stderrSink {
-			si.threshold.SetValue(severity.INFO)
+			si.threshold.set(channel.DEV, severity.INFO)
 
 			// Make stderr non-critical.
 			defer func(prevCriticality bool, si *sinkInfo) { si.criticality = prevCriticality }(si.criticality, si)

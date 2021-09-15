@@ -123,7 +123,7 @@ func testBase(
 	cfg.Sinks.HTTPServers = map[string]*logconfig.HTTPSinkConfig{
 		"ops": {
 			HTTPDefaults: defaults,
-			Channels:     logconfig.ChannelList{Channels: []Channel{channel.OPS}}},
+			Channels:     logconfig.SelectChannels(channel.OPS)},
 	}
 	// Derive a full config using the same directory as the
 	// TestLogScope.

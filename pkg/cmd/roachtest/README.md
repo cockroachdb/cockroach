@@ -191,7 +191,16 @@ A solid foundation for building the binaries and stressing a roachtest is
 provided via the [roachstress.sh] script, which can either be used outright or
 saved and adjusted. The script can be invoked without parameters from a clean
 checkout of the cockroach repository at the revision to be tested. It will
-prompt for user input on which test to stress.
+prompt for user input on which test to stress. Each input can be provided via
+the environment (replacing the prompt), and additional flags that are passed
+through to `roachtest` can be provided. For example:
+
+```bash
+# Run 10 instances of mytest against real VMs (i.e. not locally), and build the
+# full CRDB binary (i.e. build with the ui). Also, use a CPU quota of 1000 and
+# keep clusters for failing tests running for later investigation.
+TEST=mytest COUNT=10 LOCAL=n SHORT=n ./pkg/cmd/roachtest/roachstress.sh --cpu-quota 1000 --debug
+```
 
 [roachstress.sh]: https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/roachstress.sh
 
