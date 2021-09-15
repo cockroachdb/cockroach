@@ -194,3 +194,15 @@ func setupPathReal(dev *dev) error {
 	}
 	return nil
 }
+
+func splitArgsAtDash(cmd *cobra.Command, args []string) (before, after []string) {
+	argsLenAtDash := cmd.ArgsLenAtDash()
+	if argsLenAtDash < 0 {
+		// If there's no dash, the value of this is -1.
+		before = args
+	} else {
+		before = args[0:argsLenAtDash]
+		after = args[argsLenAtDash:]
+	}
+	return
+}
