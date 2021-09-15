@@ -586,7 +586,6 @@ func makeRowFetcher(
 	}
 
 	table := row.FetcherTableArgs{
-		Spans:            []roachpb.Span{entry.Span},
 		Desc:             entry.Desc,
 		Index:            entry.Desc.GetPrimaryIndex(),
 		ColIdxMap:        colIdxMap,

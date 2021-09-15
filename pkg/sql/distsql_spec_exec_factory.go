@@ -921,7 +921,6 @@ func (e *distSQLSpecExecFactory) ConstructDeleteRange(
 	table cat.Table,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
-	interleavedTables []cat.Table,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: delete range")
