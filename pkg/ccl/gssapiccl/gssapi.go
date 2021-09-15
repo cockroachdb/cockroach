@@ -51,7 +51,7 @@ func authGSS(
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
-	return func(ctx context.Context, requestedUser security.SQLUsername, clientConnection bool) (func(), error) {
+	return func(ctx context.Context, systemIdentity, _ security.SQLUsername, clientConnection bool) (func(), error) {
 		var (
 			majStat, minStat, lminS, gflags C.OM_uint32
 			gbuf                            C.gss_buffer_desc
@@ -154,8 +154,8 @@ func authGSS(
 		}
 
 		gssUsername, _ := security.MakeSQLUsernameFromUserInput(gssUser, security.UsernameValidation)
-		if gssUsername != requestedUser {
-			return connClose, errors.Errorf("requested user is %s, but GSSAPI auth is for %s", requestedUser, gssUser)
+		if gssUsername != systemIdentity {
+			return connClose, errors.Errorf("requested user is %s, but GSSAPI auth is for %s", systemIdentity, gssUser)
 		}
 
 		// Do the license check last so that administrators are able to test whether
