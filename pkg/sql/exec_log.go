@@ -277,19 +277,25 @@ func (p *planner) maybeLogStatementInternal(
 		sqlErrState = pgerror.GetPGCode(err).String()
 	}
 
-	execDetails := eventpb.CommonSQLExecDetails{
-		// Note: the current statement, application name, etc, are
-		// automatically populated by the shared logic in event_log.go.
-		ExecMode:      lbl,
-		NumRows:       uint64(rows),
-		SQLSTATE:      sqlErrState,
-		ErrorText:     execErrStr,
-		Age:           age,
-		NumRetries:    uint32(numRetries),
-		FullTableScan: p.curPlan.flags.IsSet(planFlagContainsFullTableScan),
-		FullIndexScan: p.curPlan.flags.IsSet(planFlagContainsFullIndexScan),
-		TxnCounter:    uint32(txnCounter),
-	}
+	var (
+		execDetails = eventpb.CommonSQLExecDetails{
+			// Note: the current statement, application name, etc, are
+			// automatically populated by the shared logic in event_log.go.
+			ExecMode:      lbl,
+			NumRows:       uint64(rows),
+			SQLSTATE:      sqlErrState,
+			ErrorText:     execErrStr,
+			Age:           age,
+			NumRetries:    uint32(numRetries),
+			FullTableScan: p.curPlan.flags.IsSet(planFlagContainsFullTableScan),
+			FullIndexScan: p.curPlan.flags.IsSet(planFlagContainsFullIndexScan),
+			TxnCounter:    uint32(txnCounter),
+		}
+
+		telemetryDetails = eventpb.CommonTelemetryEventDetails{
+			CockroachDBVersion: p.execCfg.Settings.Version.BinaryVersion().String(),
+		}
+	)
 
 	if auditEventsDetected {
 		// TODO(knz): re-add the placeholders and age into the logging event.
@@ -372,10 +378,22 @@ func (p *planner) maybeLogStatementInternal(
 		// TODO(thardy98): add the effective sample rate to the SampledQuery event
 		// (#69653).
 		if !shouldSampleEventToTelemetry {
-			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails}})
+			p.logEventsOnlyExternally(
+				ctx,
+				eventLogEntry{event: &eventpb.SampledQuery{
+					CommonTelemetryEventDetails: telemetryDetails,
+					CommonSQLExecDetails:        execDetails,
+				}},
+			)
 		} else if shouldSampleEventToTelemetry {
 			if rng.Float64() < sampleRate {
-				p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails}})
+				p.logEventsOnlyExternally(
+					ctx,
+					eventLogEntry{event: &eventpb.SampledQuery{
+						CommonTelemetryEventDetails: telemetryDetails,
+						CommonSQLExecDetails:        execDetails,
+					}},
+				)
 			}
 			// TODO(thardy98): event has not been sampled, increment the not emitted
 			// count (#69653).

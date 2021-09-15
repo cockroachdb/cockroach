@@ -2215,6 +2215,7 @@ contains common SQL event/execution details.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
+| `CockroachDBVersion` | The CockroachDB version. | yes |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |

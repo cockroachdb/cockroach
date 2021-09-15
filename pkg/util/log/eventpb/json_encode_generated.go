@@ -1547,6 +1547,24 @@ func (m *CommonSessionDetails) AppendJSONFields(printComma bool, b redact.Redact
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *CommonTelemetryEventDetails) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if m.CockroachDBVersion != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CockroachDBVersion\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.CockroachDBVersion)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *CommonTxnRowsLimitDetails) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	if m.TxnID != "" {
@@ -2723,6 +2741,8 @@ func (m *RuntimeStats) AppendJSONFields(printComma bool, b redact.RedactableByte
 func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonTelemetryEventDetails.AppendJSONFields(printComma, b)
 
 	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
 
