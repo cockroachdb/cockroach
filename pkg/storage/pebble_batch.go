@@ -43,13 +43,14 @@ type pebbleBatch struct {
 	// engine state. This relies on the fact that all pebbleIterators created
 	// here are marked as reusable, which causes pebbleIterator.Close to not
 	// close iter. iter will be closed when pebbleBatch.Close is called.
-	prefixIter       pebbleIterator
-	normalIter       pebbleIterator
-	prefixEngineIter pebbleIterator
-	normalEngineIter pebbleIterator
-	iter             cloneableIter
-	writeOnly        bool
-	closed           bool
+	prefixIter                         pebbleIterator
+	normalIter                         pebbleIterator
+	prefixEngineIter                   pebbleIterator
+	normalEngineIter                   pebbleIterator
+	iter                               cloneableIter
+	writeOnly                          bool
+	closed                             bool
+	overrideTxnDidNotUpdateMetaToFalse bool
 
 	wrappedIntentWriter intentDemuxWriter
 	// scratch space for wrappedIntentWriter.
@@ -66,7 +67,11 @@ var pebbleBatchPool = sync.Pool{
 
 // Instantiates a new pebbleBatch.
 func newPebbleBatch(
-	db *pebble.DB, batch *pebble.Batch, writeOnly bool, disableSeparatedIntents bool,
+	db *pebble.DB,
+	batch *pebble.Batch,
+	writeOnly bool,
+	disableSeparatedIntents bool,
+	overrideTxnDidNotUpdateMetaToFalse bool,
 ) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
@@ -94,6 +99,10 @@ func newPebbleBatch(
 			reusable:      true,
 		},
 		writeOnly: writeOnly,
+		// A batch is not long-lived, so using the same value (which could be
+		// slightly stale) is fine for the lifetime of the batch. Staleness is not
+		// a correctness issue.
+		overrideTxnDidNotUpdateMetaToFalse: overrideTxnDidNotUpdateMetaToFalse,
 	}
 	pb.wrappedIntentWriter = wrapIntentWriter(context.Background(), pb, disableSeparatedIntents)
 	return pb
@@ -472,6 +481,11 @@ func (p *pebbleBatch) PutEngineKey(key EngineKey, value []byte) error {
 
 	p.buf = key.EncodeToBuf(p.buf[:0])
 	return p.batch.Set(p.buf, value, nil)
+}
+
+// OverrideTxnDidNotUpdateMetaToFalse implements the Batch interface.
+func (p *pebbleBatch) OverrideTxnDidNotUpdateMetaToFalse(_ context.Context) bool {
+	return p.overrideTxnDidNotUpdateMetaToFalse
 }
 
 func (p *pebbleBatch) put(key MVCCKey, value []byte) error {
