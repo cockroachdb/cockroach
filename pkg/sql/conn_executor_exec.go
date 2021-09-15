@@ -1861,7 +1861,6 @@ func (ex *connExecutor) handleAutoCommit(
 func (ex *connExecutor) incrementStartedStmtCounter(ast tree.Statement) {
 	ex.metrics.StartedStatementCounters.incrementCount(ex, ast)
 	ex.server.TelemetryLoggingMetrics.updateRollingQueryCounts()
-
 }
 
 // incrementExecutedStmtCounter increments the appropriate executed
