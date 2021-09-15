@@ -13,6 +13,7 @@ package jobs
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 )
@@ -112,3 +113,8 @@ var (
 	GcIntervalSetting               = gcIntervalSetting
 	RetentionTimeSetting            = retentionTimeSetting
 )
+
+// IsVersionActive returns whether the given cluster version is active.
+func IsVersionActive(ctx context.Context, r *Registry, key clusterversion.Key) bool {
+	return r.settings.Version.IsActive(ctx, key)
+}

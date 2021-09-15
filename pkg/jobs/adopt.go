@@ -474,7 +474,12 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)
 					md.Payload.FinalResumeError = &encodedErr
 					ju.UpdatePayload(md.Payload)
-					if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+					// md.RunStats will be nil if clusterversion.RetryJobsWithExponentialBackoff
+					// was not active when Update was called above. In this case, we skip updating
+					// the runStats, treating this job run as if backoff is not active.
+					//
+					// TODO (sajjad): Update this comment after version 22.2 has been released.
+					if md.RunStats != nil {
 						// When we cancel a job, we want to reset its last_run and num_runs
 						// so that the job can be picked-up in the next adopt-loop, sooner
 						// than its current next-retry time.

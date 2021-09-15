@@ -214,6 +214,12 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 			}
 		}
 
+		if j.registry.knobs.BeforeUpdateFn != nil {
+			if err := j.registry.knobs.BeforeUpdateFn(md); err != nil {
+				return err
+			}
+		}
+
 		var ju JobUpdater
 		if err := updateFn(txn, md, &ju); err != nil {
 			return err

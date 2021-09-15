@@ -24,10 +24,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -39,12 +41,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -723,4 +727,95 @@ SELECT unnest(execution_errors)
 		close(seventhRun.resume)
 		require.Regexp(t, err3, registry.WaitForJobs(ctx, ie, []jobspb.JobID{id}))
 	})
+}
+
+// TestVersionUpgradeTimings tests that the system do not break when exponential-backoff
+// version is activated. When exponential-backoff is not active, num_runs and last_run
+// columns are not present in system.jobs table. As we check version updates at multiple
+// locations and query system.jobs table during a job lifecycle, this test checks that
+// version update between two cluster-version checks does not result in an error.
+func TestVersionUpgradeTimings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var jobID jobspb.JobID
+	var updated atomic.Value
+	beforeUpdateCh := make(chan struct{})
+	versionWaitCh := make(chan struct{})
+	updated.Store(false)
+	shortInterval := 2 * time.Millisecond
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: 1,
+					BinaryVersionOverride: clusterversion.ByKey(
+						clusterversion.RetryJobsWithExponentialBackoff - 1),
+				},
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					BeforeUpdateFn: func(md jobs.JobMetadata) error {
+						if updated.Load().(bool) || // The version is already upgraded.
+							md.ID != jobID || // Intercept the right job.
+							md.Payload.StartedMicros != 0 { // The job has already started.
+							return nil
+						}
+						// Ensure that RunStats is nil.
+						assert.Nil(t, md.RunStats)
+						updated.Store(true)
+						beforeUpdateCh <- struct{}{}
+						// Wait until backoff version becomes active.
+						<-versionWaitCh
+						return nil
+					},
+					IntervalOverrides: jobs.TestingIntervalOverrides{
+						Adopt:  &shortInterval,
+						Cancel: &shortInterval,
+					},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+	s := tc.Server(0)
+	sqlDB := tc.ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create and run a dummy job.
+	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{}
+	})
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	jobID = registry.MakeJobID()
+	require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := registry.CreateJobWithTxn(ctx, jobs.Record{
+			Details:  jobspb.ImportDetails{},
+			Progress: jobspb.ImportProgress{},
+		}, jobID, txn)
+		return err
+	}))
+
+	// Wait until the job runs updateFn function in jobs.Update().
+	<-beforeUpdateCh
+
+	// Ensure that the exponential-backoff version is not active.
+	require.False(t, jobs.IsVersionActive(ctx, registry, clusterversion.RetryJobsWithExponentialBackoff))
+	// Activate exponential-backoff version.
+	tdb.Exec(t,
+		`SET CLUSTER SETTING version = $1`, clusterversion.ByKey(clusterversion.RetryJobsWithExponentialBackoff).String(),
+	)
+	// Ensure that backoff version is now active.
+	require.True(t, jobs.IsVersionActive(ctx, registry, clusterversion.RetryJobsWithExponentialBackoff))
+
+	// Release the job to continue calling updateFn function.
+	versionWaitCh <- struct{}{}
+
+	tdb.CheckQueryResultsRetry(t,
+		fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", jobID),
+		[][]string{{string(jobs.StatusSucceeded)}},
+	)
 }

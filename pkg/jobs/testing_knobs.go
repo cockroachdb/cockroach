@@ -66,6 +66,9 @@ type TestingKnobs struct {
 
 	// DisableAdoptions disables job adoptions.
 	DisableAdoptions bool
+
+	// BeforeUpdateFn is called before calling updateFn in jobs.Update function.
+	BeforeUpdateFn func(md JobMetadata) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
