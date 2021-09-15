@@ -600,6 +600,7 @@ go_test(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqlliveness/slprovider",
+        "//pkg/sql/sqlstats",
         "//pkg/sql/sqltestutils",
         "//pkg/sql/stats",
         "//pkg/sql/stmtdiagnostics",
