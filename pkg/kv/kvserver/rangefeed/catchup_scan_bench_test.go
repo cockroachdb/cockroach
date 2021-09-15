@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -184,7 +185,7 @@ func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, readOnly boo
 	peb, err := storage.NewPebble(
 		context.Background(),
 		storage.PebbleConfig{
-			StorageConfig: base.StorageConfig{Dir: dir},
+			StorageConfig: base.StorageConfig{Dir: dir, Settings: cluster.MakeTestingClusterSettings()},
 			Opts:          opts,
 		})
 	if err != nil {
