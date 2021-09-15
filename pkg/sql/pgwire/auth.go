@@ -20,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -51,6 +53,10 @@ type authOptions struct {
 	// auth is the current HBA configuration as returned by
 	// (*Server).GetAuthenticationConfiguration().
 	auth *hba.Conf
+	// identMap is used in conjunction with the HBA configuration to
+	// allow system usernames (e.g. GSSAPI principals or X.509 CN's) to
+	// be dynamically mapped to database usernames.
+	identMap *identmap.Conf
 	// ie is the server-wide internal executor, used to
 	// retrieve entries from system.users.
 	ie *sql.InternalExecutor
@@ -89,15 +95,40 @@ func (c *conn) handleAuthentication(
 		return err
 	}
 
+	// Retrieve the authentication method.
+	tlsState, hbaEntry, methodFn, err := c.findAuthenticationMethod(authOpt)
+	if err != nil {
+		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
+		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+	}
+
+	ac.SetAuthMethod(hbaEntry.Method.String())
+	ac.LogAuthInfof(ctx, "HBA rule: %s", hbaEntry.Input)
+
+	// Populate the AuthMethod with per-connection information so that it
+	// can construct the next layer of services that we need.
+	roleMapper, authorizer := methodFn(
+		ctx, ac, tlsState, execCfg, hbaEntry, authOpt.identMap)
+
+	// Delegate to the AuthMethod's RoleMapper to choose the actual
+	// database user that a successful authentication will result in.
+	systemIdentity := c.sessionArgs.User
+	if err := c.chooseDbRole(ctx, ac, roleMapper); err != nil {
+		log.Warningf(ctx, "unable to map incoming identity %q to any database user: %+v", systemIdentity, err)
+		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, err)
+		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+	}
+
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLogin, isSuperuser, validUntil, defaultSettings, pwRetrievalFn, err := sql.GetUserSessionInitInfo(
-		ctx,
-		execCfg,
-		authOpt.ie,
-		c.sessionArgs.User,
-		c.sessionArgs.SessionDefaults["database"],
-	)
+	exists, canLogin, isSuperuser, validUntil, defaultSettings, pwRetrievalFn, err :=
+		sql.GetUserSessionInitInfo(
+			ctx,
+			execCfg,
+			authOpt.ie,
+			c.sessionArgs.User,
+			c.sessionArgs.SessionDefaults["database"],
+		)
 	if err != nil {
 		log.Warningf(ctx, "user retrieval failed for user=%q: %+v", c.sessionArgs.User, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
@@ -123,26 +154,21 @@ func (c *conn) handleAuthentication(
 		))
 	}
 
-	// Retrieve the authentication method.
-	tlsState, hbaEntry, methodFn, err := c.findAuthenticationMethod(authOpt)
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
 		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
-	ac.SetAuthMethod(hbaEntry.Method.String())
-	ac.LogAuthInfof(ctx, "HBA rule: %s", hbaEntry.Input)
-
-	// Ask the method to authenticate.
-	authenticationHook, err := methodFn(ctx, ac, tlsState, pwRetrievalFn,
-		validUntil, execCfg, hbaEntry)
-
-	if err != nil {
-		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
-		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+	// Set up lazy provider for password or cert-password methods.
+	pwDataFn := func(ctx context.Context) ([]byte, *tree.DTimestamp, error) {
+		pwHash, err := pwRetrievalFn(ctx)
+		return pwHash, validUntil, err
 	}
 
-	if connClose, err = authenticationHook(ctx, c.sessionArgs.User, true /* public */); err != nil {
+	// At this point, we know that the requested user exists and is
+	// allowed to log in. Now we can delegate to the selected AuthMethod
+	// implementation to complete the authentication.
+	if connClose, err = authorizer(ctx, systemIdentity, true /* public */, pwDataFn); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
 		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
@@ -175,6 +201,31 @@ func (c *conn) handleAuthentication(
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
 	return connClose, c.msgBuilder.finishMsg(c.conn)
+}
+
+// ErrNoDbRoleForIdentity indicates that an incoming system identity
+// could not be successfully mapped onto a database role/user.
+var ErrNoDbRoleForIdentity = errors.New("system identity did not map to a database role")
+
+// chooseDbRole uses the provided RoleMapper to map an incoming
+// system identity to an actual database role. If a mapping is present,
+// the sessionArgs.User field will be updated.
+//
+// TODO(#sql-security): The docs for the pg_ident.conf file state that
+// if there are multiple mappings for an incoming system-user, the
+// session should act with the union of all roles granted to the mapped
+// database users. We're going to go with a first-one-wins approach
+// until the session can have multiple roles.
+func (c *conn) chooseDbRole(ctx context.Context, ac AuthConn, mapper RoleMapper) error {
+	if mapped, err := mapper(ctx, c.sessionArgs.User); err != nil {
+		return err
+	} else if len(mapped) == 0 {
+		return ErrNoDbRoleForIdentity
+	} else {
+		c.sessionArgs.User = mapped[0]
+		ac.SetDbUser(mapped[0])
+	}
+	return nil
 }
 
 func (c *conn) findAuthenticationMethod(
@@ -301,6 +352,9 @@ type AuthConn interface {
 	// SetAuthMethod sets the authentication method for subsequent
 	// logging messages.
 	SetAuthMethod(method string)
+	// SetDbUser updates the AuthConn with the actual database username
+	// the connection has authenticated to.
+	SetDbUser(dbUser security.SQLUsername)
 	// LogAuthInfof logs details about the progress of the
 	// authentication.
 	LogAuthInfof(ctx context.Context, format string, args ...interface{})
@@ -332,14 +386,16 @@ type authRes struct {
 	err error
 }
 
-func newAuthPipe(c *conn, logAuthn bool, authOpt authOptions, user security.SQLUsername) *authPipe {
+func newAuthPipe(
+	c *conn, logAuthn bool, authOpt authOptions, systemIdentity security.SQLUsername,
+) *authPipe {
 	ap := &authPipe{
 		c:           c,
 		log:         logAuthn,
 		connDetails: authOpt.connDetails,
 		authDetails: eventpb.CommonSessionDetails{
-			Transport: authOpt.connType.String(),
-			User:      user.Normalized(),
+			SystemIdentity: systemIdentity.Normalized(),
+			Transport:      authOpt.connType.String(),
 		},
 		ch:         make(chan []byte),
 		writerDone: make(chan struct{}),
@@ -390,6 +446,10 @@ func (p *authPipe) AuthFail(err error) {
 
 func (p *authPipe) SetAuthMethod(method string) {
 	p.authMethod = method
+}
+
+func (p *authPipe) SetDbUser(dbUser security.SQLUsername) {
+	p.authDetails.User = dbUser.Normalized()
 }
 
 func (p *authPipe) LogAuthOK(ctx context.Context) {

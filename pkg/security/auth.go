@@ -28,7 +28,15 @@ var certPrincipalMap struct {
 // UserAuthHook authenticates a user based on their username and whether their
 // connection originates from a client or another node in the cluster. It
 // returns an optional func that is run at connection close.
-type UserAuthHook func(context.Context, SQLUsername, bool) (connClose func(), _ error)
+//
+// The systemIdentity is the external identity, from GSSAPI or an X.509
+// certificate, while databaseUsername reflects any username mappings
+// that may have been applied to the given connection.
+type UserAuthHook func(
+	ctx context.Context,
+	systemIdentity SQLUsername,
+	clientConnection bool,
+) (connClose func(), _ error)
 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
 // list must either be empty or have the format <source>:<dest>. The principal
@@ -110,14 +118,14 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		}
 	}
 
-	return func(ctx context.Context, requestedUser SQLUsername, clientConnection bool) (func(), error) {
+	return func(ctx context.Context, systemIdentity SQLUsername, clientConnection bool) (func(), error) {
 		// TODO(marc): we may eventually need stricter user syntax rules.
-		if requestedUser.Undefined() {
+		if systemIdentity.Undefined() {
 			return nil, errors.New("user is missing")
 		}
 
-		if !clientConnection && !requestedUser.IsNodeUser() {
-			return nil, errors.Errorf("user %s is not allowed", requestedUser)
+		if !clientConnection && !systemIdentity.IsNodeUser() {
+			return nil, errors.Errorf("user %s is not allowed", systemIdentity)
 		}
 
 		// If running in insecure mode, we have nothing to verify it against.
@@ -137,8 +145,8 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		// The client certificate user must match the requested user,
 		// except if the certificate user is NodeUser, which is allowed to
 		// act on behalf of all other users.
-		if !Contains(certUsers, requestedUser.Normalized()) && !Contains(certUsers, NodeUser) {
-			return nil, errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUsers)
+		if !Contains(certUsers, systemIdentity.Normalized()) && !Contains(certUsers, NodeUser) {
+			return nil, errors.Errorf("requested user is %s, but certificate is for %s", systemIdentity, certUsers)
 		}
 
 		return nil, nil
@@ -148,8 +156,8 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
 func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
-	return func(ctx context.Context, requestedUser SQLUsername, clientConnection bool) (func(), error) {
-		if requestedUser.Undefined() {
+	return func(ctx context.Context, systemIdentity SQLUsername, clientConnection bool) (func(), error) {
+		if systemIdentity.Undefined() {
 			return nil, errors.New("user is missing")
 		}
 
@@ -163,7 +171,7 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 
 		// If the requested user has an empty password, disallow authentication.
 		if len(password) == 0 || CompareHashAndPassword(ctx, hashedPassword, password) != nil {
-			return nil, errors.Errorf(ErrPasswordUserAuthFailed, requestedUser)
+			return nil, errors.Errorf(ErrPasswordUserAuthFailed, systemIdentity)
 		}
 
 		return nil, nil
