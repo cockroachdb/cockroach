@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -97,6 +98,8 @@ type Container struct {
 	}
 
 	txnCounts transactionCounts
+
+	knobs *sqlstats.TestingKnobs
 }
 
 var _ sqlstats.ApplicationStats = &Container{}
@@ -110,12 +113,14 @@ func New(
 	uniqueTxnFingerprintCount *int64,
 	mon *mon.BytesMonitor,
 	appName string,
+	knobs *sqlstats.TestingKnobs,
 ) *Container {
 	s := &Container{
 		st:                         st,
 		appName:                    appName,
 		uniqueStmtFingerprintLimit: uniqueStmtFingerprintLimit,
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
+		knobs:                      knobs,
 	}
 
 	if mon != nil {
@@ -266,6 +271,7 @@ func NewTempContainerFromExistingStmtStats(
 		nil, /* uniqueTxnFingerprintCount */
 		nil, /* mon */
 		appName,
+		nil, /* knobs */
 	)
 
 	for i := range statistics {
@@ -332,6 +338,7 @@ func NewTempContainerFromExistingTxnStats(
 		nil, /* uniqueTxnFingerprintCount */
 		nil, /* mon */
 		appName,
+		nil, /* knobs */
 	)
 
 	for i := range statistics {
@@ -499,6 +506,7 @@ func (s *Container) getStatsForStmtWithKeyLocked(
 		stats = &stmtStats{}
 		stats.ID = stmtFingerprintID
 		s.mu.stmts[key] = stats
+
 		return stats, true /* created */, false /* throttled */
 	}
 	return stats, false /* created */, false /* throttled */
@@ -706,6 +714,14 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 	s.txnCounts.mu.Unlock()
 
 	return err
+}
+
+func (s *Container) getTimeNow() time.Time {
+	if s.knobs != nil && s.knobs.StubTimeNow != nil {
+		return s.knobs.StubTimeNow()
+	}
+
+	return timeutil.Now()
 }
 
 func (s *transactionCounts) recordTransactionCounts(

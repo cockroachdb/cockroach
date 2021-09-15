@@ -11,6 +11,7 @@
 package sslocal
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 )
@@ -26,17 +27,25 @@ type StatsCollector struct {
 	// previousPhaseTimes tracks the session-level phase times for the previous
 	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
 	previousPhaseTimes *sessionphase.Times
+
+	st    *cluster.Settings
+	knobs *sqlstats.TestingKnobs
 }
 
 var _ sqlstats.ApplicationStats = &StatsCollector{}
 
 // NewStatsCollector returns an instance of sqlstats.StatsCollector.
 func NewStatsCollector(
-	appStats sqlstats.ApplicationStats, phaseTime *sessionphase.Times,
+	st *cluster.Settings,
+	appStats sqlstats.ApplicationStats,
+	phaseTime *sessionphase.Times,
+	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
 	return &StatsCollector{
 		ApplicationStats: appStats,
 		phaseTimes:       phaseTime.Clone(),
+		st:               st,
+		knobs:            knobs,
 	}
 }
 

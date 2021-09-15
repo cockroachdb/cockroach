@@ -42,9 +42,11 @@ func New(
 	pool *mon.BytesMonitor,
 	resetInterval *settings.DurationSetting,
 	reportingSink Sink,
+	knobs *sqlstats.TestingKnobs,
 ) *SQLStats {
 	return newSQLStats(settings, maxStmtFingerprints, maxTxnFingerprints,
-		curMemoryBytesCount, maxMemoryBytesHist, pool, resetInterval, reportingSink)
+		curMemoryBytesCount, maxMemoryBytesHist, pool, resetInterval,
+		reportingSink, knobs)
 }
 
 var _ sqlstats.Provider = &SQLStats{}
@@ -116,6 +118,7 @@ func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats
 		&s.atomic.uniqueTxnFingerprintCount,
 		s.mu.mon,
 		appName,
+		s.knobs,
 	)
 	s.mu.apps[appName] = a
 	return a
