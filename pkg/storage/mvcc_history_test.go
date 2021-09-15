@@ -20,8 +20,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -108,8 +110,33 @@ func TestMVCCHistories(t *testing.T) {
 			log.Infof(context.Background(),
 				"randomly setting enableSeparated: %t", enabledSeparated)
 		}
+		printTxnDidNotUpdateMetaEtc := false
 		// We start from a clean slate in every test file.
-		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), SetSeparatedIntents(!enabledSeparated))
+		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
+			SetSeparatedIntents(!enabledSeparated),
+			func(cfg *engineConfig) error {
+				if !overridden {
+					// Latest cluster version, since these tests are not ones where we
+					// are examining differences related to separated intents.
+					cfg.Settings = cluster.MakeTestingClusterSettings()
+				} else {
+					if !enabledSeparated {
+						// 21.1, which has the old code that is unaware about the changes
+						// we have made for OverrideTxnDidNotUpdateMetaToFalse. By using
+						// the latest cluster version, we effectively undo these changes.
+						cfg.Settings = cluster.MakeTestingClusterSettings()
+					} else if strings.Contains(path, "mixed_cluster") {
+						v21_1 := clusterversion.ByKey(clusterversion.V21_1)
+						cfg.Settings =
+							cluster.MakeTestingClusterSettingsWithVersions(v21_1, v21_1, true)
+						printTxnDidNotUpdateMetaEtc = true
+					} else {
+						// Latest cluster version.
+						cfg.Settings = cluster.MakeTestingClusterSettings()
+					}
+				}
+				return nil
+			})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,7 +152,19 @@ func TestMVCCHistories(t *testing.T) {
 					if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
 						fmt.Fprintf(buf, "meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
 					} else {
-						fmt.Fprintf(buf, "meta: %v -> %+v\n", r.Key, &meta)
+						fmt.Fprintf(buf, "meta: %v -> %+v", r.Key, &meta)
+						if printTxnDidNotUpdateMetaEtc {
+							// #69809 was not backported to 21.2, but we need this change to
+							// properly check the datadriven files that were changed by #70267
+							// for backport.
+							var txnDidNotUpdateMeta bool
+							if meta.TxnDidNotUpdateMeta != nil {
+								txnDidNotUpdateMeta = *meta.TxnDidNotUpdateMeta
+							}
+							fmt.Fprintf(buf, " mergeTs=%s txnDidNotUpdateMeta=%t\n", meta.MergeTimestamp, txnDidNotUpdateMeta)
+						} else {
+							fmt.Fprintf(buf, "\n")
+						}
 					}
 				} else {
 					fmt.Fprintf(buf, "data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
