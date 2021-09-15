@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	version_util "github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 // TimeFormat is the reference format for build.Time. Make sure it stays in sync
@@ -39,6 +39,7 @@ var (
 	typ          string // Type of this build: <empty>, "development", or "release"
 	channel      = "unknown"
 	envChannel   = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
+	version      = computeVersion(tag)
 )
 
 // IsRelease returns true if the binary was produced by a "release" build.
@@ -52,9 +53,22 @@ func SeemsOfficial() bool {
 	return channel == "official-binary" || channel == "source-archive"
 }
 
+func computeVersion(tag string) string {
+	v, err := version_util.Parse(tag)
+	if err != nil {
+		return "dev"
+	}
+	return v.String()
+}
+
+// BinaryVersion returns the version prefix, patch number and metadata of the current build.
+func BinaryVersion() string {
+	return version
+}
+
 // VersionPrefix returns the version prefix of the current build.
 func VersionPrefix() string {
-	v, err := version.Parse(tag)
+	v, err := version_util.Parse(tag)
 	if err != nil {
 		return "dev"
 	}
@@ -137,8 +151,10 @@ func GetInfo() Info {
 // TestingOverrideTag allows tests to override the build tag.
 func TestingOverrideTag(t string) func() {
 	prev := tag
+	prevVersion := version
 	tag = t
-	return func() { tag = prev }
+	version = computeVersion(tag)
+	return func() { tag = prev; version = prevVersion }
 }
 
 // MakeIssueURL produces a URL to a CockroachDB issue.
