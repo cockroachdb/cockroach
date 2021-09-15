@@ -10,6 +10,11 @@ set -euo pipefail
 # It's best practice to invoke this script with "caffeinate" on OSX and/or linux
 # to avoid computer going to standby.
 
+if [ -z "${BASH_VERSINFO}" ] || [ -z "${BASH_VERSINFO[0]}" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+  echo "This script requires Bash version >= 4"
+  echo "On OSX, 'brew install bash' should do the trick."
+  exit 1
+fi
 
 # Read user input.
 if [ ! -v TEST ]; then read -r -e -p "Test regexp: " TEST; fi
