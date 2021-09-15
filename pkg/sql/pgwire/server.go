@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -187,7 +188,8 @@ type Server struct {
 
 	auth struct {
 		syncutil.RWMutex
-		conf *hba.Conf
+		conf        *hba.Conf
+		identityMap *identmap.Conf
 	}
 
 	sqlMemoryPool *mon.BytesMonitor
@@ -300,11 +302,14 @@ func MakeServer(
 	server.mu.connCancelMap = make(cancelChanMap)
 	server.mu.Unlock()
 
-	connAuthConf.SetOnChange(&st.SV,
-		func(ctx context.Context) {
-			loadLocalAuthConfigUponRemoteSettingChange(
-				ambientCtx.AnnotateCtx(context.Background()), server, st)
-		})
+	connAuthConf.SetOnChange(&st.SV, func(ctx context.Context) {
+		loadLocalHBAConfigUponRemoteSettingChange(
+			ambientCtx.AnnotateCtx(context.Background()), server, st)
+	})
+	connIdentityMapConf.SetOnChange(&st.SV, func(ctx context.Context) {
+		loadLocalIdentityMapUponRemoteSettingChange(
+			ambientCtx.AnnotateCtx(context.Background()), server, st)
+	})
 
 	return server
 }
@@ -695,6 +700,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		testingAuthHook = k.AuthHook
 	}
 
+	hbaConf, identMap := s.GetAuthenticationConfiguration()
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
 	s.serveConn(
@@ -706,7 +712,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 			connDetails:     connDetails,
 			insecure:        s.cfg.Insecure,
 			ie:              s.execCfg.InternalExecutor,
-			auth:            s.GetAuthenticationConfiguration(),
+			auth:            hbaConf,
+			identMap:        identMap,
 			testingAuthHook: testingAuthHook,
 		})
 	return nil

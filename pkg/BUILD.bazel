@@ -271,6 +271,7 @@ ALL_TESTS = [
     "//pkg/sql/opt:opt_test",
     "//pkg/sql/parser:parser_test",
     "//pkg/sql/pgwire/hba:hba_test",
+    "//pkg/sql/pgwire/identmap:identmap_test",
     "//pkg/sql/pgwire/pgerror:pgerror_test",
     "//pkg/sql/pgwire:pgwire_test",
     "//pkg/sql/physicalplan/replicaoracle:replicaoracle_test",
