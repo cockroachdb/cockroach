@@ -248,7 +248,8 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 			storage.InMemory(),
 			storage.Attributes(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}),
 			storage.MaxSize(1<<20),
-			storage.SetSeparatedIntents(disableSeparatedIntents))
+			storage.SetSeparatedIntents(disableSeparatedIntents),
+			storage.Settings(cfg.Settings))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -6433,9 +6434,9 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	expMS = baseStats
 	expMS.Add(enginepb.MVCCStats{
-		LiveBytes:   103,
+		LiveBytes:   101,
 		KeyBytes:    28,
-		ValBytes:    75,
+		ValBytes:    73,
 		IntentBytes: 23,
 		LiveCount:   2,
 		KeyCount:    2,
@@ -6444,6 +6445,10 @@ func TestRangeStatsComputation(t *testing.T) {
 	})
 	if tc.engine.IsSeparatedIntentsEnabledForTesting(ctx) {
 		expMS.SeparatedIntentCount++
+	}
+	if !tc.engine.OverrideTxnDidNotUpdateMetaToFalse(ctx) {
+		expMS.LiveBytes += 2
+		expMS.ValBytes += 2
 	}
 	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)
