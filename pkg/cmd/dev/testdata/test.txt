@@ -70,3 +70,11 @@ which cc
 readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/testutils:testutils_test --test_timeout=10 --test_output errors
+
+dev test pkg/util/tracing -- -s
+----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev -s //pkg/util/tracing:tracing_test --test_output errors
