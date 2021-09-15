@@ -1075,8 +1075,7 @@ func (b *putBuffer) putIntentMeta(
 	ctx context.Context,
 	writer Writer,
 	key MVCCKey,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
+	helper txnDidNotUpdateMetaHelper,
 	meta *enginepb.MVCCMetadata,
 ) (keyBytes, valBytes int64, separatedIntentCountDelta int, err error) {
 	if meta.Txn != nil && meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
@@ -1085,30 +1084,60 @@ func (b *putBuffer) putIntentMeta(
 		return 0, 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
-	// All nodes in this cluster understand separated intents, so can fiddle
-	// with TxnDidNotUpdateMeta, which is not understood by older nodes (which
-	// are no longer present, and will never again be present).
-	//
-	// NB: the parameter txnDidNotUpdateMeta is about what happened prior to
-	// this Put, and is passed through to writer below. The field
-	// TxnDidNotUpdateMeta, in the MVCCMetadata we are about to write,
-	// includes what happened in this Put.
-	if state == NoExistingIntent {
-		meta.TxnDidNotUpdateMeta = &trueValue
-	} else {
-		// Absence represents false.
-		meta.TxnDidNotUpdateMeta = nil
-	}
-
+	helper.populateMeta(ctx, meta)
 	bytes, err := b.marshalMeta(meta)
 	if err != nil {
 		return 0, 0, 0, err
 	}
 	if separatedIntentCountDelta, err = writer.PutIntent(
-		ctx, key.Key, bytes, state, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
+		ctx, key.Key, bytes, helper.state, helper.valueForPutIntent(), meta.Txn.ID); err != nil {
 		return 0, 0, 0, err
 	}
 	return int64(key.EncodedSize()), int64(len(bytes)), separatedIntentCountDelta, nil
+}
+
+// txnDidNotUpdateMetaHelper is used to decide what to put in the MVCCMetadata
+// proto, and what value to pass in the txnDidNotUpdateMeta parameter of
+// PutIntent.
+//
+// Note that all nodes in this cluster understand separated intents, so can
+// fiddle with TxnDidNotUpdateMeta, which is not understood by older nodes
+// (which are no longer present, and will never again be present). Our
+// assumption is that 21.1 nodes will never be writing separated intents since
+// it is disabled by default and the code is known to have a bug. However they
+// can set MVCCMetadata.TxnDidNotUpdateMeta to true when writing interleaved
+// intents (this is harmless since interleaved intents do not invoke the
+// SingleDelete optimization).
+// - The txnDidNotUpdateMeta field is about what happened prior to this Put,
+//   and is intended to be passed through to Writer.PutIntent. It is only used
+//   by intentDemuxWriter when there was an existing separated intent that was
+//   written once and the writer is writing interleaved intents, and the true
+//   value enables SingleDelete of the existing separated intent. This
+//   transition can happen when an intent written at a 21.2 node is rewritten
+//   on a 21.1 node. But since 21.2 nodes never set
+//   MVCCMetadata.TxnDidNotUpdateMeta to true in a mixed version cluster (see
+//   next bullet), this will always be false in such a situation.
+// - The state field describes the preceding intent state. It is intended to
+//   be used for populating the MVCCMetadata.TxnDidNotUpdateMeta. This is
+//   where we use Writer.OverrideTxnDidNotUpdateMetaToFalse to override to
+//   false until there can never be 21.1 nodes.
+type txnDidNotUpdateMetaHelper struct {
+	txnDidNotUpdateMeta bool
+	state               PrecedingIntentState
+	w                   Writer
+}
+
+func (t txnDidNotUpdateMetaHelper) valueForPutIntent() bool {
+	return t.txnDidNotUpdateMeta
+}
+
+func (t txnDidNotUpdateMetaHelper) populateMeta(ctx context.Context, meta *enginepb.MVCCMetadata) {
+	if t.state == NoExistingIntent && !t.w.OverrideTxnDidNotUpdateMetaToFalse(ctx) {
+		meta.TxnDidNotUpdateMeta = &trueValue
+	} else {
+		// Absence represents false.
+		meta.TxnDidNotUpdateMeta = nil
+	}
 }
 
 // MVCCPut sets the value for a specified key. It will save the value
@@ -1746,7 +1775,12 @@ func mvccPutInternal(
 	var separatedIntentCountDelta int
 	if newMeta.Txn != nil {
 		metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
-			ctx, writer, metaKey, precedingIntentState, txnDidNotUpdateMeta, newMeta)
+			ctx, writer, metaKey,
+			txnDidNotUpdateMetaHelper{
+				txnDidNotUpdateMeta: txnDidNotUpdateMeta,
+				state:               precedingIntentState,
+				w:                   writer,
+			}, newMeta)
 		if err != nil {
 			return err
 		}
@@ -3176,7 +3210,13 @@ func mvccResolveWriteIntent(
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
 			metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
-				ctx, rw, metaKey, precedingIntentState, canSingleDelHelper.v(), &buf.newMeta)
+				ctx, rw, metaKey,
+				txnDidNotUpdateMetaHelper{
+					txnDidNotUpdateMeta: canSingleDelHelper.v(),
+					state:               precedingIntentState,
+					w:                   rw,
+				},
+				&buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
 			separatedIntentCountDelta, err =

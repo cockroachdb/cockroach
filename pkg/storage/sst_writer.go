@@ -239,6 +239,11 @@ func (fw *SSTWriter) ClearEngineKey(key EngineKey) error {
 	return fw.fw.Delete(fw.scratch)
 }
 
+// OverrideTxnDidNotUpdateMetaToFalse implements the Writer interface.
+func (fw *SSTWriter) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
+	panic("OverrideTxnDidNotUpdateMetaToFalse is unsupported")
+}
+
 // An error is returned if it is not greater than any previous point key
 // passed to this Writer (according to the comparator configured during writer
 // creation). `Close` cannot have been called.

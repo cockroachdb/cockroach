@@ -679,6 +679,31 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	SingleClearEngineKey(key EngineKey) error
+
+	// OverrideTxnDidNotUpdateMetaToFalse is a temporary method that will be removed
+	// for 22.1.
+	//
+	// See #69891 for details on the bug related to usage of SingleDelete in
+	// separated intent resolution. The following is needed for correctly
+	// migrating from 21.1 to 21.2.
+	//
+	// We have fixed the intent resolution code path in 21.2-beta to use
+	// SingleDelete more conservatively. The 21.2-GA will also likely include
+	// Pebble changes to make the old buggy usage of SingleDelete correct.
+	// However, there is a problem if someone upgrades from 21.1 to
+	// 21.2-beta/21.2-GA:
+	// 21.1 nodes will not write separated intents while they are the
+	// leaseholder for a range. However they can become the leaseholder for a
+	// range after a separated intent was written (in a mixed version cluster).
+	// Hence they can resolve separated intents. The logic in 21.1 for using
+	// SingleDelete when resolving intents is similarly buggy, and the Pebble
+	// code included in 21.1 will not make this buggy usage correct. The
+	// solution is for 21.2 nodes to never set txnDidNotUpdateMeta=true when
+	// writing separated intents, until the cluster version is at the version
+	// when the buggy code was fixed in 21.2. So 21.1 code will never use
+	// SingleDelete when resolving these separated intents (since the only
+	// separated intents being written are by 21.2 nodes).
+	OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool
 }
 
 // ReadWriter is the read/write interface to an engine's data.
