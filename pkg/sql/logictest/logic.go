@@ -40,6 +40,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/migration"
@@ -3491,16 +3492,25 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 		skip.IgnoreLint(t, "-bigtest flag must be specified to run this test")
 	}
 
-	logicTestPath := gobuild.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
-	if _, err := os.Stat(logicTestPath); oserror.IsNotExist(err) {
-		fullPath, err := filepath.Abs(logicTestPath)
+	var logicTestPath string
+	if bazel.BuiltWithBazel() {
+		runfilesPath, err := bazel.RunfilesPath()
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Fatalf("unable to find sqllogictest repo: %s\n"+
-			"git clone https://github.com/cockroachdb/sqllogictest %s",
-			logicTestPath, fullPath)
-		return
+		logicTestPath = filepath.Join(runfilesPath, "external", "com_github_cockroachdb_sqllogictest")
+	} else {
+		logicTestPath = gobuild.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
+		if _, err := os.Stat(logicTestPath); oserror.IsNotExist(err) {
+			fullPath, err := filepath.Abs(logicTestPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Fatalf("unable to find sqllogictest repo: %s\n"+
+				"git clone https://github.com/cockroachdb/sqllogictest %s",
+				logicTestPath, fullPath)
+			return
+		}
 	}
 
 	// Prefix the globs with the logicTestPath.

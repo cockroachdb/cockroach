@@ -16,6 +16,8 @@ export BUILDER_HIDE_GOPATH_SRC=0
 # numeric typing differences.
 # TODO(yuzefovich): remove crdb_test_off tag once sqllite tests have been
 # adjusted to run in reasonable time with batch size randomizations.
+# WARNING! Keep all of this (including the flags/tags that we pass to the test)
+# in sync w/ build/teamcity/cockroach/ci/tests/sqlite_logic_test_impl.sh.
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
   make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$' TAGS=crdb_test_off
