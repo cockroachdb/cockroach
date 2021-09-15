@@ -85,23 +85,6 @@ func MakeBuilder(
 
 	// Set up the interstices for encoding interleaved tables later.
 	s.interstices[0] = s.KeyPrefix
-	if index.NumInterleaveAncestors() > 0 {
-		// TODO(rohany): too much of this code is copied from EncodePartialIndexKey.
-		sharedPrefixLen := 0
-		for i := 0; i < index.NumInterleaveAncestors(); i++ {
-			ancestor := index.GetInterleaveAncestor(i)
-			// The first ancestor is already encoded in interstices[0].
-			if i != 0 {
-				s.interstices[sharedPrefixLen] = rowenc.EncodePartialTableIDIndexID(
-					s.interstices[sharedPrefixLen], ancestor.TableID, ancestor.IndexID)
-			}
-			sharedPrefixLen += int(ancestor.SharedPrefixLen)
-			s.interstices[sharedPrefixLen] = encoding.EncodeInterleavedSentinel(
-				s.interstices[sharedPrefixLen])
-		}
-		s.interstices[sharedPrefixLen] = rowenc.EncodePartialTableIDIndexID(
-			s.interstices[sharedPrefixLen], table.GetID(), index.GetID())
-	}
 
 	return s
 }
@@ -384,13 +367,9 @@ func (s *Builder) appendSpansFromConstraintSpan(
 		}
 	}
 
-	// We tighten the end key to prevent reading interleaved children after the
-	// last parent key. If cs.End.Inclusive is true, we also advance the key as
-	// necessary.
-	endInclusive := cs.EndBoundary() == constraint.IncludeBoundary
-	span.EndKey, err = rowenc.AdjustEndKeyForInterleave(s.codec, s.table, s.index, span.EndKey, endInclusive)
-	if err != nil {
-		return nil, err
+	// We need to ensure that the end key is exclusive.
+	if s.index.GetType() == descpb.IndexDescriptor_INVERTED || cs.EndBoundary() == constraint.IncludeBoundary {
+		span.EndKey = span.EndKey.PrefixEnd()
 	}
 	return append(appendTo, span), nil
 }
