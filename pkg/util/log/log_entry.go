@@ -60,6 +60,8 @@ type logEntry struct {
 	// The channel on which the entry was sent. This is not reported by
 	// formatters when the header boolean is set.
 	ch Channel
+	// The CockroachDB binary version with which the event was generated.
+	version string
 
 	// The goroutine where the event was generated.
 	gid int64
