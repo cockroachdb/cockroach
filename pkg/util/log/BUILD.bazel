@@ -147,6 +147,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":log"],
     deps = [
+        "//pkg/build",
         "//pkg/cli/exit",
         "//pkg/settings/cluster",
         "//pkg/util/caller",
