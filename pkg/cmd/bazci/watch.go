@@ -14,7 +14,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"io/fs"
 	"io/ioutil"
 	"log"
 	"os"
@@ -104,9 +103,8 @@ func (w watcher) Watch() error {
 			// Note that even if the build failed, we still want to
 			// try to stage test artifacts.
 			testErr := w.stageTestArtifacts(finalizePhase)
-			// Also stage binary and tmpdir artifacts this time.
+			// Also stage binary artifacts this time.
 			binErr := w.stageBinaryArtifacts()
-			tmpErr := w.stageTmpDir()
 			// Only check errors after we're done staging all
 			// artifacts -- we don't want to miss anything because
 			// the build failed.
@@ -118,9 +116,6 @@ func (w watcher) Watch() error {
 			}
 			if binErr != nil {
 				return binErr
-			}
-			if tmpErr != nil {
-				return tmpErr
 			}
 			return nil
 		case <-time.After(10 * time.Second):
@@ -472,45 +467,4 @@ func (w watcher) maybeStageArtifact(
 		}
 	}
 	return nil
-}
-
-// stageTmpDir stages the contents of the tmpDir to $artifactsDir/tmp. As with
-// binary artifacts, we only ever stage them during the finalize phase.
-func (w watcher) stageTmpDir() error {
-	if len(w.info.tests) == 0 {
-		return nil
-	}
-	return filepath.WalkDir(tmpDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			log.Printf("WARNING: failing to stage tmpdir artifact at %s due to error %v", path, err)
-			return nil
-		}
-		if d.IsDir() {
-			if filepath.Base(path) == ".gocache" {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		src, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer src.Close()
-		relPath, err := filepath.Rel(tmpDir, path)
-		if err != nil {
-			return err
-		}
-		dstPath := filepath.Join(artifactsDir, "tmp", relPath)
-		err = os.MkdirAll(filepath.Dir(dstPath), 0755)
-		if err != nil {
-			return err
-		}
-		dst, err := os.Create(dstPath)
-		if err != nil {
-			return err
-		}
-		defer dst.Close()
-		_, err = io.Copy(dst, src)
-		return err
-	})
 }
