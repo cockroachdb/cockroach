@@ -26,6 +26,7 @@ go_library(
             "//pkg/sql/sem/tree",
             "//pkg/sql/pgwire",
             "//pkg/sql/pgwire/hba",
+            "//pkg/sql/pgwire/identmap",
             "@com_github_cockroachdb_errors//:errors",
         ],
         "//conditions:default": [],
