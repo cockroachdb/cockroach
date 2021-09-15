@@ -12,7 +12,6 @@ package execbuilder
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -556,25 +555,13 @@ func (b *Builder) tryBuildDeleteRange(del *memo.DeleteExpr) (_ execPlan, ok bool
 		return execPlan{}, false, nil
 	}
 
-	primaryIdx := tab.Index(cat.PrimaryIndex)
-
-	// If the table is interleaved in another table, we cannot use the fast path.
-	if primaryIdx.InterleaveAncestorCount() > 0 {
-		return execPlan{}, false, nil
-	}
-
-	if primaryIdx.InterleavedByCount() > 0 {
-		return b.tryBuildDeleteRangeOnInterleaving(del, tab)
-	}
-
-	// No other tables interleaved inside this table. We can use the fast path
-	// if we don't need to buffer the input to the delete operator (for foreign
-	// key checks/cascades).
+	// We can use the fast path if we don't need to buffer the input to the
+	// delete operator (for foreign key checks/cascades).
 	if del.WithID != 0 {
 		return execPlan{}, false, nil
 	}
 
-	ep, err := b.buildDeleteRange(del, nil /* interleavedTables */)
+	ep, err := b.buildDeleteRange(del)
 	if err != nil {
 		return execPlan{}, false, err
 	}
@@ -587,116 +574,10 @@ func (b *Builder) tryBuildDeleteRange(del *memo.DeleteExpr) (_ execPlan, ok bool
 	return ep, true, nil
 }
 
-// tryBuildDeleteRangeOnInterleaving attempts to construct a fast DeleteRange
-// execution for a logical Delete operator when the table is at the root of an
-// interleaving hierarchy.
-//
-// We can use DeleteRange only when foreign keys are set up such that a deletion
-// of a row cascades into deleting all interleaved rows with the same prefix.
-// More specifically, the following conditions must apply:
-//  - none of the tables in the hierarchy have secondary indexes;
-//  - none of the tables in the hierarchy are referenced by any tables outside
-//    the hierarchy;
-//  - all foreign key references between tables in the hierarchy have columns
-//    that match the interleaving;
-//  - all tables in the interleaving hierarchy have at least an ON DELETE
-//    CASCADE foreign key reference to an ancestor.
-//
-func (b *Builder) tryBuildDeleteRangeOnInterleaving(
-	del *memo.DeleteExpr, root cat.Table,
-) (_ execPlan, ok bool, _ error) {
-	// To check the conditions above, we explore the entire hierarchy using
-	// breadth-first search.
-	queue := make([]cat.Table, 0, root.Index(cat.PrimaryIndex).InterleavedByCount())
-	tables := make(map[cat.StableID]cat.Table)
-	tables[root.ID()] = root
-	queue = append(queue, root)
-	for queuePos := 0; queuePos < len(queue); queuePos++ {
-		currTab := queue[queuePos]
-
-		if currTab.DeletableIndexCount() > 1 {
-			return execPlan{}, false, nil
-		}
-
-		currIdx := currTab.Index(cat.PrimaryIndex)
-		for i, n := 0, currIdx.InterleavedByCount(); i < n; i++ {
-			// We don't care about the index ID because we bail if any of the tables
-			// have any secondary indexes anyway.
-			tableID, _ := currIdx.InterleavedBy(i)
-			if tab, ok := tables[tableID]; ok {
-				err := errors.AssertionFailedf("multiple interleave paths to table %s", tab.Name())
-				return execPlan{}, false, err
-			}
-			ds, _, err := b.catalog.ResolveDataSourceByID(context.TODO(), cat.Flags{}, tableID)
-			if err != nil {
-				return execPlan{}, false, err
-			}
-			child := ds.(cat.Table)
-			tables[tableID] = child
-			queue = append(queue, child)
-		}
-	}
-
-	// Verify that there are no "inbound" foreign key references from outside the
-	// hierarchy and that all foreign key references between tables in the hierarchy
-	// match the interleaving (i.e. a prefix of the PK of the child references the
-	// PK of the ancestor).
-	for _, parent := range queue {
-		for i, n := 0, parent.InboundForeignKeyCount(); i < n; i++ {
-			fk := parent.InboundForeignKey(i)
-			child, ok := tables[fk.OriginTableID()]
-			if !ok {
-				// Foreign key from a table outside of the hierarchy.
-				return execPlan{}, false, nil
-			}
-			childIdx := child.Index(cat.PrimaryIndex)
-			parentIdx := parent.Index(cat.PrimaryIndex)
-			numCols := fk.ColumnCount()
-			if parentIdx.KeyColumnCount() != numCols || childIdx.KeyColumnCount() < numCols {
-				return execPlan{}, false, nil
-			}
-			for i := 0; i < numCols; i++ {
-				if fk.OriginColumnOrdinal(child, i) != childIdx.Column(i).Ordinal() {
-					return execPlan{}, false, nil
-				}
-				if fk.ReferencedColumnOrdinal(parent, i) != parentIdx.Column(i).Ordinal() {
-					return execPlan{}, false, nil
-				}
-			}
-		}
-	}
-
-	// Finally, verify that each table (except for the root) has an ON DELETE
-	// CASCADE foreign key reference to another table in the hierarchy.
-	for _, tab := range queue[1:] {
-		found := false
-		for i, n := 0, tab.OutboundForeignKeyCount(); i < n; i++ {
-			fk := tab.OutboundForeignKey(i)
-			if fk.DeleteReferenceAction() == tree.Cascade && tables[fk.ReferencedTableID()] != nil {
-				// Note that we must have already checked above that this foreign key matches
-				// the interleaving.
-				found = true
-				break
-			}
-		}
-		if !found {
-			return execPlan{}, false, nil
-		}
-	}
-
-	ep, err := b.buildDeleteRange(del, queue[1:])
-	if err != nil {
-		return execPlan{}, false, err
-	}
-	return ep, true, nil
-}
-
 // buildDeleteRange constructs a DeleteRange operator that deletes contiguous
 // rows in the primary index; the caller must have already checked the
 // conditions which allow use of DeleteRange.
-func (b *Builder) buildDeleteRange(
-	del *memo.DeleteExpr, interleavedTables []cat.Table,
-) (execPlan, error) {
+func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
 	// tryBuildDeleteRange has already validated that input is a Scan operator.
 	scan := del.Input.(*memo.ScanExpr)
 	tab := b.mem.Metadata().Table(scan.Table)
@@ -714,25 +595,16 @@ func (b *Builder) buildDeleteRange(
 		// request doesn't work properly if the limit is hit. So, we permit autocommit
 		// here if we can guarantee that the number of returned keys is finite and
 		// relatively small.
+		//
+		// Mutations only allow auto-commit if there are no FK checks or cascades.
 
-		// We can't calculate the maximum number of keys if there are interleaved
-		// children, as we don't know how many children rows may be in range.
-		if len(interleavedTables) == 0 {
-			if maxRows, ok := b.indexConstraintMaxResults(&scan.ScanPrivate, scan.Relational()); ok {
-				if maxKeys := maxRows * uint64(tab.FamilyCount()); maxKeys <= row.TableTruncateChunkSize {
-					// Other mutations only allow auto-commit if there are no FK checks or
-					// cascades. In this case, we won't actually execute anything for the
-					// checks or cascades - if we got this far, we determined that the FKs
-					// match the interleaving hierarchy and a delete range is sufficient.
-					autoCommit = true
-				}
+		if maxRows, ok := b.indexConstraintMaxResults(&scan.ScanPrivate, scan.Relational()); ok {
+			if maxKeys := maxRows * uint64(tab.FamilyCount()); maxKeys <= row.TableTruncateChunkSize {
+				autoCommit = true
 			}
-			if len(del.FKChecks) > 0 || len(del.FKCascades) > 0 {
-				// Do not allow autocommit if we have checks or cascades. This does not
-				// apply for the interleaved case, where we decided that the delete
-				// range takes care of all the FKs as well.
-				autoCommit = false
-			}
+		}
+		if len(del.FKChecks) > 0 || len(del.FKCascades) > 0 {
+			autoCommit = false
 		}
 	}
 
@@ -740,7 +612,6 @@ func (b *Builder) buildDeleteRange(
 		tab,
 		needed,
 		scan.Constraint,
-		interleavedTables,
 		autoCommit,
 	)
 	if err != nil {

@@ -82,24 +82,20 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		a STRING PRIMARY KEY, b STRING, c STRING, d STRING,
 		FAMILY (a, b, c), FAMILY (d)
 	)`)
-	parentDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
-	var args []row.FetcherTableArgs
-	for _, desc := range []catalog.TableDescriptor{parentDesc} {
-		var colIdxMap catalog.TableColMap
-		var valNeededForCol util.FastIntSet
-		for i, col := range desc.PublicColumns() {
-			colIdxMap.Set(col.GetID(), i)
-			valNeededForCol.Add(i)
-		}
-		args = append(args, row.FetcherTableArgs{
-			Spans:            desc.AllIndexSpans(keys.SystemSQLCodec),
-			Desc:             desc,
-			Index:            desc.GetPrimaryIndex(),
-			ColIdxMap:        colIdxMap,
-			IsSecondaryIndex: false,
-			Cols:             desc.PublicColumns(),
-			ValNeededForCol:  valNeededForCol,
-		})
+	desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
+	var colIdxMap catalog.TableColMap
+	var valNeededForCol util.FastIntSet
+	for i, col := range desc.PublicColumns() {
+		colIdxMap.Set(col.GetID(), i)
+		valNeededForCol.Add(i)
+	}
+	table := row.FetcherTableArgs{
+		Desc:             desc,
+		Index:            desc.GetPrimaryIndex(),
+		ColIdxMap:        colIdxMap,
+		IsSecondaryIndex: false,
+		Cols:             desc.PublicColumns(),
+		ValNeededForCol:  valNeededForCol,
 	}
 	var rf row.Fetcher
 	if err := rf.Init(
@@ -112,7 +108,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		true, /* isCheck */
 		&rowenc.DatumAlloc{},
 		nil, /* memMonitor */
-		args...,
+		table,
 	); err != nil {
 		t.Fatal(err)
 	}
