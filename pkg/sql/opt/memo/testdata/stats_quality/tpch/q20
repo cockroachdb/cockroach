@@ -62,27 +62,27 @@ sort
  ├── save-table-name: q20_sort_1
  ├── columns: s_name:2(char!null) s_address:3(varchar!null)
  ├── immutable
- ├── stats: [rows=1e-06, distinct(2)=1e-06, null(2)=0, distinct(3)=1e-06, null(3)=0]
+ ├── stats: [rows=2.01612903e-05, distinct(2)=2.01612903e-05, null(2)=0, distinct(3)=2.01612903e-05, null(3)=0]
  ├── ordering: +2
  └── project
       ├── save-table-name: q20_project_2
       ├── columns: s_name:2(char!null) s_address:3(varchar!null)
       ├── immutable
-      ├── stats: [rows=1e-06, distinct(2)=1e-06, null(2)=0, distinct(3)=1e-06, null(3)=0]
+      ├── stats: [rows=2.01612903e-05, distinct(2)=2.01612903e-05, null(2)=0, distinct(3)=2.01612903e-05, null(3)=0]
       └── inner-join (lookup nation)
            ├── save-table-name: q20_lookup_join_3
            ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null) n_nationkey:9(int!null) n_name:10(char!null)
            ├── key columns: [4] = [9]
            ├── lookup columns are key
            ├── immutable
-           ├── stats: [rows=1e-06, distinct(1)=1.24917659e-08, null(1)=0, distinct(2)=1e-06, null(2)=0, distinct(3)=1e-06, null(3)=0, distinct(4)=1e-06, null(4)=0, distinct(9)=1e-06, null(9)=0, distinct(10)=1e-06, null(10)=0]
+           ├── stats: [rows=2.01612903e-05, distinct(1)=2e-05, null(1)=0, distinct(2)=2.01612903e-05, null(2)=0, distinct(3)=2.01612903e-05, null(3)=0, distinct(4)=2.01612824e-05, null(4)=0, distinct(9)=2.01612824e-05, null(9)=0, distinct(10)=2.01612903e-05, null(10)=0]
            ├── key: (1)
            ├── fd: ()-->(10), (1)-->(2-4), (4)==(9), (9)==(4)
            ├── project
            │    ├── save-table-name: q20_project_4
            │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null)
            │    ├── immutable
-           │    ├── stats: [rows=1e-06, distinct(1)=1.24917659e-08, null(1)=0, distinct(2)=1e-06, null(2)=0, distinct(3)=1e-06, null(3)=0, distinct(4)=1e-06, null(4)=0]
+           │    ├── stats: [rows=2.01612903e-05, distinct(1)=2e-05, null(1)=0, distinct(2)=2.01612903e-05, null(2)=0, distinct(3)=2.01612903e-05, null(3)=0, distinct(4)=2.01612824e-05, null(4)=0]
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-4)
            │    └── inner-join (lookup supplier)
@@ -91,7 +91,7 @@ sort
            │         ├── key columns: [15] = [1]
            │         ├── lookup columns are key
            │         ├── immutable
-           │         ├── stats: [rows=0.000124917659, distinct(1)=1.24917659e-08, null(1)=0, distinct(2)=0.000124917659, null(2)=0, distinct(3)=0.000124917659, null(3)=0, distinct(4)=0.000124917659, null(4)=0, distinct(15)=1.24917659e-08, null(15)=0]
+           │         ├── stats: [rows=0.2, distinct(1)=2e-05, null(1)=0, distinct(2)=0.2, null(2)=0, distinct(3)=0.2, null(3)=0, distinct(4)=0.2, null(4)=0, distinct(15)=2e-05, null(15)=0]
            │         ├── key: (15)
            │         ├── fd: (1)-->(2-4), (1)==(15), (15)==(1)
            │         ├── distinct-on
@@ -99,19 +99,19 @@ sort
            │         │    ├── columns: ps_suppkey:15(int!null)
            │         │    ├── grouping columns: ps_suppkey:15(int!null)
            │         │    ├── immutable
-           │         │    ├── stats: [rows=1.24917659e-08, distinct(15)=1.24917659e-08, null(15)=0]
+           │         │    ├── stats: [rows=2e-05, distinct(15)=2e-05, null(15)=0]
            │         │    ├── key: (15)
            │         │    └── project
            │         │         ├── save-table-name: q20_project_7
            │         │         ├── columns: ps_partkey:14(int!null) ps_suppkey:15(int!null)
            │         │         ├── immutable
-           │         │         ├── stats: [rows=1.24917659e-08, distinct(14)=2e-15, null(14)=0, distinct(15)=1.24917659e-08, null(15)=0]
+           │         │         ├── stats: [rows=2e-05, distinct(14)=2e-05, null(14)=0, distinct(15)=2e-05, null(15)=0]
            │         │         ├── key: (14,15)
            │         │         └── project
            │         │              ├── save-table-name: q20_project_8
            │         │              ├── columns: ps_partkey:14(int!null) ps_suppkey:15(int!null) p_partkey:20(int!null)
            │         │              ├── immutable
-           │         │              ├── stats: [rows=2.49835317e-13, distinct(14)=2e-15, null(14)=0, distinct(15)=2.49835317e-13, null(15)=0, distinct(20)=2e-15, null(20)=0]
+           │         │              ├── stats: [rows=0.00249835317, distinct(14)=2e-05, null(14)=0, distinct(15)=0.00249835317, null(15)=0, distinct(20)=2e-05, null(20)=0]
            │         │              ├── key: (15,20)
            │         │              ├── fd: (14)==(20), (20)==(14)
            │         │              └── inner-join (lookup part)
@@ -120,7 +120,7 @@ sort
            │         │                   ├── key columns: [14] = [20]
            │         │                   ├── lookup columns are key
            │         │                   ├── immutable
-           │         │                   ├── stats: [rows=2.49835317e-13, distinct(14)=2e-15, null(14)=0, distinct(15)=2.49835317e-13, null(15)=0, distinct(16)=2.49835317e-13, null(16)=0, distinct(20)=2e-15, null(20)=0, distinct(21)=2e-15, null(21)=0, distinct(47)=2.49835317e-13, null(47)=0]
+           │         │                   ├── stats: [rows=0.00249835317, distinct(14)=2e-05, null(14)=0, distinct(15)=0.00249835317, null(15)=0, distinct(16)=0.00249835317, null(16)=0, distinct(20)=2e-05, null(20)=0, distinct(21)=7.51678871e-09, null(21)=0, distinct(47)=0.00249835317, null(47)=0]
            │         │                   ├── key: (15,20)
            │         │                   ├── fd: (14,15)-->(16,47), (20)-->(21), (14)==(20), (20)==(14)
            │         │                   ├── select

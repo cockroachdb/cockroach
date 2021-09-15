@@ -2963,37 +2963,37 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2,6,7,10,18,21,28,43,50), (6)-->(28,43)
  ├── ordering: -2
- ├── inner-join (lookup status_type)
+ ├── inner-join (lookup exchange)
  │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:17!null st_name:18!null tt_id:20!null tt_name:21!null s_symb:25!null s_name:28!null s_ex_id:29!null ex_id:42!null ex_name:43!null
- │    ├── key columns: [3] = [17]
+ │    ├── key columns: [29] = [42]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 50]
  │    ├── key: (1)
  │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (17)-->(18), (3)==(17), (17)==(3), (20)-->(21), (4)==(20), (20)==(4), (25)-->(28,29), (42)-->(43), (29)==(42), (42)==(29), (6)==(25), (25)==(6)
  │    ├── ordering: -2 opt(9) [actual: -2]
- │    ├── inner-join (lookup trade_type)
- │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null tt_id:20!null tt_name:21!null s_symb:25!null s_name:28!null s_ex_id:29!null ex_id:42!null ex_name:43!null
- │    │    ├── key columns: [4] = [20]
+ │    ├── inner-join (lookup security)
+ │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:17!null st_name:18!null tt_id:20!null tt_name:21!null s_symb:25!null s_name:28!null s_ex_id:29!null
+ │    │    ├── key columns: [6] = [25]
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [0 - 50]
  │    │    ├── key: (1)
- │    │    ├── fd: ()-->(9), (20)-->(21), (1)-->(2-4,6,7,10,12), (25)-->(28,29), (42)-->(43), (29)==(42), (42)==(29), (6)==(25), (25)==(6), (4)==(20), (20)==(4)
+ │    │    ├── fd: ()-->(9), (17)-->(18), (20)-->(21), (1)-->(2-4,6,7,10,12), (25)-->(28,29), (6)==(25), (25)==(6), (4)==(20), (20)==(4), (3)==(17), (17)==(3)
  │    │    ├── ordering: -2 opt(9) [actual: -2]
- │    │    ├── inner-join (lookup exchange)
- │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null s_symb:25!null s_name:28!null s_ex_id:29!null ex_id:42!null ex_name:43!null
- │    │    │    ├── key columns: [29] = [42]
+ │    │    ├── inner-join (lookup status_type)
+ │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:17!null st_name:18!null tt_id:20!null tt_name:21!null
+ │    │    │    ├── key columns: [3] = [17]
  │    │    │    ├── lookup columns are key
  │    │    │    ├── cardinality: [0 - 50]
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (25)-->(28,29), (42)-->(43), (29)==(42), (42)==(29), (6)==(25), (25)==(6)
+ │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (17)-->(18), (3)==(17), (17)==(3), (20)-->(21), (4)==(20), (20)==(4)
  │    │    │    ├── ordering: -2 opt(9) [actual: -2]
- │    │    │    ├── inner-join (lookup security)
- │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null s_symb:25!null s_name:28!null s_ex_id:29!null
- │    │    │    │    ├── key columns: [6] = [25]
+ │    │    │    ├── inner-join (lookup trade_type)
+ │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null tt_id:20!null tt_name:21!null
+ │    │    │    │    ├── key columns: [4] = [20]
  │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── cardinality: [0 - 50]
  │    │    │    │    ├── key: (1)
- │    │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (25)-->(28,29), (6)==(25), (25)==(6)
+ │    │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (20)-->(21), (4)==(20), (20)==(4)
  │    │    │    │    ├── ordering: -2 opt(9) [actual: -2]
  │    │    │    │    ├── scan trade@secondary
  │    │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null

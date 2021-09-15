@@ -509,7 +509,7 @@ SELECT * FROM order_history WHERE item_id = order_id AND item_id < 5 AND item_id
 ----
 select
  ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int) year:4(int)
- ├── stats: [rows=0.99, distinct(1)=0.99, null(1)=0, distinct(2)=0.99, null(2)=0]
+ ├── stats: [rows=0.396, distinct(1)=0.396, null(1)=0, distinct(2)=0.396, null(2)=0]
  ├── fd: (1)==(2), (2)==(1)
  ├── scan order_history
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
@@ -524,7 +524,7 @@ SELECT * FROM order_history WHERE item_id = order_id AND customer_id < 5 AND cus
 ----
 select
  ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int!null) year:4(int)
- ├── stats: [rows=0.9801, distinct(1)=0.9801, null(1)=0, distinct(2)=0.9801, null(2)=0, distinct(3)=0.9801, null(3)=0]
+ ├── stats: [rows=0.39204, distinct(1)=0.39204, null(1)=0, distinct(2)=0.39204, null(2)=0, distinct(3)=0.39204, null(3)=0]
  ├── fd: (1)==(2), (2)==(1)
  ├── scan order_history
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
@@ -2678,3 +2678,55 @@ select
  │                     <---- NULL ---- 0 ---- 1 -
  └── filters
       └── x:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+
+exec-ddl
+CREATE TABLE bigtable (x INT, y INT)
+----
+
+exec-ddl
+ALTER TABLE bigtable INJECT STATISTICS '[
+    {
+        "columns": [
+            "x"
+        ],
+        "created_at": "2021-06-15 02:06:48.036389",
+        "distinct_count": 3000000002,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq":         10,
+                "num_range":      0,
+                "upper_bound":    "0"
+            },
+            {
+                "distinct_range": 3000000000,
+                "num_eq":         10,
+                "num_range":      29999999980,
+                "upper_bound":    "100000000000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "row_count": 30000000000
+    }
+]'
+----
+
+# Regression test for #69709. Ensure the row count estimate is correct when
+# we are selecting a relatively small number of rows from a very large table.
+norm
+SELECT * from bigtable WHERE x = 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=9.99999999, distinct(1)=1, null(1)=0]
+ │   histogram(1)=  0  10
+ │                <--- 10
+ ├── fd: ()-->(1)
+ ├── scan bigtable
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── stats: [rows=3e+10, distinct(1)=3e+09, null(1)=0]
+ │        histogram(1)=  0 10  3e+10       10
+ │                     <--- 0 ------- 100000000000
+ └── filters
+      └── x:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
