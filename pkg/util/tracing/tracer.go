@@ -920,6 +920,26 @@ func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	return sp.Tracer().StartSpanCtx(ctx, opName, WithFollowsFrom(), collectionOpt)
 }
 
+// EnsureForkSpan is like ForkSpan except that, if there is no span in ctx, it
+// creates a root span.
+func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
+	sp := SpanFromContext(ctx)
+	var opts []SpanOption
+	// If there's a span in ctx, we use it as a parent.
+	if sp != nil {
+		tr = sp.Tracer()
+		if !tr.ShouldRecordAsyncSpans() {
+			opts = append(opts, WithParentAndManualCollection(sp.Meta()))
+		} else {
+			// Using auto collection here ensures that recordings from async spans
+			// also show up at the parent.
+			opts = append(opts, WithParentAndAutoCollection(sp))
+		}
+		opts = append(opts, WithFollowsFrom())
+	}
+	return tr.StartSpanCtx(ctx, opName, opts...)
+}
+
 // ChildSpan creates a child span of the current one, if any. Recordings from
 // child spans are automatically propagated to the parent span, and the tags are
 // inherited from the context's log tags automatically. Also see `ForkSpan`,

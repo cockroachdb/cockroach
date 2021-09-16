@@ -788,85 +788,87 @@ func (bq *baseQueue) MaybeRemove(rangeID roachpb.RangeID) {
 // stopper signals exit.
 func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 	ctx := bq.AnnotateCtx(context.Background())
-	stop := func() {
+	done := func() {
 		bq.mu.Lock()
 		bq.mu.stopped = true
 		bq.mu.Unlock()
 	}
-	if err := stopper.RunAsyncTask(ctx, "queue-loop", func(ctx context.Context) {
-		defer stop()
+	if err := stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{TaskName: "queue-loop", SpanOpt: stop.SterileRootSpan},
+		func(ctx context.Context) {
+			defer done()
 
-		// nextTime is initially nil; we don't start any timers until the queue
-		// becomes non-empty.
-		var nextTime <-chan time.Time
+			// nextTime is initially nil; we don't start any timers until the queue
+			// becomes non-empty.
+			var nextTime <-chan time.Time
 
-		immediately := make(chan time.Time)
-		close(immediately)
+			immediately := make(chan time.Time)
+			close(immediately)
 
-		for {
-			select {
-			// Exit on stopper.
-			case <-stopper.ShouldQuiesce():
-				return
+			for {
+				select {
+				// Exit on stopper.
+				case <-stopper.ShouldQuiesce():
+					return
 
-			// Incoming signal sets the next time to process if there were previously
-			// no replicas in the queue.
-			case <-bq.incoming:
-				if nextTime == nil {
-					// When a replica is added, wake up immediately. This is mainly
-					// to facilitate testing without unnecessary sleeps.
-					nextTime = immediately
-
-					// In case we're in a test, still block on the impl.
-					bq.impl.timer(0)
-				}
-			// Process replicas as the timer expires.
-			case <-nextTime:
-				// Acquire from the process semaphore.
-				bq.processSem <- struct{}{}
-
-				repl := bq.pop()
-				if repl != nil {
-					annotatedCtx := repl.AnnotateCtx(ctx)
-					if stopper.RunAsyncTask(
-						annotatedCtx, fmt.Sprintf("storage.%s: processing replica", bq.name),
-						func(ctx context.Context) {
-							// Release semaphore when finished processing.
-							defer func() { <-bq.processSem }()
-
-							start := timeutil.Now()
-							err := bq.processReplica(ctx, repl)
-
-							duration := timeutil.Since(start)
-							bq.recordProcessDuration(ctx, duration)
-
-							bq.finishProcessingReplica(ctx, stopper, repl, err)
-						}) != nil {
-						// Release semaphore on task failure.
-						<-bq.processSem
-						return
-					}
-				} else {
-					// Release semaphore if no replicas were available.
-					<-bq.processSem
-				}
-
-				if bq.Length() == 0 {
-					nextTime = nil
-				} else {
-					// lastDur will be 0 after the first processing attempt.
-					lastDur := bq.lastProcessDuration()
-					switch t := bq.impl.timer(lastDur); t {
-					case 0:
+				// Incoming signal sets the next time to process if there were previously
+				// no replicas in the queue.
+				case <-bq.incoming:
+					if nextTime == nil {
+						// When a replica is added, wake up immediately. This is mainly
+						// to facilitate testing without unnecessary sleeps.
 						nextTime = immediately
-					default:
-						nextTime = time.After(t)
+
+						// In case we're in a test, still block on the impl.
+						bq.impl.timer(0)
+					}
+				// Process replicas as the timer expires.
+				case <-nextTime:
+					// Acquire from the process semaphore.
+					bq.processSem <- struct{}{}
+
+					repl := bq.pop()
+					if repl != nil {
+						annotatedCtx := repl.AnnotateCtx(ctx)
+						if stopper.RunAsyncTask(
+							annotatedCtx, fmt.Sprintf("storage.%s: processing replica", bq.name),
+							func(ctx context.Context) {
+								// Release semaphore when finished processing.
+								defer func() { <-bq.processSem }()
+
+								start := timeutil.Now()
+								err := bq.processReplica(ctx, repl)
+
+								duration := timeutil.Since(start)
+								bq.recordProcessDuration(ctx, duration)
+
+								bq.finishProcessingReplica(ctx, stopper, repl, err)
+							}) != nil {
+							// Release semaphore on task failure.
+							<-bq.processSem
+							return
+						}
+					} else {
+						// Release semaphore if no replicas were available.
+						<-bq.processSem
+					}
+
+					if bq.Length() == 0 {
+						nextTime = nil
+					} else {
+						// lastDur will be 0 after the first processing attempt.
+						lastDur := bq.lastProcessDuration()
+						switch t := bq.impl.timer(lastDur); t {
+						case 0:
+							nextTime = immediately
+						default:
+							nextTime = time.After(t)
+						}
 					}
 				}
 			}
-		}
-	}); err != nil {
-		stop()
+		}); err != nil {
+		done()
 	}
 }
 
