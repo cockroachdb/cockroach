@@ -482,6 +482,10 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		subDir := filepath.Join(locationToDir(location), "data")
 		files, err := ioutil.ReadDir(subDir)
 		if err != nil {
+			if oserror.IsNotExist(err) {
+				return false
+			}
+
 			t.Fatal(err)
 		}
 		found := false
@@ -538,22 +542,27 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		sqlDB.Exec(t, restoreQuery, locationURIArgs...)
 	}
 
-	// Ensure that each node has at least one leaseholder. (These splits were
-	// made in BackupRestoreTestSetup.) These are wrapped with SucceedsSoon()
-	// because EXPERIMENTAL_RELOCATE can fail if there are other replication
-	// changes happening.
-	for _, stmt := range []string{
-		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`,
-		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`,
-		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`,
-	} {
-		testutils.SucceedsSoon(t, func() error {
-			_, err := sqlDB.DB.ExecContext(ctx, stmt)
-			return err
-		})
+	// Ensure that each node has at least one leaseholder. These are wrapped with
+	// SucceedsSoon() because EXPERIMENTAL_RELOCATE can fail if there are other
+	// replication changes happening.
+	ensureLeaseholder := func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+		for _, stmt := range []string{
+			`ALTER TABLE data.bank SPLIT AT VALUES (0)`,
+			`ALTER TABLE data.bank SPLIT AT VALUES (100)`,
+			`ALTER TABLE data.bank SPLIT AT VALUES (200)`,
+			`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`,
+			`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`,
+			`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`,
+		} {
+			testutils.SucceedsSoon(t, func() error {
+				_, err := sqlDB.DB.ExecContext(ctx, stmt)
+				return err
+			})
+		}
 	}
 
 	t.Run("partition-by-unique-key", func(t *testing.T) {
+		ensureLeaseholder(t, sqlDB)
 		testSubDir := t.Name()
 		locations := []string{
 			LocalFoo + "/" + testSubDir + "/1",
@@ -578,8 +587,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 	// Test that we're selecting the most specific locality tier for a location.
 	t.Run("partition-by-different-tiers", func(t *testing.T) {
-		skip.WithIssue(t, 64974, "flaky test")
-
+		ensureLeaseholder(t, sqlDB)
 		testSubDir := t.Name()
 		locations := []string{
 			LocalFoo + "/" + testSubDir + "/1",
@@ -603,6 +611,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	})
 
 	t.Run("partition-by-several-keys", func(t *testing.T) {
+		ensureLeaseholder(t, sqlDB)
 		testSubDir := t.Name()
 		locations := []string{
 			LocalFoo + "/" + testSubDir + "/1",
