@@ -503,6 +503,9 @@ export class StatementDetails extends React.Component<
       moment(stats.last_exec_timestamp.seconds.low * 1e3).format(
         "MMM DD, YYYY HH:MM",
       );
+    const notSelectStatement =
+      this.props.statement.statement.indexOf("SELECT") !== 0;
+
     return (
       <Tabs
         defaultActiveKey="1"
@@ -568,6 +571,19 @@ export class StatementDetails extends React.Component<
                         {formatNumberForDisplay(stats.bytes_read.mean, Bytes)}
                       </Text>
                     </div>
+                    {notSelectStatement && (
+                      <div
+                        className={summaryCardStylesCx("summary--card__item")}
+                      >
+                        <Text>Mean rows written</Text>
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.rows_written.mean,
+                            formatTwoPlaces,
+                          )}
+                        </Text>
+                      </div>
+                    )}
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Max memory usage</Text>
                       <Text>
