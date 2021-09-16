@@ -281,7 +281,7 @@ func TestSpanRecordLimit(t *testing.T) {
 	// variably sized (needed for the test below).
 	clock := &timeutil.ManualTime{}
 	tr := NewTracer()
-	tr.testing = &testingKnob{clock: clock}
+	tr.SetTestingKnobs(TracerTestingKnobs{Clock: clock})
 
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
@@ -335,7 +335,7 @@ func TestSpanReset(t *testing.T) {
 	// variably sized (needed for the test below).
 	clock := &timeutil.ManualTime{}
 	tr := NewTracer()
-	tr.testing = &testingKnob{clock}
+	tr.SetTestingKnobs(TracerTestingKnobs{Clock: clock})
 
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()

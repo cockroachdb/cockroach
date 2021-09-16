@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -158,7 +159,16 @@ type Tracer struct {
 	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
 	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
 
-	testing *testingKnob
+	testing TracerTestingKnobs
+}
+
+// TracerTestingKnobs contains knobs for a Tracer.
+type TracerTestingKnobs struct {
+	// Clock allows the time source for spans to be controlled.
+	Clock timeutil.TimeSource
+	// ForceRealSpans, if set, forces the tracer to create span even when tracing
+	// is otherwise disabled.
+	ForceRealSpans bool
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -171,6 +181,11 @@ func NewTracer() *Tracer {
 	// it won't soak up data.
 	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t}}
 	return t
+}
+
+// SetTestingKnobs allows tests to muck with the tracer.
+func (t *Tracer) SetTestingKnobs(knobs TracerTestingKnobs) {
+	t.testing = knobs
 }
 
 // Configure sets up the Tracer according to the cluster settings (and keeps
@@ -263,8 +278,36 @@ func (t *Tracer) StartSpanCtx(
 // AlwaysTrace returns true if operations should be traced regardless of the
 // context.
 func (t *Tracer) AlwaysTrace() bool {
+	if t.testing.ForceRealSpans {
+		return true
+	}
 	shadowTracer := t.getShadowTracer()
 	return t.useNetTrace() || shadowTracer != nil
+}
+
+type registry struct {
+	mu struct {
+		syncutil.Mutex
+		spansPerTrace map[uint64]traceInfo
+	}
+}
+
+type traceInfo struct {
+	rootName   string
+	remoteRoot bool
+	spans      int
+}
+
+func (r *registry) newTrace(traceID uint64, rootName string) {
+	r.mu.Lock()
+	if _, ok := r.mu.spansPerTrace[traceID]; ok {
+		panic(fmt.Sprintf("duplicate trace id: %d", traceID))
+	}
+	r.mu.spansPerTrace[traceID] = traceInfo{
+		rootName: rootName,
+		spans:    1,
+	}
+	defer r.mu.Unlock()
 }
 
 // startSpanGeneric is the implementation of StartSpanCtx and StartSpan. In
@@ -378,7 +421,7 @@ func (t *Tracer) startSpanGeneric(
 		mu: crdbSpanMu{
 			duration: -1, // unfinished
 		},
-		testing: t.testing,
+		testing: &t.testing,
 	}
 	helper.crdbSpan.mu.operation = opName
 	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)

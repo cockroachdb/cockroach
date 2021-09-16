@@ -268,7 +268,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock = hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
 	}
 	registry := metric.NewRegistry()
-	// If the tracer has a Close function, call it after the server stops.
+	stopper.SetTracer(cfg.AmbientCtx.Tracer)
 	stopper.AddCloser(cfg.AmbientCtx.Tracer)
 
 	// Add a dynamic log tag value for the node ID.
@@ -2586,16 +2586,22 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 				// this hasn't been observed to be a problem.
 				statsCollected := make(chan struct{})
 				if atomic.CompareAndSwapInt32(&collectingMemStats, 0, 1) {
-					if err := cfg.stopper.RunAsyncTask(ctx, "get-mem-stats", func(ctx context.Context) {
-						var ms status.GoMemStats
-						runtime.ReadMemStats(&ms.MemStats)
-						ms.Collected = timeutil.Now()
-						log.VEventf(ctx, 2, "memstats: %+v", ms)
+					if err := cfg.stopper.RunAsyncTaskEx(ctx,
+						stop.TaskOpts{
+							TaskName: "get-mem-stats",
+							// Not worth creating spans for this trivial work.
+							SpanOpt: stop.NoSpan,
+						},
+						func(ctx context.Context) {
+							var ms status.GoMemStats
+							runtime.ReadMemStats(&ms.MemStats)
+							ms.Collected = timeutil.Now()
+							log.VEventf(ctx, 2, "memstats: %+v", ms)
 
-						goMemStats.Store(&ms)
-						atomic.StoreInt32(&collectingMemStats, 0)
-						close(statsCollected)
-					}); err != nil {
+							goMemStats.Store(&ms)
+							atomic.StoreInt32(&collectingMemStats, 0)
+							close(statsCollected)
+						}); err != nil {
 						close(statsCollected)
 					}
 				}

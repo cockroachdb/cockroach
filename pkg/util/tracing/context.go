@@ -85,3 +85,13 @@ func ContextWithSpan(ctx context.Context, sp *Span) context.Context {
 	ctx, _ = maybeWrapCtx(ctx, nil /* octx */, sp)
 	return ctx
 }
+
+// ContextWithoutSpan returns a Context with the span overridden such that
+// ContextFromSpan(newCtx) will return nil.
+func ContextWithoutSpan(ctx context.Context) context.Context {
+	if SpanFromContext(ctx) == nil {
+		return ctx
+	}
+	// Override the span with a nil.
+	return context.WithValue(ctx, activeSpanKey{}, nil)
+}
