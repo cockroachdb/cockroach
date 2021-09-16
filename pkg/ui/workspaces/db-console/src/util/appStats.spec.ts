@@ -177,6 +177,7 @@ function randomStats(sensitiveInfo?: ISensitiveInfo): StatementStatistics {
     overhead_lat: randomStat(),
     bytes_read: randomStat(),
     rows_read: randomStat(),
+    rows_written: randomStat(),
     sensitive_info: sensitiveInfo || makeSensitiveInfo(null, null),
     exec_stats: randomExecStats(),
     sql_type: "DDL",

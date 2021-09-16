@@ -87,6 +87,9 @@ message StatementStatistics {
   // RowsRead collects the number of rows read from disk.
   optional NumericStat rows_read = 16 [(gogoproto.nullable) = false];
 
+  // RowsWritten collects the number of rows written to disk.
+  optional NumericStat rows_written = 25 [(gogoproto.nullable) = false];
+
   // ExecStats are the execution statistics for this statement. These statistics
   // are sampled.
   optional ExecStats exec_stats = 21 [(gogoproto.nullable) = false];
