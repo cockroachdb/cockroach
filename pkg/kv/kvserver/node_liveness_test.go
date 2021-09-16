@@ -1032,6 +1032,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 
+	// Verify retry of the ambiguous result for heartbeat loop.
 	testutils.SucceedsSoon(t, func() error {
 		return verifyLivenessServer(s, 1)
 	})
