@@ -409,7 +409,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       start: moment.unix(start),
       end: moment.unix(end),
     });
-    const newTimeScale = findClosestTimeScale(end - start);
+    const newTimeScale = findClosestTimeScale(end - start, start);
     this.props.setTimeScale(newTimeScale);
     const { pathname, search } = this.props.history.location;
     const urlParams = new URLSearchParams(search);
