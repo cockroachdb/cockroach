@@ -2514,16 +2514,17 @@ func (r roleOptions) validUntil(p *planner) (tree.Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-
-		validUntil, _, err := pgdate.ParseTimestamp(
-			p.EvalContext().GetRelativeParseTime(),
-			pgdate.DefaultDateStyle(),
-			*valStr,
-		)
-		if err != nil {
-			return nil, errors.Errorf("rolValidUntil string %s could not be parsed with datestyle %s", *valStr, p.EvalContext().GetDateStyle())
+		if valStr != nil {
+			validUntil, _, err := pgdate.ParseTimestamp(
+				p.EvalContext().GetRelativeParseTime(),
+				pgdate.DefaultDateStyle(),
+				*valStr,
+			)
+			if err != nil {
+				return nil, errors.Errorf("rolValidUntil string %s could not be parsed with datestyle %s", *valStr, p.EvalContext().GetDateStyle())
+			}
+			rolValidUntil = &validUntil
 		}
-		rolValidUntil = &validUntil
 	}
 
 	if rolValidUntil == nil {

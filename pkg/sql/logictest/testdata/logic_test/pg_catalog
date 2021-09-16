@@ -5329,3 +5329,8 @@ usename       usesuper
 regular_user  false
 root          true
 super_user    true
+
+# Testing null valid until roles
+statement ok
+CREATE USER testuser3 WITH password '123' VALID UNTIL null;
+SELECT 1 FROM pg_user WHERE usename = 'testuser3';
