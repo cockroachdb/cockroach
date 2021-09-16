@@ -243,6 +243,14 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 			v.err = newQueryNotSupportedErrorf("cast to %s is not supported by distsql", t.Type)
 			return false, expr
 		}
+	case *tree.DArray:
+		// We need to check for arrays of untyped tuples here since constant-folding
+		// on builtin functions sometimes produces this.
+		if t.ResolvedType().ArrayContents() == types.AnyTuple {
+			v.err = newQueryNotSupportedErrorf("array %s cannot be executed with distsql", t)
+			return false, expr
+		}
+
 	}
 	return true, expr
 }

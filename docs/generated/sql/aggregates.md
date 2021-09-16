@@ -39,6 +39,8 @@
 </span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
+<tr><td><a name="array_agg"></a><code>array_agg(arg1: tuple) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
+</span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: varbit) &rarr; varbit[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
 <tr><td><a name="avg"></a><code>avg(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the average of the selected values.</p>
