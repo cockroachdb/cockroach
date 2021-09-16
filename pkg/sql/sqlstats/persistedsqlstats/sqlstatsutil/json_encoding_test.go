@@ -92,6 +92,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
+				"rowsWritten": {
+					"mean": 0.5706732760710226,
+					"sqDiff": 0.5706732760710226
+					},
          "nodes": [{{joinInts .IntArray}}]
        },
        "execution_statistics": {
