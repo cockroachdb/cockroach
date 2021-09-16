@@ -61,6 +61,23 @@ func registerAcceptance(r registry.Registry) {
 				minVersion: "v19.2.0",
 				timeout:    30 * time.Minute,
 			},
+			{
+				name: "patch-upgrade",
+				fn: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runPatchUpgrade(ctx, t, c, 0)
+				},
+				minVersion: "v21.1.9", // Regression test for 21.1.8
+
+				timeout: 30 * time.Minute,
+			},
+			{
+				name: "double-patch-upgrade",
+				fn: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runPatchUpgrade(ctx, t, c, 1)
+				},
+				minVersion: "v21.1.9", // Regression test for 21.1.8
+				timeout:    30 * time.Minute,
+			},
 		},
 		registry.OwnerServer: {
 			{name: "build-info", fn: RunBuildInfo},
