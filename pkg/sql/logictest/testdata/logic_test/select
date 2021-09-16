@@ -722,19 +722,59 @@ true NULL
 
 # Tests for `disallow_full_table_scans`
 statement ok
-CREATE TABLE t_disallow_scans(a INT);
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
 statement ok
-INSERT INTO t_disallow_scans VALUES (1), (2), (3)
+CREATE TABLE t_disallow_scans(a INT, b INT, INDEX b_idx(b));
 
 statement ok
 SELECT * FROM t_disallow_scans
 
 statement ok
-SET disallow_full_table_scans = true
+SET disallow_full_table_scans = true;
+
+# Full scans are prohibited because we don't have stats on the table.
+statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans
+
+statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans@b_idx
+
+# Disable 'large_full_scan_rows' heuristic and inject the stats in order to
+# test 'disallow_full_table_scans' in isolation.
+statement ok
+SET large_full_scan_rows = 0;
+
+statement ok
+ALTER TABLE t_disallow_scans INJECT STATISTICS '[
+  {
+    "columns": ["rowid"],
+    "created_at": "2021-09-15 19:38:46.017315",
+    "distinct_count": 3,
+    "null_count": 0,
+    "row_count": 3
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2021-09-15 19:38:46.017315",
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2021-09-15 19:38:46.017315",
+    "distinct_count": 3,
+    "null_count": 0,
+    "row_count": 3
+  }
+]'
 
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
+
+statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans@b_idx
 
 # Internal statements should still be allowed with this setting.
 statement ok
@@ -743,9 +783,32 @@ SELECT * FROM pg_class
 statement ok
 SELECT * FROM crdb_internal.jobs
 
+# Tests for 'large_full_scan_rows'.
+statement ok
+SET large_full_scan_rows = 1000
+
+# These queries succeed because the full table/index scans aren't considered
+# "large".
+statement ok
+SELECT * FROM t_disallow_scans
+
+statement ok
+SELECT * FROM t_disallow_scans@b_idx
+
+statement ok
+SET large_full_scan_rows = 2
+
+statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans
+
+statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans@b_idx
+
 # Cleanup
 statement ok
-SET disallow_full_table_scans = false
+SET disallow_full_table_scans = false;
+RESET large_full_scan_rows;
+RESET CLUSTER SETTING sql.stats.automatic_collection.enabled;
 
 # Regression test for #58104.
 statement ok

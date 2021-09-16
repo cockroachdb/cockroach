@@ -1134,15 +1134,21 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 
 	if flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan) {
 		if ex.executorType == executorTypeExec && planner.EvalContext().SessionData.DisallowFullTableScans {
-			// We don't execute the statement if:
-			// - plan contains a full table or full index scan.
-			// - the session setting disallows full table/index scans.
-			// - the query is not an internal query.
-			return errors.WithHint(
-				pgerror.Newf(pgcode.TooManyRows,
-					"query `%s` contains a full table/index scan which is explicitly disallowed",
-					planner.stmt.SQL),
-				"try overriding the `disallow_full_table_scans` cluster/session setting")
+			hasLargeScan := flags.IsSet(planFlagContainsLargeFullIndexScan) || flags.IsSet(planFlagContainsLargeFullTableScan)
+			if hasLargeScan {
+				// We don't execute the statement if:
+				// - plan contains a full table or full index scan.
+				// - the session setting disallows full table/index scans.
+				// - the scan is considered large.
+				// - the query is not an internal query.
+				ex.metrics.EngineMetrics.FullTableOrIndexScanRejectedCount.Inc(1)
+				return errors.WithHint(
+					pgerror.Newf(pgcode.TooManyRows,
+						"query `%s` contains a full table/index scan which is explicitly disallowed",
+						planner.stmt.SQL),
+					"try overriding the `disallow_full_table_scans` or increasing the `large_full_scan_rows` cluster/session settings",
+				)
+			}
 		}
 		ex.metrics.EngineMetrics.FullTableOrIndexScanCount.Inc(1)
 	}

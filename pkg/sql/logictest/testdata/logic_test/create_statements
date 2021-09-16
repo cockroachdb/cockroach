@@ -3614,7 +3614,7 @@ unlogged_tbl  CREATE TABLE public.unlogged_tbl (
 statement error invalid storage parameter "foo"
 CREATE TABLE a (b INT) WITH (foo=100);
 
-statement error parameter "fillfactor" requires an float value
+statement error parameter "fillfactor" requires a float value
 CREATE TABLE a (b INT) WITH (fillfactor=true);
 
 statement error unimplemented: storage parameter "toast_tuple_target"
