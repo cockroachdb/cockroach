@@ -29,7 +29,6 @@ const (
 
 var (
 	artifactsDir    string
-	tmpDir          string
 	configs         []string
 	compilationMode string
 
@@ -54,11 +53,6 @@ func init() {
 		"artifacts_dir",
 		"/artifacts",
 		"path where artifacts should be staged")
-	rootCmd.Flags().StringVar(
-		&tmpDir,
-		"tmp_dir",
-		"/tmp/bazelbuild",
-		"path to temporary directory to use for tests")
 	rootCmd.Flags().StringVar(
 		&compilationMode,
 		"compilation_mode",
@@ -237,9 +231,6 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 		processArgs = append(processArgs, configArgList()...)
 		processArgs = append(processArgs, "-c", compilationMode)
 		processArgs = append(processArgs, parsedArgs.additional...)
-		if parsedArgs.subcmd == "test" {
-			processArgs = append(processArgs, fmt.Sprintf("--test_tmpdir=%s", tmpDir))
-		}
 		fmt.Println("running bazel w/ args: ", processArgs)
 		cmd := exec.Command("bazel", processArgs...)
 		cmd.Stdout = os.Stdout
