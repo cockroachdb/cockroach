@@ -446,6 +446,11 @@ func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
 	desc.DrainingNames = append(desc.DrainingNames, name)
 }
 
+// SetName sets the TypeDescriptor's name.
+func (desc *Mutable) SetName(name string) {
+	desc.Name = name
+}
+
 // EnumMembers is a sortable list of TypeDescriptor_EnumMember, sorted by the
 // physical representation.
 type EnumMembers []descpb.TypeDescriptor_EnumMember

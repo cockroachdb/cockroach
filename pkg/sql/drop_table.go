@@ -457,14 +457,15 @@ func (p *planner) initiateDropTable(
 		return err
 	}
 
-	tableDesc.State = descpb.DescriptorState_DROP
+	// Actually mark table descriptor as dropped.
+	tableDesc.SetDropped()
 
-	// Queue up name for draining.
-	tableDesc.AddDrainingName(descpb.NameInfo{
-		ParentID:       tableDesc.GetParentID(),
-		ParentSchemaID: tableDesc.GetParentSchemaID(),
-		Name:           tableDesc.GetName(),
-	})
+	// Delete namespace entry for table.
+	b := p.txn.NewBatch()
+	p.dropNamespaceEntry(ctx, b, tableDesc)
+	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
 
 	// For this table descriptor, mark all previous jobs scheduled for schema changes as successful
 	// and delete them from the schema change job cache.

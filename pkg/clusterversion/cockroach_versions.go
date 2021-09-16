@@ -292,6 +292,14 @@ const (
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
 
+	// v22.1 versions.
+	//
+	// Start22_1 demarcates work towards CockroachDB v22.1.
+	Start22_1
+	// AvoidDrainingNames avoids using the draining_names field when renaming or
+	// dropping descriptors.
+	AvoidDrainingNames
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -494,6 +502,17 @@ var versionsSingleton = keyedVersions{
 		Key:     V21_2,
 		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
+
+	// v22.1 versions.
+	{
+		Key:     Start22_1,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 1174},
+	},
+	{
+		Key:     AvoidDrainingNames,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 1176},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
