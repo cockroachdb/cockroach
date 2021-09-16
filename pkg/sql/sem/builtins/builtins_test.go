@@ -12,17 +12,24 @@ package builtins
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"math/bits"
 	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,6 +67,84 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 		if tc <= prev {
 			t.Fatalf("%d > %d", tc, prev)
 		}
+	}
+}
+
+// TestMapToUniqueUnorderedID verifies that the mapping preserves the ones count
+func TestMapToUniqueUnorderedID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for i := 0; i < 30; i++ {
+		// randInput is [0][63 bits of randomness]
+		randInput := uint64(rand.Int63())
+		output := mapToUnorderedUniqueInt(randInput)
+
+		inputOnesCount := bits.OnesCount64(randInput)
+		outputOnesCount := bits.OnesCount64(output)
+		if inputOnesCount != outputOnesCount {
+			t.Errorf("input: %b, output %b\nExpected: %d, got: %d", randInput, output, inputOnesCount, outputOnesCount)
+		}
+	}
+}
+
+// TestSerialNormalizationWithUniqueUnorderedID makes sure that serial
+// normalization can use unique_unordered_id() and a split in a table followed
+// by insertions guarantees a (somewhat) uniform distribution of the data.
+func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+	// create a new table with serial primary key i (unordered_rowid) and int j (index)
+	tdb.Exec(t, `
+SET serial_normalization TO 'unordered_rowid';
+CREATE DATABASE t;
+USE t;
+CREATE TABLE t (
+  i SERIAL PRIMARY KEY,
+  j INT
+)`)
+
+	// testing configurations
+	const numberOfRows = 1000
+	const varianceThreshold = float64(numberOfRows) * 0.05
+
+	// enforce range splits to collect range statistics after row insertions
+	// 3 bits worth of splits in the high order
+	tdb.Exec(t, fmt.Sprintf(`
+ALTER TABLE t SPLIT AT SELECT i<<(60) FROM generate_series(1, 7) as t(i);
+INSERT INTO t(j) SELECT * FROM generate_series(1, %d);
+`, numberOfRows))
+
+	// Derive range statistics
+	var keyCounts pq.Int64Array
+	tdb.QueryRow(t, "SELECT "+
+		"array_agg((crdb_internal.range_stats(start_key)->>'key_count')::int) AS rows "+
+		"FROM crdb_internal.ranges_no_leases WHERE table_id"+
+		"='t'::regclass;").Scan(&keyCounts)
+
+	// Calculate mean and variance using NumericStat
+	var stats roachpb.NumericStat
+	var count int64
+	for _, keyCount := range keyCounts {
+		count++
+		stats.Record(count, float64(keyCount))
+	}
+	mean := stats.Mean
+	variance := stats.GetVariance(count)
+	fmt.Printf("Mean: %f Variance: %f\n", mean, variance)
+
+	// print out distribution among split ranges
+	fmt.Println("Key counts in each split range")
+	for i, keyCount := range keyCounts {
+		fmt.Printf("range %d: %d\n", i, keyCount)
+	}
+
+	// Ensure variance < threshold
+	if variance >= varianceThreshold {
+		t.Errorf("Variance %f exceeds threshold %f", variance, varianceThreshold)
 	}
 }
 
