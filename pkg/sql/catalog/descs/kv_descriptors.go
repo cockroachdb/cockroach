@@ -193,6 +193,11 @@ func (kd *kvDescriptors) getByName(
 		// Immediately after a RENAME an old name still points to the descriptor
 		// during the drain phase for the name. Do not return a descriptor during
 		// draining.
+		//
+		// TODO(postamar): remove this after 22.1 is release.
+		// At that point, draining names will no longer have to be supported.
+		// We can then consider making the descriptor collection aware of
+		// uncommitted namespace operations.
 		return nil, nil
 	}
 	return desc, nil

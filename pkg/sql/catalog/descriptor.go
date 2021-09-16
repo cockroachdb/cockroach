@@ -770,9 +770,6 @@ func FormatSafeDescriptorProperties(w *redact.StringBuilder, desc Descriptor) {
 			w.Printf(", OfflineReason: %q", redact.Safe(offlineReason))
 		}
 	}
-	if drainingNames := desc.GetDrainingNames(); len(drainingNames) > 0 {
-		w.Printf(", NumDrainingNames: %d", len(drainingNames))
-	}
 }
 
 // IsSystemDescriptor returns true iff the descriptor is a system or a reserved
