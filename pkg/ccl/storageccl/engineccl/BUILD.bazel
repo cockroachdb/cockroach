@@ -18,8 +18,10 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_cockroachdb_pebble//vfs/atomicfs",
         "@com_github_gogo_protobuf//proto",
     ],
 )

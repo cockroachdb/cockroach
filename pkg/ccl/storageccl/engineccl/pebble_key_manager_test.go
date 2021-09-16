@@ -13,6 +13,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -295,6 +297,11 @@ func TestDataKeyManager(t *testing.T) {
 					return err.Error()
 				}
 				return ""
+			case "close":
+				if err := dkm.Close(); err != nil {
+					return err.Error()
+				}
+				return ""
 			case "set-active-store-key":
 				var id string
 				d.ScanArgs(t, "id", &id)
@@ -376,4 +383,166 @@ func TestDataKeyManager(t *testing.T) {
 				return fmt.Sprintf("unknown command: %s\n", d.Cmd)
 			}
 		})
+}
+
+func TestDataKeyManagerIO(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	prev := kmTimeNow
+	kmTimeNow = func() time.Time { return time.Time{} }
+	defer func() { kmTimeNow = prev }()
+
+	var buf bytes.Buffer
+	fs := loggingFS{FS: vfs.NewMem(), w: &buf}
+
+	appendError := func(err error) {
+		if err != nil {
+			fmt.Fprintf(&buf, "error: %s\n", err)
+			return
+		}
+		fmt.Fprintf(&buf, "OK\n")
+	}
+
+	var dkm *DataKeyManager
+
+	datadriven.RunTest(t, "testdata/data_key_manager_io",
+		func(t *testing.T, d *datadriven.TestData) string {
+			fmt.Println(d.Pos)
+			buf.Reset()
+
+			switch d.Cmd {
+			case "close":
+				appendError(dkm.Close())
+				dkm = nil
+				return buf.String()
+			case "list":
+				ls, err := fs.List(d.CmdArgs[0].String())
+				require.NoError(t, err)
+				sort.Strings(ls)
+				for _, filename := range ls {
+					fmt.Fprintln(&buf, filename)
+				}
+				return buf.String()
+			case "load":
+				var dir string
+				d.ScanArgs(t, "dir", &dir)
+
+				require.Nil(t, dkm)
+				dkm = &DataKeyManager{fs: fs, dbDir: dir, rotationPeriod: 10}
+				err := dkm.Load(context.Background())
+				appendError(err)
+				if err != nil {
+					dkm = nil
+				}
+				return buf.String()
+			case "mkdir-all":
+				appendError(fs.MkdirAll(d.CmdArgs[0].String(), os.ModePerm))
+				return buf.String()
+			case "rm-all":
+				appendError(fs.RemoveAll(d.CmdArgs[0].String()))
+				return buf.String()
+			case "set-active-store-key":
+				var id string
+				d.ScanArgs(t, "id", &id)
+				fmt.Fprintf(&buf, "%s", setActiveStoreKey(dkm, id, enginepbccl.EncryptionType_AES128_CTR))
+				return buf.String()
+			case "use-marker":
+				appendError(dkm.UseMarker())
+				return buf.String()
+			default:
+				return fmt.Sprintf("unknown command: %s\n", d.Cmd)
+			}
+		})
+}
+
+type loggingFS struct {
+	vfs.FS
+	w io.Writer
+}
+
+func (fs loggingFS) Create(name string) (vfs.File, error) {
+	fmt.Fprintf(fs.w, "create(%q)\n", name)
+	f, err := fs.FS.Create(name)
+	if err != nil {
+		return nil, err
+	}
+	return loggingFile{f, name, fs.w}, nil
+}
+
+func (fs loggingFS) Link(oldname, newname string) error {
+	fmt.Fprintf(fs.w, "link(%q, %q)\n", oldname, newname)
+	return fs.FS.Link(oldname, newname)
+}
+
+func (fs loggingFS) Open(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+	fmt.Fprintf(fs.w, "open(%q)\n", name)
+	f, err := fs.FS.Open(name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return loggingFile{f, name, fs.w}, nil
+}
+
+func (fs loggingFS) OpenDir(name string) (vfs.File, error) {
+	fmt.Fprintf(fs.w, "open-dir(%q)\n", name)
+	f, err := fs.FS.OpenDir(name)
+	if err != nil {
+		return nil, err
+	}
+	return loggingFile{f, name, fs.w}, nil
+}
+
+func (fs loggingFS) Remove(name string) error {
+	fmt.Fprintf(fs.w, "remove(%q)\n", name)
+	return fs.FS.Remove(name)
+}
+
+func (fs loggingFS) Rename(oldname, newname string) error {
+	fmt.Fprintf(fs.w, "rename(%q, %q)\n", oldname, newname)
+	return fs.FS.Rename(oldname, newname)
+}
+
+func (fs loggingFS) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+	fmt.Fprintf(fs.w, "reuseForWrite(%q, %q)\n", oldname, newname)
+	f, err := fs.FS.ReuseForWrite(oldname, newname)
+	if err == nil {
+		f = loggingFile{f, newname, fs.w}
+	}
+	return f, err
+}
+
+func (fs loggingFS) Stat(path string) (os.FileInfo, error) {
+	fmt.Fprintf(fs.w, "stat(%q)\n", path)
+	return fs.FS.Stat(path)
+}
+
+func (fs loggingFS) MkdirAll(dir string, perm os.FileMode) error {
+	fmt.Fprintf(fs.w, "mkdir-all(%q, %#o)\n", dir, perm)
+	return fs.FS.MkdirAll(dir, perm)
+}
+
+func (fs loggingFS) Lock(name string) (io.Closer, error) {
+	fmt.Fprintf(fs.w, "lock: %q\n", name)
+	return fs.FS.Lock(name)
+}
+
+type loggingFile struct {
+	vfs.File
+	name string
+	w    io.Writer
+}
+
+func (f loggingFile) Write(p []byte) (n int, err error) {
+	fmt.Fprintf(f.w, "write(%q, <...%d bytes...>)\n", f.name, len(p))
+	return f.File.Write(p)
+}
+
+func (f loggingFile) Close() error {
+	fmt.Fprintf(f.w, "close(%q)\n", f.name)
+	return f.File.Close()
+}
+
+func (f loggingFile) Sync() error {
+	fmt.Fprintf(f.w, "sync(%q)\n", f.name)
+	return f.File.Sync()
 }
