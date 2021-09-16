@@ -64,6 +64,7 @@ func registerTests(r *testRegistry) {
 	registerLibPQ(r)
 	registerNamespaceUpgradeMigration(r)
 	registerNetwork(r)
+	registerNonAcceptanceVersionUpgrade(r)
 	registerPebble(r)
 	registerPgjdbc(r)
 	registerPgx(r)
