@@ -410,6 +410,9 @@ func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster
 		run(`ALTER TABLE system.replication_stats %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 		run(`ALTER TABLE system.replication_constraint_stats %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	}
+	if t.IsBuildVersion("v21.2.0") {
+		run(`ALTER TABLE system.tenant_usage %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
+	}
 
 	var lastReplCount int
 	if err := retry.ForDuration(2*time.Minute, func() error {
