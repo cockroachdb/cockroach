@@ -137,7 +137,9 @@ type Descriptor interface {
 	// Metadata for descriptor leasing.
 	GetVersion() descpb.DescriptorVersion
 	GetModificationTime() hlc.Timestamp
-	GetDrainingNames() []descpb.NameInfo
+
+	// TODO(postamar): remove GetDrainingNames method in 22.2
+	GetDrainingNames() []descpb.NameInfo // Deprecated
 
 	GetPrivileges() *descpb.PrivilegeDescriptor
 	DescriptorType() DescriptorType
@@ -176,7 +178,10 @@ type DatabaseDescriptor interface {
 	IsMultiRegion() bool
 	PrimaryRegionName() (descpb.RegionName, error)
 	MultiRegionEnumID() (descpb.ID, error)
-	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error
+
+	// TODO(postamar): remove ForEachSchemaInfo method in 22.2
+	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error // Deprecated
+	ForEachNonDroppedSchema(func(id descpb.ID, name string) error) error
 	GetSchemaID(name string) descpb.ID
 	GetNonDroppedSchemaName(schemaID descpb.ID) string
 	GetDefaultPrivilegeDescriptor() DefaultPrivilegeDescriptor

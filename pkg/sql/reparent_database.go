@@ -128,10 +128,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	if n.newParent.Schemas == nil {
 		n.newParent.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 	}
-	n.newParent.Schemas[n.db.Name] = descpb.DatabaseDescriptor_SchemaInfo{
-		ID:      schema.GetID(),
-		Dropped: false,
-	}
+	n.newParent.Schemas[n.db.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: schema.GetID()}
 
 	if err := p.createDescriptorWithID(
 		ctx,

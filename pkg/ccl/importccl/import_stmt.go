@@ -1503,7 +1503,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 
 		// Update the parent database with this schema information.
 		dbDesc.Schemas[newMutableSchemaDescriptor.Name] =
-			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID, Dropped: false}
+			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID}
 
 		schemaMetadata.schemaRewrites[desc.Desc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
 			ID: id,
@@ -2567,9 +2567,12 @@ func (r *importResumer) dropSchemas(
 			return nil, errors.Newf("unable to resolve schema desc with ID %d", schema.Desc.ID)
 		}
 
-		schemaDesc.DrainingNames = append(schemaDesc.DrainingNames,
-			descpb.NameInfo{ParentID: details.ParentID, ParentSchemaID: keys.RootNamespaceID,
-				Name: schemaDesc.Name})
+		//lint:ignore SA1019 deprecated method call is OK
+		schemaDesc.AddDrainingName(descpb.NameInfo{
+			ParentID:       details.ParentID,
+			ParentSchemaID: keys.RootNamespaceID,
+			Name:           schemaDesc.Name,
+		})
 
 		// Update the parent database with information about the dropped schema.
 		if dbDesc.Schemas == nil {
@@ -2583,6 +2586,7 @@ func (r *importResumer) dropSchemas(
 		droppedSchemaIDs = append(droppedSchemaIDs, schemaDesc.GetID())
 
 		b := txn.NewBatch()
+
 		if err := descsCol.WriteDescToBatch(ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 			schemaDesc, b); err != nil {
 			return nil, err
