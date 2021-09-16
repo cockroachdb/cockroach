@@ -14,7 +14,7 @@
     ]
   },
   "devDependencies": {
-    "@bazel/typescript": "^3.6.0",
+    "@bazel/typescript": "4.1.0",
     "@types/long": "3.0.32",
     "chalk": "^1.1.3",
     "escodegen": "^1.8.1",
