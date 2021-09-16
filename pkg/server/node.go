@@ -365,9 +365,9 @@ func (n *Node) AnnotateCtx(ctx context.Context) context.Context {
 
 // AnnotateCtxWithSpan is a convenience wrapper; see AmbientContext.
 func (n *Node) AnnotateCtxWithSpan(
-	ctx context.Context, opName string,
+	ctx context.Context, opName string, spanOpt log.SpanOption,
 ) (context.Context, *tracing.Span) {
-	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
+	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName, spanOpt)
 }
 
 // start starts the node by registering the storage instance for the RPC
@@ -870,7 +870,7 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 	}
 
 	_ = n.stopper.RunAsyncTask(ctx, "record-join", func(bgCtx context.Context) {
-		ctx, span := n.AnnotateCtxWithSpan(bgCtx, "record-join-event")
+		ctx, span := n.AnnotateCtxWithSpan(bgCtx, "record-join-event", log.ChildSpan)
 		defer span.Finish()
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = n.stopper.ShouldQuiesce()
@@ -1364,7 +1364,7 @@ func (n *Node) GossipSubscription(
 func (n *Node) Join(
 	ctx context.Context, req *roachpb.JoinNodeRequest,
 ) (*roachpb.JoinNodeResponse, error) {
-	ctx, span := n.AnnotateCtxWithSpan(ctx, "alloc-{node,store}-id")
+	ctx, span := n.AnnotateCtxWithSpan(ctx, "alloc-{node,store}-id", log.ChildSpan)
 	defer span.Finish()
 
 	activeVersion := n.storeCfg.Settings.Version.ActiveVersion(ctx)

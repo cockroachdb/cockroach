@@ -442,7 +442,7 @@ func (r *Replica) GetSnapshot(
 	rangeID := r.RangeID
 
 	startKey := r.mu.state.Desc.StartKey
-	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
+	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot", log.ChildSpan)
 	defer sp.Finish()
 
 	log.Eventf(ctx, "new engine snapshot for replica %s", r)

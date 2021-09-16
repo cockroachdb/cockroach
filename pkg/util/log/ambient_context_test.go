@@ -52,7 +52,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	ctx1 := tracing.ContextWithSpan(context.Background(), sp1)
 	Event(ctx1, "a")
 
-	ctx2, sp2 := ac.AnnotateCtxWithSpan(ctx1, "child")
+	ctx2, sp2 := ac.AnnotateCtxWithSpan(ctx1, "child", ChildSpan)
 	Event(ctx2, "b")
 
 	Event(ctx1, "c")
@@ -76,7 +76,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	// caller.
 
 	ac.Tracer = tracer
-	ctx, sp := ac.AnnotateCtxWithSpan(context.Background(), "s")
+	ctx, sp := ac.AnnotateCtxWithSpan(context.Background(), "s", RootSpan)
 	require.Equal(t, sp, tracing.SpanFromContext(ctx))
 	require.NotNil(t, sp)
 	require.False(t, sp.IsVerbose())

@@ -12,6 +12,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
@@ -153,12 +154,13 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 // AnnotateCtxWithSpan annotates the given context with the information in
 // AmbientContext (see AnnotateCtx) and opens a span.
 //
-// If the given context has a span, the new span is a child of that span.
-// Otherwise, the Tracer in AmbientContext is used to create a new root span.
+// spanOpt controls the relationship between the new span and the caller's span.
+// If the caller does not have a span, then the new span will be a root regardless
+// of the option.
 //
 // The caller is responsible for closing the span (via Span.Finish).
 func (ac *AmbientContext) AnnotateCtxWithSpan(
-	ctx context.Context, opName string,
+	ctx context.Context, opName string, spanOpt SpanOption,
 ) (context.Context, *tracing.Span) {
 	switch ctx {
 	case context.TODO(), context.Background():
@@ -173,5 +175,34 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 		}
 	}
 
-	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
+	var sp *tracing.Span
+	switch spanOpt {
+	case FollowsFromSpan:
+		ctx, sp = tracing.EnsureForkSpan(ctx, ac.Tracer, opName)
+	case ChildSpan:
+		ctx, sp = tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
+	case RootSpan:
+		ctx, sp = ac.Tracer.StartSpanCtx(ctx, opName)
+	default:
+		panic(fmt.Sprintf("unsupported SpanReference: %v", spanOpt))
+	}
+	return ctx, sp
 }
+
+// SpanOption controls the type of span created by AnnotateCtxWithSpan.
+type SpanOption int
+
+const (
+	// FollowsFromSpan creates a span that's not included in the caller's
+	// recording. If the caller does not have a span, a root span is created. See
+	// stop.FollowsFromSpan for more details.
+	FollowsFromSpan SpanOption = iota
+
+	// ChildSpan creates a span that a child of the caller's span. If the caller
+	// does not have a span, a root span is created. See stop.ChildSpan for more
+	// details.
+	ChildSpan
+
+	// RootSpan creates a root span.
+	RootSpan
+)

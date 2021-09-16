@@ -696,7 +696,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 		ambient.AddLogTag("liveness-hb", nil)
 		ctx, cancel := opts.Stopper.WithCancelOnQuiesce(context.Background())
 		defer cancel()
-		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
+		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop", log.RootSpan)
 		defer sp.Finish()
 
 		incrementEpoch := true

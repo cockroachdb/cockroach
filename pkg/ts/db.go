@@ -187,7 +187,7 @@ func (p *poller) poll() {
 			return
 		}
 
-		ctx, span := p.AnnotateCtxWithSpan(bgCtx, "ts-poll")
+		ctx, span := p.AnnotateCtxWithSpan(bgCtx, "ts-poll", log.ChildSpan)
 		defer span.Finish()
 
 		if err := p.db.StoreData(ctx, p.r, data); err != nil {

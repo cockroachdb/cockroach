@@ -179,7 +179,7 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 			defer t.Stop()
 			t.Reset(d())
 
-			ctx, sp := ambient.AnnotateCtxWithSpan(ctx, desc)
+			ctx, sp := ambient.AnnotateCtxWithSpan(ctx, desc, log.RootSpan)
 			defer sp.Finish()
 
 			ctx, cancel := stopper.WithCancelOnQuiesce(ctx)

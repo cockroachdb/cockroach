@@ -125,7 +125,7 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 // NOTE: This can be slow because of cloud detection; use cloudinfo.Disable() in
 // tests to avoid that.
 func (r *Reporter) ReportDiagnostics(ctx context.Context) {
-	ctx, span := r.AmbientCtx.AnnotateCtxWithSpan(ctx, "usageReport")
+	ctx, span := r.AmbientCtx.AnnotateCtxWithSpan(ctx, "usageReport", log.RootSpan)
 	defer span.Finish()
 
 	report := r.CreateReport(ctx, telemetry.ResetCounts)

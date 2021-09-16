@@ -828,9 +828,9 @@ func (s *Server) AnnotateCtx(ctx context.Context) context.Context {
 
 // AnnotateCtxWithSpan is a convenience wrapper; see AmbientContext.
 func (s *Server) AnnotateCtxWithSpan(
-	ctx context.Context, opName string,
+	ctx context.Context, opName string, spanOpt log.SpanOption,
 ) (context.Context, *tracing.Span) {
-	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
+	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName, spanOpt)
 }
 
 // ClusterID returns the ID of the cluster this server is a part of.
