@@ -7051,12 +7051,13 @@ var similarOverloads = []tree.Overload{
 }
 
 func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
-	overloads := make([]tree.Overload, 0, len(types.Scalar))
+	overloads := make([]tree.Overload, 0, len(types.Scalar)+1)
 	for _, typ := range types.Scalar {
 		if ok, _ := types.IsValidArrayElementType(typ); ok {
 			overloads = append(overloads, impl(typ))
 		}
 	}
+	overloads = append(overloads, impl(types.AnyTuple))
 	return builtinDefinition{
 		props:     tree.FunctionProperties{Category: categoryArray},
 		overloads: overloads,
