@@ -734,74 +734,92 @@ func getRangesBeforeAndAfter(
 	// TODO(rytaft): handle more types here.
 	// Note: the calculations below assume that bucketLowerBound is inclusive and
 	// Span.PreferInclusive() has been called on the span.
+	switch bucketLowerBound.ResolvedType().Family() {
+	case types.IntFamily:
+		rangeBefore = float64(*bucketUpperBound.(*tree.DInt)) - float64(*bucketLowerBound.(*tree.DInt))
+		rangeAfter = float64(*spanUpperBound.(*tree.DInt)) - float64(*spanLowerBound.(*tree.DInt))
+		return rangeBefore, rangeAfter, true
 
-	getRange := func(lowerBound, upperBound tree.Datum) (rng float64, ok bool) {
-		switch lowerBound.ResolvedType().Family() {
-		case types.IntFamily:
-			rng = float64(*upperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt))
-			return rng, true
-
-		case types.DateFamily:
-			lower := lowerBound.(*tree.DDate)
-			upper := upperBound.(*tree.DDate)
-			if lower.IsFinite() && upper.IsFinite() {
-				rng = float64(upper.PGEpochDays()) - float64(lower.PGEpochDays())
-				return rng, true
-			}
-			return 0, false
-
-		case types.DecimalFamily:
-			lower, err := lowerBound.(*tree.DDecimal).Float64()
-			if err != nil {
-				return 0, false
-			}
-			upper, err := upperBound.(*tree.DDecimal).Float64()
-			if err != nil {
-				return 0, false
-			}
-			rng = upper - lower
-			return rng, true
-
-		case types.FloatFamily:
-			rng = float64(*upperBound.(*tree.DFloat)) - float64(*lowerBound.(*tree.DFloat))
-			return rng, true
-
-		case types.TimestampFamily:
-			lower := lowerBound.(*tree.DTimestamp).Time
-			upper := upperBound.(*tree.DTimestamp).Time
-			rng = float64(upper.Sub(lower))
-			return rng, true
-
-		case types.TimestampTZFamily:
-			lower := lowerBound.(*tree.DTimestampTZ).Time
-			upper := upperBound.(*tree.DTimestampTZ).Time
-			rng = float64(upper.Sub(lower))
-			return rng, true
-
-		case types.TimeFamily:
-			lower := lowerBound.(*tree.DTime)
-			upper := upperBound.(*tree.DTime)
-			rng = float64(*upper) - float64(*lower)
-			return rng, true
-
-		case types.TimeTZFamily:
-			lower := lowerBound.(*tree.DTimeTZ).TimeOfDay
-			upper := upperBound.(*tree.DTimeTZ).TimeOfDay
-			rng = float64(upper) - float64(lower)
-			return rng, true
-
-		default:
-			return 0, false
+	case types.DateFamily:
+		lowerBefore := bucketLowerBound.(*tree.DDate)
+		upperBefore := bucketUpperBound.(*tree.DDate)
+		lowerAfter := spanLowerBound.(*tree.DDate)
+		upperAfter := spanUpperBound.(*tree.DDate)
+		if lowerBefore.IsFinite() && upperBefore.IsFinite() && lowerAfter.IsFinite() && upperAfter.IsFinite() {
+			rangeBefore = float64(upperBefore.PGEpochDays()) - float64(lowerBefore.PGEpochDays())
+			rangeAfter = float64(upperAfter.PGEpochDays()) - float64(lowerAfter.PGEpochDays())
+			return rangeBefore, rangeAfter, true
 		}
-	}
+		return 0, 0, false
 
-	getRangeNonNumeric := func(
-		lowerBoundBefore, upperBoundBefore, lowerBoundAfter, upperBoundAfter tree.Datum,
-	) (rngBefore, rngAfter float64, ok bool) {
+	case types.DecimalFamily:
+		lowerBefore, err := bucketLowerBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		upperBefore, err := bucketUpperBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		lowerAfter, err := spanLowerBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		upperAfter, err := spanUpperBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		rangeBefore = upperBefore - lowerBefore
+		rangeAfter = upperAfter - lowerAfter
+		return rangeBefore, rangeAfter, true
 
-		// Utilizes an array to simplify number of repetitive calls.
+	case types.FloatFamily:
+		rangeBefore = float64(*bucketUpperBound.(*tree.DFloat)) - float64(*bucketLowerBound.(*tree.DFloat))
+		rangeAfter = float64(*spanUpperBound.(*tree.DFloat)) - float64(*spanLowerBound.(*tree.DFloat))
+		return rangeBefore, rangeAfter, true
+
+	case types.TimestampFamily:
+		lowerBefore := bucketLowerBound.(*tree.DTimestamp).Time
+		upperBefore := bucketUpperBound.(*tree.DTimestamp).Time
+		lowerAfter := spanLowerBound.(*tree.DTimestamp).Time
+		upperAfter := spanUpperBound.(*tree.DTimestamp).Time
+		rangeBefore = float64(upperBefore.Sub(lowerBefore))
+		rangeAfter = float64(upperAfter.Sub(lowerAfter))
+		return rangeBefore, rangeAfter, true
+
+	case types.TimestampTZFamily:
+		lowerBefore := bucketLowerBound.(*tree.DTimestampTZ).Time
+		upperBefore := bucketUpperBound.(*tree.DTimestampTZ).Time
+		lowerAfter := spanLowerBound.(*tree.DTimestampTZ).Time
+		upperAfter := spanUpperBound.(*tree.DTimestampTZ).Time
+		rangeBefore = float64(upperBefore.Sub(lowerBefore))
+		rangeAfter = float64(upperAfter.Sub(lowerAfter))
+		return rangeBefore, rangeAfter, true
+
+	case types.TimeFamily:
+		lowerBefore := bucketLowerBound.(*tree.DTime)
+		upperBefore := bucketUpperBound.(*tree.DTime)
+		lowerAfter := spanLowerBound.(*tree.DTime)
+		upperAfter := spanUpperBound.(*tree.DTime)
+		rangeBefore = float64(*upperBefore) - float64(*lowerBefore)
+		rangeAfter = float64(*upperAfter) - float64(*lowerAfter)
+		return rangeBefore, rangeAfter, true
+
+	case types.TimeTZFamily:
+		lowerBefore := bucketLowerBound.(*tree.DTimeTZ).TimeOfDay
+		upperBefore := bucketUpperBound.(*tree.DTimeTZ).TimeOfDay
+		lowerAfter := spanLowerBound.(*tree.DTimeTZ).TimeOfDay
+		upperAfter := spanUpperBound.(*tree.DTimeTZ).TimeOfDay
+		rangeBefore = float64(upperBefore) - float64(lowerBefore)
+		rangeAfter = float64(upperAfter) - float64(lowerAfter)
+		return rangeBefore, rangeAfter, true
+
+	case types.StringFamily, types.BytesFamily, types.UuidFamily, types.INetFamily:
+		// For non-numeric types, convert the datums to encoded keys to
+		// approximate the range. We utilize an array to reduce repetitive code
+		// number of repetitive calls.
 		boundArr := [4]tree.Datum{
-			lowerBoundBefore, upperBoundBefore, lowerBoundAfter, upperBoundAfter,
+			bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound,
 		}
 		var boundArrByte [4][]byte
 
@@ -821,44 +839,23 @@ func getRangesBeforeAndAfter(
 			boundArrByte[i] = getFixedLenArr(boundArrByte[i], ind, 8 /* fixLen */)
 		}
 
-		rngBefore = float64(binary.BigEndian.Uint64(boundArrByte[1]) -
+		rangeBefore = float64(binary.BigEndian.Uint64(boundArrByte[1]) -
 			binary.BigEndian.Uint64(boundArrByte[0]))
-		rngAfter = float64(binary.BigEndian.Uint64(boundArrByte[3]) -
+		rangeAfter = float64(binary.BigEndian.Uint64(boundArrByte[3]) -
 			binary.BigEndian.Uint64(boundArrByte[2]))
 
-		return rngBefore, rngAfter, true
-	}
+		return rangeBefore, rangeAfter, true
 
-	// For non-numeric types, compute the prefix across all bucket/span bounds.
-	ok = false
-	if isNonNumeric(bucketLowerBound.ResolvedType()) {
-		rangeBefore, rangeAfter, ok = getRangeNonNumeric(
-			bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound,
-		)
-	} else {
-		okBefore, okAfter := false, false
-		rangeBefore, okBefore = getRange(bucketLowerBound, bucketUpperBound)
-		rangeAfter, okAfter = getRange(spanLowerBound, spanUpperBound)
-		ok = okBefore && okAfter
+	default:
+		// Range calculations are not supported for the given type family.
+		return 0, 0, false
 	}
-	return rangeBefore, rangeAfter, ok
 }
 
 // isDiscrete returns true if the given data type is discrete.
 func isDiscrete(typ *types.T) bool {
 	switch typ.Family() {
 	case types.IntFamily, types.DateFamily, types.TimestampFamily, types.TimestampTZFamily:
-		return true
-	}
-	return false
-}
-
-// isNonNumeric returns true if the given data type is non-numeric.
-// Note: this function does not support all non-numeric data-types within
-// cockroach db.
-func isNonNumeric(typ *types.T) bool {
-	switch typ.Family() {
-	case types.StringFamily, types.BytesFamily, types.UuidFamily, types.INetFamily:
 		return true
 	}
 	return false
