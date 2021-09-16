@@ -162,6 +162,7 @@ type RecordedStmtStats struct {
 	OverheadLatency float64
 	BytesRead       int64
 	RowsRead        int64
+	RowsWritten     int64
 	Nodes           []int64
 	StatementType   tree.StatementType
 	Plan            *roachpb.ExplainTreePlanNode
