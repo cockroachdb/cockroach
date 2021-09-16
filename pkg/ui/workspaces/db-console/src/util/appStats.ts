@@ -82,12 +82,13 @@ export function addStatementStats(
     ),
     bytes_read: addNumericStats(a.bytes_read, b.bytes_read, countA, countB),
     rows_read: addNumericStats(a.rows_read, b.rows_read, countA, countB),
+    rows_written: addNumericStats(a.rows_written, b.rows_written, countA, countB),
     sensitive_info: coalesceSensitiveInfo(a.sensitive_info, b.sensitive_info),
     legacy_last_err: "",
     legacy_last_err_redacted: "",
     exec_stats: addExecStats(a.exec_stats, b.exec_stats),
     sql_type: a.sql_type,
-    last_exec_timestamp:
+    last_exec_timestamp:pkg/ui/workspaces/cluster-ui/src/util/appStats/appStats.fixture.ts
       a.last_exec_timestamp.seconds > b.last_exec_timestamp.seconds
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
@@ -95,7 +96,7 @@ export function addStatementStats(
   };
 }
 
-function addExecStats(a: ExecStats, b: ExecStats): Required<ExecStats> {
+function addExpkg/ui/workspaces/cluster-ui/src/util/appStats/appStats.fixture.tsecStats(a: ExecStats, b: ExecStats): Required<ExecStats> {
   let countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
   if (countA === 0 && countB === 0) {
