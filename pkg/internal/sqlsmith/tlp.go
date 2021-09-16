@@ -44,10 +44,14 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
 		s.disableImpureFns = originalDisableImpureFns
 	}()
 
-	if rand.Int()%2 == 0 {
+	switch tlpType := rand.Intn(3); tlpType {
+	case 0:
 		return s.generateWhereTLP()
+	case 1:
+		return s.generateOuterJoinTLP()
+	default:
+		return s.generateInnerJoinTLP()
 	}
-	return s.generateJoinTLP()
 }
 
 // generateWhereTLP returns two SQL queries as strings that can be used by the
@@ -98,7 +102,7 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string) {
 	return unpartitioned, partitioned
 }
 
-// generateJoinTLP returns two SQL queries as strings that can be used by the
+// generateOuterJoinTLP returns two SQL queries as strings that can be used by the
 // GenerateTLP function. These queries make use of LEFT JOIN to partition the
 // original query in two ways. The latter query is partitioned by a predicate p,
 // while the former is not.
@@ -134,14 +138,12 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string) {
 // row in table2 exactly once (CROSS JOIN) and also matched with NULL values
 // exactly twice, as expected by the unpartitioned query.
 //
-// Note that this implementation is restricted to testing LEFT JOIN and only
-// uses the columns from the left table. This means that only CROSS JOIN is
-// tested and not other joins like MERGE JOIN. In the future, this JOIN testing
-// could be further expanded.
-//
+// Note that this implementation is restricted in that it only uses columns from
+// the left table in the predicate p.
+
 // If the resulting counts of the two queries are not equal, there is a logical
 // bug.
-func (s *Smither) generateJoinTLP() (unpartitioned, partitioned string) {
+func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 	f := tree.NewFmtCtx(tree.FmtParsable)
 
 	table1, _, _, cols1, ok1 := s.getSchemaTable()
@@ -182,6 +184,78 @@ func (s *Smither) generateJoinTLP() (unpartitioned, partitioned string) {
 	)
 	part3 := fmt.Sprintf(
 		"SELECT * FROM %s LEFT JOIN %s ON (%s) IS NULL",
+		tableName1, tableName2, predicate,
+	)
+
+	partitioned = fmt.Sprintf(
+		"SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)",
+		part1, part2, part3,
+	)
+
+	return unpartitioned, partitioned
+}
+
+// generateInnerJoinTLP returns two SQL queries as strings that can be used by
+// the GenerateTLP function. These queries make use of INNER JOIN to partition
+// the original query in two ways. The latter query is partitioned by a
+// predicate p, while the former is not.
+
+// The first query returned is an unpartitioned query of the form:
+//
+//   SELECT count(*) FROM table1 JOIN table2 ON TRUE
+//
+// The second query returned is a partitioned query of the form:
+//
+//   SELECT count(*) FROM (
+//     SELECT * FROM table1 JOIN table2 ON (p)
+//     UNION ALL
+//     SELECT * FROM table1 JOIN table2 ON NOT (p)
+//     UNION ALL
+//     SELECT * FROM table1 JOIN table2 ON (p) IS NULL
+//   )
+//
+// From the first query, we have a CROSS JOIN of the two tables (JOIN ON TRUE).
+// Recall our TLP logical guarantee that a given predicate p always evaluates to
+// either TRUE, FALSE, or NULL. It follows that for any row returned by the
+// first query, exactly one of the expressions (p), NOT (p), or (p) is NULL will
+// resolve to TRUE. So the partitioned query accounts for each row in the
+// CROSS JOIN exactly once.
+//
+// If the resulting counts of the two queries are not equal, there is a logical
+// bug.
+func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
+	f := tree.NewFmtCtx(tree.FmtParsable)
+
+	table1, _, _, cols1, ok1 := s.getSchemaTable()
+	table2, _, _, cols2, ok2 := s.getSchemaTable()
+	if !ok1 || !ok2 {
+		panic(errors.AssertionFailedf("failed to find random tables"))
+	}
+	table1.Format(f)
+	tableName1 := f.CloseAndGetString()
+	table2.Format(f)
+	tableName2 := f.CloseAndGetString()
+
+	unpartitioned = fmt.Sprintf(
+		"SELECT count(*) FROM %s JOIN %s ON true",
+		tableName1, tableName2,
+	)
+
+	cols := cols1.extend(cols2...)
+	pred := makeBoolExpr(s, cols)
+	pred.Format(f)
+	predicate := f.CloseAndGetString()
+
+	part1 := fmt.Sprintf(
+		"SELECT * FROM %s JOIN %s ON %s",
+		tableName1, tableName2, predicate,
+	)
+	part2 := fmt.Sprintf(
+		"SELECT * FROM %s JOIN %s ON NOT (%s)",
+		tableName1, tableName2, predicate,
+	)
+	part3 := fmt.Sprintf(
+		"SELECT * FROM %s JOIN %s ON (%s) IS NULL",
 		tableName1, tableName2, predicate,
 	)
 
