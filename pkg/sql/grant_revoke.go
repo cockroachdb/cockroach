@@ -210,13 +210,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 		switch d := descriptor.(type) {
 		case *dbdesc.Mutable:
-			if err := p.writeDatabaseChangeToBatch(ctx, d, b); err != nil {
-				return err
-			}
-			if err := p.createNonDropDatabaseChangeJob(ctx, d.ID,
-				fmt.Sprintf("updating privileges for database %d", d.ID)); err != nil {
-				return err
-			}
+			p.writeNonDropDatabaseChange(ctx, d, fmt.Sprintf("updating privileges for database %d", d.ID))
 			for _, grantee := range n.grantees {
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
