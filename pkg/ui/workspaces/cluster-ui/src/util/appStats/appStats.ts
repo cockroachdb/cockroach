@@ -151,6 +151,12 @@ export function addStatementStats(
       countB,
     ),
     rows_read: aggregateNumericStats(a.rows_read, b.rows_read, countA, countB),
+    rows_written: aggregateNumericStats(
+      a.rows_written,
+      b.rows_written,
+      countA,
+      countB,
+    ),
     sensitive_info: coalesceSensitiveInfo(a.sensitive_info, b.sensitive_info),
     legacy_last_err: "",
     legacy_last_err_redacted: "",
