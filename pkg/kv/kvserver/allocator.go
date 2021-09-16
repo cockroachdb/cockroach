@@ -1257,7 +1257,11 @@ func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
 	zone *zonepb.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
-	leaseStoreID roachpb.StoreID,
+	leaseRepl interface {
+		RaftStatus() *raft.Status
+		StoreID() roachpb.StoreID
+		GetRangeID() roachpb.RangeID
+	},
 	stats *replicaStats,
 	checkTransferLeaseSource bool,
 	checkCandidateFullness bool,
@@ -1265,6 +1269,7 @@ func (a *Allocator) TransferLeaseTarget(
 ) roachpb.ReplicaDescriptor {
 	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
+	sl = sl.filter(zone.VoterConstraints)
 
 	// Filter stores that are on nodes containing existing replicas, but leave
 	// the stores containing the existing replicas in place. This excludes stores
@@ -1289,7 +1294,7 @@ func (a *Allocator) TransferLeaseTarget(
 	}
 	sl = makeStoreList(filteredDescs)
 
-	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
+	source, ok := a.storePool.getStoreDescriptor(leaseRepl.StoreID())
 	if !ok {
 		return roachpb.ReplicaDescriptor{}
 	}
@@ -1307,14 +1312,14 @@ func (a *Allocator) TransferLeaseTarget(
 		// it's too big a change to make right before a major release.
 		var candidates []roachpb.ReplicaDescriptor
 		for _, repl := range existing {
-			if repl.StoreID != leaseStoreID {
+			if repl.StoreID != leaseRepl.StoreID() {
 				candidates = append(candidates, repl)
 			}
 		}
 		preferred = a.preferredLeaseholders(zone, candidates)
 	}
 	if len(preferred) == 1 {
-		if preferred[0].StoreID == leaseStoreID {
+		if preferred[0].StoreID == leaseRepl.StoreID() {
 			return roachpb.ReplicaDescriptor{}
 		}
 		// Verify that the preferred replica is eligible to receive the lease.
@@ -1327,7 +1332,7 @@ func (a *Allocator) TransferLeaseTarget(
 		// If the current leaseholder is not preferred, set checkTransferLeaseSource
 		// to false to motivate the below logic to transfer the lease.
 		existing = preferred
-		if !storeHasReplica(leaseStoreID, roachpb.MakeReplicaSet(preferred).ReplicationTargets()) {
+		if !storeHasReplica(leaseRepl.StoreID(), roachpb.MakeReplicaSet(preferred).ReplicationTargets()) {
 			checkTransferLeaseSource = false
 		}
 	}
@@ -1335,9 +1340,28 @@ func (a *Allocator) TransferLeaseTarget(
 	// Only consider live, non-draining, non-suspect replicas.
 	existing, _ = a.storePool.liveAndDeadReplicas(existing, false /* includeSuspectStores */)
 
+	// Only proceed with the lease transfer if we are also the raft leader (we
+	// already know we are the leaseholder at this point), and only consider
+	// replicas that are in `StateReplicate` as potential candidates.
+	//
+	// NB: The RaftStatus() only returns a non-empty and non-nil result on the
+	// Raft leader (since Raft followers do not track the progress of other
+	// replicas, only the leader does).
+	//
+	// NB: On every Raft tick, we try to ensure that leadership is collocated with
+	// leaseholdership (see
+	// Replica.maybeTransferRaftLeadershipToLeaseholderLocked()). This means that
+	// on a range that is not already borked (i.e. can accept writes), periods of
+	// leader/leaseholder misalignment should be ephemeral and rare. We choose to
+	// be pessimistic here and choose to bail on the lease transfer, as opposed to
+	// potentially transferring the lease to a replica that may be waiting for a
+	// snapshot (which will wedge the range until the replica applies that
+	// snapshot).
+	existing = excludeReplicasInNeedOfSnapshots(ctx, leaseRepl.RaftStatus(), existing)
+
 	// Short-circuit if there are no valid targets out there.
-	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseStoreID) {
-		log.VEventf(ctx, 2, "no lease transfer target found")
+	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
+		log.VEventf(ctx, 2, "no lease transfer target found for r%d", leaseRepl.GetRangeID())
 		return roachpb.ReplicaDescriptor{}
 	}
 
@@ -1374,7 +1398,7 @@ func (a *Allocator) TransferLeaseTarget(
 	var bestOption roachpb.ReplicaDescriptor
 	bestOptionLeaseCount := int32(math.MaxInt32)
 	for _, repl := range existing {
-		if leaseStoreID == repl.StoreID {
+		if leaseRepl.StoreID() == repl.StoreID {
 			continue
 		}
 		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
@@ -1780,6 +1804,58 @@ func replicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool 
 		}
 	}
 	return true
+}
+
+// replicaMayNeedSnapshot determines whether the replica referred to by
+// `replicaID` may be in need of a raft snapshot. If this function is called
+// with an empty or nil `raftStatus` (as will be the case when its called by a
+// replica that is not the raft leader), we pessimistically assume that
+// `replicaID` may need a snapshot.
+func replicaMayNeedSnapshot(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool {
+	if raftStatus == nil || len(raftStatus.Progress) == 0 {
+		return true
+	}
+	if progress, ok := raftStatus.Progress[uint64(replicaID)]; ok {
+		// We can only reasonably assume that the follower replica is not in need of
+		// a snapshot iff it is in `StateReplicate`. However, even this is racey
+		// because we can still possibly have an ill-timed log truncation between
+		// when we make this determination and when we act on it.
+		return progress.State != tracker.StateReplicate
+	}
+	return true
+}
+
+// excludeReplicasInNeedOfSnapshots filters out the `replicas` that may be in
+// need of a raft snapshot. If this function is called with the `raftStatus` of
+// a non-raft leader replica, an empty slice is returned.
+func excludeReplicasInNeedOfSnapshots(
+	ctx context.Context, raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
+) []roachpb.ReplicaDescriptor {
+	if raftStatus == nil || len(raftStatus.Progress) == 0 {
+		log.VEventf(
+			ctx,
+			5,
+			"raft leader not collocated with the leaseholder; will not produce any lease transfer targets",
+		)
+		return []roachpb.ReplicaDescriptor{}
+	}
+
+	filled := 0
+	for _, repl := range replicas {
+		if replicaMayNeedSnapshot(raftStatus, repl.ReplicaID) {
+			log.VEventf(
+				ctx,
+				5,
+				"not considering [n%d, s%d] as a potential candidate for a lease transfer"+
+					" because the replica may be waiting for a snapshot",
+				repl.NodeID, repl.StoreID,
+			)
+			continue
+		}
+		replicas[filled] = repl
+		filled++
+	}
+	return replicas[:filled]
 }
 
 // simulateFilterUnremovableReplicas removes any unremovable replicas from the
