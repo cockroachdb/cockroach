@@ -97,14 +97,6 @@ func DecodeNodeTombstoneKey(key roachpb.Key) (roachpb.NodeID, error) {
 	return roachpb.NodeID(nodeID), err
 }
 
-// StoreSuggestedCompactionKeyPrefix returns a store-local prefix for all
-// suggested compaction keys. These are unused in versions 21.1 and later.
-//
-// TODO(bilal): Delete this method along with any related uses of it after 21.1.
-func StoreSuggestedCompactionKeyPrefix() roachpb.Key {
-	return MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
-}
-
 // StoreCachedSettingsKey returns a store-local key for store's cached settings.
 func StoreCachedSettingsKey(settingKey roachpb.Key) roachpb.Key {
 	return MakeStoreKey(localStoreCachedSettingsSuffix, encoding.EncodeBytesAscending(nil, settingKey))

@@ -147,9 +147,6 @@ var (
 	//
 	// LocalStorePrefix is the prefix identifying per-store data.
 	LocalStorePrefix = makeKey(LocalPrefix, roachpb.Key("s"))
-	// localStoreSuggestedCompactionSuffix stores suggested compactions to
-	// be aggregated and processed on the store.
-	localStoreSuggestedCompactionSuffix = []byte("comp")
 	// localStoreClusterVersionSuffix stores the cluster-wide version
 	// information for this store, updated any time the operator
 	// updates the minimum cluster version.
