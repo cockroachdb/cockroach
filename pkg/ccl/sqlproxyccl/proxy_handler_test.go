@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -118,12 +119,12 @@ func TestFailedConnection(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	s, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$"})
+	s, proxyAddr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$"})
 
 	// TODO(asubiotto): consider using datadriven for these, especially if the
 	// proxy becomes more complex.
 
-	_, p, err := net.SplitHostPort(addr)
+	_, p, err := addr.SplitHostPort(proxyAddr, "")
 	require.NoError(t, err)
 	u := fmt.Sprintf("postgres://unused:unused@localhost:%s/", p)
 
@@ -286,7 +287,7 @@ func TestProxyTLSConf(t *testing.T) {
 		defer testutils.TestingHook(&BackendDial, func(
 			_ *pgproto3.StartupMessage, outgoingAddress string, tlsConf *tls.Config,
 		) (net.Conn, error) {
-			outgoingHost, _, err := net.SplitHostPort(outgoingAddress)
+			outgoingHost, _, err := addr.SplitHostPort(outgoingAddress, "")
 			require.NoError(t, err)
 
 			require.False(t, tlsConf.InsecureSkipVerify)
@@ -1077,12 +1078,6 @@ func newProxyServer(
 	const listenAddress = "127.0.0.1:0"
 	ln, err := net.Listen("tcp", listenAddress)
 	require.NoError(t, err)
-
-	// If routing rule is not specified, default to something that will
-	// return a non empty string with a port.
-	if opts.RoutingRule == "" {
-		opts.RoutingRule = "{{clusterName}}:1234"
-	}
 
 	server, err = NewServer(ctx, stopper, *opts)
 	require.NoError(t, err)
