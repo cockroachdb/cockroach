@@ -34,6 +34,7 @@ import {
   formatNumberForDisplay,
   calculateTotalWorkload,
   unique,
+  summarize,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -500,6 +501,10 @@ export class StatementDetails extends React.Component<
       moment(stats.last_exec_timestamp.seconds.low * 1e3).format(
         "MMM DD, YYYY HH:MM",
       );
+    const summary = summarize(statement);
+    const showRowsWritten =
+      stats.sql_type === "TypeDML" && summary.statement !== "select";
+
     return (
       <Tabs
         defaultActiveKey="1"
@@ -565,6 +570,19 @@ export class StatementDetails extends React.Component<
                         {formatNumberForDisplay(stats.bytes_read.mean, Bytes)}
                       </Text>
                     </div>
+                    {showRowsWritten && (
+                      <div
+                        className={summaryCardStylesCx("summary--card__item")}
+                      >
+                        <Text>Mean rows written</Text>
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.rows_written?.mean,
+                            formatTwoPlaces,
+                          )}
+                        </Text>
+                      </div>
+                    )}
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Max memory usage</Text>
                       <Text>
@@ -805,6 +823,11 @@ export class StatementDetails extends React.Component<
                   format: Bytes,
                 },
                 {
+                  name: "Rows Written",
+                  value: stats.rows_written,
+                  bar: genericBarChart(stats.rows_written, stats.count),
+                },
+                {
                   name: "Network Bytes Sent",
                   value: stats.exec_stats.network_bytes,
                   bar: genericBarChart(
@@ -816,9 +839,10 @@ export class StatementDetails extends React.Component<
                 },
               ].filter(function(r) {
                 if (
-                  r.name === "Network Bytes Sent" &&
-                  r.value &&
-                  r.value.mean === 0
+                  (r.name === "Network Bytes Sent" &&
+                    r.value &&
+                    r.value.mean === 0) ||
+                  (r.name === "Rows Written" && !showRowsWritten)
                 ) {
                   // Omit if empty.
                   return false;
