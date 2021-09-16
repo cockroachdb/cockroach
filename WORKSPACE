@@ -26,8 +26,8 @@ git_repository(
 # Like the above, but for nodeJS.
 http_archive(
     name = "build_bazel_rules_nodejs",
-    sha256 = "8f5f192ba02319254aaf2cdcca00ec12eaafeb979a80a1e946773c520ae0a2c9",
-    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/3.7.0/rules_nodejs-3.7.0.tar.gz"],
+    sha256 = "b32a4713b45095e9e1921a7fcb1adf584bc05959f3336e7351bcf77f015a2d7c",
+    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/4.1.0/rules_nodejs-4.1.0.tar.gz"],
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
@@ -70,7 +70,10 @@ yarn_install(
     yarn_lock = "//pkg/ui:yarn.lock",
     strict_visibility = False,
     # package_path = "pkg/ui/workspaces/a",
-    # data = ["@nodejs//:yarn_node_repositories"]
+    links = {
+        "@cockroachlabs/cluster-ui": "//pkg/ui/workspaces/cluster-ui:cluster_ui_package",
+        "@cockroachlabs/crdb-protobuf-client": "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
+    },
 )
 
 # Load gazelle dependencies.

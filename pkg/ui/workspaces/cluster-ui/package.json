@@ -29,7 +29,7 @@
     "@babel/runtime": "^7.12.13"
   },
   "devDependencies": {
-    "@bazel/typescript": "^3.6.0",
+    "@bazel/typescript": "4.1.0",
     "@babel/cli": "^7.8.3",
     "@babel/core": "^7.8.3",
     "@babel/plugin-proposal-class-properties": "^7.8.0",
