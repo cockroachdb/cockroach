@@ -2313,6 +2313,8 @@ func (desc *Mutable) SetParentSchemaID(schemaID descpb.ID) {
 
 // AddDrainingName adds a draining name to the TableDescriptor's slice of
 // draining names.
+//
+// Deprecated: Do not use.
 func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
 	desc.DrainingNames = append(desc.DrainingNames, name)
 }

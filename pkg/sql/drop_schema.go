@@ -198,7 +198,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 func (p *planner) dropSchemaImpl(
 	ctx context.Context, parentDB *dbdesc.Mutable, sc *schemadesc.Mutable,
 ) error {
-	sc.DrainingNames = append(sc.DrainingNames, descpb.NameInfo{
+	sc.AddDrainingName(descpb.NameInfo{
 		ParentID:       parentDB.ID,
 		ParentSchemaID: keys.RootNamespaceID,
 		Name:           sc.Name,
