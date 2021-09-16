@@ -54,6 +54,23 @@ func registerAcceptance(r *testRegistry) {
 				minVersion: "v19.2.0",
 				timeout:    30 * time.Minute,
 			},
+			{
+				name: "patch-upgrade",
+				fn: func(ctx context.Context, t *test, c *cluster) {
+					runPatchUpgrade(ctx, t, c, r.buildVersion, 0)
+				},
+				minVersion: "v21.1.9", // Regression test for 21.1.8
+
+				timeout: 30 * time.Minute,
+			},
+			{
+				name: "double-patch-upgrade",
+				fn: func(ctx context.Context, t *test, c *cluster) {
+					runPatchUpgrade(ctx, t, c, r.buildVersion, 1)
+				},
+				minVersion: "v21.1.9", // Regression test for 21.1.8
+				timeout:    30 * time.Minute,
+			},
 		},
 		OwnerServer: {
 			{name: "build-info", fn: runBuildInfo},
