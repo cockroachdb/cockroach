@@ -101,8 +101,11 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 	tableDesc := n.tableDesc
-	schemaID := tableDesc.GetParentSchemaID()
-	databaseID := tableDesc.GetParentID()
+	oldNameKey := descpb.NameInfo{
+		ParentID:       tableDesc.GetParentID(),
+		ParentSchemaID: tableDesc.GetParentSchemaID(),
+		Name:           tableDesc.GetName(),
+	}
 
 	kind := tree.GetTableType(tableDesc.IsSequence(), tableDesc.IsView(), tableDesc.GetIsMaterializedView())
 	oldName := tree.MakeTableNameFromPrefix(n.prefix.NamePrefix(), tree.Name(n.tableDesc.GetName()))
@@ -114,30 +117,26 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 
 	// If the schema being changed to is the same as the current schema for the
 	// table, do a no-op.
-	if desiredSchemaID == schemaID {
+	if desiredSchemaID == oldNameKey.GetParentSchemaID() {
 		return nil
 	}
 
 	// TODO(ajwerner): Use the collection here.
 	exists, _, err := catalogkv.LookupObjectID(
-		ctx, p.txn, p.ExecCfg().Codec, databaseID, desiredSchemaID, tableDesc.Name,
+		ctx, p.txn, p.ExecCfg().Codec, tableDesc.GetParentID(), desiredSchemaID, tableDesc.GetName(),
 	)
 	if err == nil && exists {
 		return pgerror.Newf(pgcode.DuplicateRelation,
-			"relation %s already exists in schema %s", tableDesc.Name, n.newSchema)
+			"relation %s already exists in schema %s", tableDesc.GetName(), n.newSchema)
 	} else if err != nil {
 		return err
 	}
 
-	renameDetails := descpb.NameInfo{
-		ParentID:       databaseID,
-		ParentSchemaID: schemaID,
-		Name:           tableDesc.Name,
-	}
-	tableDesc.AddDrainingName(renameDetails)
-
 	// Set the tableDesc's new schema id to the desired schema's id.
 	tableDesc.SetParentSchemaID(desiredSchemaID)
+
+	b := p.txn.NewBatch()
+	p.renameNamespaceEntry(ctx, b, oldNameKey, tableDesc)
 
 	if err := p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
@@ -145,7 +144,7 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := p.writeNameKey(ctx, tableDesc, tableDesc.ID); err != nil {
+	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
 
