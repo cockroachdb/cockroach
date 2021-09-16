@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
@@ -187,7 +188,16 @@ type Tracer struct {
 	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
 	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
 
-	testing *testingKnob
+	testing TracerTestingKnobs
+}
+
+// TracerTestingKnobs contains knobs for a Tracer.
+type TracerTestingKnobs struct {
+	// Clock allows the time source for spans to be controlled.
+	Clock timeutil.TimeSource
+	// ForceRealSpans, if set, forces the tracer to create span even when tracing
+	// is otherwise disabled.
+	ForceRealSpans bool
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -200,6 +210,11 @@ func NewTracer() *Tracer {
 	// it won't soak up data.
 	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t, sterile: true}}
 	return t
+}
+
+// SetTestingKnobs allows tests to muck with the tracer.
+func (t *Tracer) SetTestingKnobs(knobs TracerTestingKnobs) {
+	t.testing = knobs
 }
 
 // Configure sets up the Tracer according to the cluster settings (and keeps
@@ -413,6 +428,9 @@ func (t *Tracer) StartSpanCtx(
 // AlwaysTrace returns true if operations should be traced regardless of the
 // context.
 func (t *Tracer) AlwaysTrace() bool {
+	if t.testing.ForceRealSpans {
+		return true
+	}
 	otelTracer := t.getOtelTracer()
 	return t.useNetTrace() || otelTracer != nil
 }
@@ -526,7 +544,7 @@ func (t *Tracer) startSpanGeneric(
 		mu: crdbSpanMu{
 			duration: -1, // unfinished
 		},
-		testing: t.testing,
+		testing: &t.testing,
 	}
 	helper.crdbSpan.mu.operation = opName
 	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)
@@ -844,6 +862,26 @@ func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 		collectionOpt = WithParentAndAutoCollection(sp)
 	}
 	return sp.Tracer().StartSpanCtx(ctx, opName, WithFollowsFrom(), collectionOpt)
+}
+
+// EnsureForkSpan is like ForkSpan except that, if there is no span in ctx, it
+// creates a root span.
+func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
+	sp := SpanFromContext(ctx)
+	var opts []SpanOption
+	// If there's a span in ctx, we use it as a parent.
+	if sp != nil {
+		tr = sp.Tracer()
+		if !tr.ShouldRecordAsyncSpans() {
+			opts = append(opts, WithParentAndManualCollection(sp.Meta()))
+		} else {
+			// Using auto collection here ensures that recordings from async spans
+			// also show up at the parent.
+			opts = append(opts, WithParentAndAutoCollection(sp))
+		}
+		opts = append(opts, WithFollowsFrom())
+	}
+	return tr.StartSpanCtx(ctx, opName, opts...)
 }
 
 // ChildSpan creates a child span of the current one, if any. Recordings from

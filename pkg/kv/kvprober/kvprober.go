@@ -169,7 +169,7 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ambient.AddLogTag("kvprober", nil)
 
 	startLoop := func(ctx context.Context, desc string, pf func(context.Context, *kv.DB, planner), pl planner, interval *settings.DurationSetting) error {
-		return stopper.RunAsyncTask(ctx, desc, func(ctx context.Context) {
+		return stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: desc, SpanOpt: stop.Sterile}, func(ctx context.Context) {
 			defer logcrash.RecoverAndReportNonfatalPanic(ctx, &p.settings.SV)
 
 			d := func() time.Duration {
