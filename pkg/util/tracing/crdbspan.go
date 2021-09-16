@@ -287,7 +287,7 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 
 	var now time.Time
 	if clock := s.testing.Clock; clock != nil {
-		now = s.testing.Clock.Now()
+		now = clock.Now()
 	} else {
 		now = time.Now()
 	}
