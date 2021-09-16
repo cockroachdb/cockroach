@@ -23,6 +23,10 @@ import (
 
 // Limiter is used to rate-limit KV requests for a given tenant.
 //
+// The intention is to limit a single tenant from using a large percentage of a
+// KV machine, which could lead to very significant variation in observed
+// performance depending how many other tenants are using the node.
+//
 // The use of an interface permits a different implementation for the system
 // tenant and other tenants. The remaining commentary will pertain to the
 // implementation used for non-system tenants. The limiter is implemented as

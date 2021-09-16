@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -73,7 +74,9 @@ func NewLimiterFactory(sv *settings.Values, knobs *TestingKnobs) *LimiterFactory
 // reference counted; call Destroy on the returned limiter when it is no longer
 // in use. If the closer channel is non-nil, closing it will lead to any blocked
 // requests becoming unblocked.
-func (rl *LimiterFactory) GetTenant(tenantID roachpb.TenantID, closer <-chan struct{}) Limiter {
+func (rl *LimiterFactory) GetTenant(
+	ctx context.Context, tenantID roachpb.TenantID, closer <-chan struct{},
+) Limiter {
 
 	if tenantID == roachpb.SystemTenantID {
 		return &rl.systemLimiter
@@ -94,6 +97,10 @@ func (rl *LimiterFactory) GetTenant(tenantID roachpb.TenantID, closer <-chan str
 		rcLim = new(refCountedLimiter)
 		rcLim.lim.init(rl, tenantID, rl.mu.config, rl.metrics.tenantMetrics(tenantID), options...)
 		rl.mu.tenants[tenantID] = rcLim
+		log.Infof(
+			ctx, "tenant %s rate limiter initialized (rate: %g RU/s; burst: %g RU)",
+			tenantID, rl.mu.config.Rate, rl.mu.config.Burst,
+		)
 	}
 	rcLim.refCount++
 	return &rcLim.lim

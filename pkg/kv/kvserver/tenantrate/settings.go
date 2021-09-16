@@ -11,8 +11,11 @@
 package tenantrate
 
 import (
+	"runtime"
+
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/errors"
 )
 
 // Config contains the configuration of the rate limiter.
@@ -38,11 +41,26 @@ type Config struct {
 // The burst limit setting is defined as a multiplier of the rate (i.e. in
 // seconds), so it doesn't need to be adjusted in concert with the rate.
 var (
+	// ruRateLimit was initially set to an absolute value in RU/s, with the
+	// intention of throttling free tier tenants.
+	//
+	// We now use it to disallow a single tenant from harnessing a large fraction
+	// of a KV node, in order to avoid very significant fluctuations in
+	// performance depending on what other tenants are using the same KV node.
+	// In this mode, a value of -200 means that we allow 200 RU/s per CPU, or
+	// roughly
+	// 20% of the machine (by design 1 RU roughly maps to 1 CPU-millisecond).
 	ruRateLimit = settings.RegisterFloatSetting(
 		"kv.tenant_rate_limiter.rate_limit",
-		"per-tenant rate limit in Request Units per second",
-		200,
-		settings.PositiveFloat,
+		"per-tenant rate limit in Request Units per second if positive, "+
+			"or Request Units per second per CPU if negative",
+		-200,
+		func(v float64) error {
+			if v == 0 {
+				return errors.New("cannot set to zero value")
+			}
+			return nil
+		},
 	)
 
 	ruBurstLimitSeconds = settings.RegisterFloatSetting(
@@ -59,9 +77,20 @@ var (
 	}
 )
 
+// absoluteRateFromConfigValue returns an absolute rate (in RU/s) from a value
+// of the kv.tenant_rate_limiter.rate_limit setting.
+func absoluteRateFromConfigValue(value float64) float64 {
+	if value < 0 {
+		// We use GOMAXPROCS instead of NumCPU because the former could be adjusted
+		// based on cgroup limits (see cgroups.AdjustMaxProcs).
+		return -value * float64(runtime.GOMAXPROCS(0))
+	}
+	return value
+}
+
 // ConfigFromSettings constructs a Config using the cluster setting values.
 func ConfigFromSettings(sv *settings.Values) Config {
-	rate := ruRateLimit.Get(sv)
+	rate := absoluteRateFromConfigValue(ruRateLimit.Get(sv))
 	return Config{
 		Rate:      rate,
 		Burst:     rate * ruBurstLimitSeconds.Get(sv),
@@ -72,7 +101,7 @@ func ConfigFromSettings(sv *settings.Values) Config {
 // DefaultConfig returns the configuration that corresponds to the default
 // setting values.
 func DefaultConfig() Config {
-	rate := ruRateLimit.Default()
+	rate := absoluteRateFromConfigValue(ruRateLimit.Default())
 	return Config{
 		Rate:      rate,
 		Burst:     rate * ruBurstLimitSeconds.Default(),
