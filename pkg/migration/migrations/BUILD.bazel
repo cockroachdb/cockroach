@@ -6,6 +6,7 @@ go_library(
         "alter_web_sessions_create_indexes.go",
         "database_role_settings.go",
         "delete_deprecated_namespace_tabledesc.go",
+        "ensure_no_draining_names.go",
         "fix_descriptor_migration.go",
         "join_tokens.go",
         "migrations.go",
@@ -67,6 +68,7 @@ go_test(
     srcs = [
         "alter_web_sessions_create_indexes_test.go",
         "delete_deprecated_namespace_tabledesc_external_test.go",
+        "ensure_no_draining_names_external_test.go",
         "fix_descriptor_migration_external_test.go",
         "helpers_test.go",
         "main_test.go",
