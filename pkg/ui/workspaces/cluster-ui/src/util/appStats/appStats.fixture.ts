@@ -97,6 +97,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       },
       bytes_read: { mean: 0, squared_diffs: 0 },
       rows_read: { mean: 0, squared_diffs: 0 },
+      rows_written: { mean: 0, squared_diffs: 0 },
       last_exec_timestamp: {
         seconds: Long.fromInt(1599670290),
         nanos: 111613000,
@@ -201,6 +202,10 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         squared_diffs: 1338970.5599999998,
       },
       rows_read: {
+        mean: 0.07999999999999999,
+        squared_diffs: 3.8399999999999994,
+      },
+      rows_written: {
         mean: 0.07999999999999999,
         squared_diffs: 3.8399999999999994,
       },
@@ -314,6 +319,10 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         mean: 0.07999999999999999,
         squared_diffs: 3.8399999999999994,
       },
+      rows_written: {
+        mean: 0.07999999999999999,
+        squared_diffs: 3.8399999999999994,
+      },
       last_exec_timestamp: {
         seconds: Long.fromInt(1599670192),
         nanos: 111613000,
@@ -418,6 +427,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       },
       bytes_read: { mean: 0, squared_diffs: 0 },
       rows_read: { mean: 0, squared_diffs: 0 },
+      rows_written: { mean: 0, squared_diffs: 0 },
       last_exec_timestamp: {
         seconds: Long.fromInt(1599670299),
         nanos: 111613000,
@@ -522,6 +532,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       },
       bytes_read: { mean: 0, squared_diffs: 0 },
       rows_read: { mean: 0, squared_diffs: 0 },
+      rows_written: { mean: 0, squared_diffs: 0 },
       last_exec_timestamp: {
         seconds: Long.fromInt(1599670242),
         nanos: 111613000,
@@ -632,6 +643,10 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         mean: 0.07999999999999999,
         squared_diffs: 3.8399999999999994,
       },
+      rows_written: {
+        mean: 0.07999999999999999,
+        squared_diffs: 3.8399999999999994,
+      },
       last_exec_timestamp: {
         seconds: Long.fromInt(1599650292),
         nanos: 111613000,
@@ -739,6 +754,10 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       },
       bytes_read: { mean: 46.48, squared_diffs: 1296234.24 },
       rows_read: {
+        mean: 0.07999999999999999,
+        squared_diffs: 3.8399999999999994,
+      },
+      rows_written: {
         mean: 0.07999999999999999,
         squared_diffs: 3.8399999999999994,
       },
@@ -855,6 +874,10 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         mean: 0.07999999999999999,
         squared_diffs: 3.8399999999999994,
       },
+      rows_written: {
+        mean: 0.07999999999999999,
+        squared_diffs: 3.8399999999999994,
+      },
       last_exec_timestamp: {
         seconds: Long.fromInt(1599670257),
         nanos: 111613000,
@@ -959,6 +982,10 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       },
       bytes_read: { mean: 47.07999999999999, squared_diffs: 1329915.84 },
       rows_read: {
+        mean: 0.07999999999999999,
+        squared_diffs: 3.8399999999999994,
+      },
+      rows_written: {
         mean: 0.07999999999999999,
         squared_diffs: 3.8399999999999994,
       },

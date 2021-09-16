@@ -112,6 +112,7 @@ func (s *Container) RecordStatement(
 	stats.mu.data.OverheadLat.Record(stats.mu.data.Count, value.OverheadLatency)
 	stats.mu.data.BytesRead.Record(stats.mu.data.Count, float64(value.BytesRead))
 	stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
+	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
 	stats.mu.data.LastExecTimestamp = timeutil.Now()
 	stats.mu.data.Nodes = util.CombineUniqueInt64(stats.mu.data.Nodes, value.Nodes)
 	// Note that some fields derived from tracing statements (such as
