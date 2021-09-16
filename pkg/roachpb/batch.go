@@ -225,6 +225,17 @@ func (ba *BatchRequest) IsSingleEndTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(EndTxn)
 }
 
+// Require1PC returns true if the batch contains an EndTxn with the Require1PC
+// flag set.
+func (ba *BatchRequest) Require1PC() bool {
+	arg, ok := ba.GetArg(EndTxn)
+	if !ok {
+		return false
+	}
+	etArg := arg.(*EndTxnRequest)
+	return etArg.Require1PC
+}
+
 // IsSingleAbortTxnRequest returns true iff the batch contains a single request,
 // and that request is an EndTxnRequest(commit=false).
 func (ba *BatchRequest) IsSingleAbortTxnRequest() bool {
