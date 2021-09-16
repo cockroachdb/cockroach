@@ -10,7 +10,6 @@ package sqlccl_test
 
 import (
 	"context"
-	"reflect"
 	"testing"
 	"time"
 
@@ -23,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 func TestTenantTempTableCleanup(t *testing.T) {
@@ -38,20 +37,46 @@ func TestTenantTempTableCleanup(t *testing.T) {
 	// nodes death.
 	slinstance.DefaultTTL.Override(ctx, &settings.SV, 5*time.Second)
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, time.Second)
-
+	// Channel that gets sent on each time a clean-up occurs.
+	tempCleanupMutex := syncutil.Mutex{}
+	tempCleanupPauseEnabled := true
+	tempCleanUpFinishedCh := make(chan struct{})
+	tenantTempKnobSettings := base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			OnTempObjectsCleanupDone: func() {
+				tempCleanupMutex.Lock()
+				if !tempCleanupPauseEnabled {
+					tempCleanupMutex.Unlock()
+					return
+				}
+				tempCleanupMutex.Unlock()
+				// Inform that a cleanup has occurred
+				<-tempCleanUpFinishedCh
+			},
+		},
+	}
+	// Waits for temporary object cleanup to occur, we
+	// intentionally wait two cycles. Just in case the object
+	// clean up hasn't occurred.
+	waitForTempObjectCleanup := func() {
+		tempCleanUpFinishedCh <- struct{}{}
+		tempCleanUpFinishedCh <- struct{}{}
+	}
 	tc := serverutils.StartNewTestCluster(
 		t, 3 /* numNodes */, base.TestClusterArgs{ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				Settings: settings,
-			}},
+			},
+		},
 	)
 	log.TestingClearServerIdentifiers()
 	tenantStoppers := []*stop.Stopper{stop.NewStopper(), stop.NewStopper()}
 	_, tenantPrimaryDB := serverutils.StartTenant(t, tc.Server(0),
 		base.TestTenantArgs{
-			TenantID: serverutils.TestTenantID(),
-			Settings: settings,
-			Stopper:  tenantStoppers[0],
+			TenantID:     serverutils.TestTenantID(),
+			Settings:     settings,
+			TestingKnobs: tenantTempKnobSettings,
+			Stopper:      tenantStoppers[0],
 		})
 	tenantSQL := sqlutils.MakeSQLRunner(tenantPrimaryDB)
 
@@ -78,6 +103,7 @@ func TestTenantTempTableCleanup(t *testing.T) {
 		})
 	tenantSecondSQL.Exec(t, "SET experimental_enable_temp_tables = 'on'")
 	tenantSecondSQL.Exec(t, "CREATE TEMP TABLE temp_table2 (x INT PRIMARY KEY, y INT);")
+	waitForTempObjectCleanup()
 	tenantSecondSQL.CheckQueryResults(t, "SELECT table_name FROM [SHOW TABLES]",
 		[][]string{
 			{"temp_table"},
@@ -85,43 +111,52 @@ func TestTenantTempTableCleanup(t *testing.T) {
 		})
 	// Stop the second node, we should one be left with a single temp table.
 	tenantStoppers[1].Stop(ctx)
-	// Session should expire in 5 seconds, but
-	// we will wait for up to 15 seconds.
-	{
-		tEnd := timeutil.Now().Add(time.Second * 15)
-		found := false
-		lastResult := [][]string{}
-		expectedResult := [][]string{
+	// Session should expire in 5 seconds, wait for
+	// two clean up cycles just in case, so that we have
+	// stable timing.
+	waitForTempObjectCleanup()
+	tenantSQL.CheckQueryResults(t, "SELECT table_name FROM [SHOW TABLES]",
+		[][]string{
 			{"temp_table"},
-		}
-		for tEnd.After(timeutil.Now()) {
-			lastResult = tenantSQL.QueryStr(t, "SELECT table_name FROM [SHOW TABLES]")
-			if reflect.DeepEqual(lastResult, expectedResult) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			log.Fatalf(ctx, "temporary table was not correctly dropped, expected %v and got %v", expectedResult, lastResult)
-		}
-	}
-
+		})
+	// Disable our hook to allow the database to be
+	// brought down.
+	tempCleanupMutex.Lock()
+	tempCleanupPauseEnabled = false
+	close(tempCleanUpFinishedCh)
+	tempCleanupMutex.Unlock()
 	// Close the primary DB, there should be no temporary
 	// tables left.
 	tenantPrimaryDB.Close()
+	// Enable our hook to allow the database to be
+	// brought up.
+	tempCleanupMutex.Lock()
+	tempCleanupPauseEnabled = true
+	tempCleanUpFinishedCh = make(chan struct{})
+	tempCleanupMutex.Unlock()
 	// Prevent a logging assertion that the server ID is initialized multiple times.
 	log.TestingClearServerIdentifiers()
 	// Once we restart the tenant, no sessions should exist
 	// so all temporary tables should be cleaned up.
 	_, tenantPrimaryDB = serverutils.StartTenant(t, tc.Server(0),
 		base.TestTenantArgs{
-			Existing: true,
-			TenantID: serverutils.TestTenantID(),
-			Settings: settings,
-			Stopper:  tenantStoppers[0]})
+			Existing:     true,
+			TenantID:     serverutils.TestTenantID(),
+			Settings:     settings,
+			TestingKnobs: tenantTempKnobSettings,
+			Stopper:      tenantStoppers[0]})
 	tenantSQL = sqlutils.MakeSQLRunner(tenantPrimaryDB)
+	waitForTempObjectCleanup()
 	tenantSQL.CheckQueryResultsRetry(t, "SELECT table_name FROM [SHOW TABLES]",
 		[][]string{})
+	// Disable our hook to allow the database to be
+	// brought stopped.
+	tempCleanupMutex.Lock()
+	tempCleanupPauseEnabled = false
+	close(tempCleanUpFinishedCh)
+	<-tempCleanUpFinishedCh
+	tempCleanupMutex.Unlock()
+	// Bring down the tenants.
 	tenantStoppers[0].Stop(ctx)
 	tc.Stopper().Stop(ctx)
 }
