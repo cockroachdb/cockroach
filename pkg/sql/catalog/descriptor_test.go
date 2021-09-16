@@ -65,6 +65,7 @@ func TestFormatSafeDescriptorProperties(t *testing.T) {
 					State:                   descpb.DescriptorState_PUBLIC,
 				}).BuildExistingMutableTable()
 				desc.MaybeIncrementVersion()
+				//lint:ignore SA1019 deprecated method call is OK
 				desc.AddDrainingName(descpb.NameInfo{
 					ParentID:       12,
 					ParentSchemaID: 51,
