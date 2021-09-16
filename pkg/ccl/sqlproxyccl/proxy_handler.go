@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -228,7 +229,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	ctx = logtags.AddTag(ctx, "cluster", clusterName)
 	ctx = logtags.AddTag(ctx, "tenant", tenID)
 
-	ipAddr, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	// Use an empty string as the default port as we only care about the
+	// correctly parsing the IP address here.
+	ipAddr, _, err := addr.SplitHostPort(conn.RemoteAddr().String(), "")
 	if err != nil {
 		clientErr := newErrorf(codeParamsRoutingFailed, "unexpected connection address")
 		log.Errorf(ctx, "could not parse address: %v", err.Error())
@@ -313,10 +316,13 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		// SkipVerify. In insecure mode, tlsConf is expected to be nil. This
 		// will cause BackendDial to skip TLS entirely. If SkipVerify is true,
 		// tlsConf will be set to a non-nil config with InsecureSkipVerify set
-		// to true.
+		// to true. InsecureSkipVerify will provide an encrypted connection but
+		// not verify that the connection recipient is a trusted party.
 		var tlsConf *tls.Config
 		if !handler.Insecure {
-			outgoingHost, _, err := net.SplitHostPort(outgoingAddress)
+			// Use an empty string as the default port as we only care about the
+			// correctly parsing the outgoingHost/IP here.
+			outgoingHost, _, err := addr.SplitHostPort(outgoingAddress, "")
 			if err != nil {
 				log.Errorf(ctx, "could not split outgoing address '%s' into host and port: %v", outgoingAddress, err.Error())
 				// Remap error for external consumption.
