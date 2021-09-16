@@ -88,6 +88,10 @@ const statementStats: Required<IStatementStatistics> = {
     mean: 10,
     squared_diffs: 1,
   },
+  rows_written: {
+    mean: 10,
+    squared_diffs: 1,
+  },
   exec_stats: execStats,
   last_exec_timestamp: {
     seconds: Long.fromInt(1599670292),
