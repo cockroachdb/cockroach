@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -174,14 +173,10 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	n.dbDesc.AddDrainingName(descpb.NameInfo{
-		ParentID:       keys.RootNamespaceID,
-		ParentSchemaID: keys.RootNamespaceID,
-		Name:           n.dbDesc.Name,
-	})
-	n.dbDesc.State = descpb.DescriptorState_DROP
+	n.dbDesc.SetDropped()
+	b := p.txn.NewBatch()
+	p.dropNamespaceEntry(ctx, b, n.dbDesc)
 
-	b := &kv.Batch{}
 	// Note that a job was already queued above.
 	if err := p.writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {
 		return err

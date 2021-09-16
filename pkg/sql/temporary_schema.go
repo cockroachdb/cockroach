@@ -213,6 +213,12 @@ func cleanupSessionTempObjects(
 }
 
 // cleanupSchemaObjects removes all objects that is located within a dbID and schema.
+//
+// TODO(postamar): properly use descsCol
+// We're currently unable to leverage descsCol properly because we run DROP
+// statements in the transaction which cause descsCol's cached state to become
+// invalid. We should either drop all objects programmatically via descsCol's
+// API or avoid it entirely.
 func cleanupSchemaObjects(
 	ctx context.Context,
 	settings *cluster.Settings,
@@ -227,7 +233,7 @@ func cleanupSchemaObjects(
 	if err != nil {
 		return err
 	}
-	tbNames, _, err := descsCol.GetObjectNamesAndIDs(
+	tbNames, tbIDs, err := descsCol.GetObjectNamesAndIDs(
 		ctx,
 		txn,
 		dbDesc,
@@ -250,10 +256,8 @@ func cleanupSchemaObjects(
 
 	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor, len(tbNames))
 	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
-	for _, tbName := range tbNames {
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidCached = true
-		_, desc, err := descsCol.GetImmutableTableByName(ctx, txn, &tbName, flags)
+	for i, tbName := range tbNames {
+		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tbIDs[i])
 		if err != nil {
 			return err
 		}
