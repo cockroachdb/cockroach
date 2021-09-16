@@ -3111,7 +3111,6 @@ type EvalDatabase interface {
 		specifier HasPrivilegeSpecifier,
 		user security.SQLUsername,
 		kind privilege.Kind,
-		withGrantOpt bool,
 	) (bool, error)
 }
 
@@ -3202,6 +3201,13 @@ type EvalPlanner interface {
 		descID int64,
 		force bool,
 	) error
+
+	// UserHasAdminRole returns tuple of bool and error:
+	// (true, nil) means that the user has an admin role (i.e. root or node)
+	// (false, nil) means that the user has NO admin role
+	// (false, err) means that there was an error running the query on
+	// the `system.users` table
+	UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error)
 
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner

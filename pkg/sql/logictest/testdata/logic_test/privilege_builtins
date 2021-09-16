@@ -86,14 +86,15 @@ true  true  true  true
 query error pgcode 42P01 relation "does_not_exist" does not exist
 SELECT has_any_column_privilege('does_not_exist', 'SELECT')
 
-query BBBBB
+query BBBBBB
 SELECT has_any_column_privilege('pg_type', 'SELECT'),
        has_any_column_privilege('pg_type', 'INSERT'),
        has_any_column_privilege('pg_type', 'UPDATE'),
        has_any_column_privilege('pg_type', 'REFERENCES'),
-       has_any_column_privilege('pg_type', 'SELECT, INSERT, UPDATE')
+       has_any_column_privilege('pg_type', 'SELECT, INSERT, UPDATE'),
+       has_any_column_privilege('pg_type', 'INSERT, UPDATE')
 ----
-true  false  false  true  false
+true  false  false  true  true  false
 
 query BBBBB
 SELECT has_any_column_privilege('t', 'SELECT'),
@@ -188,14 +189,15 @@ SELECT has_column_privilege('pg_type', 100, 'SELECT')
 query error pgcode 42703 column 100 of relation pg_type does not exist
 SELECT has_column_privilege('pg_type'::regclass, 100, 'SELECT')
 
-query BBBBB
+query BBBBBB
 SELECT has_column_privilege('pg_type', 1, 'SELECT'),
        has_column_privilege('pg_type', 1, 'INSERT'),
        has_column_privilege('pg_type', 1, 'UPDATE'),
        has_column_privilege('pg_type', 1, 'REFERENCES'),
-       has_column_privilege('pg_type', 1, 'SELECT, INSERT, UPDATE')
+       has_column_privilege('pg_type', 1, 'SELECT, INSERT, UPDATE'),
+       has_column_privilege('pg_type', 1, 'INSERT, UPDATE')
 ----
-true  false  false  true  false
+true  false  false  true  true  false
 
 query BBBBB
 SELECT has_column_privilege('t', 1, 'SELECT'),
@@ -272,14 +274,15 @@ SELECT has_column_privilege('pg_type', 'does not exist', 'SELECT')
 query error pgcode 42703 column "does not exist" does not exist
 SELECT has_column_privilege('pg_type'::regclass, 'does not exist', 'SELECT')
 
-query BBBBB
+query BBBBBB
 SELECT has_column_privilege('pg_type', 'typname', 'SELECT'),
        has_column_privilege('pg_type', 'typname', 'INSERT'),
        has_column_privilege('pg_type', 'typname', 'UPDATE'),
        has_column_privilege('pg_type', 'typname', 'REFERENCES'),
-       has_column_privilege('pg_type', 'typname', 'SELECT, INSERT, UPDATE')
+       has_column_privilege('pg_type', 'typname', 'SELECT, INSERT, UPDATE'),
+       has_column_privilege('pg_type', 'typname', 'INSERT, UPDATE')
 ----
-true  false  false  true  false
+true  false  false  true  true  false
 
 query BBBBB
 SELECT has_column_privilege('t', 'a', 'SELECT'),
@@ -443,7 +446,7 @@ SELECT has_database_privilege('bar', 'test', 'CREATE'),
        has_database_privilege('bar', 'test', 'CREATE, CONNECT'),
        has_database_privilege('bar', 'test', 'CREATE, TEMP')
 ----
-true  false  true  true  false  true
+true  false  true  true  true  true
 
 statement ok
 GRANT CONNECT ON DATABASE test TO bar
@@ -469,7 +472,7 @@ false  false  false  false  false  false
 query B
 SELECT has_foreign_data_wrapper_privilege(12345, 'USAGE')
 ----
-true
+NULL
 
 query error pgcode 42704 foreign-data wrapper 'does_not_exist' does not exist
 SELECT has_foreign_data_wrapper_privilege('does_not_exist', 'USAGE')
@@ -480,7 +483,7 @@ SELECT has_foreign_data_wrapper_privilege('does_not_exist'::Name, 'USAGE')
 query B
 SELECT has_foreign_data_wrapper_privilege(12345, 'USAGE WITH GRANT OPTION')
 ----
-true
+NULL
 
 query error pgcode 22023 unrecognized privilege type: "UPDATE"
 SELECT has_foreign_data_wrapper_privilege(12345, 'UPDATE')
@@ -494,7 +497,7 @@ SELECT has_foreign_data_wrapper_privilege('no_user', 12345, 'USAGE')
 query B
 SELECT has_foreign_data_wrapper_privilege('bar', 12345, 'USAGE')
 ----
-true
+NULL
 
 
 ## has_function_privilege
@@ -652,7 +655,7 @@ SELECT has_schema_privilege('bar', 'public', 'CREATE'),
        has_schema_privilege('bar', 'public', 'USAGE'),
        has_schema_privilege('bar', 'public', 'CREATE, USAGE')
 ----
-true  false  false
+true  false  true
 
 query BBB
 SELECT has_schema_privilege('bar', 'public', 'CREATE WITH GRANT OPTION'),
@@ -673,7 +676,7 @@ SELECT has_schema_privilege('bar', 'test_schema', 'CREATE'),
        has_schema_privilege('bar', 'test_schema', 'USAGE'),
        has_schema_privilege('bar', 'test_schema', 'CREATE, USAGE')
 ----
-true  false  false
+true  false  true
 
 query BBB
 SELECT has_schema_privilege('testuser', 'test_schema', 'CREATE'),
@@ -801,7 +804,7 @@ false  false  false
 query B
 SELECT has_server_privilege(12345, 'USAGE')
 ----
-true
+NULL
 
 query error pgcode 42704 server 'does_not_exist' does not exist
 SELECT has_server_privilege('does_not_exist', 'USAGE')
@@ -812,7 +815,7 @@ SELECT has_server_privilege('does_not_exist'::Name, 'USAGE')
 query B
 SELECT has_server_privilege(12345, 'USAGE WITH GRANT OPTION')
 ----
-true
+NULL
 
 query error pgcode 22023 unrecognized privilege type: "UPDATE"
 SELECT has_server_privilege(12345, 'UPDATE')
@@ -826,7 +829,7 @@ SELECT has_server_privilege('no_user', 12345, 'USAGE')
 query B
 SELECT has_server_privilege('bar', 12345, 'USAGE')
 ----
-true
+NULL
 
 
 ## has_table_privilege
@@ -867,7 +870,7 @@ true  true  true  true  true  true  true
 query error pgcode 42P01 relation "does_not_exist" does not exist
 SELECT has_table_privilege('does_not_exist', 'SELECT')
 
-query BBBBBBBBB
+query BBBBBBBBBB
 SELECT has_table_privilege('pg_type', 'SELECT'),
        has_table_privilege('pg_type', 'INSERT'),
        has_table_privilege('pg_type', 'UPDATE'),
@@ -876,9 +879,10 @@ SELECT has_table_privilege('pg_type', 'SELECT'),
        has_table_privilege('pg_type', 'REFERENCES'),
        has_table_privilege('pg_type', 'TRIGGER'),
        has_table_privilege('pg_type', 'SELECT, INSERT, UPDATE'),
-       has_table_privilege('pg_type', 'SELECT, TRUNCATE')
+       has_table_privilege('pg_type', 'SELECT, TRUNCATE'),
+       has_table_privilege('pg_type', 'INSERT, UPDATE')
 ----
-true  false  false  false  false  true  false  false  false
+true  false  false  false  false  true  false  true  true  false
 
 query BBBBBBBBB
 SELECT has_table_privilege('t', 'SELECT'),
@@ -942,7 +946,7 @@ SELECT has_table_privilege('t', 'SELECT, USAGE')
 query error pgcode 42704 role 'no_user' does not exist
 SELECT has_table_privilege('no_user', 't', 'SELECT')
 
-query BBBBBBBBB
+query BBBBBBBBBB
 SELECT has_table_privilege('bar', 't', 'SELECT'),
        has_table_privilege('bar', 't', 'INSERT'),
        has_table_privilege('bar', 't', 'UPDATE'),
@@ -951,11 +955,12 @@ SELECT has_table_privilege('bar', 't', 'SELECT'),
        has_table_privilege('bar', 't', 'REFERENCES'),
        has_table_privilege('bar', 't', 'TRIGGER'),
        has_table_privilege('bar', 't', 'SELECT, INSERT, UPDATE'),
-       has_table_privilege('bar', 't', 'SELECT, TRUNCATE')
+       has_table_privilege('bar', 't', 'SELECT, TRUNCATE'),
+       has_table_privilege('bar', 't', 'INSERT, UPDATE')
 ----
-false  false  false  true  true  false  true  false  false
+false  false  false  true  true  false  true  false  true  false
 
-query BBBBBBBBB
+query BBBBBBBBBB
 SELECT has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'INSERT WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'UPDATE WITH GRANT OPTION'),
@@ -964,9 +969,10 @@ SELECT has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'REFERENCES WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'TRIGGER WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION'),
-       has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION, TRUNCATE WITH GRANT OPTION')
+       has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION, TRUNCATE WITH GRANT OPTION'),
+       has_table_privilege('bar', 't', 'INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION')
 ----
-false  false  false  true  true  false  true  false  false
+false  false  false  true  true  false  true  false  true  false
 
 
 ## has_tablespace_privilege
@@ -974,7 +980,7 @@ false  false  false  true  true  false  true  false  false
 query B
 SELECT has_tablespace_privilege(12345, 'CREATE')
 ----
-true
+NULL
 
 query B
 SELECT has_tablespace_privilege((SELECT oid FROM pg_tablespace LIMIT 1), 'CREATE')
@@ -1065,6 +1071,161 @@ query B
 SELECT has_type_privilege('bar', 'text'::REGTYPE::OID, 'USAGE')
 ----
 true
+
+
+## pg_has_role
+
+query BBBBBB
+SELECT pg_has_role(12345, 'USAGE'),
+       pg_has_role(12345, 'USAGE WITH GRANT OPTION'),
+       pg_has_role(12345, 'USAGE WITH ADMIN OPTION'),
+       pg_has_role(12345, 'MEMBER'),
+       pg_has_role(12345, 'MEMBER WITH GRANT OPTION'),
+       pg_has_role(12345, 'MEMBER WITH ADMIN OPTION')
+----
+NULL  NULL  NULL  NULL  NULL  NULL
+
+query BBBBBB
+SELECT pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'USAGE'),
+       pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'USAGE WITH GRANT OPTION'),
+       pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'USAGE WITH ADMIN OPTION'),
+       pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'MEMBER'),
+       pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'MEMBER WITH GRANT OPTION'),
+       pg_has_role((SELECT oid FROM pg_roles WHERE rolname = 'root'), 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+query error pgcode 42704 role 'does_not_exist' does not exist
+SELECT pg_has_role('does_not_exist', 'USAGE')
+
+query BBBBBB
+SELECT pg_has_role('root', 'USAGE'),
+       pg_has_role('root', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('root', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('root', 'MEMBER'),
+       pg_has_role('root', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('root', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+query error pgcode 22023 unrecognized privilege type: "SELECT"
+SELECT pg_has_role('root', 'SELECT')
+
+query error pgcode 22023 unrecognized privilege type: "SELECT"
+SELECT pg_has_role('root', 'SELECT, SELECT')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT pg_has_role('no_user', 'root', 'USAGE')
+
+query BBBBBB
+SELECT pg_has_role('root', 'root', 'USAGE'),
+       pg_has_role('root', 'root', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('root', 'root', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('root', 'root', 'MEMBER'),
+       pg_has_role('root', 'root', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('root', 'root', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+query BBBBBB
+SELECT pg_has_role('bar', 'root', 'USAGE'),
+       pg_has_role('bar', 'root', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('bar', 'root', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('bar', 'root', 'MEMBER'),
+       pg_has_role('bar', 'root', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('bar', 'root', 'MEMBER WITH ADMIN OPTION')
+----
+false  false  false  false  false  false
+
+statement ok
+CREATE ROLE some_users
+
+statement ok
+GRANT some_users TO bar
+
+query BBBBBB
+SELECT pg_has_role('testuser', 'some_users', 'USAGE'),
+       pg_has_role('testuser', 'some_users', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('testuser', 'some_users', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('testuser', 'some_users', 'MEMBER'),
+       pg_has_role('testuser', 'some_users', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('testuser', 'some_users', 'MEMBER WITH ADMIN OPTION')
+----
+false  false  false  false  false  false
+
+query BBBBBB
+SELECT pg_has_role('root', 'some_users', 'USAGE'),
+       pg_has_role('root', 'some_users', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('root', 'some_users', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('root', 'some_users', 'MEMBER'),
+       pg_has_role('root', 'some_users', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('root', 'some_users', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+query BBBBBBBBBB
+SELECT pg_has_role('bar', 'some_users', 'USAGE'),
+       pg_has_role('bar', 'some_users', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('bar', 'some_users', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('bar', 'some_users', 'MEMBER'),
+       pg_has_role('bar', 'some_users', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('bar', 'some_users', 'MEMBER WITH ADMIN OPTION'),
+       pg_has_role('bar', 'some_users', 'USAGE, MEMBER'),
+       pg_has_role('bar', 'some_users', 'USAGE, MEMBER WITH GRANT OPTION'),
+       pg_has_role('bar', 'some_users', 'USAGE WITH GRANT OPTION, MEMBER'),
+       pg_has_role('bar', 'some_users', 'USAGE WITH GRANT OPTION, MEMBER WITH GRANT OPTION')
+----
+true  false  false  true  false  false  true  true  true  false
+
+statement ok
+GRANT some_users TO bar WITH ADMIN OPTION
+
+query BBBBBB
+SELECT pg_has_role('bar', 'some_users', 'USAGE'),
+       pg_has_role('bar', 'some_users', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('bar', 'some_users', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('bar', 'some_users', 'MEMBER'),
+       pg_has_role('bar', 'some_users', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('bar', 'some_users', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+# WITH ADMIN OPTION is session-user dependent.
+
+query BBBBBB
+SELECT pg_has_role('testuser', 'testuser', 'USAGE'),
+       pg_has_role('testuser', 'testuser', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('testuser', 'testuser', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('testuser', 'testuser', 'MEMBER'),
+       pg_has_role('testuser', 'testuser', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('testuser', 'testuser', 'MEMBER WITH ADMIN OPTION')
+----
+true  false  false  true  false  false
+
+user testuser
+
+query BBBBBB
+SELECT pg_has_role('testuser', 'testuser', 'USAGE'),
+       pg_has_role('testuser', 'testuser', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('testuser', 'testuser', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('testuser', 'testuser', 'MEMBER'),
+       pg_has_role('testuser', 'testuser', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('testuser', 'testuser', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+query BBBBBB
+SELECT pg_has_role('testuser', 'USAGE'),
+       pg_has_role('testuser', 'USAGE WITH GRANT OPTION'),
+       pg_has_role('testuser', 'USAGE WITH ADMIN OPTION'),
+       pg_has_role('testuser', 'MEMBER'),
+       pg_has_role('testuser', 'MEMBER WITH GRANT OPTION'),
+       pg_has_role('testuser', 'MEMBER WITH ADMIN OPTION')
+----
+true  true  true  true  true  true
+
+user root
+
 
 # Regression test for #39703.
 

@@ -113,7 +113,7 @@ func (t AlterDefaultPrivilegesTargetObject) String() string {
 	}
 }
 
-// AbbreviatedGrant represents an the GRANT part of an
+// AbbreviatedGrant represents the GRANT part of an
 // ALTER DEFAULT PRIVILEGES statement.
 type AbbreviatedGrant struct {
 	Privileges      privilege.List
@@ -144,7 +144,7 @@ func (n *AbbreviatedGrant) Format(ctx *FmtCtx) {
 	}
 }
 
-// AbbreviatedRevoke represents an the REVOKE part of an
+// AbbreviatedRevoke represents the REVOKE part of an
 // ALTER DEFAULT PRIVILEGES statement.
 type AbbreviatedRevoke struct {
 	Privileges     privilege.List

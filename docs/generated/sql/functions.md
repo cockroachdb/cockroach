@@ -3138,6 +3138,18 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="pg_get_serial_sequence"></a><code>pg_get_serial_sequence(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the name of the sequence used by the given column_name in the table table_name.</p>
 </span></td></tr>
+<tr><td><a name="pg_has_role"></a><code>pg_has_role(role: <a href="string.html">string</a>, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for role.</p>
+</span></td></tr>
+<tr><td><a name="pg_has_role"></a><code>pg_has_role(role: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for role.</p>
+</span></td></tr>
+<tr><td><a name="pg_has_role"></a><code>pg_has_role(user: <a href="string.html">string</a>, role: <a href="string.html">string</a>, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for role.</p>
+</span></td></tr>
+<tr><td><a name="pg_has_role"></a><code>pg_has_role(user: <a href="string.html">string</a>, role: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for role.</p>
+</span></td></tr>
+<tr><td><a name="pg_has_role"></a><code>pg_has_role(user: oid, role: <a href="string.html">string</a>, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for role.</p>
+</span></td></tr>
+<tr><td><a name="pg_has_role"></a><code>pg_has_role(user: oid, role: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for role.</p>
+</span></td></tr>
 <tr><td><a name="pg_is_other_temp_schema"></a><code>pg_is_other_temp_schema(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the given OID is the OID of another session’s temporary schema. (This can be useful, for example, to exclude other sessions’ temporary tables from a catalog display.)</p>
 </span></td></tr>
 <tr><td><a name="pg_my_temp_schema"></a><code>pg_my_temp_schema() &rarr; oid</code></td><td><span class="funcdesc"><p>Returns the OID of the current session’s temporary schema, or zero if it has none (because it has not created any temporary tables).</p>
