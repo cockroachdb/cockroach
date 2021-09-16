@@ -2022,17 +2022,12 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// orig is [0][48 bits of ts][15 bits of node id]
-				orig := uint64(GenerateUniqueInt(ctx.NodeID.SQLInstanceID()))
-				// ts is [16 bits of 0][48 bits of ts]
-				ts := (orig & ((uint64(math.MaxUint64) >> 16) << 15)) >> 15
-				// v is [0][48 bits of reversed ts][15 bits of node id]
-				v := (bits.Reverse64(ts) >> 1) | (orig & (1<<15 - 1))
-				return tree.NewDInt(tree.DInt(v)), nil
+				v := GenerateUniqueUnorderedID(ctx.NodeID.SQLInstanceID())
+				return tree.NewDInt(v), nil
 			},
 			Info: "Returns a unique ID. The value is a combination of the " +
 				"insert timestamp and the ID of the node executing the statement, which " +
-				"guarantees this combination is globally unique. The way it is generated" +
+				"guarantees this combination is globally unique. The way it is generated " +
 				"there is no ordering",
 			Volatility: tree.VolatilityVolatile,
 		},
@@ -7643,6 +7638,20 @@ func overlay(s, to string, pos, size int) (tree.Datum, error) {
 // NodeIDBits is the number of bits stored in the lower portion of
 // GenerateUniqueInt.
 const NodeIDBits = 15
+
+// GenerateUniqueUnorderedID creates a unique int64 composed of the current time
+// at a 10-microsecond granularity and the instance-id. The top-bit is left
+// empty so that negative values are not returned. The 48 bits following after
+// represent the reversed timestamp and then 15 bits of the node id.
+func GenerateUniqueUnorderedID(instanceID base.SQLInstanceID) tree.DInt {
+	// orig is [0][48 bits of ts][15 bits of node id]
+	orig := uint64(GenerateUniqueInt(instanceID))
+	// ts is [16 bits of 0][48 bits of ts]
+	ts := (orig & ((uint64(math.MaxUint64) >> 16) << 15)) >> 15
+	// v is [0][48 bits of reversed ts][15 bits of node id]
+	v := (bits.Reverse64(ts) >> 1) | (orig & (1<<15 - 1))
+	return tree.DInt(v)
+}
 
 // GenerateUniqueInt creates a unique int composed of the current time at a
 // 10-microsecond granularity and the instance-id. The instance-id is stored in the
