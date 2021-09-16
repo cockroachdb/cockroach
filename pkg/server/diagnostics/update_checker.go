@@ -100,7 +100,7 @@ func (u *UpdateChecker) PeriodicallyCheckForUpdates(ctx context.Context, stopper
 // The returned boolean indicates if the check succeeded (and thus does not need
 // to be re-attempted by the scheduler after a retry-interval).
 func (u *UpdateChecker) CheckForUpdates(ctx context.Context) bool {
-	ctx, span := u.AmbientCtx.AnnotateCtxWithSpan(ctx, "usageReport")
+	ctx, span := u.AmbientCtx.AnnotateCtxWithSpan(ctx, "version update check")
 	defer span.Finish()
 
 	url := u.buildUpdatesURL(ctx)
