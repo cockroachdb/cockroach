@@ -1,0 +1,83 @@
+statement ok
+CREATE DATABASE db;
+CREATE DATABASE db_new;
+
+statement ok
+BEGIN;
+ALTER DATABASE db RENAME TO db_old;
+ALTER DATABASE db_new RENAME TO db;
+COMMIT;
+
+statement ok
+BEGIN;
+DROP DATABASE db;
+ALTER DATABASE db_old RENAME TO db;
+COMMIT;
+
+statement ok
+BEGIN;
+ALTER DATABASE db RENAME TO db_old;
+CREATE DATABASE db;
+COMMIT;
+
+statement ok
+BEGIN;
+DROP DATABASE db;
+CREATE DATABASE db;
+COMMIT;
+
+statement ok
+CREATE SCHEMA sc;
+CREATE SCHEMA sc_new;
+
+statement ok
+BEGIN;
+ALTER SCHEMA sc RENAME TO sc_old;
+ALTER SCHEMA sc_new RENAME TO sc;
+COMMIT;
+
+statement ok
+BEGIN;
+DROP SCHEMA sc;
+ALTER SCHEMA sc_old RENAME TO sc;
+COMMIT;
+
+statement ok
+BEGIN;
+ALTER SCHEMA sc RENAME TO sc_old;
+CREATE SCHEMA sc;
+COMMIT;
+
+statement ok
+BEGIN;
+DROP SCHEMA sc;
+CREATE SCHEMA sc;
+COMMIT;
+
+statement ok
+CREATE VIEW v AS SELECT 1;
+CREATE VIEW v_new AS SELECT 1;
+
+statement ok
+BEGIN;
+ALTER VIEW v RENAME TO v_old;
+ALTER VIEW v_new RENAME TO v;
+COMMIT;
+
+statement ok
+BEGIN;
+DROP VIEW v;
+ALTER VIEW v_old RENAME TO v;
+COMMIT;
+
+statement ok
+BEGIN;
+ALTER VIEW v RENAME TO v_old;
+CREATE VIEW v AS SELECT 1;
+COMMIT;
+
+statement ok
+BEGIN;
+DROP VIEW v;
+CREATE VIEW v AS SELECT 1;
+COMMIT;
