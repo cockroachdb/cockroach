@@ -221,7 +221,6 @@ export function setTimeWindow(tw: TimeWindow): PayloadAction<TimeWindow> {
 }
 
 export function setTimeRange(tw: TimeWindow): PayloadAction<TimeWindow> {
-  console.log(tw);
   return {
     type: SET_RANGE,
     payload: tw,
