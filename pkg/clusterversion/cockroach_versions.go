@@ -299,6 +299,9 @@ const (
 	// AvoidDrainingNames avoids using the draining_names field when renaming or
 	// dropping descriptors.
 	AvoidDrainingNames
+	// DrainingNamesMigration adds the migration which guarantees that no
+	// descriptors have draining names.
+	DrainingNamesMigration
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -511,6 +514,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AvoidDrainingNames,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 1176},
+	},
+	{
+		Key:     DrainingNamesMigration,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 1178},
 	},
 
 	// *************************************************
