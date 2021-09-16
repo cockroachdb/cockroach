@@ -1078,12 +1078,6 @@ func newProxyServer(
 	ln, err := net.Listen("tcp", listenAddress)
 	require.NoError(t, err)
 
-	// If routing rule is not specified, default to something that will
-	// return a non empty string with a port.
-	if opts.RoutingRule == "" {
-		opts.RoutingRule = "{{clusterName}}:1234"
-	}
-
 	server, err = NewServer(ctx, stopper, *opts)
 	require.NoError(t, err)
 
