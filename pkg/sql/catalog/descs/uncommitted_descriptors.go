@@ -97,6 +97,8 @@ type uncommittedDescriptors struct {
 	// as all of the known draining names. The idea is that if we find that
 	// a name is not in the above map but is in the set, then we can avoid
 	// doing a lookup.
+	//
+	// TODO(postamar): better uncommitted namespace changes handling after 22.1.
 	descNames nstree.Set
 }
 

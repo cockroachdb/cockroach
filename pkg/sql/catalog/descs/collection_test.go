@@ -245,10 +245,6 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.Same(t, immByName, immByID)
 
 			mut.Name = "new_name"
-			//lint:ignore SA1019 deprecated method call is OK
-			mut.SetDrainingNames([]descpb.NameInfo{{
-				Name: "db",
-			}})
 
 			// Don't write the descriptor, just write the namespace entry.
 			// This will mean that resolution still is based on the old name.
