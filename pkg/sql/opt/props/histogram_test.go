@@ -644,7 +644,7 @@ func TestFilterBucket(t *testing.T) {
 		runTest(h, testData, types.TimeTZFamily)
 	})
 
-	t.Run("string/bytes", func(t *testing.T) {
+	t.Run("string-bytes", func(t *testing.T) {
 		typesToTest := []struct {
 			family        types.Family
 			createDatumFn func(string) tree.Datum
