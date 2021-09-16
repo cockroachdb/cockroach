@@ -56,7 +56,7 @@ func (p *planner) renameDatabase(
 	}
 	b.CPut(newKey, descID, nil)
 
-	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
+	desc.AddDrainingName(descpb.NameInfo{
 		ParentID:       keys.RootNamespaceID,
 		ParentSchemaID: keys.RootNamespaceID,
 		Name:           oldName,

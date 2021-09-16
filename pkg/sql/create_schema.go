@@ -192,10 +192,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	if db.Schemas == nil {
 		db.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 	}
-	db.Schemas[desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{
-		ID:      desc.ID,
-		Dropped: false,
-	}
+	db.Schemas[desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: desc.ID}
 
 	if err := p.writeNonDropDatabaseChange(
 		params.ctx, db,

@@ -81,6 +81,8 @@ func (desc *immutable) DatabaseDesc() *descpb.DatabaseDescriptor {
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
+//
+// Deprecated: Do not use.
 func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }
@@ -174,6 +176,22 @@ func (desc *immutable) ForEachSchemaInfo(
 ) error {
 	for name, info := range desc.Schemas {
 		if err := f(info.ID, name, info.Dropped); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// ForEachNonDroppedSchema implements the DatabaseDescriptor interface.
+func (desc *immutable) ForEachNonDroppedSchema(f func(id descpb.ID, name string) error) error {
+	for name, info := range desc.Schemas {
+		if info.Dropped {
+			continue
+		}
+		if err := f(info.ID, name); err != nil {
 			if iterutil.Done(err) {
 				return nil
 			}
@@ -371,6 +389,8 @@ func (desc *Mutable) SetOffline(reason string) {
 
 // AddDrainingName adds a draining name to the DatabaseDescriptor's slice of
 // draining names.
+//
+// Deprecated: Do not use.
 func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
 	desc.DrainingNames = append(desc.DrainingNames, name)
 }

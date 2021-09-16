@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -209,6 +210,11 @@ func (p *planner) renameSchema(
 
 	// Set the new name for the descriptor.
 	oldName := desc.Name
+	desc.AddDrainingName(descpb.NameInfo{
+		ParentID:       desc.ParentID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           desc.Name,
+	})
 	desc.SetName(newName)
 
 	// Write a new namespace entry for the new name.
@@ -247,10 +253,7 @@ func (p *planner) renameSchema(
 		Dropped: true,
 	}
 	// Create an entry for the new schema name.
-	db.Schemas[newName] = descpb.DatabaseDescriptor_SchemaInfo{
-		ID:      desc.ID,
-		Dropped: false,
-	}
+	db.Schemas[newName] = descpb.DatabaseDescriptor_SchemaInfo{ID: desc.ID}
 	if err := p.writeNonDropDatabaseChange(
 		ctx, db,
 		fmt.Sprintf("updating parent database %s for %s", db.GetName(), jobDesc),

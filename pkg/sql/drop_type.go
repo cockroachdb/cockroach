@@ -251,7 +251,7 @@ func (p *planner) dropTypeImpl(
 	}
 
 	// Add a draining name.
-	typeDesc.DrainingNames = append(typeDesc.DrainingNames, descpb.NameInfo{
+	typeDesc.AddDrainingName(descpb.NameInfo{
 		ParentID:       typeDesc.ParentID,
 		ParentSchemaID: typeDesc.ParentSchemaID,
 		Name:           typeDesc.Name,
