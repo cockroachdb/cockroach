@@ -59,7 +59,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "cnt": {{.Int64}},
          "firstAttemptCnt": {{.Int64}},
          "maxRetries":      {{.Int64}},
-         "lastExecAt":      "0001-01-01T00:00:00Z",
+         "lastExecAt":      "{{stringifyTime .Time}}",
          "numRows": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}

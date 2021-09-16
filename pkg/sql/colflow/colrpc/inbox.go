@@ -323,7 +323,7 @@ func (i *Inbox) Next() coldata.Batch {
 			}
 			// Note that here err can be stream's context cancellation.
 			// Regardless of the cause we want to propagate such an error as
-			// expected on in all cases so that the caller could decide on how
+			// expected one in all cases so that the caller could decide on how
 			// to handle it.
 			err = pgerror.Newf(pgcode.InternalConnectionFailure, "inbox communication error: %s", err)
 			i.errCh <- err

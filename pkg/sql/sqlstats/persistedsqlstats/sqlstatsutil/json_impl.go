@@ -334,7 +334,7 @@ func (t *jsonTime) decodeJSON(js json.JSON) error {
 		return err
 	}
 
-	tm := (time.Time)(*t)
+	tm := (*time.Time)(t)
 	if err := tm.UnmarshalText([]byte(s)); err != nil {
 		return err
 	}

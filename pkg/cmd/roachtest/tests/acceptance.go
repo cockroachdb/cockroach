@@ -67,10 +67,7 @@ func registerAcceptance(r registry.Registry) {
 			{name: "build-analyze", fn: RunBuildAnalyze},
 			{name: "cli/node-status", fn: runCLINodeStatus},
 			{name: "cluster-init", fn: runClusterInit},
-			{
-				name: "rapid-restart", fn: runRapidRestart,
-				skip: "https://github.com/cockroachdb/cockroach/issues/63795",
-			},
+			{name: "rapid-restart", fn: runRapidRestart},
 			{name: "status-server", fn: runStatusServer},
 		},
 	}
