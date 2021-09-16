@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"testing"
@@ -223,8 +224,7 @@ func TestStartChildSpan(t *testing.T) {
 }
 
 func TestSterileSpan(t *testing.T) {
-	tr := NewTracer()
-	tr.SetTestingKnobs(TracerTestingKnobs{ForceRealSpans: true})
+	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
 
 	// Check that a children of sterile spans are roots.
 	sp1 := tr.StartSpan("parent", WithSterile())
