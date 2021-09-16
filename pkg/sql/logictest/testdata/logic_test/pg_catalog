@@ -5329,3 +5329,15 @@ usename       usesuper
 regular_user  false
 root          true
 super_user    true
+
+# Testing null valid until roles
+statement ok
+CREATE USER regression_70180 WITH password '123' VALID UNTIL null;
+
+query TT colnames
+SELECT usename, valuntil
+FROM pg_user
+WHERE usename = 'regression_70180'
+----
+usename           valuntil
+regression_70180  NULL

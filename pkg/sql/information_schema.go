@@ -2499,38 +2499,29 @@ func (r roleOptions) noLogin() (tree.DBool, error) {
 
 func (r roleOptions) validUntil(p *planner) (tree.Datum, error) {
 	const validUntilKey = "VALID UNTIL"
-	exists, err := r.Exists(validUntilKey)
+	jsonValue, err := r.FetchValKey(validUntilKey)
 	if err != nil {
 		return nil, err
 	}
-
-	var rolValidUntil *time.Time = nil
-	if exists {
-		val, err := r.FetchValKey(validUntilKey)
-		if err != nil {
-			return nil, err
-		}
-		valStr, err := val.AsText()
-		if err != nil {
-			return nil, err
-		}
-
-		validUntil, _, err := pgdate.ParseTimestamp(
-			p.EvalContext().GetRelativeParseTime(),
-			pgdate.DefaultDateStyle(),
-			*valStr,
-		)
-		if err != nil {
-			return nil, errors.Errorf("rolValidUntil string %s could not be parsed with datestyle %s", *valStr, p.EvalContext().GetDateStyle())
-		}
-		rolValidUntil = &validUntil
-	}
-
-	if rolValidUntil == nil {
+	if jsonValue == nil {
 		return tree.DNull, nil
 	}
-
-	return tree.MakeDTimestampTZ(*rolValidUntil, time.Second)
+	validUntilText, err := jsonValue.AsText()
+	if err != nil {
+		return nil, err
+	}
+	if validUntilText == nil {
+		return tree.DNull, nil
+	}
+	validUntil, _, err := pgdate.ParseTimestamp(
+		p.EvalContext().GetRelativeParseTime(),
+		pgdate.DefaultDateStyle(),
+		*validUntilText,
+	)
+	if err != nil {
+		return nil, errors.Errorf("rolValidUntil string %s could not be parsed with datestyle %s", *validUntilText, p.EvalContext().GetDateStyle())
+	}
+	return tree.MakeDTimestampTZ(validUntil, time.Second)
 }
 
 func (r roleOptions) createDB() (tree.DBool, error) {
