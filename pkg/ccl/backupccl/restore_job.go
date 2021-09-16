@@ -2109,18 +2109,17 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 			}
 		}
 
-		if err := r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, descsCol); err != nil {
-			return err
-		}
-
-		if details.DescriptorCoverage == tree.AllDescriptors {
-			// The temporary system table descriptors should already have been dropped
-			// in `dropDescriptors` but we still need to drop the temporary system db.
-			return r.cleanupTempSystemTables(ctx, txn)
-		}
-		return nil
+		return r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, descsCol)
 	}); err != nil {
 		return err
+	}
+
+	if details.DescriptorCoverage == tree.AllDescriptors {
+		// The temporary system table descriptors should already have been dropped
+		// in `dropDescriptors` but we still need to drop the temporary system db.
+		if err := execCfg.DB.Txn(ctx, r.cleanupTempSystemTables); err != nil {
+			return err
+		}
 	}
 
 	// Emit to the event log that the job has completed reverting.
