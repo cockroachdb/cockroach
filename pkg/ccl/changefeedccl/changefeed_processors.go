@@ -496,6 +496,8 @@ func (ca *changeAggregator) tick() error {
 		if ca.knobs.ShouldSkipResolved == nil || !ca.knobs.ShouldSkipResolved(resolved) {
 			return ca.noteResolvedSpan(resolved)
 		}
+	case kvevent.TypeFlush:
+		return ca.sink.Flush(ca.Ctx)
 	}
 
 	return nil
