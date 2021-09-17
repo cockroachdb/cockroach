@@ -265,9 +265,9 @@ type SpanMeta struct {
 	// a root span. This is useful for span corresponding to long-running
 	// operations that don't want to be associated with derived operations.
 	//
-	// Note that this field is unlike all the other in that it doesn't make it
+	// Note that this field is unlike all the others in that it doesn't make it
 	// across the wire through a carrier. As can be seen in
-	// Tracer.InjectMetaInto(carrier), is sterile is set, then we don't propagate
+	// Tracer.InjectMetaInto(carrier), if sterile is set, then we don't propagate
 	// any info about the span in order to not have a child be created on the
 	// other side. Similarly, ExtractMetaFrom does not deserialize this field.
 	sterile bool
