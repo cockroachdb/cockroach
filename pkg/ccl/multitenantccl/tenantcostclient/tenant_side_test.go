@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -142,7 +143,9 @@ func (ts *testState) start(t *testing.T) {
 		usage := time.Duration(atomic.LoadInt64((*int64)(&ts.cpuUsage)))
 		return usage.Seconds()
 	}
-	if err := ts.controller.Start(ctx, ts.stopper, cpuUsageFn); err != nil {
+	instanceID := base.SQLInstanceID(1)
+	sessionID := sqlliveness.SessionID("foo")
+	if err := ts.controller.Start(ctx, ts.stopper, instanceID, sessionID, cpuUsageFn); err != nil {
 		t.Fatal(err)
 	}
 }
