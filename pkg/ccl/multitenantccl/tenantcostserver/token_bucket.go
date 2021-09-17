@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -68,8 +69,21 @@ func (s *instance) TokenBucketRequest(
 				return err
 			}
 		}
+		if string(instance.Lease) != string(in.InstanceLease) {
+			// This must be a different incarnation of the same ID. Clear the sequence
+			// number.
+			instance.Seq = 0
+			instance.Lease = tree.DBytes(in.InstanceLease)
+		}
 
-		tenant.Consumption.Add(&in.ConsumptionSinceLastRequest)
+		// Only update consumption if we are sure this is not a duplicate request
+		// that we already counted. Note that if this is a duplicate request, it
+		// will still consume RUs; we rely on a higher level control loop that
+		// periodically reconfigures the token bucket to correct such errors.
+		if instance.Seq == 0 || instance.Seq < in.SeqNum {
+			tenant.Consumption.Add(&in.ConsumptionSinceLastRequest)
+			instance.Seq = in.SeqNum
+		}
 
 		// TODO(radu): update shares.
 		*result = tenant.Bucket.Request(in)

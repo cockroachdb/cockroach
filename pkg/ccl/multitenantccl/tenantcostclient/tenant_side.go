@@ -179,8 +179,12 @@ type tenantSideCostController struct {
 		now         time.Time
 		cpuSecs     float64
 		consumption roachpb.TenantConsumption
+		// requestSeqNum is an increasing sequence number that is included in token
+		// bucket requests.
+		requestSeqNum int64
 
-		// TargetPeriodSetting value at the last update.
+		// targetPeriod stores the value of the TargetPeriodSetting setting at the
+		// last update.
 		targetPeriod time.Duration
 
 		// initialRequestCompleted is set to true when the first token bucket
@@ -261,6 +265,7 @@ func (c *tenantSideCostController) initRunState(ctx context.Context) {
 	c.run.cpuSecs = c.cpuSecsFn(ctx)
 	c.run.lastRequestTime = now
 	c.run.avgRUPerSec = initialRUs / c.run.targetPeriod.Seconds()
+	c.run.requestSeqNum = 1
 }
 
 // updateRunState is called whenever the main loop awakens and accounts for the
@@ -354,10 +359,12 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		TenantID:                    c.tenantID.ToUint64(),
 		InstanceID:                  uint32(c.instanceID),
 		InstanceLease:               []byte(c.sessionID),
+		SeqNum:                      c.run.requestSeqNum,
 		ConsumptionSinceLastRequest: deltaConsumption,
 		RequestedRU:                 requested,
 		TargetRequestPeriod:         c.run.targetPeriod,
 	}
+	c.run.requestSeqNum++
 
 	c.run.lastRequestTime = c.run.now
 	// TODO(radu): in case of an error, we undercount some consumption.
