@@ -62,6 +62,11 @@ const (
 	// meaningful.
 	TypeResolved
 
+	// TypeFlush indicates a request to flush buffered data.
+	// This request type is emitted by blocking buffer when it's blocked, waiting
+	// for more memory.
+	TypeFlush
+
 	// TypeUnknown indicates the event could not be parsed. Will fail the feed.
 	TypeUnknown
 )
@@ -71,6 +76,7 @@ const (
 type Event struct {
 	kv                 roachpb.KeyValue
 	prevVal            roachpb.Value
+	flush              bool
 	resolved           *jobspb.ResolvedSpan
 	backfillTimestamp  hlc.Timestamp
 	bufferGetTimestamp time.Time
@@ -85,6 +91,9 @@ func (b *Event) Type() Type {
 	}
 	if b.resolved != nil {
 		return TypeResolved
+	}
+	if b.flush {
+		return TypeFlush
 	}
 	return TypeUnknown
 }
