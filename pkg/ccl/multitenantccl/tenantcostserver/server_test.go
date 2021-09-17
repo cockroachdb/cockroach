@@ -64,6 +64,7 @@ type testState struct {
 	clock       *timeutil.ManualTime
 	tenantUsage multitenant.TenantUsageServer
 	metricsReg  *metric.Registry
+	autoSeqNum  int64
 }
 
 const timeFormat = "15:04:05.000"
@@ -127,8 +128,10 @@ func (ts *testState) createTenant(t *testing.T, d *datadriven.TestData) string {
 func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) string {
 	tenantID := ts.tenantID(t, d)
 	var args struct {
-		InstanceID  uint32 `yaml:"instance_id"`
-		Consumption struct {
+		InstanceID    uint32 `yaml:"instance_id"`
+		InstanceLease string `yaml:"instance_lease"`
+		SeqNum        int64  `yaml:"seq_num"`
+		Consumption   struct {
 			RU              float64 `yaml:"ru"`
 			ReadReq         uint64  `yaml:"read_req"`
 			ReadBytes       uint64  `yaml:"read_bytes"`
@@ -139,17 +142,26 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		RU     float64 `yaml:"ru"`
 		Period string  `yaml:"period"`
 	}
+	args.SeqNum = -1
 	args.Period = "10s"
+	args.InstanceLease = "foo"
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &args); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
+	}
+	// If sequence number not specified, use an auto-incrementing number.
+	if args.SeqNum == -1 {
+		ts.autoSeqNum++
+		args.SeqNum = ts.autoSeqNum
 	}
 	period, err := time.ParseDuration(args.Period)
 	if err != nil {
 		d.Fatalf(t, "failed to parse duration: %v", args.Period)
 	}
 	req := roachpb.TokenBucketRequest{
-		TenantID:   uint64(tenantID),
-		InstanceID: args.InstanceID,
+		TenantID:      uint64(tenantID),
+		InstanceID:    args.InstanceID,
+		InstanceLease: []byte(args.InstanceLease),
+		SeqNum:        args.SeqNum,
 		ConsumptionSinceLastRequest: roachpb.TenantConsumption{
 			RU:                args.Consumption.RU,
 			ReadRequests:      args.Consumption.ReadReq,
