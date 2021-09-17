@@ -2728,6 +2728,15 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 
 	printComma, b = m.CommonSQLExecDetails.AppendJSONFields(printComma, b)
 
+	if m.SkippedQueries != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SkippedQueries\":"...)
+		b = strconv.AppendUint(b, uint64(m.SkippedQueries), 10)
+	}
+
 	return printComma, b
 }
 
