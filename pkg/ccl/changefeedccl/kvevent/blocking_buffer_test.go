@@ -111,3 +111,51 @@ func TestBlockingBuffer(t *testing.T) {
 	}
 	stopProducers()
 }
+
+func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	metrics := kvevent.MakeMetrics(time.Minute)
+	ba, release := getBoundAccountWithBudget(4096)
+	defer release()
+
+	st := cluster.MakeTestingClusterSettings()
+	buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics)
+	defer func() {
+		require.NoError(t, buf.Close(context.Background()))
+	}()
+
+	producerCtx, stopProducer := context.WithCancel(context.Background())
+	wg := ctxgroup.WithContext(producerCtx)
+	defer func() {
+		_ = wg.Wait() // Ignore error -- this group returns context cancellation.
+	}()
+
+	// Start adding KVs to the buffer until we block.
+	wg.GoCtx(func(ctx context.Context) error {
+		rnd, _ := randutil.NewTestPseudoRand()
+		for {
+			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}))
+			if err != nil {
+				return nil
+			}
+		}
+	})
+
+	// Consume events until we get a flush event.
+	var outstanding kvevent.Alloc
+	for i := 0; ; i++ {
+		e, err := buf.Get(context.Background())
+		require.NoError(t, err)
+		if e.Type() == kvevent.TypeFlush {
+			break
+		}
+
+		// detach alloc associated with an event and merge (but not release) it into outstanding.
+		a := e.DetachAlloc()
+		outstanding.Merge(&a)
+	}
+
+	stopProducer()
+}
