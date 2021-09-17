@@ -30,8 +30,9 @@ type logger struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	ttl  time.Duration
-	seed int64
+	ttl                                time.Duration
+	seed                               int64
+	minRowsPerInsert, maxRowsPerInsert int
 }
 
 var loggerMeta = workload.Meta{
@@ -44,6 +45,8 @@ var loggerMeta = workload.Meta{
 		g.flags.FlagSet = pflag.NewFlagSet(`ttllogger`, pflag.ContinueOnError)
 		g.flags.DurationVar(&g.ttl, "ttl", time.Minute, `Table TTL duration.`)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
+		g.flags.IntVar(&g.minRowsPerInsert, `min-rows-per-insert`, 10, `Minimum rows per insert.`)
+		g.flags.IntVar(&g.maxRowsPerInsert, `max-rows-per-insert`, 1000, `Maximum rows per insert.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -74,8 +77,8 @@ func (l logger) Ops(
 	db.SetMaxOpenConns(l.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(l.connFlags.Concurrency + 1)
 
-	insertStmt, err := db.Prepare(
-		`INSERT INTO logs (message) VALUES ($1)`,
+	insertStmt, err := db.Prepare(`
+		INSERT INTO logs (message) (SELECT ($2 || s) FROM generate_series(1, $1) s)`,
 	)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -89,7 +92,7 @@ func (l logger) Ops(
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < l.connFlags.Concurrency/2; i++ {
-		rng := rand.New(rand.NewSource(l.seed) + int64(i))
+		rng := rand.New(rand.NewSource(l.seed + int64(i)))
 		hists := reg.GetHandle()
 		workerFn := func(ctx context.Context) error {
 			strLen := 1 + rng.Intn(100)
@@ -97,9 +100,10 @@ func (l logger) Ops(
 			for i := 0; i < strLen; i++ {
 				str[i] = logChars[rand.Intn(len(logChars))]
 			}
+			rowsToInsert := l.minRowsPerInsert + rng.Intn(l.maxRowsPerInsert-l.minRowsPerInsert)
 
 			start := timeutil.Now()
-			_, err := insertStmt.Exec(string(str))
+			_, err := insertStmt.Exec(rowsToInsert, string(str))
 			elapsed := timeutil.Since(start)
 			hists.Get(`log`).Record(elapsed)
 			return err
