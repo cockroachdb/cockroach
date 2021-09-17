@@ -1060,10 +1060,8 @@ func decodeTuple(a *DatumAlloc, tupTyp *types.T, b []byte) (tree.Datum, []byte, 
 		return nil, nil, err
 	}
 
-	result := tree.DTuple{
-		D: a.NewDatums(len(tupTyp.TupleContents())),
-	}
-
+	result := *(tree.NewDTuple(tupTyp))
+	result.D = a.NewDatums(len(tupTyp.TupleContents()))
 	var datum tree.Datum
 	for i := range tupTyp.TupleContents() {
 		datum, b, err = DecodeTableValue(a, tupTyp.TupleContents()[i], b)
