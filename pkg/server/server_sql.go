@@ -130,6 +130,7 @@ type SQLServer struct {
 	// sqlMemMetrics are used to track memory usage of sql sessions.
 	sqlMemMetrics           sql.MemoryMetrics
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
+	sqlLivenessSessionID    sqlliveness.SessionID
 	sqlLivenessProvider     sqlliveness.Provider
 	sqlInstanceProvider     sqlinstance.Provider
 	metricsRegistry         *metric.Registry
@@ -956,7 +957,7 @@ func (s *SQLServer) initInstanceID(ctx context.Context) error {
 		// as this is not a SQL pod server.
 		return nil
 	}
-	instanceID, err := s.sqlInstanceProvider.Instance(ctx)
+	instanceID, sessionID, err := s.sqlInstanceProvider.Instance(ctx)
 	if err != nil {
 		return err
 	}
@@ -964,6 +965,7 @@ func (s *SQLServer) initInstanceID(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.sqlLivenessSessionID = sessionID
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(instanceID)})
 	return nil
 }
