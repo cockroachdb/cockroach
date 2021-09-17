@@ -87,7 +87,14 @@ func (tc *Collection) GetMutableTypeByID(
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*typedesc.Mutable), nil
+	switch t := desc.(type) {
+	case *typedesc.Mutable:
+		return t, nil
+	case *typedesc.VirtualTableRecordType:
+		return nil, pgerror.Newf(pgcode.DependentObjectsStillExist, "cannot modify table record type %q", desc.GetName())
+	}
+	return nil,
+		errors.AssertionFailedf("unhandled type descriptor type %T during GetMutableTypeByID", desc)
 }
 
 // GetImmutableTypeByID returns an immutable type descriptor with
@@ -118,7 +125,7 @@ func (tc *Collection) getTypeByID(
 		return t, nil
 	case catalog.TableDescriptor:
 		// Table record type.
-		return typedesc.CreateMutableFromTableDesc(t), nil
+		return typedesc.CreateVirtualRecordTypeFromTableDesc(t)
 	}
 	return nil, pgerror.Newf(
 		pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
