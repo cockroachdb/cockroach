@@ -105,6 +105,9 @@ var retiredSettings = map[string]struct{}{
 	"sql.distsql.prefer_local_execution.enabled":                     {},
 	"kv.follower_read.target_multiple":                               {},
 	"kv.closed_timestamp.close_fraction":                             {},
+
+	// removed as of 22.1.
+	"sql.defaults.drop_enum_value.enabled": {},
 }
 
 // register adds a setting to the registry.
