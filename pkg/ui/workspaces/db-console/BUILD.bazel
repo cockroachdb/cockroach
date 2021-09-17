@@ -1,0 +1,91 @@
+load("@npm//webpack-cli:index.bzl", webpack = "webpack_cli")
+
+WEBPACK_DATA_OSS = [
+    ".babelrc",
+    ".eslintrc.json",
+    ".stylintrc",
+    "assets",
+    "favicon.ico",
+    "fonts",
+    "src",
+    "styl",
+    "tsconfig.json",
+    "webpack.app.js",
+    ":node_modules",
+    "//pkg/ui:node_modules_db_console",
+    "//pkg/ui/workspaces/cluster-ui:cluster_ui_package",
+    "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
+    "@npm//@babel/parser",
+    "@npm//@babel/plugin-proposal-class-properties",
+    "@npm//@babel/plugin-proposal-object-rest-spread",
+    "@npm//@babel/plugin-transform-modules-commonjs",
+    "@npm//@babel/plugin-transform-runtime",
+    "@npm//@babel/preset-env",
+    "@npm//@babel/preset-react",
+    "@npm//@babel/preset-typescript",
+    "@npm//@babel/runtime",
+    "@npm//@babel/types",
+    "@npm//@types",
+    "@npm//antd",
+    "@npm//astroturf",
+    "@npm//babel-loader",
+    "@npm//babel-plugin-import",
+    "@npm//babel-polyfill",
+    "@npm//babel-preset-react-app",
+    "@npm//cache-loader",
+    "@npm//copy-webpack-plugin",
+    "@npm//css-loader",
+    "@npm//nib",
+    "@npm//protobufjs",
+    "@npm//sass-loader",
+    "@npm//source-map-loader",
+    "@npm//string-replace-webpack-plugin",
+    "@npm//style-loader",
+    "@npm//stylus-loader",
+    "@npm//ts-loader",
+    "@npm//url-loader",
+    "@npm//webpack",
+    "@npm//webpackbar",
+]
+
+WEBPACK_DATA_CCL = WEBPACK_DATA_OSS + [
+    "//pkg/ui/workspaces/db-console/ccl/src/js:db_console_ccl_js_proto",
+    "ccl",
+]
+
+webpack(
+    name = "db-console-ccl",
+    args = [
+        "--config $(execpath webpack.app.js)",
+        "--env.dist=ccl",
+        "--mode production",
+        "--env.is_bazel_build",
+        "--env.output=$(RULEDIR)/db-console-ccl",
+    ],
+    data = WEBPACK_DATA_CCL,
+    output_dir = True,
+    visibility = ["//visibility:public"],
+)
+
+webpack(
+    name = "db-console-oss",
+    args = [
+        "--config $(execpath webpack.app.js)",
+        "--env.dist=oss",
+        "--mode production",
+        "--env.is_bazel_build",
+        "--env.output=$(RULEDIR)/db-console-oss",
+    ],
+    data = WEBPACK_DATA_OSS,
+    output_dir = True,
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "node_modules",
+    srcs = glob(
+        include = [
+            "node_modules/**",
+        ],
+    ),
+)

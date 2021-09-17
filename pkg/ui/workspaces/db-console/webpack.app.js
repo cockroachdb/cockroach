@@ -14,7 +14,6 @@ const path = require("path");
 const rimraf = require("rimraf");
 const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
-const VisualizerPlugin = require("webpack-visualizer-plugin");
 const StringReplacePlugin = require("string-replace-webpack-plugin");
 const WebpackBar = require("webpackbar");
 
@@ -41,17 +40,61 @@ function shouldProxy(reqPath) {
 
 // tslint:disable:object-literal-sort-keys
 module.exports = (env, argv) => {
+  const isBazelBuild = env && env.is_bazel_build;
+
   let localRoots = [path.resolve(__dirname)];
   if (env.dist === "ccl") {
     // CCL modules shadow OSS modules.
     localRoots.unshift(path.resolve(__dirname, "ccl"));
   }
 
+  let plugins = [
+    new RemoveBrokenDependenciesPlugin(),
+    new CopyWebpackPlugin([
+      { from: path.resolve(__dirname, "favicon.ico"), to: "favicon.ico" },
+    ]),
+    // use WebpackBar instead of webpack dashboard to fit multiple webpack dev server outputs (db-console and cluster-ui)
+    new WebpackBar({
+      name: "db-console",
+      color: "orange",
+      profile: true,
+    }),
+  ];
+
+  // First check for local modules, then for third-party modules from
+  // node_modules.
+  let modules = [
+    ...localRoots,
+    path.resolve(__dirname, "node_modules"),
+    path.resolve(__dirname, "../..", "node_modules"),
+  ];
+
+  if (isBazelBuild) {
+    // required for bazel build to resolve properly dependencies
+    modules.push("node_modules");
+  }
+
+  // Exclude DLLPlugin when build with Bazel because bazel handles caching on its own
+  if (!isBazelBuild) {
+    plugins = plugins.concat([
+      // See "DLLs for speedy builds" in the README for details.
+      new webpack.DllReferencePlugin({
+        context: path.resolve(__dirname, `dist${env.dist}`),
+        manifest: require(env.protos_manifest ||
+          `./protos.${env.dist}.manifest.json`),
+      }),
+      new webpack.DllReferencePlugin({
+        context: path.resolve(__dirname, `dist${env.dist}`),
+        manifest: require(env.vendor_manifest || "./vendor.oss.manifest.json"),
+      }),
+    ]);
+  }
+
   const config = {
-    entry: ["./src/index.tsx"],
+    entry: [path.resolve(__dirname, "./src/index.tsx")],
     output: {
       filename: "bundle.js",
-      path: path.resolve(__dirname, "../..", `dist${env.dist}`, "assets"),
+      path: path.resolve(env.output || `../../dist${env.dist}`, "assets"),
     },
 
     mode: argv.mode || "production",
@@ -59,19 +102,7 @@ module.exports = (env, argv) => {
     resolve: {
       // Add resolvable extensions.
       extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
-      // First check for local modules, then for third-party modules from
-      // node_modules.
-      //
-      // These module roots are transformed into absolute paths, by
-      // path.resolve, to ensure that only the exact directory is checked.
-      // Relative paths would trigger the resolution behavior used by Node.js
-      // for "node_modules", i.e., checking for a "node_modules" directory in
-      // the current directory *or any parent directory*.
-      modules: [
-        ...localRoots,
-        path.resolve(__dirname, "node_modules"),
-        path.resolve("../..", "node_modules"),
-      ],
+      modules: modules,
       alias: {
         oss: path.resolve(__dirname),
         "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
@@ -128,12 +159,23 @@ module.exports = (env, argv) => {
         {
           test: /\.js$/,
           include: localRoots,
+          exclude: [
+            /node_modules/,
+            /src\/js/,
+            /ccl\/src\/js/,
+            /cluster-ui\/dist/,
+          ],
           use: ["cache-loader", "babel-loader"],
         },
         {
           test: /\.(ts|tsx)?$/,
           include: localRoots,
-          exclude: /\/node_modules/,
+          exclude: [
+            /node_modules/,
+            /src\/js/,
+            /ccl\/src\/js/,
+            /cluster-ui\/dist/,
+          ],
           use: [
             "cache-loader",
             "babel-loader",
@@ -147,31 +189,17 @@ module.exports = (env, argv) => {
           test: /\.js$/,
           loader: "source-map-loader",
           include: localRoots,
-          exclude: /\/node_modules/,
+          exclude: [
+            /node_modules/,
+            /src\/js/,
+            /ccl\/src\/js/,
+            /cluster-ui\/dist/,
+          ],
         },
       ],
     },
 
-    plugins: [
-      new RemoveBrokenDependenciesPlugin(),
-      // See "DLLs for speedy builds" in the README for details.
-      new webpack.DllReferencePlugin({
-        context: path.resolve(__dirname, `dist${env.dist}`),
-        manifest: require(`./protos.${env.dist}.manifest.json`),
-      }),
-      new webpack.DllReferencePlugin({
-        context: path.resolve(__dirname, `dist${env.dist}`),
-        manifest: require("./vendor.oss.manifest.json"),
-      }),
-      new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),
-      new VisualizerPlugin({ filename: `../../dist/stats.${env.dist}.html` }),
-      // use WebpackBar instead of webpack dashboard to fit multiple webpack dev server outputs (db-console and cluster-ui)
-      new WebpackBar({
-        name: "db-console",
-        color: "orange",
-        profile: true,
-      }),
-    ],
+    plugins: plugins,
 
     stats: "errors-only",
 
@@ -181,7 +209,7 @@ module.exports = (env, argv) => {
       proxy: {
         "/": {
           secure: false,
-          target: process.env.TARGET,
+          target: env.target || process.env.TARGET,
         },
       },
     },

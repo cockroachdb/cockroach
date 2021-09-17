@@ -29,6 +29,7 @@
     "@babel/runtime": "^7.12.13"
   },
   "devDependencies": {
+    "@bazel/typescript": "4.1.0",
     "@babel/cli": "^7.8.3",
     "@babel/core": "^7.8.3",
     "@babel/plugin-proposal-class-properties": "^7.8.0",
@@ -39,7 +40,7 @@
     "@babel/preset-react": "^7.10.4",
     "@babel/preset-typescript": "^7.8.0",
     "@cockroachlabs/crdb-protobuf-client": "link:../db-console/src/js",
-    "@cockroachlabs/eslint-config": "^0.1.3",
+    "@cockroachlabs/eslint-config": "^0.1.11",
     "@cockroachlabs/icons": "0.3.0",
     "@cockroachlabs/ui-components": "0.2.19-alpha.11",
     "@popperjs/core": "^2.4.0",
@@ -113,7 +114,6 @@
     "react-helmet": "^5.2.0",
     "react-popper": "^2.2.3",
     "react-redux": "^7.2.4",
-    "react-router-dom": "^5.1.2",
     "react-select": "^4.3.0",
     "react-test-renderer": "^16.13.1",
     "redux": "^4.1.0",

@@ -13,8 +13,9 @@ const webpack = require("webpack");
 const WebpackBar = require("webpackbar");
 const MomentLocalesPlugin = require("moment-locales-webpack-plugin");
 
+// tslint:disable:object-literal-sort-keys
 module.exports = {
-  entry: "./src/index.ts",
+  entry: path.resolve(__dirname, "./src/index.ts"),
 
   output: {
     path: path.resolve(__dirname, "dist/js"),
@@ -80,7 +81,7 @@ module.exports = {
           "babel-loader",
           {
             loader: "astroturf/loader",
-            options: { extension: ".module.scss" },
+            options: {extension: ".module.scss"},
           },
         ],
         exclude: /node_modules/,
@@ -107,8 +108,9 @@ module.exports = {
         enforce: "pre",
         test: /\.js$/,
         loader: "source-map-loader",
+        exclude: /node_modules/,
       },
-      { test: /\.css$/, use: [ "style-loader", "css-loader" ] },
+      {test: /\.css$/, use: ["style-loader", "css-loader"]},
     ],
   },
 
@@ -148,4 +150,4 @@ module.exports = {
     "redux-saga": "redux-saga",
     "redux": "redux",
   },
-};
+}
