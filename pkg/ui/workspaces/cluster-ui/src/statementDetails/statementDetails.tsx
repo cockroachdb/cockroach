@@ -76,7 +76,6 @@ interface SingleStatementStatistics {
   database: string;
   distSQL: Fraction;
   vec: Fraction;
-  opt: Fraction;
   implicit_txn: Fraction;
   failed: Fraction;
   node_id: number[];
@@ -439,7 +438,6 @@ export class StatementDetails extends React.Component<
       app,
       distSQL,
       vec,
-      opt,
       failed,
       implicit_txn,
       database,
@@ -641,10 +639,6 @@ export class StatementDetails extends React.Component<
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Failed?</Text>
                   <Text>{renderBools(failed)}</Text>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Used cost-based optimizer?</Text>
-                  <Text>{renderBools(opt)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Distributed execution?</Text>
