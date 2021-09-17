@@ -46,7 +46,6 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
   "db":      "{{.String}}",
   "distsql": {{.Bool}},
   "failed":  {{.Bool}},
-  "opt":     {{.Bool}},
   "implicitTxn": {{.Bool}},
   "vec":         {{.Bool}},
   "fullScan":    {{.Bool}}
@@ -89,6 +88,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "sqDiff": {{.Float}}
          },
          "rowsRead": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "rowsWritten": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },

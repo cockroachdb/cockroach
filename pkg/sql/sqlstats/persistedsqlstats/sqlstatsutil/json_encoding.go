@@ -54,7 +54,6 @@ func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
 //        "db":                   { "type": "string" },
 //        "distsql":              { "type": "boolean" },
 //        "failed":               { "type": "boolean" },
-//        "opt":                  { "type": "boolean" },
 //        "implicitTxn":          { "type": "boolean" },
 //        "vec":                  { "type": "boolean" },
 //        "fullScan":             { "type": "boolean" },

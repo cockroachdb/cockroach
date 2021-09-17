@@ -147,7 +147,6 @@ describe("flattenStatementStats", () => {
       assert.equal(flattened[i].app, stats[i].key.key_data.app);
       assert.equal(flattened[i].distSQL, stats[i].key.key_data.distSQL);
       assert.equal(flattened[i].vec, stats[i].key.key_data.vec);
-      assert.equal(flattened[i].opt, stats[i].key.key_data.opt);
       assert.equal(flattened[i].full_scan, stats[i].key.key_data.full_scan);
       assert.equal(flattened[i].failed, stats[i].key.key_data.failed);
       assert.equal(flattened[i].node_id, stats[i].key.node_id);
@@ -204,6 +203,7 @@ function randomStats(
     overhead_lat: randomStat(),
     bytes_read: randomStat(),
     rows_read: randomStat(),
+    rows_written: randomStat(),
     sensitive_info: sensitiveInfo || makeSensitiveInfo(null, null),
     legacy_last_err: "",
     legacy_last_err_redacted: "",

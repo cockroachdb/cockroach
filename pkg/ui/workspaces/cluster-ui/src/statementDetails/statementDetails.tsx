@@ -34,6 +34,7 @@ import {
   formatNumberForDisplay,
   calculateTotalWorkload,
   unique,
+  summarize,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -76,7 +77,6 @@ interface SingleStatementStatistics {
   database: string;
   distSQL: Fraction;
   vec: Fraction;
-  opt: Fraction;
   implicit_txn: Fraction;
   failed: Fraction;
   node_id: number[];
@@ -439,7 +439,6 @@ export class StatementDetails extends React.Component<
       app,
       distSQL,
       vec,
-      opt,
       failed,
       implicit_txn,
       database,
@@ -503,6 +502,9 @@ export class StatementDetails extends React.Component<
       moment(stats.last_exec_timestamp.seconds.low * 1e3).format(
         "MMM DD, YYYY HH:MM",
       );
+    const summary = summarize(statement);
+    const notSelectStatement = summary.statement !== "select";
+
     return (
       <Tabs
         defaultActiveKey="1"
@@ -568,6 +570,19 @@ export class StatementDetails extends React.Component<
                         {formatNumberForDisplay(stats.bytes_read.mean, Bytes)}
                       </Text>
                     </div>
+                    {notSelectStatement && (
+                      <div
+                        className={summaryCardStylesCx("summary--card__item")}
+                      >
+                        <Text>Mean rows written</Text>
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.rows_written.mean,
+                            formatTwoPlaces,
+                          )}
+                        </Text>
+                      </div>
+                    )}
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Max memory usage</Text>
                       <Text>
@@ -641,10 +656,6 @@ export class StatementDetails extends React.Component<
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Failed?</Text>
                   <Text>{renderBools(failed)}</Text>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Used cost-based optimizer?</Text>
-                  <Text>{renderBools(opt)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Distributed execution?</Text>
