@@ -124,7 +124,6 @@ func TestTelemetryLogging(t *testing.T) {
 	}{
 		{
 			// Test case with statement that is not of type DML.
-			// Therefore, expected sample rate is 1.
 			"create-table-query",
 			"CREATE TABLE t();",
 			[]int{1},
@@ -136,7 +135,7 @@ func TestTelemetryLogging(t *testing.T) {
 		{
 			// Test case with statement that is of type DML.
 			// QPS threshold is not expected to be exceeded, therefore,
-			// no sampling will occur. Expected sample rate is 1.
+			// no sampling will occur.
 			"select-*-limit-1-query",
 			"SELECT * FROM t LIMIT 1;",
 			[]int{1},
@@ -160,7 +159,7 @@ func TestTelemetryLogging(t *testing.T) {
 		{
 			// Test case with statement that is of type DML.
 			// QPS threshold is expected to be exceeded, and sampling
-			// selection is guaranteed. Expected sample rate is >0, and <1.
+			// selection is guaranteed.
 			"select-*-limit-3-query",
 			"SELECT * FROM t LIMIT 3;",
 			[]int{2},
@@ -172,7 +171,7 @@ func TestTelemetryLogging(t *testing.T) {
 		{
 			// Test case with statement that is of type DML.
 			// QPS threshold is expected to be exceeded, and sampling
-			// selection is guaranteed. Expected sample rate is >0, and <1.
+			// selection is guaranteed.
 			// Test case executes multiple queries in multiple 1s intervals.
 			"select-*-limit-4-query",
 			"SELECT * FROM t LIMIT 4;",
