@@ -1051,11 +1051,8 @@ func descBuilderFromTableDesc(descriptor catalog.TableDescriptor) TypeDescriptor
 		Version: uint32(descriptor.GetVersion()),
 	}
 	return NewBuilder(&descpb.TypeDescriptor{
-		Name: descriptor.GetName(),
-		// The ID of the virtual type descriptor is the type OID, not the table
-		// descriptor ID. This is important: if the descriptor had the table's ID,
-		// and not its own, the descriptor caches would not have unique keys.
-		ID:               descpb.ID(tableID),
+		Name:             descriptor.GetName(),
+		ID:               tableID,
 		Version:          descriptor.GetVersion(),
 		ModificationTime: descriptor.GetModificationTime(),
 		DrainingNames:    descriptor.GetDrainingNames(),
@@ -1072,14 +1069,209 @@ func descBuilderFromTableDesc(descriptor catalog.TableDescriptor) TypeDescriptor
 	})
 }
 
-// CreateMutableFromTableDesc creates a mutable TypeDescriptor that represents
-// the composite type of the visible columns of the input table.
-func CreateMutableFromTableDesc(descriptor catalog.TableDescriptor) catalog.TypeDescriptor {
-	return descBuilderFromTableDesc(descriptor).BuildCreatedMutableType()
+// VirtualTableRecordType is an implementation of catalog.TypeDescriptor that
+// represents a record type for a particular table: meaning, the composite type
+// that contains, in order, all of the visible columns for the table.
+type VirtualTableRecordType struct {
+	// desc is the TableDescriptor that this virtual record type is created from.
+	// TODO(jordan): does it make more sense to eagerly pop out all the fields
+	// that we care about from this backing TableDescriptor into the struct,
+	// rather than have all of the methods delegate?
+	desc catalog.TableDescriptor
+
+	typ *types.T
 }
 
-// CreateImmutableFromTableDesc creates an immutable TypeDescriptor that represents
-// the composite type of the visible columns of the input table.
-func CreateImmutableFromTableDesc(descriptor catalog.TableDescriptor) catalog.TypeDescriptor {
-	return descBuilderFromTableDesc(descriptor).BuildImmutableType()
+// TODO(jordan): if we keep the embedded catalog.TableDescriptor, do we want
+// to just use Go embedding to avoid writing all of these delegate calls? For now,
+// I like keeping them explicit, since it forces us to think about the implementations
+// separately from the table descriptor itself.
+
+func (v VirtualTableRecordType) GetName() string                      { return v.desc.GetName() }
+func (v VirtualTableRecordType) GetParentID() descpb.ID               { return v.desc.GetParentID() }
+func (v VirtualTableRecordType) GetParentSchemaID() descpb.ID         { return v.desc.GetParentSchemaID() }
+func (v VirtualTableRecordType) GetID() descpb.ID                     { return v.desc.GetID() }
+func (v VirtualTableRecordType) IsUncommittedVersion() bool           { return v.desc.IsUncommittedVersion() }
+func (v VirtualTableRecordType) GetVersion() descpb.DescriptorVersion { return v.desc.GetVersion() }
+func (v VirtualTableRecordType) GetModificationTime() hlc.Timestamp {
+	return v.desc.GetModificationTime()
+}
+func (v VirtualTableRecordType) GetDrainingNames() []descpb.NameInfo {
+	// TODO(jordan): I don't think we need to return anything here, because this
+	// descriptor doesn't really "own" any names on top of what the table already
+	// does.
+	return nil
+}
+
+func (v VirtualTableRecordType) GetPrivileges() *descpb.PrivilegeDescriptor {
+	// TODO(jordan): we can't drop these virtual types, so is it weird to say
+	// that we have drop permission on this thing even if we don't?
+	return v.desc.GetPrivileges()
+}
+
+func (v VirtualTableRecordType) DescriptorType() catalog.DescriptorType {
+	return catalog.Type
+}
+
+func (v VirtualTableRecordType) GetAuditMode() descpb.TableDescriptor_AuditMode {
+	return descpb.TableDescriptor_DISABLED
+}
+
+func (v VirtualTableRecordType) Public() bool { return v.desc.Public() }
+
+func (v VirtualTableRecordType) Adding() bool             { panic("adding") }
+func (v VirtualTableRecordType) Dropped() bool            { panic("dropped") }
+func (v VirtualTableRecordType) Offline() bool            { panic("offline") }
+func (v VirtualTableRecordType) GetOfflineReason() string { panic("offline reason") }
+
+func (v VirtualTableRecordType) DescriptorProto() *descpb.Descriptor { panic("descriptor proto") }
+
+func (v VirtualTableRecordType) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+	return v.desc.GetReferencedDescIDs()
+}
+
+func (v VirtualTableRecordType) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
+	// TODO(jordan): let's validate this thing
+	return
+}
+
+func (v VirtualTableRecordType) ValidateCrossReferences(
+	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+) {
+	// TODO(jordan): let's validate this thing
+	return
+}
+
+func (v VirtualTableRecordType) ValidateTxnCommit(
+	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+) {
+	// TODO(jordan): let's validate this thing
+	return
+}
+
+func (v VirtualTableRecordType) TypeDesc() *descpb.TypeDescriptor { panic("we have no type desc") }
+
+func (v VirtualTableRecordType) HydrateTypeInfoWithName(
+	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
+) error {
+	if typ.IsHydrated() {
+		return nil
+	}
+	typ.TypeMeta.Name = &types.UserDefinedTypeName{
+		Catalog:        name.Catalog(),
+		ExplicitSchema: name.ExplicitSchema,
+		Schema:         name.Schema(),
+		Name:           name.Object(),
+	}
+	typ.TypeMeta.Version = uint32(v.desc.GetVersion())
+	for _, t := range typ.TupleContents() {
+		if t.UserDefined() {
+			if err := hydrateElementType(ctx, t, res); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (v VirtualTableRecordType) MakeTypesT(
+	ctx context.Context, name *tree.TypeName, res catalog.TypeDescriptorResolver,
+) (*types.T, error) {
+	return v.typ, nil
+}
+
+func (v VirtualTableRecordType) HasPendingSchemaChanges() bool { return false }
+
+func (v VirtualTableRecordType) GetIDClosure() (map[descpb.ID]struct{}, error) {
+	ret := make(map[descpb.ID]struct{})
+	for _, elt := range v.typ.TupleContents() {
+		children, err := GetTypeDescriptorClosure(elt)
+		if err != nil {
+			return nil, err
+		}
+		for id := range children {
+			ret[id] = struct{}{}
+		}
+	}
+	return ret, nil
+}
+
+func (v VirtualTableRecordType) IsCompatibleWith(other catalog.TypeDescriptor) error {
+	return errors.Newf("compatibility comparison unsupported for virtual table record types")
+}
+
+func (v VirtualTableRecordType) PrimaryRegionName() (descpb.RegionName, error) {
+	return "", errors.AssertionFailedf(
+		"can not get primary region of a virtual table record type")
+}
+
+func (v VirtualTableRecordType) RegionNames() (descpb.RegionNames, error) {
+	return nil, errors.AssertionFailedf(
+		"can not get region names of a virtual table record type")
+}
+
+func (v VirtualTableRecordType) RegionNamesIncludingTransitioning() (descpb.RegionNames, error) {
+	return nil, errors.AssertionFailedf(
+		"can not get region names of a virtual table record type")
+}
+
+func (v VirtualTableRecordType) RegionNamesForValidation() (descpb.RegionNames, error) {
+	return nil, errors.AssertionFailedf(
+		"can not get region names of a virtual table record type")
+}
+
+func (v VirtualTableRecordType) TransitioningRegionNames() (descpb.RegionNames, error) {
+	return nil, errors.AssertionFailedf(
+		"can not get region names of a virtual table record type")
+}
+
+func (v VirtualTableRecordType) GetArrayTypeID() descpb.ID {
+	return 0
+}
+
+func (v VirtualTableRecordType) GetKind() descpb.TypeDescriptor_Kind {
+	panic("no kind for virtual table record types")
+}
+
+func (v VirtualTableRecordType) NumEnumMembers() int                          { return 0 }
+func (v VirtualTableRecordType) GetMemberPhysicalRepresentation(_ int) []byte { return nil }
+func (v VirtualTableRecordType) GetMemberLogicalRepresentation(_ int) string  { return "" }
+func (v VirtualTableRecordType) IsMemberReadOnly(_ int) bool                  { return false }
+func (v VirtualTableRecordType) NumReferencingDescriptors() int               { panic("num ref desc") }
+func (v VirtualTableRecordType) GetReferencingDescriptorID(_ int) descpb.ID   { panic("ref desc id") }
+
+func CreateVirtualRecordTypeFromTableDesc(
+	descriptor catalog.TableDescriptor,
+) catalog.TypeDescriptor {
+
+	cols := descriptor.VisibleColumns()
+	typs := make([]*types.T, len(cols))
+	names := make([]string, len(cols))
+	for i, col := range cols {
+		typs[i] = col.GetType()
+		names[i] = col.GetName()
+	}
+	// The TypeDescriptor will be an alias to this Tuple type, which contains
+	// all of the table's visible columns in order, labeled by the table's column
+	// names.
+	typ := types.MakeLabeledTuple(typs, names)
+	tableID := descriptor.GetID()
+	typeOID := TypeIDToOID(tableID)
+	// Setting the type's OID allows us to properly report and display this type
+	// as having ID <tableID> + 100000 in the pg_type table and ::REGTYPE casts.
+	// It will also be used to serialize expressions casted to this type for
+	// distribution with DistSQL. The receiver of such a serialized expression
+	// will then be able to look up and rehydrate this type via the type cache.
+	typ.InternalType.Oid = typeOID
+	typ.TypeMeta = types.UserDefinedTypeMetadata{
+		Name: &types.UserDefinedTypeName{
+			Name: descriptor.GetName(),
+		},
+		Version: uint32(descriptor.GetVersion()),
+	}
+
+	return &VirtualTableRecordType{
+		desc: descriptor,
+		typ:  typ,
+	}
 }

@@ -105,11 +105,7 @@ func (tc *Collection) getObjectByName(
 		if flags.DesiredObjectKind == tree.TypeObject {
 			// Since a type descriptor was requested, we need to return the implicitly
 			// created record type for the table that we found.
-			if flags.RequireMutable {
-				desc = typedesc.CreateMutableFromTableDesc(tableDesc)
-			} else {
-				desc = typedesc.CreateImmutableFromTableDesc(tableDesc)
-			}
+			desc = typedesc.CreateVirtualRecordTypeFromTableDesc(tableDesc)
 		}
 	case catalog.TypeDescriptor:
 		if flags.DesiredObjectKind != tree.TypeObject {
