@@ -171,7 +171,9 @@ func (p *planner) maybeLogStatementInternal(
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
 	sampleRate := telemetrySampleRate.Get(&p.execCfg.Settings.SV)
 	qpsThreshold := telemetryQPSThreshold.Get(&p.execCfg.Settings.SV)
-	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV)
+
+	// We only consider non-internal SQL statements for telemetry logging.
+	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) && execType != executorTypeInternal
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole

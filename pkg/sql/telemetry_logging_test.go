@@ -214,6 +214,12 @@ func TestTelemetryLogging(t *testing.T) {
 		t.Fatal(errors.Newf("no entries found"))
 	}
 
+	for _, e := range entries {
+		if strings.Contains(e.Message, `"ExecMode":"`+executorTypeInternal.logLabel()) {
+			t.Errorf("unexpected telemetry event for internal statement:\n%s", e.Message)
+		}
+	}
+
 	for _, tc := range testData {
 		logStatementFound := false
 		for _, e := range entries {
