@@ -334,6 +334,12 @@ func getDecimalLen(buf []byte) (int, error) {
 		return 1, nil
 	case decimalNegLarge, decimalNegSmall, decimalPosLarge, decimalPosSmall:
 		// Skip the varint exponent.
+		//
+		// getVarintLen assumes that its argument has at least one byte, so we
+		// explicitly check for that.
+		if len(buf) <= p {
+			return 0, errors.New("invalid decimal")
+		}
 		l, err := getVarintLen(buf[p:])
 		if err != nil {
 			return 0, err
