@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"math"
 	"time"
 
@@ -368,6 +369,11 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 			scName,
 			tree.Name(desc.GetName())),
 		nil
+}
+
+// RoleExists is part of the cat.Catalog interface.
+func (oc *optCatalog) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+	return RoleExists(ctx, oc.planner.ExecCfg(), oc.planner.Txn(), role)
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
