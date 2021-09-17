@@ -13,6 +13,9 @@ package delegate
 import (
 	"bytes"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -233,5 +236,21 @@ FROM "".information_schema.type_privileges`
 	query := fmt.Sprintf(`
 		SELECT * FROM (%s) %s ORDER BY %s
 	`, source.String(), cond.String(), orderBy)
+
+	// terminate on invalid users
+	for _, p := range n.Grantees {
+		user, err := security.MakeSQLUsernameFromUserInput(string(p), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		userExists, err := d.catalog.RoleExists(d.ctx, user)
+		if err != nil {
+			return nil, err
+		}
+		if !userExists {
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", user)
+		}
+	}
+
 	return parse(query)
 }
