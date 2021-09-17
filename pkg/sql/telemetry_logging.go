@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -29,11 +30,12 @@ type TelemetryLoggingMetrics struct {
 		// value.
 		MovingQPS []int64
 	}
-	// TODO(thardy98): add counter of number of not emitted events since the last
-	// emitted event (#69653).
 	smoothingAlpha  float64
 	rollingInterval int
 	Knobs           *TelemetryLoggingTestingKnobs
+
+	// skippedQueryCount is used to produce the count of non-sampled queries.
+	skippedQueryCount uint64
 }
 
 // TelemetryLoggingTestingKnobs provides hooks and knobs for unit tests.
@@ -101,6 +103,14 @@ func (t *TelemetryLoggingMetrics) updateRollingQueryCounts() {
 		1,
 	}
 	t.mu.rollingQueryCounts.insert(newLatest)
+}
+
+func (t *TelemetryLoggingMetrics) resetSkippedQueryCount() (res uint64) {
+	return atomic.SwapUint64(&t.skippedQueryCount, 0)
+}
+
+func (t *TelemetryLoggingMetrics) incSkippedQueryCount() {
+	atomic.AddUint64(&t.skippedQueryCount, 1)
 }
 
 // queryCountCircularBuffer is a circular buffer of queryCountAndTime objects.

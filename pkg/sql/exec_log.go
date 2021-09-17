@@ -372,16 +372,22 @@ func (p *planner) maybeLogStatementInternal(
 		// If we DO NOT need to sample the event, log immediately to the telemetry
 		// channel. Otherwise, log the event to the telemetry channel if it has been
 		// sampled.
-		// TODO(thardy98): add the effective sample rate to the SampledQuery event
-		// (#69653).
 		if alwaysReportQueries {
-			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails}})
+			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
+				CommonSQLExecDetails: execDetails,
+				SkippedQueries:       skippedQueries,
+			}})
 		} else if useSamplingMethod {
 			if rng.Float64() < sampleRate {
-				p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails}})
+				skippedQueries := telemetryMetrics.resetSkippedQueryCount()
+				p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
+					CommonSQLExecDetails: execDetails,
+					SkippedQueries:       skippedQueries,
+				}})
+			} else {
+				telemetryMetrics.incSkippedQueryCount()
 			}
-			// TODO(thardy98): event has not been sampled, increment the not emitted
-			// count (#69653).
 		}
 	}
 }
