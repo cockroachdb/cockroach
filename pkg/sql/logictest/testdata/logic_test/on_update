@@ -296,9 +296,6 @@ SELECT p, k FROM test_table_enum
 pk1  y
 
 statement ok
-SET enable_drop_enum_value = true
-
-statement ok
 ALTER TYPE test_enum DROP VALUE 'z'
 
 statement error pq: could not remove enum value "x" as it is being used in an ON UPDATE expression of "test_table_enum"

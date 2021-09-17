@@ -1370,9 +1370,6 @@ SELECT * from arr_t5
 subtest drop_used_enum_values
 
 statement ok
-SET enable_drop_enum_value = true
-
-statement ok
 CREATE TYPE default_abc AS ENUM ('a', 'b', 'c')
 
 statement ok
@@ -1510,9 +1507,6 @@ SELECT typname FROM pg_type WHERE oid = $oid
 typ2
 
 subtest drop_enum_value_index_predicate
-
-statement ok
-SET enable_drop_enum_value = true;
 
 statement ok
 DROP TYPE IF EXISTS enum_for_predicate;
