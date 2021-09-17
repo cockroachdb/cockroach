@@ -2481,6 +2481,12 @@ message TokenBucketRequest {
   // request originates, in light of ID reuse.
   bytes instance_lease = 4;
 
+  // SeqNum is a strictly positive, monotonically increasing sequence number,
+  // used to detect duplicate requests on the server side (to avoid
+  // double-charging). The consumption reported in a request with a lower
+  // sequence number than the last request is ignored.
+  int64 seq_num = 7;
+
   // RequestedRU is the number of requested tokens (RUs).
   double requested_r_u = 5;
 
@@ -2488,8 +2494,6 @@ message TokenBucketRequest {
   // TrickleDuration in the response.
   google.protobuf.Duration target_request_period = 6 [(gogoproto.nullable) = false,
                                                       (gogoproto.stdduration) = true];
-
-  // TODO(radu): add remaining fields.
 }
 
 message TokenBucketResponse {

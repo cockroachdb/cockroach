@@ -568,8 +568,8 @@ func InspectTenantMetadata(
 	}
 	for _, r := range rows {
 		fmt.Fprintf(
-			&buf, "  Instance %s:  lease=%s  seq=%s  shares=%s  next-instance=%s  last-update=%s\n",
-			r[0], r[3], r[4], r[5], r[1], tree.MustBeDTimestamp(r[2]).Time.Format(timeFormat),
+			&buf, "  Instance %s:  lease=%q  seq=%s  shares=%s  next-instance=%s  last-update=%s\n",
+			r[0], tree.MustBeDBytes(r[3]), r[4], r[5], r[1], tree.MustBeDTimestamp(r[2]).Time.Format(timeFormat),
 		)
 	}
 	return buf.String(), nil
