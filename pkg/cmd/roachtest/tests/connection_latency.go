@@ -13,10 +13,13 @@ package tests
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -85,10 +88,11 @@ func runConnectionLatencyTest(
 		t.L().Printf("running workload in %q against urls:\n%s", locality, strings.Join(urls, "\n"))
 
 		workloadCmd := fmt.Sprintf(
-			`./workload run connectionlatency %s --user testuser --secure %s --duration 30s --histograms=%s/stats.json --locality %s`,
+			`./workload run connectionlatency %s --user testuser --secure %s --duration 30s --histograms=%s/stats.json --prometheus-port=%d --locality %s`,
 			urlString,
 			passwordFlag,
 			t.PerfArtifactsDir(),
+			2112,
 			locality,
 		)
 		err = c.RunE(ctx, loadNode, workloadCmd)
@@ -102,12 +106,75 @@ func runConnectionLatencyTest(
 		cockroachUsWest := loadGroups[1].loadNodes
 		cockroachEuWest := loadGroups[2].loadNodes
 
+		_, cleanup := setupPrometheusConnectionLatency(ctx, t, c, loadGroups.loadNodes())
+		defer cleanup()
+
 		runWorkload(loadGroups[0].roachNodes, cockroachUsEast, regionUsEast)
 		runWorkload(loadGroups[1].roachNodes, cockroachUsWest, regionUsWest)
 		runWorkload(loadGroups[2].roachNodes, cockroachEuWest, regionEuWest)
 	} else {
+		_, cleanup := setupPrometheusConnectionLatency(ctx, t, c, c.Node(c.Spec().NodeCount))
+		defer cleanup()
 		// Run only on the load node.
 		runWorkload(c.Range(1, numNodes), c.Node(numNodes+1), regionUsCentral)
+	}
+}
+
+// setupPrometheusConnectionLatency initializes prometheus to run against a new
+// PrometheusConfig. It creates a prometheus scraper for all load nodes.
+// Returns the created PrometheusConfig if prometheus is initialized, as well
+// as a cleanup function which should be called in a defer statement.
+func setupPrometheusConnectionLatency(
+	ctx context.Context, t test.Test, c cluster.Cluster, loadNodes option.NodeListOption,
+) (*prometheus.Config, func()) {
+	// Avoid setting prometheus automatically up for local clusters.
+	if c.IsLocal() {
+		return nil, func() {}
+	}
+	workloadScrapeNodes := []prometheus.ScrapeNode{
+		{
+			Nodes: loadNodes,
+			Port:  2112,
+		},
+	}
+	cfg := &prometheus.Config{
+		PrometheusNode: loadNodes,
+		ScrapeConfigs: []prometheus.ScrapeConfig{
+			prometheus.MakeWorkloadScrapeConfig("workload", workloadScrapeNodes),
+		},
+	}
+	p, err := prometheus.Init(
+		ctx,
+		*cfg,
+		c,
+		func(ctx context.Context, nodes option.NodeListOption, operation string, args ...string) error {
+			return repeatRunE(
+				ctx,
+				t,
+				c,
+				nodes,
+				operation,
+				args...,
+			)
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return cfg, func() {
+		// Use a context that will not time out to avoid the issue where
+		// ctx gets canceled if t.Fatal gets called.
+		snapshotCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := p.Snapshot(
+			snapshotCtx,
+			c,
+			t.L(),
+			filepath.Join(t.ArtifactsDir(), "prometheus-snapshot.tar.gz"),
+		); err != nil {
+			t.L().Printf("failed to get prometheus snapshot: %v", err)
+		}
 	}
 }
 
