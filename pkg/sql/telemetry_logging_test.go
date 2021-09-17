@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"regexp"
 	"strings"
@@ -121,10 +122,10 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedLogStatement string
 		stubQPSThreshold     int64
 		stubSamplingRate     float64
+		expectedSkipped      int
 	}{
 		{
 			// Test case with statement that is not of type DML.
-			// Therefore, expected sample rate is 1.
 			"create-table-query",
 			"CREATE TABLE t();",
 			[]int{1},
@@ -132,11 +133,12 @@ func TestTelemetryLogging(t *testing.T) {
 			"CREATE TABLE ‹defaultdb›.public.‹t› ()",
 			qpsThresholdExceed,
 			samplingRatePass,
+			0,
 		},
 		{
 			// Test case with statement that is of type DML.
 			// QPS threshold is not expected to be exceeded, therefore,
-			// no sampling will occur. Expected sample rate is 1.
+			// no sampling will occur.
 			"select-*-limit-1-query",
 			"SELECT * FROM t LIMIT 1;",
 			[]int{1},
@@ -144,6 +146,7 @@ func TestTelemetryLogging(t *testing.T) {
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹1›`,
 			qpsThresholdNotExceed,
 			samplingRatePass,
+			0,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -156,11 +159,12 @@ func TestTelemetryLogging(t *testing.T) {
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹2›`,
 			qpsThresholdExceed,
 			samplingRateFail,
+			0,
 		},
 		{
 			// Test case with statement that is of type DML.
 			// QPS threshold is expected to be exceeded, and sampling
-			// selection is guaranteed. Expected sample rate is >0, and <1.
+			// selection is guaranteed.
 			"select-*-limit-3-query",
 			"SELECT * FROM t LIMIT 3;",
 			[]int{2},
@@ -168,11 +172,12 @@ func TestTelemetryLogging(t *testing.T) {
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹3›`,
 			1,
 			samplingRatePass,
+			2, // sum of exec counts of previous test.
 		},
 		{
 			// Test case with statement that is of type DML.
 			// QPS threshold is expected to be exceeded, and sampling
-			// selection is guaranteed. Expected sample rate is >0, and <1.
+			// selection is guaranteed.
 			// Test case executes multiple queries in multiple 1s intervals.
 			"select-*-limit-4-query",
 			"SELECT * FROM t LIMIT 4;",
@@ -181,6 +186,7 @@ func TestTelemetryLogging(t *testing.T) {
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹4›`,
 			1,
 			samplingRatePass,
+			0,
 		},
 	}
 
@@ -215,19 +221,40 @@ func TestTelemetryLogging(t *testing.T) {
 		t.Fatal(errors.Newf("no entries found"))
 	}
 
+	for _, e := range entries {
+		if strings.Contains(e.Message, `"ExecMode":"`+executorTypeInternal.logLabel()) {
+			t.Errorf("unexpected telemetry event for internal statement:\n%s", e.Message)
+		}
+	}
+
 	for _, tc := range testData {
 		logStatementFound := false
-		for _, e := range entries {
+		firstMatch := true
+		// NB: FetchEntriesFromFiles delivers entries in reverse order.
+		for i := len(entries) - 1; i >= 0; i-- {
+			e := entries[i]
 			if strings.Contains(e.Message, tc.expectedLogStatement) {
+				t.Logf("%s: found entry:\n%s", tc.name, e.Message)
 				logStatementFound = true
-				break
+				if firstMatch {
+					firstMatch = false
+					if tc.expectedSkipped == 0 {
+						if strings.Contains(e.Message, "SkippedQueries") {
+							t.Errorf("%s: expected no skipped queries, found:\n%s", tc.name, e.Message)
+						}
+					} else {
+						if expected := fmt.Sprintf(`"SkippedQueries":%d`, tc.expectedSkipped); !strings.Contains(e.Message, expected) {
+							t.Errorf("%s: expected %s in first log entry, found:\n%s", tc.name, expected, e.Message)
+						}
+					}
+				}
 			}
 		}
 		if !logStatementFound && tc.name != "select-*-limit-2-query" {
-			t.Fatal(errors.Newf("no matching log statement found for test case %s", tc.name))
+			t.Errorf("%s: no matching log entry found", tc.name)
 		}
 		if logStatementFound && tc.name == "select-*-limit-2-query" {
-			t.Fatal(errors.Newf("found entry for test case %s, was expecting no entry", tc.name))
+			t.Errorf("%s: found log entry, was expecting no entry", tc.name)
 		}
 	}
 }
