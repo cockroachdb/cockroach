@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -829,7 +830,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 				if repl != nil {
 					annotatedCtx := repl.AnnotateCtx(ctx)
 					if stopper.RunAsyncTask(
-						annotatedCtx, fmt.Sprintf("storage.%s: processing replica", bq.name),
+						annotatedCtx, bq.processOpName(),
 						func(ctx context.Context) {
 							// Release semaphore when finished processing.
 							defer func() { <-bq.processSem }()
@@ -888,7 +889,8 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 // called externally to the queue. bq.mu.Lock must not be held
 // while calling this method.
 //
-// ctx should already be annotated by repl.AnnotateCtx().
+// ctx should already have a span for this operation and be annotated by
+// repl.AnnotateCtx().
 func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) error {
 	// Load the system config if it's needed.
 	var confReader spanconfig.StoreReader
@@ -913,8 +915,6 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 		return nil
 	}
 
-	ctx, span := bq.AnnotateCtxWithSpan(ctx, bq.name)
-	defer span.Finish()
 	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("%s queue process replica %d", bq.name, repl.GetRangeID()),
 		bq.processTimeoutFunc(bq.store.ClusterSettings(), repl), func(ctx context.Context) error {
 			log.VEventf(ctx, 1, "processing replica")
@@ -1171,8 +1171,12 @@ func (bq *baseQueue) addToPurgatoryLocked(
 							continue
 						}
 						annotatedCtx := repl.AnnotateCtx(ctx)
+						// Create a root span so as to not reference the long-running
+						// purgatory span.
+						annotatedCtx, sp := bq.Tracer.StartSpanCtx(ctx, bq.processOpName())
+						defer sp.Finish()
 						if stopper.RunTask(
-							annotatedCtx, fmt.Sprintf("storage.%s: purgatory processing replica", bq.name),
+							annotatedCtx, bq.processOpName(),
 							func(ctx context.Context) {
 								err := bq.processReplica(ctx, repl)
 								bq.finishProcessingReplica(ctx, stopper, repl, err)
@@ -1305,7 +1309,13 @@ func (bq *baseQueue) DrainQueue(stopper *stop.Stopper) {
 	ctx := bq.AnnotateCtx(context.TODO())
 	for repl := bq.pop(); repl != nil; repl = bq.pop() {
 		annotatedCtx := repl.AnnotateCtx(ctx)
+		annotatedCtx, sp := tracing.EnsureForkSpan(annotatedCtx, bq.Tracer, bq.processOpName())
+		defer sp.Finish()
 		err := bq.processReplica(annotatedCtx, repl)
 		bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
 	}
+}
+
+func (bq *baseQueue) processOpName() string {
+	return fmt.Sprintf("queue.%s: processing replica", bq.name)
 }
