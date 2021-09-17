@@ -243,3 +243,27 @@ Executed 1 out of 1 test: 1 test passes.
 [0m
 ----
 ----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev -s //pkg/util/tracing:tracing_test --test_output errors
+----
+----
+//pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.2s
+
+Executed 1 out of 1 test: 1 test passes.
+----
+----

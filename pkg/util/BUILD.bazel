@@ -10,8 +10,11 @@ go_library(
         "crdb_test_on.go",  # keep
         "every_n.go",
         "fast_int_map.go",
-        "fast_int_set.go",
+        "fast_int_set.go",  # keep
+        "fast_int_set_large.go",
+        "fast_int_set_small.go",
         "fast_int_set_str.go",
+        "fast_int_set_testonly.go",
         "hash.go",
         "nocopy.go",
         "pluralize.go",
