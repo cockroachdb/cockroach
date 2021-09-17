@@ -756,22 +756,6 @@ type lockTableWaiter interface {
 	// again.
 	WaitOn(context.Context, Request, lockTableGuard) *Error
 
-	// WaitOnLock waits on the transaction responsible for the specified lock
-	// and then ensures that the lock is cleared out of the request's way.
-	//
-	// The method should be called after dropping any latches that a request has
-	// acquired. It returns when the lock has been resolved.
-	//
-	// NOTE: this method is used when the lockTable is disabled (e.g. on a
-	// follower replica) and a lock is discovered that must be waited on (e.g.
-	// during a follower read). If/when lockTables are maintained on follower
-	// replicas by propagating lockTable state transitions through the Raft log
-	// in the ReplicatedEvalResult instead of through the (leaseholder-only)
-	// LocalResult, we should be able to remove the lockTable "disabled" state
-	// and, in turn, remove this method. This will likely fall out of pulling
-	// all replicated locks into the lockTable.
-	WaitOnLock(context.Context, Request, *roachpb.Intent) *Error
-
 	// ResolveDeferredIntents resolves the batch of intents if the provided
 	// error is nil. The batch of intents may be resolved more efficiently than
 	// if they were resolved individually.
