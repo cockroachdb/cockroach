@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -154,6 +156,8 @@ type tenantSideCostController struct {
 	provider   kvtenant.TokenBucketProvider
 	limiter    limiter
 	stopper    *stop.Stopper
+	instanceID base.SQLInstanceID
+	sessionID  sqlliveness.SessionID
 	cpuSecsFn  multitenant.CPUSecsFn
 
 	mu struct {
@@ -228,9 +232,21 @@ var _ multitenant.TenantSideCostController = (*tenantSideCostController)(nil)
 
 // Start is part of multitenant.TenantSideCostController.
 func (c *tenantSideCostController) Start(
-	ctx context.Context, stopper *stop.Stopper, cpuSecsFn multitenant.CPUSecsFn,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	instanceID base.SQLInstanceID,
+	sessionID sqlliveness.SessionID,
+	cpuSecsFn multitenant.CPUSecsFn,
 ) error {
+	if instanceID == 0 {
+		return errors.New("invalid SQLInstanceID")
+	}
+	if sessionID == "" {
+		return errors.New("invalid sqlliveness.SessionID")
+	}
 	c.stopper = stopper
+	c.instanceID = instanceID
+	c.sessionID = sessionID
 	c.cpuSecsFn = cpuSecsFn
 	return stopper.RunAsyncTask(ctx, "cost-controller", func(ctx context.Context) {
 		c.mainLoop(ctx)
@@ -335,9 +351,9 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 	}
 
 	req := roachpb.TokenBucketRequest{
-		TenantID: c.tenantID.ToUint64(),
-		// TODO(radu): populate instance ID.
-		InstanceID:                  1,
+		TenantID:                    c.tenantID.ToUint64(),
+		InstanceID:                  uint32(c.instanceID),
+		InstanceLease:               []byte(c.sessionID),
 		ConsumptionSinceLastRequest: deltaConsumption,
 		RequestedRU:                 requested,
 		TargetRequestPeriod:         c.run.targetPeriod,
