@@ -375,11 +375,7 @@ const (
 	//
 	// Use this when the caller will not wait for the task to finish, but a
 	// relationship between the caller and the task might still be useful to
-	// visualize in a trace collector. Generally avoid using this for tasks
-	// spawned periodically by long-running background processes since the tasks's
-	// relationship to the background process is trivial and grouping the task
-	// under the parent (like Zipkin does for example) doesn't serve any purpose.
-	// Prefer RootSpan in such cases.
+	// visualize in a trace collector.
 	FollowsFromSpan SpanOption = iota
 
 	// ChildSpan makes the task run in a span that's a child of the caller's span
