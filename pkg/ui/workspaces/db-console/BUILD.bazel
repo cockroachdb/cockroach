@@ -1,4 +1,5 @@
 load("@npm//webpack-cli:index.bzl", webpack = "webpack_cli")
+
 WEBPACK_DATA_OSS = [
     ".babelrc",
     ".eslintrc.json",

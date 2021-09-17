@@ -69,11 +69,6 @@ yarn_install(
     package_json = "//pkg/ui:package.json",
     yarn_lock = "//pkg/ui:yarn.lock",
     strict_visibility = False,
-    # package_path = "pkg/ui/workspaces/a",
-    links = {
-        "@cockroachlabs/cluster-ui": "//pkg/ui/workspaces/cluster-ui:cluster_ui_package",
-        "@cockroachlabs/crdb-protobuf-client": "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
-    },
 )
 
 # Load gazelle dependencies.
