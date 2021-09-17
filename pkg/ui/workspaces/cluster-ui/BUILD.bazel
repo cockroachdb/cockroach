@@ -1,0 +1,117 @@
+load("@npm//webpack-cli:index.bzl", webpack = "webpack_cli")
+load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
+load("@npm//@bazel/typescript:index.bzl", "ts_project")
+
+ts_project(
+    name = "ts_project",
+    srcs = glob(
+        ["src/**"],
+        exclude = [
+            "src/**/*.stories.tsx",
+            "src/**/*.spec.tsx",
+            "src/**/*.spec.ts",
+        ],
+    ),
+    declaration = True,
+    emit_declaration_only = True,
+    out_dir = "dist/types",
+    root_dir = "src",
+    tsconfig = "tsconfig.json",
+    deps = [
+        "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
+        "@npm//@babel/parser",
+        "@npm//@babel/types",
+        "@npm//@cockroachlabs/icons",
+        "@npm//@cockroachlabs/ui-components",
+        "@npm//@reduxjs/toolkit",
+        "@npm//@types",
+        "@npm//antd",
+        "@npm//classnames",
+        "@npm//connected-react-router",
+        "@npm//moment",
+        "@npm//protobufjs",
+        "@npm//redux",
+        "@npm//redux-saga",
+        "@npm//redux-saga-test-plan",
+        "@npm//reselect",
+    ],
+)
+
+webpack(
+    name = "webpack",
+    outs = [
+        "dist/js/main.js",
+        # TODO (koorosh): webpack outputs `main.js.map` file as well but it's ignored for now
+        # due to limited understanding how to preserve project structure and include more than
+        # single file as output.
+    ],
+    args = [
+        "$(execpath src/index.ts)",
+        "--config",
+        "$(execpath webpack.config.js)",
+        "--env.is_bazel_build",
+        "--mode",
+        "production",
+        "-o $@",
+        "--env.output=$@",
+    ],
+    data = glob([
+        "src/**",
+    ]) + [
+        ":node_modules",
+        ".babelrc",
+        "tsconfig.json",
+        "webpack.config.js",
+        "//pkg/ui:node_modules_cluster_ui",
+        "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
+        "@npm//@babel/parser",
+        "@npm//@babel/plugin-proposal-class-properties",
+        "@npm//@babel/plugin-proposal-object-rest-spread",
+        "@npm//@babel/plugin-transform-modules-commonjs",
+        "@npm//@babel/plugin-transform-runtime",
+        "@npm//@babel/preset-env",
+        "@npm//@babel/preset-react",
+        "@npm//@babel/preset-typescript",
+        "@npm//@babel/runtime",
+        "@npm//@babel/types",
+        "@npm//@types",
+        "@npm//antd",
+        "@npm//astroturf",
+        "@npm//babel-loader",
+        "@npm//babel-plugin-import",
+        "@npm//babel-polyfill",
+        "@npm//babel-preset-react-app",
+        "@npm//css-loader",
+        "@npm//less-loader",
+        "@npm//moment-locales-webpack-plugin",
+        "@npm//protobufjs",
+        "@npm//sass-loader",
+        "@npm//source-map-loader",
+        "@npm//style-loader",
+        "@npm//url-loader",
+        "@npm//webpackbar",
+    ],
+)
+
+js_library(
+    name = "cluster_ui_package",
+    package_name = "@cockroachlabs/cluster-ui",
+    srcs = [
+        "package.json",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":ts_project",
+        ":webpack",
+        "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
+    ],
+)
+
+filegroup(
+    name = "node_modules",
+    srcs = glob(
+        include = [
+            "node_modules/**",
+        ],
+    ),
+)
