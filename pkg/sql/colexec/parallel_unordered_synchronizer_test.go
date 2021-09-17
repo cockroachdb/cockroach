@@ -118,7 +118,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		inputIdx := i
 		inputs[i].MetadataSources = []colexecop.MetadataSource{
 			colexectestutils.CallbackMetadataSource{DrainMetaCb: func() []execinfrapb.ProducerMetadata {
-				return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d "+errSuffix, inputIdx)}}
+				return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d %s", inputIdx, errSuffix)}}
 			}},
 		}
 	}

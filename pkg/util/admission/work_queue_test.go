@@ -136,7 +136,7 @@ func TestWorkQueueBasic(t *testing.T) {
 
 	var q *WorkQueue
 	var tg *testGranter
-	var workMap workMap
+	var wrkMap workMap
 	var buf builderWithMu
 	datadriven.RunTest(t, "testdata/work_queue",
 		func(t *testing.T, d *datadriven.TestData) string {
@@ -145,13 +145,13 @@ func TestWorkQueueBasic(t *testing.T) {
 				tg = &testGranter{buf: &buf}
 				q = makeWorkQueue(KVWork, tg, nil, makeWorkQueueOptions(KVWork)).(*WorkQueue)
 				tg.r = q
-				workMap.workMap = make(map[int]*testWork)
+				wrkMap.workMap = make(map[int]*testWork)
 				return ""
 
 			case "admit":
 				var id int
 				d.ScanArgs(t, "id", &id)
-				if _, ok := workMap.get(id); ok {
+				if _, ok := wrkMap.get(id); ok {
 					panic(fmt.Sprintf("id %d is already used", id))
 				}
 				tenant := scanTenantID(t, d)
@@ -161,7 +161,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				var bypass bool
 				d.ScanArgs(t, "bypass", &bypass)
 				ctx, cancel := context.WithCancel(context.Background())
-				workMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
+				wrkMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
 				workInfo := WorkInfo{
 					TenantID:        tenant,
 					Priority:        WorkPriority(priority),
@@ -173,10 +173,10 @@ func TestWorkQueueBasic(t *testing.T) {
 					require.True(t, enabled)
 					if err != nil {
 						buf.printf("id %d: admit failed", id)
-						workMap.delete(id)
+						wrkMap.delete(id)
 					} else {
 						buf.printf("id %d: admit succeeded", id)
-						workMap.setAdmitted(id)
+						wrkMap.setAdmitted(id)
 					}
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine
@@ -199,7 +199,7 @@ func TestWorkQueueBasic(t *testing.T) {
 			case "cancel-work":
 				var id int
 				d.ScanArgs(t, "id", &id)
-				work, ok := workMap.get(id)
+				work, ok := wrkMap.get(id)
 				if !ok {
 					return fmt.Sprintf("unknown id: %d", id)
 				}
@@ -215,7 +215,7 @@ func TestWorkQueueBasic(t *testing.T) {
 			case "work-done":
 				var id int
 				d.ScanArgs(t, "id", &id)
-				work, ok := workMap.get(id)
+				work, ok := wrkMap.get(id)
 				if !ok {
 					return fmt.Sprintf("unknown id: %d\n", id)
 				}
@@ -223,7 +223,7 @@ func TestWorkQueueBasic(t *testing.T) {
 					return fmt.Sprintf("id not admitted: %d\n", id)
 				}
 				q.AdmittedWorkDone(work.tenantID)
-				workMap.delete(id)
+				wrkMap.delete(id)
 				return buf.stringAndReset()
 
 			case "print":

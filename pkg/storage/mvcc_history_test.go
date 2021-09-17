@@ -11,10 +11,8 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -32,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // TestMVCCHistories verifies that sequences of MVCC reads and writes
@@ -115,7 +114,7 @@ func TestMVCCHistories(t *testing.T) {
 		}
 		defer engine.Close()
 
-		reportDataEntries := func(buf *bytes.Buffer) error {
+		reportDataEntries := func(buf *redact.StringBuilder) error {
 			hasData := false
 			err := engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
 				hasData = true
@@ -123,17 +122,17 @@ func TestMVCCHistories(t *testing.T) {
 					// Meta is at timestamp zero.
 					meta := enginepb.MVCCMetadata{}
 					if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
-						fmt.Fprintf(buf, "meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
+						buf.Printf("meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
 					} else {
-						fmt.Fprintf(buf, "meta: %v -> %+v\n", r.Key, &meta)
+						buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
 					}
 				} else {
-					fmt.Fprintf(buf, "data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
+					buf.Printf("data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
 				}
 				return nil
 			})
 			if !hasData {
-				buf.WriteString("<no data>\n")
+				buf.SafeString("<no data>\n")
 			}
 			return err
 		}
@@ -184,7 +183,7 @@ func TestMVCCHistories(t *testing.T) {
 				// buf will accumulate the actual output, which the
 				// datadriven driver will use to compare to the expected
 				// output.
-				var buf bytes.Buffer
+				var buf redact.StringBuilder
 				e.results.buf = &buf
 				e.results.traceIntentWrites = trace
 
@@ -210,7 +209,7 @@ func TestMVCCHistories(t *testing.T) {
 
 				reportResults := func(printTxn, printData bool) {
 					if printTxn && e.results.txn != nil {
-						fmt.Fprintf(&buf, "txn: %v\n", e.results.txn)
+						buf.Printf("txn: %v\n", e.results.txn)
 					}
 					if printData {
 						err := reportDataEntries(&buf)
@@ -219,7 +218,7 @@ func TestMVCCHistories(t *testing.T) {
 								// Handle the error below.
 								foundErr = err
 							} else {
-								fmt.Fprintf(&buf, "error reading data: (%T:) %v\n", err, err)
+								buf.Printf("error reading data: (%T:) %v\n", err, err)
 							}
 						}
 					}
@@ -296,11 +295,11 @@ func TestMVCCHistories(t *testing.T) {
 					if trace {
 						// If tracing is also requested by the datadriven input,
 						// we'll trace the statement in the actual results too.
-						fmt.Fprintf(&buf, ">> %s", d.Cmd)
+						buf.Printf(">> %s", d.Cmd)
 						for i := range d.CmdArgs {
-							fmt.Fprintf(&buf, " %s", &d.CmdArgs[i])
+							buf.Printf(" %s", &d.CmdArgs[i])
 						}
-						buf.WriteByte('\n')
+						_ = buf.WriteByte('\n')
 					}
 
 					// Run the command.
@@ -323,7 +322,7 @@ func TestMVCCHistories(t *testing.T) {
 				if !trace {
 					// If we were not tracing, no results were printed yet. Do it now.
 					if txnChange || dataChange {
-						buf.WriteString(">> at end:\n")
+						buf.SafeString(">> at end:\n")
 					}
 					reportResults(txnChange, dataChange)
 				}
@@ -342,7 +341,7 @@ func TestMVCCHistories(t *testing.T) {
 					return d.Expected
 				} else if foundErr != nil {
 					if expectError {
-						fmt.Fprintf(&buf, "error: (%T:) %v\n", foundErr, foundErr)
+						buf.Printf("error: (%T:) %v\n", foundErr, foundErr)
 					} else /* !expectError */ {
 						signalError("%s: expected success, found: (%T:) %v", d.Pos, foundErr, foundErr)
 						return d.Expected
@@ -517,7 +516,7 @@ func cmdTxnUpdate(e *evalCtx) error {
 
 type intentPrintingReadWriter struct {
 	ReadWriter
-	buf io.Writer
+	buf *redact.StringBuilder
 }
 
 func (rw intentPrintingReadWriter) PutIntent(
@@ -528,7 +527,7 @@ func (rw intentPrintingReadWriter) PutIntent(
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 ) (int, error) {
-	fmt.Fprintf(rw.buf, "called PutIntent(%v, _, %v, TDNUM(%t), %v)\n",
+	rw.buf.Printf("called PutIntent(%v, _, %v, TDNUM(%t), %v)\n",
 		key, state, txnDidNotUpdateMeta, txnUUID)
 	return rw.ReadWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID)
 }
@@ -536,7 +535,7 @@ func (rw intentPrintingReadWriter) PutIntent(
 func (rw intentPrintingReadWriter) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) (int, error) {
-	fmt.Fprintf(rw.buf, "called ClearIntent(%v, %v, TDNUM(%t), %v)\n",
+	rw.buf.Printf("called ClearIntent(%v, %v, TDNUM(%t), %v)\n",
 		key, state, txnDidNotUpdateMeta, txnUUID)
 	return rw.ReadWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID)
 }
@@ -580,7 +579,7 @@ func cmdCheckIntent(e *evalCtx) error {
 		return errors.Newf("meta: %v -> expected intent, found none", key)
 	}
 	if ok {
-		fmt.Fprintf(e.results.buf, "meta: %v -> %+v\n", key, &meta)
+		e.results.buf.Printf("meta: %v -> %+v\n", key, &meta)
 		if !wantIntent {
 			return errors.Newf("meta: %v -> expected no intent, found one", key)
 		}
@@ -654,12 +653,12 @@ func cmdDeleteRange(e *evalCtx) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(e.results.buf, "del_range: %v-%v -> deleted %d key(s)\n", key, endKey, num)
+		e.results.buf.Printf("del_range: %v-%v -> deleted %d key(s)\n", key, endKey, num)
 		for _, key := range deleted {
-			fmt.Fprintf(e.results.buf, "del_range: returned %v\n", key)
+			e.results.buf.Printf("del_range: returned %v\n", key)
 		}
 		if resumeSpan != nil {
-			fmt.Fprintf(e.results.buf, "del_range: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
+			e.results.buf.Printf("del_range: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
 		}
 
 		if resolve {
@@ -692,12 +691,12 @@ func cmdGet(e *evalCtx) error {
 	// ascertain no result is populated in the intent when an error
 	// occurs.
 	if intent != nil {
-		fmt.Fprintf(e.results.buf, "get: %v -> intent {%s}\n", key, intent.Txn)
+		e.results.buf.Printf("get: %v -> intent {%s}\n", key, intent.Txn)
 	}
 	if val != nil {
-		fmt.Fprintf(e.results.buf, "get: %v -> %v @%v\n", key, val.PrettyPrint(), val.Timestamp)
+		e.results.buf.Printf("get: %v -> %v @%v\n", key, val.PrettyPrint(), val.Timestamp)
 	} else {
-		fmt.Fprintf(e.results.buf, "get: %v -> <no data>\n", key)
+		e.results.buf.Printf("get: %v -> <no data>\n", key)
 	}
 	return err
 }
@@ -721,7 +720,7 @@ func cmdIncrement(e *evalCtx) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(e.results.buf, "inc: current value = %d\n", curVal)
+		e.results.buf.Printf("inc: current value = %d\n", curVal)
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus)
 		}
@@ -801,19 +800,19 @@ func cmdScan(e *evalCtx) error {
 	// ascertain no result is populated in the intents when an error
 	// occurs.
 	for _, intent := range res.Intents {
-		fmt.Fprintf(e.results.buf, "scan: %v -> intent {%s}\n", key, intent.Txn)
+		e.results.buf.Printf("scan: %v -> intent {%s}\n", key, intent.Txn)
 	}
 	for _, val := range res.KVs {
-		fmt.Fprintf(e.results.buf, "scan: %v -> %v @%v\n", val.Key, val.Value.PrettyPrint(), val.Value.Timestamp)
+		e.results.buf.Printf("scan: %v -> %v @%v\n", val.Key, val.Value.PrettyPrint(), val.Value.Timestamp)
 	}
 	if res.ResumeSpan != nil {
-		fmt.Fprintf(e.results.buf, "scan: resume span [%s,%s)\n", res.ResumeSpan.Key, res.ResumeSpan.EndKey)
+		e.results.buf.Printf("scan: resume span [%s,%s)\n", res.ResumeSpan.Key, res.ResumeSpan.EndKey)
 	}
 	if opts.TargetBytes > 0 {
-		fmt.Fprintf(e.results.buf, "scan: %d bytes (target %d)\n", res.NumBytes, opts.TargetBytes)
+		e.results.buf.Printf("scan: %d bytes (target %d)\n", res.NumBytes, opts.TargetBytes)
 	}
 	if len(res.KVs) == 0 {
-		fmt.Fprintf(e.results.buf, "scan: %v-%v -> <no data>\n", key, endKey)
+		e.results.buf.Printf("scan: %v-%v -> <no data>\n", key, endKey)
 	}
 	return err
 }
@@ -822,7 +821,7 @@ func cmdScan(e *evalCtx) error {
 // script.
 type evalCtx struct {
 	results struct {
-		buf               io.Writer
+		buf               *redact.StringBuilder
 		txn               *roachpb.Transaction
 		traceIntentWrites bool
 	}
@@ -952,7 +951,7 @@ func (e *evalCtx) withWriter(cmd string, fn func(_ ReadWriter) error) error {
 		if batch.Empty() {
 			batchStatus = "empty"
 		}
-		fmt.Fprintf(e.results.buf, "%s: batch after write is %s\n", cmd, batchStatus)
+		e.results.buf.Printf("%s: batch after write is %s\n", cmd, batchStatus)
 	}
 	if origErr != nil {
 		return origErr

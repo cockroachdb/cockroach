@@ -350,6 +350,9 @@ func (t LegacyTimestamp) String() string {
 	return t.ToTimestamp().String()
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (LegacyTimestamp) SafeValue() {}
+
 // ClockTimestamp is a Timestamp with the added capability of being able to
 // update a peer's HLC clock. It possesses this capability because the clock
 // timestamp itself is guaranteed to have come from an HLC clock somewhere in

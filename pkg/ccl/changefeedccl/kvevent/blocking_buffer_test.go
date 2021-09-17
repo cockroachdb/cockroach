@@ -95,7 +95,7 @@ func TestBlockingBuffer(t *testing.T) {
 		for {
 			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}))
 			if err != nil {
-				return nil
+				return nil //nolint:returnerrcheck
 			}
 		}
 	})
