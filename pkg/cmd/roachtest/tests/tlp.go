@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -169,28 +170,52 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 	unpartitioned, partitioned := smither.GenerateTLP()
 
 	return runWithTimeout(func() error {
-		var unpartitionedCount int
-		row := conn.QueryRow(unpartitioned)
-		if err := row.Scan(&unpartitionedCount); err != nil {
-			// Ignore errors.
+		unpartitionedResults := make(map[string]int)
+		rows1, err := conn.Query(unpartitioned)
+		if err != nil {
+			// Ignore errors
 			//nolint:returnerrcheck
 			return nil
 		}
+		defer rows1.Close()
+		for rows1.Next() {
+			var result string
+			if err := rows1.Scan(&result); err != nil {
+				// Ignore errors
+				//nolint:returnerrcheck
+				return nil
+			}
+			unpartitionedResults[result]++
+		}
 
-		var partitionedCount int
-		row = conn.QueryRow(partitioned)
-		if err := row.Scan(&partitionedCount); err != nil {
-			// Ignore errors.
+		partitionedResults := make(map[string]int)
+		rows2, err := conn.Query(partitioned)
+		if err != nil {
+			// Ignore errors
 			//nolint:returnerrcheck
 			return nil
 		}
+		defer rows2.Close()
+		for rows2.Next() {
+			var result string
+			if err := rows2.Scan(&result); err != nil {
+				// Ignore errors
+				//nolint:returnerrcheck
+				return nil
+			}
+			partitionedResults[result]++
+		}
+		// Check for errors while delivering results
+		if rows2.Err() != nil {
+			return nil
+		}
 
-		if unpartitionedCount != partitionedCount {
+		if !reflect.DeepEqual(unpartitionedResults, partitionedResults) {
 			logStmt(unpartitioned)
 			logStmt(partitioned)
 			return errors.Newf(
-				"expected unpartitioned count %d to equal partitioned count %d\nsql: %s\n%s",
-				unpartitionedCount, partitionedCount, unpartitioned, partitioned)
+				"expected unpartitioned results %v to equal partitioned results %v\nsql: %s\n%s",
+				unpartitionedResults, partitionedResults, unpartitioned, partitioned)
 		}
 
 		return nil

@@ -28,14 +28,10 @@ import (
 //
 // More information on TLP: https://www.manuelrigger.at/preprints/TLP.pdf.
 //
-// We currently implement a limited form of TLP that can only verify that the
-// number of rows returned by the unpartitioned and the partitioned queries are
-// equal.
-//
-// This TLP implementation is also limited in the types of queries that are
-// tested. We currently only test basic WHERE and JOIN query filters. It is
-// possible to use TLP to test aggregations, GROUP BY, and HAVING, which have
-// all been implemented in SQLancer. See:
+// This TLP implementation is limited in the types of queries that are tested.
+// We currently only test some query filters (WHERE, JOIN, MAX/MIN). It is
+// possible to use TLP to test other aggregations, GROUP BY, and HAVING, which
+// have all been implemented in SQLancer. See:
 // https://github.com/sqlancer/sqlancer/tree/1.1.0/src/sqlancer/cockroachdb/oracle/tlp.
 func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
 	// Set disableImpureFns to true so that generated predicates are immutable.
@@ -63,19 +59,17 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
 //
 // The first query returned is an unpartitioned query of the form:
 //
-//   SELECT count(*) FROM table
+//   SELECT (table.*)::STRING FROM table
 //
 // The second query returned is a partitioned query of the form:
 //
-//   SELECT count(*) FROM (
-//     SELECT * FROM table WHERE (p)
-//     UNION ALL
-//     SELECT * FROM table WHERE NOT (p)
-//     UNION ALL
-//     SELECT * FROM table WHERE (p) IS NULL
-//   )
+//   SELECT (table.*)::STRING FROM table WHERE p
+//   UNION ALL
+//   SELECT (table.*)::STRING FROM table WHERE NOT (p)
+//   UNION ALL
+//   SELECT (table.*)::STRING FROM table WHERE (p) IS NULL
 //
-// If the resulting counts of the two queries are not equal, there is a logical
+// If the resulting values of the two queries are not equal, there is a logical
 // bug.
 func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string) {
 	f := tree.NewFmtCtx(tree.FmtParsable)
@@ -86,19 +80,29 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string) {
 	}
 	table.Format(f)
 	tableName := f.CloseAndGetString()
+	tableNameAlias := strings.TrimSpace(strings.Split(tableName, "AS")[1])
 
-	unpartitioned = fmt.Sprintf("SELECT count(*) FROM %s", tableName)
+	unpartitioned = fmt.Sprintf("SELECT (%s.*)::STRING FROM %s", tableNameAlias, tableName)
 
 	pred := makeBoolExpr(s, cols)
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
 
-	part1 := fmt.Sprintf("SELECT * FROM %s WHERE %s", tableName, predicate)
-	part2 := fmt.Sprintf("SELECT * FROM %s WHERE NOT (%s)", tableName, predicate)
-	part3 := fmt.Sprintf("SELECT * FROM %s WHERE (%s) IS NULL", tableName, predicate)
+	part1 := fmt.Sprintf(
+		"SELECT (%s.*)::STRING FROM %s WHERE %s",
+		tableNameAlias, tableName, predicate,
+	)
+	part2 := fmt.Sprintf(
+		"SELECT (%s.*)::STRING FROM %s WHERE NOT (%s)",
+		tableNameAlias, tableName, predicate,
+	)
+	part3 := fmt.Sprintf(
+		"SELECT (%s.*)::STRING FROM %s WHERE (%s) IS NULL",
+		tableNameAlias, tableName, predicate,
+	)
 
 	partitioned = fmt.Sprintf(
-		"SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)",
+		"(%s) UNION ALL (%s) UNION ALL (%s)",
 		part1, part2, part3,
 	)
 
@@ -112,23 +116,31 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string) {
 //
 // The first query returned is an unpartitioned query of the form:
 //
-//   SELECT count(*) FROM (
-//     SELECT * FROM table1 LEFT JOIN table2 ON TRUE
-//     UNION ALL
-//     SELECT * FROM table1 LEFT JOIN table2 ON FALSE
-//     UNION ALL
-//     SELECT * FROM table1 LEFT JOIN table2 ON FALSE
-//   )
+//   SELECT (t.*)::STRING FROM (
+//    SELECT * FROM table1 LEFT JOIN table2 ON TRUE
+//   ) t
+//   UNION ALL
+//   SELECT (t.*)::STRING FROM (
+//    SELECT * FROM table1 LEFT JOIN table2 ON FALSE
+//   ) t
+//   UNION ALL
+//   SELECT (t.*)::STRING FROM (
+//    SELECT * FROM table1 LEFT JOIN table2 ON FALSE
+//   ) t
 //
 // The second query returned is a partitioned query of the form:
 //
-//   SELECT count(*) FROM (
-//     SELECT * FROM table1 LEFT JOIN table2 ON (p)
-//     UNION ALL
-//     SELECT * FROM table1 LEFT JOIN table2 ON NOT (p)
-//     UNION ALL
-//     SELECT * FROM table1 LEFT JOIN table2 ON (p) IS NULL
-//   )
+//   SELECT (t.*)::STRING FROM (
+//    SELECT * FROM table1 LEFT JOIN table2 ON p
+//   ) t
+//   UNION ALL
+//   SELECT (t.*)::STRING FROM (
+//    SELECT * FROM table1 LEFT JOIN table2 ON NOT (p)
+//   ) t
+//   UNION ALL
+//   SELECT (t.*)::STRING FROM (
+//    SELECT * FROM table1 LEFT JOIN table2 ON (p) IS NULL
+//   ) t
 //
 // From the first query, we have a CROSS JOIN of the two tables (JOIN ON TRUE)
 // and then all rows concatenated with NULL values for the second and third
@@ -144,7 +156,7 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string) {
 // Note that this implementation is restricted in that it only uses columns from
 // the left table in the predicate p.
 
-// If the resulting counts of the two queries are not equal, there is a logical
+// If the resulting values of the two queries are not equal, there is a logical
 // bug.
 func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 	f := tree.NewFmtCtx(tree.FmtParsable)
@@ -160,16 +172,16 @@ func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 	tableName2 := f.CloseAndGetString()
 
 	leftJoinTrue := fmt.Sprintf(
-		"SELECT * FROM %s LEFT JOIN %s ON TRUE",
+		"SELECT (t.*)::STRING FROM (SELECT * FROM %s LEFT JOIN %s ON TRUE) t",
 		tableName1, tableName2,
 	)
 	leftJoinFalse := fmt.Sprintf(
-		"SELECT * FROM %s LEFT JOIN %s ON FALSE",
+		"SELECT (t.*)::STRING FROM (SELECT * FROM %s LEFT JOIN %s ON FALSE) t",
 		tableName1, tableName2,
 	)
 
 	unpartitioned = fmt.Sprintf(
-		"SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)",
+		"(%s) UNION ALL (%s) UNION ALL (%s)",
 		leftJoinTrue, leftJoinFalse, leftJoinFalse,
 	)
 
@@ -178,20 +190,20 @@ func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 	predicate := f.CloseAndGetString()
 
 	part1 := fmt.Sprintf(
-		"SELECT * FROM %s LEFT JOIN %s ON %s",
+		"SELECT (t.*)::STRING FROM (SELECT * FROM %s LEFT JOIN %s ON %s) t",
 		tableName1, tableName2, predicate,
 	)
 	part2 := fmt.Sprintf(
-		"SELECT * FROM %s LEFT JOIN %s ON NOT (%s)",
+		"SELECT (t.*)::STRING FROM (SELECT * FROM %s LEFT JOIN %s ON NOT (%s)) t",
 		tableName1, tableName2, predicate,
 	)
 	part3 := fmt.Sprintf(
-		"SELECT * FROM %s LEFT JOIN %s ON (%s) IS NULL",
+		"SELECT (t.*)::STRING FROM (SELECT * FROM %s LEFT JOIN %s ON (%s) IS NULL) t",
 		tableName1, tableName2, predicate,
 	)
 
 	partitioned = fmt.Sprintf(
-		"SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)",
+		"(%s) UNION ALL (%s) UNION ALL (%s)",
 		part1, part2, part3,
 	)
 
@@ -205,17 +217,21 @@ func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 //
 // The first query returned is an unpartitioned query of the form:
 //
-//   SELECT count(*) FROM table1 JOIN table2 ON TRUE
+//   SELECT (t.*)::STRING FROM (SELECT * FROM table1 JOIN table2 ON TRUE) t
 //
 // The second query returned is a partitioned query of the form:
 //
-//   SELECT count(*) FROM (
-//     SELECT * FROM table1 JOIN table2 ON (p)
-//     UNION ALL
-//     SELECT * FROM table1 JOIN table2 ON NOT (p)
-//     UNION ALL
+//   SELECT (t.*)::STRING FROM (
+//    SELECT * FROM table1 JOIN table2 ON p
+//   ) t
+//   UNION ALL
+//   SELECT (t.*)::STRING FROM (
+//    SELECT * FROM table1 JOIN table2 ON NOT (p)
+//   ) t
+//   UNION ALL
+//   SELECT (t.*)::STRING FROM (
 //     SELECT * FROM table1 JOIN table2 ON (p) IS NULL
-//   )
+//   ) t
 //
 // From the first query, we have a CROSS JOIN of the two tables (JOIN ON TRUE).
 // Recall our TLP logical guarantee that a given predicate p always evaluates to
@@ -224,7 +240,7 @@ func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 // resolve to TRUE. So the partitioned query accounts for each row in the
 // CROSS JOIN exactly once.
 //
-// If the resulting counts of the two queries are not equal, there is a logical
+// If the resulting values of the two queries are not equal, there is a logical
 // bug.
 func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 	f := tree.NewFmtCtx(tree.FmtParsable)
@@ -240,7 +256,7 @@ func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 	tableName2 := f.CloseAndGetString()
 
 	unpartitioned = fmt.Sprintf(
-		"SELECT count(*) FROM %s JOIN %s ON true",
+		"SELECT (t.*)::STRING FROM (SELECT * FROM %s JOIN %s ON TRUE) t",
 		tableName1, tableName2,
 	)
 
@@ -250,20 +266,19 @@ func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 	predicate := f.CloseAndGetString()
 
 	part1 := fmt.Sprintf(
-		"SELECT * FROM %s JOIN %s ON %s",
+		"SELECT (t.*)::STRING FROM (SELECT * FROM %s JOIN %s ON %s) t",
 		tableName1, tableName2, predicate,
 	)
 	part2 := fmt.Sprintf(
-		"SELECT * FROM %s JOIN %s ON NOT (%s)",
+		"SELECT (t.*)::STRING FROM (SELECT * FROM %s JOIN %s ON NOT (%s)) t",
 		tableName1, tableName2, predicate,
 	)
 	part3 := fmt.Sprintf(
-		"SELECT * FROM %s JOIN %s ON (%s) IS NULL",
+		"SELECT (t.*)::STRING FROM (SELECT * FROM %s JOIN %s ON (%s) IS NULL) t",
 		tableName1, tableName2, predicate,
 	)
-
 	partitioned = fmt.Sprintf(
-		"SELECT count(*) FROM (%s UNION ALL %s UNION ALL %s)",
+		"(%s) UNION ALL (%s) UNION ALL (%s)",
 		part1, part2, part3,
 	)
 
@@ -278,20 +293,20 @@ func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 //
 // The first query returned is an unpartitioned query of the form:
 //
-//   SELECT MAX(first) FROM (SELECT * FROM table) table(first)
+//   SELECT MAX((first)::STRING) FROM (SELECT * FROM table) table(first)
 //
 // The second query returned is a partitioned query of the form:
 //
-//   SELECT MAX(agg) FROM (
-//     SELECT MAX(first) AS agg FROM (
+//   SELECT MAX((agg)::STRING) FROM (
+//     SELECT MAX((first)::STRING) AS agg FROM (
 //       SELECT * FROM table WHERE p
 //     ) table(first)
 //     UNION ALL
-//     SELECT MAX(first) AS agg FROM (
+//     SELECT MAX((first)::STRING) AS agg FROM (
 //       SELECT * FROM table WHERE NOT (p)
 //     ) table(first)
 //     UNION ALL
-//     SELECT MAX(first) AS agg FROM (
+//     SELECT MAX((first)::STRING) AS agg FROM (
 //       SELECT * FROM table WHERE (p) IS NULL
 //     ) table(first)
 //   )
@@ -321,7 +336,7 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 	}
 
 	unpartitioned = fmt.Sprintf(
-		"SELECT %s(first) FROM (SELECT * FROM %s) %s(first)",
+		"SELECT %s((first)::STRING) FROM (SELECT * FROM %s) %s(first)",
 		agg, tableName, tableNameAlias,
 	)
 
@@ -330,20 +345,20 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 	predicate := f.CloseAndGetString()
 
 	part1 := fmt.Sprintf(
-		"SELECT %s(first) AS agg FROM (SELECT * FROM %s WHERE %s) %s(first)",
+		"SELECT %s((first)::STRING) AS agg FROM (SELECT * FROM %s WHERE %s) %s(first)",
 		agg, tableName, predicate, tableNameAlias,
 	)
 	part2 := fmt.Sprintf(
-		"SELECT %s(first) AS agg FROM (SELECT * FROM %s WHERE NOT (%s)) %s(first)",
+		"SELECT %s((first)::STRING) AS agg FROM (SELECT * FROM %s WHERE NOT (%s)) %s(first)",
 		agg, tableName, predicate, tableNameAlias,
 	)
 	part3 := fmt.Sprintf(
-		"SELECT %s(first) AS agg FROM (SELECT * FROM %s WHERE (%s) IS NULL) %s(first)",
+		"SELECT %s((first)::STRING) AS agg FROM (SELECT * FROM %s WHERE (%s) IS NULL) %s(first)",
 		agg, tableName, predicate, tableNameAlias,
 	)
 
 	partitioned = fmt.Sprintf(
-		"SELECT %s(agg) FROM (%s UNION ALL %s UNION ALL %s)",
+		"SELECT %s((agg)::STRING) FROM (%s UNION ALL %s UNION ALL %s)",
 		agg, part1, part2, part3,
 	)
 
