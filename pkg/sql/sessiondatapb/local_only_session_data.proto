@@ -97,8 +97,7 @@ message LocalOnlySessionData {
   // ImplicitPartitioningEnabled indicates whether implicit column partitioning
   // can be created.
   bool implicit_column_partitioning_enabled = 22;
-  // DropEnumValueEnabled indicates whether enum values can be dropped.
-  bool drop_enum_value_enabled = 23;
+  reserved 23;
   // OverrideMultiRegionZoneConfigEnabled indicates whether zone configurations can be
   // modified for multi-region databases and tables/indexes/partitions.
   bool override_multi_region_zone_config_enabled = 24;
