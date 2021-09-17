@@ -80,10 +80,16 @@ func (l logger) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
+	selectElemStmt, err := db.Prepare(
+		`SELECT * FROM logs WHERE ts >= now() - $1::interval LIMIT 1`,
+	)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	for i := 0; i < l.connFlags.Concurrency; i++ {
-		rng := rand.New(rand.NewSource(l.seed))
+	for i := 0; i < l.connFlags.Concurrency/2; i++ {
+		rng := rand.New(rand.NewSource(l.seed) + int64(i))
 		hists := reg.GetHandle()
 		workerFn := func(ctx context.Context) error {
 			strLen := 1 + rng.Intn(100)
@@ -98,7 +104,14 @@ func (l logger) Ops(
 			hists.Get(`log`).Record(elapsed)
 			return err
 		}
-		ql.WorkerFns = append(ql.WorkerFns, workerFn)
+		selectFn := func(ctx context.Context) error {
+			start := timeutil.Now()
+			_, err := selectElemStmt.Exec(l.ttl / 2)
+			elapsed := timeutil.Since(start)
+			hists.Get(`select`).Record(elapsed)
+			return err
+		}
+		ql.WorkerFns = append(ql.WorkerFns, workerFn, selectFn)
 	}
 	return ql, nil
 }
