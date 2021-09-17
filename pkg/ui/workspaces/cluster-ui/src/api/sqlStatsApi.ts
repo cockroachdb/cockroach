@@ -18,5 +18,6 @@ export const resetSQLStats = (): Promise<cockroach.server.serverpb.ResetSQLStats
     cockroach.server.serverpb.ResetSQLStatsResponse,
     RESET_SQL_STATS_PATH,
     cockroach.server.serverpb.ResetSQLStatsRequest,
+    new cockroach.server.serverpb.ResetSQLStatsRequest(),
   );
 };
