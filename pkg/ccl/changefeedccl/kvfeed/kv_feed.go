@@ -467,7 +467,7 @@ func copyFromSourceToDestUntilTableEvent(
 		}
 		addEntry = func(e kvevent.Event) error {
 			switch e.Type() {
-			case kvevent.TypeKV:
+			case kvevent.TypeKV, kvevent.TypeFlush:
 				return dest.Add(ctx, e)
 			case kvevent.TypeResolved:
 				// TODO(ajwerner): technically this doesn't need to happen for most
