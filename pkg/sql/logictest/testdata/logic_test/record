@@ -74,7 +74,7 @@ SELECT $tabletypeid::REGTYPE::TEXT
 a
 
 # You can't drop the type descriptor.
-statement error \"a\" is an alias type and cannot be modified
+statement error cannot modify table record type \"a\"
 DROP TYPE a
 
 # User-defined types in table defs work fine.
@@ -89,38 +89,38 @@ SELECT (1, 'a')::b
 
 
 # Can't use a table record type in a persisted descriptor.
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 CREATE TABLE fail (b INT DEFAULT (((1,'a')::b).a))
 
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 ALTER TABLE b ADD COLUMN b INT DEFAULT (((1,'a')::b).a)
 
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 CREATE TABLE fail (b INT AS (((1,'a')::b).a) VIRTUAL)
 
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 ALTER TABLE b ADD COLUMN b INT AS (((1,'a')::b).a) VIRTUAL
 
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 CREATE TABLE fail (b INT AS (((1,'a')::b).a) STORED)
 
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 ALTER TABLE b ADD COLUMN b INT AS (((1,'a')::b).a) STORED
 
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 CREATE TABLE fail (b INT, INDEX(b) WHERE b > (((1,'a')::b).a))
 
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 CREATE INDEX ON a(a) WHERE a > (((1,'a')::b).a)
 
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 CREATE TABLE fail (b INT, INDEX((b + (((1,'a')::b).a))))
 
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 CREATE INDEX ON a((a + (((1,'a')::b).a)))
 
 statement error value type tuple{int AS a, e AS e} cannot be used for table columns
 CREATE VIEW v AS SELECT (1,'a')::b
 
-statement error table record type \"b\" not allowed in definition
+statement error cannot modify table record type
 CREATE VIEW v AS SELECT ((1,'a')::b).a

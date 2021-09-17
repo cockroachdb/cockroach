@@ -111,7 +111,10 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 		// If we find a table descriptor when we were expecting a type descriptor,
 		// we return the implicitly-created type descriptor that is created for each
 		// table.
-		typeDesc = typedesc.CreateImmutableFromTableDesc(t)
+		typeDesc, err = typedesc.CreateVirtualRecordTypeFromTableDesc(t)
+		if err != nil {
+			return tree.TypeName{}, nil, err
+		}
 	default:
 		return tree.TypeName{}, nil, pgerror.Newf(pgcode.WrongObjectType,
 			"descriptor %d is a %s not a %s", id, desc.DescriptorType(), catalog.Type)

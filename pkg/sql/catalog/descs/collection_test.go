@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -448,14 +449,14 @@ func TestDistSQLTypeResolver_GetTypeDescriptor_FromTable(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "t", name.ObjectName.String())
-	desc := typedesc.TypeDesc()
-	require.Equal(t, descpb.TypeDescriptor_ALIAS, desc.Kind)
-	require.Equal(t, "t", desc.Alias.TypeMeta.Name.Name)
-	require.Equal(t, types.TupleFamily, desc.Alias.Family())
-	require.Equal(t, []string{"a", "b"}, desc.Alias.TupleLabels())
-	require.Equal(t, types.IntFamily, desc.Alias.TupleContents()[0].Family())
-	require.Equal(t, types.StringFamily, desc.Alias.TupleContents()[1].Family())
-	require.Equal(t, id+100000, desc.ID)
+	typ, err := typedesc.MakeTypesT(ctx, &name, nil)
+	require.NoError(t, err)
+	require.Equal(t, types.TupleFamily, typ.Family())
+	require.Equal(t, "t", typ.TypeMeta.Name.Name)
+	require.Equal(t, []string{"a", "b"}, typ.TupleLabels())
+	require.Equal(t, types.IntFamily, typ.TupleContents()[0].Family())
+	require.Equal(t, types.StringFamily, typ.TupleContents()[1].Family())
+	require.Equal(t, oid.Oid(id+100000), typ.Oid())
 }
 
 // TestMaybeFixSchemaPrivilegesIntegration ensures that schemas that have

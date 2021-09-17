@@ -106,9 +106,15 @@ func (tc *Collection) getObjectByName(
 			// Since a type descriptor was requested, we need to return the implicitly
 			// created record type for the table that we found.
 			if flags.RequireMutable {
-				desc = typedesc.CreateMutableFromTableDesc(tableDesc)
-			} else {
-				desc = typedesc.CreateImmutableFromTableDesc(tableDesc)
+				// ... but, we can't do it if we need a mutable descriptor - we don't
+				// have the capability of returning a mutable type descriptor for a
+				// table's implicit record type.
+				return prefix, nil, errors.AssertionFailedf(
+					"can't fetch a mutable TypeDescriptor for the implicit record type for table %q", objectName)
+			}
+			desc, err = typedesc.CreateVirtualRecordTypeFromTableDesc(tableDesc)
+			if err != nil {
+				return prefix, nil, err
 			}
 		}
 	case catalog.TypeDescriptor:
