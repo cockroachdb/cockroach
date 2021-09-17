@@ -416,11 +416,27 @@ func (m *managerImpl) HandleWriterIntentError(
 	}
 
 	// Add a discovered lock to lock-table for each intent and enter each lock's
-	// wait-queue. If the lock-table is disabled and one or more of the intents
-	// are ignored then we immediately wait on all intents.
+	// wait-queue.
+	//
+	// If the lock-table is disabled and one or more of the intents are ignored
+	// then we proceed without the intent being added to the lock table. In such
+	// cases, we know that this replica is no longer the leaseholder. One of two
+	// things can happen next.
+	// 1) if the request cannot be served on this follower replica according to
+	//    the closed timestamp then it will be redirected to the leaseholder on
+	//    its next evaluation attempt, where it may discover the same intent and
+	//    wait in the new leaseholder's lock table.
+	// 2) if the request can be served on this follower replica according to the
+	//    closed timestamp then it will likely re-encounter the same intent on its
+	//    next evaluation attempt. The WriteIntentError will then be mapped to an
+	//    InvalidLeaseError in maybeAttachLease, which will indicate that the
+	//    request cannot be served as a follower read after all and cause the
+	//    request to be redirected to the leaseholder.
+	//
+	// Either way, there is no possibility of the request entering an infinite
+	// loop without making progress.
 	consultFinalizedTxnCache :=
 		int64(len(t.Intents)) > DiscoveredLocksThresholdToConsultFinalizedTxnCache.Get(&m.st.SV)
-	wait := false
 	for i := range t.Intents {
 		intent := &t.Intents[i]
 		added, err := m.lt.AddDiscoveredLock(intent, seq, consultFinalizedTxnCache, g.ltg)
@@ -428,7 +444,9 @@ func (m *managerImpl) HandleWriterIntentError(
 			log.Fatalf(ctx, "%v", err)
 		}
 		if !added {
-			wait = true
+			log.VEventf(ctx, 2,
+				"intent on %s discovered but not added to disabled lock table",
+				intent.Key.String())
 		}
 	}
 
@@ -438,23 +456,12 @@ func (m *managerImpl) HandleWriterIntentError(
 	// Guard. This is analogous to iterating through the loop in SequenceReq.
 	m.lm.Release(g.moveLatchGuard())
 
-	// If the lockTable was disabled then we need to immediately wait on the
-	// intents to ensure that they are resolved and moved out of the request's
-	// way.
-	if wait {
-		for i := range t.Intents {
-			intent := &t.Intents[i]
-			if err := m.ltw.WaitOnLock(ctx, g.Req, intent); err != nil {
-				m.FinishReq(g)
-				return nil, err
-			}
-		}
-	} else {
-		if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
-			if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
-				m.FinishReq(g)
-				return nil, err
-			}
+	// If the discovery process collected a set of intents to resolve before the
+	// next evaluation attempt, do so.
+	if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
+		if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
+			m.FinishReq(g)
+			return nil, err
 		}
 	}
 

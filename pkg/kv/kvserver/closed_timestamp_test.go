@@ -247,10 +247,10 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	}
 }
 
-// TestClosedTimestampCanServeWithConflictingIntent validates that a read served
-// from a follower replica will wait on conflicting intents and ensure that they
-// are cleaned up if necessary to allow the read to proceed.
-func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
+// TestClosedTimestampCantServeWithConflictingIntent validates that a read
+// served from a follower replica will redirect to the leaseholder if it
+// encounters a conflicting intent below the closed timestamp.
+func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -261,8 +261,8 @@ func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
 
 	// Write N different intents for the same transaction, where N is the number
-	// of replicas in the testing range. Each intent will be read and eventually
-	// resolved by a read on a different replica.
+	// of replicas in the testing range. Each intent will be read on a different
+	// replica.
 	txnKey := desc.StartKey.AsRawKey()
 	txnKey = txnKey[:len(txnKey):len(txnKey)] // avoid aliasing
 	txn := roachpb.MakeTransaction("txn", txnKey, 0, tc.Server(0).Clock().Now(), 0)
@@ -272,53 +272,89 @@ func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 		keys = append(keys, key)
 		put := putArgs(key, []byte("val"))
 		resp, err := kv.SendWrappedWith(ctx, ds, roachpb.Header{Txn: &txn}, put)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.Nil(t, err)
 		txn.Update(resp.Header().Txn)
 	}
 
-	// Read a different intent on each replica. All should begin waiting on the
-	// intents by pushing the transaction that wrote them. None should complete.
-	ts := txn.WriteTimestamp
-	respCh := make(chan error, len(keys))
-	for i, key := range keys {
-		go func(repl *kvserver.Replica, key roachpb.Key) {
-			baRead := makeTxnReadBatchForDesc(desc, ts)
-			respCh <- testutils.SucceedsSoonError(func() error {
-				// Expect 0 rows, because the intents will be aborted.
-				_, err := expectRows(0)(repl.Send(ctx, baRead))
-				return err
-			})
-		}(repls[i], key)
+	// Set a long txn liveness threshold so that the txn cannot be aborted.
+	defer txnwait.TestingOverrideTxnLivenessThreshold(time.Hour)()
+
+	// runFollowerReads attempts to perform a follower read on a different key on
+	// each replica, using the provided timestamp as the request timestamp.
+	runFollowerReads := func(ts hlc.Timestamp, retryUntilSuccessful bool) chan error {
+		respCh := make(chan error, len(repls))
+		for i := range repls {
+			go func(repl *kvserver.Replica, key roachpb.Key) {
+				baRead := makeTxnReadBatchForDesc(desc, ts)
+				baRead.Requests[0].GetScan().SetSpan(roachpb.Span{
+					Key:    key,
+					EndKey: key.Next(),
+				})
+				var err error
+				if retryUntilSuccessful {
+					err = testutils.SucceedsSoonError(func() error {
+						// Expect 0 rows, because the intents are never committed.
+						_, err := expectRows(0)(repl.Send(ctx, baRead))
+						return err
+					})
+				} else {
+					_, pErr := repl.Send(ctx, baRead)
+					err = pErr.GoError()
+				}
+				respCh <- err
+			}(repls[i], keys[i])
+		}
+		return respCh
 	}
 
+	// Follower reads should be possible up to just below the intents' timestamp.
+	// We use MinTimestamp instead of WriteTimestamp because the WriteTimestamp
+	// may have been bumped after the txn wrote some intents.
+	respCh1 := runFollowerReads(txn.MinTimestamp.Prev(), true)
+	for i := 0; i < len(repls); i++ {
+		require.NoError(t, <-respCh1)
+	}
+
+	// At the intents' timestamp, reads on the leaseholder should block and reads
+	// on the followers should be redirected to the leaseholder, even though the
+	// read timestamp is below the closed timestamp.
+	respCh2 := runFollowerReads(txn.WriteTimestamp, false)
+	for i := 0; i < len(repls)-1; i++ {
+		err := <-respCh2
+		require.Error(t, err)
+		var lErr *roachpb.NotLeaseHolderError
+		require.True(t, errors.As(err, &lErr))
+	}
 	select {
-	case err := <-respCh:
+	case err := <-respCh2:
 		t.Fatalf("request unexpectedly returned, should block; err: %v", err)
 	case <-time.After(20 * time.Millisecond):
 	}
 
-	// Abort the transaction. All pushes should succeed and all intents should
-	// be resolved, allowing all reads (on the leaseholder and on followers) to
-	// proceed and finish.
+	// Abort the transaction. All intents should be rolled back.
 	endTxn := &roachpb.EndTxnRequest{
 		RequestHeader: roachpb.RequestHeader{Key: txn.Key},
 		Commit:        false,
+		LockSpans:     []roachpb.Span{desc.KeySpan().AsRawSpanWithNoLocals()},
 	}
-	if _, err := kv.SendWrappedWith(ctx, ds, roachpb.Header{Txn: &txn}, endTxn); err != nil {
-		t.Fatal(err)
-	}
-	for range keys {
-		require.NoError(t, <-respCh)
+	_, err := kv.SendWrappedWith(ctx, ds, roachpb.Header{Txn: &txn}, endTxn)
+	require.Nil(t, err)
+
+	// The blocked read on the leaseholder should succeed.
+	require.NoError(t, <-respCh2)
+
+	// Follower reads should now be possible at the intents' timestamp.
+	respCh3 := runFollowerReads(txn.WriteTimestamp, true)
+	for i := 0; i < len(repls); i++ {
+		require.NoError(t, <-respCh3)
 	}
 }
 
 // TestClosedTimestampCanServeAfterSplitsAndMerges validates the invariant that
 // if a timestamp is safe for reading on both the left side and right side of a
-// a merge then it will be safe after the merge and that if a timestamp is safe
+// merge then it will be safe after the merge and that if a timestamp is safe
 // for reading before the beginning of a split it will be safe on both sides of
-// of the split.
+// the split.
 func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
