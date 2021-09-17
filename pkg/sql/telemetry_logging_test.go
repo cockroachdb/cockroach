@@ -223,10 +223,10 @@ func TestTelemetryLogging(t *testing.T) {
 			}
 		}
 		if !logStatementFound && tc.name != "select-*-limit-2-query" {
-			t.Fatal(errors.Newf("no matching log statement found for test case %s", tc.name))
+			t.Errorf("%s: no matching log entry found", tc.name)
 		}
 		if logStatementFound && tc.name == "select-*-limit-2-query" {
-			t.Fatal(errors.Newf("found entry for test case %s, was expecting no entry", tc.name))
+			t.Errorf("%s: found log entry, was expecting no entry", tc.name)
 		}
 	}
 }
