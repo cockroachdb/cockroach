@@ -13,6 +13,7 @@ package testcat
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"sort"
 	"time"
 
@@ -224,6 +225,11 @@ func (tc *Catalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,
 ) (cat.DataSourceName, error) {
 	return ds.(dataSource).fqName(), nil
+}
+
+// RoleExists is part of the cat.Catalog interface.
+func (tc *Catalog) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+	return true, nil
 }
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
