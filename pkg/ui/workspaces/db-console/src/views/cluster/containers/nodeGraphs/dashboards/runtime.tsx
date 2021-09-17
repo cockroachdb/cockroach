@@ -158,7 +158,7 @@ export default function(props: GraphDashboardProps) {
             key={nid}
             name="cr.node.clock-offset.meannanos"
             title={nodeDisplayName(nodesSummary, nid)}
-            sources={storeIDsForNode(nodesSummary, nid)}
+            sources={[nid]}
           />
         ))}
       </Axis>
