@@ -11,7 +11,6 @@
 package colencoding
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -39,7 +38,6 @@ func TestDecodeTableValueToCol(t *testing.T) {
 		typs[i] = ct
 		datums[i] = datum
 		var err error
-		fmt.Println(datum)
 		buf, err = rowenc.EncodeTableValue(buf, descpb.ColumnID(encoding.NoColumnID), datum, scratch)
 		if err != nil {
 			t.Fatal(err)
@@ -48,7 +46,6 @@ func TestDecodeTableValueToCol(t *testing.T) {
 	batch := coldata.NewMemBatchWithCapacity(typs, 1 /* capacity */, coldataext.NewExtendedColumnFactory(nil /*evalCtx */))
 	for i := 0; i < nCols; i++ {
 		typeOffset, dataOffset, _, typ, err := encoding.DecodeValueTag(buf)
-		fmt.Println(typ)
 		if err != nil {
 			t.Fatal(err)
 		}
