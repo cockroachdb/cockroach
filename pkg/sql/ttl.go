@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -43,24 +44,136 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	db := p.ExecCfg().DB
 	details := t.job.Details().(jobspb.TTLDetails)
 	cn := tree.Name(details.ColumnName)
+	var lastRows []interface{}
+	var pks []string
+	var pkStr string
+	var pkRevStr string
+	const batchSize = 1000
+
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		numAffected := 1
-		for numAffected > 0 {
-			// TODO(XXX): prevent full table scans?
-			var err error
-			numAffected, err = ie.Exec(
-				ctx,
-				"ttl_delete",
-				txn,
-				fmt.Sprintf("DELETE FROM [%d AS t] WHERE %s < now() LIMIT %d", details.TableID, cn.String(), 1000),
-			)
-			if err != nil {
-				return err
+		desc, err := p.ExtendedEvalContext().Descs.GetImmutableTableByID(ctx, txn, details.TableID, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return err
+		}
+		pks = desc.GetPrimaryIndex().IndexDesc().KeyColumnNames
+		pkStr = strings.Join(pks, ", ")
+		//We have to delete backwards...
+		for i, pk := range pks {
+			if i > 0 {
+				pkRevStr += ", "
 			}
+			pkRevStr += pk
+			pkRevStr += " DESC"
 		}
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	for {
+		var rows []tree.Datums
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// TODO(XXX): order by directions.
+			// TODO(XXX): prevent full table scans?
+			_, err := ie.Exec(ctx, "ttl-begin", txn, "SET TRANSACTION AS OF SYSTEM TIME follower_read_timestamp()")
+			if err != nil {
+				return err
+			}
+
+			// ((i = 10 AND j = 100 AND k < 1000)) OR (i = 10 AND j < 10) OR (i < 0))
+			var filterClause string
+			if len(lastRows) > 0 {
+				filterClause += " AND ("
+				for i := 0; i < len(lastRows); i++ {
+					if i > 0 {
+						filterClause += " OR "
+					}
+					filterClause += "("
+					until := len(lastRows) - i
+					for j := 0; j < until; j++ {
+						if j > 0 {
+							filterClause += " AND "
+						}
+						sign := "="
+						if j == until-1 {
+							sign = "<"
+						}
+						filterClause += fmt.Sprintf("%s %s $%d", pks[j], sign, j+1)
+					}
+					filterClause += ")"
+				}
+				filterClause += ")"
+			}
+			q := fmt.Sprintf(
+				`SELECT %[1]s FROM [%[2]d AS t] WHERE %[3]s < now()%[5]s ORDER BY %[6]s LIMIT %[4]d`,
+				pkStr,
+				details.TableID,
+				cn.String(),
+				batchSize,
+				filterClause,
+				pkRevStr,
+			)
+			//fmt.Printf("%s\n", q)
+			rows, err = ie.QueryBuffered(
+				ctx,
+				"ttl",
+				txn,
+				q,
+				lastRows...,
+			)
+			return err
+		}); err != nil {
+			return err
+		}
+
+		// If we have no rows found, we're done.
+		if len(rows) == 0 {
+			break
+		}
+
+		lastRowIdx := len(rows) - 1
+		lastRows = make([]interface{}, len(pks))
+		for i := 0; i < len(pks); i++ {
+			lastRows[i] = rows[lastRowIdx][i]
+		}
+
+		// TODO(XXX): account for schema changes.
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			placeholderVals := make([]interface{}, len(pks)*len(rows))
+			placeholderStr := ""
+			for i, row := range rows {
+				if i > 0 {
+					placeholderStr += ", "
+				}
+				placeholderStr += "("
+				for j := 0; j < len(pks); j++ {
+					if j > 0 {
+						placeholderStr += ", "
+					}
+					placeholderStr += fmt.Sprintf("$%d", 1+i*len(pks)+j)
+					placeholderVals[i*len(pks)+j] = row[j]
+				}
+				placeholderStr += ")"
+			}
+			q := fmt.Sprintf(`DELETE FROM [%d AS t] WHERE (%s) IN (%s)`, details.TableID, pkStr, placeholderStr)
+			//	fmt.Printf("%s\n", q)
+			if _, err := ie.Exec(
+				ctx,
+				"ttl_delete",
+				txn,
+				q,
+				placeholderVals...,
+			); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		if len(rows) < batchSize {
+			break
+		}
 	}
 	return nil
 }
