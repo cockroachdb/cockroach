@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -272,7 +273,9 @@ func StartTenant(
 	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
 	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 
-	if err := args.costController.Start(ctx, args.stopper, status.GetUserCPUSeconds); err != nil {
+	if err := args.costController.Start(
+		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID, status.GetUserCPUSeconds,
+	); err != nil {
 		return nil, "", "", err
 	}
 
@@ -496,7 +499,11 @@ type noopTenantSideCostController struct{}
 var _ multitenant.TenantSideCostController = noopTenantSideCostController{}
 
 func (noopTenantSideCostController) Start(
-	ctx context.Context, stopper *stop.Stopper, cpuSecsFn multitenant.CPUSecsFn,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	instanceID base.SQLInstanceID,
+	sessionID sqlliveness.SessionID,
+	cpuSecsFn multitenant.CPUSecsFn,
 ) error {
 	return nil
 }

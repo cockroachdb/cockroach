@@ -13,7 +13,9 @@ package multitenant
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -21,7 +23,13 @@ import (
 // and throttles resource usage. Its implementation lives in the
 // tenantcostclient CCL package.
 type TenantSideCostController interface {
-	Start(ctx context.Context, stopper *stop.Stopper, cpuSecsFn CPUSecsFn) error
+	Start(
+		ctx context.Context,
+		stopper *stop.Stopper,
+		instanceID base.SQLInstanceID,
+		sessionID sqlliveness.SessionID,
+		cpuSecsFn CPUSecsFn,
+	) error
 
 	TenantSideKVInterceptor
 }
