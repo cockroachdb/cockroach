@@ -18,8 +18,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -108,7 +110,30 @@ func TestMVCCHistories(t *testing.T) {
 				"randomly setting enableSeparated: %t", enabledSeparated)
 		}
 		// We start from a clean slate in every test file.
-		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), SetSeparatedIntents(!enabledSeparated))
+		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
+			SetSeparatedIntents(!enabledSeparated),
+			func(cfg *engineConfig) error {
+				if !overridden {
+					// Latest cluster version, since these tests are not ones where we
+					// are examining differences related to separated intents.
+					cfg.Settings = cluster.MakeTestingClusterSettings()
+				} else {
+					if !enabledSeparated {
+						// 21.1, which has the old code that is unaware about the changes
+						// we have made for OverrideTxnDidNotUpdateMetaToFalse. By using
+						// the latest cluster version, we effectively undo these changes.
+						cfg.Settings = cluster.MakeTestingClusterSettings()
+					} else if strings.Contains(path, "mixed_cluster") {
+						v21_1 := clusterversion.ByKey(clusterversion.V21_1)
+						cfg.Settings =
+							cluster.MakeTestingClusterSettingsWithVersions(v21_1, v21_1, true)
+					} else {
+						// Latest cluster version.
+						cfg.Settings = cluster.MakeTestingClusterSettings()
+					}
+				}
+				return nil
+			})
 		if err != nil {
 			t.Fatal(err)
 		}
