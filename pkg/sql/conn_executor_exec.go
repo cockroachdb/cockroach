@@ -1846,8 +1846,10 @@ func (ex *connExecutor) handleAutoCommit(
 // statement counter for stmt's type.
 func (ex *connExecutor) incrementStartedStmtCounter(ast tree.Statement) {
 	ex.metrics.StartedStatementCounters.incrementCount(ex, ast)
-	ex.server.TelemetryLoggingMetrics.updateRollingQueryCounts()
-
+	if ex.executorType != executorTypeInternal {
+		// Update the non-internal QPS estimation.
+		ex.server.TelemetryLoggingMetrics.updateRollingQueryCounts()
+	}
 }
 
 // incrementExecutedStmtCounter increments the appropriate executed

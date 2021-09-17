@@ -204,6 +204,10 @@ TEST=mytest COUNT=10 LOCAL=n SHORT=n ./pkg/cmd/roachtest/roachstress.sh --cpu-qu
 
 [roachstress.sh]: https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/roachstress.sh
 
+It's important to make sure that the machine running this invocation does not
+suspend or lose network connectivity. Using a tmux session on a `./scripts/gceworker.sh`
+machine has worked well for many of us in the past.
+
 Another option is to start a [`Cockroach_Nightlies_RoachtestStress`](https://teamcity.cockroachdb.com/buildConfiguration/Cockroach_Nightlies_RoachtestStress)
 CI job, which allows running a bunch of tests without having to keep your
 laptop online. The CI job is run as follows:
