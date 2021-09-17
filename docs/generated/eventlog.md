@@ -2209,6 +2209,9 @@ An event of type `sampled_query` is the SQL query event logged to the telemetry 
 contains common SQL event/execution details.
 
 
+| Field | Description | Sensitive |
+|--|--|--|
+| `SkippedQueries` | skipped_queries indicate how many SQL statements were not considered for sampling prior to this one. If the field is omitted, or its value is zero, this indicates that no statement was omitted since the last event. | no |
 
 
 #### Common fields

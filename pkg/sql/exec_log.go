@@ -171,7 +171,9 @@ func (p *planner) maybeLogStatementInternal(
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
 	sampleRate := telemetrySampleRate.Get(&p.execCfg.Settings.SV)
 	qpsThreshold := telemetryQPSThreshold.Get(&p.execCfg.Settings.SV)
-	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV)
+
+	// We only consider non-internal SQL statements for telemetry logging.
+	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) && execType != executorTypeInternal
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
@@ -365,20 +367,27 @@ func (p *planner) maybeLogStatementInternal(
 
 	if telemetryLoggingEnabled {
 		smoothQPS := telemetryMetrics.expSmoothQPS()
-		shouldSampleEventToTelemetry := p.stmt.AST.StatementType() == tree.TypeDML && smoothQPS > qpsThreshold
+		useSamplingMethod := p.stmt.AST.StatementType() == tree.TypeDML && smoothQPS > qpsThreshold
+		alwaysReportQueries := !useSamplingMethod
 		// If we DO NOT need to sample the event, log immediately to the telemetry
 		// channel. Otherwise, log the event to the telemetry channel if it has been
 		// sampled.
-		// TODO(thardy98): add the effective sample rate to the SampledQuery event
-		// (#69653).
-		if !shouldSampleEventToTelemetry {
-			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails}})
-		} else if shouldSampleEventToTelemetry {
+		if alwaysReportQueries {
+			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
+				CommonSQLExecDetails: execDetails,
+				SkippedQueries:       skippedQueries,
+			}})
+		} else if useSamplingMethod {
 			if rng.Float64() < sampleRate {
-				p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails}})
+				skippedQueries := telemetryMetrics.resetSkippedQueryCount()
+				p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
+					CommonSQLExecDetails: execDetails,
+					SkippedQueries:       skippedQueries,
+				}})
+			} else {
+				telemetryMetrics.incSkippedQueryCount()
 			}
-			// TODO(thardy98): event has not been sampled, increment the not emitted
-			// count (#69653).
 		}
 	}
 }
