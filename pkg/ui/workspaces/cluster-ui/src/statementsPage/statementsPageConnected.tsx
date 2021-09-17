@@ -56,7 +56,7 @@ export const ConnectedStatementsPage = withRouter(
       columns: selectColumns(state),
       nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
       isTenant: selectIsTenant(state),
-      dateRange: selectIsTenant(state) ? null : selectDateRange(state),
+      dateRange: selectDateRange(state),
     }),
     (dispatch: Dispatch) => ({
       refreshStatements: (req?: StatementsRequest) =>

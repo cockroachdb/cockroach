@@ -148,7 +148,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		d.Fatalf(t, "failed to parse duration: %v", args.Period)
 	}
 	req := roachpb.TokenBucketRequest{
-		TenantID:   uint64(tenantID),
+		TenantID:   tenantID,
 		InstanceID: args.InstanceID,
 		ConsumptionSinceLastRequest: roachpb.TenantConsumption{
 			RU:                args.Consumption.RU,

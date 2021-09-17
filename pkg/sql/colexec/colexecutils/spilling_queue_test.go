@@ -277,7 +277,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	// Choose a memory limit such that at most two batches can be kept in the
 	// in-memory buffer at a time (single batch is not enough because the queue
 	// delays the release of the memory by one batch).
-	memoryLimit := int64(2 * colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()))
+	memoryLimit := 2 * colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize())
 	if memoryLimit < mon.DefaultPoolAllocationSize {
 		memoryLimit = mon.DefaultPoolAllocationSize
 	}

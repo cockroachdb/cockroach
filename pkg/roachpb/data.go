@@ -22,7 +22,6 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -904,7 +903,8 @@ func (ts TransactionStatus) IsFinalized() bool {
 	return ts == COMMITTED || ts == ABORTED
 }
 
-var _ errors.SafeMessager = Transaction{}
+// SafeValue implements the redact.SafeValue interface.
+func (TransactionStatus) SafeValue() {}
 
 // MakeTransaction creates a new transaction. The transaction key is
 // composed using the specified baseKey (for locality with data
@@ -1267,48 +1267,26 @@ func (t *Transaction) LocksAsLockUpdates() []LockUpdate {
 }
 
 // String formats transaction into human readable string.
-//
-// NOTE: When updating String(), you probably want to also update SafeMessage().
 func (t Transaction) String() string {
-	var buf strings.Builder
-	if len(t.Name) > 0 {
-		fmt.Fprintf(&buf, "%q ", t.Name)
-	}
-	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
-		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
-	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
-		fmt.Fprintf(&buf, " int=%d", ni)
-	}
-	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
-		fmt.Fprintf(&buf, " ifw=%d", nw)
-	}
-	if ni := len(t.IgnoredSeqNums); ni > 0 {
-		fmt.Fprintf(&buf, " isn=%d", ni)
-	}
-	return buf.String()
+	return redact.StringWithoutMarkers(t)
 }
 
-// SafeMessage implements the SafeMessager interface.
-//
-// This method should be kept largely synchronized with String(), except that it
-// can't include sensitive info (e.g. the transaction key).
-func (t Transaction) SafeMessage() string {
-	var buf strings.Builder
+// SafeFormat implements the redact.SafeFormatter interface.
+func (t Transaction) SafeFormat(w redact.SafePrinter, _ rune) {
 	if len(t.Name) > 0 {
-		fmt.Fprintf(&buf, "%q ", t.Name)
+		w.Printf("%q ", redact.SafeString(t.Name))
 	}
-	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
-		t.TxnMeta.SafeMessage(), t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
+	w.Printf("meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
+		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
 	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
-		fmt.Fprintf(&buf, " int=%d", ni)
+		w.Printf(" int=%d", ni)
 	}
 	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
-		fmt.Fprintf(&buf, " ifw=%d", nw)
+		w.Printf(" ifw=%d", nw)
 	}
 	if ni := len(t.IgnoredSeqNums); ni > 0 {
-		fmt.Fprintf(&buf, " isn=%d", ni)
+		w.Printf(" isn=%d", ni)
 	}
-	return buf.String()
 }
 
 // ResetObservedTimestamps clears out all timestamps recorded from individual

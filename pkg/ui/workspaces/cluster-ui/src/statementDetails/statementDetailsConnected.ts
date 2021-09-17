@@ -45,7 +45,7 @@ const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
   return {
     statement,
     statementsError: state.adminUI.statements.lastError,
-    dateRange: selectIsTenant(state) ? null : selectDateRange(state),
+    dateRange: selectDateRange(state),
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
     nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
     diagnosticsReports: selectIsTenant(state)

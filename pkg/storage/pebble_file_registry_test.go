@@ -89,11 +89,6 @@ func TestFileRegistryOps(t *testing.T) {
 	bazFileEntry :=
 		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("baz")}
 
-	require.NoError(t, mem.MkdirAll("/mydb", 0755))
-	registry := &PebbleFileRegistry{FS: mem, DBDir: "/mydb"}
-	require.NoError(t, registry.Load())
-	require.Nil(t, registry.GetFileEntry("file1"))
-
 	expected := make(map[string]*enginepb.FileEntry)
 
 	checkEquality := func() {
@@ -116,6 +111,11 @@ func TestFileRegistryOps(t *testing.T) {
 			t.Fatalf("%s\n%v", strings.Join(diff, "\n"), registry.mu.currProto.Files)
 		}
 	}
+
+	require.NoError(t, mem.MkdirAll("/mydb", 0755))
+	registry := &PebbleFileRegistry{FS: mem, DBDir: "/mydb"}
+	require.NoError(t, registry.Load())
+	require.Nil(t, registry.GetFileEntry("file1"))
 
 	// {file1 => foo}
 	require.NoError(t, registry.SetFileEntry("file1", fooFileEntry))

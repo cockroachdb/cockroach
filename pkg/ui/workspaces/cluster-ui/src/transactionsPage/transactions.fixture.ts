@@ -11,6 +11,7 @@
 import { createMemoryHistory } from "history";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import Long from "long";
+import moment from "moment";
 
 const history = createMemoryHistory({ initialEntries: ["/transactions"] });
 
@@ -36,6 +37,11 @@ export const nodeRegions: { [nodeId: string]: string } = {
   "3": "gcp-us-west1",
   "4": "gcp-europe-west1",
 };
+
+export const dateRange: [moment.Moment, moment.Moment] = [
+  moment.utc("2021.08.08"),
+  moment.utc("2021.08.12"),
+];
 
 export const data: cockroach.server.serverpb.IStatementsResponse = {
   statements: [

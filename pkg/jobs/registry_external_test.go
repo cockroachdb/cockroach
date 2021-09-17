@@ -656,7 +656,7 @@ SELECT unnest(execution_errors)
 		tdb.Exec(t, "SET CLUSTER SETTING "+jobs.ExecutionErrorsMaxEntrySizeKey+" = $1", maxSize)
 		tdb.Exec(t, "SET CLUSTER SETTING "+jobs.ExecutionErrorsMaxEntriesKey+" = $1", 1)
 		err1 := strings.Repeat("a", largeSize)
-		firstRun.resume <- jobs.MarkAsRetryJobError(errors.New(err1))
+		firstRun.resume <- jobs.MarkAsRetryJobError(fmt.Errorf("%s", err1))
 
 		// Wait for the job to get restarted.
 		secondRun, secondStart := waitForEvent(t, id)
@@ -694,7 +694,7 @@ SELECT unnest(execution_errors)
 			executionErrorEqual(t, secondExecErr, execErrs[0])
 		}
 		err4 := strings.Repeat("b", largeSize)
-		fourthRun.resume <- jobs.MarkAsRetryJobError(errors.New(err4))
+		fourthRun.resume <- jobs.MarkAsRetryJobError(fmt.Errorf("%s", err4))
 		fifthRun, fifthStart := waitForEvent(t, id)
 		{
 			execErrs := getExecErrors(t, id)

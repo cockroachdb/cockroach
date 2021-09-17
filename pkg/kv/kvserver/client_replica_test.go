@@ -3228,7 +3228,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 						sysCfg.RaftLock()
 						require.NoError(t, sysCfg.MaybeGossipSystemConfigRaftMuLocked(ctx))
 						sysCfg.RaftUnlock()
-						return errors.Errorf("expected %d, got %d", exp, c.TTL().Seconds())
+						return errors.Errorf("expected %d, got %f", exp, c.TTL().Seconds())
 					}
 				}
 				return nil
@@ -3867,6 +3867,7 @@ func TestOptimisticEvalRetry(t *testing.T) {
 			require.True(t, removedLocks)
 			done = true
 		case <-timer.C:
+			timer.Read = true
 			require.NoError(t, txn1.Commit(ctx))
 			removedLocks = true
 		}

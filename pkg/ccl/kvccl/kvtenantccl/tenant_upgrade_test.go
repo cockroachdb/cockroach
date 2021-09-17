@@ -253,7 +253,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			TestingKnobs: base.TestingKnobs{
 				MigrationManager: &migration.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
-						return []clusterversion.ClusterVersion{{v1}, {v2}}
+						return []clusterversion.ClusterVersion{{Version: v1}, {Version: v2}}
 					},
 					RegistryOverride: func(cv clusterversion.ClusterVersion) (migration.Migration, bool) {
 						switch cv.Version {
@@ -281,7 +281,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 						default:
 							panic("Unexpected version number observed.")
 						}
-						return nil, false
 					},
 				},
 			},

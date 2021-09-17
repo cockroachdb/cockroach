@@ -11,7 +11,6 @@
 package nstree
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -90,7 +89,7 @@ func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr Map) string {
 			defer func() { i++ }()
 			if a.set&argStopAfter != 0 && i == a.stopAfter {
 				if d.Input != "" {
-					return errors.New(d.Input)
+					return fmt.Errorf("error: %s", d.Input)
 				}
 				return iterutil.StopIteration()
 			}
@@ -99,7 +98,7 @@ func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr Map) string {
 			return nil
 		})
 		if err != nil {
-			fmt.Fprintf(&buf, "error: %v", err)
+			fmt.Fprintf(&buf, "%v", err)
 		}
 		return buf.String()
 	case "len":

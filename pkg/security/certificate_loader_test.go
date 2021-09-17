@@ -167,7 +167,7 @@ func makeTestCert(
 func TestNamingScheme(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	permissionRequirement := ".* exceeds -rwx------"
+	permissionRequirementErr := errors.New(".* exceeds -rwx------")
 
 	// by default we only allow certificate keys owned by the same user
 	// as the running process (0700). In some environments, such as
@@ -180,7 +180,7 @@ func TestNamingScheme(t *testing.T) {
 	// Because this test creates certificate keys, when run as root we
 	// we have the less stringent permission requirement.
 	if os.Getuid() == 0 {
-		permissionRequirement = "exceeds -rwxr-----"
+		permissionRequirementErr = errors.New("exceeds -rwxr-----")
 	}
 
 	fullKeyUsage := x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature
@@ -284,9 +284,9 @@ func TestNamingScheme(t *testing.T) {
 			certs: []security.CertInfo{
 				{FileUsage: security.CAPem, Filename: "ca.crt", FileContents: caCert},
 				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
-					Error: errors.New(permissionRequirement)},
+					Error: permissionRequirementErr},
 				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New(permissionRequirement)},
+					Error: permissionRequirementErr},
 			},
 			skipWindows: true,
 		},

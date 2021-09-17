@@ -11,19 +11,18 @@
 package enginepb
 
 import (
-	"fmt"
-	"io"
 	"math"
 	"sort"
-	"strings"
 
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
 // TxnEpoch is a zero-indexed epoch for a transaction. When a transaction
 // retries, it increments its epoch, invalidating all of its previous writes.
 type TxnEpoch int32
+
+// SafeValue implements the redact.SafeValue interface.
+func (TxnEpoch) SafeValue() {}
 
 // TxnSeq is a zero-indexed sequence number assigned to a request performed by a
 // transaction. Writes within a transaction have unique sequences and start at
@@ -34,6 +33,9 @@ type TxnEpoch int32
 // Reads within a transaction observe only writes performed by the transaction
 // at equal or lower sequence numbers.
 type TxnSeq int32
+
+// SafeValue implements the redact.SafeValue interface.
+func (TxnSeq) SafeValue() {}
 
 // TxnPriority defines the priority that a transaction operates at. Transactions
 // with high priorities are preferred over transaction with low priorities when
@@ -255,21 +257,13 @@ func (meta *MVCCMetadata) GetIntentValue(seq TxnSeq) ([]byte, bool) {
 }
 
 // String implements the fmt.Stringer interface.
-func (m *MVCCMetadata_SequencedIntent) String() string {
-	var buf strings.Builder
-	m.FormatW(&buf, false /* expand */)
-	return buf.String()
+func (m MVCCMetadata_SequencedIntent) String() string {
+	return redact.StringWithoutMarkers(m)
 }
 
-// Format implements the fmt.Formatter interface.
-func (m *MVCCMetadata_SequencedIntent) Format(f fmt.State, r rune) {
-	m.FormatW(f, f.Flag('+'))
-}
-
-// FormatW enables grouping formatters around a single buffer while
-// avoiding copies.
-func (m *MVCCMetadata_SequencedIntent) FormatW(buf io.Writer, expand bool) {
-	fmt.Fprintf(buf,
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m MVCCMetadata_SequencedIntent) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf(
 		"{%d %s}",
 		m.Sequence,
 		FormatBytesAsValue(m.Value))
@@ -277,42 +271,37 @@ func (m *MVCCMetadata_SequencedIntent) FormatW(buf io.Writer, expand bool) {
 
 // String implements the fmt.Stringer interface.
 func (meta *MVCCMetadata) String() string {
-	var buf strings.Builder
-	meta.FormatW(&buf, false /* expand */)
-	return buf.String()
+	return redact.StringWithoutMarkers(meta)
 }
 
-// Format implements the fmt.Formatter interface.
-func (meta *MVCCMetadata) Format(f fmt.State, r rune) {
-	meta.FormatW(f, f.Flag('+'))
-}
+// SafeFormat implements the redact.SafeFormatter interface.
+func (meta *MVCCMetadata) SafeFormat(w redact.SafePrinter, _ rune) {
+	expand := w.Flag('+')
 
-// FormatW enables grouping formatters around a single buffer while
-// avoiding copies.
-func (meta *MVCCMetadata) FormatW(buf io.Writer, expand bool) {
-	fmt.Fprintf(buf, "txn={%s} ts=%s del=%t klen=%d vlen=%d",
+	w.Printf("txn={%s} ts=%s del=%t klen=%d vlen=%d",
 		meta.Txn,
 		meta.Timestamp,
 		meta.Deleted,
 		meta.KeyBytes,
 		meta.ValBytes,
 	)
+
 	if len(meta.RawBytes) > 0 {
 		if expand {
-			fmt.Fprintf(buf, " raw=%s", FormatBytesAsValue(meta.RawBytes))
+			w.Printf(" raw=%s", FormatBytesAsValue(meta.RawBytes))
 		} else {
-			fmt.Fprintf(buf, " rawlen=%d", len(meta.RawBytes))
+			w.Printf(" rawlen=%d", len(meta.RawBytes))
 		}
 	}
 	if nih := len(meta.IntentHistory); nih > 0 {
 		if expand {
-			fmt.Fprint(buf, " ih={")
+			w.Printf(" ih={")
 			for i := range meta.IntentHistory {
-				meta.IntentHistory[i].FormatW(buf, expand)
+				w.Print(meta.IntentHistory[i])
 			}
-			fmt.Fprint(buf, "}")
+			w.Printf("}")
 		} else {
-			fmt.Fprintf(buf, " nih=%d", nih)
+			w.Printf(" nih=%d", nih)
 		}
 	}
 
@@ -320,7 +309,7 @@ func (meta *MVCCMetadata) FormatW(buf io.Writer, expand bool) {
 	if meta.TxnDidNotUpdateMeta != nil {
 		txnDidNotUpdateMeta = *meta.TxnDidNotUpdateMeta
 	}
-	fmt.Fprintf(buf, " mergeTs=%s txnDidNotUpdateMeta=%t", meta.MergeTimestamp, txnDidNotUpdateMeta)
+	w.Printf(" mergeTs=%s txnDidNotUpdateMeta=%t", meta.MergeTimestamp, txnDidNotUpdateMeta)
 }
 
 func (meta *MVCCMetadataSubsetForMergeSerialization) String() string {
@@ -330,50 +319,17 @@ func (meta *MVCCMetadataSubsetForMergeSerialization) String() string {
 	return m.String()
 }
 
-// SafeMessage implements the SafeMessager interface.
-//
-// This method should be kept largely synchronized with String(), except that it
-// can't include sensitive info (e.g. the transaction key).
-func (meta *MVCCMetadata) SafeMessage() string {
-	var buf strings.Builder
-	fmt.Fprintf(&buf, "{%s} ts=%s del=%t klen=%d vlen=%d",
-		meta.Txn.SafeMessage(),
-		meta.Timestamp,
-		meta.Deleted,
-		meta.KeyBytes,
-		meta.ValBytes,
-	)
-	if len(meta.RawBytes) > 0 {
-		fmt.Fprintf(&buf, " rawlen=%d", len(meta.RawBytes))
-	}
-	if nih := len(meta.IntentHistory); nih > 0 {
-		fmt.Fprintf(&buf, " nih=%d", nih)
-	}
-
-	var txnDidNotUpdateMeta bool
-	if meta.TxnDidNotUpdateMeta != nil {
-		txnDidNotUpdateMeta = *meta.TxnDidNotUpdateMeta
-	}
-	fmt.Fprintf(&buf, " mergeTs=%s txnDidNotUpdateMeta=%t", meta.MergeTimestamp, txnDidNotUpdateMeta)
-
-	return buf.String()
-}
-
 // String implements the fmt.Stringer interface.
 // We implement by value as the object may not reside on the heap.
 func (t TxnMeta) String() string {
-	var buf strings.Builder
-	t.FormatW(&buf)
-	return buf.String()
+	return redact.StringWithoutMarkers(t)
 }
 
-// FormatW enables grouping formatters around a single buffer while
-// avoiding copies.
-// We implement by value as the object may not reside on the heap.
-func (t TxnMeta) FormatW(buf io.Writer) {
+// SafeFormat implements the redact.SafeFormatter interface.
+func (t TxnMeta) SafeFormat(w redact.SafePrinter, _ rune) {
 	// Compute priority as a floating point number from 0-100 for readability.
 	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
-	fmt.Fprintf(buf,
+	w.Printf(
 		"id=%s key=%s pri=%.8f epo=%d ts=%s min=%s seq=%d",
 		t.Short(),
 		FormatBytesAsKey(t.Key),
@@ -384,35 +340,14 @@ func (t TxnMeta) FormatW(buf io.Writer) {
 		t.Sequence)
 }
 
-// SafeMessage implements the SafeMessager interface.
-//
-// This method should be kept largely synchronized with String(), except that it
-// can't include sensitive info (e.g. the transaction key).
-//
-// We implement by value as the object may not reside on the heap.
-func (t TxnMeta) SafeMessage() string {
-	var buf strings.Builder
-	// Compute priority as a floating point number from 0-100 for readability.
-	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
-	fmt.Fprintf(&buf,
-		"id=%s pri=%.8f epo=%d ts=%s min=%s seq=%d",
-		t.Short(),
-		floatPri,
-		t.Epoch,
-		t.WriteTimestamp,
-		t.MinTimestamp,
-		t.Sequence)
-	return buf.String()
-}
-
-var _ errors.SafeMessager = (*TxnMeta)(nil)
-
 // FormatBytesAsKey is injected by module roachpb as dependency upon initialization.
+// TODO(sarkesian): Make this explicitly redactable.  See #70288
 var FormatBytesAsKey = func(k []byte) string {
 	return string(k)
 }
 
 // FormatBytesAsValue is injected by module roachpb as dependency upon initialization.
+// TODO(sarkesian): Make this explicitly redactable.  See #70288
 var FormatBytesAsValue = func(v []byte) string {
 	return string(v)
 }
