@@ -39,7 +39,7 @@ Bucket state: ru-burst-limit=5000  ru-refill-rate=100  ru-current=1000  current-
 Consumption: ru=10  reads=20 req/30 bytes  writes=40 req/50 bytes  pod-cpu-usage: 60
 Last update: 00:00:00.000
 First active instance: 1
-  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 1:  lease="foo"  seq=1  shares=0.0  next-instance=0  last-update=00:00:00.000
 
 advance
 1m
@@ -57,4 +57,4 @@ Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=2000  current-sha
 Consumption: ru=10  reads=20 req/30 bytes  writes=40 req/50 bytes  pod-cpu-usage: 60
 Last update: 00:01:00.000
 First active instance: 1
-  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 1:  lease="foo"  seq=1  shares=0.0  next-instance=0  last-update=00:00:00.000

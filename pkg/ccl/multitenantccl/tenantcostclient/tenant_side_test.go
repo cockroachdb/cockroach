@@ -444,6 +444,8 @@ type testProvider struct {
 		syncutil.Mutex
 		consumption roachpb.TenantConsumption
 
+		lastSeqNum int64
+
 		cfg testProviderConfig
 	}
 	recvOnRequest chan struct{}
@@ -509,6 +511,11 @@ func (tp *testProvider) TokenBucket(
 	case <-tp.recvOnRequest:
 	default:
 	}
+
+	if in.SeqNum <= tp.mu.lastSeqNum {
+		panic("non-increasing sequence number")
+	}
+	tp.mu.lastSeqNum = in.SeqNum
 
 	if tp.mu.cfg.Error {
 		return nil, errors.New("injected error")

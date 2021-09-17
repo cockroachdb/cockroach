@@ -24,7 +24,7 @@ Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=-10  current-shar
 Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
 Last update: 00:00:00.000
 First active instance: 1
-  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 1:  lease="foo"  seq=2  shares=0.0  next-instance=0  last-update=00:00:00.000
 
 advance
 10s
@@ -43,7 +43,7 @@ Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=490  current-shar
 Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
 Last update: 00:00:10.000
 First active instance: 1
-  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:10.000
+  Instance 1:  lease="foo"  seq=3  shares=0.0  next-instance=0  last-update=00:00:10.000
 
 token-bucket-request tenant=5
 instance_id: 2
@@ -74,8 +74,8 @@ Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=230  current-shar
 Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
 Last update: 00:00:10.000
 First active instance: 1
-  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=2  last-update=00:00:09.000
-  Instance 2:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:10.000
+  Instance 1:  lease="foo"  seq=5  shares=0.0  next-instance=2  last-update=00:00:09.000
+  Instance 2:  lease="foo"  seq=4  shares=0.0  next-instance=0  last-update=00:00:10.000
 
 advance
 1s
@@ -93,8 +93,8 @@ Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=230  current-shar
 Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
 Last update: 00:00:10.000
 First active instance: 1
-  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=2  last-update=00:00:10.000
-  Instance 2:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:10.000
+  Instance 1:  lease="foo"  seq=6  shares=0.0  next-instance=2  last-update=00:00:10.000
+  Instance 2:  lease="foo"  seq=4  shares=0.0  next-instance=0  last-update=00:00:10.000
 
 advance
 1s
@@ -112,5 +112,5 @@ Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=330  current-shar
 Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
 Last update: 00:00:11.000
 First active instance: 1
-  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=2  last-update=00:00:11.000
-  Instance 2:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:10.000
+  Instance 1:  lease="foo"  seq=7  shares=0.0  next-instance=2  last-update=00:00:11.000
+  Instance 2:  lease="foo"  seq=4  shares=0.0  next-instance=0  last-update=00:00:10.000
