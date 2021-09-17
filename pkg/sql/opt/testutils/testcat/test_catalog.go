@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -224,6 +225,11 @@ func (tc *Catalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,
 ) (cat.DataSourceName, error) {
 	return ds.(dataSource).fqName(), nil
+}
+
+// RoleExists is part of the cat.Catalog interface.
+func (tc *Catalog) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+	return true, nil
 }
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {

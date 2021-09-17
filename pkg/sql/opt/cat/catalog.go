@@ -15,6 +15,7 @@ package cat
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -157,4 +158,7 @@ type Catalog interface {
 	//  - the fully qualified name of a data source object can change without the
 	//    object itself changing (e.g. when a database is renamed).
 	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
+
+	// RoleExists returns true if the role exists.
+	RoleExists(ctx context.Context, role security.SQLUsername) (bool, error)
 }
