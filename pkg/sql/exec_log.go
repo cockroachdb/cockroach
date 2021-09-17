@@ -365,15 +365,16 @@ func (p *planner) maybeLogStatementInternal(
 
 	if telemetryLoggingEnabled {
 		smoothQPS := telemetryMetrics.expSmoothQPS()
-		shouldSampleEventToTelemetry := p.stmt.AST.StatementType() == tree.TypeDML && smoothQPS > qpsThreshold
+		useSamplingMethod := p.stmt.AST.StatementType() == tree.TypeDML && smoothQPS > qpsThreshold
+		alwaysReportQueries := !useSamplingMethod
 		// If we DO NOT need to sample the event, log immediately to the telemetry
 		// channel. Otherwise, log the event to the telemetry channel if it has been
 		// sampled.
 		// TODO(thardy98): add the effective sample rate to the SampledQuery event
 		// (#69653).
-		if !shouldSampleEventToTelemetry {
+		if alwaysReportQueries {
 			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails}})
-		} else if shouldSampleEventToTelemetry {
+		} else if useSamplingMethod {
 			if rng.Float64() < sampleRate {
 				p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails}})
 			}
