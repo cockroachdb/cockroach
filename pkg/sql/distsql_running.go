@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -510,6 +511,33 @@ func (dsp *DistSQLPlanner) Run(
 
 	if planCtx.planner != nil && flow.IsVectorized() {
 		planCtx.planner.curPlan.flags.Set(planFlagVectorized)
+		stmt := planCtx.planner.stmt
+		skipExplainVec := false
+		for _, s := range []string{
+			"EXPLAIN",
+			"FOLLOWER_READ_TIMESTAMP()",
+			"NOTICE",
+		} {
+			skipExplainVec = skipExplainVec || strings.Contains(strings.ToUpper(stmt.SQL), s)
+		}
+		if stmt.NumPlaceholders == 0 && !evalCtx.SessionData().Internal && !skipExplainVec {
+			_, err = evalCtx.InternalExecutor.Exec(ctx, "EXPLAIN (VEC)", txn, "EXPLAIN (VEC) "+stmt.SQL)
+			if err != nil {
+				allowedError := false
+				for _, s := range []string{
+					"syntax error",
+					"unsupported processor core",
+					"inconsistent AS OF SYSTEM TIME timestamp",
+					"presence of subqueries",
+				} {
+					allowedError = allowedError || strings.Contains(err.Error(), s)
+				}
+				if !allowedError {
+					recv.SetError(err)
+					return func() {}
+				}
+			}
+		}
 	}
 
 	if planCtx.saveFlows != nil {
