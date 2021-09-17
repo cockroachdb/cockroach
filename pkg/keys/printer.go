@@ -193,7 +193,6 @@ var constSubKeyDict = []struct {
 	{"/gossipBootstrap", localStoreGossipSuffix},
 	{"/clusterVersion", localStoreClusterVersionSuffix},
 	{"/nodeTombstone", localStoreNodeTombstoneSuffix},
-	{"/suggestedCompaction", localStoreSuggestedCompactionSuffix},
 	{"/cachedSettings", localStoreCachedSettingsSuffix},
 }
 
@@ -237,7 +236,6 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 		if strings.HasPrefix(input, s.name) {
 			switch {
 			case
-				s.key.Equal(localStoreSuggestedCompactionSuffix),
 				s.key.Equal(localStoreNodeTombstoneSuffix),
 				s.key.Equal(localStoreCachedSettingsSuffix):
 				panic(&ErrUglifyUnsupported{errors.Errorf("cannot parse local store key with suffix %s", s.key)})

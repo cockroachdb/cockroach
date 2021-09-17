@@ -17,6 +17,7 @@ go_library(
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings",
+        "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
         "//pkg/util/quotapool",
