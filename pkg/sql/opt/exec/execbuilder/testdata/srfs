@@ -424,48 +424,44 @@ ORDER BY a0.created_at
 distribution: local
 vectorized: true
 ·
-• limit
+• top-k
 │ columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)
+│ ordering: +created_at
 │ estimated row count: 10 (missing stats)
-│ count: 10
+│ order: +any_not_null
+│ k: 10
 │
-└── • sort
+└── • group
     │ columns: (id, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null)
-    │ ordering: +any_not_null
     │ estimated row count: 14 (missing stats)
-    │ order: +any_not_null
+    │ aggregate 0: any_not_null(body)
+    │ aggregate 1: any_not_null(description)
+    │ aggregate 2: any_not_null(title)
+    │ aggregate 3: any_not_null(slug)
+    │ aggregate 4: any_not_null(tag_list)
+    │ aggregate 5: any_not_null(user_id)
+    │ aggregate 6: any_not_null(created_at)
+    │ aggregate 7: any_not_null(updated_at)
+    │ group by: id
     │
-    └── • group
-        │ columns: (id, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null)
-        │ estimated row count: 14 (missing stats)
-        │ aggregate 0: any_not_null(body)
-        │ aggregate 1: any_not_null(description)
-        │ aggregate 2: any_not_null(title)
-        │ aggregate 3: any_not_null(slug)
-        │ aggregate 4: any_not_null(tag_list)
-        │ aggregate 5: any_not_null(user_id)
-        │ aggregate 6: any_not_null(created_at)
-        │ aggregate 7: any_not_null(updated_at)
-        │ group by: id
+    └── • project
+        │ columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)
         │
-        └── • project
-            │ columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)
+        └── • filter
+            │ columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)
+            │ estimated row count: 14 (missing stats)
+            │ filter: unnest = 'dragons'
             │
-            └── • filter
+            └── • project set
                 │ columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)
-                │ estimated row count: 14 (missing stats)
-                │ filter: unnest = 'dragons'
+                │ estimated row count: 10,000 (missing stats)
+                │ render 0: unnest(tag_list)
                 │
-                └── • project set
-                    │ columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)
-                    │ estimated row count: 10,000 (missing stats)
-                    │ render 0: unnest(tag_list)
-                    │
-                    └── • scan
-                          columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)
-                          estimated row count: 1,000 (missing stats)
-                          table: articles@primary
-                          spans: FULL SCAN
+                └── • scan
+                      columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)
+                      estimated row count: 1,000 (missing stats)
+                      table: articles@primary
+                      spans: FULL SCAN
 
 # Regression test for #32723.
 query T
