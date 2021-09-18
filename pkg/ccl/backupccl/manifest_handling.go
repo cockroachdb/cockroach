@@ -31,6 +31,7 @@ import (
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -855,7 +856,15 @@ func loadSQLDescsFromBackupsAtTime(
 		return ret
 	}
 	if asOf.IsEmpty() {
-		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		if lastBackupManifest.DescriptorCoverage != tree.AllDescriptors {
+			return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		}
+
+		// Cluster backups with revision history may have included previous
+		// database versions of database descriptors in
+		// lastBackupManifest.Descriptors. Find the correct set of descriptors by
+		// going through their revisions. See #68541.
+		asOf = lastBackupManifest.EndTime
 	}
 
 	for _, b := range backupManifests {
