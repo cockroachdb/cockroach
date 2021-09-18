@@ -97,6 +97,49 @@ func TestRestoreOldVersions(t *testing.T) {
 	// versions, but are now disallowed, but we should check that we fail
 	// gracefully with them.
 	t.Run("exceptional-backups", func(t *testing.T) {
+		t.Run("duplicate-db-desc", func(t *testing.T) {
+			backupUnderTest := "doubleDB"
+			/*
+					This backup was generated with the following SQL on (v21.1.6):
+
+				  CREATE DATABASE db1;
+				  DROP DATABASE db1;
+				  CREATE DATABASE db1;
+				  BACKUP TO 'nodelocal://1/doubleDB' WITH revision_history;
+			*/
+			dir, err := os.Stat(filepath.Join(exceptionalDirs, backupUnderTest))
+			require.NoError(t, err)
+			require.True(t, dir.IsDir())
+
+			// We could create tables which reference types in another database on
+			// 20.2 release candidates.
+			exportDir, err := filepath.Abs(filepath.Join(exceptionalDirs, dir.Name()))
+			require.NoError(t, err)
+
+			externalDir, dirCleanup := testutils.TempDir(t)
+			ctx := context.Background()
+			tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					ExternalIODir: externalDir,
+				},
+			})
+			sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+			defer func() {
+				tc.Stopper().Stop(ctx)
+				dirCleanup()
+			}()
+			err = os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
+			require.NoError(t, err)
+
+			sqlDB.Exec(t, `RESTORE FROM $1`, LocalFoo)
+			sqlDB.Exec(t, `DROP DATABASE db1;`)
+			sqlDB.Exec(t, `RESTORE DATABASE db1 FROM $1`, LocalFoo)
+			sqlDB.CheckQueryResults(t,
+				`SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = 'db1'`,
+				[][]string{{"1"}},
+			)
+		})
+
 		t.Run("x-db-type-reference", func(t *testing.T) {
 			backupUnderTest := "xDbRef"
 			/*
