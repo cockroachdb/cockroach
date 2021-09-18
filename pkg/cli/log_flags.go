@@ -438,6 +438,7 @@ func addPredefinedLogFiles(c *logconfig.Config) {
 const predefinedLogFiles = `
 sinks:
  file-groups:
+  health:                 { channels: HEALTH  }
   pebble:                 { channels: STORAGE }
   sql-auth:               { channels: SESSIONS, auditable: true }
   sql-audit:              { channels: SENSITIVE_ACCESS, auditable: true }
