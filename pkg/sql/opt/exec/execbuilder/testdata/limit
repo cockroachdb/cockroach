@@ -56,22 +56,18 @@ vectorized: true
     │ distinct on: w
     │ order key: w
     │
-    └── • limit
+    └── • top-k
         │ columns: (w)
+        │ ordering: +w
         │ estimated row count: 100 (missing stats)
-        │ count: 100
+        │ order: +w
+        │ k: 100
         │
-        └── • sort
-            │ columns: (w)
-            │ ordering: +w
-            │ estimated row count: 1,000 (missing stats)
-            │ order: +w
-            │
-            └── • scan
-                  columns: (w)
-                  estimated row count: 1,000 (missing stats)
-                  table: t@primary
-                  spans: FULL SCAN
+        └── • scan
+              columns: (w)
+              estimated row count: 1,000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
@@ -157,31 +153,27 @@ vectorized: true
     │ ordering: -any_not_null
     │ estimated row count: 10 (missing stats)
     │
-    └── • limit
+    └── • top-k
         │ columns: (k, sum, any_not_null)
+        │ ordering: -any_not_null
         │ estimated row count: 10 (missing stats)
-        │ count: 10
+        │ order: -any_not_null
+        │ k: 10
         │
-        └── • sort
+        └── • group
             │ columns: (k, sum, any_not_null)
-            │ ordering: -any_not_null
             │ estimated row count: 1,000 (missing stats)
-            │ order: -any_not_null
+            │ aggregate 0: sum(w)
+            │ aggregate 1: any_not_null(v)
+            │ group by: k
+            │ ordered: +k
             │
-            └── • group
-                │ columns: (k, sum, any_not_null)
-                │ estimated row count: 1,000 (missing stats)
-                │ aggregate 0: sum(w)
-                │ aggregate 1: any_not_null(v)
-                │ group by: k
-                │ ordered: +k
-                │
-                └── • scan
-                      columns: (k, v, w)
-                      ordering: +k
-                      estimated row count: 1,000 (missing stats)
-                      table: t@primary
-                      spans: FULL SCAN
+            └── • scan
+                  columns: (k, v, w)
+                  ordering: +k
+                  estimated row count: 1,000 (missing stats)
+                  table: t@primary
+                  spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)

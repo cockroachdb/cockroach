@@ -1532,39 +1532,13 @@ func (b *Builder) buildTopK(e *memo.TopKExpr) (execPlan, error) {
 	}
 	ordering := e.Ordering.ToOrdering()
 
-	// TODO(harding): Eventually we should build a topk node to pass down to the
-	// exec engines.
-	// Construct sort first.
-	node, err := b.factory.ConstructSort(
+	node, err := b.factory.ConstructTopK(
 		input.root,
-		exec.OutputOrdering(input.sqlOrdering(ordering)),
-		0, /* alreadyOrderedPrefix */
-	)
+		e.K,
+		exec.OutputOrdering(input.sqlOrdering(ordering)))
 	if err != nil {
 		return execPlan{}, err
 	}
-	// Hack the stats for the sort node. Usually stats are annotated in the
-	// parent function, but since buildTopK is adding two nodes instead of one, we
-	// add stats to the sort node here. We use the child node's stats as the stats
-	// are a logical property that does not change for a sort. This hack will be
-	// removed when we construct a TopK node instead of a sort and limit node.
-	if ef, ok := b.factory.(exec.ExplainFactory); ok {
-		stats := &inputExpr.Relational().Stats
-		val := exec.EstimatedStats{
-			TableStatsAvailable: stats.Available,
-			RowCount:            stats.RowCount,
-			Cost:                float64(e.Cost()),
-		}
-		ef.AnnotateNode(node, exec.EstimatedStatsID, &val)
-	}
-
-	// Construct the limit, using the sort as the child.
-	kVal := tree.DInt(e.K)
-	node, err = b.factory.ConstructLimit(node, &kVal, nil)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 

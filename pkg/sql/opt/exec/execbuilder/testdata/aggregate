@@ -1113,32 +1113,28 @@ vectorized: true
 │ estimated row count: 1 (missing stats)
 │ aggregate 0: any_not_null(column5)
 │
-└── • limit
+└── • top-k
     │ columns: (column5 int)
+    │ ordering: +column5
     │ estimated row count: 1 (missing stats)
-    │ count: (1)[int]
+    │ order: +column5
+    │ k: 1
     │
-    └── • sort
+    └── • render
         │ columns: (column5 int)
-        │ ordering: +column5
         │ estimated row count: 333 (missing stats)
-        │ order: +column5
+        │ render column5: ((v)[int] + (1)[int])[int]
         │
-        └── • render
-            │ columns: (column5 int)
+        └── • filter
+            │ columns: (v int)
             │ estimated row count: 333 (missing stats)
-            │ render column5: ((v)[int] + (1)[int])[int]
+            │ filter: ((((v)[int] + (1)[int])[int]) IS NOT NULL)[bool]
             │
-            └── • filter
-                │ columns: (v int)
-                │ estimated row count: 333 (missing stats)
-                │ filter: ((((v)[int] + (1)[int])[int]) IS NOT NULL)[bool]
-                │
-                └── • scan
-                      columns: (v int)
-                      estimated row count: 1,000 (missing stats)
-                      table: opt_test@primary
-                      spans: FULL SCAN
+            └── • scan
+                  columns: (v int)
+                  estimated row count: 1,000 (missing stats)
+                  table: opt_test@primary
+                  spans: FULL SCAN
 
 # Verify that we don't use the optimization if there is a GROUP BY.
 query T

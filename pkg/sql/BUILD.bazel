@@ -212,6 +212,7 @@ go_library(
         "temporary_schema.go",
         "tenant.go",
         "testutils.go",
+        "topk.go",
         "truncate.go",
         "txn_state.go",
         "type_change.go",
