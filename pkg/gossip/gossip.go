@@ -1393,10 +1393,8 @@ func (g *Gossip) manage() {
 						if c := g.findClient(func(c *client) bool {
 							return c.peerID == leastUsefulID
 						}); c != nil {
-							if log.V(1) {
-								log.Health.Infof(ctx, "closing least useful client %+v to tighten network graph", c)
-							}
-							log.VEventf(ctx, 1, "culling n%d %s", c.peerID, c.addr)
+							log.VEventf(ctx, 1, "closing least useful client %+v to tighten network graph", c)
+							log.Health.Infof(ctx, "closing gossip client n%d %s", c.peerID, c.addr)
 							c.close()
 
 							// After releasing the lock, block until the client disconnects.
@@ -1406,7 +1404,7 @@ func (g *Gossip) manage() {
 						} else {
 							if log.V(1) {
 								g.clientsMu.Lock()
-								log.Health.Infof(ctx, "couldn't find least useful client among %+v", g.clientsMu.clients)
+								log.Dev.Infof(ctx, "couldn't find least useful client among %+v", g.clientsMu.clients)
 								g.clientsMu.Unlock()
 							}
 						}
@@ -1447,9 +1445,8 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
 			log.Health.Errorf(ctx, "unable to get address for n%d: %s", distantNodeID, err)
 		} else {
-			log.Health.Infof(ctx, "starting client to n%d (%d > %d) to tighten network graph",
-				distantNodeID, distantHops, maxHops)
-			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
+			log.Health.Infof(ctx, "starting client to n%d %s (%d > %d) to tighten network graph",
+				distantNodeID, nodeAddr, distantHops, maxHops)
 			g.startClientLocked(nodeAddr)
 		}
 	}
@@ -1484,9 +1481,7 @@ func (g *Gossip) maybeSignalStatusChangeLocked() {
 			log.Eventf(ctx, "now stalled")
 			if orphaned {
 				if len(g.resolvers) == 0 {
-					if log.V(1) {
-						log.Ops.Warningf(ctx, "no resolvers found; use --join to specify a connected node")
-					}
+					log.Ops.Warningf(ctx, "no gossip resolvers found; use --join to specify a connected node")
 				} else {
 					log.Health.Warningf(ctx, "no incoming or outgoing connections")
 				}
