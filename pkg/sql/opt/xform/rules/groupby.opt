@@ -30,6 +30,21 @@
     $groupingPrivate
 )
 
+# ReplaceScalarMinMaxWithScalarSubqueries replaces a SelectExpr of
+# n > 1 MIN/MAX expressions with n scalar subqueries so that each
+# subquery may take advantage of the ReplaceScalarMinMaxWithLimit
+# rule.
+# NOTE: The input relation must be a simple scan as currently no
+# other cases, such as joins, can take advantage of this rewrite.
+[ReplaceScalarMinMaxWithScalarSubqueries, Explore]
+(ScalarGroupBy
+    $input:(Scan)
+    $aggregations:* & (TwoOrMoreMinOrMax $aggregations)
+    $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
+)
+=>
+(MakeMinMaxScalarSubqueries $input $aggregations)
+
 # ReplaceMinWithLimit replaces a Min group-by expression with a limit 1, in the
 # case where the group-by returns zero or one groups (i.e. the grouping columns
 # are constant). In this situation, the group-by can be entirely replaced by a

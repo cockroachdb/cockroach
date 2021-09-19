@@ -510,6 +510,55 @@ vectorized: true
       spans: LIMITED SCAN
       limit: 1
 
+query T
+EXPLAIN (TYPES) SELECT min(a), max(a) FROM abc
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (min char, max char)
+│
+├── • values
+│     columns: (min char, max char)
+│     size: 2 columns, 1 row
+│     row 0, expr 0: (@S1)[char]
+│     row 0, expr 1: (@S2)[char]
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │ columns: (any_not_null char)
+│       │ estimated row count: 1 (missing stats)
+│       │ aggregate 0: any_not_null(a)
+│       │
+│       └── • scan
+│             columns: (a char)
+│             estimated row count: 1 (missing stats)
+│             table: abc@primary
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │ columns: (any_not_null char)
+        │ estimated row count: 1 (missing stats)
+        │ aggregate 0: any_not_null(a)
+        │
+        └── • revscan
+              columns: (a char)
+              estimated row count: 1 (missing stats)
+              table: abc@primary
+              spans: LIMITED SCAN
+              limit: 1
+
 statement ok
 CREATE TABLE xyz (
   x INT PRIMARY KEY,
@@ -681,6 +730,198 @@ vectorized: true
           table: xyz@zyx
           spans: /3/2-/3/3
           limit: 1
+
+query T
+EXPLAIN (TYPES) SELECT min(x), max(z) FROM xyz
+----
+distribution: local
+vectorized: true
+·
+  • root
+  │ columns: (min int, max float)
+  │
+  ├── • values
+  │     columns: (min int, max float)
+  │     size: 2 columns, 1 row
+  │     row 0, expr 0: (@S1)[int]
+  │     row 0, expr 1: (@S2)[float]
+  │
+  ├── • subquery
+  │   │ id: @S1
+  │   │ original sql: <unknown>
+  │   │ exec mode: one row
+  │   │
+  │   └── • group (scalar)
+  │       │ columns: (any_not_null int)
+  │       │ estimated row count: 1 (missing stats)
+  │       │ aggregate 0: any_not_null(x)
+  │       │
+  │       └── • scan
+  │             columns: (x int)
+  │             estimated row count: 1 (missing stats)
+  │             table: xyz@xy
+  │             spans: LIMITED SCAN
+  │             limit: 1
+  │
+  └── • subquery
+      │ id: @S2
+      │ original sql: <unknown>
+      │ exec mode: one row
+      │
+      └── • group (scalar)
+          │ columns: (any_not_null float)
+          │ estimated row count: 1 (missing stats)
+          │ aggregate 0: any_not_null(z)
+          │
+          └── • revscan
+                columns: (z float)
+                estimated row count: 1 (missing stats)
+                table: xyz@zyx
+                spans: /!NULL-
+                limit: 1
+
+
+query T
+EXPLAIN (TYPES) SELECT min(x), max(z), sum(x) FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int, max float, sum decimal)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: min(x)
+│ aggregate 1: max(z)
+│ aggregate 2: sum(x)
+│
+└── • scan
+      columns: (x int, z float)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@primary
+      spans: FULL SCAN
+
+
+query T
+EXPLAIN (TYPES) SELECT min(y), max(y) FROM xyz WHERE x in (0, 4, 7);
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int, max int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: min(y)
+│ aggregate 1: max(y)
+│
+└── • project
+    │ columns: (y int)
+    │
+    └── • scan
+          columns: (x int, y int)
+          estimated row count: 3 (missing stats)
+          table: xyz@xy
+          spans: /0-/1 /4-/5 /7-/8
+
+
+query T
+EXPLAIN (TYPES) SELECT min(x), max(x) FROM xyz WHERE x = 1
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int, max int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: min(x)
+│ aggregate 1: max(x)
+│
+└── • scan
+      columns: (x int)
+      estimated row count: 1 (missing stats)
+      table: xyz@xy
+      spans: /1-/2
+
+
+query T
+EXPLAIN (TYPES) SELECT min(z), max(y) FROM xyz WHERE z in (3.0, 6.0, 8.0)
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (min float, max int)
+│
+├── • values
+│     columns: (min float, max int)
+│     size: 2 columns, 1 row
+│     row 0, expr 0: (@S1)[float]
+│     row 0, expr 1: (@S2)[int]
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │ columns: (any_not_null float)
+│       │ estimated row count: 1 (missing stats)
+│       │ aggregate 0: any_not_null(z)
+│       │
+│       └── • scan
+│             columns: (z float)
+│             estimated row count: 1 (missing stats)
+│             table: xyz@zyx
+│             spans: /3-/3.0000000000000004 /6-/6.000000000000001 /8-/8.000000000000002
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │ columns: (any_not_null int)
+        │ estimated row count: 1 (missing stats)
+        │ aggregate 0: any_not_null(y)
+        │
+        └── • project
+            │ columns: (y int)
+            │
+            └── • limit
+                │ columns: (y int, z float)
+                │ estimated row count: 1 (missing stats)
+                │ count: (1)[int]
+                │
+                └── • union all
+                    │ columns: (y int, z float)
+                    │ ordering: -y
+                    │ estimated row count: 3 (missing stats)
+                    │
+                    ├── • union all
+                    │   │ columns: (y int, z float)
+                    │   │ ordering: -y
+                    │   │ estimated row count: 2 (missing stats)
+                    │   │
+                    │   ├── • revscan
+                    │   │     columns: (y int, z float)
+                    │   │     estimated row count: 1 (missing stats)
+                    │   │     table: xyz@zyx
+                    │   │     spans: /3/!NULL-/3.0000000000000004
+                    │   │     limit: 1
+                    │   │
+                    │   └── • revscan
+                    │         columns: (y int, z float)
+                    │         estimated row count: 1 (missing stats)
+                    │         table: xyz@zyx
+                    │         spans: /6/!NULL-/6.000000000000001
+                    │         limit: 1
+                    │
+                    └── • revscan
+                          columns: (y int, z float)
+                          estimated row count: 1 (missing stats)
+                          table: xyz@zyx
+                          spans: /8/!NULL-/8.000000000000002
+                          limit: 1
 
 statement ok
 SET tracing = on,kv,results; SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0); SET tracing = off
