@@ -73,7 +73,7 @@ type tShim interface {
 // restrictions.
 func Scope(t tShim) *TestLogScope {
 	if logging.showLogs {
-		return newLogScope(t, false /* mostlyInline */)
+		return newLogScope(t, true /* mostlyInline */)
 	}
 
 	scope := ScopeWithoutShowLogs(t)
@@ -97,7 +97,7 @@ func Scope(t tShim) *TestLogScope {
 // TestLogScope.
 func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	t.Helper()
-	return newLogScope(t, true /* mostlyInline */)
+	return newLogScope(t, false /* mostlyInline */)
 }
 
 func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
