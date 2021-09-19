@@ -263,9 +263,7 @@ func (r RemoteOffset) isHealthy(ctx context.Context, maxOffset time.Duration) bo
 		// The maximum offset is in the uncertainty window of the measured offset;
 		// health is ambiguous. For now, we err on the side of not spuriously
 		// killing nodes.
-		if log.V(1) {
-			log.Infof(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, toleratedOffset)
-		}
+		log.Warningf(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, toleratedOffset)
 		return true
 	}
 }

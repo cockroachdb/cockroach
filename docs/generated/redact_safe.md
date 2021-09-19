@@ -12,6 +12,7 @@ pkg/roachpb/metadata.go | `RangeID`
 pkg/roachpb/metadata.go | `ReplicaID`
 pkg/roachpb/metadata.go | `RangeGeneration`
 pkg/roachpb/metadata.go | `ReplicaType`
+pkg/rpc/connection_class.go | `ConnectionClass`
 pkg/sql/catalog/descpb/structured.go | `ID`
 pkg/sql/catalog/descpb/structured.go | `FamilyID`
 pkg/sql/catalog/descpb/structured.go | `IndexID`

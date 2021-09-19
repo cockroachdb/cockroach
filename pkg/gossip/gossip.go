@@ -1396,10 +1396,8 @@ func (g *Gossip) manage() {
 						if c := g.findClient(func(c *client) bool {
 							return c.peerID == leastUsefulID
 						}); c != nil {
-							if log.V(1) {
-								log.Infof(ctx, "closing least useful client %+v to tighten network graph", c)
-							}
-							log.Eventf(ctx, "culling %s", c.addr)
+							log.VEventf(ctx, 1, "closing least useful client %+v to tighten network graph", c)
+							log.Infof(ctx, "closing gossip client n%d %s", c.peerID, c.addr)
 							c.close()
 
 							// After releasing the lock, block until the client disconnects.
@@ -1450,9 +1448,8 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
 			log.Errorf(ctx, "unable to get address for n%d: %s", distantNodeID, err)
 		} else {
-			log.Infof(ctx, "starting client to n%d (%d > %d) to tighten network graph",
-				distantNodeID, distantHops, maxHops)
-			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
+			log.Infof(ctx, "starting client to n%d %s (%d > %d) to tighten network graph",
+				distantNodeID, nodeAddr, distantHops, maxHops)
 			g.startClientLocked(nodeAddr)
 		}
 	}
@@ -1487,9 +1484,7 @@ func (g *Gossip) maybeSignalStatusChangeLocked() {
 			log.Eventf(ctx, "now stalled")
 			if orphaned {
 				if len(g.resolvers) == 0 {
-					if log.V(1) {
-						log.Warningf(ctx, "no resolvers found; use --join to specify a connected node")
-					}
+					log.Warningf(ctx, "no gossip resolvers found; use --join to specify a connected node")
 				} else {
 					log.Warningf(ctx, "no incoming or outgoing connections")
 				}
