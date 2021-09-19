@@ -69,6 +69,9 @@ yarn_install(
     package_json = "//pkg/ui:package.json",
     yarn_lock = "//pkg/ui:yarn.lock",
     strict_visibility = False,
+    args = [
+        "--ignore-optional",
+    ]
 )
 
 # Load gazelle dependencies.
