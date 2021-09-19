@@ -79,10 +79,6 @@ module.exports = {
         test: /\.(ts|js)x?$/,
         use: [
           "babel-loader",
-          {
-            loader: "astroturf/loader",
-            options: {extension: ".module.scss"},
-          },
         ],
         exclude: /node_modules/,
       },
@@ -149,5 +145,7 @@ module.exports = {
     "react-redux": "react-redux",
     "redux-saga": "redux-saga",
     "redux": "redux",
+    "antd": "antd",
+    "@cockroachlabs/crdb-protobuf-client": "@cockroachlabs/crdb-protobuf-client",
   },
 }
