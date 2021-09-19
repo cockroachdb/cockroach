@@ -15,6 +15,9 @@ artifacts
 /lib
 /lib.*
 .buildinfo
+*.swp
+.idea
+node[0-9]*
 # cockroach-data, cockroach{,.race}-{darwin,linux,windows}-*
 /cockroach*
 /certs
