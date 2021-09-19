@@ -69,3 +69,15 @@ ORDER BY message
 fetched: /t/primary/1/2.00/x -> /1.00
 fetched: /t/primary/1/2/y -> /2.00
 fetched: /t/primary/1/2/z -> /1
+
+statement ok
+CREATE TABLE multiple_families (a INT, b INT, PRIMARY KEY (a, b), FAMILY (a), FAMILY (b));
+INSERT INTO multiple_families VALUES (0, 0), (0, 1), (1, 0), (1, 1)
+
+query II
+SELECT a, b FROM multiple_families WHERE a IN (0, 1) AND b IN (0, 1)
+----
+0  0
+0  1
+1  0
+1  1

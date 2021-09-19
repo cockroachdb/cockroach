@@ -826,7 +826,11 @@ func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 	rf.machine.nextKV = kvCopy
 }
 
-func (rf *cFetcher) handleNewSpan(ctx context.Context, newSpan roachpb.Span) error {
+// handleNewSpan checks whether the current KV came from a new key span and
+// updates the LLCP state if so. It also fills in the constant values from LLCP
+// of the previous key span if a new key span is encountered.
+// - newRowIdx must be the index of the first row that belongs to the new span.
+func (rf *cFetcher) handleNewSpan(ctx context.Context, newSpan roachpb.Span, newRowIdx int) error {
 	if len(newSpan.Key) == 0 {
 		// We're still processing the old key span, so there is nothing to do.
 		return nil
@@ -836,30 +840,23 @@ func (rf *cFetcher) handleNewSpan(ctx context.Context, newSpan roachpb.Span) err
 		rf.resetLLCP()
 		return nil
 	}
-	if rf.table.desc.NumFamilies() != 1 {
-		// TODO(yuzefovich): we currently don't support the cases when tables
-		// have multiple column families. Lift that restriction.
-		return nil
-	}
 
 	// We have a new span. Populate constant index key column values from the
 	// previous span if applicable.
-	if rf.mustDecodeIndexKey {
-		if rf.llcpState.needCopyingFromCommon {
-			// Copy over the decoded values from LLCP of the previous key span.
-			for _, colIdx := range rf.table.indexColOrdinals[:rf.llcpState.numConstIndexKeyCols] {
-				if colIdx != -1 {
-					coldata.ExpandValue(
-						rf.machine.colvecs[colIdx],
-						rf.llcpState.commonValues[colIdx],
-						rf.llcpState.outputBatchStartIdx,
-						rf.machine.rowIdx,
-						0, /* srcIdx */
-					)
-				}
+	if rf.llcpState.needCopyingFromCommon && rf.mustDecodeIndexKey {
+		// Copy over the decoded values from LLCP of the previous key span.
+		for _, colIdx := range rf.table.indexColOrdinals[:rf.llcpState.numConstIndexKeyCols] {
+			if colIdx != -1 {
+				coldata.ExpandValue(
+					rf.machine.colvecs[colIdx],
+					rf.llcpState.commonValues[colIdx],
+					rf.llcpState.outputBatchStartIdx,
+					newRowIdx,
+					0, /* srcIdx */
+				)
 			}
-			rf.llcpState.needCopyingFromCommon = false
 		}
+		rf.llcpState.needCopyingFromCommon = false
 	}
 
 	// Skip the preamble right away.
@@ -869,7 +866,7 @@ func (rf *cFetcher) handleNewSpan(ctx context.Context, newSpan roachpb.Span) err
 	// Find the length of LLCP.
 	commonPrefixLength := 0
 	rf.llcpState.numConstIndexKeyCols = 0
-	for len(key) > 0 && len(endKey) > 0 {
+	for len(key) > 0 && len(endKey) > 0 && rf.llcpState.numConstIndexKeyCols < len(rf.table.indexColOrdinals) {
 		startElementLength, err := encoding.PeekLength(key)
 		if err != nil {
 			break
@@ -885,11 +882,17 @@ func (rf *cFetcher) handleNewSpan(ctx context.Context, newSpan roachpb.Span) err
 			break
 		}
 		colIdx := rf.table.indexColOrdinals[rf.llcpState.numConstIndexKeyCols]
-		if colIdx != -1 && colinfo.CanHaveCompositeKeyEncoding(rf.typs[colIdx]) {
-			// If we need to decode this index key column and it has a composite
-			// encoding, we omit the column from LLCP.
-			// TODO(yuzefovich): lift this restriction.
-			break
+		if colIdx != -1 {
+			if colinfo.CanHaveCompositeKeyEncoding(rf.typs[colIdx]) {
+				// If we need to decode this index key column and it has a composite
+				// encoding, we stop LLCP before this column.
+				// TODO(yuzefovich): lift this restriction.
+				break
+			}
+			if rf.table.invertedColOrdinal == colIdx {
+				// Let's not deal with the inverted columns.
+				break
+			}
 		}
 		commonPrefixLength += startElementLength
 		rf.llcpState.numConstIndexKeyCols++
@@ -950,8 +953,10 @@ func (rf *cFetcher) handleNewSpan(ctx context.Context, newSpan roachpb.Span) err
 		if err != nil {
 			return scrub.WrapError(scrub.IndexKeyDecodingError, err)
 		}
-		rf.llcpState.outputBatchStartIdx = rf.machine.rowIdx
-		rf.llcpState.needCopyingFromCommon = true
+		rf.llcpState.outputBatchStartIdx = newRowIdx
+		// If the tracing is enabled, then we'll be copying the common values on
+		// a per-row basis in order to print out the correct logs.
+		rf.llcpState.needCopyingFromCommon = !rf.traceKV
 	}
 	return nil
 }
@@ -989,10 +994,10 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				rf.machine.state[0] = stateEmitLastBatch
 				continue
 			}
-			if err = rf.handleNewSpan(ctx, newSpan); err != nil {
+			rf.setNextKV(kv, finalReferenceToBatch)
+			if err = rf.handleNewSpan(ctx, newSpan, rf.machine.rowIdx); err != nil {
 				return nil, err
 			}
-			rf.setNextKV(kv, finalReferenceToBatch)
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
@@ -1119,19 +1124,35 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				rf.machine.state[1] = stateEmitLastBatch
 				continue
 			}
-			if err = rf.handleNewSpan(ctx, newSpan); err != nil {
+			rf.setNextKV(kv, finalReferenceToBatch)
+			var foundNewRow bool
+			if len(kv.Key) < rf.table.knownPrefixLength {
+				foundNewRow = true
+			} else {
+				foundNewRow = !bytes.HasPrefix(kv.Key[rf.table.knownPrefixLength:], rf.machine.lastRowPrefix[rf.table.knownPrefixLength:])
+			}
+			newRowIdx := rf.machine.rowIdx
+			if foundNewRow {
+				// If the KV we've just fetched belongs to a new key span, then
+				// we need to increment newRowIdx. Normally this happens in
+				// stateFinalizeRow, but we have to handle the new span now and
+				// let handleNewSpan() copy the values into the batch, including
+				// the current rf.machine.rowIdx.
+				newRowIdx++
+			}
+			if err = rf.handleNewSpan(ctx, newSpan, newRowIdx); err != nil {
 				return nil, err
 			}
-			rf.setNextKV(kv, finalReferenceToBatch)
-			if debugState {
-				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
-			}
 
-			if !bytes.HasPrefix(kv.Key[rf.table.knownPrefixLength:], rf.machine.lastRowPrefix[rf.table.knownPrefixLength:]) {
+			if foundNewRow {
 				// The kv we just found is from a different row.
 				rf.machine.state[0] = stateFinalizeRow
 				rf.machine.state[1] = stateDecodeFirstKVOfRow
 				continue
+			}
+
+			if debugState {
+				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
 			}
 
 			familyID, err := rf.getCurrentColumnFamilyID()
@@ -1258,7 +1279,18 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		buf.WriteString(rf.table.index.GetName())
 		// Note that because rf.traceKV is true, rf.table.indexColOrdinals will
 		// not include any -1, so idx values will all be valid.
-		for _, idx := range rf.table.indexColOrdinals {
+		for i, idx := range rf.table.indexColOrdinals {
+			if i < rf.llcpState.numConstIndexKeyCols {
+				// We have to pro-actively copy the common value for this
+				// column.
+				coldata.ExpandValue(
+					rf.machine.colvecs[idx],
+					rf.llcpState.commonValues[idx],
+					rf.machine.rowIdx,
+					rf.machine.rowIdx+1,
+					0, /* srcIdx */
+				)
+			}
 			buf.WriteByte('/')
 			buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
 		}
