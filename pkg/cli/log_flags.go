@@ -440,9 +440,11 @@ sinks:
  file-groups:
   health:                 { channels: HEALTH  }
   pebble:                 { channels: STORAGE }
+  security:               { channels: [PRIVILEGES, USER_ADMIN], auditable: true  }
   sql-auth:               { channels: SESSIONS, auditable: true }
   sql-audit:              { channels: SENSITIVE_ACCESS, auditable: true }
   sql-exec:               { channels: SQL_EXEC }
+  sql-schema:             { channels: SQL_SCHEMA }
   sql-slow:               { channels: SQL_PERF }
   sql-slow-internal-only: { channels: SQL_INTERNAL_PERF }
   telemetry:
