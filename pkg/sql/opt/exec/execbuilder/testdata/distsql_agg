@@ -376,17 +376,40 @@ EXPLAIN (DISTSQL) SELECT max(a), min(b) FROM data HAVING min(b) > 2
 distribution: full
 vectorized: true
 ·
-• filter
-│ filter: min > 2
+• root
 │
-└── • group (scalar)
+├── • filter
+│   │ filter: min > 2
+│   │
+│   └── • values
+│         size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • revscan
+│             missing stats
+│             table: data@primary
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
     │
-    └── • scan
-          missing stats
-          table: data@primary
-          spans: FULL SCAN
+    └── • group (scalar)
+        │
+        └── • scan
+              missing stats
+              table: data@primary
+              spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslF1v2jAUhu_3K6xzBZJRYicU8FXQRrdIfHSApkobFy45YpEgZrYjdUL89ylEW6EqTrpwaZuX582jo3MA82sLAkaPD-NhPCWtT_Fiufg6bpPFaDz6uCQ7-dySbUp2adZ6apP7-WxCEmkl-TL8Fk8__73_kft-gIQDhUwlOJU7NCC-AwMKxWUAFEKg0IUVhb1WazRG6eInh1MgTp5B-BTSbJ_b4npFYa00gjiATe0WQcBSPm1xjjJB7flAIUEr0-0JUzSK9jrdSf0bKCz2MjOCdDxGZJYQRpT9iRoozHIrSMRoxGF1pKBy-4IzVm4QBDvS-pWGm43GjbRKe93LRpPhYytibaAwiaetiLevAvlV4Asnz5ROUGNyAVkd3ZWY_7-dgvdIuE-3FjVqj7FLXvkgSMT_zYcQIp4u-1fB4QWY1R8IVmcgPNbxeNORqCh15v_uNiPB61vgtSzwjhc0tVBR6sxC7zYWgvoWgloWgo4XNrVQUerMQv82FsL6FsJaFsKO121qoaLUmYXB7ZfkG8A5mr3KDL5alm__s18sUUw2WG5co3K9xget1idMeZydcqeLBI0tX1l5iLPyqSh4HmbOML8Is9dh7gwHbnLgrs3d6dCZ7rrD3SYffecM99zkXhNy3xkeuMmDJmRWMWNVQ_a-KVsdP_wJAAD__7X7Lbw=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkE1L80AQx-_PpxjmlMBCkzwX2ZNVW12oaW1LETSHNTvUYLpb9wUKpd9dksWXChU9zm_2P7-d2aN7bZHj6H42GYoSkiuxWC7uJiksRpPR5RI2cpfIlMGm0clTCuP59BaU9BJuhitRXr_zx5Bl_wkKZKiNolJuyCF_wBwrhltranLO2A7t-wdC7ZBnDBu9Db7DFcPaWEK-R9_4lpDjSraB3CBDhoq8bNp-YgEXkORQPwf94lKsDgxN8J9TnJdrQp4d2O9N46b1ZMkO8mNX5BzOi48FOeeiXJ6d9OZ_8c7JbY12dGQ9vVHFkNSa4hWdCbammTV1r4nltM_1QJHzsZvHQujY6j74NZz_GC6-havDv7cAAAD__0das9A=
 
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT (a) FROM data
