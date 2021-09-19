@@ -78,7 +78,7 @@ func TestSetupLogging(t *testing.T) {
 			`enable: true, ` +
 			`dir: (?P<path>[^}]+)\}`)
 	fileCfgRe := regexp.MustCompile(
-		`\{channels: \{INFO: (?P<chans>all|\[[^]]*\])\}, ` +
+		`\{channels: \{(?P<chans>[^}]*)\}, ` +
 			`dir: (?P<path>[^,]+), ` +
 			`max-file-size: 10MiB, ` +
 			`file-permissions: "0644", ` +
