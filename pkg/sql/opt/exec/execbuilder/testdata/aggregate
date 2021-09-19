@@ -832,8 +832,67 @@ vectorized: true
       table: xyz@xy
       spans: [/1 - /1]
 
+# MULTIPLE MIN/MAX WITH FILTER
+
 query T
 EXPLAIN SELECT min(z), max(y) FROM xyz WHERE z in (3.0, 6.0, 8.0)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@zyx
+│             spans: [/3.0 - /3.0] [/6.0 - /6.0] [/8.0 - /8.0]
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • union all
+                │
+                ├── • union all
+                │   │
+                │   ├── • revscan
+                │   │     missing stats
+                │   │     table: xyz@zyx
+                │   │     spans: (/3.0/NULL - /3.0]
+                │   │     limit: 1
+                │   │
+                │   └── • revscan
+                │         missing stats
+                │         table: xyz@zyx
+                │         spans: (/6.0/NULL - /6.0]
+                │         limit: 1
+                │
+                └── • revscan
+                      missing stats
+                      table: xyz@zyx
+                      spans: (/8.0/NULL - /8.0]
+                      limit: 1
+
+# The COUNT disables ReplaceFilteredScalarMinMaxWithSubqueries.
+query T
+EXPLAIN SELECT min(z), max(y), count(x) FROM xyz WHERE z in (3.0, 6.0, 8.0)
 ----
 distribution: local
 vectorized: true
@@ -844,6 +903,174 @@ vectorized: true
       missing stats
       table: xyz@zyx
       spans: [/3.0 - /3.0] [/6.0 - /6.0] [/8.0 - /8.0]
+
+# Filter on derived table is supported.
+query T
+EXPLAIN SELECT max(z), min(x) FROM (SELECT x,y,z FROM xyz a) dt WHERE dt.y > 0
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • filter
+│               │ filter: y > 0
+│               │
+│               └── • revscan
+│                     missing stats
+│                     table: xyz@zyx
+│                     spans: (/NULL - ]
+│
+└── • subquery
+   │ id: @S2
+   │ original sql: <unknown>
+   │ exec mode: one row
+   │
+   └── • group (scalar)
+       │
+       └── • limit
+           │ count: 1
+           │
+           └── • filter
+               │ filter: y > 0
+               │
+               └── • scan
+                     missing stats
+                     table: xyz@xy
+                     spans: FULL SCAN
+
+# Scalar subquery in filter is supported.
+query T
+EXPLAIN SELECT max(z), min(x) FROM xyz WHERE (z,x) = (SELECT max(z), min(x) FROM xyz)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • revscan
+│             missing stats
+│             table: xyz@zyx
+│             spans: (/NULL - ]
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S2
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@xy
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S3
+│   │ original sql: (SELECT max(z), min(x) FROM xyz)
+│   │ exec mode: one row
+│   │
+│   └── • render
+│       │
+│       └── • values
+│             size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S4
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • filter
+│               │ filter: (z, x) = @S3
+│               │
+│               └── • revscan
+│                     missing stats
+│                     table: xyz@zyx
+│                     spans: (/NULL - ]
+│
+├── • subquery
+│   │ id: @S5
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • revscan
+│             missing stats
+│             table: xyz@zyx
+│             spans: (/NULL - ]
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S6
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@xy
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S7
+│   │ original sql: (SELECT max(z), min(x) FROM xyz)
+│   │ exec mode: one row
+│   │
+│   └── • render
+│       │
+│       └── • values
+│             size: 2 columns, 1 row
+│
+└── • subquery
+    │ id: @S8
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • filter
+                │ filter: (z, x) = @S7
+                │
+                └── • scan
+                      missing stats
+                      table: xyz@primary
+                      spans: FULL SCAN
 
 # VARIANCE/STDDEV
 
