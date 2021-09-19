@@ -81,10 +81,6 @@ module.exports = {
         test: /\.(ts|js)x?$/,
         use: [
           "babel-loader",
-          {
-            loader: "astroturf/loader",
-            options: {extension: ".module.scss"},
-          },
         ],
         exclude: [
           /node_modules/,
