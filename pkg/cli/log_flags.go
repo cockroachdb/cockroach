@@ -430,6 +430,20 @@ func addPredefinedLogFiles(c *logconfig.Config) {
 	if cliCtx.deprecatedLogOverrides.sqlAuditLogDir.isSet {
 		c.Sinks.FileGroups["sql-audit"].Dir = &cliCtx.deprecatedLogOverrides.sqlAuditLogDir.s
 	}
+
+	// For every dedicated file sink, add the events from its channels
+	// at severity WARNING or higher to the default sink.
+	defSink := c.Sinks.FileGroups["default"]
+	for _, fc := range c.Sinks.FileGroups {
+		if fc == defSink {
+			continue
+		}
+		for _, chl := range fc.Channels.Filters {
+			for _, ch := range chl.Channels {
+				defSink.Channels.AddChannel(ch, severity.WARNING)
+			}
+		}
+	}
 }
 
 // predefinedLogFiles are the files defined when the --log flag
@@ -438,6 +452,7 @@ func addPredefinedLogFiles(c *logconfig.Config) {
 const predefinedLogFiles = `
 sinks:
  file-groups:
+  default:                { channels: DEV }
   health:                 { channels: HEALTH  }
   pebble:                 { channels: STORAGE }
   security:               { channels: [PRIVILEGES, USER_ADMIN], auditable: true  }
