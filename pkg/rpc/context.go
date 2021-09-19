@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -328,6 +329,13 @@ type connKey struct {
 	targetAddr string
 	nodeID     roachpb.NodeID
 	class      ConnectionClass
+}
+
+var _ redact.SafeFormatter = connKey{}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (c connKey) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Printf("{n%d: %s (%v)}", c.nodeID, c.targetAddr, c.class)
 }
 
 // ContextOptions are passed to NewContext to set up a new *Context.
@@ -672,15 +680,11 @@ func (ctx *Context) removeConn(conn *Connection, keys ...connKey) {
 	for _, key := range keys {
 		ctx.conns.Delete(key)
 	}
-	if log.V(1) {
-		log.Health.Infof(ctx.masterCtx, "closing %+v", keys)
-	}
+	log.Health.Infof(ctx.masterCtx, "closing %+v", keys)
 	if grpcConn := conn.grpcConn; grpcConn != nil {
 		err := grpcConn.Close() // nolint:grpcconnclose
 		if err != nil && !grpcutil.IsClosedConnection(err) {
-			if log.V(1) {
-				log.Health.Errorf(ctx.masterCtx, "failed to close client connection: %v", err)
-			}
+			log.Health.Warningf(ctx.masterCtx, "failed to close client connection: %v", err)
 		}
 	}
 }
@@ -1018,9 +1022,7 @@ func (ctx *Context) grpcDialRaw(
 	// behavior and redialChan will never be closed).
 	dialOpts = append(dialOpts, ctx.testingDialOpts...)
 
-	if log.V(1) {
-		log.Health.Infof(ctx.masterCtx, "dialing %s", target)
-	}
+	log.Health.Infof(ctx.masterCtx, "dialing n%v: %s (%v)", remoteNodeID, target, class)
 	conn, err := grpc.DialContext(ctx.masterCtx, target, dialOpts...)
 	return conn, dialer.redialChan, err
 }

@@ -41,6 +41,20 @@ const (
 	NumConnectionClasses int = iota
 )
 
+// ConnectionClass_name maps classes to their name.
+var ConnectionClass_name = map[ConnectionClass]string{
+	DefaultClass: "default",
+	SystemClass:  "system",
+}
+
+// String implements the fmt.Stringer interface.
+func (c ConnectionClass) String() string {
+	return ConnectionClass_name[c]
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (ConnectionClass) SafeValue() {}
+
 var systemClassKeyPrefixes = []roachpb.RKey{
 	roachpb.RKey(keys.Meta1Prefix),
 	roachpb.RKey(keys.NodeLivenessPrefix),
