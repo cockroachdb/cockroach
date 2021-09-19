@@ -774,6 +774,21 @@ SELECT min(z), max(y) FROM xyz WHERE z in (3.0, 6.0, 8.0)
 ----
 3  5
 
+query FI
+SELECT max(z), min(x) FROM (select x,y,z from xyz a) dt where dt.y > 0
+----
+6  1
+
+query FI
+SELECT max(z), min(x) FROM xyz where (z,x) = (select max(z), min(x) from xyz)
+----
+NULL  NULL
+
+query FI
+SELECT max(z), min(x) FROM xyz having (max(z), min(x)) = (select max(z), min(x) from xyz)
+----
+8  1
+
 query I
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
