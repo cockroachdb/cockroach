@@ -53,6 +53,7 @@ go_library(
         "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_facebookgo_clock//:clock",
         "@com_github_gogo_protobuf//proto",
         "@com_github_golang_protobuf//proto:go_default_library",
