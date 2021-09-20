@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -43,7 +43,7 @@ func (n *createSchemaNode) startExec(params runParams) error {
 // CreateUserDefinedSchemaDescriptor constructs a mutable schema descriptor.
 func CreateUserDefinedSchemaDescriptor(
 	ctx context.Context,
-	user security.SQLUsername,
+	sessionData *sessiondata.SessionData,
 	n *tree.CreateSchema,
 	txn *kv.Txn,
 	descriptors *descs.Collection,
@@ -51,9 +51,14 @@ func CreateUserDefinedSchemaDescriptor(
 	db catalog.DatabaseDescriptor,
 	allocateID bool,
 ) (*schemadesc.Mutable, *descpb.PrivilegeDescriptor, error) {
+	authRole, err := n.AuthRole.ToSQLUsername(sessionData)
+	if err != nil {
+		return nil, nil, err
+	}
+	user := sessionData.User()
 	var schemaName string
 	if !n.Schema.ExplicitSchema {
-		schemaName = n.AuthRole.Normalized()
+		schemaName = authRole.Normalized()
 	} else {
 		schemaName = n.Schema.Schema()
 	}
@@ -109,7 +114,7 @@ func CreateUserDefinedSchemaDescriptor(
 	)
 
 	if !n.AuthRole.Undefined() {
-		exists, err := RoleExists(ctx, execCfg, txn, n.AuthRole)
+		exists, err := RoleExists(ctx, execCfg, txn, authRole)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -117,7 +122,7 @@ func CreateUserDefinedSchemaDescriptor(
 			return nil, nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist",
 				n.AuthRole)
 		}
-		privs.SetOwner(n.AuthRole)
+		privs.SetOwner(authRole)
 	} else {
 		privs.SetOwner(user)
 	}
@@ -170,7 +175,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
-	desc, privs, err := CreateUserDefinedSchemaDescriptor(params.ctx, params.SessionData().User(), n,
+	desc, privs, err := CreateUserDefinedSchemaDescriptor(params.ctx, params.SessionData(), n,
 		p.Txn(), p.Descriptors(), p.ExecCfg(), db, true /* allocateID */)
 	if err != nil {
 		return err

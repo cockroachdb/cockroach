@@ -79,6 +79,7 @@ go_library(
         "replication_stream.go",
         "returning.go",
         "revoke.go",
+        "role_spec.go",
         "run_control.go",
         "schedule.go",
         "scrub.go",

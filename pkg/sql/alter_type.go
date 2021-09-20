@@ -111,7 +111,11 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		// See https://github.com/cockroachdb/cockroach/issues/57741
 		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
-		if err = params.p.alterTypeOwner(params.ctx, n, t.Owner); err != nil {
+		owner, err := t.Owner.ToSQLUsername(params.SessionData())
+		if err != nil {
+			return err
+		}
+		if err = params.p.alterTypeOwner(params.ctx, n, owner); err != nil {
 			return err
 		}
 		eventLogDone = true // done inside alterTypeOwner().
