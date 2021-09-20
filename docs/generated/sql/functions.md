@@ -1119,6 +1119,10 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td></tr>
 <tr><td><a name="json_object_keys"></a><code>json_object_keys(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
 </span></td></tr>
+<tr><td><a name="json_populate_record"></a><code>json_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
+</span></td></tr>
+<tr><td><a name="json_populate_recordset"></a><code>json_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
+</span></td></tr>
 <tr><td><a name="jsonb_array_elements"></a><code>jsonb_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
 </span></td></tr>
 <tr><td><a name="jsonb_array_elements_text"></a><code>jsonb_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
@@ -1128,6 +1132,10 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="jsonb_each_text"></a><code>jsonb_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
 </span></td></tr>
 <tr><td><a name="jsonb_object_keys"></a><code>jsonb_object_keys(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
+</span></td></tr>
+<tr><td><a name="jsonb_populate_record"></a><code>jsonb_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
+</span></td></tr>
+<tr><td><a name="jsonb_populate_recordset"></a><code>jsonb_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
 </span></td></tr>
 <tr><td><a name="pg_get_keywords"></a><code>pg_get_keywords() &rarr; tuple{string AS word, string AS catcode, string AS catdesc}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the keywords known to the SQL parser.</p>
 </span></td></tr>
