@@ -178,6 +178,7 @@ require (
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 	gotest.tools/v3 v3.0.3 // indirect
 	honnef.co/go/tools v0.2.0
 	vitess.io/vitess v0.0.0-00010101000000-000000000000

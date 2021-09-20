@@ -1,0 +1,30 @@
+name: cyclegraph
+data:
+    message1: {name: message1, s1: message1, s2: message2, c: container2}
+    message2: {name: message2, s1: message1, s2: message2, c: container1}
+    container1: {s1: message1}
+    container2: {s2: message2}
+attributes: {}
+queries:
+    - indexes:
+        - []
+        - [[s], [c], [name]]
+      data: [container1]
+      queries:
+        oneOf member:
+            query:
+                - $c[Type] = '*cyclegraphtest.container'
+                - $c[s] = $s
+            entities: [$c]
+            result-vars: [$c, $s]
+            results:
+                - [container1, message1]
+                - [container2, message2]
+        oneOf member:
+            query:
+                - $c[s] = struct1(message1)
+            entities: [$c]
+            result-vars: [$c]
+            results:
+                - [container1]
+comparisons: []
