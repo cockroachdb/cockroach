@@ -211,6 +211,12 @@ func changefeedPlanHook(
 		targetDescs, _, err := backupresolver.ResolveTargetsToDescriptors(
 			ctx, p, statementTime, &changefeedStmt.Targets)
 		if err != nil {
+			var m *backupresolver.MissingTableErr
+			if errors.As(err, &m) {
+				tableName := m.TableName
+				err = errors.Unwrap(err)
+				err = errors.Wrapf(err, "table %q does not exist", tableName)
+			}
 			err = errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
 			if !initialHighWater.IsEmpty() {
 				// We specified cursor -- it is possible the targets do not exist at that time.

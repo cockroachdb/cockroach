@@ -47,7 +47,7 @@ type MissingTableErr struct {
 }
 
 func (e *MissingTableErr) Error() (string) {
-	return fmt.Sprintf("table %q does not exist: %v", e.TableName, e.Inner.Error())
+	return fmt.Sprintf("table %q does not exist, or invalid RESTORE timestamp: %v", e.TableName, e.Inner.Error())
 }
 
 func (e *MissingTableErr) Unwrap() (error) {

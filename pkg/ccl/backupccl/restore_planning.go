@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -1848,12 +1847,6 @@ func doRestorePlan(
 
 	sqlDescs, restoreDBs, tenants, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
 	if err != nil {
-		var m *backupresolver.MissingTableErr
-		if errors.As(err, &m) {
-			tableName := m.TableName
-			err = errors.Unwrap(err)
-			err = errors.Wrapf(err, "table %q does not exist, or invalid RESTORE timestamp", tableName)
-		}
 		return errors.Wrap(err,
 			"failed to resolve targets in the BACKUP location specified by the RESTORE stmt, "+
 				"use SHOW BACKUP to find correct targets")
