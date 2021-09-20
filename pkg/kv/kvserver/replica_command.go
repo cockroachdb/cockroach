@@ -2440,20 +2440,42 @@ func (r *Replica) sendSnapshot(
 		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
 	}
 
-	// We avoid shipping over the past Raft log in the snapshot by changing
-	// the truncated state (we're allowed to -- it's an unreplicated key and not
-	// subject to mapping across replicas). The actual sending happens here:
-	_ = (*kvBatchSnapshotStrategy)(nil).Send
-	// and results in no log entries being sent at all. Note that
-	// Metadata.Index is really the applied index of the replica.
-	snap.State.TruncatedState = &roachpb.RaftTruncatedState{
-		Index: snap.RaftSnap.Metadata.Index,
-		Term:  snap.RaftSnap.Metadata.Term,
+	usesReplicatedTruncatedState, err := storage.MVCCGetProto(
+		ctx, snap.EngineSnap, keys.RaftTruncatedStateLegacyKey(r.RangeID), hlc.Timestamp{}, nil, storage.MVCCGetOptions{},
+	)
+	if err != nil {
+		return errors.Wrap(err, "loading legacy truncated state")
+	}
+
+	canAvoidSendingLog := !usesReplicatedTruncatedState &&
+		snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex
+
+	if canAvoidSendingLog {
+		// If we're not using a legacy (replicated) truncated state, we avoid
+		// sending the (past) Raft log in the snapshot in the first place and
+		// send only those entries that are actually useful to the follower.
+		// This is done by changing the truncated state, which we're allowed
+		// to do since it is not a replicated key (and thus not subject to
+		// matching across replicas). The actual sending happens here:
+		_ = (*kvBatchSnapshotStrategy)(nil).Send
+		// and results in no log entries being sent at all. Note that
+		// Metadata.Index is really the applied index of the replica.
+		snap.State.TruncatedState = &roachpb.RaftTruncatedState{
+			Index: snap.RaftSnap.Metadata.Index,
+			Term:  snap.RaftSnap.Metadata.Term,
+		}
 	}
 
 	req := SnapshotRequest_Header{
-		State:                                snap.State,
-		DeprecatedUnreplicatedTruncatedState: true,
+		State: snap.State,
+		// Tell the recipient whether it needs to synthesize the new
+		// unreplicated TruncatedState. It could tell by itself by peeking into
+		// the data, but it uses a write only batch for performance which
+		// doesn't support that; this is easier. Notably, this is true if the
+		// snap index itself is the one at which the migration happens.
+		//
+		// See VersionUnreplicatedRaftTruncatedState.
+		UnreplicatedTruncatedState: !usesReplicatedTruncatedState,
 		RaftMessageRequest: RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: sender,

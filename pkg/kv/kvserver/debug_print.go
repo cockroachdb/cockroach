@@ -13,6 +13,7 @@ package kvserver
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -292,6 +293,15 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 	// switch. Other types are handled inside the switch and return.
 	var msg protoutil.Message
 	switch {
+	case bytes.Equal(suffix, keys.LocalLeaseAppliedIndexLegacySuffix):
+		fallthrough
+	case bytes.Equal(suffix, keys.LocalRaftAppliedIndexLegacySuffix):
+		i, err := value.GetInt()
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatInt(i, 10), nil
+
 	case bytes.Equal(suffix, keys.LocalAbortSpanSuffix):
 		msg = &roachpb.AbortSpanEntry{}
 
@@ -304,7 +314,7 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 	case bytes.Equal(suffix, keys.LocalRangeTombstoneSuffix):
 		msg = &roachpb.RangeTombstone{}
 
-	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
+	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateLegacySuffix):
 		msg = &roachpb.RaftTruncatedState{}
 
 	case bytes.Equal(suffix, keys.LocalRangeLeaseSuffix):

@@ -34,6 +34,7 @@ import (
 	_ "github.com/mattn/goveralls"
 	_ "github.com/mibk/dupl"
 	_ "github.com/mmatczuk/go_generics/cmd/go_generics"
+	_ "github.com/prometheus/prometheus/promql"
 	_ "github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc"
 	_ "github.com/wadey/gocovmerge"
 	_ "golang.org/x/lint/golint"

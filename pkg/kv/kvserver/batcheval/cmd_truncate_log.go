@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -30,6 +31,7 @@ func init() {
 func declareKeysTruncateLog(
 	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(rs.GetRangeID())})
 	prefix := keys.RaftLogPrefix(rs.GetRangeID())
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 }
@@ -50,6 +52,15 @@ func TruncateLog(
 		log.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
 			args.RangeID)
 		return result.Result{}, nil
+	}
+
+	var legacyTruncatedState roachpb.RaftTruncatedState
+	legacyKeyFound, err := storage.MVCCGetProto(
+		ctx, readWriter, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
+		hlc.Timestamp{}, &legacyTruncatedState, storage.MVCCGetOptions{},
+	)
+	if err != nil {
+		return result.Result{}, err
 	}
 
 	firstIndex, err := cArgs.EvalCtx.GetFirstIndex()
@@ -119,5 +130,18 @@ func TruncateLog(
 	}
 
 	pd.Replicated.RaftLogDelta = ms.SysBytes
+
+	if legacyKeyFound {
+		// Time to migrate by deleting the legacy key. The downstream-of-Raft
+		// code will atomically rewrite the truncated state (supplied via the
+		// side effect) into the new unreplicated key.
+		if err := storage.MVCCDelete(
+			ctx, readWriter, cArgs.Stats, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
+			hlc.Timestamp{}, nil, /* txn */
+		); err != nil {
+			return result.Result{}, err
+		}
+	}
+
 	return pd, nil
 }
