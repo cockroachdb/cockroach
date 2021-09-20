@@ -43,7 +43,7 @@ type DescriptorsMatched struct {
 
 // MissingTableErr is a custom error type for Missing Table when resolver.ResolveExisting() is called in DescriptorsMatchingTargets
 type MissingTableErr struct {
-	Inner error
+	Inner     error
 	TableName string
 }
 
