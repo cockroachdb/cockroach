@@ -1117,14 +1117,6 @@ func (m *CommonLargeRowDetails) AppendJSONFields(printComma bool, b redact.Redac
 		b = append(b, '"')
 	}
 
-	if m.ViolatesMaxRowSizeErr {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"ViolatesMaxRowSizeErr\":true"...)
-	}
-
 	return printComma, b
 }
 

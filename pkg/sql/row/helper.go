@@ -259,11 +259,10 @@ func (rh *rowHelper) checkRowSize(
 		return nil
 	}
 	details := eventpb.CommonLargeRowDetails{
-		RowSize:               size,
-		TableID:               uint32(rh.TableDesc.GetID()),
-		FamilyID:              uint32(family),
-		PrimaryKey:            keys.PrettyPrint(rh.primIndexValDirs, *key),
-		ViolatesMaxRowSizeErr: shouldErr,
+		RowSize:    size,
+		TableID:    uint32(rh.TableDesc.GetID()),
+		FamilyID:   uint32(family),
+		PrimaryKey: keys.PrettyPrint(rh.primIndexValDirs, *key),
 	}
 	if rh.internal && shouldErr {
 		// Internal work should never err and always log if violating either limit.
