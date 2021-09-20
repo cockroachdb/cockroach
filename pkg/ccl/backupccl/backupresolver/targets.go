@@ -10,8 +10,8 @@ package backupresolver
 
 import (
 	"context"
-	"sort"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -41,16 +41,20 @@ type DescriptorsMatched struct {
 	RequestedDBs []catalog.DatabaseDescriptor
 }
 
+// Custom error type for Missing Table when resolver.ResolveExisting() is called in DescriptorsMatchingTargets
 type MissingTableErr struct {
 	Inner error
 	TableName string
 }
 
-func (e *MissingTableErr) Error() (string) {
+// Error() implements the erorr interface for MissingTableErr and outputs an error string
+func (e *MissingTableErr) Error() string {
 	return fmt.Sprintf("table %q does not exist, or invalid RESTORE timestamp: %v", e.TableName, e.Inner.Error())
 }
 
-func (e *MissingTableErr) Unwrap() (error) {
+// Unwrap() implements the erorr interface for MissingTableErr and outputs inner error
+// implemented so that errors.As can be used with MissingTableErr
+func (e *MissingTableErr) Unwrap() error {
 	return e.Inner
 }
 
