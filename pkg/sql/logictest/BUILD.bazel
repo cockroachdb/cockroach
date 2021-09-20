@@ -14,6 +14,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/build/bazel",
         "//pkg/clusterversion",
         "//pkg/kv/kvserver",
         "//pkg/migration",
@@ -61,6 +62,7 @@ go_test(
     data = [
         ":testdata",
         "@cockroach//c-deps:libgeos",
+        "@com_github_cockroachdb_sqllogictest//:testfiles",
     ],
     embed = [":logictest"],
     deps = [

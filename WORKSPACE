@@ -14,7 +14,7 @@ workspace(
 
 # Load the things that let us load other things.
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 git_repository(
@@ -131,4 +131,16 @@ http_archive(
     urls = [
         "https://github.com/jmhodges/bazel_gomock/archive/fde78c91cf1783cc1e33ba278922ba67a6ee2a84.tar.gz",
     ],
+)
+
+new_git_repository(
+    name = "com_github_cockroachdb_sqllogictest",
+    build_file_content = """
+filegroup(
+    name = "testfiles",
+    srcs = glob(["test/**/*.test"]),
+    visibility = ["//visibility:public"],
+)""",
+    commit = "96138842571462ed9a697bff590828d8f6356a2f",
+    remote = "https://github.com/cockroachdb/sqllogictest",
 )

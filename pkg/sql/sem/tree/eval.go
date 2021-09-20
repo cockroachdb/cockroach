@@ -4157,6 +4157,9 @@ func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator,
 	if expr.fn == nil || expr.fnProps.Class != GeneratorClass {
 		return nil, errors.AssertionFailedf("cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
 	}
+	if expr.fn.GeneratorWithExprs != nil {
+		return expr.fn.GeneratorWithExprs(ctx, expr.Exprs)
+	}
 	nullArg, args, err := expr.evalArgs(ctx)
 	if err != nil || nullArg {
 		return nil, err
