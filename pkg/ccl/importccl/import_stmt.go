@@ -2343,6 +2343,44 @@ func (r *importResumer) checkForUDTModification(
 	})
 }
 
+// writeStubStatisticsForImportedTables writes "stub" statistics for new tables
+// created during an import.
+func (r *importResumer) writeStubStatisticsForImportedTables(
+	ctx context.Context, execCfg *sql.ExecutorConfig, res roachpb.BulkOpSummary,
+) {
+	details := r.job.Details().(jobspb.ImportDetails)
+	for _, tbl := range details.Tables {
+		if tbl.IsNew {
+			desc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
+			id := roachpb.BulkOpSummaryID(uint64(desc.GetID()), uint64(desc.GetPrimaryIndexID()))
+			rowCount := uint64(res.EntryCounts[id])
+			// TODO(michae2): collect distinct and null counts during import.
+			distinctCount := uint64(float64(rowCount) * memo.UnknownDistinctCountRatio)
+			nullCount := uint64(float64(rowCount) * memo.UnknownNullCountRatio)
+			// Because we don't yet have real distinct and null counts, only produce
+			// single-column stats to avoid the appearance of perfectly correlated
+			// columns.
+			multiColEnabled := false
+			statistics, err := sql.StubTableStats(desc, jobspb.ImportStatsName, multiColEnabled)
+			if err == nil {
+				for _, statistic := range statistics {
+					statistic.RowCount = rowCount
+					statistic.DistinctCount = distinctCount
+					statistic.NullCount = nullCount
+				}
+				err = stats.InsertNewStats(ctx, execCfg.InternalExecutor, nil /* txn */, statistics)
+			}
+			if err != nil {
+				// Failure to create statistics should not fail the entire import.
+				log.Warningf(
+					ctx, "error while creating statistics during import of %q: %v",
+					desc.GetName(), err,
+				)
+			}
+		}
+	}
+}
+
 // publishTables updates the status of imported tables from OFFLINE to PUBLIC.
 func (r *importResumer) publishTables(
 	ctx context.Context, execCfg *sql.ExecutorConfig, res roachpb.BulkOpSummary,
@@ -2398,39 +2436,6 @@ func (r *importResumer) publishTables(
 			return errors.Wrap(err, "publishing tables")
 		}
 
-		// Write "stub" statistics for new tables, which should be good enough to use
-		// until the full CREATE STATISTICS run finishes.
-		for _, tbl := range details.Tables {
-			if tbl.IsNew {
-				desc := tabledesc.NewUnsafeImmutable(tbl.Desc)
-				id := roachpb.BulkOpSummaryID(uint64(desc.GetID()), uint64(desc.GetPrimaryIndexID()))
-				rowCount := uint64(res.EntryCounts[id])
-				// TODO(michae2): collect distinct and null counts during import.
-				distinctCount := uint64(float64(rowCount) * memo.UnknownDistinctCountRatio)
-				nullCount := uint64(float64(rowCount) * memo.UnknownNullCountRatio)
-				// Because we don't yet have real distinct and null counts, only produce
-				// single-column stats to avoid the appearance of perfectly correlated
-				// columns.
-				multiColEnabled := false
-				statistics, err := sql.StubTableStats(desc, jobspb.ImportStatsName, multiColEnabled)
-				if err == nil {
-					for _, statistic := range statistics {
-						statistic.RowCount = rowCount
-						statistic.DistinctCount = distinctCount
-						statistic.NullCount = nullCount
-					}
-					err = stats.InsertNewStats(ctx, execCfg.InternalExecutor, txn, statistics)
-				}
-				if err != nil {
-					// Failure to create statistics should not fail the entire import.
-					log.Warningf(
-						ctx, "error while creating statistics during import of %q: %v",
-						desc.GetName(), err,
-					)
-				}
-			}
-		}
-
 		// Update job record to mark tables published state as complete.
 		details.TablesPublished = true
 		err := r.job.SetDetails(ctx, txn, details)
@@ -2442,6 +2447,10 @@ func (r *importResumer) publishTables(
 	if err != nil {
 		return err
 	}
+
+	// Write stub statistics for new tables created during the import. This should
+	// be sufficient until the CREATE STATISTICS run finishes.
+	r.writeStubStatisticsForImportedTables(ctx, execCfg, res)
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
 	// rows affected per table, so we use a large number because we want to make
