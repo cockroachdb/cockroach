@@ -1040,6 +1040,13 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 // encodeTuple produces the value encoding for a tuple.
 func encodeTuple(t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte) ([]byte, error) {
 	appendTo = encoding.EncodeValueTag(appendTo, colID, encoding.Tuple)
+	return encodeUntaggedTuple(t, appendTo, colID, scratch)
+}
+
+// encodeUntaggedTuple produces the value encoding for a tuple without a value tag.
+func encodeUntaggedTuple(
+	t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte,
+) ([]byte, error) {
 	appendTo = encoding.EncodeNonsortingUvarint(appendTo, uint64(len(t.D)))
 
 	var err error
@@ -1356,6 +1363,8 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.IPAddr, nil
 	case types.JsonFamily:
 		return encoding.JSON, nil
+	case types.TupleFamily:
+		return encoding.Tuple, nil
 	default:
 		return 0, errors.AssertionFailedf("no known encoding type for %s", t)
 	}
@@ -1433,6 +1442,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 			return nil, err
 		}
 		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
+	case *tree.DTuple:
+		return encodeUntaggedTuple(t, b, encoding.NoColumnID, nil)
 	default:
 		return nil, errors.Errorf("don't know how to encode %s (%T)", d, d)
 	}

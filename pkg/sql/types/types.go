@@ -1813,9 +1813,9 @@ func (t *T) Equivalent(other *T) bool {
 }
 
 // EquivalentOrNull is the same as Equivalent, except it returns true if:
-// * `t` is Unknown (i.e., NULL) and `other` is not a tuple,
+// * `t` is Unknown (i.e., NULL) AND (allowNullTupleEquivalence OR `other` is not a tuple),
 // * `t` is a tuple with all non-Unknown elements matching the types in `other`.
-func (t *T) EquivalentOrNull(other *T) bool {
+func (t *T) EquivalentOrNull(other *T, allowNullTupleEquivalence bool) bool {
 	// Check normal equivalency first, then check for Null
 	normalEquivalency := t.Equivalent(other)
 	if normalEquivalency {
@@ -1824,7 +1824,7 @@ func (t *T) EquivalentOrNull(other *T) bool {
 
 	switch t.Family() {
 	case UnknownFamily:
-		return other.Family() != TupleFamily
+		return allowNullTupleEquivalence || other.Family() != TupleFamily
 
 	case TupleFamily:
 		if other.Family() != TupleFamily {
@@ -1840,7 +1840,7 @@ func (t *T) EquivalentOrNull(other *T) bool {
 			return false
 		}
 		for i := range t.TupleContents() {
-			if !t.TupleContents()[i].EquivalentOrNull(other.TupleContents()[i]) {
+			if !t.TupleContents()[i].EquivalentOrNull(other.TupleContents()[i], allowNullTupleEquivalence) {
 				return false
 			}
 		}
