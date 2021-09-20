@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestHandleTruncatedStateBelowRaft(t *testing.T) {
@@ -33,16 +32,23 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// This test verifies the expected behavior of the downstream-of-Raft log
-	// truncation code.
+	// truncation code, in particular regarding the
+	// VersionUnreplicatedRaftTruncatedState migration.
 
 	ctx := context.Background()
-	datadriven.Walk(t, "testdata/truncated_state", func(t *testing.T, path string) {
+
+	// neither exists (migration)
+	// old one exists (no migration)
+	// new one exists (migrated already)
+	// truncstate regresses
+
+	var prevTruncatedState roachpb.RaftTruncatedState
+	datadriven.Walk(t, "testdata/truncated_state_migration", func(t *testing.T, path string) {
 		const rangeID = 12
 		loader := stateloader.Make(rangeID)
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
 
-		var prevTruncatedState roachpb.RaftTruncatedState
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "prev":
@@ -52,15 +58,21 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 			case "put":
 				var index uint64
 				var term uint64
+				var legacy bool
 				d.ScanArgs(t, "index", &index)
 				d.ScanArgs(t, "term", &term)
+				d.ScanArgs(t, "legacy", &legacy)
 
 				truncState := &roachpb.RaftTruncatedState{
 					Index: index,
 					Term:  term,
 				}
 
-				assert.NoError(t, loader.SetRaftTruncatedState(ctx, eng, truncState))
+				if legacy {
+					assert.NoError(t, loader.SetLegacyRaftTruncatedState(ctx, eng, nil, truncState))
+				} else {
+					assert.NoError(t, loader.SetRaftTruncatedState(ctx, eng, truncState))
+				}
 				return ""
 			case "handle":
 				var buf bytes.Buffer
@@ -70,28 +82,31 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 				d.ScanArgs(t, "index", &index)
 				d.ScanArgs(t, "term", &term)
 
-				suggestedTruncatedState := &roachpb.RaftTruncatedState{
+				newTruncatedState := &roachpb.RaftTruncatedState{
 					Index: index,
 					Term:  term,
 				}
 
-				currentTruncatedState, err := loader.LoadRaftTruncatedState(ctx, eng)
-				assert.NoError(t, err)
-				apply, err := handleTruncatedStateBelowRaftPreApply(ctx, &currentTruncatedState, suggestedTruncatedState, loader, eng)
+				apply, err := handleTruncatedStateBelowRaft(ctx, &prevTruncatedState, newTruncatedState, loader, eng, false)
 				if err != nil {
 					return err.Error()
 				}
-
 				fmt.Fprintf(&buf, "apply: %t\n", apply)
 
-				key := keys.RaftTruncatedStateKey(rangeID)
-				var truncatedState roachpb.RaftTruncatedState
-				ok, err := storage.MVCCGetProto(ctx, eng, key, hlc.Timestamp{}, &truncatedState, storage.MVCCGetOptions{})
-				if err != nil {
-					t.Fatal(err)
+				for _, key := range []roachpb.Key{
+					keys.RaftTruncatedStateLegacyKey(rangeID),
+					keys.RaftTruncatedStateKey(rangeID),
+				} {
+					var truncatedState roachpb.RaftTruncatedState
+					ok, err := storage.MVCCGetProto(ctx, eng, key, hlc.Timestamp{}, &truncatedState, storage.MVCCGetOptions{})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !ok {
+						continue
+					}
+					fmt.Fprintf(&buf, "%s -> index=%d term=%d\n", key, truncatedState.Index, truncatedState.Term)
 				}
-				require.True(t, ok)
-				fmt.Fprintf(&buf, "%s -> index=%d term=%d\n", key, truncatedState.Index, truncatedState.Term)
 				return buf.String()
 			default:
 			}

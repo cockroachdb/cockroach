@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,6 +42,8 @@ func declareKeysMigrate(
 
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeVersionKey(rs.GetRangeID())})
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(rs.GetRangeID())})
+	lockSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(rs.GetRangeID())})
 }
 
 // migrationRegistry is a global registry of all KV-level migrations. See
@@ -51,6 +54,7 @@ var migrationRegistry = make(map[roachpb.Version]migration)
 type migration func(context.Context, storage.ReadWriter, CommandArgs) (result.Result, error)
 
 func init() {
+	registerMigration(clusterversion.TruncatedAndRangeAppliedStateMigration, truncatedAndAppliedStateMigration)
 	registerMigration(clusterversion.PostSeparatedIntentsMigration, postSeparatedIntentsMigration)
 }
 
@@ -89,6 +93,41 @@ func Migrate(
 	// as all below-raft migrations (the only users of Migrate) were introduced
 	// after it.
 	pd.Replicated.State.Version = &migrationVersion
+	return pd, nil
+}
+
+// truncatedAndRangeAppliedStateMigration lets us stop using the legacy
+// replicated truncated state and start using the new RangeAppliedState for this
+// specific range.
+func truncatedAndAppliedStateMigration(
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs,
+) (result.Result, error) {
+	var legacyTruncatedState roachpb.RaftTruncatedState
+	legacyKeyFound, err := storage.MVCCGetProto(
+		ctx, readWriter, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
+		hlc.Timestamp{}, &legacyTruncatedState, storage.MVCCGetOptions{},
+	)
+	if err != nil {
+		return result.Result{}, err
+	}
+
+	var pd result.Result
+	if legacyKeyFound {
+		// Time to migrate by deleting the legacy key. The downstream-of-Raft
+		// code will atomically rewrite the truncated state (supplied via the
+		// side effect) into the new unreplicated key.
+		if err := storage.MVCCDelete(
+			ctx, readWriter, cArgs.Stats, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
+			hlc.Timestamp{}, nil, /* txn */
+		); err != nil {
+			return result.Result{}, err
+		}
+		pd.Replicated.State = &kvserverpb.ReplicaState{
+			// We need to pass in a truncated state to enable the migration.
+			// Passing the same one is the easiest thing to do.
+			TruncatedState: &legacyTruncatedState,
+		}
+	}
 	return pd, nil
 }
 

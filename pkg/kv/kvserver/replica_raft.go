@@ -1789,44 +1789,46 @@ func (r *Replica) acquireMergeLock(
 	return rightRepl.raftMu.Unlock, nil
 }
 
-// handleTruncatedStateBelowRaftPreApply is called before applying a Raft
-// command that updates the truncated state.
-//
-// The truncated state of a replica determines where its Raft log starts (by
-// giving the last index that was already deleted). It's unreplicated -- it can
-// differ between replicas at the same applied index. This divergence occurs
-// primarily occurs through snapshots that contain no log entries; the truncated
-// index in the snapshot is set to equal the applied index it was generated
-// from. The truncation itself then is a purely replicated side effect.
-//
-// Updates to the HardState are sent out by a leaseholder truncating the log
-// based on its local knowledge. For example, the leader might have a log
-// 10..100 and truncates to 50, and will send out a TruncatedState with Index 50
-// to that effect. However, some replicas may not even have log entries that
-// old and must make sure to ignore this update to the truncated state, as it
-// would otherwise clobber their "newer" truncated state. The truncated state
-// provided by the leader then is merely a suggested one -- we could ignore it
-// and still be correct.
-//
-// We also rely on log truncations happening in the apply loop -- this makes
-// sure that a truncation does not remove entries to be applied that we haven't
-// yet. Since a truncation only ever removes committed log indexes, and after
-// choosing the index gets proposed, the truncation command itself will be
-// assigned an index higher than the one it could possibly remove. By the time
-// the truncation itself is handled, the state machine will have applied all
-// entries the truncation could possibly affect.
+// handleTruncatedStateBelowRaft is called when a Raft command updates the truncated
+// state. This isn't 100% trivial for two reasons:
+// - in 19.1 we're making the TruncatedState key unreplicated, so there's a migration
+// - we're making use of the above by not sending the Raft log in snapshots (the truncated
+//   state effectively determines the first index of the log, which requires it to be unreplicated).
+//   Updates to the HardState are sent out by a leaseholder truncating the log based on its local
+//   knowledge. For example, the leader might have a log 10..100 and truncates to 50, and will send
+//   out a TruncatedState with Index 50 to that effect. However, some replicas may not even have log
+//   entries that old, and must make sure to ignore this update to the truncated state, as it would
+//   otherwise clobber their "newer" truncated state.
 //
 // The returned boolean tells the caller whether to apply the truncated state's
 // side effects, which means replacing the in-memory TruncatedState and applying
 // the associated RaftLogDelta. It is usually expected to be true, but may not
 // be for the first truncation after on a replica that recently received a
 // snapshot.
-func handleTruncatedStateBelowRaftPreApply(
+func handleTruncatedStateBelowRaft(
 	ctx context.Context,
-	currentTruncatedState, suggestedTruncatedState *roachpb.RaftTruncatedState,
+	oldTruncatedState, newTruncatedState *roachpb.RaftTruncatedState,
 	loader stateloader.StateLoader,
 	readWriter storage.ReadWriter,
+	assertNoLegacy bool,
 ) (_apply bool, _ error) {
+	// If this is a log truncation, load the resulting unreplicated or legacy
+	// replicated truncated state (in that order). If the migration is happening
+	// in this command, the result will be an empty message. In steady state
+	// after the migration, it's the unreplicated truncated state not taking
+	// into account the current truncation (since the key is unreplicated).
+	// Either way, we'll update it below.
+	//
+	// See VersionUnreplicatedRaftTruncatedState for details.
+	truncStatePostApply, truncStateIsLegacy, err := loader.LoadRaftTruncatedState(ctx, readWriter)
+	if err != nil {
+		return false, errors.Wrap(err, "loading truncated state")
+	}
+
+	if assertNoLegacy && truncStateIsLegacy {
+		log.Fatalf(ctx, "found legacy truncated state which should no longer exist")
+	}
+
 	// Truncate the Raft log from the entry after the previous
 	// truncation index to the new truncation index. This is performed
 	// atomically with the raft command application so that the
@@ -1840,31 +1842,42 @@ func handleTruncatedStateBelowRaftPreApply(
 	// perform well here because the tombstones could be "collapsed",
 	// but it is hardly worth the risk at this point.
 	prefixBuf := &loader.RangeIDPrefixBuf
-	for idx := currentTruncatedState.Index + 1; idx <= suggestedTruncatedState.Index; idx++ {
+	for idx := oldTruncatedState.Index + 1; idx <= newTruncatedState.Index; idx++ {
 		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
 		// avoid allocating when constructing Raft log keys (16 bytes).
 		unsafeKey := prefixBuf.RaftLogKey(idx)
 		if err := readWriter.ClearUnversioned(unsafeKey); err != nil {
-			return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
-				suggestedTruncatedState, idx)
+			return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
 		}
 	}
 
-	if suggestedTruncatedState.Index <= currentTruncatedState.Index {
-		// The suggested truncated state moves us backwards; instruct the
-		// caller to not update the in-memory state.
+	if !truncStateIsLegacy {
+		if truncStatePostApply.Index < newTruncatedState.Index {
+			// There are two cases here (though handled just the same). In the
+			// first case, the Raft command has just deleted the legacy
+			// replicated truncated state key as part of the migration (so
+			// truncStateIsLegacy is now false for the first time and
+			// truncStatePostApply is zero) and we need to atomically write the
+			// new, unreplicated, key. Or we've already migrated earlier, in
+			// which case truncStatePostApply equals the current value of the
+			// new key (which wasn't touched by the batch), and we need to
+			// overwrite it if this truncation "moves it forward".
+
+			if err := storage.MVCCPutProto(
+				ctx, readWriter, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
+				hlc.Timestamp{}, nil /* txn */, newTruncatedState,
+			); err != nil {
+				return false, errors.Wrap(err, "unable to migrate RaftTruncatedState")
+			}
+			// Have migrated and this new truncated state is moving us forward.
+			// Tell caller that we applied it and that so should they.
+			return true, nil
+		}
+		// Have migrated, but this truncated state moves the existing one
+		// backwards, so instruct caller to not update in-memory state.
 		return false, nil
 	}
-
-	// The suggested truncated state moves us forward; apply it and tell
-	// the caller as much.
-	if err := storage.MVCCPutProto(
-		ctx, readWriter, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
-		hlc.Timestamp{}, nil /* txn */, suggestedTruncatedState,
-	); err != nil {
-		return false, errors.Wrap(err, "unable to write RaftTruncatedState")
-	}
-
+	// Haven't migrated yet, don't ever discard the update.
 	return true, nil
 }
 
