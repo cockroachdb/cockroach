@@ -277,6 +277,10 @@ const (
 	// PebbleFormatVersioned ratchets Pebble's format major version to
 	// the version FormatVersioned.
 	PebbleFormatVersioned
+	// MarkerDataKeysRegistry switches to using an atomic marker file
+	// for denoting which data keys registry is active.
+	MarkerDataKeysRegistry
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -464,6 +468,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatVersioned,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1162},
+	},
+	{
+		Key:     MarkerDataKeysRegistry,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1164},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
