@@ -41,12 +41,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -273,8 +275,15 @@ func StartTenant(
 	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
 	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 
+	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(
+		args.stopper,
+		s.sqlInstanceProvider,
+		s.SQLInstanceID(),
+	)
+
 	if err := args.costController.Start(
-		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID, status.GetUserCPUSeconds,
+		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
+		status.GetUserCPUSeconds, nextLiveInstanceIDFn,
 	); err != nil {
 		return nil, "", "", err
 	}
@@ -478,6 +487,68 @@ func makeTenantSQLServerArgs(
 	}, nil
 }
 
+func makeNextLiveInstanceIDFn(
+	stopper *stop.Stopper, sqlInstanceProvider sqlinstance.Provider, instanceID base.SQLInstanceID,
+) multitenant.NextLiveInstanceIDFn {
+	// We retrieve the value from the provider every minute.
+	//
+	// We report each retrieved value only once; for all other calls we return 0.
+	// We prefer to not provide a value rather than providing a stale value which
+	// might cause a bit of unnecessary work on the server side.
+	//
+	// TODO(radu): once the provider caches the information (see #69976), we can
+	// use it directly each time.
+	const interval = 1 * time.Minute
+	var mu syncutil.Mutex
+	var lastRetrieval time.Time
+	var lastValue base.SQLInstanceID
+
+	return func(ctx context.Context) base.SQLInstanceID {
+		mu.Lock()
+		defer mu.Unlock()
+		if lastValue != 0 {
+			v := lastValue
+			lastValue = 0
+			return v
+		}
+
+		if now := timeutil.Now(); lastRetrieval.Before(now.Add(-interval)) {
+			lastRetrieval = now
+
+			_ = stopper.RunAsyncTask(ctx, "get-next-live-instance-id", func(ctx context.Context) {
+				instances, err := sqlInstanceProvider.GetAllInstances(ctx)
+				if err != nil {
+					log.Infof(ctx, "GetAllInstances failed: %v", err)
+					// We will try again.
+					return
+				}
+				if len(instances) == 0 {
+					return
+				}
+				// Find the next ID in circular order.
+				var minID, nextID base.SQLInstanceID
+				for i := range instances {
+					id := instances[i].InstanceID
+					if minID == 0 || minID > id {
+						minID = id
+					}
+					if id > instanceID && (nextID == 0 || nextID > id) {
+						nextID = id
+					}
+				}
+				if nextID == 0 {
+					nextID = minID
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				lastValue = nextID
+			})
+		}
+		return 0
+	}
+
+}
+
 // NewTenantSideCostController is a hook for CCL code which implements the
 // controller.
 var NewTenantSideCostController = func(
@@ -504,6 +575,7 @@ func (noopTenantSideCostController) Start(
 	instanceID base.SQLInstanceID,
 	sessionID sqlliveness.SessionID,
 	cpuSecsFn multitenant.CPUSecsFn,
+	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn,
 ) error {
 	return nil
 }

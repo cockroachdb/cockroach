@@ -148,17 +148,18 @@ func init() {
 }
 
 type tenantSideCostController struct {
-	timeSource timeutil.TimeSource
-	testInstr  TestInstrumentation
-	settings   *cluster.Settings
-	costCfg    tenantcostmodel.Config
-	tenantID   roachpb.TenantID
-	provider   kvtenant.TokenBucketProvider
-	limiter    limiter
-	stopper    *stop.Stopper
-	instanceID base.SQLInstanceID
-	sessionID  sqlliveness.SessionID
-	cpuSecsFn  multitenant.CPUSecsFn
+	timeSource           timeutil.TimeSource
+	testInstr            TestInstrumentation
+	settings             *cluster.Settings
+	costCfg              tenantcostmodel.Config
+	tenantID             roachpb.TenantID
+	provider             kvtenant.TokenBucketProvider
+	limiter              limiter
+	stopper              *stop.Stopper
+	instanceID           base.SQLInstanceID
+	sessionID            sqlliveness.SessionID
+	cpuSecsFn            multitenant.CPUSecsFn
+	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn
 
 	mu struct {
 		syncutil.Mutex
@@ -241,6 +242,7 @@ func (c *tenantSideCostController) Start(
 	instanceID base.SQLInstanceID,
 	sessionID sqlliveness.SessionID,
 	cpuSecsFn multitenant.CPUSecsFn,
+	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn,
 ) error {
 	if instanceID == 0 {
 		return errors.New("invalid SQLInstanceID")
@@ -252,6 +254,7 @@ func (c *tenantSideCostController) Start(
 	c.instanceID = instanceID
 	c.sessionID = sessionID
 	c.cpuSecsFn = cpuSecsFn
+	c.nextLiveInstanceIDFn = nextLiveInstanceIDFn
 	return stopper.RunAsyncTask(ctx, "cost-controller", func(ctx context.Context) {
 		c.mainLoop(ctx)
 	})
@@ -359,6 +362,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		TenantID:                    c.tenantID.ToUint64(),
 		InstanceID:                  uint32(c.instanceID),
 		InstanceLease:               []byte(c.sessionID),
+		NextLiveInstanceID:          uint32(c.nextLiveInstanceIDFn(ctx)),
 		SeqNum:                      c.run.requestSeqNum,
 		ConsumptionSinceLastRequest: deltaConsumption,
 		RequestedRU:                 requested,
