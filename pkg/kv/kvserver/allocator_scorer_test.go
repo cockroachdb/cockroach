@@ -651,7 +651,7 @@ func TestConstraintsCheck(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, s := range testStores {
-				valid := isStoreValid(s, tc.constraints)
+				valid := constraintsCheck(s, tc.constraints)
 				ok := tc.expected[s.StoreID]
 				if valid != ok {
 					t.Errorf("expected store %d to be %t, but got %t", s.StoreID, ok, valid)
@@ -1036,7 +1036,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	options := rangeCountScorerOptions{}
+	options := scorerOptions{}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
 		return roachpb.StoreDescriptor{
 			StoreID: roachpb.StoreID(id),
@@ -1193,7 +1193,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		actual := len(targets) > 0
 		if actual != tc.expected {
 			t.Errorf(
-				"%d: shouldRebalanceBasedOnThresholds on s%d with replicas on %v got %t, expected %t",
+				"%d: shouldRebalanceBasedOnRangeCount on s%d with replicas on %v got %t, expected %t",
 				i,
 				tc.s.StoreID,
 				tc.existingNodeIDs,
@@ -1462,13 +1462,11 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 	}
 }
 
-func TestBalanceScoreByRangeCount(t *testing.T) {
+func TestBalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	options := rangeCountScorerOptions{
-		rangeRebalanceThreshold: 0.1,
-	}
+	options := scorerOptions{}
 	storeList := StoreList{
 		candidateRanges: stat{mean: 1000},
 	}
@@ -1488,68 +1486,24 @@ func TestBalanceScoreByRangeCount(t *testing.T) {
 	sRangesOverfull.RangeCount = 1500
 	sRangesUnderfull := sMean
 	sRangesUnderfull.RangeCount = 500
-	sRangesLessThanMean := sMean
-	sRangesLessThanMean.RangeCount = 900
-	sRangesMoreThanMean := sMean
-	sRangesMoreThanMean.RangeCount = 1099
 
 	testCases := []struct {
 		sc       roachpb.StoreCapacity
-		expected balanceStatus
+		expected float64
 	}{
-		{sEmpty, underfull},
-		{sRangesLessThanMean, lessThanEqualToMean},
-		{sMean, lessThanEqualToMean},
-		{sRangesMoreThanMean, moreThanMean},
-		{sRangesOverfull, overfull},
-		{sRangesUnderfull, underfull},
+		{sEmpty, 1},
+		{sMean, 0},
+		{sRangesOverfull, -1},
+		{sRangesUnderfull, 1},
 	}
 	for i, tc := range testCases {
-		if a, e := options.balanceScore(storeList, tc.sc), tc.expected; a != e {
-			t.Errorf("%d: balanceScore(storeList, %+v) got %d; want %d", i, tc.sc, a, e)
+		if a, e := balanceScore(storeList, tc.sc, options), tc.expected; a.totalScore() != e {
+			t.Errorf("%d: balanceScore(storeList, %+v) got %s; want %.2f", i, tc.sc, a, e)
 		}
 	}
 }
 
-func TestRebalanceBalanceScoreOnQPS(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	storeList := StoreList{
-		candidateQueriesPerSecond: stat{mean: 1000},
-	}
-
-	testCases := []struct {
-		QPS             float64
-		expBalanceScore balanceStatus
-	}{
-		{0, underfull},
-		{900, lessThanEqualToMean},
-		{999, lessThanEqualToMean},
-		{1000, lessThanEqualToMean},
-		{1001, moreThanMean},
-		{2000, overfull},
-	}
-
-	for i, tc := range testCases {
-		sc := roachpb.StoreCapacity{
-			QueriesPerSecond: tc.QPS,
-		}
-		options := qpsScorerOptions{
-			qpsRebalanceThreshold: 0.1,
-		}
-		if a, e := options.balanceScore(storeList, sc), tc.expBalanceScore; a != e {
-			t.Errorf("%d: rebalanceToConvergesScore(storeList, %+v) got %d; want %d", i, sc, a, e)
-		}
-		// NB: Any replica whose removal would not converge the QPS to the mean is
-		// given a score of 1 to make it less attractive for removal.
-		if a, e := options.balanceScore(storeList, sc), tc.expBalanceScore; a != e {
-			t.Errorf("%d: rebalanceFromConvergesScore(storeList, %+v) got %d; want %d", i, sc, a, e)
-		}
-	}
-}
-
-func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
+func TestRebalanceConvergesOnMean(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1564,28 +1518,23 @@ func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
 	}{
 		{0, true, false},
 		{900, true, false},
+		{900, true, false},
 		{999, true, false},
 		{1000, false, false},
 		{1001, false, true},
 		{2000, false, true},
+		{900, true, false},
 	}
 
-	options := rangeCountScorerOptions{}
 	for i, tc := range testCases {
 		sc := roachpb.StoreCapacity{
 			RangeCount: tc.rangeCount,
 		}
-		if a, e := options.rebalanceToConvergesScore(
-			storeList, sc,
-		) == 1, tc.toConverges; a != e {
-			t.Errorf("%d: rebalanceToConvergesScore(storeList, %+v) got %t; want %t", i, sc, a, e)
+		if a, e := rebalanceToConvergesOnMean(storeList, sc), tc.toConverges; a != e {
+			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v) got %t; want %t", i, sc, a, e)
 		}
-		// NB: Any replica whose removal would not converge the range count to the
-		// mean is given a score of 1 to make it less attractive for removal.
-		if a, e := options.rebalanceFromConvergesScore(
-			storeList, sc,
-		) == 0, tc.fromConverges; a != e {
-			t.Errorf("%d: rebalanceFromConvergesScore(storeList, %+v) got %t; want %t", i, sc, a, e)
+		if a, e := rebalanceFromConvergesOnMean(storeList, sc), tc.fromConverges; a != e {
+			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v) got %t; want %t", i, sc, a, e)
 		}
 	}
 }

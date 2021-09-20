@@ -252,7 +252,6 @@ func (rq *replicateQueue) shouldQueue(
 			nonVoterReplicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			rq.allocator.scorerOptions(),
 		)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found for voter, enqueuing")
@@ -266,7 +265,6 @@ func (rq *replicateQueue) shouldQueue(
 			nonVoterReplicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			rq.allocator.scorerOptions(),
 		)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found for non-voter, enqueuing")
@@ -783,14 +781,7 @@ func (rq *replicateQueue) findRemoveVoter(
 			rangeRaftProgress(repl.RaftStatus(), existingVoters))}
 	}
 
-	return rq.allocator.RemoveVoter(
-		ctx,
-		zone,
-		candidates,
-		existingVoters,
-		existingNonVoters,
-		rq.allocator.scorerOptions(),
-	)
+	return rq.allocator.RemoveVoter(ctx, zone, candidates, existingVoters, existingNonVoters)
 }
 
 // maybeTransferLeaseAway is called whenever a replica on a given store is
@@ -900,9 +891,7 @@ func (rq *replicateQueue) removeNonVoter(
 		ctx,
 		conf,
 		existingNonVoters,
-		existingVoters,
-		existingNonVoters,
-		rq.allocator.scorerOptions(),
+		existingVoters, existingNonVoters,
 	)
 	if err != nil {
 		return false, err
@@ -1085,7 +1074,6 @@ func (rq *replicateQueue) considerRebalance(
 			existingNonVoters,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			rq.allocator.scorerOptions(),
 		)
 		if !ok {
 			// If there was nothing to do for the set of voting replicas on this
@@ -1099,7 +1087,6 @@ func (rq *replicateQueue) considerRebalance(
 				existingNonVoters,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				rq.allocator.scorerOptions(),
 			)
 			rebalanceTargetType = nonVoterTarget
 		}
@@ -1164,7 +1151,6 @@ func (rq *replicateQueue) considerRebalance(
 		desc,
 		conf,
 		transferLeaseOptions{
-			goal:                     followTheWorkload,
 			checkTransferLeaseSource: true,
 			checkCandidateFullness:   true,
 			dryRun:                   dryRun,
@@ -1272,19 +1258,7 @@ func replicationChangesForRebalance(
 	return chgs, performingSwap, nil
 }
 
-// transferLeaseGoal dictates whether a call to TransferLeaseTarget should
-// improve locality of access, convergence of lease counts or convergence of
-// QPS.
-type transferLeaseGoal int
-
-const (
-	followTheWorkload transferLeaseGoal = iota
-	leaseCountConvergence
-	qpsConvergence
-)
-
 type transferLeaseOptions struct {
-	goal                     transferLeaseGoal
 	checkTransferLeaseSource bool
 	checkCandidateFullness   bool
 	dryRun                   bool
@@ -1333,8 +1307,9 @@ func (rq *replicateQueue) shedLease(
 		desc.Replicas().VoterDescriptors(),
 		repl,
 		repl.leaseholderStats,
-		false, /* forceDecisionWithoutStats */
-		opts,
+		opts.checkTransferLeaseSource,
+		opts.checkCandidateFullness,
+		false, /* alwaysAllowDecisionWithoutStats */
 	)
 	if target == (roachpb.ReplicaDescriptor{}) {
 		return noSuitableTarget, nil
