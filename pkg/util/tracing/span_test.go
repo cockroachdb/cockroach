@@ -74,7 +74,7 @@ func TestRecordingString(t *testing.T) {
 	rec := root.GetRecording()
 	// Sanity check that the recording looks like we want. Note that this is not
 	// its String() representation; this just lists all the spans in order.
-	require.NoError(t, TestingCheckRecordedSpans(rec, `
+	require.NoError(t, CheckRecordedSpans(rec, `
 		span: root
 			tags: _verbose=1
 			event: root 1
@@ -90,7 +90,7 @@ func TestRecordingString(t *testing.T) {
 				event: local child 1
 		`))
 
-	require.NoError(t, TestingCheckRecording(rec, `
+	require.NoError(t, CheckRecording(rec, `
 		=== operation:root _verbose:1
 		event:root 1
 			=== operation:remote child _verbose:1
@@ -157,7 +157,7 @@ func TestRecordingInRecording(t *testing.T) {
 	root.Finish()
 
 	rootRec := root.GetRecording()
-	require.NoError(t, TestingCheckRecordedSpans(rootRec, `
+	require.NoError(t, CheckRecordedSpans(rootRec, `
 		span: root
 			tags: _verbose=1
 			span: child
@@ -167,14 +167,14 @@ func TestRecordingInRecording(t *testing.T) {
 		`))
 
 	childRec := child.GetRecording()
-	require.NoError(t, TestingCheckRecordedSpans(childRec, `
+	require.NoError(t, CheckRecordedSpans(childRec, `
 		span: child
 			tags: _verbose=1
 			span: grandchild
 				tags: _verbose=1
 		`))
 
-	require.NoError(t, TestingCheckRecording(childRec, `
+	require.NoError(t, CheckRecording(childRec, `
 		=== operation:child _verbose:1
 			=== operation:grandchild _verbose:1
 		`))
@@ -193,7 +193,7 @@ func TestSpan_ImportRemoteSpans(t *testing.T) {
 	sp.ImportRemoteSpans(ch.GetRecording())
 	sp.Finish()
 
-	require.NoError(t, TestingCheckRecordedSpans(sp.GetRecording(), `
+	require.NoError(t, CheckRecordedSpans(sp.GetRecording(), `
 		span: root
 			span: child
 				event: foo
@@ -220,10 +220,10 @@ func TestSpanRecordStructured(t *testing.T) {
 	require.NoError(t, types.UnmarshalAny(item.Payload, &d1))
 	require.IsType(t, (*types.Int32Value)(nil), d1.Message)
 
-	require.NoError(t, TestingCheckRecordedSpans(rec, `
+	require.NoError(t, CheckRecordedSpans(rec, `
 		span: root
 		`))
-	require.NoError(t, TestingCheckRecording(rec, `
+	require.NoError(t, CheckRecording(rec, `
 		=== operation:root
         structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
 	`))
@@ -349,7 +349,7 @@ func TestSpanReset(t *testing.T) {
 		}
 	}
 
-	require.NoError(t, TestingCheckRecordedSpans(sp.GetRecording(), `
+	require.NoError(t, CheckRecordedSpans(sp.GetRecording(), `
 		span: root
 			tags: _unfinished=1 _verbose=1
 			event: 1
@@ -363,7 +363,7 @@ func TestSpanReset(t *testing.T) {
 			event: 9
 			event: structured=10
 		`))
-	require.NoError(t, TestingCheckRecording(sp.GetRecording(), `
+	require.NoError(t, CheckRecording(sp.GetRecording(), `
 		=== operation:root _unfinished:1 _verbose:1
 		event:1
 		event:structured=2
@@ -379,11 +379,11 @@ func TestSpanReset(t *testing.T) {
 
 	sp.ResetRecording()
 
-	require.NoError(t, TestingCheckRecordedSpans(sp.GetRecording(), `
+	require.NoError(t, CheckRecordedSpans(sp.GetRecording(), `
 		span: root
 			tags: _unfinished=1 _verbose=1
 		`))
-	require.NoError(t, TestingCheckRecording(sp.GetRecording(), `
+	require.NoError(t, CheckRecording(sp.GetRecording(), `
 		=== operation:root _unfinished:1 _verbose:1
 	`))
 
