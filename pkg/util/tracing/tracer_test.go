@@ -67,12 +67,12 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	// Initial recording of this fresh (real) span.
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), ``); err != nil {
+	if err := CheckRecordedSpans(s1.GetRecording(), ``); err != nil {
 		t.Fatal(err)
 	}
 
 	s1.SetVerbose(true)
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 	`); err != nil {
@@ -96,7 +96,7 @@ func TestTracerRecording(t *testing.T) {
 	}
 	s2.Recordf("x=%d", 3)
 
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
@@ -107,7 +107,7 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := TestingCheckRecordedSpans(s2.GetRecording(), `
+	if err := CheckRecordedSpans(s2.GetRecording(), `
 		span: b
 			tags: _unfinished=1 _verbose=1
 			event: x=3
@@ -121,7 +121,7 @@ func TestTracerRecording(t *testing.T) {
 
 	s2.Finish()
 
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
@@ -135,7 +135,7 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 	s3.Finish()
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
@@ -151,7 +151,7 @@ func TestTracerRecording(t *testing.T) {
 	s1.ResetRecording()
 	s1.SetVerbose(false)
 	s1.Recordf("x=%d", 100)
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 	`); err != nil {
 		t.Fatal(err)
@@ -159,7 +159,7 @@ func TestTracerRecording(t *testing.T) {
 
 	// The child Span, now finished, will drop future recordings.
 	s3.Recordf("x=%d", 5)
-	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
+	if err := CheckRecordedSpans(s3.GetRecording(), `
 		span: c
 			tags: _verbose=1 tag=val
 			event: x=4
@@ -177,7 +177,7 @@ func TestStartChildSpan(t *testing.T) {
 	sp2.Finish()
 	sp1.Finish()
 
-	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
+	if err := CheckRecordedSpans(sp1.GetRecording(), `
 		span: parent
 			tags: _verbose=1
 			span: child
@@ -191,13 +191,13 @@ func TestStartChildSpan(t *testing.T) {
 	sp2 = tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
 	sp2.Finish()
 	sp1.Finish()
-	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
+	if err := CheckRecordedSpans(sp1.GetRecording(), `
 		span: parent
 			tags: _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
-	if err := TestingCheckRecordedSpans(sp2.GetRecording(), `
+	if err := CheckRecordedSpans(sp2.GetRecording(), `
 		span: child
 			tags: _verbose=1
 	`); err != nil {
@@ -210,7 +210,7 @@ func TestStartChildSpan(t *testing.T) {
 		WithLogTags(logtags.SingleTagBuffer("key", "val")))
 	sp2.Finish()
 	sp1.Finish()
-	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
+	if err := CheckRecordedSpans(sp1.GetRecording(), `
 		span: parent
 			tags: _verbose=1
 			span: child
@@ -280,7 +280,7 @@ func TestTracerInjectExtract(t *testing.T) {
 
 	// Verify that recording was started automatically.
 	rec := s2.GetRecording()
-	if err := TestingCheckRecordedSpans(rec, `
+	if err := CheckRecordedSpans(rec, `
 		span: remote op
 			tags: _verbose=1
 			event: x=1
@@ -288,7 +288,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 	`); err != nil {
@@ -298,7 +298,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	s1.ImportRemoteSpans(rec)
 	s1.Finish()
 
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _verbose=1
 			span: remote op
