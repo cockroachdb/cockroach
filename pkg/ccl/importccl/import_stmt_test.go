@@ -168,14 +168,13 @@ ORDER BY table_name
 				s string collate en_u_ks_level1 primary key
 			`,
 			typ: "CSV",
-			data: `a
-B
-c
-D
-d
+			data: `'a' collate en_u_ks_level1
+'B' collate en_u_ks_level1
+'c' collate en_u_ks_level1
+'D' collate en_u_ks_level1
+'d' collate en_u_ks_level1
 `,
-			err:       "duplicate key",
-			skipIssue: 53956,
+			err: "duplicate key",
 		},
 		{
 			name: "duplicate PK at sst boundary",
