@@ -29,6 +29,7 @@ type TenantSideCostController interface {
 		instanceID base.SQLInstanceID,
 		sessionID sqlliveness.SessionID,
 		cpuSecsFn CPUSecsFn,
+		nextLiveInstanceIDFn NextLiveInstanceIDFn,
 	) error
 
 	TenantSideKVInterceptor
@@ -37,6 +38,15 @@ type TenantSideCostController interface {
 // CPUSecsFn is a function used to get the cumulative CPU usage in seconds for
 // the SQL instance.
 type CPUSecsFn func(ctx context.Context) float64
+
+// NextLiveInstanceIDFn is a function used to get the next live instance ID
+// for this tenant. The information is used as a cleanup trigger on the server
+// side and can be stale without causing correctness issues.
+//
+// Can return 0 if the value is not available right now.
+//
+// The function must not block.
+type NextLiveInstanceIDFn func(ctx context.Context) base.SQLInstanceID
 
 // TenantSideKVInterceptor intercepts KV requests and responses, accounting
 // for resource usage and potentially throttling requests.
