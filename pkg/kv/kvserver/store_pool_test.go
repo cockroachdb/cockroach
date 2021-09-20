@@ -172,7 +172,7 @@ func verifyStoreList(
 		sl, aliveStoreCount, throttled = sp.getStoreListFromIDs(storeIDs, filter)
 	}
 	throttledStoreCount := len(throttled)
-	sl = sl.excludeInvalid(constraints)
+	sl = sl.filter(constraints)
 	if aliveStoreCount != expectedAliveStoreCount {
 		return errors.Errorf("expected AliveStoreCount %d does not match actual %d",
 			expectedAliveStoreCount, aliveStoreCount)
@@ -216,7 +216,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
 	sl, _, _ := sp.getStoreList(storeFilterNone)
-	sl = sl.excludeInvalid(constraints)
+	sl = sl.filter(constraints)
 	if len(sl.stores) != 0 {
 		t.Errorf("expected no stores, instead %+v", sl.stores)
 	}
@@ -485,7 +485,7 @@ func TestStoreListFilter(t *testing.T) {
 		}
 	}
 
-	filtered := sl.excludeInvalid(constraints)
+	filtered := sl.filter(constraints)
 	if !reflect.DeepEqual(expected, filtered.stores) {
 		t.Errorf("did not get expected stores %s", pretty.Diff(expected, filtered.stores))
 	}

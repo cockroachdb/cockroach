@@ -57,9 +57,6 @@ type replicaStats struct {
 		requests   [6]perLocalityCounts
 		lastRotate time.Time
 		lastReset  time.Time
-
-		// Testing only.
-		avgQPSForTesting float64
 	}
 }
 
@@ -189,9 +186,6 @@ func (rs *replicaStats) avgQPS() (float64, time.Duration) {
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	if rs.mu.avgQPSForTesting != 0 {
-		return rs.mu.avgQPSForTesting, 0
-	}
 
 	rs.maybeRotateLocked(now)
 
@@ -229,10 +223,4 @@ func (rs *replicaStats) resetRequestCounts() {
 	rs.mu.requests[rs.mu.idx] = make(perLocalityCounts)
 	rs.mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
 	rs.mu.lastReset = rs.mu.lastRotate
-}
-
-func (rs *replicaStats) setAvgQPSForTesting(qps float64) {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	rs.mu.avgQPSForTesting = qps
 }

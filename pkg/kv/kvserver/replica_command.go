@@ -2970,13 +2970,8 @@ func (s *Store) relocateOne(
 		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
 		// may not want to do that due to constraints.
 		targetStore, _, err := s.allocator.removeTarget(
-			ctx,
-			conf,
-			args.targetsToRemove(),
-			existingVoters,
-			existingNonVoters,
-			args.targetType,
-			s.allocator.scorerOptions(),
+			ctx, conf, args.targetsToRemove(), existingVoters,
+			existingNonVoters, args.targetType,
 		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(
