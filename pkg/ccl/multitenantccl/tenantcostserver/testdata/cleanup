@@ -1,0 +1,132 @@
+create-tenant tenant=5
+----
+
+
+# First, establish a few instances.
+token-bucket-request tenant=5
+instance_id: 7
+----
+
+token-bucket-request tenant=5
+instance_id: 3
+----
+
+token-bucket-request tenant=5
+instance_id: 5
+----
+
+token-bucket-request tenant=5
+instance_id: 9
+----
+
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:00:00.000
+First active instance: 3
+  Instance 3:  lease="foo"  seq=2  shares=0.0  next-instance=5  last-update=00:00:00.000
+  Instance 5:  lease="foo"  seq=3  shares=0.0  next-instance=7  last-update=00:00:00.000
+  Instance 7:  lease="foo"  seq=1  shares=0.0  next-instance=9  last-update=00:00:00.000
+  Instance 9:  lease="foo"  seq=4  shares=0.0  next-instance=0  last-update=00:00:00.000
+
+create-tenant tenant=13
+----
+
+token-bucket-request tenant=13
+instance_id: 2
+----
+
+token-bucket-request tenant=13
+instance_id: 8
+----
+
+token-bucket-request tenant=13
+instance_id: 3
+----
+
+inspect tenant=13
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:00:00.000
+First active instance: 2
+  Instance 2:  lease="foo"  seq=5  shares=0.0  next-instance=3  last-update=00:00:00.000
+  Instance 3:  lease="foo"  seq=7  shares=0.0  next-instance=8  last-update=00:00:00.000
+  Instance 8:  lease="foo"  seq=6  shares=0.0  next-instance=0  last-update=00:00:00.000
+
+# Set up another tenant to verify that the cleanup of one tenant does not
+# affect another tenant.
+
+# Advance the time so that all instances look stale; this will allow us to
+# verify that only the expected ranges get cleaned up.
+advance
+5m
+----
+00:05:00.000
+
+# Pretend that instance 7 died.
+token-bucket-request tenant=5
+instance_id: 5
+next_live_instance_id: 9
+----
+
+wait-inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10030000  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:05:00.000
+First active instance: 3
+  Instance 3:  lease="foo"  seq=2  shares=0.0  next-instance=5  last-update=00:00:00.000
+  Instance 5:  lease="foo"  seq=8  shares=0.0  next-instance=9  last-update=00:05:00.000
+  Instance 9:  lease="foo"  seq=4  shares=0.0  next-instance=0  last-update=00:00:00.000
+
+advance
+5m
+----
+00:10:00.000
+
+# Pretend that the last instance died, while we are creating a new instance 8.
+token-bucket-request tenant=5
+instance_id: 8
+next_live_instance_id: 3
+----
+
+wait-inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10060000  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:10:00.000
+First active instance: 3
+  Instance 3:  lease="foo"  seq=2  shares=0.0  next-instance=5  last-update=00:00:00.000
+  Instance 5:  lease="foo"  seq=8  shares=0.0  next-instance=8  last-update=00:05:00.000
+  Instance 8:  lease="foo"  seq=9  shares=0.0  next-instance=0  last-update=00:10:00.000
+
+advance
+5m
+----
+00:15:00.000
+
+# Pretend that instances 3 and 8 both died.
+token-bucket-request tenant=5
+instance_id: 5
+next_live_instance_id: 5
+----
+
+wait-inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10090000  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:15:00.000
+First active instance: 5
+  Instance 5:  lease="foo"  seq=10  shares=0.0  next-instance=0  last-update=00:15:00.000
+
+inspect tenant=13
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Last update: 00:00:00.000
+First active instance: 2
+  Instance 2:  lease="foo"  seq=5  shares=0.0  next-instance=3  last-update=00:00:00.000
+  Instance 3:  lease="foo"  seq=7  shares=0.0  next-instance=8  last-update=00:00:00.000
+  Instance 8:  lease="foo"  seq=6  shares=0.0  next-instance=0  last-update=00:00:00.000
