@@ -52,10 +52,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	ptypes "github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go/ext"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -1043,6 +1045,31 @@ func (n *Node) Batch(
 			)
 		}
 		br.Error = roachpb.NewError(err)
+	}
+	if tenantID != roachpb.SystemTenantID {
+		// For tenants, strip the verbose log messages. See:
+		// https://github.com/cockroachdb/cockroach/issues/70407
+		for i := range br.CollectedSpans {
+			// Guard against a new sensitive field being added to RecordedSpan.
+			type calcifiedRecordedSpan struct {
+				TraceID                      uint64
+				SpanID                       uint64
+				ParentSpanID                 uint64
+				Operation                    string
+				Baggage                      map[string]string
+				Tags                         map[string]string
+				StartTime                    time.Time
+				Duration                     time.Duration
+				Logs                         []tracingpb.LogRecord
+				DeprecatedInternalStructured []*ptypes.Any
+				GoroutineID                  uint64
+				Finished                     bool
+				StructuredRecords            []tracingpb.StructuredRecord
+			}
+			sp := (*calcifiedRecordedSpan)(&br.CollectedSpans[i])
+			sp.Tags = nil
+			sp.Logs = nil
+		}
 	}
 	return br, nil
 }
