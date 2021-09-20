@@ -1372,7 +1372,8 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 					ForceProductionBatchSizes:       serverArgs.forceProductionBatchSizes,
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DeterministicExplain: true,
+					DeterministicExplain:          true,
+					AllowDeclarativeSchemaChanger: true,
 				},
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					AOSTClause: "AS OF SYSTEM TIME '-1us'",
@@ -1482,7 +1483,8 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				AllowSettingClusterSettings: true,
 				TestingKnobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
-						DeterministicExplain: true,
+						DeterministicExplain:          true,
+						AllowDeclarativeSchemaChanger: true,
 					},
 					SQLStatsKnobs: &sqlstats.TestingKnobs{
 						AOSTClause: "AS OF SYSTEM TIME '-1us'",

@@ -543,7 +543,7 @@ func restoreWithRetry(
 			break
 		}
 
-		if !utilccl.IsDistSQLRetryableError(err) {
+		if utilccl.IsPermanentBulkJobError(err) {
 			return RowCount{}, err
 		}
 

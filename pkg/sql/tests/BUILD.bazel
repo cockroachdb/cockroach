@@ -29,6 +29,7 @@ go_test(
     size = "large",
     srcs = [
         "bank_test.go",
+        "declarative_schema_changer_knob_test.go",
         "enum_test.go",
         "hash_sharded_test.go",
         "impure_builtin_test.go",

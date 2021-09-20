@@ -79,7 +79,7 @@ func (s *instance) TokenBucketRequest(
 			return err
 		}
 
-		if err := h.maybeCheckInvariants(); err != nil {
+		if err := h.maybeCheckInvariants(ctx); err != nil {
 			panic(err)
 		}
 		consumption = tenant.Consumption

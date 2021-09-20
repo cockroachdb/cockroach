@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -113,13 +114,14 @@ func getLastImportSummary(job *jobs.Job) roachpb.BulkOpSummary {
 func makeImportReaderSpecs(
 	job *jobs.Job,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	typeDescs []*descpb.TypeDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
 	nodes []roachpb.NodeID,
 	walltime int64,
 	user security.SQLUsername,
 ) []*execinfrapb.ReadImportDataSpec {
-
+	details := job.Details().(jobspb.ImportDetails)
 	// For each input file, assign it to a node.
 	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, len(nodes))
 	progress := job.Progress()
@@ -130,15 +132,17 @@ func makeImportReaderSpecs(
 		if i < len(nodes) {
 			spec := &execinfrapb.ReadImportDataSpec{
 				Tables: tables,
+				Types:  typeDescs,
 				Format: format,
 				Progress: execinfrapb.JobProgress{
 					JobID: job.ID(),
 					Slot:  int32(i),
 				},
-				WalltimeNanos: walltime,
-				Uri:           make(map[int32]string),
-				ResumePos:     make(map[int32]int64),
-				UserProto:     user.EncodeProto(),
+				WalltimeNanos:         walltime,
+				Uri:                   make(map[int32]string),
+				ResumePos:             make(map[int32]int64),
+				UserProto:             user.EncodeProto(),
+				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
@@ -195,6 +199,7 @@ func DistIngest(
 	execCtx JobExecContext,
 	job *jobs.Job,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	typeDescs []*descpb.TypeDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -221,7 +226,8 @@ func DistIngest(
 	accumulatedBulkSummary.BulkOpSummary = getLastImportSummary(job)
 	accumulatedBulkSummary.Unlock()
 
-	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime, execCtx.User())
+	inputSpecs := makeImportReaderSpecs(job, tables, typeDescs, from, format, nodes, walltime,
+		execCtx.User())
 
 	p := planCtx.NewPhysicalPlan()
 
