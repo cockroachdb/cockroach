@@ -215,6 +215,8 @@
 /pkg/multitenant             @cockroachdb/unowned
 /pkg/release/                @cockroachdb/dev-inf
 /pkg/roachpb/                @cockroachdb/kv-prs
+/pkg/roachpb/app*            @cockroachdb/sql-observability
+/pkg/roachpb/index*          @cockroachdb/sql-observability
 /pkg/rpc/                    @cockroachdb/server-prs
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
 /pkg/security/               @cockroachdb/server-prs
