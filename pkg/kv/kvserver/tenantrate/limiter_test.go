@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -46,8 +47,8 @@ func TestCloser(t *testing.T) {
 	})
 	tenant := roachpb.MakeTenantID(2)
 	closer := make(chan struct{})
-	limiter := factory.GetTenant(tenant, closer)
 	ctx := context.Background()
+	limiter := factory.GetTenant(ctx, tenant, closer)
 	// First Wait call will not block.
 	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(true, 1)))
 	errCh := make(chan error, 1)
@@ -436,10 +437,11 @@ func timesToStrings(times []time.Time) []string {
 //  [2#2, 3#1]
 //
 func (ts *testState) getTenants(t *testing.T, d *datadriven.TestData) string {
+	ctx := context.Background()
 	tenantIDs := parseTenantIDs(t, d)
 	for i := range tenantIDs {
 		id := roachpb.MakeTenantID(tenantIDs[i])
-		ts.tenants[id] = append(ts.tenants[id], ts.rl.GetTenant(id, nil /* closer */))
+		ts.tenants[id] = append(ts.tenants[id], ts.rl.GetTenant(ctx, id, nil /* closer */))
 	}
 	return ts.FormatTenants()
 }
@@ -509,6 +511,12 @@ func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 
 	sustained := calculateIOPS(config.Rate)
 	burst := calculateIOPS(config.Burst)
+
+	// By default, the rate scales with GOMAXPROCS.
+	numProcs := float64(runtime.GOMAXPROCS(0))
+	sustained /= numProcs
+	burst /= numProcs
+
 	fmtFloat := func(val float64) string {
 		if val < 10 {
 			return fmt.Sprintf("%.1f", val)
@@ -518,17 +526,17 @@ func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 	switch workload.ReadPercentage {
 	case 0:
 		return fmt.Sprintf(
-			"Write-only workload (%s writes): %s sustained IOPS, %s burst.",
+			"Write-only workload (%s writes): %s sustained IOPS/CPU, %s burst.",
 			humanize.IBytes(uint64(workload.WriteSize)), fmtFloat(sustained), fmtFloat(burst),
 		)
 	case 100:
 		return fmt.Sprintf(
-			"Read-only workload (%s reads): %s sustained IOPS, %s burst.",
+			"Read-only workload (%s reads): %s sustained IOPS/CPU, %s burst.",
 			humanize.IBytes(uint64(workload.ReadSize)), fmtFloat(sustained), fmtFloat(burst),
 		)
 	default:
 		return fmt.Sprintf(
-			"Mixed workload (%d%% reads; %s reads; %s writes): %s sustained IOPS, %s burst.",
+			"Mixed workload (%d%% reads; %s reads; %s writes): %s sustained IOPS/CPU, %s burst.",
 			workload.ReadPercentage,
 			humanize.IBytes(uint64(workload.ReadSize)), humanize.IBytes(uint64(workload.WriteSize)),
 			fmtFloat(sustained), fmtFloat(burst),
