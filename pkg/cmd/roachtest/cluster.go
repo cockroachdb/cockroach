@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"encoding/json"
@@ -1171,19 +1172,65 @@ func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
 //
 // `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
 func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t test.Test) error {
-	return contextutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
-		var err error
-		for i := 1; i <= c.spec.NodeCount; i++ {
-			err = c.RunE(ctx, c.Node(i), "./cockroach debug tsdump --insecure --format=raw > tsdump.gob")
+	return contextutil.RunWithTimeout(ctx, "fetch tsdata", 5*time.Minute, func(ctx context.Context) error {
+		node := 1
+		for ; node <= c.spec.NodeCount; node++ {
+			db, err := c.ConnE(ctx, node)
 			if err == nil {
-				err = c.Get(ctx, c.l, "tsdump.gob", filepath.Join(c.t.ArtifactsDir(), "tsdump.gob"), c.Node(i))
+				err = db.Ping()
+				db.Close()
 			}
-			if err == nil {
-				return nil
+			if err != nil {
+				t.L().Printf("node %d not responding to SQL, trying next one", node)
+				continue
 			}
-			t.L().Printf("while fetching timeseries: %s", err)
+			break
 		}
-		return err
+		if node > c.spec.NodeCount {
+			return errors.New("no node responds to SQL, cannot fetch tsdata")
+		}
+		if err := c.RunE(
+			ctx, c.Node(node), "./cockroach debug tsdump --insecure --format=raw > tsdump.gob",
+		); err != nil {
+			return err
+		}
+		tsDumpGob := filepath.Join(c.t.ArtifactsDir(), "tsdump.gob")
+		if err := c.Get(
+			ctx, c.l, "tsdump.gob", tsDumpGob, c.Node(node),
+		); err != nil {
+			return err
+		}
+		db, err := c.ConnE(ctx, node)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		rows, err := db.QueryContext(
+			ctx,
+			` SELECT store_id, node_id FROM crdb_internal.kv_store_status`,
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		var buf bytes.Buffer
+		for rows.Next() {
+			var storeID, nodeID int
+			if err := rows.Scan(&storeID, &nodeID); err != nil {
+				return err
+			}
+			fmt.Fprintf(&buf, "%d: %d\n", storeID, nodeID)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if err := ioutil.WriteFile(tsDumpGob+".yaml", buf.Bytes(), 0644); err != nil {
+			return err
+		}
+		return ioutil.WriteFile(tsDumpGob+"-run.sh", []byte(`#!/usr/bin/env bash
+
+COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure
+`), 0755)
 	})
 }
 
