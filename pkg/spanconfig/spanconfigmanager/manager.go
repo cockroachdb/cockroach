@@ -154,12 +154,9 @@ func (m *Manager) run(ctx context.Context) {
 		timer.Reset(checkReconciliationJobInterval.Get(&m.settings.SV))
 		select {
 		case <-jobCheckCh:
-			timer.Read = true
-
 			checkJob()
 		case <-timer.C:
 			timer.Read = true
-
 			checkJob()
 		case <-m.stopper.ShouldQuiesce():
 			return
