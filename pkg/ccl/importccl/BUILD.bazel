@@ -7,6 +7,7 @@ go_library(
         "import_processor.go",
         "import_stmt.go",
         "import_table_creation.go",
+        "import_type_resolver.go",
         "read_import_avro.go",
         "read_import_base.go",
         "read_import_csv.go",
