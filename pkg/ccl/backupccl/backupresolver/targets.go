@@ -41,7 +41,7 @@ type DescriptorsMatched struct {
 	RequestedDBs []catalog.DatabaseDescriptor
 }
 
-// Custom error type for Missing Table when resolver.ResolveExisting() is called in DescriptorsMatchingTargets
+// MissingTableErr is a custom error type for Missing Table when resolver.ResolveExisting() is called in DescriptorsMatchingTargets
 type MissingTableErr struct {
 	Inner error
 	TableName string
