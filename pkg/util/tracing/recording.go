@@ -23,8 +23,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 	jaegerjson "github.com/jaegertracing/jaeger/model/json"
-	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -43,7 +41,7 @@ const (
 )
 
 type traceLogData struct {
-	opentracing.LogRecord
+	logRecord
 	depth int
 	// timeSincePrev represents the duration since the previous log line (previous in the
 	// set of log lines that this is part of). This is always computed relative to a log line
@@ -55,6 +53,11 @@ type traceLogData struct {
 	//   log 2  			 // duration relative to "start Span B"
 	// log 3  				 // duration relative to "log 1"
 	timeSincePrev time.Duration
+}
+
+type logRecord struct {
+	Timestamp time.Time
+	Msg       string
 }
 
 // String formats the given spans for human consumption, showing the
@@ -87,12 +90,7 @@ func (r Recording) String() string {
 				1000*entry.Timestamp.Sub(start).Seconds(),
 				1000*entry.timeSincePrev.Seconds(),
 				strings.Repeat("    ", entry.depth+1))
-			for i, f := range entry.Fields {
-				if i != 0 {
-					buf.WriteByte(' ')
-				}
-				fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
-			}
+			fmt.Fprint(&buf, entry.Msg)
 			buf.WriteByte('\n')
 		}
 	}
@@ -170,48 +168,47 @@ func (r Recording) FindSpan(operation string) (tracingpb.RecordedSpan, bool) {
 func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogData {
 	ownLogs := make([]traceLogData, 0, len(sp.Logs)+1)
 
-	conv := func(l opentracing.LogRecord, ref time.Time) traceLogData {
+	conv := func(msg string, timestamp time.Time, ref time.Time) traceLogData {
 		var timeSincePrev time.Duration
 		if ref != (time.Time{}) {
-			timeSincePrev = l.Timestamp.Sub(ref)
+			timeSincePrev = timestamp.Sub(ref)
 		}
 		return traceLogData{
-			LogRecord:     l,
+			logRecord: logRecord{
+				Timestamp: timestamp,
+				Msg:       msg,
+			},
 			depth:         depth,
 			timeSincePrev: timeSincePrev,
 		}
 	}
 
 	// Add a log line representing the start of the Span.
-	lr := opentracing.LogRecord{
-		Timestamp: sp.StartTime,
-		Fields:    []otlog.Field{otlog.String("=== operation", sp.Operation)},
+	var sb strings.Builder
+	sb.WriteString("=== operation:")
+	sb.WriteString(sp.Operation)
+
+	tags := make([]string, 0, len(sp.Tags))
+	for k := range sp.Tags {
+		tags = append(tags, k)
 	}
-	if len(sp.Tags) > 0 {
-		tags := make([]string, 0, len(sp.Tags))
-		for k := range sp.Tags {
-			tags = append(tags, k)
-		}
-		sort.Strings(tags)
-		for _, k := range tags {
-			lr.Fields = append(lr.Fields, otlog.String(k, sp.Tags[k]))
-		}
+	sort.Strings(tags)
+
+	for _, k := range tags {
+		sb.WriteRune(' ')
+		sb.WriteString(k)
+		sb.WriteRune(':')
+		sb.WriteString(sp.Tags[k])
 	}
 	ownLogs = append(ownLogs, conv(
-		lr,
+		sb.String(),
+		sp.StartTime,
 		// ref - this entries timeSincePrev will be computed when we merge it into the parent
 		time.Time{}))
 
 	for _, l := range sp.Logs {
-		lr := opentracing.LogRecord{
-			Timestamp: l.Time,
-			Fields:    make([]otlog.Field, len(l.Fields)),
-		}
-		for i, f := range l.Fields {
-			lr.Fields[i] = otlog.String(f.Key, f.Value)
-		}
 		lastLog := ownLogs[len(ownLogs)-1]
-		ownLogs = append(ownLogs, conv(lr, lastLog.Timestamp))
+		ownLogs = append(ownLogs, conv("event:"+l.Msg(), l.Time, lastLog.Timestamp))
 	}
 
 	// If the span was verbose then the Structured events would have been
@@ -219,16 +216,12 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 	// we should add the Structured events now.
 	if !isVerbose(sp) {
 		sp.Structured(func(sr *types.Any, t time.Time) {
-			lr := opentracing.LogRecord{
-				Timestamp: t,
-			}
 			str, err := MessageToJSONString(sr, true /* emitDefaults */)
 			if err != nil {
 				return
 			}
-			lr.Fields = append(lr.Fields, otlog.String("structured", str))
 			lastLog := ownLogs[len(ownLogs)-1]
-			ownLogs = append(ownLogs, conv(lr, lastLog.Timestamp))
+			ownLogs = append(ownLogs, conv("structured:"+str, t, lastLog.Timestamp))
 		})
 	}
 
