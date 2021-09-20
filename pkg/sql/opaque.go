@@ -47,7 +47,7 @@ func buildOpaque(
 	scalarProps.Require(stmt.StatementTag(), tree.RejectSubqueries)
 
 	var plan planNode
-	if tree.CanModifySchema(stmt) {
+	if tree.CanModifySchema(stmt) && p.execCfg.TestingKnobs.AllowDeclarativeSchemaChanger {
 		scPlan, usePlan, err := p.SchemaChange(ctx, stmt)
 		if err != nil {
 			return nil, err
