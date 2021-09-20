@@ -13,7 +13,6 @@ package tree
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -673,7 +672,7 @@ type AlterTableOwner struct {
 	Name *UnresolvedObjectName
 	// TODO(solon): Adjust this, see
 	// https://github.com/cockroachdb/cockroach/issues/54696
-	Owner          security.SQLUsername
+	Owner          RoleSpec
 	IfExists       bool
 	IsView         bool
 	IsMaterialized bool
@@ -707,7 +706,7 @@ func (node *AlterTableOwner) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(node.Name)
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatUsername(node.Owner)
+	ctx.FormatRoleSpec(node.Owner)
 }
 
 // GetTableType returns a string representing the type of table the command

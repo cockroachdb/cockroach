@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1575,7 +1574,7 @@ type CreateSchema struct {
 	IfNotExists bool
 	// TODO(solon): Adjust this, see
 	// https://github.com/cockroachdb/cockroach/issues/54696
-	AuthRole security.SQLUsername
+	AuthRole RoleSpec
 	Schema   ObjectNamePrefix
 }
 
@@ -1594,7 +1593,7 @@ func (node *CreateSchema) Format(ctx *FmtCtx) {
 
 	if !node.AuthRole.Undefined() {
 		ctx.WriteString(" AUTHORIZATION ")
-		ctx.FormatUsername(node.AuthRole)
+		ctx.FormatRoleSpec(node.AuthRole)
 	}
 }
 

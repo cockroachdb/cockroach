@@ -385,6 +385,23 @@ func (ctx *FmtCtx) FormatUsername(s security.SQLUsername) {
 	ctx.FormatName(s.Normalized())
 }
 
+// FormatRoleSpec formats a role specification safely.
+func (ctx *FmtCtx) FormatRoleSpec(spec RoleSpec) {
+	switch spec.RoleSpecType {
+	case RoleName:
+		ctx.FormatName(spec.Name)
+		return
+	case CurrentUser:
+		ctx.WriteString("CURRENT_USER")
+		return
+	case SessionUser:
+		ctx.WriteString("SESSION_USER")
+		return
+	default:
+		panic(errors.AssertionFailedf("unknown RoleSpecType %v", spec.RoleSpecType))
+	}
+}
+
 //FormatUsernameN formats a username that is type Name
 func (ctx *FmtCtx) FormatUsernameN(s Name) {
 	ctx.FormatName(s.Normalize())

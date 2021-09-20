@@ -10,8 +10,6 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/security"
-
 // AlterSchema represents an ALTER SCHEMA statement.
 type AlterSchema struct {
 	Schema ObjectNamePrefix
@@ -52,11 +50,11 @@ func (*AlterSchemaOwner) alterSchemaCmd() {}
 type AlterSchemaOwner struct {
 	// TODO(solon): Adjust this, see
 	// https://github.com/cockroachdb/cockroach/issues/54696
-	Owner security.SQLUsername
+	Owner RoleSpec
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterSchemaOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatUsername(node.Owner)
+	ctx.FormatRoleSpec(node.Owner)
 }

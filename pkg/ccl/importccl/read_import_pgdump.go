@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -241,14 +242,14 @@ func createPostgresSchemas(
 	parentID descpb.ID,
 	schemasToCreate map[string]*tree.CreateSchema,
 	execCfg *sql.ExecutorConfig,
-	user security.SQLUsername,
+	sessionData *sessiondata.SessionData,
 ) ([]*schemadesc.Mutable, error) {
 	createSchema := func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		dbDesc catalog.DatabaseDescriptor, schema *tree.CreateSchema,
 	) (*schemadesc.Mutable, error) {
 		desc, _, err := sql.CreateUserDefinedSchemaDescriptor(
-			ctx, user, schema, txn, descriptors, execCfg, dbDesc, false, /* allocateID */
+			ctx, sessionData, schema, txn, descriptors, execCfg, dbDesc, false, /* allocateID */
 		)
 		if err != nil {
 			return nil, err
@@ -494,7 +495,7 @@ func readPostgresCreateTable(
 	tables := make([]*tabledesc.Mutable, 0, len(schemaObjects.createTbl))
 	schemaNameToDesc := make(map[string]*schemadesc.Mutable)
 	schemaDescs, err := createPostgresSchemas(ctx, parentDB.GetID(), schemaObjects.createSchema,
-		p.ExecCfg(), p.User())
+		p.ExecCfg(), p.SessionData())
 	if err != nil {
 		return nil, nil, err
 	}
