@@ -124,7 +124,6 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.1
 	github.com/opennota/wd v0.0.0-20180911144301-b446539ab1e7 // indirect
-	github.com/opentracing/opentracing-go v1.2.0
 	github.com/peterbourgon/g2s v0.0.0-20170223122336-d4e7ad98afea // indirect
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5
 	github.com/pierrre/geohash v1.0.0
