@@ -73,15 +73,15 @@ ALTER TYPE _ OWNER TO _ -- identifiers removed
 parse
 ALTER TYPE t OWNER TO CURRENT_USER
 ----
-ALTER TYPE t OWNER TO "current_user" -- normalized!
-ALTER TYPE t OWNER TO "current_user" -- fully parenthesized
-ALTER TYPE t OWNER TO "current_user" -- literals removed
+ALTER TYPE t OWNER TO CURRENT_USER
+ALTER TYPE t OWNER TO CURRENT_USER -- fully parenthesized
+ALTER TYPE t OWNER TO CURRENT_USER -- literals removed
 ALTER TYPE _ OWNER TO _ -- identifiers removed
 
 parse
 ALTER TYPE t OWNER TO SESSION_USER
 ----
-ALTER TYPE t OWNER TO "session_user" -- normalized!
-ALTER TYPE t OWNER TO "session_user" -- fully parenthesized
-ALTER TYPE t OWNER TO "session_user" -- literals removed
+ALTER TYPE t OWNER TO SESSION_USER
+ALTER TYPE t OWNER TO SESSION_USER -- fully parenthesized
+ALTER TYPE t OWNER TO SESSION_USER -- literals removed
 ALTER TYPE _ OWNER TO _ -- identifiers removed

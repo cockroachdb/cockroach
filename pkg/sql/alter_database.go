@@ -64,7 +64,10 @@ func (p *planner) AlterDatabaseOwner(
 }
 
 func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
-	newOwner := n.n.Owner
+	newOwner, err := n.n.Owner.ToSQLUsername(params.p.SessionData())
+	if err != nil {
+		return err
+	}
 	oldOwner := n.desc.GetPrivileges().Owner()
 
 	if err := params.p.checkCanAlterToNewOwner(params.ctx, n.desc, newOwner); err != nil {

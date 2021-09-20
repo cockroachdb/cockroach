@@ -57,21 +57,13 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 		return nil, err
 	}
 
-	inputRoles := make([]security.SQLUsername, len(n.Roles))
-	inputMembers := make([]security.SQLUsername, len(n.Members))
-	for i, role := range n.Roles {
-		normalizedRole, err := security.MakeSQLUsernameFromUserInput(string(role), security.UsernameValidation)
-		if err != nil {
-			return nil, err
-		}
-		inputRoles[i] = normalizedRole
+	inputRoles, err := n.Roles.ToSQLUsernames()
+	if err != nil {
+		return nil, err
 	}
-	for i, member := range n.Members {
-		normalizedMember, err := security.MakeSQLUsernameFromUserInput(string(member), security.UsernameValidation)
-		if err != nil {
-			return nil, err
-		}
-		inputMembers[i] = normalizedMember
+	inputMembers, err := n.Members.ToSQLUsernames(p.SessionData())
+	if err != nil {
+		return nil, err
 	}
 
 	for _, r := range inputRoles {
