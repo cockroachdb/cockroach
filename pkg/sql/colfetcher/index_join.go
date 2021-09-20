@@ -174,7 +174,6 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				false, /* limitBatches */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
-				s.flowCtx.TraceKV,
 				s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 			); err != nil {
 				colexecerror.InternalError(err)
