@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "comparetest",
+    srcs = [
+        "schema.go",
+        "tests.go",
+        ":gen-testattr-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel/internal/comparetest",
+    visibility = ["//pkg/sql/schemachanger/rel:__subpackages__"],
+    deps = [
+        "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/rel/reltest",
+    ],
+)
+
+stringer(
+    name = "gen-testattr-stringer",
+    src = "schema.go",
+    typ = "testAttr",
+)
