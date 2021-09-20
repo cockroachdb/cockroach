@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -228,7 +229,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	ctx = logtags.AddTag(ctx, "cluster", clusterName)
 	ctx = logtags.AddTag(ctx, "tenant", tenID)
 
-	ipAddr, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	// Use an empty string as the default port as we only care about the
+	// correctly parsing the IP address here.
+	ipAddr, _, err := addr.SplitHostPort(conn.RemoteAddr().String(), "")
 	if err != nil {
 		clientErr := newErrorf(codeParamsRoutingFailed, "unexpected connection address")
 		log.Errorf(ctx, "could not parse address: %v", err.Error())
@@ -262,11 +265,6 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		err = newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
 		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
 		return err
-	}
-
-	var TLSConf *tls.Config
-	if !handler.Insecure {
-		TLSConf = &tls.Config{InsecureSkipVerify: handler.SkipVerify}
 	}
 
 	var crdbConn net.Conn
@@ -314,8 +312,37 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 			break
 		}
 
+		// NB: TLS options for the proxy are split into Insecure and
+		// SkipVerify. In insecure mode, tlsConf is expected to be nil. This
+		// will cause BackendDial to skip TLS entirely. If SkipVerify is true,
+		// tlsConf will be set to a non-nil config with InsecureSkipVerify set
+		// to true. InsecureSkipVerify will provide an encrypted connection but
+		// not verify that the connection recipient is a trusted party.
+		var tlsConf *tls.Config
+		if !handler.Insecure {
+			// Use an empty string as the default port as we only care about the
+			// correctly parsing the outgoingHost/IP here.
+			outgoingHost, _, err := addr.SplitHostPort(outgoingAddress, "")
+			if err != nil {
+				log.Errorf(ctx, "could not split outgoing address '%s' into host and port: %v", outgoingAddress, err.Error())
+				// Remap error for external consumption.
+				clientErr := newErrorf(
+					codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
+				updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
+				return clientErr
+			}
+
+			tlsConf = &tls.Config{
+				// Always set ServerName, if SkipVerify is true, it will be
+				// ignored. When SkipVerify is false, it is required to
+				// establish a TLS connection.
+				ServerName:         outgoingHost,
+				InsecureSkipVerify: handler.SkipVerify,
+			}
+		}
+
 		// Now actually dial the backend server.
-		crdbConn, err = BackendDial(backendStartupMsg, outgoingAddress, TLSConf)
+		crdbConn, err = BackendDial(backendStartupMsg, outgoingAddress, tlsConf)
 
 		// If we get a backend down error, retry the connection.
 		var codeErr *codeError
