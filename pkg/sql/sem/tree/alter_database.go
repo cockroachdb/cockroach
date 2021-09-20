@@ -10,14 +10,10 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/security"
-
 // AlterDatabaseOwner represents a ALTER DATABASE OWNER TO statement.
 type AlterDatabaseOwner struct {
-	Name Name
-	// TODO(solon): Adjust this, see
-	// https://github.com/cockroachdb/cockroach/issues/54696
-	Owner security.SQLUsername
+	Name  Name
+	Owner RoleSpec
 }
 
 // Format implements the NodeFormatter interface.
@@ -25,7 +21,7 @@ func (node *AlterDatabaseOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatUsername(node.Owner)
+	ctx.FormatNode(&node.Owner)
 }
 
 // AlterDatabaseAddRegion represents a ALTER DATABASE ADD REGION statement.
