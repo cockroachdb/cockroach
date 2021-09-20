@@ -11,6 +11,7 @@ package backupresolver
 import (
 	"context"
 	"sort"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -38,6 +39,19 @@ type DescriptorsMatched struct {
 
 	// Explicitly requested DBs (e.g. DATABASE a).
 	RequestedDBs []catalog.DatabaseDescriptor
+}
+
+type MissingTableErr struct {
+	Inner error
+	TableName string
+}
+
+func (e *MissingTableErr) Error() (string) {
+	return fmt.Sprintf("table %q does not exist: %v", e.TableName, e.Inner.Error())
+}
+
+func (e *MissingTableErr) Unwrap() (error) {
+	return e.Inner
 }
 
 // CheckExpansions determines if matched targets are covered by the specified
@@ -397,7 +411,7 @@ func DescriptorsMatchingTargets(
 				if asOf.IsEmpty() {
 					return ret, doesNotExistErr
 				}
-				return ret, errors.Wrapf(invalidRestoreTsErr, `table %q does not exist, or invalid RESTORE timestamp`, tree.ErrString(p))
+				return ret, &MissingTableErr{invalidRestoreTsErr, tree.ErrString(p)}
 			}
 			tableDesc, isTable := descI.(catalog.TableDescriptor)
 			// If the type assertion didn't work, then we resolved a type instead, so

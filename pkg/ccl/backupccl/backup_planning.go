@@ -916,6 +916,12 @@ func backupPlanHook(
 			var err error
 			targetDescs, completeDBs, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 			if err != nil {
+				var m *backupresolver.MissingTableErr
+				if errors.As(err, &m) {
+					tableName := m.TableName
+					err = errors.Unwrap(err)
+					err = errors.Wrapf(err, "table %q does not exist, or invalid RESTORE timestamp", tableName)
+				}
 				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 			}
 		case tree.AllDescriptors:
