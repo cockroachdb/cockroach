@@ -18,6 +18,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -218,12 +219,12 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 	snap := r.store.engine.NewSnapshot()
 	if cc.Checkpoint {
 		sl := stateloader.Make(r.RangeID)
-		as, err := sl.LoadRangeAppliedState(ctx, snap)
+		rai, _, err := sl.LoadAppliedIndex(ctx, snap)
 		if err != nil {
 			log.Warningf(ctx, "unable to load applied index, continuing anyway")
 		}
 		// NB: the names here will match on all nodes, which is nice for debugging.
-		tag := fmt.Sprintf("r%d_at_%d", r.RangeID, as.RaftAppliedIndex)
+		tag := fmt.Sprintf("r%d_at_%d", r.RangeID, rai)
 		if dir, err := r.store.checkpoint(ctx, tag); err != nil {
 			log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
 		} else {
@@ -861,6 +862,41 @@ func (r *Replica) evaluateProposal(
 		// This is the result of a migration. See the field for more details.
 		if res.Replicated.Delta.ContainsEstimates > 0 {
 			res.Replicated.Delta.ContainsEstimates *= 2
+		}
+
+		// If the RangeAppliedState key is not being used and the cluster version is
+		// high enough to guarantee that all current and future binaries will
+		// understand the key, we send the migration flag through Raft. Because
+		// there is a delay between command proposal and application, we may end up
+		// setting this migration flag multiple times. This is ok, because the
+		// migration is idempotent.
+		// TODO(nvanbenschoten): This will be baked in to 2.1, so it can be removed
+		// in the 2.2 release.
+		r.mu.RLock()
+		usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
+		r.mu.RUnlock()
+		if !usingAppliedStateKey {
+			// The range applied state was originally introduced in v2.1, and in
+			// v21.1 we guarantee that it's used for all ranges, which we assert
+			// on below. If we're not running 21.1 yet, migrate over as we've
+			// done since the introduction of the applied state key.
+			activeVersion := r.ClusterSettings().Version.ActiveVersion(ctx).Version
+			migrationVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
+			if migrationVersion.Less(activeVersion) {
+				log.Fatal(ctx, "not using applied state key in v21.1")
+			}
+			// The range applied state was introduced in v2.1. It's possible to
+			// still find ranges that haven't activated it. If so, activate it.
+			// We can remove this code if we introduce a boot-time check that
+			// fails the startup process when any legacy replicas are found. The
+			// operator can then run the old binary for a while to upgrade the
+			// stragglers.
+			//
+			// TODO(irfansharif): Is this still applicable?
+			if res.Replicated.State == nil {
+				res.Replicated.State = &kvserverpb.ReplicaState{}
+			}
+			res.Replicated.State.UsingAppliedStateKey = true
 		}
 	}
 

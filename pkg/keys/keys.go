@@ -230,8 +230,32 @@ func DecodeAbortSpanKey(key roachpb.Key, dest []byte) (uuid.UUID, error) {
 }
 
 // RangeAppliedStateKey returns a system-local key for the range applied state key.
+// This key has subsumed the responsibility of the following three keys:
+// - RaftAppliedIndexLegacyKey
+// - LeaseAppliedIndexLegacyKey
+// - RangeStatsLegacyKey
 func RangeAppliedStateKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeAppliedStateKey()
+}
+
+// RaftAppliedIndexLegacyKey returns a system-local key for a raft applied index.
+// The key is no longer written to. Its responsibility has been subsumed by the
+// RangeAppliedStateKey.
+func RaftAppliedIndexLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RaftAppliedIndexLegacyKey()
+}
+
+// LeaseAppliedIndexLegacyKey returns a system-local key for a lease applied index.
+// The key is no longer written to. Its responsibility has been subsumed by the
+// RangeAppliedStateKey.
+func LeaseAppliedIndexLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).LeaseAppliedIndexLegacyKey()
+}
+
+// RaftTruncatedStateLegacyKey returns a system-local key for a RaftTruncatedState.
+// See VersionUnreplicatedRaftTruncatedState.
+func RaftTruncatedStateLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RaftTruncatedStateLegacyKey()
 }
 
 // RangeLeaseKey returns a system-local key for a range lease.
@@ -243,6 +267,13 @@ func RangeLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
 // summary.
 func RangePriorReadSummaryKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangePriorReadSummaryKey()
+}
+
+// RangeStatsLegacyKey returns the key for accessing the MVCCStats struct for
+// the specified Range ID. The key is no longer written to. Its responsibility
+// has been subsumed by the RangeAppliedStateKey.
+func RangeStatsLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeStatsLegacyKey()
 }
 
 // RangeGCThresholdKey returns a system-local key for last used GC threshold on the
@@ -912,6 +943,23 @@ func (b RangeIDPrefixBuf) RangeAppliedStateKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeAppliedStateSuffix...)
 }
 
+// RaftAppliedIndexLegacyKey returns a system-local key for a raft applied index.
+// See comment on RaftAppliedIndexLegacyKey function.
+func (b RangeIDPrefixBuf) RaftAppliedIndexLegacyKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRaftAppliedIndexLegacySuffix...)
+}
+
+// LeaseAppliedIndexLegacyKey returns a system-local key for a lease applied index.
+// See comment on LeaseAppliedIndexLegacyKey function.
+func (b RangeIDPrefixBuf) LeaseAppliedIndexLegacyKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalLeaseAppliedIndexLegacySuffix...)
+}
+
+// RaftTruncatedStateLegacyKey returns a system-local key for a RaftTruncatedState.
+func (b RangeIDPrefixBuf) RaftTruncatedStateLegacyKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRaftTruncatedStateLegacySuffix...)
+}
+
 // RangeLeaseKey returns a system-local key for a range lease.
 func (b RangeIDPrefixBuf) RangeLeaseKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeLeaseSuffix...)
@@ -921,6 +969,13 @@ func (b RangeIDPrefixBuf) RangeLeaseKey() roachpb.Key {
 // summary.
 func (b RangeIDPrefixBuf) RangePriorReadSummaryKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangePriorReadSummarySuffix...)
+}
+
+// RangeStatsLegacyKey returns the key for accessing the MVCCStats struct
+// for the specified Range ID.
+// See comment on RangeStatsLegacyKey function.
+func (b RangeIDPrefixBuf) RangeStatsLegacyKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRangeStatsLegacySuffix...)
 }
 
 // RangeGCThresholdKey returns a system-local key for the GC threshold.
@@ -940,7 +995,7 @@ func (b RangeIDPrefixBuf) RangeTombstoneKey() roachpb.Key {
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
 func (b RangeIDPrefixBuf) RaftTruncatedStateKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRaftTruncatedStateSuffix...)
+	return append(b.unreplicatedPrefix(), LocalRaftTruncatedStateLegacySuffix...)
 }
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.

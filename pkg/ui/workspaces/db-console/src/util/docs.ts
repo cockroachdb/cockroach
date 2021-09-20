@@ -54,6 +54,10 @@ export const metaRanges = docsURL(
 );
 export const databaseTable = docsURL("ui-databases-page.html");
 export const jobTable = docsURL("ui-jobs-page.html");
+export const jobStatus = docsURL("ui-jobs-page.html#job-status");
+export const jobsPause = docsURL("pause-job");
+export const jobsResume = docsURL("resume-job");
+export const jobsCancel = docsURL("cancel-job");
 export const statementsTable = docsURL("ui-statements-page.html");
 export const statementDiagnostics = docsURL(
   "ui-statements-page.html#diagnostics",

@@ -313,7 +313,8 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	rng := rand.New(rand.NewSource(seed))
 
 	ops := []func(rangeID roachpb.RangeID) roachpb.Key{
-		keys.RaftHardStateKey, // unreplicated; sorts after tombstone
+		keys.RaftAppliedIndexLegacyKey, // replicated; sorts before tombstone
+		keys.RaftHardStateKey,          // unreplicated; sorts after tombstone
 		// Replicated key-anchored local key (i.e. not one we should care about).
 		// Will be written at zero timestamp, but that's ok.
 		func(rangeID roachpb.RangeID) roachpb.Key {
