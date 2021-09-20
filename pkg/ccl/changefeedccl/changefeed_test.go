@@ -272,6 +272,42 @@ func TestChangefeedTenants(t *testing.T) {
 	})
 }
 
+func TestMissingTableErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	kvServer, kvSQLdb, cleanup := startTestServer(t, feedTestOptions{argsFn: func(args *base.TestServerArgs) {
+		args.ExternalIODirConfig.DisableOutbound = true
+	}})
+	defer cleanup()
+
+	tenantArgs := base.TestTenantArgs{
+		// crdb_internal.create_tenant called by StartTenant
+		TenantID: serverutils.TestTenantID(),
+		// Non-enterprise changefeeds are currently only
+		// disabled by setting DisableOutbound true
+		// everywhere.
+		ExternalIODirConfig: base.ExternalIODirConfig{
+			DisableOutbound: true,
+		},
+		UseDatabase: `d`,
+	}
+
+	_, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
+	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
+	tenantSQL.Exec(t, serverSetupStatements)
+
+	tenantSQL.Exec(t, `CREATE TABLE foo_in_tenant (pk INT PRIMARY KEY)`)
+	t.Run("changefeed on non-tenant table fails", func(t *testing.T) {
+		kvSQL := sqlutils.MakeSQLRunner(kvSQLdb)
+		kvSQL.Exec(t, `CREATE TABLE d.foo (pk INT PRIMARY KEY)`)
+
+		tenantSQL.ExpectErr(t, `^pq: failed to resolve targets in the CHANGEFEED stmt: table "foo" does not exist$`,
+			`CREATE CHANGEFEED FOR foo`,
+		)
+	})
+}
+
 func TestChangefeedTenantsExternalIOEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -315,6 +351,8 @@ func TestChangefeedTenantsExternalIOEnabled(t *testing.T) {
 		})
 	})
 }
+
+
 
 func TestChangefeedEnvelope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
