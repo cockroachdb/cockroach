@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -378,16 +377,6 @@ func (ctx *FmtCtx) FormatName(s string) {
 // FormatNameP formats a string reference as a name.
 func (ctx *FmtCtx) FormatNameP(s *string) {
 	ctx.FormatNode((*Name)(s))
-}
-
-// FormatUsername formats a username safely.
-func (ctx *FmtCtx) FormatUsername(s security.SQLUsername) {
-	ctx.FormatName(s.Normalized())
-}
-
-//FormatUsernameN formats a username that is type Name
-func (ctx *FmtCtx) FormatUsernameN(s Name) {
-	ctx.FormatName(s.Normalize())
 }
 
 // FormatNode recurses into a node for pretty-printing.

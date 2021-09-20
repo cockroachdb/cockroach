@@ -225,8 +225,12 @@ FROM "".information_schema.type_privileges`
 
 	if n.Grantees != nil {
 		params = params[:0]
-		for _, grantee := range n.Grantees.ToStrings() {
-			params = append(params, lexbase.EscapeSQLString(grantee))
+		grantees, err := n.Grantees.ToSQLUsernames(d.evalCtx.SessionData())
+		if err != nil {
+			return nil, err
+		}
+		for _, grantee := range grantees {
+			params = append(params, lexbase.EscapeSQLString(grantee.Normalized()))
 		}
 		fmt.Fprintf(&cond, ` AND grantee IN (%s)`, strings.Join(params, ","))
 	}

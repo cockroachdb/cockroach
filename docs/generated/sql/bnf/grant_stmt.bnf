@@ -1,6 +1,6 @@
 grant_stmt ::=
-	'GRANT' 'ALL' 'PRIVILEGES' 'ON' targets 'TO' name_list
-	| 'GRANT' 'ALL'  'ON' targets 'TO' name_list
-	| 'GRANT' privilege_list 'ON' targets 'TO' name_list
-	| 'GRANT' privilege_list 'TO' name_list
-	| 'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'
+	'GRANT' 'ALL' 'PRIVILEGES' 'ON' targets 'TO' role_spec_list
+	| 'GRANT' 'ALL'  'ON' targets 'TO' role_spec_list
+	| 'GRANT' privilege_list 'ON' targets 'TO' role_spec_list
+	| 'GRANT' privilege_list 'TO' role_spec_list
+	| 'GRANT' privilege_list 'TO' role_spec_list 'WITH' 'ADMIN' 'OPTION'
