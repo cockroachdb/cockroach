@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttlpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -63,13 +64,14 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				pkRevStr += ", "
 			}
 			pkRevStr += pk
-			pkRevStr += " DESC"
+			pkRevStr += " ASC"
 		}
 		return nil
 	}); err != nil {
 		return err
 	}
 
+	untilTS := timeutil.Unix(details.UntilUnix, 0)
 	for {
 		var rows []tree.Datums
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -80,7 +82,7 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				return err
 			}
 
-			// ((i = 10 AND j = 100 AND k < 1000)) OR (i = 10 AND j < 10) OR (i < 0))
+			// ((i = 10 AND j = 100 AND k > 1000)) OR (i = 10 AND j > 10) OR (i > 0))
 			var filterClause string
 			if len(lastRows) > 0 {
 				filterClause += " AND ("
@@ -96,16 +98,16 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 						}
 						sign := "="
 						if j == until-1 {
-							sign = "<"
+							sign = ">"
 						}
-						filterClause += fmt.Sprintf("%s %s $%d", pks[j], sign, j+1)
+						filterClause += fmt.Sprintf("%s %s $%d", pks[j], sign, j+2)
 					}
 					filterClause += ")"
 				}
 				filterClause += ")"
 			}
 			q := fmt.Sprintf(
-				`SELECT %[1]s FROM [%[2]d AS t] WHERE %[3]s < now()%[5]s ORDER BY %[6]s LIMIT %[4]d`,
+				`SELECT %[1]s FROM [%[2]d AS t] WHERE %[3]s < $1%[5]s ORDER BY %[6]s LIMIT %[4]d`,
 				pkStr,
 				details.TableID,
 				cn.String(),
@@ -113,13 +115,17 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				filterClause,
 				pkRevStr,
 			)
-			//fmt.Printf("%s\n", q)
+			args := append(
+				[]interface{}{untilTS},
+				lastRows...,
+			)
+			//fmt.Printf("initial query:%s\nargs: %#v\n", q, args)
 			rows, err = ie.QueryBuffered(
 				ctx,
 				"ttl",
 				txn,
 				q,
-				lastRows...,
+				args...,
 			)
 			return err
 		}); err != nil {
@@ -155,6 +161,7 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				}
 				placeholderStr += ")"
 			}
+			// TODO(XXX): we should probably do a secondary check here if we decide against strict TTL.
 			q := fmt.Sprintf(`DELETE FROM [%d AS t] WHERE (%s) IN (%s)`, details.TableID, pkStr, placeholderStr)
 			//	fmt.Printf("%s\n", q)
 			if _, err := ie.Exec(
@@ -291,6 +298,7 @@ func CreateTTLJob(
 		Details: jobspb.TTLDetails{
 			TableID:    ttlDetails.TableID,
 			ColumnName: ttlDetails.TTLColumn,
+			UntilUnix:  timeutil.Now().Unix(),
 		},
 		Progress:  jobspb.TTLProgress{},
 		CreatedBy: createdByInfo,

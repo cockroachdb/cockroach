@@ -741,6 +741,7 @@ message TTLDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
   string column_name = 2;
+  int64 until_unix = 3;
 }
 
 message TTLProgress {
