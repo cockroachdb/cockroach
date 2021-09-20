@@ -143,9 +143,14 @@ func (ts *testState) start(t *testing.T) {
 		usage := time.Duration(atomic.LoadInt64((*int64)(&ts.cpuUsage)))
 		return usage.Seconds()
 	}
+	nextLiveInstanceIDFn := func(ctx context.Context) base.SQLInstanceID {
+		return 0
+	}
 	instanceID := base.SQLInstanceID(1)
 	sessionID := sqlliveness.SessionID("foo")
-	if err := ts.controller.Start(ctx, ts.stopper, instanceID, sessionID, cpuUsageFn); err != nil {
+	if err := ts.controller.Start(
+		ctx, ts.stopper, instanceID, sessionID, cpuUsageFn, nextLiveInstanceIDFn,
+	); err != nil {
 		t.Fatal(err)
 	}
 }
