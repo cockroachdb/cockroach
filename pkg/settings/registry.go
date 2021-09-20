@@ -107,7 +107,8 @@ var retiredSettings = map[string]struct{}{
 	"kv.closed_timestamp.close_fraction":                             {},
 
 	// removed as of 22.1.
-	"sql.defaults.drop_enum_value.enabled": {},
+	"sql.defaults.drop_enum_value.enabled":                 {},
+	"sql.defaults.experimental_expression_indexes.enabled": {},
 }
 
 // register adds a setting to the registry.

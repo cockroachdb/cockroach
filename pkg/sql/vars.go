@@ -1502,7 +1502,24 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	// TODO(rytaft): remove this once unique without index constraints are fully
+	// CockroachDB extension.
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`experimental_enable_expression_indexes`: {
+		Hidden:       true,
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_expression_indexes`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			_, err := paramparse.ParseBoolVar("experimental_enable_expression_indexes", s)
+			return err
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(true)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(true)
+		},
+	},
+
+	// TODO(rytaft): hide this once unique without index constraints are fully
 	// supported.
 	`experimental_enable_unique_without_index_constraints`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_unique_without_index_constraints`),
