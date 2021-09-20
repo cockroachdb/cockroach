@@ -556,6 +556,7 @@ func allocateDescriptorRewrites(
 
 		// TODO (rohany, pbardea): These checks really need to be refactored.
 		// Construct rewrites for any user defined schemas.
+		userDefinedSchemaIDMap := make(map[descpb.ID]descpb.ID)
 		for _, sc := range schemasByID {
 			if _, ok := descriptorRewrites[sc.ID]; ok {
 				continue
@@ -609,6 +610,7 @@ func allocateDescriptorRewrites(
 						ID:         desc.GetID(),
 						ToExisting: true,
 					}
+					userDefinedSchemaIDMap[sc.ID] = desc.GetID()
 				}
 			}
 		}
@@ -718,12 +720,19 @@ func allocateDescriptorRewrites(
 				}
 
 				// See if there is an existing type with the same name.
+				getParentSchemaID := func(typ *typedesc.Mutable) (parentSchemaID descpb.ID) {
+					// If we find UDS with same name defined in the restoring DB, use its ID instead.
+					if parentSchemaID, ok = userDefinedSchemaIDMap[typ.GetParentSchemaID()]; !ok {
+						parentSchemaID = typ.GetParentSchemaID()
+					}
+					return
+				}
 				desc, err := catalogkv.GetDescriptorCollidingWithObject(
 					ctx,
 					txn,
 					p.ExecCfg().Codec,
 					parentID,
-					typ.GetParentSchemaID(),
+					getParentSchemaID(typ),
 					typ.Name,
 				)
 				if err != nil {
@@ -744,7 +753,7 @@ func allocateDescriptorRewrites(
 					// Ensure that there isn't a collision with the array type name.
 					arrTyp := typesByID[typ.ArrayTypeID]
 					typeName := tree.NewUnqualifiedTypeName(arrTyp.GetName())
-					err := catalogkv.CheckObjectCollision(ctx, txn, p.ExecCfg().Codec, parentID, typ.GetParentSchemaID(), typeName)
+					err = catalogkv.CheckObjectCollision(ctx, txn, p.ExecCfg().Codec, parentID, getParentSchemaID(typ), typeName)
 					if err != nil {
 						return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
 					}
