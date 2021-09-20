@@ -640,7 +640,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		updates.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
-	tenantUsage := NewTenantUsageServer(db, internalExecutor)
+	tenantUsage := NewTenantUsageServer(st, db, internalExecutor)
 	registry.AddMetricStruct(tenantUsage.Metrics())
 
 	node := NewNode(

@@ -2477,6 +2477,24 @@ message TokenBucketRequest {
   // originates.
   uint32 instance_id = 3 [(gogoproto.customname) = "InstanceID"];
 
+  // NextLiveInstanceID is the ID of the next live SQL instance for this tenant,
+  // in circular order by ID.
+  //
+  // In other words:
+  //  - if this instance has the largest ID, NextLiveInstanceID is the smallest
+  //    ID of a live instance.
+  //  - otherwise, NextLiveInstanceID is the smallest ID of a live instance that
+  //    is greater than InstanceID.
+  //
+  // In particular, if this is the only live instance, then NextLiveInstanceID
+  // will equal InstanceID.
+  //
+  // The information in this field is used by the server to trigger checking for
+  // dead instances; it is acceptable for the information to be stale.
+  //
+  // Can be zero if this information is not currently available.
+  uint32 next_live_instance_id = 8 [(gogoproto.customname) = "NextLiveInstanceID"];
+
   // InstanceLease uniquely identifies the SQL pod instance from where the
   // request originates, in light of ID reuse.
   bytes instance_lease = 4;
