@@ -18,9 +18,15 @@ type TestingKnobs struct {
 	// ManagerDisableJobCreation disables creating the auto span config
 	// reconciliation job.
 	ManagerDisableJobCreation bool
+
+	// ManagerCheckJobInterceptor, if set, is invoked when checking to see if
+	// the reconciliation job exists.
+	ManagerCheckJobInterceptor func()
+
 	// ManagerCreatedJobInterceptor expects a *jobs.Job to be passed into it. It
 	// takes an interface here to resolve a circular dependency.
 	ManagerCreatedJobInterceptor func(interface{})
+
 	// ManagerAfterCheckedReconciliationJobExistsInterceptor is run after the
 	// manager has checked if the auto span config reconciliation job exists or
 	// not.

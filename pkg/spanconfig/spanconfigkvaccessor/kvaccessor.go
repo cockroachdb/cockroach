@@ -52,17 +52,23 @@ func New(
 	}
 }
 
-var kvAccessorEnabled = settings.RegisterBoolSetting(
-	"spanconfig.kvaccessor_experimental.enabled",
+// enabledSetting gates usage of the KVAccessor.
+var enabledSetting = settings.RegisterBoolSetting(
+	"spanconfig.experimental_kvaccessor.enabled",
 	"enable the use of the kv accessor", false).WithSystemOnly()
+
+// errDisabled is returned if the setting gating usage of the KVAccessor is
+// disabled.
+var errDisabled = errors.New("span config kv accessor disabled")
 
 // GetSpanConfigEntriesFor is part of the KVAccessor interface.
 func (k *KVAccessor) GetSpanConfigEntriesFor(
 	ctx context.Context, spans []roachpb.Span,
 ) (resp []roachpb.SpanConfigEntry, retErr error) {
-	if kvAccessorEnabled.Get(&k.settings.SV) {
-		return nil, errors.New("use of span configs disabled")
+	if !enabledSetting.Get(&k.settings.SV) {
+		return nil, errDisabled
 	}
+
 	if len(spans) == 0 {
 		return resp, nil
 	}
@@ -111,6 +117,10 @@ func (k *KVAccessor) GetSpanConfigEntriesFor(
 func (k *KVAccessor) UpdateSpanConfigEntries(
 	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
 ) error {
+	if !enabledSetting.Get(&k.settings.SV) {
+		return errDisabled
+	}
+
 	if err := validateUpdateArgs(toDelete, toUpsert); err != nil {
 		return err
 	}
