@@ -45,6 +45,7 @@ func WriteInitialReplicaState(
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
+	truncStateType TruncatedStateType,
 	replicaVersion roachpb.Version,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
@@ -62,6 +63,9 @@ func WriteInitialReplicaState(
 	s.GCThreshold = &gcThreshold
 	if (replicaVersion != roachpb.Version{}) {
 		s.Version = &replicaVersion
+	}
+	if truncStateType != TruncatedStateLegacyReplicatedAndNoAppliedKey {
+		s.UsingAppliedStateKey = true
 	}
 
 	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
@@ -82,7 +86,7 @@ func WriteInitialReplicaState(
 		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
-	newMS, err := rsl.Save(ctx, readWriter, s)
+	newMS, err := rsl.Save(ctx, readWriter, s, truncStateType)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -98,13 +102,31 @@ func WriteInitialRangeState(
 	desc roachpb.RangeDescriptor,
 	replicaVersion roachpb.Version,
 ) error {
+	const initialTruncStateType = TruncatedStateUnreplicated
+	return WriteInitialRangeStateWithTruncatedState(ctx, readWriter, desc, replicaVersion, initialTruncStateType)
+}
+
+// WriteInitialRangeStateWithTruncatedState is the same as
+// WriteInitialRangeState, but allows the caller to override the truncated state
+// type.
+//
+// TODO(irfansharif): This can be removed in the v21.2 cycle after we no longer
+// need to test the truncated state migration.
+func WriteInitialRangeStateWithTruncatedState(
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	desc roachpb.RangeDescriptor,
+	replicaVersion roachpb.Version,
+	truncState TruncatedStateType,
+) error {
 	initialLease := roachpb.Lease{}
 	initialGCThreshold := hlc.Timestamp{}
 	initialMS := enginepb.MVCCStats{}
+	initialTruncStateType := truncState
 
 	if _, err := WriteInitialReplicaState(
 		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold,
-		replicaVersion,
+		initialTruncStateType, replicaVersion,
 	); err != nil {
 		return err
 	}

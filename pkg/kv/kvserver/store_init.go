@@ -244,8 +244,16 @@ func WriteInitialClusterData(
 			}
 		}
 
-		if err := stateloader.WriteInitialRangeState(ctx, batch, *desc, initialReplicaVersion); err != nil {
-			return err
+		if tt := knobs.TruncatedStateTypeOverride; tt != nil {
+			if err := stateloader.WriteInitialRangeStateWithTruncatedState(
+				ctx, batch, *desc, initialReplicaVersion, *tt,
+			); err != nil {
+				return err
+			}
+		} else {
+			if err := stateloader.WriteInitialRangeState(ctx, batch, *desc, initialReplicaVersion); err != nil {
+				return err
+			}
 		}
 		computedStats, err := rditer.ComputeStatsForRange(desc, batch, now.WallTime)
 		if err != nil {

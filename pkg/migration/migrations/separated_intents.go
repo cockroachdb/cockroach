@@ -54,19 +54,6 @@ const concurrentMigrateLockTableRequests = 4
 // the migration.
 const migrateLockTableRetries = 3
 
-// defaultPageSize controls how many ranges are paged in by default when
-// iterating through all ranges in a cluster during any given migration. We
-// pulled this number out of thin air(-ish). Let's consider a cluster with 50k
-// ranges, with each range taking ~200ms. We're being somewhat conservative with
-// the duration, but in a wide-area cluster with large hops between the manager
-// and the replicas, it could be true. Here's how long it'll take for various
-// block sizes:
-//
-//   page size of 1   ~ 2h 46m
-//   page size of 50  ~ 3m 20s
-//   page size of 200 ~ 50s
-const defaultPageSize = 200
-
 // migrateLockTableRequest represents migration of one slice of the keyspace. As
 // part of this request, multiple non-transactional requests would need to be
 // run: a Barrier, a ScanInterleavedIntents, then multiple txn pushes and intent
