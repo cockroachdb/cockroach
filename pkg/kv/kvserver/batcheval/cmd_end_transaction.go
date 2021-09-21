@@ -238,7 +238,9 @@ func EndTxn(
 			// meantime. The TransactionStatusError is going to be handled by the
 			// txnCommitter interceptor.
 			log.VEventf(ctx, 2, "transaction found to be already committed")
-			return result.Result{}, roachpb.NewTransactionCommittedStatusError()
+			return result.Result{}, roachpb.NewTransactionStatusError(
+				roachpb.TransactionStatusError_REASON_TXN_COMMITTED,
+				"already committed")
 
 		case roachpb.ABORTED:
 			if !args.Commit {
