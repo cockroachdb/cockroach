@@ -117,7 +117,7 @@ LOCALITY REGIONAL BY ROW
 statement ok
 CREATE TABLE parent_table (pk INT PRIMARY KEY)
 
-statement notice ERROR: creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
+statement notice NOTICE: creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
 CREATE TABLE regional_by_row_table_int (
   pk INT NOT NULL PRIMARY KEY
 )
@@ -348,7 +348,7 @@ CREATE INDEX bad_idx ON regional_by_row_table(a) USING HASH WITH BUCKET_COUNT = 
 statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
 ALTER TABLE regional_by_row_table ALTER PRIMARY KEY USING COLUMNS(pk2) USING HASH WITH BUCKET_COUNT = 8
 
-statement notice ERROR: creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
+statement notice NOTICE: creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
 CREATE INDEX bad_idx_int ON regional_by_row_table(pk) INTERLEAVE IN PARENT parent_table(pk)
 
 statement ok
