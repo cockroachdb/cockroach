@@ -151,7 +151,6 @@ func TestEnumDropValueCheckConstraint(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	db.Exec(t, "CREATE TYPE typ AS ENUM ('a', 'b', 'c')")
-	db.Exec(t, "SET enable_drop_enum_value = true")
 
 	// Check that an enum value cannot be dropped if it is referenced in a table's
 	// check constraint.

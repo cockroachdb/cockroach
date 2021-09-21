@@ -197,8 +197,6 @@ func TestFailedTypeSchemaChangeRetriesTransparently(t *testing.T) {
 
 	// Create a type.
 	_, err := sqlDB.Exec(`
-SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
-SET enable_drop_enum_value = true;
 CREATE DATABASE d;
 CREATE TYPE d.t AS ENUM();
 `)
@@ -239,8 +237,6 @@ func TestAddDropValuesInTransaction(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
-SET enable_drop_enum_value = true;
 CREATE DATABASE d;
 USE d;
 CREATE TYPE greetings AS ENUM('hi', 'hello', 'yo');
@@ -403,8 +399,6 @@ func TestEnumMemberTransitionIsolation(t *testing.T) {
 
 	// Setup.
 	if _, err := sqlDB.Exec(`
-SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
-SET enable_drop_enum_value = true;
 CREATE TYPE ab AS ENUM ('a', 'b')`,
 	); err != nil {
 		t.Fatal(err)
@@ -541,8 +535,6 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 
 			// Setup.
 			_, err := sqlDB.Exec(`
-SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
-SET enable_drop_enum_value = true;
 CREATE DATABASE db;
 CREATE TYPE db.greetings AS ENUM ('hi', 'yo');
 `)

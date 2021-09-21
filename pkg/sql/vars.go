@@ -1410,21 +1410,19 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	// This is only kept for backwards compatibility and no longer has any effect.
 	`enable_drop_enum_value`: {
+		Hidden:       true,
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_drop_enum_value`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("enable_drop_enum_value", s)
-			if err != nil {
-				return err
-			}
-			m.SetDropEnumValueEnabled(b)
-			return nil
+			_, err := paramparse.ParseBoolVar("enable_drop_enum_value", s)
+			return err
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().DropEnumValueEnabled)
+			return formatBoolAsPostgresSetting(true)
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(dropEnumValueEnabledClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(true)
 		},
 	},
 

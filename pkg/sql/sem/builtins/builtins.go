@@ -7049,12 +7049,16 @@ var similarOverloads = []tree.Overload{
 }
 
 func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
-	overloads := make([]tree.Overload, 0, len(types.Scalar))
+	overloads := make([]tree.Overload, 0, len(types.Scalar)+1)
 	for _, typ := range types.Scalar {
 		if ok, _ := types.IsValidArrayElementType(typ); ok {
 			overloads = append(overloads, impl(typ))
 		}
 	}
+	// Prevent usage in DistSQL because it cannot handle arrays of untyped tuples.
+	tupleOverload := impl(types.AnyTuple)
+	tupleOverload.DistsqlBlocklist = true
+	overloads = append(overloads, tupleOverload)
 	return builtinDefinition{
 		props:     tree.FunctionProperties{Category: categoryArray},
 		overloads: overloads,

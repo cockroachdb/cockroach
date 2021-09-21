@@ -227,6 +227,7 @@ array_agg(time) -> time[]
 array_agg(timetz) -> timetz[]
 array_agg(jsonb) -> jsonb[]
 array_agg(varbit) -> varbit[]
+array_agg(tuple) -> tuple[]
 array_agg(bool) -> bool[]
 
 # With an explicit cast, this works as expected.

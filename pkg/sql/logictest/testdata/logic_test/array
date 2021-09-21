@@ -1746,6 +1746,8 @@ INSERT INTO t VALUES (
   '{0101, 11}',
   '{12.34, 45.67}');
 
+subtest array_tuples
+
 # Test for #32715: able to distribute queries with arrays of tuples.
 
 statement ok
@@ -1781,3 +1783,158 @@ SELECT ARRAY[(k, 'foo'), (1, v)] FROM kv
 {"(3,foo)","(1,three)"}
 {"(4,foo)","(1,four)"}
 {"(5,foo)","(1,)"}
+
+# Test array builtins on record types
+
+query T rowsort
+SELECT array_cat(ARRAY[ROW(10,'fish')], ARRAY[(k,v)]) FROM kv
+----
+{"(10,fish)","(1,one)"}
+{"(10,fish)","(2,two)"}
+{"(10,fish)","(3,three)"}
+{"(10,fish)","(4,four)"}
+{"(10,fish)","(5,)"}
+
+query T rowsort
+SELECT array_cat(ARRAY[ROW(1,NULL)], ARRAY[(k,v)]) FROM kv
+----
+{"(1,)","(1,one)"}
+{"(1,)","(2,two)"}
+{"(1,)","(3,three)"}
+{"(1,)","(4,four)"}
+{"(1,)","(5,)"}
+
+query T rowsort
+SELECT array_cat(ARRAY[NULL::record], ARRAY[(k,v)]) FROM kv
+----
+{NULL,"(1,one)"}
+{NULL,"(2,two)"}
+{NULL,"(3,three)"}
+{NULL,"(4,four)"}
+{NULL,"(5,)"}
+
+query T
+SELECT array_cat(ARRAY[ROW(1,2)], ARRAY[NULL::record])
+----
+{"(1,2)",NULL}
+
+query T
+SELECT array_agg(ROW(1, 2))
+----
+{"(1,2)"}
+
+query T
+SELECT array_agg(ROW(k,v) ORDER BY k) FROM kv
+----
+{"(1,one)","(2,two)","(3,three)","(4,four)","(5,)"}
+
+query T rowsort
+SELECT array_append(ARRAY[ROW(10,'fish')], (k,v)) FROM kv
+----
+{"(10,fish)","(1,one)"}
+{"(10,fish)","(2,two)"}
+{"(10,fish)","(3,three)"}
+{"(10,fish)","(4,four)"}
+{"(10,fish)","(5,)"}
+
+query T
+SELECT array_append(ARRAY[ROW(1,2)], NULL::record)
+----
+{"(1,2)",NULL}
+
+query T rowsort
+SELECT array_append(NULL::record[], (k,v)) FROM kv
+----
+{"(1,one)"}
+{"(2,two)"}
+{"(3,three)"}
+{"(4,four)"}
+{"(5,)"}
+
+query T
+SELECT array_append(NULL::record[], NULL::record)
+----
+{NULL}
+
+query T rowsort
+SELECT array_prepend((k,v), ARRAY[ROW(10,'fish'), ROW(11,'zebra')]) FROM kv
+----
+{"(1,one)","(10,fish)","(11,zebra)"}
+{"(2,two)","(10,fish)","(11,zebra)"}
+{"(3,three)","(10,fish)","(11,zebra)"}
+{"(4,four)","(10,fish)","(11,zebra)"}
+{"(5,)","(10,fish)","(11,zebra)"}
+
+query T
+SELECT array_prepend(NULL::record, ARRAY[ROW(10,'fish'), ROW(11,'zebra')])
+----
+{NULL,"(10,fish)","(11,zebra)"}
+
+query T
+SELECT array_prepend(ROW(1,2), NULL::record[])
+----
+{"(1,2)"}
+
+query T
+SELECT array_prepend(NULL::record, NULL::record[])
+----
+{NULL}
+
+query T
+SELECT array_remove(ARRAY[ROW(1,'cat'), ROW(10,'fish'), ROW(11,'zebra')], ROW(10,'fish'))
+----
+{"(1,cat)","(11,zebra)"}
+
+query T
+SELECT array_remove(ARRAY[ROW(1,'cat'), ROW(10,'fish'), ROW(11,'zebra'), NULL], NULL::record)
+----
+{"(1,cat)","(10,fish)","(11,zebra)"}
+
+query T
+SELECT array_remove(NULL::record[], NULL::record)
+----
+NULL
+
+query T
+SELECT array_replace(ARRAY[ROW(1,'cat'), ROW(10,'fish'), ROW(11,'zebra')], ROW(10,'fish'), ROW(2,'dog'))
+----
+{"(1,cat)","(2,dog)","(11,zebra)"}
+
+query TT
+SELECT array_replace(ARRAY[ROW(1,'cat'), NULL, ROW(11,'zebra')], NULL::record, ROW(2,'dog')), array_replace(NULL::record[], ROW(10,'fish'), ROW(2,'dog'))
+----
+{"(1,cat)","(2,dog)","(11,zebra)"}  NULL
+
+# ARRAY_POSITION function
+
+query I
+SELECT array_position(ARRAY[ROW(1,'cat'), ROW(10,'fish'), ROW(11,'zebra')], ROW(11,'zebra'))
+----
+3
+
+query I
+SELECT array_position(ARRAY[ROW(1,'cat'), ROW(10,'fish'), ROW(11,'zebra')], ROW(33,'hippo'))
+----
+NULL
+
+query I
+SELECT array_position(NULL::record[], ROW(33,'hippo'))
+----
+NULL
+
+# ARRAY_POSITIONS function
+
+query T
+SELECT array_positions(ARRAY[ROW(1,'cat'), ROW(11,'zebra'), ROW(10,'fish'), ROW(11,'zebra')], ROW(11,'zebra'))
+----
+{2,4}
+
+query T
+SELECT array_positions(ARRAY[ROW(1,'cat'), ROW(11,'zebra'), ROW(10,'fish'), ROW(11,'zebra')], ROW(33,'hippo'))
+----
+{}
+
+query T
+SELECT array_positions(NULL::record[], ROW(33,'hippo'))
+----
+NULL

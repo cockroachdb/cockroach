@@ -101,6 +101,11 @@ type Overload struct {
 	// Oid is the cached oidHasher.BuiltinOid result for this Overload. It's
 	// populated at init-time.
 	Oid oid.Oid
+
+	// DistsqlBlocklist is set to true when a function cannot be evaluated in
+	// DistSQL. One example is when the type information for function arguments
+	// cannot be recovered.
+	DistsqlBlocklist bool
 }
 
 // params implements the overloadImpl interface.
