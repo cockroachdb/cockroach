@@ -119,6 +119,16 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html",
 		)
 	})
+
+	t.Run("basic when tracing already enabled", func(t *testing.T) {
+		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='100ms';")
+		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='0ms';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
+		checkBundle(
+			t, fmt.Sprint(rows), "public.abc",
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html",
+		)
+	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
