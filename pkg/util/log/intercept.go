@@ -56,14 +56,16 @@ type Interceptor interface {
 }
 
 func (l *loggingT) newInterceptorSinkInfo() *sinkInfo {
-	return &sinkInfo{
+	si := &sinkInfo{
 		sink:       &l.interceptor,
-		threshold:  severity.INFO, // all events
 		editor:     getEditor(WithMarkedSensitiveData),
 		formatter:  formatInterceptor{},
 		redact:     false, // do not redact sensitive information
 		redactable: true,  // keep redaction markers
 	}
+	// Ensure all events are collected across all channels.
+	si.threshold.setAll(severity.INFO)
+	return si
 }
 
 // formatInterceptor converts the raw logpb.Entry to JSON.
