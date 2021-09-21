@@ -935,6 +935,10 @@ hourly by a cronjob so it is not necessary to run manually.
 		if err != nil {
 			return err
 		}
+		err = cld.GCAWSKeyPairs()
+		if err != nil {
+			return err
+		}
 		return cld.GCClusters(cloud, dryrun)
 	}),
 }
