@@ -730,6 +730,7 @@ func TestChangefeedExternalIODisabled(t *testing.T) {
 		})
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, serverSetupStatements)
 		sqlDB.Exec(t, "CREATE TABLE target_table (pk INT PRIMARY KEY)")
 		for _, proto := range disallowedSinkProtos {
 			sqlDB.ExpectErr(t, "Outbound IO is disabled by configuration, cannot create changefeed",
