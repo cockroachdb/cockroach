@@ -453,13 +453,11 @@ func TestLimitScans(t *testing.T) {
 			}
 		}
 		for _, l := range span.Logs {
-			for _, f := range l.Fields {
-				match := re.FindStringSubmatch(f.Value)
-				if match == nil {
-					continue
-				}
-				ranges[match[1]] = struct{}{}
+			match := re.FindStringSubmatch(l.Msg())
+			if match == nil {
+				continue
 			}
+			ranges[match[1]] = struct{}{}
 		}
 	}
 	if len(ranges) != 1 {

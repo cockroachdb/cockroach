@@ -35,12 +35,8 @@ func FindMsgInRecording(recording Recording, msg string) int {
 // LogsContainMsg returns true if a Span's logs contain the given message.
 func LogsContainMsg(sp tracingpb.RecordedSpan, msg string) bool {
 	for _, l := range sp.Logs {
-		// NOTE: With our logs, each LogRecord has a single field ("event") and
-		// value.
-		for _, f := range l.Fields {
-			if strings.Contains(f.Value, msg) {
-				return true
-			}
+		if strings.Contains(l.Msg(), msg) {
+			return true
 		}
 	}
 	return false
@@ -50,12 +46,8 @@ func LogsContainMsg(sp tracingpb.RecordedSpan, msg string) bool {
 func CountLogMessages(sp tracingpb.RecordedSpan, msg string) int {
 	res := 0
 	for _, l := range sp.Logs {
-		// NOTE: With our logs, each LogRecord has a single field ("event") and
-		// value.
-		for _, f := range l.Fields {
-			if strings.Contains(f.Value, msg) {
-				res++
-			}
+		if strings.Contains(l.Msg(), msg) {
+			res++
 		}
 	}
 	return res
@@ -144,11 +136,7 @@ func CheckRecordedSpans(rec Recording, expected string) error {
 			row(d, "    tags: %s", strings.Join(tags, " "))
 		}
 		for _, l := range rs.Logs {
-			var msg string
-			for _, f := range l.Fields {
-				msg = msg + fmt.Sprintf("    %s: %v", f.Key, f.Value)
-			}
-			row(d, "%s", msg)
+			row(d, "    event: %s", l.Msg())
 		}
 	}
 
