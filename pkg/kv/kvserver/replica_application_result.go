@@ -320,12 +320,6 @@ func (r *Replica) handleVersionResult(ctx context.Context, version *roachpb.Vers
 	r.mu.Unlock()
 }
 
-func (r *Replica) handleUsingAppliedStateKeyResult(ctx context.Context) {
-	r.mu.Lock()
-	r.mu.state.UsingAppliedStateKey = true
-	r.mu.Unlock()
-}
-
 func (r *Replica) handleComputeChecksumResult(ctx context.Context, cc *kvserverpb.ComputeChecksum) {
 	r.computeChecksumPostApply(ctx, *cc)
 }
