@@ -3303,11 +3303,6 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Retry": {"Max": -1}}'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
-		t, ``,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, webhook_sink_config='{"Retry":{"Max":"inf"}}'`,
-		`webhook-https://fake-host`,
-	)
 
 	// Sanity check on_error option
 	sqlDB.ExpectErr(
