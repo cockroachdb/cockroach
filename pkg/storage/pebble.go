@@ -774,12 +774,19 @@ func (p *Pebble) Close() {
 		return
 	}
 	p.closed = true
-	_ = p.db.Close()
+	err := p.db.Close()
 	if p.fileRegistry != nil {
-		_ = p.fileRegistry.Close()
+		if err2 := p.fileRegistry.Close(); err2 != nil {
+			err = errors.CombineErrors(err, err2)
+		}
 	}
 	if p.encryption != nil {
-		_ = p.encryption.Closer.Close()
+		if err2 := p.encryption.Closer.Close(); err != nil {
+			err = errors.CombineErrors(err, err2)
+		}
+	}
+	if err != nil {
+		p.logger.Fatalf("closing engine: %v", err)
 	}
 }
 
@@ -1588,13 +1595,16 @@ func (p *pebbleReadOnly) Close() {
 		panic("closing an already-closed pebbleReadOnly")
 	}
 	p.closed = true
-	// Setting iter to nil is sufficient since it will be closed by one of the
-	// subsequent destroy calls.
-	p.iter = nil
 	p.prefixIter.destroy()
 	p.normalIter.destroy()
 	p.prefixEngineIter.destroy()
 	p.normalEngineIter.destroy()
+	if p.iter != nil {
+		if err := p.iter.Close(); err != nil {
+			panic(err)
+		}
+		p.iter = nil
+	}
 
 	pebbleReadOnlyPool.Put(p)
 }

@@ -75,6 +75,7 @@ var pebbleIterPool = sync.Pool{
 
 type cloneableIter interface {
 	Clone() (*pebble.Iterator, error)
+	Close() error
 }
 
 type testingSetBoundsListener interface {

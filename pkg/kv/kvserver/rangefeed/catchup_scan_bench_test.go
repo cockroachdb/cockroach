@@ -51,6 +51,7 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) {
 			WithDiff: opts.withDiff,
 			Span:     span,
 		}, opts.useTBI, func() {})
+		defer iter.Close()
 		counter := 0
 		err := iter.CatchUpScan(storage.MakeMVCCMetadataKey(startKey), storage.MakeMVCCMetadataKey(endKey), opts.ts, opts.withDiff, func(*roachpb.RangeFeedEvent) error {
 			counter++

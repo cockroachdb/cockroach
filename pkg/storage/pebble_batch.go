@@ -115,14 +115,17 @@ func (p *pebbleBatch) Close() {
 	}
 	p.closed = true
 
-	// Setting iter to nil is sufficient since it will be closed by one of the
-	// subsequent destroy calls.
-	p.iter = nil
 	// Destroy the iterators before closing the batch.
 	p.prefixIter.destroy()
 	p.normalIter.destroy()
 	p.prefixEngineIter.destroy()
 	p.normalEngineIter.destroy()
+	if p.iter != nil {
+		if err := p.iter.Close(); err != nil {
+			panic(err)
+		}
+		p.iter = nil
+	}
 
 	_ = p.batch.Close()
 	p.batch = nil
