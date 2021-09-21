@@ -11,6 +11,8 @@
 package execinfrapb
 
 import (
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -24,6 +26,10 @@ type ProcessorID int
 // machine boundaries. The identifier can only be used in the context of a
 // specific flow.
 type StreamID int
+
+func (sid StreamID) String() string {
+	return strconv.Itoa(int(sid))
+}
 
 // FlowID identifies a flow. It is most importantly used when setting up streams
 // between nodes.
