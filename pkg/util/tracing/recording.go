@@ -207,7 +207,9 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 
 	for _, l := range sp.Logs {
 		lastLog := ownLogs[len(ownLogs)-1]
-		ownLogs = append(ownLogs, conv("event:"+l.Msg(), l.Time, lastLog.Timestamp))
+		var sb redact.StringBuilder
+		sb.Printf("event:%s", l.Msg())
+		ownLogs = append(ownLogs, conv(sb.RedactableString(), l.Time, lastLog.Timestamp))
 	}
 
 	// If the span was verbose then the Structured events would have been
@@ -353,13 +355,13 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 			})
 		}
 		for _, l := range sp.Logs {
-			jl := jaegerjson.Log{Timestamp: uint64(l.Time.UnixNano() / 1000)}
-			for _, field := range l.Fields {
-				jl.Fields = append(jl.Fields, jaegerjson.KeyValue{
-					Key:   field.Key,
-					Value: field.Value,
+			jl := jaegerjson.Log{
+				Timestamp: uint64(l.Time.UnixNano() / 1000),
+				Fields: []jaegerjson.KeyValue{{
+					Key:   "event",
+					Value: l.Msg(),
 					Type:  "STRING",
-				})
+				}},
 			}
 			s.Logs = append(s.Logs, jl)
 		}
