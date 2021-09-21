@@ -88,6 +88,27 @@ export const upgradeCockroachVersion =
 export const enterpriseLicensing =
   "https://www.cockroachlabs.com/docs/stable/enterprise-licensing.html";
 
+// Explain plan
+export const distSql = docsURL("architecture/sql-layer.html#distsql");
+export const vectorizedExecution = docsURL(
+  "vectorized-execution.html#configuring-vectorized-execution",
+);
+export const mergeJoin = docsURL("joins.html#merge-joins");
+export const lookupJoin = docsURL("joins.html#lookup-joins");
+export const hashJoin = docsURL("joins.html#hash-joins");
+export const invertedJoin = docsURL("joins.html#inverted-joins");
+export const indexJoin = docsURL("indexes.html#storing-columns");
+export const fullScan = docsURL(
+  "sql-tuning-with-explain.html#issue-full-table-scans",
+);
+export const secondaryIndex = docsURL("schema-design-indexes.html");
+export const lockingStrength = docsURL(
+  "explain.html#find-out-if-a-statement-is-using-select-for-update-locking",
+);
+export const transactionLayerOverview = docsURL(
+  "architecture/transaction-layer.html#overview",
+);
+
 // Not actually a docs URL.
 export const startTrial = "https://www.cockroachlabs.com/pricing/start-trial/";
 export const transactionsTable = docsURL("ui-transactions-page.html");
