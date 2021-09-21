@@ -527,7 +527,10 @@ func (s *ColIndexJoin) Close() error {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil
 	}
-	s.spanAssembler.Close()
+	if s.spanAssembler != nil {
+		// spanAssembler can be nil if Release() has already been called.
+		s.spanAssembler.Close()
+	}
 	s.batch = nil
 	return nil
 }

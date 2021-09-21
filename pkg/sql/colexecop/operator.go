@@ -141,6 +141,11 @@ type Closer interface {
 	// Close releases the resources associated with this Closer. If this Closer
 	// is an Operator, the implementation of Close must be safe to execute even
 	// if Operator.Init wasn't called.
+	//
+	// If this Closer is an execinfra.Releasable, the implementation must be
+	// safe to execute even after Release() was called.
+	// TODO(yuzefovich): refactor this because the Release()'d objects should
+	// not be used anymore.
 	Close() error
 }
 
