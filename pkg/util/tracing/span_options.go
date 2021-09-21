@@ -24,7 +24,6 @@ type spanOptions struct {
 	RemoteParent  SpanMeta                      // see WithParentAndManualCollection
 	RefType       opentracing.SpanReferenceType // see WithFollowsFrom
 	LogTags       *logtags.Buffer               // see WithLogTags
-	Tags          map[string]interface{}        // see WithTags
 	ForceRealSpan bool                          // see WithForceRealSpan
 }
 
