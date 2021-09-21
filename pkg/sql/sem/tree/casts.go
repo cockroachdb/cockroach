@@ -90,6 +90,7 @@ var validCasts = []castInfo{
 	{from: types.DecimalFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
 	{from: types.StringFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
 	{from: types.CollatedStringFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
+	{from: types.JsonFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
 
 	// Casts to IntFamily.
 	{from: types.UnknownFamily, to: types.IntFamily, volatility: VolatilityImmutable},
@@ -766,6 +767,12 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			return ParseDBool(string(*v))
 		case *DCollatedString:
 			return ParseDBool(v.Contents)
+		case *DJSON:
+			b, ok := v.AsBool()
+			if !ok {
+				return nil, failedCastFromJSON(v, t)
+			}
+			return MakeDBool(DBool(b)), nil
 		}
 
 	case types.IntFamily:
@@ -797,14 +804,9 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			}
 			res = NewDInt(DInt(f))
 		case *DDecimal:
-			d := ctx.getTmpDec()
-			_, err := DecimalCtx.RoundToIntegralValue(d, &v.Decimal)
+			i, err := roundDecimalToInt(ctx, &v.Decimal)
 			if err != nil {
 				return nil, err
-			}
-			i, err := d.Int64()
-			if err != nil {
-				return nil, ErrIntOutOfRange
 			}
 			res = NewDInt(DInt(i))
 		case *DString:
@@ -836,12 +838,19 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 		case *DOid:
 			res = &v.DInt
 		case *DJSON:
-			if dec, ok := v.AsDecimal(); ok {
-				asInt, err := dec.Int64()
-				if err == nil {
-					res = NewDInt(DInt(asInt))
+			dec, ok := v.AsDecimal()
+			if !ok {
+				return nil, failedCastFromJSON(v, t)
+			}
+			i, err := dec.Int64()
+			if err != nil {
+				// Attempt to round the number to an integer.
+				i, err = roundDecimalToInt(ctx, dec)
+				if err != nil {
+					return nil, err
 				}
 			}
+			res = NewDInt(DInt(i))
 		}
 		if res != nil {
 			return res, nil
@@ -893,13 +902,15 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 		case *DInterval:
 			return NewDFloat(DFloat(v.AsFloat64())), nil
 		case *DJSON:
-			if dec, ok := v.AsDecimal(); ok {
-				fl, err := dec.Float64()
-				if err != nil {
-					return nil, ErrFloatOutOfRange
-				}
-				return NewDFloat(DFloat(fl)), nil
+			dec, ok := v.AsDecimal()
+			if !ok {
+				return nil, failedCastFromJSON(v, t)
 			}
+			fl, err := dec.Float64()
+			if err != nil {
+				return nil, ErrFloatOutOfRange
+			}
+			return NewDFloat(DFloat(fl)), nil
 		}
 
 	case types.DecimalFamily:
@@ -949,11 +960,11 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			v.AsBigInt(&dd.Coeff)
 			dd.Exponent = -9
 		case *DJSON:
-			if dec, ok := v.AsDecimal(); ok {
-				dd.Set(dec)
-			} else {
-				unset = false
+			dec, ok := v.AsDecimal()
+			if !ok {
+				return nil, failedCastFromJSON(v, t)
 			}
+			dd.Set(dec)
 		default:
 			unset = true
 		}
@@ -1478,6 +1489,26 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		}
 		return oid, nil
 	}
+}
+
+func roundDecimalToInt(ctx *EvalContext, d *apd.Decimal) (int64, error) {
+	newD := ctx.getTmpDec()
+	if _, err := DecimalCtx.RoundToIntegralValue(newD, d); err != nil {
+		return 0, err
+	}
+	i, err := newD.Int64()
+	if err != nil {
+		return 0, ErrIntOutOfRange
+	}
+	return i, nil
+}
+
+func failedCastFromJSON(j *DJSON, t *types.T) error {
+	return pgerror.Newf(
+		pgcode.InvalidParameterValue,
+		"cannot cast jsonb %s to type %s",
+		j.Type(), t,
+	)
 }
 
 // PopulateRecordWithJSON is used for the json to record function family, like
