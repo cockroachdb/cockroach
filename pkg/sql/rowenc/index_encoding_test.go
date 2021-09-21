@@ -177,7 +177,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen := randutil.RandIntInRange(rng, len(t.primaryInterleaves)+1, len(t.primaryInterleaves)+10)
 		t.primaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.primaryValues {
-			t.primaryValues[j] = RandDatum(rng, types.Int, true)
+			t.primaryValues[j] = RandDatum(rng, types.Int, false /* nullOk */)
 		}
 
 		t.secondaryInterleaves = make([]descpb.ID, rng.Intn(10))
@@ -187,7 +187,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen = randutil.RandIntInRange(rng, len(t.secondaryInterleaves)+1, len(t.secondaryInterleaves)+10)
 		t.secondaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.secondaryValues {
-			t.secondaryValues[j] = RandDatum(rng, types.Int, true)
+			t.secondaryValues[j] = RandDatum(rng, types.Int, true /* nullOk */)
 		}
 
 		tests = append(tests, t)
@@ -691,11 +691,11 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 
 			// Column values should be at the beginning of the
 			// remaining bytes of the key.
-			colVals, null, err := EncodeColumns(desc.PrimaryIndex.ColumnIDs, desc.PrimaryIndex.ColumnDirections, colMap, tc.table.values, nil /*key*/)
+			colVals, nullColID, err := EncodeColumns(desc.PrimaryIndex.ColumnIDs, desc.PrimaryIndex.ColumnDirections, colMap, tc.table.values, nil /*key*/)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if null {
+			if nullColID != 0 {
 				t.Fatalf("unexpected null values when encoding expected column values")
 			}
 
