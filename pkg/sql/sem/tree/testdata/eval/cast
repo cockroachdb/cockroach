@@ -97,6 +97,86 @@ eval
 1
 
 eval
+'0008'::int
+----
+8
+
+eval
+' 0008'::int4
+----
+8
+
+eval
+'0008 '::int
+----
+8
+
+eval
+'2 2'::int4
+----
+could not parse "2 2" as type int: strconv.ParseInt: parsing "2 2": invalid syntax
+
+eval
+'9223372036854775808'::int8
+----
+could not parse "9223372036854775808" as type int: strconv.ParseInt: parsing "9223372036854775808": value out of range
+
+eval
+'9223372036854775807'::int8
+----
+9223372036854775807
+
+eval
+'-9223372036854775809'::int8
+----
+could not parse "-9223372036854775809" as type int: strconv.ParseInt: parsing "-9223372036854775809": value out of range
+
+eval
+'-9223372036854775808'::int8
+----
+-9223372036854775808
+
+eval
+'2147483648'::int4
+----
+integer out of range for type int4
+
+eval
+'2147483647'::int4
+----
+2147483647
+
+eval
+'-2147483649'::int4
+----
+integer out of range for type int4
+
+eval
+'-2147483648'::int4
+----
+-2147483648
+
+eval
+'32768'::int2
+----
+integer out of range for type int2
+
+eval
+'32767'::int2
+----
+32767
+
+eval
+'-32769'::int2
+----
+integer out of range for type int2
+
+eval
+'-32768'::int2
+----
+-32768
+
+eval
 1::float
 ----
 1.0
@@ -345,12 +425,12 @@ NULL
 eval
 '0x123'::int + 1
 ----
-292
+could not parse "0x123" as type int: strconv.ParseInt: parsing "0x123": invalid syntax
 
 eval
 '0123'::int + 1
 ----
-84
+124
 
 eval
 '1.23'::float + 1.0
