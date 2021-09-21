@@ -25,6 +25,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 

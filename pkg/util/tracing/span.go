@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -192,7 +193,7 @@ func (sp *Span) RecordStructured(item Structured) {
 
 // SetTag adds a tag to the span. If there is a pre-existing tag set for the
 // key, it is overwritten.
-func (sp *Span) SetTag(key string, value interface{}) {
+func (sp *Span) SetTag(key string, value attribute.Value) {
 	if sp.done() {
 		return
 	}

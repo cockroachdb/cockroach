@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -776,7 +777,7 @@ func (ctx *Context) grpcDialOptions(
 		// is in setupSpanForIncomingRPC().
 		//
 		tagger := func(span *tracing.Span) {
-			span.SetTag("node", ctx.NodeID.Get().String())
+			span.SetTag("node", attribute.StringValue(ctx.NodeID.Get().String()))
 		}
 		unaryInterceptors = append(unaryInterceptors,
 			tracing.ClientInterceptor(tracer, tagger))

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc/metadata"
 )
@@ -509,6 +510,7 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	tr := NewTracer()
 	var counter countingStringer
 	logTags := logtags.SingleTagBuffer("tagfoo", "tagbar")
+	logTags = logTags.Add("foo1", &counter)
 	sp := tr.StartSpan("root",
 		WithForceRealSpan(),
 		WithLogTags(logTags),
@@ -516,23 +518,28 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	defer sp.Finish()
 
 	require.False(t, sp.IsVerbose())
-	sp.SetTag("foo1", &counter)
+	sp.SetTag("foo2", attribute.StringValue("bar2"))
 	sp.Record("dummy recording")
 	rec := sp.GetRecording()
 	require.Len(t, rec, 0)
+	// We didn't stringify the log tag.
 	require.Zero(t, int(counter))
 
 	// Verify that we didn't hold onto anything underneath.
 	sp.SetVerbose(true)
 	rec = sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].Tags, 3) // _unfinished:1 _verbose:1 tagfoo:tagbar
-	require.Zero(t, int(counter))
+	require.Len(t, rec[0].Tags, 4) // _unfinished:1 _verbose:1 tagfoo:tagbar foo1:1
+	_, ok := rec[0].Tags["foo2"]
+	require.False(t, ok)
+	require.Equal(t, 1, int(counter))
 
 	// Verify that subsequent tags are captured.
-	sp.SetTag("foo2", &counter)
+	sp.SetTag("foo3", attribute.StringValue("bar3"))
 	rec = sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].Tags, 4)
-	require.Equal(t, 1, int(counter))
+	require.Len(t, rec[0].Tags, 5)
+	_, ok = rec[0].Tags["foo3"]
+	require.True(t, ok)
+	require.Equal(t, 2, int(counter))
 }

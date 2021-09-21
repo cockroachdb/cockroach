@@ -181,16 +181,19 @@ func (s *spanInner) SetOperationName(operationName string) *spanInner {
 	return s
 }
 
-func (s *spanInner) SetTag(key string, value interface{}) *spanInner {
+func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
 	if s.isNoop() {
 		return s
 	}
 	return s.setTagInner(key, value, false /* locked */)
 }
 
-func (s *spanInner) setTagInner(key string, value interface{}, locked bool) *spanInner {
+func (s *spanInner) setTagInner(key string, value attribute.Value, locked bool) *spanInner {
 	if s.otelSpan != nil {
-		s.otelSpan.SetAttributes(attribute.Any(key, value))
+		s.otelSpan.SetAttributes(attribute.KeyValue{
+			Key:   attribute.Key(key),
+			Value: value,
+		})
 	}
 	if s.netTr != nil {
 		s.netTr.LazyPrintf("%s:%v", key, value)
