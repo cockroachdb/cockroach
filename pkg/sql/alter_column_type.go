@@ -83,6 +83,17 @@ func AlterColumnType(
 		return err
 	}
 
+	version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
+	if supported, err := types.IsTypeSupportedInVersion(version, typ); err != nil {
+		return err
+	} else if !supported {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"type %s is not supported until version upgrade is finalized",
+			typ.SQLString(),
+		)
+	}
+
 	// Special handling for STRING COLLATE xy to verify that we recognize the language.
 	if t.Collation != "" {
 		if types.IsStringType(typ) {

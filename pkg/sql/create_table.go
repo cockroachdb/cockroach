@@ -1641,6 +1641,15 @@ func NewTableDesc(
 					)
 				}
 			}
+			if supported, err := types.IsTypeSupportedInVersion(st.Version.ActiveVersionOrEmpty(ctx), defType); err != nil {
+				return nil, err
+			} else if !supported {
+				return nil, pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"type %s is not supported until version upgrade is finalized",
+					defType.SQLString(),
+				)
+			}
 			if d.PrimaryKey.Sharded {
 				if !sessionData.HashShardedIndexesEnabled {
 					return nil, hashShardedIndexesDisabledError

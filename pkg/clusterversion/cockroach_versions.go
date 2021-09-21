@@ -281,6 +281,8 @@ const (
 	// MarkerDataKeysRegistry switches to using an atomic marker file
 	// for denoting which data keys registry is active.
 	MarkerDataKeysRegistry
+	// RegroleType is the version the new Regrole type is added in.
+	RegroleType
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -470,6 +472,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     MarkerDataKeysRegistry,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1164},
+	},
+	{
+		Key:     RegroleType,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1166},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

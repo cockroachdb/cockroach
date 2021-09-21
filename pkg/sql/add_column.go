@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -46,6 +47,17 @@ func (p *planner) addColumnImpl(
 		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"VECTOR column types are unsupported",
+		)
+	}
+
+	version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
+	if supported, err := types.IsTypeSupportedInVersion(version, toType); err != nil {
+		return err
+	} else if !supported {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"type %s is not supported until version upgrade is finalized",
+			toType.SQLString(),
 		)
 	}
 
