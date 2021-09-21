@@ -27,12 +27,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/cobra"
@@ -479,14 +479,14 @@ func TestServerConnSettings(t *testing.T) {
 			"192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", ":"},
-			":", ":",
-			":", ":",
-			":", ":",
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1:"},
-			"127.0.0.1:", "127.0.0.1:",
-			"127.0.0.1:", "127.0.0.1:",
-			"127.0.0.1:", "127.0.0.1:",
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", ":12345"},
 			":12345", ":12345",
@@ -886,15 +886,11 @@ func TestServerJoinSettings(t *testing.T) {
 
 		var actual []string
 		myHostname, _ := os.Hostname()
-		for _, addr := range serverCfg.JoinList {
-			res, err := resolver.NewResolver(addr)
-			if err != nil {
-				t.Error(err)
-			}
-			actualAddr := res.Addr()
+		for _, j := range serverCfg.JoinList {
+			addr := util.MakeUnresolvedAddrWithDefaults("tcp", j, base.DefaultPort)
+
 			// Normalize the local hostname to make the test location-agnostic.
-			actualAddr = strings.ReplaceAll(actualAddr, myHostname, "HOSTNAME")
-			actual = append(actual, actualAddr)
+			actual = append(actual, strings.ReplaceAll(addr.String(), myHostname, "HOSTNAME"))
 		}
 		if !reflect.DeepEqual(td.expectedJoin, actual) {
 			t.Errorf("%d. serverCfg.JoinList expected %#v, but got %#v. td.args was '%#v'.",
