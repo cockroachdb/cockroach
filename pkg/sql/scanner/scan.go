@@ -697,9 +697,13 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 		// string as an octal literal. Note: we can't use strings.TrimLeft
 		// here, because it will truncate '0' to ''.
 		if !isHex {
-			for len(lval.Str()) > 1 && lval.Str()[0] == '0' {
-				lval.SetStr(lval.Str()[1:])
+			i, err := strconv.ParseInt(lval.Str(), 10, 64)
+			if err != nil {
+				return
 			}
+
+			lval.SetStr(strconv.FormatInt(i, 10))
+
 		}
 
 		lval.SetID(lexbase.ICONST)

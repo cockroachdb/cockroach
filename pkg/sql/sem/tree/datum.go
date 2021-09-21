@@ -650,7 +650,7 @@ func NewDInt(d DInt) *DInt {
 // ParseDInt parses and returns the *DInt Datum value represented by the provided
 // string, or an error if parsing is unsuccessful.
 func ParseDInt(s string) (*DInt, error) {
-	i, err := strconv.ParseInt(s, 0, 64)
+	i, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return nil, MakeParseError(s, types.Int, err)
 	}
