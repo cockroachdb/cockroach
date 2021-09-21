@@ -94,3 +94,30 @@ feature-usage
 CREATE OR REPLACE VIEW cor_view AS SELECT 1
 ----
 sql.schema.create_or_replace_view
+
+feature-allowlist
+sql.schema.*
+----
+
+feature-usage
+CREATE TABLE on_update_t (a INT PRIMARY KEY, b INT8 DEFAULT 1 ON UPDATE 2)
+----
+sql.schema.create_table
+sql.schema.new_column.qualification.default_expr
+sql.schema.new_column.qualification.on_update
+sql.schema.new_column_type.int8
+
+feature-usage
+ALTER TABLE on_update_t ADD COLUMN c INT DEFAULT 1 ON UPDATE 2;
+----
+sql.schema.alter_table
+sql.schema.alter_table.add_column
+sql.schema.new_column.qualification.default_expr
+sql.schema.new_column.qualification.on_update
+sql.schema.new_column_type.int8
+
+feature-usage
+ALTER TABLE on_update_t ALTER COLUMN b SET ON UPDATE 3
+----
+sql.schema.alter_table
+sql.schema.alter_table.set_on_update
