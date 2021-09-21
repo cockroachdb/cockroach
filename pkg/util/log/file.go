@@ -275,7 +275,7 @@ func (l *fileSink) flushAndMaybeSyncLocked(doSync bool) {
 
 var (
 	pid      = os.Getpid()
-	program  = filepath.Base(os.Args[0])
+	program  = removeHyphens(removePeriods(filepath.Base(os.Args[0])))
 	host     = "unknownhost"
 	userName = "unknownuser"
 )
@@ -313,7 +313,14 @@ const FileTimeFormat = "2006-01-02T15_04_05Z07:00"
 // the only periods in the filename are the ones added by logName so it can
 // be easily parsed.
 func removePeriods(s string) string {
-	return strings.Replace(s, ".", "", -1)
+	return strings.ReplaceAll(s, ".", "")
+}
+
+// removeHyphens removes all extraneous hyphens. This is required to
+// ensure that the only hyphen in the program prefix is the one that
+// separates the program name from the file group name.
+func removeHyphens(s string) string {
+	return strings.ReplaceAll(s, "-", "_")
 }
 
 // logName returns a new log file name with start time t, and the name
