@@ -205,7 +205,8 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 									aggFnInputTypes[j] = randgen.RandType(rng)
 								}
 								// There is a special case for some functions when at
-								// least one argument is a tuple.
+								// least one argument is a tuple or an array of
+								// tuples.
 								// Such cases pass GetAggregateInfo check below,
 								// but they are actually invalid, and during normal
 								// execution it is caught during type-checking.
@@ -220,7 +221,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 									execinfrapb.StUnion,
 									execinfrapb.StCollect:
 									for _, typ := range aggFnInputTypes {
-										if typ.Family() == types.TupleFamily {
+										if typ.Family() == types.TupleFamily || (typ.Family() == types.ArrayFamily && typ.ArrayContents().Family() == types.TupleFamily) {
 											invalid = true
 											break
 										}

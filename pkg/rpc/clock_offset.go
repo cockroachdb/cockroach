@@ -177,7 +177,7 @@ func (r *RemoteClockMonitor) UpdateOffset(
 	}
 
 	if log.V(2) {
-		log.Health.Infof(ctx, "update offset: %s %v", addr, r.mu.offsets[addr])
+		log.Dev.Infof(ctx, "update offset: %s %v", addr, r.mu.offsets[addr])
 	}
 }
 
@@ -232,7 +232,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 				maxOffset, healthyOffsetCount, numClocks)
 		}
 		if log.V(1) {
-			log.Health.Infof(ctx, "%d of %d nodes are within the maximum clock offset of %s", healthyOffsetCount, numClocks, maxOffset)
+			log.Dev.Infof(ctx, "%d of %d nodes are within the maximum clock offset of %s", healthyOffsetCount, numClocks, maxOffset)
 		}
 	}
 
@@ -263,9 +263,7 @@ func (r RemoteOffset) isHealthy(ctx context.Context, maxOffset time.Duration) bo
 		// The maximum offset is in the uncertainty window of the measured offset;
 		// health is ambiguous. For now, we err on the side of not spuriously
 		// killing nodes.
-		if log.V(1) {
-			log.Health.Infof(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, toleratedOffset)
-		}
+		log.Health.Warningf(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, toleratedOffset)
 		return true
 	}
 }

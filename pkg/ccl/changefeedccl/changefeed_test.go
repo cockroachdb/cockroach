@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	// Imported to allow multi-tenant tests
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	// Imported to allow locality-related table mutations
@@ -66,9 +67,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -4580,4 +4583,139 @@ func TestChangefeedCaseInsensitiveOpts(t *testing.T) {
 		})
 	}
 	t.Run(`sinkless`, sinklessTest(testFn))
+}
+
+func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
+	mm := mon.NewMonitorWithLimit(
+		"test-mm", mon.MemoryResource, budget,
+		nil, nil,
+		128 /* small allocation increment */, 100,
+		cluster.MakeTestingClusterSettings())
+	mm.Start(context.Background(), nil, mon.MakeStandaloneBudget(budget))
+	return mm
+}
+
+type memoryHoggingSink struct {
+	allEmitted chan struct{}
+	mu         struct {
+		syncutil.Mutex
+		expectedRows int
+		seenRows     map[string]struct{}
+		numFlushes   int
+		alloc        kvevent.Alloc
+	}
+}
+
+var _ Sink = (*memoryHoggingSink)(nil)
+
+func (s *memoryHoggingSink) expectRows(n int) chan struct{} {
+	if n <= 0 {
+		panic("n<=0")
+	}
+	s.allEmitted = make(chan struct{})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.expectedRows = n
+	s.mu.numFlushes = 0
+	s.mu.seenRows = make(map[string]struct{})
+	s.mu.alloc.Release(context.Background()) // Release leftover alloc
+	return s.allEmitted
+}
+
+func (s *memoryHoggingSink) Dial() error {
+	return nil
+}
+
+func (s *memoryHoggingSink) EmitRow(
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.seenRows[string(key)] = struct{}{}
+	s.mu.alloc.Merge(&alloc)
+	if s.mu.expectedRows == len(s.mu.seenRows) && s.allEmitted != nil {
+		close(s.allEmitted)
+		s.allEmitted = nil
+	}
+	return nil
+}
+
+func (s *memoryHoggingSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
+	panic("should not be called")
+}
+
+func (s *memoryHoggingSink) Flush(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.numFlushes++
+	s.mu.alloc.Release(ctx)
+	return nil
+}
+
+func (s *memoryHoggingSink) numFlushes() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.numFlushes
+}
+func (s *memoryHoggingSink) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.alloc.Release(context.Background())
+	return nil
+}
+
+func TestChangefeedFlushesSinkToReleaseMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, stopServer := startTestServer(t, newTestOptions())
+	defer stopServer()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	knobs := s.TestingKnobs().
+		DistSQL.(*execinfra.TestingKnobs).
+		Changefeed.(*TestingKnobs)
+
+	// Arrange for a small memory budget.
+	knobs.MemMonitor = startMonitorWithBudget(4096)
+
+	// Ignore resolved events delivered to this changefeed.  This has
+	// an effect of never advancing the frontier, and thus never flushing
+	// the sink due to frontier advancement.  The only time we flush the sink
+	// is if the memory pressure causes flush request to be delivered.
+	knobs.ShouldSkipResolved = func(_ *jobspb.ResolvedSpan) bool {
+		return true
+	}
+
+	// Arrange for custom sink to be used -- a sink that does not
+	// release its resources.
+	sink := &memoryHoggingSink{}
+	knobs.WrapSink = func(_ Sink, _ jobspb.JobID) Sink {
+		return sink
+	}
+
+	// Create table, and insert 123 rows in it -- this fills up
+	// our tiny memory buffer (~26 rows do)
+	sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
+	sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 123)`)
+
+	// Expect 123 rows from backfill.
+	allEmitted := sink.expectRows(123)
+
+	sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo INTO 'http://host/does/not/matter'`)
+
+	<-allEmitted
+	require.Greater(t, sink.numFlushes(), 0)
+
+	// Insert another set of rows.  This now uses rangefeeds.
+	allEmitted = sink.expectRows(123)
+	sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 123)`)
+	<-allEmitted
+	require.Greater(t, sink.numFlushes(), 0)
 }
