@@ -131,6 +131,9 @@ type cTableInfo struct {
 
 	keyValTypes []*types.T
 	extraTypes  []*types.T
+	// extraValDirections contains len(extraTypes) ASC directions. This will
+	// only be used for unique secondary indexes.
+	extraValDirections []descpb.IndexDescriptor_Direction
 
 	da rowenc.DatumAlloc
 }
@@ -159,6 +162,7 @@ func (c *cTableInfo) Release() {
 		colIdxMap:            c.colIdxMap,
 		keyValTypes:          c.keyValTypes[:0],
 		extraTypes:           c.extraTypes[:0],
+		extraValDirections:   c.extraValDirections[:0],
 		neededColsList:       c.neededColsList[:0],
 		notNeededColOrdinals: c.notNeededColOrdinals[:0],
 		indexColOrdinals:     c.indexColOrdinals[:0],
@@ -596,6 +600,14 @@ func (rf *cFetcher) Init(
 		} else {
 			table.extraValColOrdinals = make([]int, nExtraColumns)
 		}
+		// Note that for extraValDirections we only need to make sure that the
+		// slice has the correct length set since the ASC direction is the zero
+		// value and we don't modify the elements of this slice.
+		if cap(table.extraValDirections) >= nExtraColumns {
+			table.extraValDirections = table.extraValDirections[:nExtraColumns]
+		} else {
+			table.extraValDirections = make([]descpb.IndexDescriptor_Direction, nExtraColumns)
+		}
 
 		extraValColOrdinals := table.extraValColOrdinals
 		_ = extraValColOrdinals[nExtraColumns-1]
@@ -969,12 +981,8 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.remainingValueColsByIdx.CopyFrom(rf.table.neededValueColsByIdx)
 			// Process the current KV's value component.
-			prettyKey, prettyVal, err := rf.processValue(ctx, familyID)
-			if err != nil {
+			if err := rf.processValue(ctx, familyID); err != nil {
 				return nil, err
-			}
-			if rf.traceKV {
-				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 			}
 			// Update the MVCC values for this row.
 			if rf.table.rowLastModified.Less(rf.machine.nextKV.Value.Timestamp) {
@@ -1069,12 +1077,8 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 			// Process the current KV's value component.
-			prettyKey, prettyVal, err := rf.processValue(ctx, familyID)
-			if err != nil {
+			if err := rf.processValue(ctx, familyID); err != nil {
 				return nil, err
-			}
-			if rf.traceKV {
-				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 			}
 
 			// Update the MVCC values for this row.
@@ -1173,14 +1177,17 @@ func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int) tree.Datum {
 // processValue processes the state machine's current value component, setting
 // columns in the rowIdx'th tuple in the current batch depending on what data
 // is found in the current value component.
-// If debugStrings is true, returns pretty printed key and value
-// information in prettyKey/prettyValue (otherwise they are empty strings).
-func (rf *cFetcher) processValue(
-	ctx context.Context, familyID descpb.FamilyID,
-) (prettyKey string, prettyValue string, err error) {
+func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) (err error) {
 	table := rf.table
 
+	var prettyKey, prettyValue string
 	if rf.traceKV {
+		defer func() {
+			if err == nil {
+				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyValue)
+			}
+		}()
+
 		var buf strings.Builder
 		buf.WriteByte('/')
 		buf.WriteString(rf.table.desc.GetName())
@@ -1200,7 +1207,7 @@ func (rf *cFetcher) processValue(
 		if rf.traceKV {
 			prettyValue = tree.DNull.String()
 		}
-		return prettyKey, prettyValue, nil
+		return nil
 	}
 
 	val := rf.machine.nextKV.Value
@@ -1225,17 +1232,17 @@ func (rf *cFetcher) processValue(
 			if err != nil {
 				break
 			}
-			prettyKey, prettyValue, err = rf.processValueTuple(ctx, table, tupleBytes, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueBytes(ctx, table, tupleBytes, prettyKey)
 		default:
 			var family *descpb.ColumnFamilyDescriptor
 			family, err = table.desc.FindFamilyByID(familyID)
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
+				return scrub.WrapError(scrub.IndexKeyDecodingError, err)
 			}
 			prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, family, prettyKey)
 		}
 		if err != nil {
-			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
+			return scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
 	} else {
 		tag := val.GetTag()
@@ -1247,7 +1254,7 @@ func (rf *cFetcher) processValue(
 			// key columns if they are present, so we decode them here.
 			valueBytes, err = val.GetBytes()
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
+				return scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 
 			if table.isSecondaryIndex && table.index.IsUnique() {
@@ -1260,13 +1267,13 @@ func (rf *cFetcher) processValue(
 					table.extraValColOrdinals,
 					false, /* checkAllColsForNull */
 					table.extraTypes,
-					nil,
+					table.extraValDirections,
 					&rf.machine.remainingValueColsByIdx,
 					valueBytes,
 					rf.table.invertedColOrdinal,
 				)
 				if err != nil {
-					return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
+					return scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
 				}
 				if rf.traceKV {
 					var buf strings.Builder
@@ -1280,7 +1287,7 @@ func (rf *cFetcher) processValue(
 		case roachpb.ValueType_TUPLE:
 			valueBytes, err = val.GetTuple()
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
+				return scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 		}
 
@@ -1289,7 +1296,7 @@ func (rf *cFetcher) processValue(
 				ctx, table, valueBytes, prettyKey,
 			)
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
+				return scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 		}
 	}
@@ -1298,7 +1305,7 @@ func (rf *cFetcher) processValue(
 		prettyValue = tree.DNull.String()
 	}
 
-	return prettyKey, prettyValue, nil
+	return nil
 }
 
 // processValueSingle processes the given value (of column
@@ -1462,14 +1469,6 @@ func (rf *cFetcher) processValueBytes(
 		prettyValue = rf.machine.prettyValueBuf.String()
 	}
 	return prettyKey, prettyValue, nil
-}
-
-// processValueTuple processes the given values (of columns family.ColumnIDs),
-// setting values in the rf.row accordingly. The key is only used for logging.
-func (rf *cFetcher) processValueTuple(
-	ctx context.Context, table *cTableInfo, tupleBytes []byte, prettyKeyPrefix string,
-) (prettyKey string, prettyValue string, err error) {
-	return rf.processValueBytes(ctx, table, tupleBytes, prettyKeyPrefix)
 }
 
 func (rf *cFetcher) fillNulls() error {
