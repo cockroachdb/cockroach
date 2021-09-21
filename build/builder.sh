@@ -200,7 +200,7 @@ docker run --init --privileged -i ${tty-} --rm \
 res=$?
 set -e
 
-if test $res -ne 0 -a \( ${1-x} = "make" -o ${1-x} = "xmkrelease" \) ; then
+if test $res -ne 0 -a \( ${1-x} = "make" -o ${1-x} = "mkrelease" \) ; then
    ram=$(docker run -i --rm \
          -u "$uid:$gid" \
          "${image}:${version}" awk '/MemTotal/{print $2}' /proc/meminfo)
