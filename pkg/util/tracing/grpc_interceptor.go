@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
@@ -83,7 +84,7 @@ func setGRPCErrorTag(sp *Span, err error) {
 		return
 	}
 	s, _ := status.FromError(err)
-	sp.SetTag("response_code", codes.Error)
+	sp.SetTag("response_code", attribute.IntValue(int(codes.Error)))
 	if sp.i.otelSpan != nil {
 		sp.i.otelSpan.SetStatus(codes.Error, s.Message())
 	}

@@ -117,7 +117,7 @@ func TestTracerRecording(t *testing.T) {
 
 	s3 := tr.StartSpan("c", WithParentAndAutoCollection(s2))
 	s3.Recordf("x=%d", 4)
-	s3.SetTag("tag", "val")
+	s3.SetTag("tag", attribute.StringValue("val"))
 
 	s2.Finish()
 
