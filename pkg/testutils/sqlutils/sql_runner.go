@@ -103,6 +103,9 @@ func (sr *SQLRunner) ExecRowsAffected(
 // matching the given regex.
 func (sr *SQLRunner) ExpectErr(t testutils.TB, errRE string, query string, args ...interface{}) {
 	t.Helper()
+	if errRE == "" {
+		t.Fatal("Empty error regular expression was provided to ExpectErr. This would assert that no error occurred. Use Exec instead, it is less confusing.")
+	}
 	_, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if !testutils.IsError(err, errRE) {
 		t.Fatalf("expected error '%s', got: %v", errRE, err)
