@@ -106,6 +106,7 @@ ORDER BY name ASC`)
 		"system.descriptor",
 		"system.namespace",
 		"system.scheduled_jobs",
+		"system.settings",
 	)
 	sort.Strings(tables)
 
