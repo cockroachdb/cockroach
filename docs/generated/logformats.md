@@ -332,6 +332,7 @@ Each entry contains at least the following fields:
 | `line` | The line number where the event was emitted in the source. |
 | `redactable` | Whether the payload is redactable (see below for details). |
 | `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+| `version` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
@@ -389,6 +390,7 @@ Each entry contains at least the following fields:
 | `l` | The line number where the event was emitted in the source. |
 | `r` | Whether the payload is redactable (see below for details). |
 | `t` | The timestamp at which the event was emitted on the logging channel. |
+| `v` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
@@ -447,6 +449,7 @@ Each entry contains at least the following fields:
 | `line` | The line number where the event was emitted in the source. |
 | `redactable` | Whether the payload is redactable (see below for details). |
 | `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+| `version` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
@@ -505,6 +508,7 @@ Each entry contains at least the following fields:
 | `l` | The line number where the event was emitted in the source. |
 | `r` | Whether the payload is redactable (see below for details). |
 | `t` | The timestamp at which the event was emitted on the logging channel. |
+| `v` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,

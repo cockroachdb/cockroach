@@ -130,6 +130,7 @@ CREATE TABLE like_table (
   h INT,
   j JSON,
   k INT UNIQUE WITHOUT INDEX,
+  t TIMESTAMPTZ DEFAULT current_timestamp() - '5s'::interval ON UPDATE current_timestamp(),
   PRIMARY KEY (a, b),
   UNIQUE INDEX foo (b DESC, c),
   INDEX (c) STORING (j),
@@ -151,9 +152,10 @@ like_none  CREATE TABLE public.like_none (
            h INT8 NULL,
            j JSONB NULL,
            k INT8 NULL,
+           t TIMESTAMPTZ NULL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-           FAMILY "primary" (a, b, c, h, j, k, rowid)
+           FAMILY "primary" (a, b, c, h, j, k, t, rowid)
 )
 
 statement ok
@@ -169,9 +171,10 @@ like_constraints  CREATE TABLE public.like_constraints (
                   h INT8 NULL,
                   j JSONB NULL,
                   k INT8 NULL,
+                  t TIMESTAMPTZ NULL,
                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-                  FAMILY "primary" (a, b, c, h, j, k, rowid),
+                  FAMILY "primary" (a, b, c, h, j, k, t, rowid),
                   CONSTRAINT check_a CHECK (a > 3:::INT8),
                   CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
                   CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
@@ -191,11 +194,12 @@ like_indexes  CREATE TABLE public.like_indexes (
               h INT8 NULL,
               j JSONB NULL,
               k INT8 NULL,
+              t TIMESTAMPTZ NULL,
               CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
               UNIQUE INDEX foo (b DESC, c ASC),
               INDEX like_table_c_idx (c ASC) STORING (j),
               INVERTED INDEX like_table_j_idx (j),
-              FAMILY "primary" (a, b, c, h, j, k)
+              FAMILY "primary" (a, b, c, h, j, k, t)
 )
 
 # INCLUDING GENERATED adds "generated columns", aka stored columns.
@@ -212,9 +216,10 @@ like_generated  CREATE TABLE public.like_generated (
                 h INT8 NULL,
                 j JSONB NULL,
                 k INT8 NULL,
+                t TIMESTAMPTZ NULL,
                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                 CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-                FAMILY "primary" (a, b, c, h, j, k, rowid)
+                FAMILY "primary" (a, b, c, h, j, k, t, rowid)
 )
 
 statement ok
@@ -230,9 +235,10 @@ like_defaults  CREATE TABLE public.like_defaults (
                h INT8 NULL,
                j JSONB NULL,
                k INT8 NULL,
+               t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-               FAMILY "primary" (a, b, c, h, j, k, rowid)
+               FAMILY "primary" (a, b, c, h, j, k, t, rowid)
 )
 
 statement ok
@@ -248,11 +254,12 @@ like_all  CREATE TABLE public.like_all (
           h INT8 NULL,
           j JSONB NULL,
           k INT8 NULL,
+          t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
           CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
           UNIQUE INDEX foo (b DESC, c ASC),
           INDEX like_table_c_idx (c ASC) STORING (j),
           INVERTED INDEX like_table_j_idx (j),
-          FAMILY "primary" (a, b, c, h, j, k),
+          FAMILY "primary" (a, b, c, h, j, k, t),
           CONSTRAINT check_a CHECK (a > 3:::INT8),
           CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
           CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
@@ -274,11 +281,12 @@ like_mixed  CREATE TABLE public.like_mixed (
             h INT8 NULL,
             j JSONB NULL,
             k INT8 NULL,
+            t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
             CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
             UNIQUE INDEX foo (b DESC, c ASC),
             INDEX like_table_c_idx (c ASC) STORING (j),
             INVERTED INDEX like_table_j_idx (j),
-            FAMILY "primary" (a, b, c, h, j, k)
+            FAMILY "primary" (a, b, c, h, j, k, t)
 )
 
 statement ok
@@ -321,13 +329,14 @@ like_more_specifiers  CREATE TABLE public.like_more_specifiers (
                       h INT8 NULL,
                       j JSONB NULL,
                       k INT8 NULL,
+                      t TIMESTAMPTZ NULL,
                       z DECIMAL NULL,
                       blah INT8 NULL,
                       rowid INT8 NOT VISIBLE NOT NULL,
                       rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                       CONSTRAINT "primary" PRIMARY KEY (rowid_1 ASC),
                       INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC),
-                      FAMILY "primary" (a, b, c, h, j, k, z, blah, rowid, rowid_1)
+                      FAMILY "primary" (a, b, c, h, j, k, t, z, blah, rowid, rowid_1)
 )
 
 statement ok

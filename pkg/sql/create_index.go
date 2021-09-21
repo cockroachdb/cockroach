@@ -614,12 +614,9 @@ var interleavedTableDisabledError = errors.WithIssueLink(
 	errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
 )
 
-var interleavedTableDisabledMigrationError = errors.WithIssueLink(
-	pgerror.New(pgcode.WarningDeprecatedFeature,
-		"creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored."+
-			" For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations"),
-	errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
-)
+var interleavedTableDisabledMigrationError = pgnotice.Newf(
+	"creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored." +
+		" For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations")
 
 // interleavedTableDeprecationAction either returns an error, if interleaved
 // tables are disabled, or sends a notice, if they're not. Returns any error
