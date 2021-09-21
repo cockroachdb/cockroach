@@ -17,7 +17,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 func registerReplicaGC(r *testRegistry) {
@@ -72,7 +74,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRest
 	// Start three new nodes that will take over all data.
 	c.Start(ctx, t, args, c.Range(4, 6))
 
-	// Recommission n1-3, with n3 in absentia, moving the replicas to n4-6.
+	// Decommission n1-3, with n3 in absentia, moving the replicas to n4-6.
 	if err := h.decommission(ctx, c.Range(1, 3), 2, "--wait=none"); err != nil {
 		t.Fatal(err)
 	}
@@ -82,6 +84,16 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRest
 
 	t.Status("waiting for zero replicas on n2")
 	h.waitForZeroReplicas(ctx, 2)
+
+	// Wait for the replica count on n3 to also drop to zero. This makes the test
+	// "test more" but also it prevents the test from failing spuriously, as later
+	// in the test any system ranges still on n3 would have a replication factor
+	// of five applied to them, and they would be unable to move off n3 as n1 and
+	// n2 will be down at that point. For details, see:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/67910#issuecomment-884856356
+	t.Status("waiting for zero replicas on n3")
+	waitForZeroReplicasOnN3(ctx, t, c.Conn(ctx, 1))
 
 	// Stop the remaining two old nodes, no replicas remaining there.
 	c.Stop(ctx, c.Range(1, 2))
@@ -236,5 +248,33 @@ func (h *replicagcTestHelper) isolateDeadNodes(ctx context.Context, runNode int)
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			h.t.Fatal(err)
 		}
+	}
+}
+
+func waitForZeroReplicasOnN3(ctx context.Context, t *test, db *gosql.DB) {
+	if err := retry.ForDuration(5*time.Minute, func() error {
+		const q = `select range_id, replicas from crdb_internal.ranges_no_leases where replicas @> ARRAY[3];`
+		rows, err := db.QueryContext(ctx, q)
+		if err != nil {
+			return err
+		}
+		m := make(map[int64]string)
+		for rows.Next() {
+			var rangeID int64
+			var replicas string
+			if err := rows.Scan(&rangeID, &replicas); err != nil {
+				return err
+			}
+			m[rangeID] = replicas
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if len(m) == 0 {
+			return nil
+		}
+		return errors.Errorf("ranges remained on n3 (according to meta2): %+v", m)
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
