@@ -2558,6 +2558,14 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					}
 				}
 			}
+			if c.OnUpdateExpr != nil {
+				if opts.Has(tree.LikeTableOptDefaults) {
+					def.OnUpdateExpr.Expr, err = parser.ParseExpr(*c.OnUpdateExpr)
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
 			defs = append(defs, &def)
 		}
 		if opts.Has(tree.LikeTableOptConstraints) {
