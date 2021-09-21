@@ -279,12 +279,6 @@ var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-var dropEnumValueEnabledClusterMode = settings.RegisterBoolSetting(
-	"sql.defaults.drop_enum_value.enabled",
-	"default value for enable_drop_enum_value; allows for dropping enum values",
-	false,
-).WithPublic()
-
 var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.override_multi_region_zone_config.enabled",
 	"default value for override_multi_region_zone_config; "+
@@ -2842,10 +2836,6 @@ func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
 
 func (m *sessionDataMutator) SetImplicitColumnPartitioningEnabled(val bool) {
 	m.data.ImplicitColumnPartitioningEnabled = val
-}
-
-func (m *sessionDataMutator) SetDropEnumValueEnabled(val bool) {
-	m.data.DropEnumValueEnabled = val
 }
 
 func (m *sessionDataMutator) SetOverrideMultiRegionZoneConfigEnabled(val bool) {
