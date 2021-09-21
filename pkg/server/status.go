@@ -1062,7 +1062,7 @@ func (s *statusServer) LogFile(
 	log.Flush()
 
 	// Read the logs.
-	reader, err := log.GetLogReader(req.File, true /* restricted */)
+	reader, err := log.GetLogReader(req.File)
 	if err != nil {
 		return nil, errors.Wrapf(err, "log file %q could not be opened", req.File)
 	}
