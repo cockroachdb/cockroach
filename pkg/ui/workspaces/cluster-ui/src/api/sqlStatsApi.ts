@@ -18,6 +18,10 @@ export const resetSQLStats = (): Promise<cockroach.server.serverpb.ResetSQLStats
     cockroach.server.serverpb.ResetSQLStatsResponse,
     RESET_SQL_STATS_PATH,
     cockroach.server.serverpb.ResetSQLStatsRequest,
-    new cockroach.server.serverpb.ResetSQLStatsRequest(),
+    new cockroach.server.serverpb.ResetSQLStatsRequest({
+      // reset_persisted_stats is set to true in order to clear both
+      // in-memory stats as well as persisted stats.
+      reset_persisted_stats: true,
+    }),
   );
 };
