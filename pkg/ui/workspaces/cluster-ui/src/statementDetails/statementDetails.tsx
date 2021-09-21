@@ -59,7 +59,7 @@ import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import styles from "./statementDetails.module.scss";
 import { NodeSummaryStats } from "../nodes";
-import { UIConfigState } from "../store/uiConfig";
+import { UIConfigState } from "../store";
 import moment, { Moment } from "moment";
 import { StatementsRequest } from "src/api/statementsApi";
 
@@ -334,7 +334,7 @@ export class StatementDetails extends React.Component<
     isTenant: false,
   };
 
-  changeSortSetting = (ss: SortSetting) => {
+  changeSortSetting = (ss: SortSetting): void => {
     this.setState({
       sortSetting: ss,
     });
@@ -343,12 +343,12 @@ export class StatementDetails extends React.Component<
     }
   };
 
-  refreshStatements = () => {
+  refreshStatements = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshStatements(req);
   };
 
-  componentDidMount() {
+  componentDidMount(): void {
     this.refreshStatements();
     if (!this.props.isTenant) {
       this.props.refreshStatementDiagnosticsRequests();
@@ -357,7 +357,7 @@ export class StatementDetails extends React.Component<
     }
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(): void {
     this.refreshStatements();
     if (!this.props.isTenant) {
       this.props.refreshStatementDiagnosticsRequests();
@@ -366,7 +366,7 @@ export class StatementDetails extends React.Component<
     }
   }
 
-  onTabChange = (tabId: string) => {
+  onTabChange = (tabId: string): void => {
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
     searchParams.set("tab", tabId);
@@ -380,14 +380,14 @@ export class StatementDetails extends React.Component<
     this.props.onTabChanged && this.props.onTabChanged(tabId);
   };
 
-  backToStatementsClick = () => {
+  backToStatementsClick = (): void => {
     this.props.history.push("/statements");
     if (this.props.onBackToStatementsClick) {
       this.props.onBackToStatementsClick();
     }
   };
 
-  render() {
+  render(): React.ReactElement {
     const app = getMatchParamByName(this.props.match, appAttr);
     return (
       <div className={cx("root")}>
@@ -417,7 +417,7 @@ export class StatementDetails extends React.Component<
     );
   }
 
-  renderContent = () => {
+  renderContent = (): React.ReactElement => {
     const {
       createStatementDiagnosticsReport,
       diagnosticsReports,
@@ -500,6 +500,21 @@ export class StatementDetails extends React.Component<
       moment(stats.last_exec_timestamp.seconds.low * 1e3).format(
         "MMM DD, YYYY HH:MM",
       );
+    const statementSampled = stats.exec_stats.count > Long.fromNumber(0);
+    const unavailableTooltip = !statementSampled && (
+      <Tooltip
+        placement="bottom"
+        style="default"
+        content={
+          <p>
+            This metric is part of the statement execution and therefore will
+            not be available until the statement is sampled via tracing.
+          </p>
+        }
+      >
+        <span className={cx("tooltip-info")}>unavailable</span>
+      </Tooltip>
+    );
     return (
       <Tabs
         defaultActiveKey="1"
@@ -556,41 +571,53 @@ export class StatementDetails extends React.Component<
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Mean rows/bytes read</Text>
-                      <Text>
-                        {formatNumberForDisplay(
-                          stats.rows_read.mean,
-                          formatTwoPlaces,
-                        )}
-                        {" / "}
-                        {formatNumberForDisplay(stats.bytes_read.mean, Bytes)}
-                      </Text>
+                      {statementSampled && (
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.rows_read.mean,
+                            formatTwoPlaces,
+                          )}
+                          {" / "}
+                          {formatNumberForDisplay(stats.bytes_read.mean, Bytes)}
+                        </Text>
+                      )}
+                      {unavailableTooltip}
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Max memory usage</Text>
-                      <Text>
-                        {formatNumberForDisplay(
-                          stats.exec_stats.max_mem_usage.mean,
-                          Bytes,
-                        )}
-                      </Text>
+                      {statementSampled && (
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.exec_stats.max_mem_usage.mean,
+                            Bytes,
+                          )}
+                        </Text>
+                      )}
+                      {unavailableTooltip}
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Network usage</Text>
-                      <Text>
-                        {formatNumberForDisplay(
-                          stats.exec_stats.network_bytes.mean,
-                          Bytes,
-                        )}
-                      </Text>
+                      {statementSampled && (
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.exec_stats.network_bytes.mean,
+                            Bytes,
+                          )}
+                        </Text>
+                      )}
+                      {unavailableTooltip}
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Max scratch disk usage</Text>
-                      <Text>
-                        {formatNumberForDisplay(
-                          stats.exec_stats.max_disk_usage.mean,
-                          Bytes,
-                        )}
-                      </Text>
+                      {statementSampled && (
+                        <Text>
+                          {formatNumberForDisplay(
+                            stats.exec_stats.max_disk_usage.mean,
+                            Bytes,
+                          )}
+                        </Text>
+                      )}
+                      {unavailableTooltip}
                     </div>
                   </Col>
                 </Row>
