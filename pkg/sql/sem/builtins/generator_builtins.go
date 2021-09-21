@@ -1261,13 +1261,8 @@ func makeJSONPopulateImpl(gen tree.GeneratorWithExprsFactory, info string) tree.
 		// the default values of each field will be NULL.
 		// The second argument can also be null, in which case the first argument
 		// is returned as-is.
-		Types: tree.ArgTypes{{"base", types.Any}, {"from_json", types.Jsonb}},
-		ReturnType: func(args []tree.TypedExpr) *types.T {
-			if len(args) != 2 {
-				return tree.UnknownReturnType
-			}
-			return args[0].ResolvedType()
-		},
+		Types:              tree.ArgTypes{{"base", types.AnyTuple}, {"from_json", types.Jsonb}},
+		ReturnType:         tree.IdentityReturnType(0),
 		GeneratorWithExprs: gen,
 		Info:               info,
 		Volatility:         tree.VolatilityStable,
