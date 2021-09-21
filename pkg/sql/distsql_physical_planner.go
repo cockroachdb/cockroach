@@ -730,11 +730,12 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 		if planner.instrumentation.collectBundle && planner.curPlan.flags.IsSet(planFlagVectorized) {
 			flowCtx := newFlowCtxForExplainPurposes(p, planner)
 			getExplain := func(verbose bool) []string {
-				explain, err := colflow.ExplainVec(
+				explain, cleanup, err := colflow.ExplainVec(
 					ctx, flowCtx, flows, p.infra.LocalProcessors, opChains,
 					planner.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
 					verbose, planner.curPlan.flags.IsDistributed(),
 				)
+				cleanup()
 				if err != nil {
 					// In some edge cases (like when subqueries are present or
 					// when certain component doesn't implement execinfra.OpNode
