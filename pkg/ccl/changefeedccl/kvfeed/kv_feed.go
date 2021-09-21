@@ -42,7 +42,7 @@ type Config struct {
 	Gossip             gossip.OptionalGossip
 	Spans              []roachpb.Span
 	Targets            jobspb.ChangefeedTargets
-	Sink               EventBufferWriter
+	Writer             EventBufferWriter
 	LeaseMgr           *lease.Manager
 	EventBufferFactory func() EventBuffer
 	WithDiff           bool
@@ -92,7 +92,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	f := newKVFeed(
-		cfg.Sink, cfg.Spans,
+		cfg.Writer, cfg.Spans,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff,
 		cfg.InitialHighWater,
@@ -101,11 +101,19 @@ func Run(ctx context.Context, cfg Config) error {
 	g.GoCtx(f.run)
 	err := g.Wait()
 	// NB: The higher layers of the changefeed should detect the boundary and the
-	// policy and tear everything down. Returning before the higher layers tear
-	// down the changefeed exposes synchronization challenges.
+	// policy and tear everything down. Returning before the higher layers tear down
+	// the changefeed exposes synchronization challenges if the provided writer is
+	// buffered. Errors returned from this function will cause the
+	// changefeedAggregator to exit even if all values haven't been read out of the
+	// provided buffer.
 	var scErr schemaChangeDetectedError
 	if errors.As(err, &scErr) {
-		log.Infof(ctx, "stopping changefeed due to schema change at %v", scErr.ts)
+		log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
+		// Close the buffer so the consumer (changeAggregator) knows no more
+		// writes are expected and can transition to a draining state.
+		f.writer.Close(ctx)
+		// This context is canceled by the change aggregator when it receives
+		// ErrBufferClosed from the kv buffer that we closed above.
 		<-ctx.Done()
 		err = nil
 	}
@@ -160,7 +168,7 @@ type kvFeed struct {
 	withDiff            bool
 	withInitialBackfill bool
 	initialHighWater    hlc.Timestamp
-	sink                EventBufferWriter
+	writer              EventBufferWriter
 	codec               keys.SQLCodec
 
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
@@ -174,7 +182,7 @@ type kvFeed struct {
 }
 
 func newKVFeed(
-	sink EventBufferWriter,
+	writer EventBufferWriter,
 	spans []roachpb.Span,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
@@ -187,7 +195,7 @@ func newKVFeed(
 	bf func() EventBuffer,
 ) *kvFeed {
 	return &kvFeed{
-		sink:                sink,
+		writer:              writer,
 		spans:               spans,
 		withInitialBackfill: withInitialBackfill,
 		withDiff:            withDiff,
@@ -239,11 +247,12 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		if f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyNoBackfill ||
 			boundaryType == jobspb.ResolvedSpan_RESTART {
 			for _, span := range f.spans {
-				if err := f.sink.AddResolved(ctx, span, highWater, boundaryType); err != nil {
+				if err := f.writer.AddResolved(ctx, span, highWater, boundaryType); err != nil {
 					return err
 				}
 			}
 		}
+
 		// Exit if the policy says we should.
 		if boundaryType == jobspb.ResolvedSpan_RESTART || boundaryType == jobspb.ResolvedSpan_EXIT {
 			return schemaChangeDetectedError{highWater.Next()}
@@ -327,7 +336,7 @@ func (f *kvFeed) scanIfShould(
 		return nil
 	}
 
-	if err := f.scanner.Scan(ctx, f.sink, physicalConfig{
+	if err := f.scanner.Scan(ctx, f.writer, physicalConfig{
 		Spans:     spansToBackfill,
 		Timestamp: scanTime,
 		WithDiff:  !isInitialScan && f.withDiff,
@@ -356,7 +365,7 @@ func (f *kvFeed) runUntilTableEvent(
 	g := ctxgroup.WithContext(ctx)
 	physicalCfg := physicalConfig{Spans: f.spans, Timestamp: startFrom, WithDiff: f.withDiff}
 	g.GoCtx(func(ctx context.Context) error {
-		return copyFromSourceToSinkUntilTableEvent(ctx, f.sink, memBuf, physicalCfg, f.tableFeed)
+		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, physicalCfg, f.tableFeed)
 	})
 	g.GoCtx(func(ctx context.Context) error {
 		return f.physicalFeed.Run(ctx, memBuf, physicalCfg)
@@ -396,14 +405,14 @@ func (e *errUnknownEvent) Error() string {
 	return "unknown event type"
 }
 
-// copyFromSourceToSinkUntilTableEvents will pull read entries from source and
-// publish them to sink if there is no table event from the schemaFeed. If a
+// copyFromSourceToDestUntilTableEvents will pull read entries from source and
+// publish them to the destination if there is no table event from the SchemaFeed. If a
 // tableEvent occurs then the function will return once all of the spans have
 // been resolved up to the event. The first such event will be returned as
 // *errBoundaryReached. A nil error will never be returned.
-func copyFromSourceToSinkUntilTableEvent(
+func copyFromSourceToDestUntilTableEvent(
 	ctx context.Context,
-	sink EventBufferWriter,
+	dest EventBufferWriter,
 	source EventBufferReader,
 	cfg physicalConfig,
 	tables schemaFeed,
@@ -454,7 +463,7 @@ func copyFromSourceToSinkUntilTableEvent(
 		addEntry = func(e Event) error {
 			switch e.Type() {
 			case KVEvent:
-				return sink.AddKV(ctx, e.KV(), e.PrevValue(), e.BackfillTimestamp())
+				return dest.AddKV(ctx, e.KV(), e.PrevValue(), e.BackfillTimestamp())
 			case ResolvedEvent:
 				// TODO(ajwerner): technically this doesn't need to happen for most
 				// events - we just need to make sure we forward for events which are
@@ -462,7 +471,7 @@ func copyFromSourceToSinkUntilTableEvent(
 				// The logic currently doesn't make this clean.
 				resolved := e.Resolved()
 				frontier.Forward(resolved.Span, resolved.Timestamp)
-				return sink.AddResolved(ctx, resolved.Span, resolved.Timestamp, jobspb.ResolvedSpan_NONE)
+				return dest.AddResolved(ctx, resolved.Span, resolved.Timestamp, jobspb.ResolvedSpan_NONE)
 			default:
 				return &errUnknownEvent{e}
 			}

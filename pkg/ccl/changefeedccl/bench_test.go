@@ -222,7 +222,7 @@ func createBenchmarkChangefeed(
 		Gossip:   gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		Spans:    spans,
 		Targets:  details.Targets,
-		Sink:     buf,
+		Writer:   buf,
 		LeaseMgr: leaseMgr,
 		EventBufferFactory: func() kvfeed.EventBuffer {
 			return kvfeed.MakeMemBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics)
