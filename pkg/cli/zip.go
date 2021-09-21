@@ -50,6 +50,7 @@ var customQuery = map[string]string{
 		") SELECT * FROM spans, LATERAL crdb_internal.payloads_for_span(span_id)",
 	"system.jobs":       "SELECT *, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress FROM system.jobs",
 	"system.descriptor": "SELECT *, to_hex(descriptor) AS hex_descriptor FROM system.descriptor",
+	"system.settings":   "SELECT *, to_hex(value::bytes) as hex_value FROM system.settings",
 }
 
 type debugZipContext struct {
