@@ -168,17 +168,14 @@ func (l *fileSink) listLogFiles() (string, []logpb.FileInfo, error) {
 	return dir, results, nil
 }
 
-// GetLogReader returns a reader for the specified filename. In
-// restricted mode, the filename must be the base name of a file in
+// GetLogReader returns a reader for the specified filename.
+// The filename must be the base name of a file in
 // this process's log directory (this is safe for cases when the
 // filename comes from external sources, such as the admin UI via
-// HTTP). In unrestricted mode any path is allowed, relative to the
-// current directory, with the added feature that simple (base name)
-// file names will be searched in this process's log directory if not
-// found in the current directory.
+// HTTP).
 //
 // TODO(knz): make this work for secondary loggers too.
-func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
+func GetLogReader(filename string) (io.ReadCloser, error) {
 	fileSink := debugLog.getFileSink()
 	if fileSink == nil || !fileSink.enabled.Get() {
 		return nil, errNoFileLogging
@@ -191,61 +188,30 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 		return nil, errDirectoryNotSet
 	}
 
-	switch restricted {
-	case true:
-		// Verify there are no path separators in a restricted-mode pathname.
-		if filepath.Base(filename) != filename {
-			return nil, errors.Errorf("pathnames must be basenames only: %s", filename)
-		}
-		filename = filepath.Join(dir, filename)
-		// Symlinks are not followed in restricted mode.
-		info, err := os.Lstat(filename)
-		if err != nil {
-			if oserror.IsNotExist(err) {
-				return nil, errors.Errorf("no such file %s in the log directory", filename)
-			}
-			return nil, errors.Wrapf(err, "Lstat: %s", filename)
-		}
-		mode := info.Mode()
-		if mode&os.ModeSymlink != 0 {
-			return nil, errors.Errorf("symlinks are not allowed")
-		}
-		if !mode.IsRegular() {
-			return nil, errors.Errorf("not a regular file")
-		}
-	case false:
-		info, err := os.Stat(filename)
-		if err != nil {
-			if !oserror.IsNotExist(err) {
-				return nil, errors.Wrapf(err, "Stat: %s", filename)
-			}
-			// The absolute filename didn't work, so try within the log
-			// directory if the filename isn't a path.
-			if filepath.IsAbs(filename) {
-				return nil, errors.Errorf("no such file %s", filename)
-			}
-			filenameAttempt := filepath.Join(dir, filename)
-			info, err = os.Stat(filenameAttempt)
-			if err != nil {
-				if oserror.IsNotExist(err) {
-					return nil, errors.Errorf("no such file %s either in current directory or in %s", filename, dir)
-				}
-				return nil, errors.Wrapf(err, "Stat: %s", filename)
-			}
-			filename = filenameAttempt
-		}
-		filename, err = filepath.EvalSymlinks(filename)
-		if err != nil {
-			return nil, err
-		}
-		if !info.Mode().IsRegular() {
-			return nil, errors.Errorf("not a regular file")
-		}
+	// Verify there are no path separators in a restricted-mode pathname.
+	if filepath.Base(filename) != filename {
+		return nil, errors.Errorf("pathnames must be basenames only: %s", filename)
+	}
+	// Check that the file name is valid.
+	if _, err := ParseLogFilename(filename); err != nil {
+		return nil, err
 	}
 
-	// Check that the file name is valid.
-	if _, err := ParseLogFilename(filepath.Base(filename)); err != nil {
-		return nil, err
+	filename = filepath.Join(dir, filename)
+	// Symlinks are not followed.
+	info, err := os.Lstat(filename)
+	if err != nil {
+		if oserror.IsNotExist(err) {
+			return nil, errors.Errorf("no such file %s in the log directory", filename)
+		}
+		return nil, errors.Wrapf(err, "Lstat: %s", filename)
+	}
+	mode := info.Mode()
+	if mode&os.ModeSymlink != 0 {
+		return nil, errors.Errorf("symlinks are not allowed")
+	}
+	if !mode.IsRegular() {
+		return nil, errors.Errorf("not a regular file")
 	}
 
 	return os.Open(filename)
@@ -373,7 +339,7 @@ func readAllEntriesFromFile(
 	editMode EditSensitiveData,
 	format string,
 ) ([]logpb.Entry, bool, error) {
-	reader, err := GetLogReader(file.Name, true /* restricted */)
+	reader, err := GetLogReader(file.Name)
 	if err != nil {
 		return nil, false, err
 	}
