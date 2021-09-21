@@ -805,12 +805,15 @@ func (*TransactionRetryError) canRestartTransaction() TransactionRestart {
 var _ ErrorDetailInterface = &TransactionRetryError{}
 var _ transactionRestartError = &TransactionRetryError{}
 
-// NewTransactionStatusError initializes a new TransactionStatusError from
-// the given message.
-func NewTransactionStatusError(msg string) *TransactionStatusError {
+// NewTransactionStatusError initializes a new TransactionStatusError with
+// the given message and reason.
+func NewTransactionStatusError(
+	reason TransactionStatusError_Reason,
+	msg string,
+) *TransactionStatusError {
 	return &TransactionStatusError{
 		Msg:    msg,
-		Reason: TransactionStatusError_REASON_UNKNOWN,
+		Reason: reason,
 	}
 }
 
