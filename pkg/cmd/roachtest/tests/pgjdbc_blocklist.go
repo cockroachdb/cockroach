@@ -743,8 +743,6 @@ var pgjdbcBlockList21_2 = blocklist{
 	"org.postgresql.test.jdbc4.IsValidTest.testIsValidRemoteClose":                                                                                                             "35897",
 	"org.postgresql.test.jdbc4.JsonbTest.jsonArray[binary = FORCE]":                                                                                                            "23468",
 	"org.postgresql.test.jdbc4.JsonbTest.jsonArray[binary = REGULAR]":                                                                                                          "23468",
-	"org.postgresql.test.jdbc4.JsonbTest.jsonbArray[binary = FORCE]":                                                                                                           "23468",
-	"org.postgresql.test.jdbc4.JsonbTest.jsonbArray[binary = REGULAR]":                                                                                                         "23468",
 	"org.postgresql.test.jdbc4.PGCopyInputStreamTest.testCopyAPI":                                                                                                              "41608",
 	"org.postgresql.test.jdbc4.PGCopyInputStreamTest.testMixedAPI":                                                                                                             "41608",
 	"org.postgresql.test.jdbc4.PGCopyInputStreamTest.testReadBytesCorrectlyHandlesEof":                                                                                         "41608",

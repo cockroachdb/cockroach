@@ -428,3 +428,22 @@ EXPLAIN (VEC) SELECT 'b' IN ('b', a, 'a') FROM t_string
         └ *colexecbase.constBytesOp
           └ *colexecbase.constBytesOp
             └ *colfetcher.ColBatchScan
+
+# Regression test for calling Release() before Close() on a vectorized index
+# joiner (#70000).
+statement ok
+CREATE TABLE table70000_1 (i INT PRIMARY KEY);
+CREATE TABLE table70000_2 (f FLOAT, b BOOL, INDEX f_idx(f));
+
+query T
+EXPLAIN (VEC)
+  SELECT
+    CASE WHEN b THEN (SELECT f FROM table70000_1 LIMIT 1) ELSE f END
+  FROM
+    table70000_2@f_idx;
+----
+│
+└ Node 1
+  └ *sql.planNodeToRowSource
+    └ *colfetcher.ColIndexJoin
+      └ *colfetcher.ColBatchScan
