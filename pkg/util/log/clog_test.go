@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 // Test that shortHostname works as advertised.
@@ -351,15 +352,43 @@ func TestFilePermissions(t *testing.T) {
 
 func TestGetLogReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer ScopeWithoutShowLogs(t).Close(t)
+	sc := ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
 
+	// Create two log directories.
+	dir1 := filepath.Join(sc.logDir, "dir1")
+	require.NoError(t, os.MkdirAll(dir1, 0755))
+
+	// Create a config with two groups in separate log directories.
+	config := logconfig.DefaultConfig()
+	config.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"g1": {
+			FileDefaults: logconfig.FileDefaults{Dir: &dir1},
+			Channels:     logconfig.SelectChannels(channel.OPS),
+		},
+	}
+
+	// Validate and apply the config.
+	require.NoError(t, config.Validate(&sc.logDir))
+	TestingResetActive()
+	cleanupFn, err := ApplyConfig(config)
+	require.NoError(t, err)
+	defer cleanupFn()
+
+	t.Logf("applied logging configuration:\n  %s\n",
+		strings.TrimSpace(strings.ReplaceAll(DescribeAppliedConfig(), "\n", "\n  ")))
+
+	// Force creation of a file on the default sink.
 	Info(context.Background(), "x")
-	info, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
+	fs := debugLog.getFileSink()
+	info, ok := fs.mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatalf("buffer wasn't created")
 	}
 	infoName := filepath.Base(info.file.Name())
 
+	// Create some relative path. We'll check below these cannot be
+	// accessed.
 	curDir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -369,25 +398,45 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir := debugLog.getFileSink().mu.logDir
+	// Directory for the default sink.
+	dir := fs.mu.logDir
 	if dir == "" {
 		t.Fatal(errDirectoryNotSet)
 	}
-	otherFile, err := os.Create(filepath.Join(dir, "other.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	otherFile.Close()
+
+	// Some arbitrary non-log file.
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir, "other.txt"), nil, 0644))
 	relPathFromLogDir := strings.Join([]string{"..", filepath.Base(dir), infoName}, string(os.PathSeparator))
+
+	// A log file in a non-default directory.
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir1,
+		program+"-g1.roach0.root.2015-09-25T19_24_19Z.00001.log",
+	), nil, 0644))
+
+	// A log file that matches the file pattern for the default sink,
+	// in a non-default directory.
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir1,
+		program+".roach0.root.2015-09-25T19_24_19Z.00002.log",
+	), nil, 0644))
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir,
+		program+"-g1.roach0.root.2015-09-25T19_24_19Z.00003.log",
+	), nil, 0644))
 
 	// Fake symlink to check the symlink error below.
 	createSymlink("bogus.log", filepath.Join(dir,
-		"cockroach.roach0.root.2015-09-25T19_24_19Z.00001.log"))
+		program+".roach0.root.2015-09-25T19_24_19Z.00004.log"))
 
 	testCases := []struct {
 		filename         string
 		expErrRestricted string
 	}{
+		// Base filename is specified.
+		{infoName, ""},
+		{program + "-g1.roach0.root.2015-09-25T19_24_19Z.00001.log", ""},
+		// File exists but in a different directory than what the sink
+		// configuration indicates. It is invisible to the API.
+		{program + ".roach0.root.2015-09-25T19_24_19Z.00002.log", "no such file"},
+		{program + "-g1.roach0.root.2015-09-25T19_24_19Z.00003.log", "no such file"},
 		// File is not specified (trying to open a directory instead).
 		{dir, "pathnames must be basenames"},
 		// Absolute filename is specified.
@@ -395,13 +444,11 @@ func TestGetLogReader(t *testing.T) {
 		// Symlink to a log file.
 		{filepath.Join(dir, program+".log"), "pathnames must be basenames"},
 		// Symlink relative to logDir.
-		{"cockroach.roach0.root.2015-09-25T19_24_19Z.00001.log", "symlinks are not allowed"},
+		{program + ".roach0.root.2015-09-25T19_24_19Z.00004.log", "symlinks are not allowed"},
 		// Non-log file.
 		{"other.txt", "malformed log filename"},
 		// Non-existent file matching RE.
-		{"cockroach.roach0.root.2015-09-25T19_24_19Z.00000.log", "no such file"},
-		// Base filename is specified.
-		{infoName, ""},
+		{program + ".roach0.root.2015-09-25T19_24_19Z.00000.log", "no such file"},
 		// Relative path with directory components.
 		{relPathFromCurDir, "pathnames must be basenames"},
 		// Relative path within the logs directory.

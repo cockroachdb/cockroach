@@ -87,8 +87,6 @@ func ParseLogFilename(filename string) (logpb.FileDetails, error) {
 	}, nil
 }
 
-var errNoFileLogging = errors.New("log: file logging is not configured")
-
 // listLogGroups returns slices of logpb.FileInfo structs.
 // There is one logpb.FileInfo slice per file sink.
 func listLogGroups() (logGroups [][]logpb.FileInfo, err error) {
@@ -105,26 +103,35 @@ func listLogGroups() (logGroups [][]logpb.FileInfo, err error) {
 
 // ListLogFiles returns a slice of logpb.FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
+//
+// This function also ensures that only the files that belong to a
+// file sink are listed. Unrelated files in the same directory are
+// skipped over (ignored).
+//
+// Note that even though the FileInfo struct does not store the path
+// to the log file(s), each file can be mapped back to its directory
+// reliably via GetLogReader, thanks to the unique file group names in
+// the log configuration. For example, consider the following config:
+//
+// file-groups:
+//    groupA:
+//      dir: dir1
+//    groupB:
+//      dir: dir2
+//
+// The result of ListLogFiles on this config will return the list
+// {cockroach-groupA.XXX.log, cockroach-groupB.XXX.log}, without
+// directory information. This can be mapped back to dir1 and dir2 via the
+// configuration. We know that groupA files cannot be in dir2 because
+// the group names are unique under file-groups and so there cannot be
+// two different groups with the same name and different directories.
 func ListLogFiles() (logFiles []logpb.FileInfo, err error) {
-	mainDir := func() string {
-		fileSink := debugLog.getFileSink()
-		if fileSink == nil {
-			return ""
-		}
-		fileSink.mu.Lock()
-		defer fileSink.mu.Unlock()
-		return fileSink.mu.logDir
-	}()
-
 	err = logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
-		// For now, only gather logs from the main log directory.
-		// This is because the other APIs don't yet understand
-		// secondary log directories, and we don't want
-		// to list a file that cannot be retrieved.
 		l.mu.Lock()
 		thisLogDir := l.mu.logDir
 		l.mu.Unlock()
-		if thisLogDir == "" || thisLogDir != mainDir {
+		if !l.enabled.Get() || thisLogDir == "" {
+			// This file sink is detached from file storage.
 			return nil
 		}
 
@@ -138,6 +145,10 @@ func ListLogFiles() (logFiles []logpb.FileInfo, err error) {
 	return logFiles, err
 }
 
+// listLogFiles lists the files matching this sink in its target
+// directory. Files that don't match the output name format of the
+// sink are ignored. This makes it possible to share directories
+// across multiple sinks.
 func (l *fileSink) listLogFiles() (string, []logpb.FileInfo, error) {
 	var results []logpb.FileInfo
 	l.mu.Lock()
@@ -173,27 +184,39 @@ func (l *fileSink) listLogFiles() (string, []logpb.FileInfo, error) {
 // filename comes from external sources, such as the admin UI via
 // HTTP).
 //
-// TODO(knz): make this work for secondary loggers too.
+// See the comment on ListLogFiles() about how/why file names are
+// mapped back to a directory name.
 func GetLogReader(filename string) (io.ReadCloser, error) {
-	fileSink := debugLog.getFileSink()
-	if fileSink == nil || !fileSink.enabled.Get() {
-		return nil, errNoFileLogging
-	}
-
-	fileSink.mu.Lock()
-	dir := fileSink.mu.logDir
-	fileSink.mu.Unlock()
-	if dir == "" {
-		return nil, errDirectoryNotSet
-	}
-
-	// Verify there are no path separators in a restricted-mode pathname.
+	// Verify there are no path separators.
 	if filepath.Base(filename) != filename {
 		return nil, errors.Errorf("pathnames must be basenames only: %s", filename)
 	}
 	// Check that the file name is valid.
-	if _, err := ParseLogFilename(filename); err != nil {
+	details, err := ParseLogFilename(filename)
+	if err != nil {
 		return nil, err
+	}
+	// Find the sink that matches the file name prefix.
+	var fs *fileSink
+	_ = logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
+		if l.fileNamePrefix == details.Program {
+			fs = l
+			// Interrupt the loop.
+			return io.EOF
+		}
+		return nil
+	})
+	// Check whether we found a sink and it has a log directory.
+	if fs == nil || !fs.enabled.Get() {
+		return nil, errors.Newf("no log directory found for %s", filename)
+	}
+	fs.mu.Lock()
+	dir := fs.mu.logDir
+	fs.mu.Unlock()
+	if dir == "" {
+		// This error should never happen: .enabled should be unset in
+		// that case.
+		return nil, errors.Newf("no log directory found for %s", filename)
 	}
 
 	filename = filepath.Join(dir, filename)

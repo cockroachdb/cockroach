@@ -367,6 +367,10 @@ message LogFilesListRequest {
 }
 
 message LogFilesListResponse {
+  // files is the list of log files under this node's configured logging
+  // directories. Note that the response does not contain detail about
+  // which directory contains which file. The location of each file
+  // is known to the server based on its name and the logging configuration.
   repeated cockroach.util.log.FileInfo files = 1
       [ (gogoproto.nullable) = false ];
 }
@@ -375,6 +379,10 @@ message LogFileRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
+  // file is the name of the log file to retrieve. Note that it
+  // must not be prefixed by a directory name. The full path to
+  // the file is computed by the server based on the base name
+  // and the logging configuration.
   string file = 2;
   // redact, if true, requests redaction of sensitive data away
   // from the retrieved log entries.
