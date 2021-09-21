@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -1078,7 +1079,7 @@ func (n *Node) setupSpanForIncomingRPC(
 			// disabled, this will be a noop span).
 			ctx, newSpan = tr.StartSpanCtx(ctx, opName)
 		} else {
-			grpcSpan.SetTag("node", n.Descriptor.NodeID)
+			grpcSpan.SetTag("node", attribute.IntValue(int(n.Descriptor.NodeID)))
 		}
 	}
 

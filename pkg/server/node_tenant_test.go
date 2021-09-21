@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // TestMaybeRedactRecording verifies that maybeRedactRecording strips
@@ -49,7 +50,7 @@ func TestMaybeRedactRecording(t *testing.T) {
 		sp.SetVerbose(true)
 
 		log.Eventf(ctx, "%s %s", msgSensitive, log.Safe(msgNotSensitive))
-		sp.SetTag("all_span_tags_are_stripped", "because_no_redactability")
+		sp.SetTag("all_span_tags_are_stripped", attribute.StringValue("because_no_redactability"))
 		sp.Finish()
 		rec := sp.GetRecording()
 		require.Len(t, rec, 1)
