@@ -529,7 +529,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	goStatsStaleness := float32(timeutil.Now().Sub(ms.Collected)) / float32(time.Second)
 	goTotal := ms.Sys - ms.HeapReleased
 
-	log.StructuredEvent(ctx, &eventpb.RuntimeStats{
+	stats := &eventpb.RuntimeStats{
 		MemRSSBytes:       mem.Resident,
 		GoroutineCount:    uint64(numGoroutine),
 		MemStackSysBytes:  ms.StackSys,
@@ -548,7 +548,9 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		GCRunCount:        uint64(gc.NumGC),
 		NetHostRecvBytes:  deltaNet.BytesRecv,
 		NetHostSendBytes:  deltaNet.BytesSent,
-	})
+	}
+
+	logStats(ctx, stats)
 
 	rsr.last.cgoCall = numCgoCall
 	rsr.last.gcCount = gc.NumGC
