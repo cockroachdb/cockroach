@@ -62,8 +62,14 @@ type fileSink struct {
 	// enabled = true implies logDir != "".
 	enabled syncutil.AtomicBool
 
+	// groupName is the config-specified file group name - do not use to
+	// generate file names! Use fileNamePrefix instead.
+	groupName string
+
 	// name prefix for log files.
-	prefix string
+	// This has been processed by removePeriods() already and thus
+	// is guaranteed not to contain any periods.
+	fileNamePrefix string
 
 	// bufferedWrites if false calls file.Flush on every log
 	// write. This can be set per-logger e.g. for audit logging.
@@ -130,18 +136,19 @@ type fileSink struct {
 
 // newFileSink creates a new file sink.
 func newFileSink(
-	dir, fileNamePrefix string,
+	dir, fileGroupName string,
 	bufferedWrites bool,
 	fileMaxSize, combinedMaxSize int64,
 	getStartLines func(time.Time) []*buffer,
 	filePermissions fs.FileMode,
 ) *fileSink {
-	prefix := program
-	if fileNamePrefix != "" {
-		prefix = program + "-" + fileNamePrefix
+	fileNamePrefix := program
+	if fileGroupName != "" {
+		fileNamePrefix = program + "-" + removePeriods(fileGroupName)
 	}
 	f := &fileSink{
-		prefix:                  prefix,
+		groupName:               fileGroupName,
+		fileNamePrefix:          fileNamePrefix,
 		bufferedWrites:          bufferedWrites,
 		logFileMaxSize:          fileMaxSize,
 		logFilesCombinedMaxSize: combinedMaxSize,
@@ -325,9 +332,12 @@ func removeHyphens(s string) string {
 
 // logName returns a new log file name with start time t, and the name
 // for the symlink.
+//
+// The caller guarantees that removePeriods has already been called on
+// the prefix.
 func logName(prefix string, t time.Time) (name, link string) {
 	name = fmt.Sprintf("%s.%s.%s.%s.%06d.log",
-		removePeriods(prefix),
+		prefix,
 		removePeriods(host),
 		removePeriods(userName),
 		t.Format(FileTimeFormat),
@@ -342,8 +352,11 @@ var errDirectoryNotSet = errors.New("log: log directory not set")
 // to update the symlink for that tag, ignoring errors.
 //
 // It is invalid to call this with an unset output directory.
+//
+// The caller guarantees that fileNamePrefix has already been
+// processed through removePeriods().
 func create(
-	dir, prefix string, t time.Time, lastRotation int64, fileMode fs.FileMode,
+	dir, fileNamePrefix string, t time.Time, lastRotation int64, fileMode fs.FileMode,
 ) (f *os.File, updatedRotation int64, filename, symlink string, err error) {
 	if dir == "" {
 		return nil, lastRotation, "", "", errDirectoryNotSet
@@ -359,7 +372,7 @@ func create(
 	t = timeutil.Unix(unix, 0)
 
 	// Generate the file name.
-	name, link := logName(prefix, t)
+	name, link := logName(fileNamePrefix, t)
 	symlink = filepath.Join(dir, link)
 	fname := filepath.Join(dir, name)
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
