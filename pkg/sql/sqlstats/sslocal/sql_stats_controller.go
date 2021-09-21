@@ -36,7 +36,13 @@ func NewController(sqlStats *SQLStats, status serverpb.SQLStatusServer) *Control
 
 // ResetClusterSQLStats implements the tree.SQLStatsController interface.
 func (s *Controller) ResetClusterSQLStats(ctx context.Context) error {
-	req := &serverpb.ResetSQLStatsRequest{}
+	req := &serverpb.ResetSQLStatsRequest{
+		// ResetPersistedStats field is explicitly set to false here since
+		// sslocal.Controller should only be resetting the in-memory stats.
+		// persistedsqlstats.Controller is responsible for resetting persisted
+		// stats.
+		ResetPersistedStats: false,
+	}
 	_, err := s.statusServer.ResetSQLStats(ctx, req)
 	if err != nil {
 		return err
