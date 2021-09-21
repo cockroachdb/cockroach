@@ -557,7 +557,7 @@ func (t *Tracer) startSpanGeneric(
 	// Deal with opts.SpanKind. This needs to be done after we enable recording
 	// above because tags are dropped on the floor before recording is enabled.
 	if opts.SpanKind != oteltrace.SpanKindUnspecified {
-		helper.crdbSpan.setTagLocked(spanKindTagKey, opts.SpanKind.String())
+		helper.crdbSpan.setTagLocked(spanKindTagKey, attribute.StringValue(opts.SpanKind.String()))
 	}
 
 	// Copy baggage from parent. This similarly fans out over the various
