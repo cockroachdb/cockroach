@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -25,6 +26,10 @@ import (
 )
 
 func TestJSONFormats(t *testing.T) {
+	// CLI tests are sensitive to the server version, but test binaries don't have
+	// a version injected. Pretend to be a very up-to-date version.
+	defer build.TestingOverrideTag("v999.0.0")()
+
 	tm, err := time.Parse(MessageTimeFormat, "060102 15:04:05.654321")
 	if err != nil {
 		t.Fatal(err)
