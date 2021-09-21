@@ -60,7 +60,6 @@ import (
 //
 func TestRestoreOldVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 70154, "flaky test")
 	defer log.Scope(t).Close(t)
 	const (
 		testdataBase                = "testdata/restore_old_versions"
