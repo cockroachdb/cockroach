@@ -352,8 +352,6 @@ func TestChangefeedTenantsExternalIOEnabled(t *testing.T) {
 	})
 }
 
-
-
 func TestChangefeedEnvelope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
