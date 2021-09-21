@@ -34,7 +34,7 @@ func GetAddJoinDialOptions(certPool *x509.CertPool) []grpc.DialOption {
 	dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
 	dialOpts = append(dialOpts, grpc.WithNoProxy())
 	backoffConfig := backoff.DefaultConfig
-	backoffConfig.MaxDelay = maxBackoff
+	backoffConfig.MaxDelay = maxRPCBackoff
 	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoffConfig}))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
 	dialOpts = append(dialOpts,

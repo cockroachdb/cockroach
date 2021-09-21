@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -73,7 +73,7 @@ func (c *client) startLocked(
 	disconnected chan *client,
 	rpcCtx *rpc.Context,
 	stopper *stop.Stopper,
-	breaker *circuit.Breaker,
+	breaker *circuit.BreakerV2,
 ) {
 	// Add a placeholder for the new outgoing connection because we may not know
 	// the ID of the node we're connecting to yet. This will be resolved in
@@ -98,9 +98,9 @@ func (c *client) startLocked(
 			disconnected <- c
 		}()
 
-		consecFailures := breaker.ConsecFailures()
+		//consecFailures := breaker.ConsecFailures()
 		var stream Gossip_GossipClient
-		if err := breaker.Call(func() error {
+		if err := breaker.Call(ctx, func(ctx context.Context) error {
 			// Note: avoid using `grpc.WithBlock` here. This code is already
 			// asynchronous from the caller's perspective, so the only effect of
 			// `WithBlock` here is blocking shutdown - at the time of this writing,
@@ -113,10 +113,10 @@ func (c *client) startLocked(
 				return err
 			}
 			return c.requestGossip(g, stream)
-		}, 0); err != nil {
-			if consecFailures == 0 {
-				log.Warningf(ctx, "failed to start gossip client to %s: %s", c.addr, err)
-			}
+		}); err != nil {
+			// if consecFailures == 0 {
+			log.Warningf(ctx, "failed to start gossip client to %s: %s", c.addr, err)
+			// }
 			return
 		}
 

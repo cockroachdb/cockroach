@@ -90,9 +90,6 @@ var requireConstFmt = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.Span).Recordf":      true,
 	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.spanInner).Recordf": true,
 
-	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Debugf": true,
-	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Infof":  true,
-
 	"(*github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc.Tree).errorf": true,
 
 	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Infof":  true,
@@ -126,9 +123,6 @@ var requireConstFmt = map[string]bool{
 
 	"(github.com/cockroachdb/pebble.Logger).Infof":  true,
 	"(github.com/cockroachdb/pebble.Logger).Fatalf": true,
-
-	"(github.com/cockroachdb/circuitbreaker.Logger).Infof":  true,
-	"(github.com/cockroachdb/circuitbreaker.Logger).Debugf": true,
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen.errorf": true,
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen.wrapf":  true,

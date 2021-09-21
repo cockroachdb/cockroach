@@ -23,8 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff"
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -54,7 +52,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	circuit "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -1305,8 +1305,14 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 	// Create a breaker which never trips and never backs off to avoid
 	// introducing timing-based flakes.
 	ts.rpcContext.BreakerFactory = func() *circuit.Breaker {
-		return circuit.NewBreakerWithOptions(&circuit.Options{
-			BackOff: &backoff.ZeroBackOff{},
+		return circuit.NewBreaker(circuit.Options{
+			ShouldTrip: func(err error) error {
+				if err != nil {
+					log.Infof(ctx, "testserver: ignoring error passed to circuit "+
+						"breaker's ShouldTrip")
+				}
+				return nil
+			},
 		})
 	}
 

@@ -23,11 +23,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
@@ -287,7 +287,6 @@ type Context struct {
 	ContextOptions
 	SecurityContext
 
-	breakerClock breakerClock
 	RemoteClocks *RemoteClockMonitor
 	masterCtx    context.Context
 
@@ -394,9 +393,6 @@ func NewContext(opts ContextOptions) *Context {
 	ctx := &Context{
 		ContextOptions:  opts,
 		SecurityContext: MakeSecurityContext(opts.Config, security.ClusterTLSSettings(opts.Settings), opts.TenantID),
-		breakerClock: breakerClock{
-			clock: opts.Clock,
-		},
 		RemoteClocks: newRemoteClockMonitor(
 			opts.Clock, 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval()),
 		rpcCompression:   enableRPCCompression,
@@ -984,6 +980,8 @@ type delayingHeader struct {
 	DelayMS  int32
 }
 
+const maxRPCBackoff = time.Second
+
 // GRPCDialRaw calls grpc.Dial with options appropriate for the context.
 // Unlike GRPCDialNode, it does not start an RPC heartbeat to validate the
 // connection. This connection will not be reconnected automatically;
@@ -1008,7 +1006,7 @@ func (ctx *Context) grpcDialRaw(
 	// Lower the MaxBackoff (which defaults to ~minutes) to something in the
 	// ~second range.
 	backoffConfig := backoff.DefaultConfig
-	backoffConfig.MaxDelay = maxBackoff
+	backoffConfig.MaxDelay = maxRPCBackoff
 	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoffConfig}))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
 	dialOpts = append(dialOpts,
@@ -1139,11 +1137,13 @@ func (ctx *Context) grpcDialNodeInternal(
 // NewBreaker creates a new circuit breaker properly configured for RPC
 // connections. name is used internally for logging state changes of the
 // returned breaker.
-func (ctx *Context) NewBreaker(name string) *circuit.Breaker {
+func (ctx *Context) NewBreaker(
+	name string, asyncProbe func(report func(error), done func()),
+) *circuit.Breaker {
 	if ctx.BreakerFactory != nil {
 		return ctx.BreakerFactory()
 	}
-	return newBreaker(ctx.masterCtx, name, &ctx.breakerClock)
+	return newBreaker(ctx.masterCtx, name, asyncProbe)
 }
 
 // ErrNotHeartbeated is returned by ConnHealth when we have not yet performed
