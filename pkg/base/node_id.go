@@ -29,25 +29,29 @@ import (
 type NodeIDContainer struct {
 	_ util.NoCopy
 
-	// nodeID is atomically updated under the mutex; it can be read atomically
-	// without the mutex.
+	// nodeID is accessed atomically.
 	nodeID int32
+
+	// If nodeID has been set, str represents nodeID converted to string. We
+	// precompute this value to speed up String() and keep it from allocating
+	// memory dynamically.
+	str atomic.Value
 }
 
 // String returns the node ID, or "?" if it is unset.
 func (n *NodeIDContainer) String() string {
-	return redact.StringWithoutMarkers(n)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (n *NodeIDContainer) SafeFormat(w redact.SafePrinter, _ rune) {
-	val := n.Get()
-	if val == 0 {
-		w.SafeRune('?')
+	s := n.str.Load()
+	if s == nil {
+		return "?"
 	} else {
-		w.Print(val)
+		return s.(string)
 	}
 }
+
+var _ redact.SafeValue = &NodeIDContainer{}
+
+// SafeValue implements the redact.SafeValue interface.
+func (n *NodeIDContainer) SafeValue() {}
 
 // Get returns the current node ID; 0 if it is unset.
 func (n *NodeIDContainer) Get() roachpb.NodeID {
@@ -67,6 +71,7 @@ func (n *NodeIDContainer) Set(ctx context.Context, val roachpb.NodeID) {
 	} else if oldVal != int32(val) {
 		log.Fatalf(ctx, "different NodeIDs set: %d, then %d", oldVal, val)
 	}
+	n.str.Store(strconv.Itoa(int(val)))
 }
 
 // Reset changes the NodeID regardless of the old value.
@@ -83,9 +88,13 @@ func (n *NodeIDContainer) Reset(val roachpb.NodeID) {
 type StoreIDContainer struct {
 	_ util.NoCopy
 
-	// After the struct is initially created, storeID is atomically
-	// updated under the mutex; it can be read atomically without the mutex.
+	// storeID is accessed atomically.
 	storeID int32
+
+	// If storeID has been set, str represents storeID converted to string. We
+	// precompute this value to speed up String() and keep it from allocating
+	// memory dynamically.
+	str atomic.Value
 }
 
 // TempStoreID is used as the store id for a temp pebble engine's log
@@ -95,20 +104,20 @@ const TempStoreID = -1
 // stores if they haven't been initialized. If a main store hasn't
 // been initialized, then "?" is returned.
 func (s *StoreIDContainer) String() string {
-	return redact.StringWithoutMarkers(s)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (s *StoreIDContainer) SafeFormat(w redact.SafePrinter, _ rune) {
 	val := s.Get()
 	if val == 0 {
-		w.SafeRune('?')
+		return "?"
 	} else if val == TempStoreID {
-		w.Print("temp")
+		return "temp"
 	} else {
-		w.Print(val)
+		return s.str.Load().(string)
 	}
 }
+
+var _ redact.SafeValue = &StoreIDContainer{}
+
+// SafeValue implements the redact.SafeValue interface.
+func (s *StoreIDContainer) SafeValue() {}
 
 // Get returns the current storeID; 0 if it is unset.
 func (s *StoreIDContainer) Get() int32 {
@@ -133,6 +142,7 @@ func (s *StoreIDContainer) Set(ctx context.Context, val int32) {
 				oldVal, val)
 		}
 	}
+	s.str.Store(strconv.Itoa(int(val)))
 }
 
 // A SQLInstanceID is an ephemeral ID assigned to a running instance of the SQL
