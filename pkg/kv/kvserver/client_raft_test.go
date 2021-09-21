@@ -2465,7 +2465,10 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// heartbeat transmission to the other store.
 	cb := tc.Servers[followerIdx].RaftTransport().GetCircuitBreaker(
 		tc.Target(followerIdx).NodeID, rpc.DefaultClass)
-	cb.Break()
+	// TODO(tbg): this is a no-op since the breaker in this test is
+	// configured to never trip. See:
+	// https://github.com/cockroachdb/cockroach/blob/885075b9c16ae04f537ffe4a0cfe7113c28c4811/pkg/server/testserver.go#L1304-L1310
+	cb.Trip()
 
 	// Send a command to ensure Raft is aware of lost follower so that it won't
 	// quiesce (which would prevent heartbeats).
@@ -2551,7 +2554,7 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 		for i := range tc.Servers {
 			if i != partitionedMaybeLeaseholderIdx {
 				cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
-				cb.Break()
+				cb.Trip()
 			}
 		}
 

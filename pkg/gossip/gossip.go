@@ -59,7 +59,6 @@ import (
 	"sync"
 	"time"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -67,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -237,7 +237,7 @@ type Gossip struct {
 		syncutil.Mutex
 		clients []*client
 		// One breaker per client for the life of the process.
-		breakers map[string]*circuit.Breaker
+		breakers map[string]*circuit.BreakerV2
 	}
 
 	disconnected chan *client  // Channel of disconnected clients
@@ -325,7 +325,7 @@ func New(
 	stopper.AddCloser(stop.CloserFn(g.server.AmbientContext.FinishEventLog))
 
 	registry.AddMetric(g.outgoing.gauge)
-	g.clientsMu.breakers = map[string]*circuit.Breaker{}
+	g.clientsMu.breakers = map[string]*circuit.BreakerV2{}
 
 	g.mu.Lock()
 	// Add ourselves as a SystemConfig watcher.
@@ -1526,8 +1526,28 @@ func (g *Gossip) startClientLocked(addr util.UnresolvedAddr) {
 	defer g.clientsMu.Unlock()
 	breaker, ok := g.clientsMu.breakers[addr.String()]
 	if !ok {
-		name := fmt.Sprintf("gossip %v->%v", g.rpcContext.Config.Addr, addr)
-		breaker = g.rpcContext.NewBreaker(name)
+		name := fmt.Sprintf("gossip to %v", addr)
+		// Don't actually probe anything here, just wait and then declare the
+		// breaker good to go. This is sufficient for the Gossip use case.
+		//
+		// TODO(tbg): refactor this such that a client wraps the breaker and the
+		// dialing logic, so that the probe has easy access to exactly the same
+		// operation that the breaker later guards.
+		asyncProbe := func(report func(error), done func()) {
+			g.stopper.RunAsyncTask(g.AnnotateCtx(context.Background()), "gossip-probe",
+				func(ctx context.Context) {
+					defer done()
+					select {
+					case <-time.After(1 * time.Second):
+						report(nil)
+					case <-ctx.Done():
+						return
+					case <-g.stopper.ShouldQuiesce():
+						return
+					}
+				})
+		}
+		breaker = g.rpcContext.NewBreaker(name, asyncProbe)
 		g.clientsMu.breakers[addr.String()] = breaker
 	}
 	ctx := g.AnnotateCtx(context.TODO())

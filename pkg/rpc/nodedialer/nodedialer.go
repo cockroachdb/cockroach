@@ -17,14 +17,16 @@ import (
 	"time"
 	"unsafe"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 )
@@ -33,7 +35,7 @@ import (
 const logPerNodeFailInterval = time.Minute
 
 type wrappedBreaker struct {
-	*circuit.Breaker
+	*circuit.BreakerV2
 	log.EveryN
 }
 
@@ -189,7 +191,7 @@ func (n *Dialer) dial(
 		return nil, ctxErr
 	}
 	if checkBreaker && !breaker.Ready() {
-		err = errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", nodeID)
+		err = errors.Wrapf(circuit.ErrBreakerOpen(), "unable to dial n%d", nodeID)
 		return nil, err
 	}
 	defer func() {
@@ -244,7 +246,7 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 	// NB: Don't call Ready(). The breaker protocol would require us to follow
 	// that up with a dial, which we won't do as this is called in hot paths.
 	if n.getBreaker(nodeID, class).Tripped() {
-		return circuit.ErrBreakerOpen
+		return circuit.ErrBreakerOpen()
 	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
@@ -280,16 +282,59 @@ func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionCl
 // dialing to that node through this NodeDialer.
 func (n *Dialer) GetCircuitBreaker(
 	nodeID roachpb.NodeID, class rpc.ConnectionClass,
-) *circuit.Breaker {
-	return n.getBreaker(nodeID, class).Breaker
+) *circuit.BreakerV2 {
+	return n.getBreaker(nodeID, class).BreakerV2
 }
 
 func (n *Dialer) getBreaker(nodeID roachpb.NodeID, class rpc.ConnectionClass) *wrappedBreaker {
 	breakers := &n.breakers[class]
 	value, ok := breakers.Load(int64(nodeID))
 	if !ok {
-		name := fmt.Sprintf("rpc %v [n%d]", n.rpcContext.Config.Addr, nodeID)
-		breaker := &wrappedBreaker{Breaker: n.rpcContext.NewBreaker(name), EveryN: log.Every(logPerNodeFailInterval)}
+		ctx := n.rpcContext.AmbientCtx.AnnotateCtx(context.Background())
+		asyncProbe := func(report func(error), done func()) {
+			// NB (nota Ben): the backoff should be less than the Raft election timeout
+			// (1.5s at time of writing) to avoid disruptions. A newly restarted node will be in follower
+			// mode with no knowledge of the Raft leader. If it doesn't hear from a
+			// leader before the election timeout expires, it will start to campaign,
+			// which can be (mildly, due to our use of PreVote) disruptive. Therefore the leader needs to get in touch (via
+			// Raft heartbeats) with such nodes within one election timeout of their
+			// restart, which won't happen if their backoff is too high.
+			const nodeDialerCircuitBreakerProbeBackoff = time.Second
+
+			if n.Stopper().RunAsyncTask(ctx, "probe-loop", func(ctx context.Context) {
+				defer done()
+
+				t := timeutil.NewTimer()
+				defer t.Stop()
+
+				t.Reset(nodeDialerCircuitBreakerProbeBackoff)
+
+				for {
+					err := contextutil.RunWithTimeout(ctx, "probe-attempt", 5*time.Second, func(ctx context.Context) error {
+						_, err := n.DialNoBreaker(ctx, nodeID, class)
+						return err
+					})
+					report(err)
+					if err == nil {
+						return
+					}
+					select {
+					case <-t.C:
+						t.Read = true
+					case <-n.Stopper().ShouldQuiesce():
+						return
+					}
+					t.Reset(nodeDialerCircuitBreakerProbeBackoff)
+				}
+			}) != nil {
+				done()
+			}
+		}
+		name := fmt.Sprintf("NodeDialer [n%d]", nodeID)
+		breaker := &wrappedBreaker{
+			BreakerV2: n.rpcContext.NewBreaker(name, asyncProbe),
+			EveryN:    log.Every(logPerNodeFailInterval),
+		}
 		value, _ = breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
 	}
 	return (*wrappedBreaker)(value)
