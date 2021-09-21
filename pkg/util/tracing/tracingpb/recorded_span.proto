@@ -26,8 +26,12 @@ message LogRecord {
     string key = 1;
     string value = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
   }
-  // Fields with values converted to strings.
-  repeated Field fields = 2 [(gogoproto.nullable) = false];
+  // Fields with values converted to strings. In 22.1, the `message` field
+  // contains the log message, and this field is only used for compatibility
+  // with 21.2 nodes.
+  repeated Field deprecated_fields = 2 [(gogoproto.nullable) = false];
+  // The log message.
+  string message = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 }
 
 // StructuredRecord is a structured message recorded in a traced span.
