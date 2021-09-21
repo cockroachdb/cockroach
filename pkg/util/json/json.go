@@ -49,6 +49,25 @@ const (
 	ObjectJSONType
 )
 
+func (t Type) String() string {
+	switch t {
+	case NullJSONType:
+		return "null"
+	case StringJSONType:
+		return "string"
+	case NumberJSONType:
+		return "numeric"
+	case FalseJSONType, TrueJSONType:
+		return "boolean"
+	case ArrayJSONType:
+		return "array"
+	case ObjectJSONType:
+		return "object"
+	default:
+		panic(errors.AssertionFailedf("unknown JSON type %d", int(t)))
+	}
+}
+
 const (
 	wordSize          = unsafe.Sizeof(big.Word(0))
 	decimalSize       = unsafe.Sizeof(apd.Decimal{})
@@ -154,8 +173,12 @@ type JSON interface {
 	AsText() (*string, error)
 
 	// AsDecimal returns the JSON document as a apd.Decimal if it is a numeric
-	// type, and a boolean inidicating if this JSON document is a numeric type.
+	// type, and a boolean indicating if this JSON value is a numeric type.
 	AsDecimal() (*apd.Decimal, bool)
+
+	// AsBool returns the JSON document as a boolean if it is a boolean type,
+	// and a boolean indicating if this JSON value is a bool type.
+	AsBool() (bool, bool)
 
 	// Exists implements the `?` operator: does the string exist as a top-level
 	// key within the JSON value?
@@ -450,6 +473,14 @@ func (j jsonNumber) AsDecimal() (*apd.Decimal, bool) {
 	d := apd.Decimal(j)
 	return &d, true
 }
+
+func (j jsonNull) AsBool() (bool, bool)   { return false, false }
+func (j jsonFalse) AsBool() (bool, bool)  { return false, true }
+func (j jsonTrue) AsBool() (bool, bool)   { return true, true }
+func (j jsonString) AsBool() (bool, bool) { return false, false }
+func (j jsonArray) AsBool() (bool, bool)  { return false, false }
+func (j jsonObject) AsBool() (bool, bool) { return false, false }
+func (j jsonNumber) AsBool() (bool, bool) { return false, false }
 
 func (j jsonNull) tryDecode() (JSON, error)   { return j, nil }
 func (j jsonFalse) tryDecode() (JSON, error)  { return j, nil }
