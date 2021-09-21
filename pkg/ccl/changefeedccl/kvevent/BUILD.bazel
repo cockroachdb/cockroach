@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "alloc.go",
         "blocking_buffer.go",
-        "chan_buffer.go",
         "err_buffer.go",
         "event.go",
         "metrics.go",

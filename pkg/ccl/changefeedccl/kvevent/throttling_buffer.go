@@ -14,20 +14,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 )
 
-type throttlingBuffer struct {
-	Buffer
+type throttlingReader struct {
+	Reader
 	throttle *cdcutils.Throttler
 }
 
-// NewThrottlingBuffer wraps specified event buffer with a throttle that
+// NewThrottlingReader wraps specified event buffer with a throttle that
 // regulates the rate of events returned by the buffer reader.
-func NewThrottlingBuffer(b Buffer, throttle *cdcutils.Throttler) Buffer {
-	return &throttlingBuffer{Buffer: b, throttle: throttle}
+func NewThrottlingReader(r Reader, throttle *cdcutils.Throttler) Reader {
+	return &throttlingReader{Reader: r, throttle: throttle}
 }
 
 // Get implements kvevent.Reader interface.
-func (b *throttlingBuffer) Get(ctx context.Context) (Event, error) {
-	evt, err := b.Buffer.Get(ctx)
+func (b *throttlingReader) Get(ctx context.Context) (Event, error) {
+	evt, err := b.Reader.Get(ctx)
 	if err != nil {
 		return evt, err
 	}

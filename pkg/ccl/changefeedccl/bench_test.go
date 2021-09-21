@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -212,7 +213,6 @@ func createBenchmarkChangefeed(
 
 	settings := s.ClusterSettings()
 	metrics := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics)
-	buf := kvevent.MakeChanBuffer()
 	mm := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
@@ -229,7 +229,6 @@ func createBenchmarkChangefeed(
 		Gossip:           gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		Spans:            spans,
 		Targets:          details.Targets,
-		Writer:           buf,
 		Metrics:          &metrics.KVFeedMetrics,
 		MM:               mm,
 		InitialHighWater: initialHighWater,
@@ -242,11 +241,19 @@ func createBenchmarkChangefeed(
 	if err != nil {
 		return nil, nil, err
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	execFeed, reader, err := kvfeed.SetupFeed(ctx, kvfeedCfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 	eventConsumer := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
 		sink, encoder, details, TestingKnobs{})
 	tickFn := func(ctx context.Context) (*jobspb.ResolvedSpan, error) {
-		event, err := buf.Get(ctx)
+		event, err := reader.Get(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -258,51 +265,38 @@ func createBenchmarkChangefeed(
 		return event.Resolved(), nil
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	go func() { _ = kvfeed.Run(ctx, kvfeedCfg) }()
-
-	errCh := make(chan error, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := func() error {
-			sf, err := span.MakeFrontier(spans...)
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(execFeed)
+	g.Go(func() error {
+		sf, err := span.MakeFrontier(spans...)
+		if err != nil {
+			return err
+		}
+		for {
+			// This is basically the ChangeAggregator processor.
+			rs, err := tickFn(ctx)
 			if err != nil {
 				return err
 			}
-			for {
-				// This is basically the ChangeAggregator processor.
-				rs, err := tickFn(ctx)
-				if err != nil {
+			// This is basically the ChangeFrontier processor, the resolved
+			// spans are normally sent using distsql, so we're missing a bit
+			// of overhead here.
+			advanced, err := sf.Forward(rs.Span, rs.Timestamp)
+			if err != nil {
+				return err
+			}
+			if advanced {
+				frontier := sf.Frontier()
+				if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
 					return err
-				}
-				// This is basically the ChangeFrontier processor, the resolved
-				// spans are normally sent using distsql, so we're missing a bit
-				// of overhead here.
-				advanced, err := sf.Forward(rs.Span, rs.Timestamp)
-				if err != nil {
-					return err
-				}
-				if advanced {
-					frontier := sf.Frontier()
-					if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
-						return err
-					}
 				}
 			}
-		}()
-		errCh <- err
-	}()
-	cancelFn := func() error {
-		select {
-		case err := <-errCh:
-			return err
-		default:
 		}
+	})
+
+	cancelFn := func() error {
 		cancel()
-		wg.Wait()
-		return nil
+		return g.Wait()
 	}
 	return sink, cancelFn, nil
 }
