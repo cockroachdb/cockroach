@@ -344,6 +344,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/tests",
         "//pkg/startupmigrations",
         "//pkg/storage",

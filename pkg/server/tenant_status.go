@@ -199,11 +199,82 @@ func (t *tenantStatusServer) ListContentionEvents(
 }
 
 func (t *tenantStatusServer) ResetSQLStats(
-	ctx context.Context, _ *serverpb.ResetSQLStatsRequest,
+	ctx context.Context, req *serverpb.ResetSQLStatsRequest,
 ) (*serverpb.ResetSQLStatsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	response := &serverpb.ResetSQLStatsResponse{}
 	controller := t.sqlServer.pgServer.SQLServer.GetSQLStatsController()
-	controller.ResetLocalSQLStats(ctx)
-	return &serverpb.ResetSQLStatsResponse{}, nil
+
+	// If we need to reset persisted stats, we delegate to SQLStatsController,
+	// which will trigger a system table truncation and RPC fanout under the hood.
+	if req.ResetPersistedStats {
+		if err := controller.ResetClusterSQLStats(ctx); err != nil {
+			return nil, err
+		}
+
+		return response, nil
+	}
+
+	localReq := &serverpb.ResetSQLStatsRequest{
+		NodeID: "local",
+		// Only the top level RPC handler handles the reset persisted stats.
+		ResetPersistedStats: false,
+	}
+
+	if len(req.NodeID) > 0 {
+		parsedInstanceID, local, err := t.parseInstanceID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			controller.ResetLocalSQLStats(ctx)
+			return response, nil
+		}
+
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		if err != nil {
+			return nil, err
+		}
+		statusClient, err := t.dialPod(ctx, parsedInstanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return statusClient.ResetSQLStats(ctx, localReq)
+	}
+
+	nodeResetFn := func(
+		ctx context.Context,
+		client interface{},
+		instanceID base.SQLInstanceID,
+	) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.ResetSQLStats(ctx, localReq)
+	}
+
+	var fanoutError error
+
+	if err := t.iteratePods(ctx, fmt.Sprintf("reset SQL statistics for instance %s", req.NodeID),
+		t.dialCallback,
+		nodeResetFn,
+		func(instanceID base.SQLInstanceID, resp interface{}) {
+			// Nothing to do here.
+		},
+		func(instanceID base.SQLInstanceID, err error) {
+			if err != nil {
+				fanoutError = errors.CombineErrors(fanoutError, err)
+			}
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	return response, fanoutError
 }
 
 func (t *tenantStatusServer) CombinedStatementStats(
@@ -235,6 +306,14 @@ func (t *tenantStatusServer) CombinedStatementStats(
 func (t *tenantStatusServer) Statements(
 	ctx context.Context, req *serverpb.StatementsRequest,
 ) (*serverpb.StatementsResponse, error) {
+	if req.Combined {
+		combinedRequest := serverpb.CombinedStatementsStatsRequest{
+			Start: req.Start,
+			End:   req.End,
+		}
+		return t.CombinedStatementStats(ctx, &combinedRequest)
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
