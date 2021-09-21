@@ -11,6 +11,7 @@ package serverccl
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -187,5 +189,121 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		for _, nonTenantTxn := range nonTenantCombinedStats.Transactions {
 			require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
 		}
+	}
+}
+
+func TestResetSQLStatsRPCForTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+
+	stmts := []string{
+		"SELECT 1",
+		"SELECT 1, 1",
+		"SELECT 1, 1, 1",
+	}
+
+	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */)
+	defer testHelper.cleanup(ctx, t)
+
+	testCluster := testHelper.testCluster()
+	controlCluster := testHelper.controlCluster()
+
+	// Disable automatic flush to ensure tests are deterministic.
+	testCluster.tenantConn(0 /* idx */).
+		Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = false")
+	controlCluster.tenantConn(0 /* idx */).
+		Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = false")
+
+	for _, flushed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
+			// Clears the SQL Stats at the end of each test via builtin.
+			defer func() {
+				testCluster.tenantConn(0 /* idx */).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+				controlCluster.tenantConn(0 /* idx */).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+			}()
+
+			for _, stmt := range stmts {
+				testCluster.tenantConn(0 /* idx */).Exec(t, stmt)
+				controlCluster.tenantConn(0 /* idx */).Exec(t, stmt)
+			}
+
+			if flushed {
+				testCluster.tenantSQLStats(0 /* idx */).Flush(ctx)
+				controlCluster.tenantSQLStats(0 /* idx */).Flush(ctx)
+			}
+
+			status := testCluster.tenantStatusSrv(1 /* idx */)
+
+			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
+				Combined: true,
+			})
+			require.NoError(t, err)
+
+			require.NotEqual(t, 0, len(statsPreReset.Statements),
+				"expected to find stats for at least one statement, but found: %d", len(statsPreReset.Statements))
+			ensureExpectedStmtFingerprintExistsInRPCResponse(t, stmts, statsPreReset, "test")
+
+			_, err = status.ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{
+				ResetPersistedStats: true,
+			})
+			require.NoError(t, err)
+
+			statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
+				Combined: true,
+			})
+			require.NoError(t, err)
+
+			if !statsPostReset.LastReset.After(statsPreReset.LastReset) {
+				t.Fatal("expected to find stats last reset value changed, but didn't")
+			}
+
+			for _, txnStatsPostReset := range statsPostReset.Transactions {
+				for _, txnStatsPreReset := range statsPreReset.Transactions {
+					require.NotEqual(t, txnStatsPostReset, txnStatsPreReset,
+						"expected to have reset SQL stats, but still found transaction %+v", txnStatsPostReset)
+				}
+			}
+
+			for _, stmtStatsPostReset := range statsPostReset.Statements {
+				for _, stmtStatsPreReset := range statsPreReset.Statements {
+					require.NotEqual(t, stmtStatsPostReset, stmtStatsPreReset,
+						"expected to have reset SQL stats, but still found statement %+v", stmtStatsPostReset)
+				}
+			}
+
+			// Ensures that sql stats reset is isolated by tenant boundary.
+			statsFromControlCluster, err :=
+				controlCluster.tenantStatusSrv(1 /* idx */).Statements(ctx, &serverpb.StatementsRequest{
+					Combined: true,
+				})
+			require.NoError(t, err)
+
+			ensureExpectedStmtFingerprintExistsInRPCResponse(t, stmts, statsFromControlCluster, "control")
+		})
+	}
+}
+
+func ensureExpectedStmtFingerprintExistsInRPCResponse(
+	t *testing.T, expectedStmts []string, resp *serverpb.StatementsResponse, clusterType string,
+) {
+	t.Helper()
+
+	for _, stmt := range expectedStmts {
+		fingerprint := strings.Replace(stmt, "1", "_", -1)
+		found := false
+		for _, foundStmt := range resp.Statements {
+			if !strings.Contains(foundStmt.Key.KeyData.App, resp.InternalAppNamePrefix) {
+				if fingerprint == foundStmt.Key.KeyData.Query {
+					found = true
+					break
+				}
+			}
+		}
+		require.True(t, found, "expected %s to be found in "+
+			"%s tenant cluster, but it was not found", fingerprint, clusterType)
 	}
 }

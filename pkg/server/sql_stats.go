@@ -32,8 +32,22 @@ func (s *statusServer) ResetSQLStats(
 	}
 
 	response := &serverpb.ResetSQLStatsResponse{}
+	controller := s.sqlServer.pgServer.SQLServer.GetSQLStatsController()
+
+	// If we need to reset persisted stats, we delegate to SQLStatsController,
+	// which will trigger a system table truncation and RPC fanout under the hood.
+	if req.ResetPersistedStats {
+		if err := controller.ResetClusterSQLStats(ctx); err != nil {
+			return nil, err
+		}
+
+		return response, nil
+	}
+
 	localReq := &serverpb.ResetSQLStatsRequest{
 		NodeID: "local",
+		// Only the top level RPC handler handles the reset persisted stats.
+		ResetPersistedStats: false,
 	}
 
 	if len(req.NodeID) > 0 {
@@ -42,7 +56,6 @@ func (s *statusServer) ResetSQLStats(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			controller := s.sqlServer.pgServer.SQLServer.GetSQLStatsController()
 			controller.ResetLocalSQLStats(ctx)
 			return response, nil
 		}
