@@ -279,13 +279,11 @@ func (ca *changeAggregator) startKVFeed(
 	ctx context.Context, spans []roachpb.Span, initialHighWater hlc.Timestamp, needsInitialScan bool,
 ) (kvevent.Reader, error) {
 	cfg := ca.flowCtx.Cfg
-	buf := kvevent.NewThrottlingBuffer(
-		kvevent.NewMemBuffer(ca.kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
-		cdcutils.NodeLevelThrottler(&cfg.Settings.SV))
-
-	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
-	// we return the kvevent.Reader part to the caller.
-	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan)
+	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, initialHighWater, needsInitialScan)
+	execFeed, reader, err := kvfeed.SetupFeed(ctx, kvfeedCfg)
+	if err != nil {
+		return nil, err
+	}
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -295,7 +293,7 @@ func (ca *changeAggregator) startKVFeed(
 		defer close(ca.kvFeedDoneCh)
 		// Trying to call MoveToDraining here is racy (`MoveToDraining called in
 		// state stateTrailingMeta`), so return the error via a channel.
-		ca.errCh <- kvfeed.Run(ctx, kvfeedCfg)
+		ca.errCh <- execFeed()
 		ca.cancel()
 	}); err != nil {
 		// If err != nil then the RunAsyncTask closure never ran, which means we
@@ -306,16 +304,11 @@ func (ca *changeAggregator) startKVFeed(
 		ca.cancel()
 		return nil, err
 	}
-
-	return buf, nil
+	return kvevent.NewThrottlingReader(reader, cdcutils.NodeLevelThrottler(&cfg.Settings.SV)), nil
 }
 
 func (ca *changeAggregator) makeKVFeedCfg(
-	ctx context.Context,
-	spans []roachpb.Span,
-	buf kvevent.Writer,
-	initialHighWater hlc.Timestamp,
-	needsInitialScan bool,
+	ctx context.Context, spans []roachpb.Span, initialHighWater hlc.Timestamp, needsInitialScan bool,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		ca.spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
@@ -333,7 +326,6 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	}
 
 	return kvfeed.Config{
-		Writer:             buf,
 		Settings:           cfg.Settings,
 		DB:                 cfg.DB,
 		Codec:              cfg.Codec,

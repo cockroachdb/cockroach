@@ -53,17 +53,9 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg phys
 	// we throw it in a buffer here to pick up the slack between RangeFeed and
 	// the sink.
 	//
-	// TODO(dan): Right now, there are two buffers in the changefeed flow when
-	// using RangeFeeds, one here and the usual one between the KVFeed and the
-	// rest of the changefeed (the latter of which is implemented with an
-	// unbuffered channel, and so doesn't actually buffer). Ideally, we'd have
-	// one, but the structure of the KVFeed code right now makes this hard.
-	// Specifically, when a schema change happens, we need a barrier where we
-	// flush out every change before the schema change timestamp before we start
-	// emitting any changes from after the schema change. The KVFeed's
-	// `SchemaFeed` is responsible for detecting and enforcing these , but the
-	// after-KVFeed buffer doesn't have access to any of this state. A cleanup is
-	// in order.
+	// TODO(yevgeniy): Evaluate if having a barrier (i.e. the need to check schema feed prior
+	// to adding events) causes too many catchup scans.
+	//
 	feed := rangefeed{
 		memBuf: sink,
 		cfg:    cfg,
