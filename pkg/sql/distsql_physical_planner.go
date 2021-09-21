@@ -165,7 +165,7 @@ func NewDistSQLPlanner(
 		nodeDialer:    nodeDialer,
 		nodeHealth: distSQLNodeHealth{
 			gossip:      gw,
-			connHealth:  nodeDialer.ConnHealth,
+			connHealth:  nodeDialer.ConnHealthTryDial,
 			isAvailable: isAvailable,
 		},
 		distSender:            distSender,
