@@ -29,25 +29,28 @@ import (
 type NodeIDContainer struct {
 	_ util.NoCopy
 
-	// nodeID is atomically updated under the mutex; it can be read atomically
-	// without the mutex.
+	// nodeID is accessed atomically.
 	nodeID int32
+
+	// If nodeID has been set, str represents nodeID converted to string. We
+	// precompute this value to speed up String() and keep it from allocating
+	// memory dynamically.
+	str atomic.Value
 }
 
 // String returns the node ID, or "?" if it is unset.
 func (n *NodeIDContainer) String() string {
-	return redact.StringWithoutMarkers(n)
+	s := n.str.Load()
+	if s == nil {
+		return "?"
+	}
+	return s.(string)
 }
 
-// SafeFormat implements the redact.SafeFormatter interface.
-func (n *NodeIDContainer) SafeFormat(w redact.SafePrinter, _ rune) {
-	val := n.Get()
-	if val == 0 {
-		w.SafeRune('?')
-	} else {
-		w.Print(val)
-	}
-}
+var _ redact.SafeValue = &NodeIDContainer{}
+
+// SafeValue implements the redact.SafeValue interface.
+func (n *NodeIDContainer) SafeValue() {}
 
 // Get returns the current node ID; 0 if it is unset.
 func (n *NodeIDContainer) Get() roachpb.NodeID {
@@ -67,6 +70,7 @@ func (n *NodeIDContainer) Set(ctx context.Context, val roachpb.NodeID) {
 	} else if oldVal != int32(val) {
 		log.Fatalf(ctx, "different NodeIDs set: %d, then %d", oldVal, val)
 	}
+	n.str.Store(strconv.Itoa(int(val)))
 }
 
 // Reset changes the NodeID regardless of the old value.
@@ -74,6 +78,7 @@ func (n *NodeIDContainer) Set(ctx context.Context, val roachpb.NodeID) {
 // Should only be used in testing code.
 func (n *NodeIDContainer) Reset(val roachpb.NodeID) {
 	atomic.StoreInt32(&n.nodeID, int32(val))
+	n.str.Store(strconv.Itoa(int(val)))
 }
 
 // StoreIDContainer is added as a logtag in the pebbleLogger's context.
@@ -83,9 +88,13 @@ func (n *NodeIDContainer) Reset(val roachpb.NodeID) {
 type StoreIDContainer struct {
 	_ util.NoCopy
 
-	// After the struct is initially created, storeID is atomically
-	// updated under the mutex; it can be read atomically without the mutex.
+	// storeID is accessed atomically.
 	storeID int32
+
+	// If storeID has been set, str represents storeID converted to string. We
+	// precompute this value to speed up String() and keep it from allocating
+	// memory dynamically.
+	str atomic.Value
 }
 
 // TempStoreID is used as the store id for a temp pebble engine's log
@@ -95,20 +104,17 @@ const TempStoreID = -1
 // stores if they haven't been initialized. If a main store hasn't
 // been initialized, then "?" is returned.
 func (s *StoreIDContainer) String() string {
-	return redact.StringWithoutMarkers(s)
+	str := s.str.Load()
+	if str == nil {
+		return "?"
+	}
+	return str.(string)
 }
 
-// SafeFormat implements the redact.SafeFormatter interface.
-func (s *StoreIDContainer) SafeFormat(w redact.SafePrinter, _ rune) {
-	val := s.Get()
-	if val == 0 {
-		w.SafeRune('?')
-	} else if val == TempStoreID {
-		w.Print("temp")
-	} else {
-		w.Print(val)
-	}
-}
+var _ redact.SafeValue = &StoreIDContainer{}
+
+// SafeValue implements the redact.SafeValue interface.
+func (s *StoreIDContainer) SafeValue() {}
 
 // Get returns the current storeID; 0 if it is unset.
 func (s *StoreIDContainer) Get() int32 {
@@ -132,6 +138,11 @@ func (s *StoreIDContainer) Set(ctx context.Context, val int32) {
 				ctx, "different storeIDs set for the store in the Pebble log: %d, then %d",
 				oldVal, val)
 		}
+	}
+	if val == TempStoreID {
+		s.str.Store("temp")
+	} else {
+		s.str.Store(strconv.Itoa(int(val)))
 	}
 }
 
