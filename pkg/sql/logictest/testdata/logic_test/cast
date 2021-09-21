@@ -1,3 +1,66 @@
+# Tests for casts from JSON values.
+subtest cast_from_json
+
+query B
+SELECT 'true'::JSON::BOOL
+----
+true
+
+query B
+SELECT 'false'::JSON::BOOL
+----
+false
+
+statement error cannot cast jsonb numeric to type bool
+SELECT '1'::JSON::BOOL
+
+query I
+SELECT '1'::JSON::INT8
+----
+1
+
+query I
+SELECT '1'::JSON::INT4
+----
+1
+
+query I
+SELECT '1'::JSON::INT2
+----
+1
+
+query I
+SELECT '1.5'::JSONB::INT8
+----
+2
+
+statement error cannot cast jsonb string to type int
+SELECT '"a"'::JSON::INT8
+
+statement error integer out of range
+SELECT '9223372036854775808'::JSONB::INT8
+
+query F
+SELECT '1.23'::JSON::FLOAT4
+----
+1.23
+
+query F
+SELECT '1.23'::JSON::FLOAT8
+----
+1.23
+
+statement error cannot cast jsonb string to type float
+SELECT '"a"'::JSON::FLOAT8
+
+query F
+SELECT '1.23'::JSON::DECIMAL(6, 2)
+----
+1.23
+
+statement error cannot cast jsonb string to type decimal
+SELECT '"a"'::JSON::DECIMAL(6, 2)
+
 statement ok
 CREATE TABLE t45837 AS SELECT 1.25::decimal AS d
 
