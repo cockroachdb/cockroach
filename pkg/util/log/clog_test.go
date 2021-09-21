@@ -393,7 +393,7 @@ func TestGetLogReader(t *testing.T) {
 		// Absolute filename is specified.
 		{info.file.Name(), "pathnames must be basenames"},
 		// Symlink to a log file.
-		{filepath.Join(dir, removePeriods(program)+".log"), "pathnames must be basenames"},
+		{filepath.Join(dir, program+".log"), "pathnames must be basenames"},
 		// Symlink relative to logDir.
 		{"cockroach.roach0.root.2015-09-25T19_24_19Z.00001.log", "symlinks are not allowed"},
 		// Non-log file.
