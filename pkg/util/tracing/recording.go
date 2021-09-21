@@ -349,13 +349,13 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 			})
 		}
 		for _, l := range sp.Logs {
-			jl := jaegerjson.Log{Timestamp: uint64(l.Time.UnixNano() / 1000)}
-			for _, field := range l.Fields {
-				jl.Fields = append(jl.Fields, jaegerjson.KeyValue{
-					Key:   field.Key,
-					Value: field.Value,
+			jl := jaegerjson.Log{
+				Timestamp: uint64(l.Time.UnixNano() / 1000),
+				Fields: []jaegerjson.KeyValue{{
+					Key:   "event",
+					Value: l.Msg(),
 					Type:  "STRING",
-				})
+				}},
 			}
 			s.Logs = append(s.Logs, jl)
 		}
