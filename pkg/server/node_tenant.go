@@ -30,8 +30,11 @@ func maybeRedactRecording(tenID roachpb.TenantID, rec tracing.Recording) {
 		sp.Tags = nil
 		for j := range sp.Logs {
 			record := &sp.Logs[j]
-			for k := range record.Fields {
-				field := &record.Fields[k]
+			record.Message = record.Message.Redact()
+
+			// For compatibility with old versions, also redact DeprecatedFields.
+			for k := range record.DeprecatedFields {
+				field := &record.DeprecatedFields[k]
 				if field.Key != tracingpb.LogMessageField {
 					// We don't have any of these fields, but let's not take any
 					// chances (our dependencies might slip them in).

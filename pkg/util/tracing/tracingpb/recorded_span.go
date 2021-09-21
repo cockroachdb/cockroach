@@ -52,7 +52,12 @@ func (s *RecordedSpan) Structured(visit func(*types.Any, time.Time)) {
 // Msg extracts the message of the LogRecord, which is either in an "event" or
 // "error" field.
 func (l LogRecord) Msg() redact.RedactableString {
-	for _, f := range l.Fields {
+	if l.Message != "" {
+		return l.Message
+	}
+
+	// Compatibility with 21.2: look at l.DeprecatedFields.
+	for _, f := range l.DeprecatedFields {
 		key := f.Key
 		if key == LogMessageField {
 			return f.Value
