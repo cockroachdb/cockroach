@@ -75,7 +75,7 @@ func TestSecondaryGC(t *testing.T) {
 	var fs *fileSink
 	require.NoError(t, logging.allSinkInfos.iterFileSinks(
 		func(p *fileSink) error {
-			if strings.HasSuffix(p.prefix, "gctest") {
+			if strings.HasSuffix(p.fileNamePrefix, "-gctest") {
 				fs = p
 			}
 			return nil
