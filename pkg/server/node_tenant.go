@@ -14,24 +14,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
 var sRedactedMarker = redact.RedactableString(redact.EscapeBytes(nil))
 
-func maybeRedactRecording(tenID roachpb.TenantID, rec tracing.Recording) {
+// redactRecordingForTenant redacts the sensitive parts of log messages in the
+// recording if the tenant to which this recording is intended is not the system
+// tenant (the system tenant gets an. See https://github.com/cockroachdb/cockroach/issues/70407.
+// The recording is modified in place.
+//
+// tenID is the tenant that will receive this recording.
+func redactRecordingForTenant(tenID roachpb.TenantID, rec tracing.Recording) error {
 	if tenID == roachpb.SystemTenantID {
-		return
+		return nil
 	}
-	// For tenants, strip the verbose log messages. See:
-	// https://github.com/cockroachdb/cockroach/issues/70407
 	for i := range rec {
 		sp := &rec[i]
 		sp.Tags = nil
 		for j := range sp.Logs {
 			record := &sp.Logs[j]
-			for k := range record.Fields {
-				field := &record.Fields[k]
+			if record.Message != "" && !sp.RedactableLogs {
+				// If Message is set, the record should have been produced by a 22.1
+				// node that also sets RedactableLogs.
+				return errors.AssertionFailedf(
+					"recording has non-redactable span with the Message field set: %s", sp)
+			}
+			record.Message = record.Message.Redact()
+
+			// For compatibility with old versions, also redact DeprecatedFields.
+			for k := range record.DeprecatedFields {
+				field := &record.DeprecatedFields[k]
 				if field.Key != tracingpb.LogMessageField {
 					// We don't have any of these fields, but let's not take any
 					// chances (our dependencies might slip them in).
@@ -51,4 +65,5 @@ func maybeRedactRecording(tenID roachpb.TenantID, rec tracing.Recording) {
 			}
 		}
 	}
+	return nil
 }

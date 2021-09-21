@@ -659,23 +659,11 @@ func (s *statusServer) Allocator(
 
 func recordedSpansToTraceEvents(spans []tracingpb.RecordedSpan) []*serverpb.TraceEvent {
 	var output []*serverpb.TraceEvent
-	var buf bytes.Buffer
 	for _, sp := range spans {
 		for _, entry := range sp.Logs {
 			event := &serverpb.TraceEvent{
-				Time: entry.Time,
-			}
-			if len(entry.Fields) == 1 {
-				event.Message = entry.Fields[0].Value.StripMarkers()
-			} else {
-				buf.Reset()
-				for i, f := range entry.Fields {
-					if i != 0 {
-						buf.WriteByte(' ')
-					}
-					fmt.Fprintf(&buf, "%s:%v", f.Key, f.Value)
-				}
-				event.Message = buf.String()
+				Time:    entry.Time,
+				Message: entry.Msg().StripMarkers(),
 			}
 			output = append(output, event)
 		}
