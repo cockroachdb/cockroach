@@ -64,7 +64,7 @@ func TestSecondaryGC(t *testing.T) {
 		Channels: logconfig.SelectChannels(channel.OPS),
 	}
 
-	// Validate and apply the config
+	// Validate and apply the config.
 	require.NoError(t, config.Validate(&s.logDir))
 	TestingResetActive()
 	cleanupFn, err := ApplyConfig(config)
