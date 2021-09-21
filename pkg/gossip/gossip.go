@@ -63,7 +63,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -258,19 +257,19 @@ type Gossip struct {
 	systemConfigMu       syncutil.RWMutex
 	systemConfigChannels []chan<- struct{}
 
-	// resolvers is a list of resolvers used to determine
-	// bootstrap hosts for connecting to the gossip network.
-	resolverIdx    int
-	resolvers      []resolver.Resolver
-	resolversTried map[int]struct{} // Set of attempted resolver indexes
+	// addresses is a list of bootstrap host addresses for
+	// connecting to the gossip network.
+	addressIdx     int
+	addresses      []util.UnresolvedAddr
+	addressesTried map[int]struct{} // Set of attempted address indexes
 	nodeDescs      map[roachpb.NodeID]*roachpb.NodeDescriptor
 	// storeMap maps store IDs to node IDs.
 	storeMap map[roachpb.StoreID]roachpb.NodeID
 
-	// Membership sets for resolvers and bootstrap addresses.
-	// bootstrapAddrs also tracks which address is associated with which
-	// node ID to enable faster node lookup by address.
-	resolverAddrs  map[util.UnresolvedAddr]resolver.Resolver
+	// Membership sets for bootstrap addresses. bootstrapAddrs also tracks which
+	// address is associated with which node ID to enable faster node lookup by
+	// address.
+	addressExists  map[util.UnresolvedAddr]bool
 	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
 
 	locality roachpb.Locality
@@ -314,10 +313,10 @@ func New(
 		stallInterval:     defaultStallInterval,
 		bootstrapInterval: defaultBootstrapInterval,
 		cullInterval:      defaultCullInterval,
-		resolversTried:    map[int]struct{}{},
+		addressesTried:    map[int]struct{}{},
 		nodeDescs:         map[roachpb.NodeID]*roachpb.NodeDescriptor{},
 		storeMap:          make(map[roachpb.StoreID]roachpb.NodeID),
-		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
+		addressExists:     map[util.UnresolvedAddr]bool{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		locality:          locality,
 		defaultZoneConfig: defaultZoneConfig,
@@ -474,35 +473,35 @@ func (g *Gossip) SetStorage(storage Storage) error {
 		}
 	}
 
-	// Cycle through all persisted bootstrap hosts and add resolvers for
-	// any which haven't already been added.
-	newResolverFound := false
+	// Cycle through all persisted bootstrap hosts and add addresses that
+	// don't already exist.
+	newAddressFound := false
 	for _, addr := range g.bootstrapInfo.Addresses {
-		if !g.maybeAddResolverLocked(addr) {
+		if !g.maybeAddAddressLocked(addr) {
 			continue
 		}
-		// If we find a new resolver, reset the resolver index so that the
-		// next resolver we try is the first of the new resolvers.
-		if !newResolverFound {
-			newResolverFound = true
-			g.resolverIdx = len(g.resolvers) - 1
+		// If we find a new address, reset the address index so that the
+		// next address we try is the first of the new addresses.
+		if !newAddressFound {
+			newAddressFound = true
+			g.addressIdx = len(g.addresses) - 1
 		}
 	}
 
-	// If a new resolver was found, immediately signal bootstrap.
-	if newResolverFound {
+	// If a new address was found, immediately signal bootstrap.
+	if newAddressFound {
 		if log.V(1) {
-			log.Ops.Infof(ctx, "found new resolvers from storage; signaling bootstrap")
+			log.Ops.Infof(ctx, "found new addresses from storage; signaling bootstrap")
 		}
 		g.signalStalledLocked()
 	}
 	return nil
 }
 
-// setResolvers initializes the set of gossip resolvers used to find
+// setAddresses initializes the set of gossip addresses used to find
 // nodes to bootstrap the gossip network.
-func (g *Gossip) setResolvers(resolvers []resolver.Resolver) {
-	if resolvers == nil {
+func (g *Gossip) setAddresses(addresses []util.UnresolvedAddr) {
+	if addresses == nil {
 		return
 	}
 
@@ -510,19 +509,19 @@ func (g *Gossip) setResolvers(resolvers []resolver.Resolver) {
 	defer g.mu.Unlock()
 
 	// Start index at end because get next address loop logic increments as first step.
-	g.resolverIdx = len(resolvers) - 1
-	g.resolvers = resolvers
-	g.resolversTried = map[int]struct{}{}
+	g.addressIdx = len(addresses) - 1
+	g.addresses = addresses
+	g.addressesTried = map[int]struct{}{}
 
 	// Start new bootstrapping immediately instead of waiting for next bootstrap interval.
 	g.maybeSignalStatusChangeLocked()
 }
 
-// GetResolvers returns a copy of the resolvers slice.
-func (g *Gossip) GetResolvers() []resolver.Resolver {
+// GetAddresses returns a copy of the addresses slice.
+func (g *Gossip) GetAddresses() []util.UnresolvedAddr {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	return append([]resolver.Resolver(nil), g.resolvers...)
+	return append([]util.UnresolvedAddr(nil), g.addresses...)
 }
 
 // GetNodeIDAddress looks up the RPC address of the node by ID.
@@ -678,22 +677,21 @@ func (g *Gossip) SimulationCycle() {
 	}
 }
 
-// maybeAddResolverLocked creates and adds a resolver for the specified
-// address if one does not already exist. Returns whether a new
-// resolver was added. The caller must hold the gossip mutex.
-func (g *Gossip) maybeAddResolverLocked(addr util.UnresolvedAddr) bool {
-	if _, ok := g.resolverAddrs[addr]; ok {
+// maybeAddAddressLocked validates and adds the given address unless it already
+// exists. Returns true if the address was new. The caller must hold the gossip
+// mutex.
+func (g *Gossip) maybeAddAddressLocked(addr util.UnresolvedAddr) bool {
+	if g.addressExists[addr] {
 		return false
 	}
 	ctx := g.AnnotateCtx(context.TODO())
-	r, err := resolver.NewResolverFromUnresolvedAddr(addr)
-	if err != nil {
-		log.Ops.Warningf(ctx, "bad address %s: %s", addr, err)
+	if addr.Network() != "tcp" {
+		log.Ops.Warningf(ctx, "unknown address network %q for %v", addr.Network(), addr)
 		return false
 	}
-	g.resolvers = append(g.resolvers, r)
-	g.resolverAddrs[addr] = r
-	log.Eventf(ctx, "add resolver %s", r)
+	g.addresses = append(g.addresses, addr)
+	g.addressExists[addr] = true
+	log.Eventf(ctx, "add address %s", addr)
 	return true
 }
 
@@ -727,12 +725,12 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Event(ctx, "cleaning up bootstrap addresses")
 
-	g.resolvers = g.resolvers[:0]
-	g.resolverIdx = 0
+	g.addresses = g.addresses[:0]
+	g.addressIdx = 0
 	g.bootstrapInfo.Addresses = g.bootstrapInfo.Addresses[:0]
 	g.bootstrapAddrs = map[util.UnresolvedAddr]roachpb.NodeID{}
-	g.resolverAddrs = map[util.UnresolvedAddr]resolver.Resolver{}
-	g.resolversTried = map[int]struct{}{}
+	g.addressExists = map[util.UnresolvedAddr]bool{}
+	g.addressesTried = map[int]struct{}{}
 
 	var desc roachpb.NodeDescriptor
 	if err := g.mu.is.visitInfos(func(key string, i *Info) error {
@@ -743,7 +741,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 			if desc.Address.IsEmpty() || desc.Address == g.mu.is.NodeAddr {
 				return nil
 			}
-			g.maybeAddResolverLocked(desc.Address)
+			g.maybeAddAddressLocked(desc.Address)
 			g.maybeAddBootstrapAddressLocked(desc.Address, desc.NodeID)
 		}
 		return nil
@@ -789,7 +787,7 @@ func maxPeers(nodeCount int) int {
 // update to a node descriptor. This allows us to compute the
 // total size of the gossip network (for determining max peers
 // each gossip node is allowed to have), as well as to create
-// new resolvers for each encountered host and to write the
+// new addresses for each encountered host and to write the
 // set of gossip node addresses to persistent storage when it
 // changes.
 func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
@@ -839,9 +837,9 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	}
 
 	// Add this new node address (if it's not already there) to our list
-	// of resolvers so we can keep connecting to gossip if the original
-	// resolvers go offline.
-	g.maybeAddResolverLocked(desc.Address)
+	// of addresses so we can keep connecting to gossip if the original
+	// addresses go offline.
+	g.maybeAddAddressLocked(desc.Address)
 
 	// Add new address (if it's not already there) to bootstrap info and
 	// persist if possible.
@@ -1213,7 +1211,7 @@ func (g *Gossip) MaxHops() uint32 {
 // Start launches the gossip instance, which commences joining the
 // gossip network using the supplied rpc server and previously known
 // peer addresses in addition to any bootstrap addresses specified via
-// --join and passed to this method via the resolvers parameter.
+// --join and passed to this method via the addresses parameter.
 //
 // The supplied advertised address is used to identify the gossip
 // instance in the gossip network; it will be used by other instances
@@ -1221,10 +1219,10 @@ func (g *Gossip) MaxHops() uint32 {
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(advertAddr net.Addr, resolvers []resolver.Resolver) {
+func (g *Gossip) Start(advertAddr net.Addr, addresses []util.UnresolvedAddr) {
 	g.AssertNotStarted(context.Background())
 	g.started = true
-	g.setResolvers(resolvers)
+	g.setAddresses(addresses)
 	g.server.start(advertAddr) // serve gossip protocol
 	g.bootstrap()              // bootstrap gossip client
 	g.manage()                 // manage gossip clients
@@ -1260,32 +1258,21 @@ func (g *Gossip) hasOutgoingLocked(nodeID roachpb.NodeID) bool {
 }
 
 // getNextBootstrapAddress returns the next available bootstrap
-// address by consulting the first non-exhausted resolver from the
-// slice supplied to the constructor or set using setBootstrap().
-// The lock is assumed held.
-func (g *Gossip) getNextBootstrapAddressLocked() net.Addr {
-	// Run through resolvers round robin starting at last resolved index.
-	for i := 0; i < len(g.resolvers); i++ {
-		g.resolverIdx++
-		g.resolverIdx %= len(g.resolvers)
-		defer func(idx int) { g.resolversTried[idx] = struct{}{} }(g.resolverIdx)
-		resolver := g.resolvers[g.resolverIdx]
-		if addr, err := resolver.GetAddress(); err != nil {
-			if _, ok := g.resolversTried[g.resolverIdx]; !ok {
-				ctx := g.AnnotateCtx(context.TODO())
-				log.Ops.Warningf(ctx, "invalid bootstrap address: %+v, %v", resolver, err)
-			}
-			continue
-		} else {
-			addrStr := addr.String()
-			if _, addrActive := g.bootstrapping[addrStr]; !addrActive {
-				g.bootstrapping[addrStr] = struct{}{}
-				return addr
-			}
+// address. The caller must hold the lock.
+func (g *Gossip) getNextBootstrapAddressLocked() util.UnresolvedAddr {
+	// Run through addresses round robin starting at last address index.
+	for range g.addresses {
+		g.addressIdx++
+		g.addressIdx %= len(g.addresses)
+		defer func(idx int) { g.addressesTried[idx] = struct{}{} }(g.addressIdx)
+		addr := g.addresses[g.addressIdx]
+		addrStr := addr.String()
+		if _, addrActive := g.bootstrapping[addrStr]; !addrActive {
+			g.bootstrapping[addrStr] = struct{}{}
+			return addr
 		}
 	}
-
-	return nil
+	return util.UnresolvedAddr{}
 }
 
 // bootstrap connects the node to the gossip network. Bootstrapping
@@ -1308,8 +1295,8 @@ func (g *Gossip) bootstrap() {
 				haveSentinel := g.mu.is.getInfo(KeySentinel) != nil
 				log.Eventf(ctx, "have clients: %t, have sentinel: %t", haveClients, haveSentinel)
 				if !haveClients || !haveSentinel {
-					// Try to get another bootstrap address from the resolvers.
-					if addr := g.getNextBootstrapAddressLocked(); addr != nil {
+					// Try to get another bootstrap address.
+					if addr := g.getNextBootstrapAddressLocked(); !addr.IsEmpty() {
 						g.startClientLocked(addr)
 					} else {
 						bootstrapAddrs := make([]string, 0, len(g.bootstrapping))
@@ -1442,12 +1429,13 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 		if distantHops <= maxHops {
 			return
 		}
-		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
+		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil || nodeAddr == nil {
 			log.Health.Errorf(ctx, "unable to get address for n%d: %s", distantNodeID, err)
 		} else {
-			log.Health.Infof(ctx, "starting client to n%d %s (%d > %d) to tighten network graph",
-				distantNodeID, nodeAddr, distantHops, maxHops)
-			g.startClientLocked(nodeAddr)
+			log.Health.Infof(ctx, "starting client to n%d (%d > %d) to tighten network graph",
+				distantNodeID, distantHops, maxHops)
+			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
+			g.startClientLocked(*nodeAddr)
 		}
 	}
 }
@@ -1461,7 +1449,7 @@ func (g *Gossip) doDisconnected(c *client) {
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClientLocked(c.forwardAddr)
+		g.startClientLocked(*c.forwardAddr)
 	}
 	g.maybeSignalStatusChangeLocked()
 }
@@ -1480,18 +1468,18 @@ func (g *Gossip) maybeSignalStatusChangeLocked() {
 		if !g.stalled {
 			log.Eventf(ctx, "now stalled")
 			if orphaned {
-				if len(g.resolvers) == 0 {
-					log.Ops.Warningf(ctx, "no gossip resolvers found; use --join to specify a connected node")
+				if len(g.addresses) == 0 {
+					log.Ops.Warningf(ctx, "no addresses found; use --join to specify a connected node")
 				} else {
 					log.Health.Warningf(ctx, "no incoming or outgoing connections")
 				}
-			} else if len(g.resolversTried) == len(g.resolvers) {
-				log.Health.Warningf(ctx, "first range unavailable; resolvers exhausted")
+			} else if len(g.addressesTried) == len(g.addresses) {
+				log.Health.Warningf(ctx, "first range unavailable; addresses exhausted")
 			} else {
-				log.Health.Warningf(ctx, "first range unavailable; trying remaining resolvers")
+				log.Health.Warningf(ctx, "first range unavailable; trying remaining addresses")
 			}
 		}
-		if len(g.resolvers) > 0 {
+		if len(g.addresses) > 0 {
 			g.signalStalledLocked()
 		}
 	} else {
@@ -1533,7 +1521,7 @@ func (g *Gossip) signalConnectedLocked() {
 // startClientLocked launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClientLocked(addr net.Addr) {
+func (g *Gossip) startClientLocked(addr util.UnresolvedAddr) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 	breaker, ok := g.clientsMu.breakers[addr.String()]
@@ -1544,7 +1532,7 @@ func (g *Gossip) startClientLocked(addr net.Addr) {
 	}
 	ctx := g.AnnotateCtx(context.TODO())
 	log.VEventf(ctx, 1, "starting new client to %s", addr)
-	c := newClient(g.server.AmbientContext, addr, g.serverMetrics)
+	c := newClient(g.server.AmbientContext, &addr, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
 	c.startLocked(g, g.disconnected, g.rpcContext, g.server.stopper, breaker)
 }
