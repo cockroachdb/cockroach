@@ -3434,7 +3434,7 @@ value if you rely on the HLC for accuracy.`,
 	"array_append": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
-			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
+			ReturnType: tree.IdentityReturnType(0),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.AppendToMaybeNullArray(typ, args[0], args[1])
 			},
@@ -3446,7 +3446,7 @@ value if you rely on the HLC for accuracy.`,
 	"array_prepend": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ArgTypes{{"elem", typ}, {"array", types.MakeArray(typ)}},
-			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
+			ReturnType: tree.IdentityReturnType(1),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.PrependToMaybeNullArray(typ, args[0], args[1])
 			},
@@ -3470,7 +3470,7 @@ value if you rely on the HLC for accuracy.`,
 	"array_remove": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
-			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
+			ReturnType: tree.IdentityReturnType(0),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -3493,7 +3493,7 @@ value if you rely on the HLC for accuracy.`,
 	"array_replace": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"toreplace", typ}, {"replacewith", typ}},
-			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
+			ReturnType: tree.IdentityReturnType(0),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
