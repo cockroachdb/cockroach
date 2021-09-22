@@ -21,14 +21,21 @@ function check_clean() {
 tc_prepare
 
 tc_start_block "Ensure generated code is up-to-date"
+
+tc_start_block "Run build/bazelutil/check.sh"
 # Buffer noisy output and only print it on failure.
 if ! run run_bazel build/bazelutil/check.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false); then
     # The command will output instructions on how to fix the error.
     exit 1
 fi
 rm artifacts/buildshort.log
+tc_end_block "Run build/bazelutil/check.sh"
+
+tc_start_block "Run build/bazelutil/bazel-generate.sh"
 run run_bazel build/bazelutil/bazel-generate.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
 rm artifacts/buildshort.log
+tc_end_block "Run build/bazelutil/bazel-generate.sh"
+
 check_clean "Run \`./dev generate bazel\` to automatically regenerate these."
 run build/builder.sh make generate &> artifacts/generate.log || (cat artifacts/generate.log && false)
 rm artifacts/generate.log
