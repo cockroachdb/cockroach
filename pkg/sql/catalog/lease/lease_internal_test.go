@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -27,12 +28,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTableSet(t *testing.T) {
@@ -1049,5 +1053,91 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 				t.Fatalf("Expected to acquire 2 leases, instead got %d", count)
 			}
 		})
+	}
+}
+
+// Tests retrieving older versions within a given start and end timestamp of a
+// table descriptor from store through an ExportRequest.
+func TestHistoricalExportRequestForTimeRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var stopper *stop.Stopper
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	stopper = s.Stopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	parseHLC := func(ts string) (hlc.Timestamp, error) {
+		dec, _, err := apd.NewFromString(ts)
+		if err != nil {
+			return hlc.Timestamp{}, err
+		}
+		return tree.DecimalToHLC(dec)
+	}
+
+	// Create a schema, create table, alter table a few times to get some history
+	// of tables while keeping checkpoints (timestamps), and call export request
+	// to see if contents are matching as expected between specific time
+	// intervals.
+	sqlDB.Exec("CREATE SCHEMA sc")
+	sqlDB.Exec("CREATE TABLE sc.foo (i INT PRIMARY KEY)")
+	sqlDB.Exec("INSERT INTO sc.foo VALUES (1)")
+
+	var ts1Str string
+	sqlDB.QueryRow("SELECT cluster_logical_timestamp()").Scan(&ts1Str)
+	ts1, err := parseHLC(ts1Str)
+	require.NoError(t, err)
+
+	sqlDB.Exec("ALTER SCHEMA sc RENAME TO sc2")
+	sqlDB.Exec("ALTER TABLE sc2.foo ADD COLUMN id UUID NOT NULL DEFAULT gen_random_uuid()")
+	sqlDB.Exec("ALTER TABLE sc2.foo RENAME COLUMN i TO former_id")
+	sqlDB.Exec("ALTER TABLE sc2.foo RENAME COLUMN id TO current_id")
+	sqlDB.Exec("CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')")
+	sqlDB.Exec("ALTER TYPE status DROP VALUE 'inactive'")
+	sqlDB.Exec("ALTER TYPE status DROP VALUE 'open'")
+
+	var ts2Str string
+	sqlDB.QueryRow("SELECT cluster_logical_timestamp()").Scan(&ts2Str)
+	ts2, err := parseHLC(ts2Str)
+	require.NoError(t, err)
+
+	// Store table descriptor ID
+	var tableID atomic.Value
+	storeID := func(val *atomic.Value, name string) {
+		var id descpb.ID
+		sqlDB.QueryRow(`SELECT id FROM system.namespace WHERE name = $1`, name).Scan(&id)
+		require.NotEqual(t, descpb.ID(0), id)
+		val.Store(id)
+	}
+	storeID(&tableID, "foo")
+
+	// Export Request for descriptor versions between ts1 and ts2. Waits for the
+	// most recent version with the name col and removes manager's active
+	// descriptorVersions before doing so for test purposes.
+	manager := s.LeaseManager().(*Manager)
+	descriptorID := tableID.Load().(descpb.ID)
+	_, err = manager.WaitForOneVersion(ctx, descriptorID, base.DefaultRetryOptions())
+	require.NoError(t, err)
+
+	manager.mu.Lock()
+	for _, mDesc := range manager.mu.descriptors {
+		mDesc.mu.Lock()
+		if mDesc.id == descriptorID {
+			mDesc.mu.active.data = nil
+		}
+		mDesc.mu.Unlock()
+	}
+	manager.mu.Unlock()
+
+	historicalDescs, err := getDescriptorsFromStoreForInterval(ctx, manager.DB(),
+		manager.Codec(), descriptorID, ts1, ts2)
+	require.NoError(t, err)
+
+	// Assert returned descriptors modification times are between ts1 and ts2 and the IDs match our query historicalDesc id
+	for _, historicalDesc := range historicalDescs {
+		modificationTime := historicalDesc.desc.GetModificationTime()
+		id := historicalDesc.desc.GetID()
+		require.Truef(t, ts1.Less(modificationTime), "ts1: %s, modification: %s", ts1.String(), modificationTime.String())
+		require.Truef(t, modificationTime.Less(ts2), "modification: %s, ts2: %s", modificationTime.String(), ts2.String())
+		require.Equalf(t, descriptorID, id, "(ID) Expected: %d, Got: %d", descriptorID, id)
 	}
 }
