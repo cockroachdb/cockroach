@@ -94,3 +94,22 @@ func (m *Manager) TestingAcquireAndAssertMinVersion(
 func (m *Manager) TestingOutstandingLeasesGauge() *metric.Gauge {
 	return m.storage.outstandingLeases
 }
+
+// TestingDescriptorExportRequest calls an export request for all descriptors
+// within the given range from the descriptor KV layer. Before calling export
+// request, we empty the manager's active leases to ensure we are retrieving
+// from store.
+func (m *Manager) TestingDescriptorExportRequest(
+	ctx context.Context, id descpb.ID, start, end hlc.Timestamp,
+) ([]catalog.Descriptor, error) {
+	// clear out current manager's descriptorStates' active leases, call export request
+	m.mu.Lock()
+	for _, mDesc := range m.mu.descriptors {
+		mDesc.mu.Lock()
+		mDesc.mu.active.data = nil
+		mDesc.mu.Unlock()
+	}
+	m.mu.Unlock()
+
+	return m.getDescriptorsFromStoreForInterval(ctx, m.DB(), id, start, end)
+}
