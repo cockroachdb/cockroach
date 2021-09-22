@@ -74,6 +74,9 @@ enum ResumeReason {
   // since MVCCScan converts the result into a WriteIntentError.
   // NB: 21.2 and below will return RESUME_KEY_LIMIT instead.
   RESUME_INTENT_LIMIT = 3;
+  // The DistSender encountered a range boundary and returned a partial result,
+  // in response to return_on_range_boundary.
+  RESUME_RANGE_BOUNDARY = 4;
 }
 
 // RequestHeader is supplied with every storage node request.
@@ -2151,6 +2154,29 @@ message Header {
   // target_bytes. Only effective on 22.1 clusters with TargetBytesAvoidExcess
   // cluster version enabled. Only supported by Get, Scan, and ReverseScan.
   bool target_bytes_allow_empty = 23;
+  // If true, DistSender returns partial non-empty results when encountering a
+  // range boundary, with an appropriate resume span and reason
+  // RESUME_RANGE_BOUNDARY. This will disable parallelism of DistSender
+  // requests, similarly to to the other limits above.
+  //
+  // This is useful in particular to prevent the DistSender from sending
+  // requests with very small remaining limits (e.g. TargetBytes) to subsequent
+  // ranges. Normally, as the DistSender iterates across ranges, each request's
+  // limits will be reduced by the results returned from the previous range,
+  // which can end up sending e.g. a request with TargetBytes=1 to the next
+  // range in the worst case. Enabling this option would instead return the
+  // partial result to the client, who then sends a new request with a new, full
+  // limit. In aggregate, as the client keeps paginating, this can significantly
+  // reduce the overall number of RPC requests sent to ranges, and thus the
+  // overall latency of the operation.
+  //
+  // However, the benefit depends greatly on the limits, key spans, overlap with
+  // range boundaries, as well as MVCC garbage. In some cases, it can be
+  // detrimental due to the cost of additional client sender stack traversals,
+  // so it is more appropriate for expensive requests (e.g. Scan) than cheap
+  // requests (e.g. Get). Benchmarks have shown that this relative overhead
+  // approaches zero as range RPC request latency increases past 1 ms.
+  bool return_on_range_boundary = 24;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTxnRequest. Currently set conservatively: a request might be
