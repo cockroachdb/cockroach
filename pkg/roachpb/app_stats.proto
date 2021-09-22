@@ -142,6 +142,9 @@ message TransactionStatistics {
   // aggregation of all its statements' execution statistics. These statistics
   // are sampled.
   optional ExecStats exec_stats = 9 [(gogoproto.nullable) = false];
+
+  // RowsWritten collects the number of rows written to disk.
+  optional NumericStat rows_written = 10 [(gogoproto.nullable) = false];
 }
 
 
