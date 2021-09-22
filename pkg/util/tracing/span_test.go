@@ -504,8 +504,8 @@ func (i *countingStringer) String() string {
 	return fmt.Sprint(*i)
 }
 
-// TestSpanTagsInRecordings verifies that tags are dropped if the span is
-// not verbose.
+// TestSpanTagsInRecordings verifies that tags added before a recording started
+// are part of the recording.
 func TestSpanTagsInRecordings(t *testing.T) {
 	tr := NewTracer()
 	var counter countingStringer
@@ -525,20 +525,19 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	// We didn't stringify the log tag.
 	require.Zero(t, int(counter))
 
-	// Verify that we didn't hold onto anything underneath.
 	sp.SetVerbose(true)
 	rec = sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].Tags, 4) // _unfinished:1 _verbose:1 tagfoo:tagbar foo1:1
+	require.Len(t, rec[0].Tags, 5) // _unfinished:1 _verbose:1 tagfoo:tagbar foo1:1 foor2:bar2
 	_, ok := rec[0].Tags["foo2"]
-	require.False(t, ok)
+	require.True(t, ok)
 	require.Equal(t, 1, int(counter))
 
-	// Verify that subsequent tags are captured.
+	// Verify that subsequent tags are also captured.
 	sp.SetTag("foo3", attribute.StringValue("bar3"))
 	rec = sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].Tags, 5)
+	require.Len(t, rec[0].Tags, 6)
 	_, ok = rec[0].Tags["foo3"]
 	require.True(t, ok)
 	require.Equal(t, 2, int(counter))
