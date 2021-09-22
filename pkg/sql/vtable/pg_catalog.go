@@ -1238,18 +1238,18 @@ CREATE TABLE pg_catalog.pg_hba_file_rules (
 	options STRING[]
 )`
 
-// PgCatalogStatisticExt is an empty table created by pg_catalog_test
-// and is currently unimplemented.
+// PgCatalogStatisticExt describes the schema of pg_catalog.pg_statistic_ext
+// https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html
 const PgCatalogStatisticExt = `
 CREATE TABLE pg_catalog.pg_statistic_ext (
-	stxrelid OID,
-	stxstattarget INT4,
 	oid OID,
+	stxrelid OID,
+  stxname NAME,
+  stxnamespace OID,
+	stxowner OID,
+	stxstattarget INT4,
 	stxkeys INT2VECTOR,
-	stxkind "char"[],
-	stxname NAME,
-	stxnamespace OID,
-	stxowner OID
+	stxkind "char"[]
 )`
 
 // PgCatalogReplicationOrigin is an empty table created by pg_catalog_test
