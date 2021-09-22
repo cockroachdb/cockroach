@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/spf13/pflag"
 )
 
@@ -33,6 +35,11 @@ type logger struct {
 	ttl                                time.Duration
 	seed                               int64
 	minRowsPerInsert, maxRowsPerInsert int
+
+	prometheus struct {
+		numRows        prometheus.Gauge
+		numExpiredRows prometheus.Gauge
+	}
 }
 
 var loggerMeta = workload.Meta{
@@ -60,9 +67,30 @@ func (l logger) Hooks() workload.Hooks {
 	return workload.Hooks{}
 }
 
+func (l *logger) setupMetrics(reg prometheus.Registerer) {
+	f := promauto.With(reg)
+	l.prometheus.numRows = f.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: histogram.PrometheusNamespace,
+			Subsystem: loggerMeta.Name,
+			Name:      "num_rows",
+			Help:      "Number of rows in the table",
+		},
+	)
+
+	l.prometheus.numExpiredRows = f.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: histogram.PrometheusNamespace,
+			Subsystem: loggerMeta.Name,
+			Name:      "num_expired_rows",
+			Help:      "Number of TTL expired rows in the table.",
+		},
+	)
+}
+
 var logChars = []rune("abdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ !.")
 
-func (l logger) Ops(
+func (l *logger) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(l, l.connFlags.DBOverride, urls)
@@ -115,7 +143,22 @@ func (l logger) Ops(
 			hists.Get(`select`).Record(elapsed)
 			return err
 		}
-		ql.WorkerFns = append(ql.WorkerFns, workerFn, selectFn)
+		ql.WorkerFns = append(ql.WorkerFns, selectFn, workerFn)
+	}
+
+	l.setupMetrics(reg.Registerer())
+	ql.WorkerFns[0] = func(ctx context.Context) error {
+		var numRows int64
+		if err := db.QueryRow("SELECT count(1) FROM logs AS OF SYSTEM TIME follower_read_timestamp()").Scan(&numRows); err != nil {
+			return err
+		}
+		l.prometheus.numRows.Set(float64(numRows))
+		var numExpiredRows int64
+		if err := db.QueryRow("SELECT count(1) FROM logs AS OF SYSTEM TIME follower_read_timestamp() WHERE now() > crdb_internal_ttl_expiration").Scan(&numExpiredRows); err != nil {
+			return err
+		}
+		l.prometheus.numExpiredRows.Set(float64(numExpiredRows))
+		return nil
 	}
 	return ql, nil
 }
