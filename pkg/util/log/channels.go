@@ -53,7 +53,7 @@ func logfDepth(
 		ctx, sev, ch,
 		depth+1, true /* redactable */, format, args...)
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
-		eventInternal(sp, el, (sev >= severity.ERROR), entry.convertToLegacy())
+		eventInternal(sp, el, sev >= severity.ERROR, &entry)
 	}
 	logger.outputLogEntry(entry)
 }

@@ -24,7 +24,7 @@ message LogRecord {
                                      (gogoproto.stdtime) = true];
   message Field {
     string key = 1;
-    string value = 2;
+    string value = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
   }
   // Fields with values converted to strings.
   repeated Field fields = 2 [(gogoproto.nullable) = false];
