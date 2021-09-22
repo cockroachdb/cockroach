@@ -15,15 +15,16 @@ interface ParamsObj {
   [key: string]: string;
 }
 
-/* eslint-disable no-prototype-builtins,no-restricted-syntax */
-export function queryToString(obj: any) {
-  const str = [];
-  for (const p in obj) {
-    if (obj.hasOwnProperty(p)) {
-      str.push(`${encodeURIComponent(p)}=${encodeURIComponent(obj[p])}`);
-    }
-  }
-  return str.join("&");
+// propsToQueryString is a helper function that converts a set of object
+// properties to a query string
+// - keys with null or undefined values will be skipped
+// - non-string values will be toString'd
+export function propsToQueryString(props: { [k: string]: any }): string {
+  const params = new URLSearchParams();
+  Object.entries(props).forEach(
+    ([k, v]: [string, any]) => v != null && params.set(k, v.toString()),
+  );
+  return params.toString();
 }
 
 export function queryToObj(location: Location, key: string, value: string) {
@@ -44,12 +45,15 @@ export function queryToObj(location: Location, key: string, value: string) {
   return paramObj;
 }
 
-export function queryByName(location: Location, key: string) {
+export function queryByName(location: Location, key: string): string {
   const urlParams = new URLSearchParams(location.search);
   return urlParams.get(key);
 }
 
-export function getMatchParamByName(match: Match<any>, key: string) {
+export function getMatchParamByName(
+  match: Match<any>,
+  key: string,
+): string | null {
   const param = match.params[key];
   if (param) {
     return decodeURIComponent(param);

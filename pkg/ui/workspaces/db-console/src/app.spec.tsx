@@ -346,13 +346,6 @@ describe("Routing to", () => {
     });
   });
 
-  describe("'/statement/:${statementAttr}' path", () => {
-    it("routes to <StatementDetails> component", () => {
-      navigateToPath("/statement/statement-attr");
-      assert.lengthOf(appWrapper.find(StatementDetails), 1);
-    });
-  });
-
   describe("'/statement/:${implicitTxnAttr}/:${statementAttr}' path", () => {
     it("routes to <StatementDetails> component", () => {
       navigateToPath("/statement/implicit-attr/statement-attr/");
