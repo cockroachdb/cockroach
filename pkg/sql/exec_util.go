@@ -168,6 +168,14 @@ var allowCrossDatabaseSeqOwner = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+const allowCrossDatabaseSeqReferencesSetting = "sql.cross_db_sequence_references.enabled"
+
+var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
+	allowCrossDatabaseSeqReferencesSetting,
+	"if true, sequences referenced by tables from other databases are allowed",
+	false,
+).WithPublic()
+
 const secondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.experimental_allow_for_secondary_tenant.enabled"
 
 // secondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
