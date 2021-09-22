@@ -183,5 +183,6 @@ type RecordedTxnStats struct {
 	CollectedExecStats      bool
 	ExecStats               execstats.QueryLevelStats
 	RowsRead                int64
+	RowsWritten             int64
 	BytesRead               int64
 }
