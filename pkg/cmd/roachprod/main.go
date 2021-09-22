@@ -923,8 +923,8 @@ func syncCloud(quiet bool) (*cld.Cloud, error) {
 
 var gcCmd = &cobra.Command{
 	Use:   "gc",
-	Short: "GC expired clusters\n",
-	Long: `Garbage collect expired clusters.
+	Short: "GC expired clusters and unused AWS keypairs\n",
+	Long: `Garbage collect expired clusters and unused SSH keypairs in AWS.
 
 Destroys expired clusters, sending email if properly configured. Usually run
 hourly by a cronjob so it is not necessary to run manually.
@@ -932,10 +932,12 @@ hourly by a cronjob so it is not necessary to run manually.
 	Args: cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		cloud, err := cld.ListCloud()
-		if err != nil {
-			return err
+		if err == nil {
+			// GCClusters depends on ListCloud so only call it if ListCloud runs without errors
+			err = cld.GCClusters(cloud, dryrun)
 		}
-		return cld.GCClusters(cloud, dryrun)
+		otherErr := cld.GCAWSKeyPairs(dryrun)
+		return errors.CombineErrors(err, otherErr)
 	}),
 }
 
