@@ -6753,12 +6753,19 @@ func TestPaginatedBackupTenant(t *testing.T) {
 		return fmt.Sprintf("%v%s", span.String(), spanStr)
 	}
 
+	// Check if export request is from a lease for a descriptor to avoid picking
+	// up on wrong export requests
+	isLeasingExportRequest := func(r *roachpb.ExportRequest) bool {
+		_, tenantID, _ := keys.DecodeTenantPrefix(r.Key)
+		codec := keys.MakeSQLCodec(tenantID)
+		return bytes.HasPrefix(r.Key, codec.DescMetadataPrefix()) &&
+			r.EndKey.Equal(r.Key.PrefixEnd())
+	}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 			for _, ru := range request.Requests {
-				switch ru.GetInner().(type) {
-				case *roachpb.ExportRequest:
-					exportRequest := ru.GetInner().(*roachpb.ExportRequest)
+				if exportRequest, ok := ru.GetInner().(*roachpb.ExportRequest); ok &&
+					!isLeasingExportRequest(exportRequest) {
 					exportRequestSpans = append(
 						exportRequestSpans,
 						requestSpanStr(roachpb.Span{Key: exportRequest.Key, EndKey: exportRequest.EndKey}, exportRequest.ResumeKeyTS),
