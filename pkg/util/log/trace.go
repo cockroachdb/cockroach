@@ -12,11 +12,9 @@ package log
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -103,56 +101,57 @@ func getSpanOrEventLog(ctx context.Context) (*tracing.Span, *ctxEventLog, bool) 
 	return nil, nil, false
 }
 
-// eventInternal is the common code for logging an event. If no args are given,
-// the format is treated as a pre-formatted string.
-//
-// Note that when called from a logging function, this is taking the log
-// message as input after introduction of redaction markers.  This
-// means the message may or may not contain markers already depending
-// of the configuration of --redactable-logs.
-func eventInternal(sp *tracing.Span, el *ctxEventLog, isErr bool, entry logpb.Entry) {
-	var msg string
-	if len(entry.Tags) == 0 && len(entry.File) == 0 && !entry.Redactable {
-		// Shortcut.
-		msg = entry.Message
+// eventInternal is the common code for logging an event to trace and/or event
+// logs. All entries passed to this method need to be redactable, or the
+// information in them will not be surfaced.
+func eventInternal(sp *tracing.Span, el *ctxEventLog, isErr bool, entry logEntry) {
+	var buf redact.StringBuilder
+	if len(entry.file) != 0 {
+		// TODO(knz): The "canonical" way to represent a file/line prefix
+		// is: <file>:<line>: msg
+		// with a colon between the line number and the message.
+		// However, some location filter deep inside SQL doesn't
+		// understand a colon after the line number.
+		buf.Printf("%s:%d ", redact.Safe(entry.file), redact.Safe(entry.line))
 	} else {
-		var buf strings.Builder
-		if len(entry.File) != 0 {
-			buf.WriteString(entry.File)
-			buf.WriteByte(':')
-			// TODO(knz): The "canonical" way to represent a file/line prefix
-			// is: <file>:<line>: msg
-			// with a colon between the line number and the message.
-			// However, some location filter deep inside SQL doesn't
-			// understand a colon after the line number.
-			buf.WriteString(strconv.FormatInt(entry.Line, 10))
-			buf.WriteByte(' ')
+		panic("x")
+	}
+	if entry.tags != nil {
+		buf.SafeString("[")
+		for i, tag := range entry.tags.Get() {
+			if i > 0 {
+				buf.SafeString(",")
+			}
+			// TODO(obs-inf/server): this assumes that log tag keys are safe, but this
+			// is not enforced. We could lint that it is true similar to how we lint
+			// that the format strings for `log.Infof` etc are const strings.
+			k := redact.SafeString(tag.Key())
+			v := tag.Value()
+			if v != nil {
+				buf.Printf("%s=%v", k, tag.Value())
+			} else {
+				buf.Printf("%s", k)
+			}
 		}
-		if len(entry.Tags) > 0 {
-			buf.WriteByte('[')
-			buf.WriteString(entry.Tags)
-			buf.WriteString("] ")
-		}
-		buf.WriteString(entry.Message)
-		msg = buf.String()
-
-		if entry.Redactable {
-			// This is true when eventInternal is called from logfDepth(),
-			// ie. a regular log call. In this case, the tags and message may contain
-			// redaction markers. We remove them here.
-			msg = redact.RedactableString(msg).StripMarkers()
-		}
+		buf.SafeString("] ")
 	}
 
+	var msg redact.RedactableString
+	if !entry.payload.redactable {
+		buf.WriteString(entry.payload.message)
+	} else {
+		buf.Printf("%s", redact.RedactableString(entry.payload.message))
+	}
+	msg = buf.RedactableString()
+
 	if sp != nil {
-		sp.Record(msg)
-		// if isErr {
-		// 	// TODO(radu): figure out a way to signal that this is an error. We
-		// 	// could use a different "error" key (provided it shows up in
-		// 	// LightStep). Things like NetTraceIntegrator would need to be modified
-		// 	// to understand the difference. We could also set a special Tag or
-		// 	// Baggage on the span. See #8827 for more discussion.
-		// }
+		sp.Recordf("%s", msg)
+		// TODO(obs-inf): figure out a way to signal that this is an error. We could
+		// use a different "error" key (provided it shows up in LightStep). Things
+		// like NetTraceIntegrator would need to be modified to understand the
+		// difference. We could also set a special Tag or Baggage on the span. See
+		// #8827 for more discussion.
+		_ = isErr
 	} else {
 		el.Lock()
 		if el.eventLog != nil {
@@ -186,6 +185,8 @@ func formatTags(ctx context.Context, brackets bool, buf *strings.Builder) bool {
 // Event looks for an opentracing.Trace in the context and logs the given
 // message to it. If no Trace is found, it looks for an EventLog in the context
 // and logs the message to it. If neither is found, does nothing.
+//
+// TODO(tbg): need to make sure linters enforce that `msg` is a constant expr.
 func Event(ctx context.Context, msg string) {
 	sp, el, ok := getSpanOrEventLog(ctx)
 	if !ok {
@@ -194,15 +195,12 @@ func Event(ctx context.Context, msg string) {
 	}
 
 	// Format the tracing event and add it to the trace.
-	entry := MakeLegacyEntry(ctx,
+	entry := makeUnstructuredEntry(ctx,
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
 		1,             /* depth */
-		// redactable is false because we want to flatten the data in traces
-		// -- we don't have infrastructure yet for trace redaction.
-		false, /* redactable */
-		"")
-	entry.Message = msg
+		true,          /* redactable */
+		msg)
 	eventInternal(sp, el, false /* isErr */, entry)
 }
 
@@ -217,13 +215,11 @@ func Eventf(ctx context.Context, format string, args ...interface{}) {
 	}
 
 	// Format the tracing event and add it to the trace.
-	entry := MakeLegacyEntry(ctx,
+	entry := makeUnstructuredEntry(ctx,
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
 		1,             /* depth */
-		// redactable is false because we want to flatten the data in traces
-		// -- we don't have infrastructure yet for trace redaction.
-		false, /* redactable */
+		true,          /* redactable */
 		format, args...)
 	eventInternal(sp, el, false /* isErr */, entry)
 }
@@ -244,13 +240,11 @@ func vEventf(
 			// Nothing to log. Skip the work.
 			return
 		}
-		entry := MakeLegacyEntry(ctx,
+		entry := makeUnstructuredEntry(ctx,
 			severity.INFO, /* unused for trace events */
 			channel.DEV,   /* unused for trace events */
 			depth+1,
-			// redactable is false because we want to flatten the data in traces
-			// -- we don't have infrastructure yet for trace redaction.
-			false, /* redactable */
+			true, /* redactable */
 			format, args...)
 		eventInternal(sp, el, isErr, entry)
 	}

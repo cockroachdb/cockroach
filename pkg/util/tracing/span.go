@@ -160,9 +160,7 @@ func (sp *Span) IsVerbose() bool {
 // Record provides a way to record free-form text into verbose spans. Recordings
 // may be dropped due to sizing constraints.
 //
-// TODO(irfansharif): We don't currently have redactability with trace
-// recordings (both here, and using RecordStructured above). We'll want to do this
-// soon.
+// TODO(tbg): make sure `msg` is lint-forced to be const.
 func (sp *Span) Record(msg string) {
 	if sp.done() {
 		return
