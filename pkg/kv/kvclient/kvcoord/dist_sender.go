@@ -1366,7 +1366,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 							replyResults, ba.MaxSpanRequestKeys)
 					}
 					ba.MaxSpanRequestKeys -= replyResults
-					// Exiting; any missing responses will be filled in via defer().
 					if ba.MaxSpanRequestKeys == 0 {
 						couldHaveSkippedResponses = true
 						resumeReason = roachpb.RESUME_KEY_LIMIT
@@ -1380,6 +1379,16 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 						resumeReason = roachpb.RESUME_BYTE_LIMIT
 						return
 					}
+				}
+				// If we hit a range boundary, and none of the limits were exceeded,
+				// return a partial result if requested. We do this after checking the
+				// limits, so that they take precedence -- if none of the responses has
+				// a resume span but the limits were exceeded above then the generated
+				// resume span won't hit this range again anyway.
+				if ba.Header.ReturnOnRangeBoundary && replyResults > 0 && !lastRange {
+					couldHaveSkippedResponses = true
+					resumeReason = roachpb.RESUME_RANGE_BOUNDARY
+					return
 				}
 			}
 		}
