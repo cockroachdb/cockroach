@@ -74,6 +74,10 @@ enum ResumeReason {
   // since MVCCScan converts the result into a WriteIntentError.
   // NB: 21.2 and below will return RESUME_KEY_LIMIT instead.
   RESUME_INTENT_LIMIT = 3;
+  // The DistSender encountered a range boundary and returned a partial result.
+  // This avoids running subsequent requests with very small limits, reducing
+  // the overall number of range requests.
+  RESUME_RANGE_BOUNDARY = 4;
 }
 
 // RequestHeader is supplied with every storage node request.
@@ -2061,6 +2065,10 @@ message Header {
   // requests that were not able to run to completion before the limit was
   // reached.
   //
+  // Note that the response is not guaranteed to be filled up to the limit; in
+  // particular, if a range boundary is encountered, an underfull response is
+  // returned along with a resume span and reason RESUME_RANGE_BOUNDARY.
+  //
   // Overlapping requests
   //
   // The spans accessed by the requests are allowed to overlap. However, if any
@@ -2129,6 +2137,10 @@ message Header {
   // and limits the number of rows scanned (and returned). The target will be
   // overshot; in particular, at least one row will always be returned (assuming
   // one exists). A suitable resume span will be returned.
+  //
+  // Note that the response is not guaranteed to be filled up to the limit; in
+  // particular, if a range boundary is encountered, an underfull response is
+  // returned along with a resume span and reason RESUME_RANGE_BOUNDARY.
   //
   // The semantics around overlapping requests, unordered requests, and
   // supported requests from max_span_request_keys apply to the target_bytes

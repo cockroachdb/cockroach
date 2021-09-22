@@ -1341,37 +1341,25 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.UpdateTxn(resp.reply.Txn)
 			}
 
-			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0
-			// Check whether we've received enough responses to exit query loop.
-			if mightStopEarly {
-				var replyResults int64
-				var replyBytes int64
+			// If the request has a limit, return a resume span on every range
+			// boundary. This avoids sending range requests with very small limits,
+			// and the client will come back for more anyway because of the
+			// ResumeSpan.
+			if ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0 {
+				var hasResults bool
 				for _, r := range resp.reply.Responses {
-					replyResults += r.GetInner().Header().NumKeys
-					replyBytes += r.GetInner().Header().NumBytes
-				}
-				// Update MaxSpanRequestKeys, if applicable. Note that ba might be
-				// passed recursively to further divideAndSendBatchToRanges() calls.
-				if ba.MaxSpanRequestKeys > 0 {
-					if replyResults > ba.MaxSpanRequestKeys {
-						log.Fatalf(ctx, "received %d results, limit was %d",
-							replyResults, ba.MaxSpanRequestKeys)
-					}
-					ba.MaxSpanRequestKeys -= replyResults
-					// Exiting; any missing responses will be filled in via defer().
-					if ba.MaxSpanRequestKeys == 0 {
+					h := r.GetInner().Header()
+					if h.ResumeSpan != nil {
 						couldHaveSkippedResponses = true
-						resumeReason = roachpb.RESUME_KEY_LIMIT
+						resumeReason = h.ResumeReason
 						return
 					}
+					hasResults = hasResults || h.NumKeys > 0 || h.NumBytes > 0
 				}
-				if ba.TargetBytes > 0 {
-					ba.TargetBytes -= replyBytes
-					if ba.TargetBytes <= 0 {
-						couldHaveSkippedResponses = true
-						resumeReason = roachpb.RESUME_BYTE_LIMIT
-						return
-					}
+				if hasResults && !lastRange {
+					couldHaveSkippedResponses = true
+					resumeReason = roachpb.RESUME_RANGE_BOUNDARY
+					return
 				}
 			}
 		}
