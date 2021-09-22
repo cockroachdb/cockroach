@@ -28,6 +28,12 @@ ALTER TABLE foo ADD COLUMN k SERIAL
 statement ok
 ALTER TABLE foo ADD COLUMN l INT NOT NULL
 
+statement error pq: sequence references cannot come from other databases; \(see the 'sql\.cross_db_sequence_references\.enabled' cluster setting\)
+ALTER TABLE FOO ALTER COLUMN l SET DEFAULT currval('diff_db.test_seq')
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
+
 statement ok
 ALTER TABLE FOO ALTER COLUMN l SET DEFAULT currval('diff_db.test_seq')
 

@@ -611,6 +611,17 @@ func maybeAddSequenceDependencies(
 		if err != nil {
 			return nil, err
 		}
+		// Check if this reference is cross DB.
+		if seqDesc.GetParentID() != tableDesc.GetParentID() &&
+			!allowCrossDatabaseSeqReferences.Get(&st.SV) {
+			return nil, errors.WithHintf(
+				pgerror.Newf(pgcode.FeatureNotSupported,
+					"sequence references cannot come from other databases; (see the '%s' cluster setting)",
+					allowCrossDatabaseSeqReferencesSetting),
+				crossDBReferenceDeprecationHint(),
+			)
+
+		}
 		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
 
 		// If we had already modified this Sequence as part of this transaction,
