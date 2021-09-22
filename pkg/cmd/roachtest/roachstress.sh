@@ -16,6 +16,66 @@ if [ -z "${BASH_VERSINFO}" ] || [ -z "${BASH_VERSINFO[0]}" ] || [ "${BASH_VERSIN
   exit 1
 fi
 
+function help {
+  cat <<EOF
+Stress run roachtest
+Usage:
+  $(basename ${0}) [flags] [-- roachtest flags]
+
+flags:
+  -t - test to run (overrides TEST)
+  -c - number of tests to run (overrides COUNT)
+  -l - run test locally on host (overrides LOCAL)
+  -s - y/n buildshort instead of build (exclude web ui)
+  -b - cr | test | all - remove artifacts to force rebuild
+       useful when running with local change like logging etc
+
+If flag neither flag nor environment variable is set, script will prompt
+for value.
+EOF
+}
+
+# Process command line flags
+rebuild=
+while getopts ":t:c:ls:b:h-" o ; do
+  case "$o" in
+    t)
+     TEST="${OPTARG}"
+     ;;
+    c)
+     COUNT="${OPTARG}"
+     ;;
+    l)
+     LOCAL=y
+     ;;
+    s)
+     SHORT="${OPTARG}"
+     ;;
+    b)
+     # Can use either of: cr | test | all
+     rebuild="${OPTARG}"
+     ;;
+    h)
+     help
+     exit 0
+     ;;
+    -)
+     break
+     ;;
+    :)
+     echo -e "Option -${OPTARG} requires argument\n"
+     help
+     exit 1
+     ;;
+    *)
+     echo -e "Unknown option -${OPTARG}\n"
+     help
+     exit 1
+     ;;
+  esac
+done
+shift $((OPTIND - 1))
+
 # Read user input.
 if [ ! -v TEST ]; then read -r -e -p "Test regexp: " TEST; fi
 if [ ! -v COUNT ]; then read -r -e -i "10" -p "Count: " COUNT; fi
@@ -47,6 +107,19 @@ rt="${abase}/roachtest"
 rp="${abase}/roachprod"
 wl="${abase}/workload${LOCAL}"
 cr="${abase}/cockroach${LOCAL}"
+
+# Check if we need to force the build by removing artifacts
+case "${rebuild}" in
+  cr)
+    rm -f "${cr}"
+    ;;
+  test)
+    rm -f "${rt}" "${rp}" "${wl}"
+    ;;
+  all)
+    rm -f "${cr}" "${rt}" "${rp}" "${wl}"
+    ;;
+esac
 
 # This is the artifacts dir we'll pass to the roachtest invocation. It's
 # disambiguated by a timestamp because one often ends up invoking roachtest on
