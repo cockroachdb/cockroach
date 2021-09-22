@@ -20,6 +20,7 @@ import {
   transactionsCountBarChart,
   transactionsRowsReadBarChart,
   transactionsBytesReadBarChart,
+  transactionsRowsWrittenBarChart,
   transactionsLatencyBarChart,
   transactionsContentionBarChart,
   transactionsMaxMemUsageBarChart,
@@ -93,6 +94,10 @@ export function makeTransactionsColumns(
     transactions,
     defaultBarChartOptions,
   );
+  const rowsWrittenBar = transactionsRowsWrittenBarChart(
+    transactions,
+    defaultBarChartOptions,
+  );
   const latencyBar = transactionsLatencyBarChart(
     transactions,
     latencyClasses.barChart,
@@ -158,6 +163,15 @@ export function makeTransactionsColumns(
       className: cx("statements-table__col-bytes-read"),
       sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.bytes_read.mean)),
+    },
+    {
+      name: "rowsWritten",
+      title: statisticsTableTitles.rowsWritten(statType),
+      cell: rowsWrittenBar,
+      className: cx("statements-table__col-rows-written"),
+      sort: (item: TransactionInfo) =>
+        FixLong(Number(item.stats_data.stats.rows_written?.mean)),
+      showByDefault: false,
     },
     {
       name: "time",
