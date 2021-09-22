@@ -1577,6 +1577,12 @@ func (c *ContentionEvent) String() string {
 	return redact.StringWithoutMarkers(c)
 }
 
+// Equal returns whether the two structs are identical. Needed for compatibility
+// with proto2.
+func (c *TenantConsumption) Equal(other *TenantConsumption) bool {
+	return *c == *other
+}
+
 // Add consumption from the given structure.
 func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.RU += other.RU

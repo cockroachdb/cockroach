@@ -996,7 +996,7 @@ func backupPlanHook(
 		}
 
 		var spans []roachpb.Span
-		var tenants []descpb.TenantInfo
+		var tenants []descpb.TenantInfoWithUsage
 		if backupStmt.Targets != nil && backupStmt.Targets.Tenant != (roachpb.TenantID{}) {
 			if !p.ExecCfg().Codec.ForSystemTenant() {
 				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
@@ -1008,7 +1008,7 @@ func backupPlanHook(
 			if err != nil {
 				return err
 			}
-			tenants = []descpb.TenantInfo{tenantInfo}
+			tenants = []descpb.TenantInfoWithUsage{tenantInfo}
 		} else {
 			tableSpans, err := spansForAllTableIndexes(ctx, p.ExecCfg(), endTime, tables, revs)
 			if err != nil {
