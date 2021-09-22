@@ -70,6 +70,8 @@ type transientCluster struct {
 	httpFirstPort int
 	sqlFirstPort  int
 
+	workloadMaxQPS int
+
 	adminPassword string
 	adminUser     security.SQLUsername
 
