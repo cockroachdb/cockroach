@@ -39,7 +39,7 @@ func StructuredEvent(ctx context.Context, event eventpb.EventPayload) {
 		event)
 
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
-		eventInternal(sp, el, (entry.sev >= severity.ERROR), entry.convertToLegacy())
+		eventInternal(sp, el, (entry.sev >= severity.ERROR), &entry)
 	}
 
 	logger := logging.getLogger(entry.ch)

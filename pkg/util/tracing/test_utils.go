@@ -33,7 +33,7 @@ func LogsContainMsg(sp tracingpb.RecordedSpan, msg string) bool {
 		// NOTE: With our logs, each LogRecord has a single field ("event") and
 		// value.
 		for _, f := range l.Fields {
-			if strings.Contains(f.Value, msg) {
+			if strings.Contains(f.Value.StripMarkers(), msg) {
 				return true
 			}
 		}
@@ -48,7 +48,7 @@ func CountLogMessages(sp tracingpb.RecordedSpan, msg string) int {
 		// NOTE: With our logs, each LogRecord has a single field ("event") and
 		// value.
 		for _, f := range l.Fields {
-			if strings.Contains(f.Value, msg) {
+			if strings.Contains(f.Value.StripMarkers(), msg) {
 				res++
 			}
 		}
