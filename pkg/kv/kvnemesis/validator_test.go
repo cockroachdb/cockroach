@@ -120,7 +120,7 @@ func TestValidate(t *testing.T) {
 			name:     "no ops with unexpected delete",
 			steps:    nil,
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`extra writes: [w]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
 		},
 		{
 			name:     "one put with expected write",
@@ -144,7 +144,7 @@ func TestValidate(t *testing.T) {
 			name:     "one delete with missing write",
 			steps:    []Step{step(withResult(del(`a`), nil))},
 			kvs:      nil,
-			expected: []string{`committed delete missing write: [w]"a":missing-><nil>`},
+			expected: []string{`committed delete missing write: [d]"a":missing-><nil>`},
 		},
 		{
 			name:     "one ambiguous put with successful write",
@@ -156,7 +156,7 @@ func TestValidate(t *testing.T) {
 			name:     "one ambiguous delete with successful write",
 			steps:    []Step{step(withResult(del(`a`), roachpb.NewAmbiguousResultError(``)))},
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`unable to validate delete operations in ambiguous transactions: [w]"a":missing-><nil>`},
+			expected: []string{`unable to validate delete operations in ambiguous transactions: [d]"a":missing-><nil>`},
 		},
 		{
 			name:     "one ambiguous put with failed write",
@@ -178,8 +178,8 @@ func TestValidate(t *testing.T) {
 			},
 			kvs: kvs(tombstone(`a`, 1)),
 			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [w]"a":missing-><nil>`,
-				`committed delete missing write: [w]"a":missing-><nil>`,
+				`unable to validate delete operations in ambiguous transactions: [d]"a":missing-><nil>`,
+				`committed delete missing write: [d]"a":missing-><nil>`,
 			},
 		},
 		{
@@ -206,7 +206,7 @@ func TestValidate(t *testing.T) {
 			kvs:   kvs(tombstone(`a`, 1)),
 			// NB: Error messages are different because we can't match an uncommitted
 			// delete op to a stored kv like above.
-			expected: []string{`extra writes: [w]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
 		},
 		{
 			name: "one delete with expected write after write transaction with shadowed delete",
@@ -245,7 +245,7 @@ func TestValidate(t *testing.T) {
 			name:     "one batch delete with missing write",
 			steps:    []Step{step(withResult(batch(withResult(del(`a`), nil)), nil))},
 			kvs:      nil,
-			expected: []string{`committed batch missing write: [w]"a":missing-><nil>`},
+			expected: []string{`committed batch missing write: [d]"a":missing-><nil>`},
 		},
 		{
 			name: "one transactionally committed put with the correct writes",
@@ -287,7 +287,7 @@ func TestValidate(t *testing.T) {
 				), nil)),
 			},
 			kvs:      kvs(tombstone(`b`, 1)),
-			expected: []string{`committed txn missing write: [w]"a":missing-><nil> [w]"b":0.000000001,0-><nil>`},
+			expected: []string{`committed txn missing write: [d]"a":missing-><nil> [d]"b":0.000000001,0-><nil>`},
 		},
 		{
 			name: "one transactionally committed put with second write missing",
@@ -309,7 +309,7 @@ func TestValidate(t *testing.T) {
 				), nil)),
 			},
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`committed txn missing write: [w]"a":0.000000001,0-><nil> [w]"b":missing-><nil>`},
+			expected: []string{`committed txn missing write: [d]"a":0.000000001,0-><nil> [d]"b":missing-><nil>`},
 		},
 		{
 			name: "one transactionally committed put with write timestamp disagreement",
@@ -336,7 +336,7 @@ func TestValidate(t *testing.T) {
 			// NB: Error messages are different because we can't match an uncommitted
 			// delete op to a stored kv like above.
 			expected: []string{
-				`committed txn missing write: [w]"a":0.000000001,0-><nil> [w]"b":missing-><nil>`,
+				`committed txn missing write: [d]"a":0.000000001,0-><nil> [d]"b":missing-><nil>`,
 			},
 		},
 		{
@@ -377,7 +377,7 @@ func TestValidate(t *testing.T) {
 				), errors.New(`rollback`))),
 			},
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`extra writes: [w]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
 		},
 		{
 			name: "one transactionally rolled back batch put with write (correctly) missing",
@@ -473,7 +473,7 @@ func TestValidate(t *testing.T) {
 			// HACK: These should be the same timestamp. See the TODO in
 			// watcher.processEvents.
 			kvs:      kvs(tombstone(`a`, 1), tombstone(`a`, 2)),
-			expected: []string{`extra writes: [w]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
 		},
 		{
 			name: "two transactionally committed writes (put, delete) of the same key with extra write",
@@ -487,7 +487,7 @@ func TestValidate(t *testing.T) {
 			// watcher.processEvents.
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
 			expected: []string{
-				`committed txn overwritten key had write: [w]"a":0.000000001,0->v1 [w]"a":0.000000002,0-><nil>`,
+				`committed txn overwritten key had write: [w]"a":0.000000001,0->v1 [d]"a":0.000000002,0-><nil>`,
 			},
 		},
 		{
@@ -514,7 +514,7 @@ func TestValidate(t *testing.T) {
 			// delete in an ambiguous txn, this should pass without error.
 			// For now we fail validation on all ambiguous transactions with deletes.
 			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [w]"b":missing-><nil>`,
+				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [d]"b":missing-><nil>`,
 			},
 		},
 		{
@@ -566,7 +566,7 @@ func TestValidate(t *testing.T) {
 			// `ambiguous txn non-atomic timestamps: [w]"a":0.000000001,0->v1 [w]"b":0.000000002,0->v2`
 			// For now we fail validation on all ambiguous transactions with deletes.
 			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [w]"b":missing-><nil>`,
+				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [d]"b":missing-><nil>`,
 			},
 		},
 		{
@@ -889,7 +889,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`a`, 3, `v2`), tombstone(`a`, 4)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, 0.000000001,0),[0.000000004,0, <max>)-><nil> [w]"a":0.000000002,0-><nil> [r]"a":[<min>, 0.000000001,0),[0.000000004,0, <max>),[0.000000002,0, 0.000000003,0)-><nil>`,
+					`[r]"a":[<min>, 0.000000001,0),[0.000000004,0, <max>)-><nil> [d]"a":0.000000002,0-><nil> [r]"a":[<min>, 0.000000001,0),[0.000000004,0, <max>),[0.000000002,0, 0.000000003,0)-><nil>`,
 			},
 		},
 		{
@@ -1009,7 +1009,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, 0.000000001,0)-><nil> [w]"a":0.000000002,0-><nil> [r]"a":[<min>, 0.000000001,0),[0.000000002,0, <max>)-><nil>`,
+					`[r]"a":[<min>, 0.000000001,0)-><nil> [d]"a":0.000000002,0-><nil> [r]"a":[<min>, 0.000000001,0),[0.000000002,0, <max>)-><nil>`,
 			},
 		},
 		{
@@ -1040,7 +1040,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0.000000001,0, <max>)->v1 [w]"a":0.000000002,0-><nil> [r]"a":[0.000000001,0, 0.000000002,0)->v1`,
+					`[r]"a":[0.000000001,0, <max>)->v1 [d]"a":0.000000002,0-><nil> [r]"a":[0.000000001,0, 0.000000002,0)->v1`,
 			},
 		},
 		{
@@ -1085,7 +1085,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(tombstone(`a`, 1)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, <max>)-><nil> [w]"a":missing->v1 [r]"a":[0.000000001,0, <max>)->v1 [w]"a":0.000000001,0-><nil> [r]"a":[0,0, 0,0)->v1`,
+					`[r]"a":[<min>, <max>)-><nil> [w]"a":missing->v1 [r]"a":[0.000000001,0, <max>)->v1 [d]"a":0.000000001,0-><nil> [r]"a":[0,0, 0,0)->v1`,
 			},
 		},
 		{
@@ -1168,7 +1168,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 4), kv(`b`, 3, `v2`)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, 0.000000003,0)}->["a":v1] [w]"a":0.000000004,0-><nil>`,
+					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, 0.000000003,0)}->["a":v1] [d]"a":0.000000004,0-><nil>`,
 			},
 		},
 		{
@@ -1317,7 +1317,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 1, `v2`), tombstone(`a`, 2), kv(`a`, 3, `v3`), tombstone(`a`, 4)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, 0.000000001,0),[0.000000004,0, <max>)}->["b":v2] [w]"a":0.000000002,0-><nil>`,
+					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, 0.000000001,0),[0.000000004,0, <max>)}->["b":v2] [d]"a":0.000000002,0-><nil>`,
 			},
 		},
 		{
