@@ -65,6 +65,7 @@ import SessionsPage from "src/views/sessions/sessionsPage";
 import SessionDetails from "src/views/sessions/sessionDetails";
 import TransactionsPage from "src/views/transactions/transactionsPage";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
+import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import "styl/app.styl";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -185,39 +186,38 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 />
                 <Route
                   exact
-                  path={`/statements/:${appAttr}/:${statementAttr}`}
-                  component={StatementDetails}
-                />
-                <Route
-                  exact
-                  path={`/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                  component={StatementDetails}
-                />
-                <Route
-                  exact
-                  path={`/statements/:${appAttr}/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                  component={StatementDetails}
-                />
-
-                <Route
-                  exact
-                  path="/statement"
-                  component={() => <Redirect to="/statements" />}
-                />
-                <Route
-                  exact
-                  path={`/statement/:${statementAttr}`}
-                  component={StatementDetails}
-                />
-                <Route
-                  exact
                   path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
                   component={StatementDetails}
                 />
                 <Route
                   exact
+                  path={`/statements/:${appAttr}/:${statementAttr}`}
+                  render={RedirectToStatementDetails}
+                />
+                <Route
+                  exact
+                  path={`/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}`}
+                  render={RedirectToStatementDetails}
+                />
+                <Route
+                  exact
+                  path={`/statements/:${appAttr}/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
+                  render={RedirectToStatementDetails}
+                />
+                <Route
+                  exact
+                  path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
+                  render={RedirectToStatementDetails}
+                />
+                <Route
+                  exact
                   path={`/statement/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                  component={StatementDetails}
+                  render={RedirectToStatementDetails}
+                />
+                <Route
+                  exact
+                  path="/statement"
+                  component={() => <Redirect to="/statements" />}
                 />
 
                 {/* sessions */}

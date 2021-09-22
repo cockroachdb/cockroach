@@ -14,7 +14,7 @@ import { sessionAttr } from "src/util/constants";
 import { Helmet } from "react-helmet";
 import { Loading } from "../loading";
 import _ from "lodash";
-import { Link, RouteComponentProps, withRouter } from "react-router-dom";
+import { Link, RouteComponentProps } from "react-router-dom";
 
 import { SessionInfo } from "./sessionsTable";
 
@@ -320,7 +320,6 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                     statementNoConstants: stmt.sql_no_constants,
                     implicitTxn: session.active_txn?.implicit,
                     app: "",
-                    search: "",
                   })}
                   onClick={() =>
                     this.props.onStatementClick && this.props.onStatementClick()
