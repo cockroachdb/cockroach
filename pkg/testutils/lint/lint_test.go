@@ -1587,6 +1587,41 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestErrWrap", func(t *testing.T) {
+		skip.UnderShort(t)
+		skip.UnderBazelWithIssue(t, 68498, "Generated files not placed in the workspace via Bazel build")
+		excludesPath, err := filepath.Abs(filepath.Join("testdata", "errwrap_excludes.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd, stderr, filter, err := dirCmd(
+			crdb.Dir,
+			"errwrap",
+			"-exclude",
+			excludesPath,
+			pkgScope,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("%s <- unchecked error", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestReturnCheck", func(t *testing.T) {
 		skip.UnderShort(t)
 		// returncheck uses 2GB of ram (as of 2017-07-13), so don't parallelize it.
