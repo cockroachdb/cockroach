@@ -1605,27 +1605,6 @@ func (p *planner) EvalAsOfTimestamp(
 	return asOf, nil
 }
 
-// ParseHLC parses a string representation of an `hlc.Timestamp`.
-// This differs from hlc.ParseTimestamp in that it parses the decimal
-// serialization of an hlc timestamp as opposed to the string serialization
-// performed by hlc.Timestamp.String().
-//
-// This function is used to parse:
-//
-//   1580361670629466905.0000000001
-//
-// hlc.ParseTimestamp() would be used to parse:
-//
-//   1580361670.629466905,1
-//
-func ParseHLC(s string) (hlc.Timestamp, error) {
-	dec, _, err := apd.NewFromString(s)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-	return tree.DecimalToHLC(dec)
-}
-
 // isAsOf analyzes a statement to bypass the logic in newPlan(), since
 // that requires the transaction to be started already. If the returned
 // timestamp is not nil, it is the timestamp to which a transaction
