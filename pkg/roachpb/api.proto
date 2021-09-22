@@ -74,6 +74,10 @@ enum ResumeReason {
   // since MVCCScan converts the result into a WriteIntentError.
   // NB: 21.2 and below will return RESUME_KEY_LIMIT instead.
   RESUME_INTENT_LIMIT = 3;
+  // The DistSender encountered a range boundary and returned a partial result.
+  // This avoids running subsequent requests with very small limits, reducing
+  // the overall number of range requests.
+  RESUME_RANGE_BOUNDARY = 4;
 }
 
 // RequestHeader is supplied with every storage node request.
@@ -2151,6 +2155,12 @@ message Header {
   // target_bytes. Only effective on 22.1 clusters, since 21.2 always overshoots
   // the limit. Only supported by Get and Scan.
   bool target_bytes_allow_empty = 23;
+  // If true and max_span_request_keys/target_bytes is set, return partial
+  // non-empty results on range boundaries, with an appropriate resume span and
+  // reason RESUME_RANGE_BOUNDARY. This avoids sending requests with very small
+  // limits to subsequent ranges, which can increase the overall number of range
+  // RPC requests.
+  bool return_on_range_boundary = 24;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTxnRequest. Currently set conservatively: a request might be
