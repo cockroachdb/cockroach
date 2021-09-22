@@ -854,6 +854,13 @@ SELECT '{}'::JSONB[]
 {}
 
 # json_populate_record
+
+statement error unknown signature: json_populate_recordset\(oid, jsonb\)
+SELECT json_populate_recordset(3923269572::OID, '["regression_70475"]'::JSONB)
+
+statement error unknown signature: jsonb_populate_recordset\(oid, jsonb\)
+SELECT jsonb_populate_recordset(3923269572::OID, '["regression_70475"]'::JSONB)
+
 query FIII colnames
 SELECT *, c FROM json_populate_record(((1.01, 2, 3) AS d, c, a), '{"a": 3, "c": 10, "d": 11.001}')
 ----
