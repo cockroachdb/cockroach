@@ -22,100 +22,6 @@ import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import Severity = cockroach.util.log.Severity;
 
 describe("rest api", function() {
-  describe("propsToQueryString", function() {
-    interface PropBag {
-      [k: string]: string;
-    }
-
-    // helper decoding function used to doublecheck querystring generation
-    function decodeQueryString(qs: string): PropBag {
-      return _.reduce<string, PropBag>(
-        qs.split("&"),
-        (memo: PropBag, v: string) => {
-          const [key, value] = v.split("=");
-          memo[decodeURIComponent(key)] = decodeURIComponent(value);
-          return memo;
-        },
-        {},
-      );
-    }
-
-    it("creates an appropriate querystring", function() {
-      const testValues: { [k: string]: any } = {
-        a: "testa",
-        b: "testb",
-      };
-
-      const querystring = api.propsToQueryString(testValues);
-
-      assert(/a=testa/.test(querystring));
-      assert(/b=testb/.test(querystring));
-      assert.lengthOf(querystring.match(/=/g), 2);
-      assert.lengthOf(querystring.match(/&/g), 1);
-      assert.deepEqual(testValues, decodeQueryString(querystring));
-    });
-
-    it("handles falsy values correctly", function() {
-      const testValues: { [k: string]: any } = {
-        // null and undefined should be ignored
-        undefined: undefined,
-        null: null,
-        // other values should be added
-        false: false,
-        "": "",
-        0: 0,
-      };
-
-      const querystring = api.propsToQueryString(testValues);
-
-      assert(/false=false/.test(querystring));
-      assert(/0=0/.test(querystring));
-      assert(/([^A-Za-z]|^)=([^A-Za-z]|$)/.test(querystring));
-      assert.lengthOf(querystring.match(/=/g), 3);
-      assert.lengthOf(querystring.match(/&/g), 2);
-      assert.notOk(/undefined/.test(querystring));
-      assert.notOk(/null/.test(querystring));
-      assert.deepEqual(
-        { false: "false", "": "", 0: "0" },
-        decodeQueryString(querystring),
-      );
-    });
-
-    it("handles special characters", function() {
-      const key = "!@#$%^&*()=+-_\\|\"`'?/<>";
-      const value = key
-        .split("")
-        .reverse()
-        .join(""); // key reversed
-      const testValues: { [k: string]: any } = {
-        [key]: value,
-      };
-
-      const querystring = api.propsToQueryString(testValues);
-
-      assert(querystring.match(/%/g).length > (key + value).match(/%/g).length);
-      assert.deepEqual(testValues, decodeQueryString(querystring));
-    });
-
-    it("handles non-string values", function() {
-      const testValues: { [k: string]: any } = {
-        boolean: true,
-        number: 1,
-        emptyObject: {},
-        emptyArray: [],
-        objectWithProps: { a: 1, b: 2 },
-        arrayWithElts: [1, 2, 3],
-        long: Long.fromNumber(1),
-      };
-
-      const querystring = api.propsToQueryString(testValues);
-      assert.deepEqual(
-        _.mapValues(testValues, _.toString),
-        decodeQueryString(querystring),
-      );
-    });
-  });
-
   describe("databases request", function() {
     afterEach(fetchMock.restore);
 
@@ -652,7 +558,9 @@ describe("rest api", function() {
         response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           const encodedResponse = protos.cockroach.server.serverpb.ClusterResponse.encode(
-            { cluster_id: clusterID },
+            {
+              cluster_id: clusterID,
+            },
           ).finish();
           return {
             body: api.toArrayBuffer(encodedResponse),
@@ -735,7 +643,9 @@ describe("rest api", function() {
         response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           const encodedResponse = protos.cockroach.server.serverpb.MetricMetadataResponse.encode(
-            { metadata },
+            {
+              metadata,
+            },
           ).finish();
           return {
             body: api.toArrayBuffer(encodedResponse),
@@ -829,7 +739,9 @@ describe("rest api", function() {
         response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           const logsResponse = protos.cockroach.server.serverpb.LogEntriesResponse.encode(
-            { entries: [logEntry] },
+            {
+              entries: [logEntry],
+            },
           ).finish();
           return {
             body: api.toArrayBuffer(logsResponse),
