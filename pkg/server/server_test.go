@@ -443,6 +443,7 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 		splitKeys []roachpb.Key
 		keys      []roachpb.Key
 	}{
+		{[]roachpb.Key{}, []roachpb.Key{roachpb.Key("a"), roachpb.Key("j"), roachpb.Key("z")}},
 		{[]roachpb.Key{roachpb.Key("m")},
 			[]roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}},
 		{[]roachpb.Key{roachpb.Key("h"), roachpb.Key("q")},
@@ -479,6 +480,8 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 				scan := roachpb.NewScan(tc.keys[0], tc.keys[len(tc.keys)-1].Next(), false)
 				resp, pErr := kv.SendWrapped(ctx, tds, scan)
 				require.Nil(t, pErr)
+				require.Nil(t, resp.Header().ResumeSpan)
+				require.EqualValues(t, len(tc.keys), resp.Header().NumKeys)
 				maxTargetBytes = resp.Header().NumBytes
 			}
 
@@ -537,12 +540,14 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 							}
 						}
 						require.Equal(t, tc.keys, keys)
+						// Definitely more pages than splits.
+						require.Greater(t, numPages, len(tc.splitKeys))
 						if targetBytes == 1 || msrq < int64(len(tc.keys)) {
 							// Definitely more than one page in this case.
 							require.Less(t, 1, numPages)
 						}
-						if targetBytes >= maxTargetBytes && msrq >= int64(len(tc.keys)) {
-							// Definitely one page if limits are larger than result set.
+						if len(tc.splitKeys) == 0 && targetBytes >= maxTargetBytes && msrq >= int64(len(tc.keys)) {
+							// Definitely one page if limits are larger than result set with no splits.
 							require.Equal(t, 1, numPages)
 						}
 					})

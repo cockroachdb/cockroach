@@ -128,6 +128,7 @@ func TestExportCmd(t *testing.T) {
 		t *testing.T, res ExportAndSlurpResult,
 		mvccLatestFilesLen int, mvccLatestKVsLen int, mvccAllFilesLen int, mvccAllKVsLen int,
 	) {
+		t.Helper()
 		if len(res.mvccLatestFiles) != mvccLatestFilesLen {
 			t.Errorf("expected %d files in latest export got %d", mvccLatestFilesLen, len(res.mvccLatestFiles))
 		}
@@ -145,6 +146,7 @@ func TestExportCmd(t *testing.T) {
 	expectResponseHeader := func(
 		t *testing.T, res ExportAndSlurpResult, mvccLatestResponseHeader roachpb.ResponseHeader,
 		mvccAllResponseHeader roachpb.ResponseHeader) {
+		t.Helper()
 		isSpanEqual := func(spanOne, spanTwo *roachpb.Span) bool {
 			if spanOne == nil || spanTwo == nil {
 				return spanOne == spanTwo
@@ -159,13 +161,21 @@ func TestExportCmd(t *testing.T) {
 			t.Errorf("expected %s span in all export got %s", mvccAllResponseHeader.ResumeSpan.String(),
 				res.mvccAllResponseHeader.ResumeSpan.String())
 		}
+		if res.mvccAllResponseHeader.ResumeReason != mvccAllResponseHeader.ResumeReason {
+			t.Errorf("expected resume reason %s in all export got %s", mvccAllResponseHeader.ResumeReason,
+				res.mvccAllResponseHeader.ResumeReason)
+		}
 		if res.mvccLatestResponseHeader.NumBytes != mvccLatestResponseHeader.NumBytes {
-			t.Errorf("expected %d NumBytes in all export got %d", mvccLatestResponseHeader.NumBytes,
+			t.Errorf("expected %d NumBytes in latest export got %d", mvccLatestResponseHeader.NumBytes,
 				res.mvccLatestResponseHeader.NumBytes)
 		}
 		if !isSpanEqual(res.mvccLatestResponseHeader.ResumeSpan, mvccLatestResponseHeader.ResumeSpan) {
-			t.Errorf("expected %s span in all export got %s",
+			t.Errorf("expected %s span in latest export got %s",
 				mvccLatestResponseHeader.ResumeSpan.String(), res.mvccLatestResponseHeader.ResumeSpan.String())
+		}
+		if res.mvccLatestResponseHeader.ResumeReason != mvccLatestResponseHeader.ResumeReason {
+			t.Errorf("expected resume reason %s in latest export got %s", mvccLatestResponseHeader.ResumeReason,
+				res.mvccLatestResponseHeader.ResumeReason)
 		}
 	}
 
@@ -304,65 +314,69 @@ INTO
 	t.Run("ts7", func(t *testing.T) {
 		var maxResponseSSTBytes int64
 		kvByteSize := int64(11)
-		// Because of the above split, there are going to be two ExportRequests by
-		// the DistSender. One for the first KV and the next one for the remaining
-		// KVs.
-		// This allows us to test both the TargetBytes limit within a single export
-		// request and across subsequent requests.
+		// Because of the above split, the DistSender will encounter a range
+		// boundary after the initial KV pair and return early with a ResumeSpan.
 
-		// No TargetSize and TargetBytes is greater than the size of a single KV.
-		// The first ExportRequest should reduce the byte limit for the next
-		// ExportRequest but since there is no TargetSize we should see all KVs
-		// exported.
-		maxResponseSSTBytes = kvByteSize + 1
-		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
-		expect(t, res7, 2, 100, 2, 100)
-		latestRespHeader := roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
-		}
-		allRespHeader := roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
-		}
-		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
-
-		// No TargetSize and TargetBytes is equal to the size of a single KV. The
-		// first ExportRequest will reduce the limit for the second request to zero
-		// and so we should only see a single ExportRequest and an accurate
-		// ResumeSpan.
-		maxResponseSSTBytes = kvByteSize
+		maxResponseSSTBytes = 2 * kvByteSize
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 1, 1, 1, 1)
-		latestRespHeader = roachpb.ResponseHeader{
+		latestRespHeader := roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
 				Key:    []byte("/Table/53/1/2"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
+			ResumeReason: roachpb.RESUME_RANGE_BOUNDARY,
+			NumBytes:     kvByteSize,
 		}
-		allRespHeader = roachpb.ResponseHeader{
+		allRespHeader := roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
 				Key:    []byte("/Table/53/1/2"),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
+			ResumeReason: roachpb.RESUME_RANGE_BOUNDARY,
+			NumBytes:     kvByteSize,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
+	})
+
+	var res8 ExportAndSlurpResult
+	t.Run("ts8", func(t *testing.T) {
+		var maxResponseSSTBytes int64
+		kvByteSize := int64(11)
+
+		// With new data only in the second range (id > 1), we can test that
+		// TargetBytes is processed as expected.
+		sqlDB.Exec(t, `WITH RECURSIVE
+    t (id, value)
+        AS (VALUES (2, 1) UNION ALL SELECT id + 1, value FROM t WHERE id < 100)
+UPSERT
+INTO
+    mvcclatest.export
+(SELECT id, value FROM t);`)
+
+		// No TargetSize and TargetBytes is equal to the size of a single KV. This
+		// will end up exporting the entire set of KVs, but with an incorrect
+		// NumBytes equal to the requested TargetBytes.
+		maxResponseSSTBytes = kvByteSize
+		res8 = exportAndSlurp(t, res7.end, maxResponseSSTBytes)
+		expect(t, res8, 1, 99, 1, 99)
+		latestRespHeader := roachpb.ResponseHeader{
+			NumBytes: maxResponseSSTBytes,
+		}
+		allRespHeader := roachpb.ResponseHeader{
+			NumBytes: maxResponseSSTBytes,
+		}
+		expectResponseHeader(t, res8, latestRespHeader, allRespHeader)
 
 		// TargetSize to one KV and TargetBytes to two KVs. We should see one KV in
 		// each ExportRequest SST.
 		setExportTargetSize(t, "'11b'")
 		maxResponseSSTBytes = 2 * kvByteSize
-		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
-		expect(t, res7, 2, 2, 2, 2)
+		res8 = exportAndSlurp(t, res7.end, maxResponseSSTBytes)
+		expect(t, res8, 2, 2, 2, 2)
 		latestRespHeader = roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte("/Table/53/1/3/0"),
+				Key:    []byte("/Table/53/1/4/0"),
 				EndKey: []byte("/Max"),
 			},
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
@@ -370,19 +384,19 @@ INTO
 		}
 		allRespHeader = roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte("/Table/53/1/3/0"),
+				Key:    []byte("/Table/53/1/4/0"),
 				EndKey: []byte("/Max"),
 			},
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
-		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
+		expectResponseHeader(t, res8, latestRespHeader, allRespHeader)
 
 		// TargetSize to one KV and TargetBytes to one less than the total KVs.
 		setExportTargetSize(t, "'11b'")
-		maxResponseSSTBytes = 99 * kvByteSize
-		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
-		expect(t, res7, 99, 99, 99, 99)
+		maxResponseSSTBytes = 98 * kvByteSize
+		res8 = exportAndSlurp(t, res7.end, maxResponseSSTBytes)
+		expect(t, res8, 98, 98, 98, 98)
 		latestRespHeader = roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
 				Key:    []byte("/Table/53/1/100/0"),
@@ -399,26 +413,26 @@ INTO
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
-		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
+		expectResponseHeader(t, res8, latestRespHeader, allRespHeader)
 
 		// Target Size to one KV and TargetBytes to greater than all KVs. Checks if
 		// final NumBytes is accurate.
 		defer resetExportTargetSize(t)
 		setExportTargetSize(t, "'11b'")
-		maxResponseSSTBytes = 101 * kvByteSize
-		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
-		expect(t, res7, 100, 100, 100, 100)
+		maxResponseSSTBytes = 100 * kvByteSize
+		res8 = exportAndSlurp(t, res7.end, maxResponseSSTBytes)
+		expect(t, res8, 99, 99, 99, 99)
 		latestRespHeader = roachpb.ResponseHeader{
 			ResumeSpan:   nil,
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     100 * kvByteSize,
+			NumBytes:     99 * kvByteSize,
 		}
 		allRespHeader = roachpb.ResponseHeader{
 			ResumeSpan:   nil,
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     100 * kvByteSize,
+			NumBytes:     99 * kvByteSize,
 		}
-		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
+		expectResponseHeader(t, res8, latestRespHeader, allRespHeader)
 	})
 }
 
