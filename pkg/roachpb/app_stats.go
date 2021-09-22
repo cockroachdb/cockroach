@@ -127,6 +127,7 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 	t.NumRows.Add(other.NumRows, t.Count, other.Count)
 	t.RowsRead.Add(other.RowsRead, t.Count, other.Count)
 	t.BytesRead.Add(other.BytesRead, t.Count, other.Count)
+	t.RowsWritten.Add(other.RowsWritten, t.Count, other.Count)
 
 	t.ExecStats.Add(other.ExecStats)
 

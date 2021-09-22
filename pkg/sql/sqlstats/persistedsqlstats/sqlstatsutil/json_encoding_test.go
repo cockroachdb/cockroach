@@ -309,6 +309,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
     "rowsRead": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
+    },
+    "rowsWritten": {
+      "mean": {{.Float}},
+      "sqDiff": {{.Float}}
     }
   },
   "execution_statistics": {
