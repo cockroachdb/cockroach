@@ -29,10 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTableSet(t *testing.T) {
@@ -1047,6 +1050,180 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			}
 			if count := atomic.LoadInt32(&leasesAcquiredCount); count != 2 {
 				t.Fatalf("Expected to acquire 2 leases, instead got %d", count)
+			}
+		})
+	}
+}
+
+type version int
+type testCase struct {
+	before   []version
+	ts       hlc.Timestamp
+	tsStr    string
+	expected []version
+}
+
+// Sets the manager's descriptor state to contain the specific testCase's
+// versions of the descriptor.
+func resetDescriptorState(
+	manager *Manager, tableID descpb.ID, tc testCase, versionDesc func(v version) catalog.Descriptor,
+) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	descStates := manager.mu.descriptors
+	descStates[tableID] = &descriptorState{m: manager, id: tableID}
+	for _, v := range tc.before {
+		addedDescVState := &descriptorVersionState{
+			t:          descStates[tableID],
+			Descriptor: versionDesc(v),
+		}
+		addedDescVState.mu.Lock()
+		addedDescVState.mu.expiration = hlc.MaxTimestamp
+		addedDescVState.mu.Unlock()
+		descStates[tableID].mu.active.insert(addedDescVState)
+	}
+}
+
+// Tests retrieving older versions within a given start and end timestamp of a
+// table descriptor from store through an ExportRequest.
+func TestReadOlderVersionForTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	serverParams := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &ManagerTestingKnobs{
+				TestingDescriptorUpdateEvent: func(_ *descpb.Descriptor) error {
+					return errors.New("Caught race between resetting state and refreshing leases")
+				},
+			},
+		},
+	}
+	var stopper *stop.Stopper
+	s, sqlDB, _ := serverutils.StartServer(t, serverParams)
+	stopper = s.Stopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	// Prevent non-explicit Acquire to leases for testing purposes.
+	tdb.Exec(t, "SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 0")
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	var tableID descpb.ID
+	tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&tableID)
+
+	manager := s.LeaseManager().(*Manager)
+	const N = 5
+	descs := make([]catalog.Descriptor, N+1)
+
+	// Create N versions of table descriptor
+	for i := 0; i < N; i++ {
+		_, err := manager.Publish(ctx, tableID, func(desc catalog.MutableDescriptor) error {
+			descs[i] = desc.ImmutableCopy()
+			return nil
+		}, nil)
+		require.NoError(t, err)
+	}
+	{
+		last, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
+		require.NoError(t, err)
+		descs[N] = last.Underlying()
+		last.Release(ctx)
+	}
+
+	versionTS := func(v version) hlc.Timestamp {
+		return descs[v-1].GetModificationTime()
+	}
+	versionDesc := func(v version) catalog.Descriptor {
+		return descs[v-1]
+	}
+
+	// Test historical read for descriptors as of specific timestamps and confirm
+	// expected data.
+	// [v1 ---)[v2 --)[v3 ---)[v4 ----)[v5 -----)[v6 ------)
+	for _, tc := range []testCase{
+		{
+			before:   []version{},
+			ts:       versionTS(1),
+			tsStr:    "ts1",
+			expected: []version{1, 2, 3, 4, 5, 6},
+		},
+		{
+			before:   []version{},
+			ts:       versionTS(4),
+			tsStr:    "ts4",
+			expected: []version{4, 5, 6},
+		},
+		{
+			before:   []version{},
+			ts:       versionTS(6),
+			tsStr:    "ts6",
+			expected: []version{6},
+		},
+		{
+			before:   []version{},
+			ts:       versionTS(6).Prev(),
+			tsStr:    "ts6.Prev",
+			expected: []version{5, 6},
+		},
+		{
+			before:   []version{6},
+			ts:       versionTS(4).Prev(),
+			tsStr:    "ts4.Prev",
+			expected: []version{3, 4, 5},
+		},
+		{
+			before:   []version{6},
+			ts:       versionTS(5),
+			tsStr:    "ts5",
+			expected: []version{5},
+		},
+		{
+			before:   []version{5, 6},
+			ts:       versionTS(3).Prev(),
+			tsStr:    "ts3.Prev",
+			expected: []version{2, 3, 4},
+		},
+		{
+			before:   []version{1, 2, 3, 4, 5, 6},
+			ts:       versionTS(4),
+			tsStr:    "ts4",
+			expected: []version{},
+		},
+	} {
+		t.Run(fmt.Sprintf("%v@%v->%v", tc.before, tc.tsStr, tc.expected), func(t *testing.T) {
+			// Reset the descriptor state to before versions.
+			resetDescriptorState(manager, tableID, tc, versionDesc)
+
+			// Retrieve historicalDescriptors modification times.
+			retrieved, err := manager.readOlderVersionForTimestamp(ctx, tableID, tc.ts)
+			require.NoError(t, err)
+			var actualTS []hlc.Timestamp
+			var actualVersions []descpb.DescriptorVersion
+			for _, desc := range retrieved {
+				actualTS = append([]hlc.Timestamp{desc.desc.GetModificationTime()}, actualTS...)
+				actualVersions = append([]descpb.DescriptorVersion{desc.desc.GetVersion()}, actualVersions...)
+			}
+
+			// Validate retrieved descriptors match expected versions.
+			var expectedTS []hlc.Timestamp
+			for _, e := range tc.expected {
+				expectedTS = append(expectedTS, versionTS(e))
+			}
+
+			func() {
+				manager.mu.Lock()
+				defer manager.mu.Unlock()
+				descStates := manager.mu.descriptors
+				t.Logf("Manager's descriptor state for desc %d: %v", tableID, descStates[tableID].mu.active.data)
+			}()
+
+			require.Equal(t, len(tc.expected), len(actualTS), "\nexpected: %v\nactual: %v\n", expectedTS, actualTS)
+			for i, eTS := range expectedTS {
+				aTS := actualTS[i]
+				require.Equal(t, eTS, aTS, "expected: %v, actual: %v\n", eTS, aTS)
+
+				aVersion := version(actualVersions[i])
+				eVersion := tc.expected[i]
+				require.Equal(t, eVersion, aVersion, "expected: %v, actual : %v\n", eVersion, aVersion)
 			}
 		})
 	}
