@@ -272,11 +272,10 @@ d
 			name:   "collated strings",
 			create: `s string collate en_u_ks_level1`,
 			typ:    "CSV",
-			data:   strings.Repeat("1\n", 2000),
+			data:   strings.Repeat("'1' COLLATE en_u_ks_level1\n", 2000),
 			query: map[string][][]string{
 				`SELECT s, count(*) FROM t GROUP BY s`: {{"1", "2000"}},
 			},
-			skipIssue: 53957,
 		},
 		{
 			name:   "quotes are accepted in a quoted string",
