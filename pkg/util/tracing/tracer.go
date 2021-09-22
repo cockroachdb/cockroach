@@ -520,6 +520,10 @@ func (t *Tracer) startSpanGeneric(
 	helper.crdbSpan.mu.operation = opName
 	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)
 	helper.crdbSpan.mu.recording.structured = newSizeLimitedBuffer(maxStructuredBytesPerSpan)
+	helper.crdbSpan.mu.tags = helper.crdbSpan.mu.tagsAlloc[:0]
+	if opts.SpanKind != oteltrace.SpanKindUnspecified {
+		helper.crdbSpan.setTagLocked(spanKindTagKey, attribute.StringValue(opts.SpanKind.String()))
+	}
 	helper.span.i = spanInner{
 		tracer:   t,
 		crdb:     &helper.crdbSpan,
@@ -553,12 +557,6 @@ func (t *Tracer) startSpanGeneric(
 			defer opts.Parent.i.crdb.addChild(s.i.crdb)
 		}
 		s.i.crdb.enableRecording(opts.recordingType())
-	}
-
-	// Deal with opts.SpanKind. This needs to be done after we enable recording
-	// above because tags are dropped on the floor before recording is enabled.
-	if opts.SpanKind != oteltrace.SpanKindUnspecified {
-		helper.crdbSpan.setTagLocked(spanKindTagKey, attribute.StringValue(opts.SpanKind.String()))
 	}
 
 	// Copy baggage from parent. This similarly fans out over the various
