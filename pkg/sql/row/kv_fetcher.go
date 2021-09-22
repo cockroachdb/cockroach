@@ -46,6 +46,7 @@ type KVFetcher struct {
 // NewKVFetcher creates a new KVFetcher.
 // If mon is non-nil, this fetcher will track its fetches and must be Closed.
 func NewKVFetcher(
+	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
 	bsHeader *roachpb.BoundedStalenessHeader,
@@ -85,6 +86,7 @@ func NewKVFetcher(
 	}
 
 	kvBatchFetcher, err := makeKVBatchFetcher(
+		ctx,
 		sendFn,
 		spans,
 		reverse,

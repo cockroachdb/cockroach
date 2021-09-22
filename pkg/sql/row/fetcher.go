@@ -596,6 +596,7 @@ func (rf *Fetcher) StartScan(
 
 	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
+		ctx,
 		makeKVBatchFetcherDefaultSendFunc(txn),
 		spans,
 		rf.reverse,
@@ -696,6 +697,7 @@ func (rf *Fetcher) StartInconsistentScan(
 
 	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
+		ctx,
 		sendFunc(sendFn),
 		spans,
 		rf.reverse,
