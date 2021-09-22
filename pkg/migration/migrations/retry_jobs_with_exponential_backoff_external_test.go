@@ -557,7 +557,7 @@ func getDeprecatedJobsDescriptor() *descpb.TableDescriptor {
 	nowString := "now():::TIMESTAMP"
 	pk := func(name string) descpb.IndexDescriptor {
 		return descpb.IndexDescriptor{
-			Name:                tabledesc.PrimaryKeyIndexName,
+			Name:                tabledesc.PrimaryKeyIndexName("jobs"),
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{name},

@@ -626,7 +626,7 @@ CREATE TABLE system.span_configurations (
 
 func pk(name string) descpb.IndexDescriptor {
 	return descpb.IndexDescriptor{
-		Name:                tabledesc.PrimaryKeyIndexName,
+		Name:                tabledesc.LegacyPrimaryKeyIndexName,
 		ID:                  1,
 		Unique:              true,
 		KeyColumnNames:      []string{name},
@@ -909,7 +909,7 @@ var (
 			}},
 			descpb.IndexDescriptor{
 				ID:                  keys.SequenceIndexID,
-				Name:                tabledesc.PrimaryKeyIndexName,
+				Name:                tabledesc.LegacyPrimaryKeyIndexName,
 				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
 				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
@@ -1851,7 +1851,7 @@ var (
 				},
 			},
 			descpb.IndexDescriptor{
-				Name:           tabledesc.PrimaryKeyIndexName,
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"major", "minor", "patch", "internal"},
@@ -1886,7 +1886,7 @@ var (
 				},
 			},
 			descpb.IndexDescriptor{
-				Name:           tabledesc.PrimaryKeyIndexName,
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"id"},
@@ -1938,7 +1938,7 @@ var (
 				},
 			},
 			descpb.IndexDescriptor{
-				Name:   tabledesc.PrimaryKeyIndexName,
+				Name:   tabledesc.LegacyPrimaryKeyIndexName,
 				ID:     1,
 				Unique: true,
 				KeyColumnNames: []string{
@@ -2042,7 +2042,7 @@ var (
 				},
 			},
 			descpb.IndexDescriptor{
-				Name:   tabledesc.PrimaryKeyIndexName,
+				Name:   tabledesc.LegacyPrimaryKeyIndexName,
 				ID:     1,
 				Unique: true,
 				KeyColumnNames: []string{
@@ -2126,7 +2126,7 @@ var (
 				},
 			},
 			descpb.IndexDescriptor{
-				Name:           tabledesc.PrimaryKeyIndexName,
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"database_id", "role_name"},
@@ -2182,7 +2182,7 @@ var (
 				},
 			},
 			descpb.IndexDescriptor{
-				Name:           tabledesc.PrimaryKeyIndexName,
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"tenant_id", "instance_id"},
