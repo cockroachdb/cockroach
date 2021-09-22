@@ -39,10 +39,6 @@ interface TableStatistics {
   resetSQLStats: () => void;
 }
 
-const renderLastCleared = (lastReset: string | Date) => {
-  return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
-};
-
 export const TableStatistics: React.FC<TableStatistics> = ({
   pagination,
   totalCount,
@@ -72,23 +68,25 @@ export const TableStatistics: React.FC<TableStatistics> = ({
     </>
   );
 
-  let toolTipText = ` history is cleared once an hour by default, which can be configured with 
-  the cluster setting diagnostics.sql_stat_reset.interval. Clicking ‘clear SQL stats’ will reset SQL stats 
-  on the statements and transactions pages.`;
-
+  let statsType = "";
   switch (tooltipType) {
     case "transaction":
-      toolTipText = contentModifiers.transactionCapital + toolTipText;
+      statsType = contentModifiers.transactionCapital;
       break;
     case "statement":
-      toolTipText = contentModifiers.statementCapital + toolTipText;
+      statsType = contentModifiers.statementCapital;
       break;
     case "transactionDetails":
-      toolTipText = contentModifiers.statementCapital + toolTipText;
+      statsType = contentModifiers.statementCapital;
       break;
     default:
       break;
   }
+  const toolTipText = `${statsType} statistics are aggregated once an hour and organized by the start time. 
+  Statistics between two hourly intervals belong to the nearest hour rounded down. 
+  For example, a ${statsType} execution ending at 1:50 would have its statistics aggregated in the 1:00 interval 
+  start time. Clicking ‘clear SQL stats’ will reset SQL stats on the Statements and Transactions pages and 
+  crdb_internal tables.`;
 
   return (
     <div className={statistic}>
@@ -96,14 +94,12 @@ export const TableStatistics: React.FC<TableStatistics> = ({
         {activeFilters ? resultsCountAndClear : resultsPerPageLabel}
       </h4>
       <div className={cxStats("flex-display")}>
-        <Tooltip content={toolTipText}>
+        <Tooltip content={toolTipText} style="tableTitle">
           <div className={cxStats("tooltip-hover-area")}>
             <Icon iconName={"InfoCircle"} />
           </div>
         </Tooltip>
         <div className={lastCleared}>
-          {renderLastCleared(lastReset)}
-          {"  "}-{"  "}
           <a className={cxStats("action")} onClick={resetSQLStats}>
             clear SQL stats
           </a>
