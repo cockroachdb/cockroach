@@ -453,8 +453,8 @@ func TestTxnCoordSenderCommitCanceled(t *testing.T) {
 	_, pErr := txn.Send(ctx, ba)
 	require.NotNil(t, pErr)
 	require.IsType(t, &roachpb.TransactionStatusError{}, pErr.GetDetail())
-	// TODO(erikgrinaker): This should really assert REASON_TXN_COMMITTED, but
-	// we return REASON_TXN_UNKNOWN to preserve existing EndTxn behavior.
+	txnErr := pErr.GetDetail().(*roachpb.TransactionStatusError)
+	require.Equal(t, roachpb.TransactionStatusError_REASON_TXN_COMMITTED, txnErr.Reason)
 }
 
 // TestTxnCoordSenderAddLockOnError verifies that locks are tracked if the
