@@ -892,6 +892,24 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/exec/factory.og.go \
 	pkg/sql/opt/exec/explain/explain_factory.og.go
 
+# removed-files is a list of files that used to exist in the
+# repository that need to be explicitly cleaned up to prevent build
+# failures.
+removed-files = pkg/ui/distccl/bindata.go
+
+removed-files-to-remove = $(strip $(foreach f,$(removed-files),$(wildcard $(f))))
+
+CLEANUP_TARGETS =
+ifneq ($(removed-files-to-remove),)
+CLEANUP_TARGETS = clean-removed-files
+endif
+
+.PHONY: clean-removed-files
+clean-removed-files:
+ifneq ($(removed-files-to-remove),)
+	rm -f $(removed-files-to-remove)
+endif
+
 test-targets := \
 	check test testshort testslow testrace testraceslow testbuild \
 	stress stressrace \
@@ -944,7 +962,7 @@ BUILD_TAGGED_RELEASE =
 ## Override for .buildinfo/tag
 BUILDINFO_TAG :=
 
-$(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ)
+$(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ) $(CLEANUP_TARGETS)
 $(go-targets): $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS)
 $(go-targets): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(if $(BUILDINFO_TAG),$(BUILDINFO_TAG),$(shell cat .buildinfo/tag))" \
