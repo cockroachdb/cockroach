@@ -82,6 +82,12 @@ export function addStatementStats(
     ),
     bytes_read: addNumericStats(a.bytes_read, b.bytes_read, countA, countB),
     rows_read: addNumericStats(a.rows_read, b.rows_read, countA, countB),
+    rows_written: addNumericStats(
+      a.rows_written,
+      b.rows_written,
+      countA,
+      countB,
+    ),
     sensitive_info: coalesceSensitiveInfo(a.sensitive_info, b.sensitive_info),
     legacy_last_err: "",
     legacy_last_err_redacted: "",

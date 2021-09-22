@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -33,8 +34,9 @@ type hashAggregatorState int
 const (
 	// hashAggregatorBuffering is the state in which the hashAggregator reads
 	// the batches from the input and buffers them up. Once the number of
-	// buffered tuples reaches maxBuffered or the input has been fully exhausted,
-	// the hashAggregator transitions to hashAggregatorAggregating state.
+	// buffered tuples reaches hashAggregatorMaxBuffered or the input has been
+	// fully exhausted, the hashAggregator transitions to
+	// hashAggregatorAggregating state.
 	hashAggregatorBuffering hashAggregatorState = iota
 
 	// hashAggregatorAggregating is the state in which the hashAggregator is
@@ -78,12 +80,9 @@ type hashAggregator struct {
 	outputTypes        []*types.T
 	inputArgsConverter *colconv.VecToDatumConverter
 
-	// maxBuffered determines the maximum number of tuples that are buffered up
-	// for aggregation at once.
-	maxBuffered    int
 	bufferingState struct {
 		// tuples contains the tuples that we have buffered up for aggregation.
-		// Its length will not exceed maxBuffered.
+		// Its length will not exceed hashAggregatorMaxBuffered.
 		tuples *colexecutils.AppendOnlyBufferedBatch
 		// pendingBatch stores the last read batch from the input that hasn't
 		// been fully processed yet.
@@ -161,6 +160,27 @@ var _ colexecop.ClosableOperator = &hashAggregator{}
 // from 1 to 4096).
 const hashAggregatorAllocSize = 128
 
+// hashAggregatorMaxBuffered determines the maximum number of tuples that are
+// buffered up for aggregation at once.
+var hashAggregatorMaxBuffered = coldata.MaxBatchSize
+
+// randomizeHashAggregatorMaxBuffered enables the metamorphic randomization for
+// hashAggregatorMaxBuffered. It cannot be executed in init() function in
+// colexec package because the tests might change coldata.BatchSize() value.
+// This function should only be called from the test code.
+func randomizeHashAggregatorMaxBuffered() {
+	maxHashAggregatorMaxBuffered := 4 * coldata.BatchSize()
+	if maxHashAggregatorMaxBuffered > coldata.MaxBatchSize {
+		maxHashAggregatorMaxBuffered = coldata.MaxBatchSize
+	}
+	hashAggregatorMaxBuffered = util.ConstantWithMetamorphicTestRange(
+		"hash-aggregator-max-buffered",
+		coldata.MaxBatchSize,
+		coldata.BatchSize(),
+		maxHashAggregatorMaxBuffered,
+	)
+}
+
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
 // NewOrderedAggregator function.
@@ -178,16 +198,6 @@ func NewHashAggregator(
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 		args, args.Spec.Aggregations, hashAggregatorAllocSize, colexecagg.HashAggKind,
 	)
-	// We want this number to be coldata.MaxBatchSize, but then we would lose
-	// some test coverage due to disabling of the randomization of the batch
-	// size, so we, instead, use 4 x coldata.BatchSize() (which ends up being
-	// coldata.MaxBatchSize in non-test environment).
-	maxBuffered := 4 * coldata.BatchSize()
-	if maxBuffered > coldata.MaxBatchSize {
-		// When randomizing coldata.BatchSize() in tests we might exceed
-		// coldata.MaxBatchSize, so we need to shrink it.
-		maxBuffered = coldata.MaxBatchSize
-	}
 	hashAgg := &hashAggregator{
 		OneInputNode:          colexecop.NewOneInputNode(args.Input),
 		hashTableAllocator:    args.Allocator,
@@ -196,7 +206,6 @@ func NewHashAggregator(
 		inputTypes:            args.InputTypes,
 		outputTypes:           args.OutputTypes,
 		inputArgsConverter:    inputArgsConverter,
-		maxBuffered:           maxBuffered,
 		toClose:               toClose,
 		maxOutputBatchMemSize: maxOutputBatchMemSize,
 		aggFnsAlloc:           aggFnsAlloc,
@@ -205,7 +214,7 @@ func NewHashAggregator(
 	hashAgg.accountingHelper.Init(outputUnlimitedAllocator, args.OutputTypes, nil /* notNeededVecIdxs */)
 	hashAgg.bufferingState.tuples = colexecutils.NewAppendOnlyBufferedBatch(args.Allocator, args.InputTypes, nil /* colsToStore */)
 	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
-	hashAgg.aggHelper = newAggregatorHelper(args, &hashAgg.datumAlloc, true /* isHashAgg */, hashAgg.maxBuffered)
+	hashAgg.aggHelper = newAggregatorHelper(args, &hashAgg.datumAlloc, true /* isHashAgg */, hashAggregatorMaxBuffered)
 	if newSpillingQueueArgs != nil {
 		hashAgg.inputTrackingState.tuples = colexecutils.NewSpillingQueue(newSpillingQueueArgs)
 	}
@@ -272,14 +281,14 @@ func (op *hashAggregator) Next() coldata.Batch {
 				continue
 			}
 			toBuffer := n
-			if op.bufferingState.tuples.Length()+toBuffer > op.maxBuffered {
-				toBuffer = op.maxBuffered - op.bufferingState.tuples.Length()
+			if op.bufferingState.tuples.Length()+toBuffer > hashAggregatorMaxBuffered {
+				toBuffer = hashAggregatorMaxBuffered - op.bufferingState.tuples.Length()
 			}
 			if toBuffer > 0 {
 				op.bufferingState.tuples.AppendTuples(op.bufferingState.pendingBatch, 0 /* startIdx */, toBuffer)
 				op.bufferingState.unprocessedIdx = toBuffer
 			}
-			if op.bufferingState.tuples.Length() == op.maxBuffered {
+			if op.bufferingState.tuples.Length() == hashAggregatorMaxBuffered {
 				op.state = hashAggregatorAggregating
 				continue
 			}

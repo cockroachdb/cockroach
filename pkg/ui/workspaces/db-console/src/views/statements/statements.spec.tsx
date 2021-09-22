@@ -487,6 +487,7 @@ function makeStats(): Required<StatementStatistics> {
     sensitive_info: makeEmptySensitiveInfo(),
     rows_read: makeStat(),
     bytes_read: makeStat(),
+    rows_written: makeStat(),
     exec_stats: makeExecStats(),
     sql_type: "DDL",
     last_exec_timestamp: {
