@@ -334,7 +334,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 	// Validates if a given dependency on a relation will
 	// lead to a cross DB reference, and an appropriate
 	// error is generated.
-	checkDepForCrossDbRef := func(depID descpb.ID) error {
+	checkDepForCrossDbRef := func(depID descpb.ID, isOwner bool) error {
 		dependentObject, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, depID,
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
@@ -360,7 +360,8 @@ func (n *renameTableNode) checkForCrossDbReferences(
 						allowCrossDatabaseViewsSetting),
 					crossDBReferenceDeprecationHint(),
 				)
-			} else if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) &&
+			} else if isOwner &&
+				!allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) &&
 				dependentObject.IsSequence() {
 				return errors.WithHintf(
 					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -371,6 +372,17 @@ func (n *renameTableNode) checkForCrossDbReferences(
 					crossDBReferenceDeprecationHint(),
 				)
 			}
+		} else if !isOwner &&
+			!allowCrossDatabaseSeqReferences.Get(&p.execCfg.Settings.SV) &&
+			dependentObject.IsSequence() {
+			return errors.WithHintf(
+				pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"a sequence %q will be referenced BY a table in a different database after rename "+
+						"(see the '%s' cluster setting)",
+					dependentObject.GetName(),
+					allowCrossDatabaseSeqReferencesSetting),
+				crossDBReferenceDeprecationHint(),
+			)
 		} else if tableDesc.IsView() {
 			// For views it can only be a relation.
 			return errors.WithHintf(
@@ -381,13 +393,24 @@ func (n *renameTableNode) checkForCrossDbReferences(
 					allowCrossDatabaseViewsSetting),
 				crossDBReferenceDeprecationHint(),
 			)
-		} else if tableDesc.IsSequence() {
+		} else if isOwner &&
+			tableDesc.IsSequence() {
 			return errors.WithHintf(
 				pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"this sequence will be OWNED BY a table %q in a different database after rename "+
 						"(see the '%s' cluster setting)",
 					dependentObject.GetName(),
 					allowCrossDatabaseSeqOwnerSetting),
+				crossDBReferenceDeprecationHint(),
+			)
+		} else if !isOwner &&
+			tableDesc.IsSequence() {
+			return errors.WithHintf(
+				pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"this sequence will be referenced BY a table %q in a different database after rename "+
+						"(see the '%s' cluster setting)",
+					dependentObject.GetName(),
+					allowCrossDatabaseSeqReferencesSetting),
 				crossDBReferenceDeprecationHint(),
 			)
 		}
@@ -439,14 +462,23 @@ func (n *renameTableNode) checkForCrossDbReferences(
 
 		// If cross database sequence owners are not allowed, then
 		// check if any column owns a sequence.
-		if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
-			for _, columnDesc := range tableDesc.Columns {
+		for _, columnDesc := range tableDesc.Columns {
+			if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
 				for _, ownsSequenceID := range columnDesc.OwnsSequenceIds {
-					err := checkDepForCrossDbRef(ownsSequenceID)
+					err := checkDepForCrossDbRef(ownsSequenceID, true)
 					if err != nil {
 						return err
 					}
 				}
+			}
+			if !allowCrossDatabaseSeqReferences.Get(&p.execCfg.Settings.SV) {
+				for _, seqID := range columnDesc.UsesSequenceIds {
+					err := checkDepForCrossDbRef(seqID, false)
+					if err != nil {
+						return err
+					}
+				}
+
 			}
 		}
 
@@ -455,7 +487,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 		// once that are in use.
 		if !allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
 			err := tableDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-				return checkDepForCrossDbRef(dep.ID)
+				return checkDepForCrossDbRef(dep.ID, false)
 			})
 			if err != nil {
 				return err
@@ -466,7 +498,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 		// For views check if we depend on tables in a different database.
 		dependsOn := tableDesc.GetDependsOn()
 		for _, dependency := range dependsOn {
-			err := checkDepForCrossDbRef(dependency)
+			err := checkDepForCrossDbRef(dependency, false)
 			if err != nil {
 				return err
 			}
@@ -479,15 +511,26 @@ func (n *renameTableNode) checkForCrossDbReferences(
 				return err
 			}
 		}
-	} else if tableDesc.IsSequence() &&
-		!allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
-		// For sequences check if the sequence is owned by
-		// a different database.
-		sequenceOpts := tableDesc.GetSequenceOpts()
-		if sequenceOpts.SequenceOwner.OwnerTableID != descpb.InvalidID {
-			err := checkDepForCrossDbRef(sequenceOpts.SequenceOwner.OwnerTableID)
-			if err != nil {
-				return err
+	} else if tableDesc.IsSequence() {
+		// Check if the sequence is owned by a different database.
+		if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
+			sequenceOpts := tableDesc.GetSequenceOpts()
+			if sequenceOpts.SequenceOwner.OwnerTableID != descpb.InvalidID {
+				err := checkDepForCrossDbRef(sequenceOpts.SequenceOwner.OwnerTableID, true)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		// Check if a table in a different database depends on this
+		// sequence.
+		if !allowCrossDatabaseSeqReferences.Get(&p.execCfg.Settings.SV) {
+
+			for _, sequenceReferences := range tableDesc.GetDependedOnBy() {
+				err := checkDepForCrossDbRef(sequenceReferences.ID, false)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
