@@ -669,7 +669,11 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			"Trying to execute: %s", ba.Summary())
 		stack := string(debug.Stack())
 		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
-		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(msg), &tc.mu.txn)
+		reason := roachpb.TransactionStatusError_REASON_UNKNOWN
+		if tc.mu.txn.Status == roachpb.COMMITTED {
+			reason = roachpb.TransactionStatusError_REASON_TXN_COMMITTED
+		}
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(reason, msg), &tc.mu.txn)
 	}
 
 	// Check the transaction proto state, along with any finalized transaction
