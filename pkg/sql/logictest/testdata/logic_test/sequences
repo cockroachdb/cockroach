@@ -7,6 +7,10 @@ statement ok
 SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
 
 statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
+
+
+statement ok
 SET DATABASE = test
 
 statement ok
@@ -1820,3 +1824,16 @@ test  public  tdb3ref  db3  public  s  table column refers to sequence
 # Testing parsing empty string for currval issue #34527.
 statement error pq: currval\(\): invalid table name:
 SELECT currval('')
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = FALSE
+
+# Validate that cross DB sequences are detected by internal tables
+statement ok
+CREATE DATABASE db4;
+
+statement ok
+CREATE SEQUENCE db4.s;
+
+statement error pq: sequence references cannot come from other databases; \(see the 'sql\.cross_db_sequence_references\.enabled' cluster setting\)
+CREATE TABLE tDb4Ref (i INT PRIMARY KEY DEFAULT (nextval('db4.s')));

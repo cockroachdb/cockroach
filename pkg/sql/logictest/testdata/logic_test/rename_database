@@ -3,6 +3,9 @@
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
+
 query TTTTT
 SHOW DATABASES
 ----
