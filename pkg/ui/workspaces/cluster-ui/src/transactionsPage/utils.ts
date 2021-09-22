@@ -265,6 +265,12 @@ function addTransactionStats(
       countB,
     ),
     rows_read: aggregateNumericStats(a.rows_read, b.rows_read, countA, countB),
+    rows_written: aggregateNumericStats(
+      a.rows_written,
+      b.rows_written,
+      countA,
+      countB,
+    ),
     bytes_read: aggregateNumericStats(
       a.bytes_read,
       b.bytes_read,
