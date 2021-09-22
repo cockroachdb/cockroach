@@ -185,17 +185,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 />
                 <Route
                   exact
-                  path={`/statements/:${appAttr}/:${statementAttr}`}
-                  component={StatementDetails}
-                />
-                <Route
-                  exact
-                  path={`/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                  component={StatementDetails}
-                />
-                <Route
-                  exact
-                  path={`/statements/:${appAttr}/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
+                  path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
                   component={StatementDetails}
                 />
 
@@ -203,21 +193,6 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   exact
                   path="/statement"
                   component={() => <Redirect to="/statements" />}
-                />
-                <Route
-                  exact
-                  path={`/statement/:${statementAttr}`}
-                  component={StatementDetails}
-                />
-                <Route
-                  exact
-                  path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
-                  component={StatementDetails}
-                />
-                <Route
-                  exact
-                  path={`/statement/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                  component={StatementDetails}
                 />
 
                 {/* sessions */}
