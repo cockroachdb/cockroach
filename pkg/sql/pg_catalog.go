@@ -3329,12 +3329,39 @@ var pgCatalogHbaFileRulesTable = virtualSchemaTable{
 }
 
 var pgCatalogStatisticExtTable = virtualSchemaTable{
-	comment: "pg_statistic_ext was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogStatisticExt,
+	comment: `pg_statistic_ext has the statistics objects created with CREATE STATISTICS
+https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
+	schema: vtable.PgCatalogStatisticExt,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		query := `SELECT "statisticID", name, "tableID", "columnIDs" FROM system.table_statistics;`
+		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
+			ctx, "read-statistics-objects", p.txn, query,
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, row := range rows {
+			statisticsID := tree.MustBeDInt(row[0])
+			name := tree.MustBeDString(row[1])
+			tableID := tree.MustBeDInt(row[2])
+			columnIDs := tree.MustBeDArray(row[3])
+
+			if err := addRow(
+				tree.NewDOid(statisticsID), // oid
+				tree.NewDOid(tableID),      // stxrelid
+				&name,                      // stxname
+				tree.DNull,                 // stxnamespace
+				tree.DNull,                 // stxowner
+				tree.DNull,                 // stxstattarget
+				columnIDs,                  // stxkeys
+				tree.DNull,                 // stxkind
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogReplicationOriginTable = virtualSchemaTable{
