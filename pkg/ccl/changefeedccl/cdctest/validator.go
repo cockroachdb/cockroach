@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -675,14 +675,14 @@ func ParseJSONValueTimestamps(v []byte) (updated, resolved hlc.Timestamp, err er
 	}
 	if valueRaw.Updated != `` {
 		var err error
-		updated, err = sql.ParseHLC(valueRaw.Updated)
+		updated, err = tree.ParseHLC(valueRaw.Updated)
 		if err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
 	}
 	if valueRaw.Resolved != `` {
 		var err error
-		resolved, err = sql.ParseHLC(valueRaw.Resolved)
+		resolved, err = tree.ParseHLC(valueRaw.Resolved)
 		if err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
