@@ -30,10 +30,10 @@ import {
   NumericStat,
   StatementStatistics,
   stdDev,
-  getMatchParamByName,
   formatNumberForDisplay,
   calculateTotalWorkload,
   unique,
+  queryByName,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -389,7 +389,7 @@ export class StatementDetails extends React.Component<
   };
 
   render(): React.ReactElement {
-    const app = getMatchParamByName(this.props.match, appAttr);
+    const app = queryByName(this.props.location, appAttr);
     return (
       <div className={cx("root")}>
         <Helmet title={`Details | ${app ? `${app} App |` : ""} Statements`} />
@@ -445,7 +445,7 @@ export class StatementDetails extends React.Component<
     } = this.props.statement;
 
     if (!stats) {
-      const sourceApp = getMatchParamByName(this.props.match, appAttr);
+      const sourceApp = queryByName(this.props.location, appAttr);
       const listUrl = "/statements" + (sourceApp ? "/" + sourceApp : "");
 
       return (

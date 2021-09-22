@@ -10,6 +10,7 @@
 
 import { createSelector } from "@reduxjs/toolkit";
 import { RouteComponentProps, match as Match } from "react-router-dom";
+import { Location } from "history";
 import _ from "lodash";
 import { AppState } from "../store";
 import {
@@ -24,6 +25,7 @@ import {
   databaseAttr,
   StatementStatistics,
   statementKey,
+  queryByName,
 } from "../util";
 import { AggregateStatistics } from "../statementsTable";
 import { Fraction } from "./statementDetails";
@@ -87,12 +89,13 @@ function fractionMatching(
 
 function filterByRouterParamsPredicate(
   match: Match<any>,
+  location: Location,
   internalAppNamePrefix: string,
 ): (stat: ExecutionStatistics) => boolean {
   const statement = getMatchParamByName(match, statementAttr);
   const implicitTxn = getMatchParamByName(match, implicitTxnAttr) === "true";
-  const database = getMatchParamByName(match, databaseAttr);
-  let app = getMatchParamByName(match, appAttr);
+  const database = queryByName(location, databaseAttr);
+  let app = queryByName(location, appAttr);
 
   const filterByKeys = (stmt: ExecutionStatistics) =>
     stmt.statement === statement &&
@@ -129,7 +132,11 @@ export const selectStatement = createSelector(
     const flattened = flattenStatementStats(statements);
     const results = _.filter(
       flattened,
-      filterByRouterParamsPredicate(props.match, internalAppNamePrefix),
+      filterByRouterParamsPredicate(
+        props.match,
+        props.location,
+        internalAppNamePrefix,
+      ),
     );
     const statement = getMatchParamByName(props.match, statementAttr);
     return {
@@ -137,7 +144,7 @@ export const selectStatement = createSelector(
       stats: combineStatementStats(results.map(s => s.stats)),
       byNode: coalesceNodeStats(results),
       app: _.uniq(results.map(s => s.app)),
-      database: getMatchParamByName(props.match, databaseAttr),
+      database: queryByName(props.location, databaseAttr),
       distSQL: fractionMatching(results, s => s.distSQL),
       vec: fractionMatching(results, s => s.vec),
       opt: fractionMatching(results, s => s.opt),
