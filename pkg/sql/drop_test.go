@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
@@ -1206,7 +1207,7 @@ WHERE
 	tdb.Exec(t, "INSERT INTO foo VALUES (1)")
 	var afterInsertStr string
 	tdb.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&afterInsertStr)
-	afterInsert, err := sql.ParseHLC(afterInsertStr)
+	afterInsert, err := tree.ParseHLC(afterInsertStr)
 	require.NoError(t, err)
 
 	// Now set up a filter to detect when the DROP INDEX execution will begin and
