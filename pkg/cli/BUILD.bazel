@@ -358,6 +358,7 @@ go_test(
         "//pkg/workload/examples",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//vfs",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
         "@com_github_stretchr_testify//assert",
