@@ -1103,13 +1103,17 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 
 // ConstructPlan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructPlan(
-	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
+	root exec.Node,
+	subqueries []exec.Subquery,
+	cascades []exec.Cascade,
+	checks []exec.Node,
+	rootRowCount int64,
 ) (exec.Plan, error) {
 	// No need to spool at the root.
 	if spool, ok := root.(*spoolNode); ok {
 		root = spool.source
 	}
-	return constructPlan(ef.planner, root, subqueries, cascades, checks)
+	return constructPlan(ef.planner, root, subqueries, cascades, checks, rootRowCount)
 }
 
 // urlOutputter handles writing strings into an encoded URL for EXPLAIN (OPT,

@@ -110,4 +110,3 @@ regions: <hidden>
       estimated row count: 1,000 (missing stats)
       table: ab@primary
       spans: FULL SCAN
-
