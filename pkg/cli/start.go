@@ -368,7 +368,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// that the process continues to exit with the Disk Full exit code. A
 	// flapping exit code can affect alerting, including the alerting
 	// performed within CockroachCloud.
-	if err := exitIfDiskFull(serverCfg.Stores.Specs); err != nil {
+	if err := exitIfDiskFull(vfs.Default, serverCfg.Stores.Specs); err != nil {
 		return err
 	}
 
@@ -1040,21 +1040,21 @@ func maybeWarnMemorySizes(ctx context.Context) {
 	}
 }
 
-func exitIfDiskFull(specs []base.StoreSpec) error {
+func exitIfDiskFull(fs vfs.FS, specs []base.StoreSpec) error {
 	var cause error
 	var ballastPaths []string
 	var ballastMissing bool
 	for _, spec := range specs {
-		isDiskFull, err := storage.IsDiskFull(vfs.Default, spec)
+		isDiskFull, err := storage.IsDiskFull(fs, spec)
 		if err != nil {
 			return err
 		}
 		if !isDiskFull {
 			continue
 		}
-		path := base.EmergencyBallastFile(vfs.Default.PathJoin, spec.Path)
+		path := base.EmergencyBallastFile(fs.PathJoin, spec.Path)
 		ballastPaths = append(ballastPaths, path)
-		if _, err := vfs.Default.Stat(path); oserror.IsNotExist(err) {
+		if _, err := fs.Stat(path); oserror.IsNotExist(err) {
 			ballastMissing = true
 		}
 		cause = errors.CombineErrors(cause, errors.Newf(`store %s: out of disk space`, spec.Path))
