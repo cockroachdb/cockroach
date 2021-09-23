@@ -53,8 +53,15 @@ type Factory interface {
 	//
 	// Checks are executed after all cascades have been executed. They don't
 	// return results but can generate errors (e.g. foreign key check failures).
+	//
+	// RootRowCount is the number of rows returned by the root node, negative if
+	// the stats weren't available to make a good estimate.
 	ConstructPlan(
-		root Node, subqueries []Subquery, cascades []Cascade, checks []Node,
+		root Node,
+		subqueries []Subquery,
+		cascades []Cascade,
+		checks []Node,
+		rootRowCount int64,
 	) (Plan, error)
 
 	// ConstructScan creates a node for a Scan operation.
@@ -84,7 +91,11 @@ type StubFactory struct{}
 var _ Factory = StubFactory{}
 
 func (StubFactory) ConstructPlan(
-	root Node, subqueries []Subquery, cascades []Cascade, checks []Node,
+	root Node,
+	subqueries []Subquery,
+	cascades []Cascade,
+	checks []Node,
+	rootRowCount int64,
 ) (Plan, error) {
 	return struct{}{}, nil
 }
