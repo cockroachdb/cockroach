@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
@@ -279,8 +280,11 @@ func MakeParseError(s string, typ *types.T, err error) error {
 }
 
 func makeUnsupportedComparisonMessage(d1, d2 Datum) error {
-	return errors.AssertionFailedWithDepthf(1,
-		"unsupported comparison: %s to %s", errors.Safe(d1.ResolvedType()), errors.Safe(d2.ResolvedType()))
+	return pgerror.Newf(pgcode.DatatypeMismatch,
+		"unsupported comparison: %s to %s",
+		errors.Safe(d1.ResolvedType()),
+		errors.Safe(d2.ResolvedType()),
+	)
 }
 
 func isCaseInsensitivePrefix(prefix, s string) bool {
@@ -3736,7 +3740,7 @@ func (d *DTuple) CompareError(ctx *EvalContext, other Datum) (int, error) {
 	for i := 0; i < n; i++ {
 		c, err := d.D[i].CompareError(ctx, v.D[i])
 		if err != nil {
-			return 0, err
+			return 0, errors.WithDetailf(err, "type mismatch at record column %d", redact.SafeInt(i+1))
 		}
 		if c != 0 {
 			return c, nil
