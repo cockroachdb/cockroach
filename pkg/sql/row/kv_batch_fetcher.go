@@ -64,9 +64,10 @@ type txnKVFetcher struct {
 	// individual Span has only a start key, it will be interpreted as a
 	// single-key fetch and may use a GetRequest under the hood.
 	spans roachpb.Spans
-	// spansScratch is the largest allocated slice of roachpb.Spans that we need
-	// to hold on to since we're slicing off spans in nextBatch(). Any resume
-	// spans are copied into this slice when processing each response.
+	// spansScratch is the initial state of spans (given to the fetcher when
+	// starting the scan) that we need to hold on to since we're slicing off
+	// spans in nextBatch(). Any resume spans are copied into this slice when
+	// processing each response.
 	spansScratch roachpb.Spans
 	// newFetchSpansIdx tracks the number of resume spans we have copied into
 	// spansScratch after the last fetch.
@@ -238,6 +239,11 @@ func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
 // limit grows between subsequent batches, starting at firstBatchKeyLimit (if not
 // 0) to ProductionKVBatchSize.
 //
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly (if mon is non-nil). The
+// caller can only reuse the spans slice after the fetcher has been closed, and
+// if the caller does, it becomes responsible for the memory accounting.
+//
 // Batch limits can only be used if the spans are ordered.
 func makeKVBatchFetcher(
 	ctx context.Context,
@@ -316,7 +322,7 @@ func makeKVBatchFetcher(
 		responseAdmissionQ:         responseAdmissionQ,
 	}
 
-	// Account for the memory we're about to allocate below.
+	// Account for the memory of the spans that we're taking the ownership of.
 	if f.acc.Monitor() != nil {
 		f.spansAccountedFor = spans.MemUsage()
 		if err := f.acc.Grow(ctx, f.spansAccountedFor); err != nil {
@@ -324,18 +330,23 @@ func makeKVBatchFetcher(
 		}
 	}
 
-	// Make a copy of the spans because we update them.
-	f.spans = make(roachpb.Spans, len(spans))
+	// Since the fetcher takes ownership of the spans slice, we don't need to
+	// perform the deep copy. Notably, the spans might be modified (when the
+	// fetcher receives the resume spans), but the fetcher will always keep the
+	// memory accounting up to date.
+	f.spans = spans
 	if reverse {
-		// Reverse scans receive the spans in decreasing order.
-		for i := range spans {
-			f.spans[len(spans)-i-1] = spans[i]
+		// Reverse scans receive the spans in decreasing order. Note that we
+		// need to be this tricky since we're updating the spans slice in place.
+		i, j := 0, len(spans)-1
+		for i < j {
+			f.spans[i], f.spans[j] = f.spans[j], f.spans[i]
+			i++
+			j--
 		}
-	} else {
-		copy(f.spans, spans)
 	}
-	// Keep the reference to the newly allocated spans slice. We will never need
-	// larger slice for the resume spans.
+	// Keep the reference to the full spans slice. We will never need larger
+	// slice for the resume spans.
 	f.spansScratch = f.spans
 
 	return f, nil
