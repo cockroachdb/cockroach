@@ -481,6 +481,11 @@ func mysqlTableToCockroach(
 		}
 
 		idxName := safeName(raw.Info.Name)
+		// In MySQL, all PRIMARY KEY have the constraint name PRIMARY.
+		// To match PostgreSQL, we want to rename this to the appropriate form.
+		if raw.Info.Primary {
+			idxName = tree.Name(tabledesc.PrimaryKeyIndexName(name))
+		}
 		idx := tree.IndexTableDef{Name: idxName, Columns: elems}
 		if raw.Info.Primary || raw.Info.Unique {
 			stmt.Defs = append(stmt.Defs, &tree.UniqueConstraintTableDef{IndexTableDef: idx, PrimaryKey: raw.Info.Primary})
