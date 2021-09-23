@@ -1058,14 +1058,32 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		referencedTypeIDs, _, err := scTable.GetAllReferencedTypeIDs(dbDesc,
-			func(id descpb.ID) (catalog.TypeDescriptor, error) {
+
+		collectReferencedTypeIDs := func() (catalog.DescriptorIDSet, error) {
+			typeLookupFn := func(id descpb.ID) (catalog.TypeDescriptor, error) {
 				desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
 					return nil, err
 				}
 				return desc, nil
-			})
+			}
+			ids, _, err := scTable.GetAllReferencedTypeIDs(dbDesc, typeLookupFn)
+			return catalog.MakeDescriptorIDSet(ids...), err
+		}
+		referencedTypeIDs, err := collectReferencedTypeIDs()
+
+		collectReferencedSequenceIDs := func() map[descpb.ID]descpb.ColumnIDs {
+			m := make(map[descpb.ID]descpb.ColumnIDs)
+			for _, col := range scTable.AllColumns() {
+				for i := 0; i < col.NumUsesSequences(); i++ {
+					id := col.GetUsesSequenceID(i)
+					m[id] = append(m[id], col.GetID())
+				}
+			}
+			return m
+		}
+		referencedSequenceIDs := collectReferencedSequenceIDs()
+
 		if err != nil {
 			return err
 		}
@@ -1269,20 +1287,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// type descriptors. If this table has been dropped in the mean time, then
 		// don't install any backreferences.
 		if !scTable.Dropped() {
-			newReferencedTypeIDs, _, err := scTable.GetAllReferencedTypeIDs(dbDesc,
-				func(id descpb.ID) (catalog.TypeDescriptor, error) {
-					typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
-					if err != nil {
-						return nil, err
-					}
-					return typ, err
-				})
+			newReferencedTypeIDs, err := collectReferencedTypeIDs()
 			if err != nil {
 				return err
 			}
 
 			// Update the set of back references.
-			for _, id := range referencedTypeIDs {
+			for _, id := range referencedTypeIDs.Ordered() {
 				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
 				if err != nil {
 					return err
@@ -1292,13 +1303,44 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					return err
 				}
 			}
-			for _, id := range newReferencedTypeIDs {
+			for _, id := range newReferencedTypeIDs.Ordered() {
 				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
 				if err != nil {
 					return err
 				}
 				typ.AddReferencingDescriptorID(scTable.ID)
 				if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Now do the same as the above but for referenced sequences.
+		if !scTable.Dropped() {
+			newReferencedSequenceIDs := collectReferencedSequenceIDs()
+
+			// Update the set of back references.
+			for id := range referencedSequenceIDs {
+				tbl, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+				if err != nil {
+					return err
+				}
+				tbl.RemoveDependedOnBy(scTable.ID)
+				if err := descsCol.WriteDescToBatch(ctx, kvTrace, tbl, b); err != nil {
+					return err
+				}
+			}
+			for id, colIDs := range newReferencedSequenceIDs {
+				tbl, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+				if err != nil {
+					return err
+				}
+				tbl.AddDependedOnBy(descpb.TableDescriptor_Reference{
+					ID:        scTable.ID,
+					ColumnIDs: colIDs,
+					ByID:      true,
+				})
+				if err := descsCol.WriteDescToBatch(ctx, kvTrace, tbl, b); err != nil {
 					return err
 				}
 			}
@@ -1453,11 +1495,9 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	}
 
 	// Get the other tables whose foreign key backreferences need to be removed.
-	var fksByBackrefTable map[descpb.ID][]*descpb.ConstraintToUpdate
 	alreadyReversed := false
 	const kvTrace = true // TODO(ajwerner): figure this out
 	err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
 		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
@@ -1489,29 +1529,12 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			return nil
 		}
 
-		for _, mutation := range scTable.Mutations {
-			if mutation.MutationID != sc.mutationID {
-				break
-			}
-			if constraint := mutation.GetConstraint(); constraint != nil &&
-				constraint.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
-				mutation.Direction == descpb.DescriptorMutation_ADD &&
-				constraint.ForeignKey.Validity == descpb.ConstraintValidity_Validating {
-				fk := &constraint.ForeignKey
-				if fk.ReferencedTableID != scTable.ID {
-					fksByBackrefTable[constraint.ForeignKey.ReferencedTableID] =
-						append(fksByBackrefTable[constraint.ForeignKey.ReferencedTableID], constraint)
-				}
-			}
-		}
-
 		// Create update closure for the table and all other tables with backreferences
 		var droppedMutations map[descpb.MutationID]struct{}
 
 		// Keep track of the column mutations being reversed so that indexes
 		// referencing them can be dropped.
 		columns := make(map[string]struct{})
-		droppedMutations = nil
 		b := txn.NewBatch()
 		for _, m := range scTable.AllMutations() {
 			if m.MutationID() != sc.mutationID {
