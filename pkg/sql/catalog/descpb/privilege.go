@@ -332,6 +332,10 @@ func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
 	objectName string,
 	allowedSuperuserPrivileges privilege.List,
 ) error {
+	if parentID == InvalidID && objectType != privilege.Database {
+		// Special case for virtual objects.
+		return nil
+	}
 	for _, user := range []security.SQLUsername{
 		// Check "root" user.
 		security.RootUserName(),

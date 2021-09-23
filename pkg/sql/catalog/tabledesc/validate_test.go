@@ -103,14 +103,10 @@ var validationMap = []struct {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
 			"IsMaterializedView": {status: thisFieldReferencesNoObjects},
-			"DependsOn": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
-			"DependsOnTypes": {status: iSolemnlySwearThisFieldIsValidated},
-			"DependedOnBy": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
-			"MutationJobs": {status: thisFieldReferencesNoObjects},
+			"DependsOn":          {status: iSolemnlySwearThisFieldIsValidated},
+			"DependsOnTypes":     {status: iSolemnlySwearThisFieldIsValidated},
+			"DependedOnBy":       {status: iSolemnlySwearThisFieldIsValidated},
+			"MutationJobs":       {status: thisFieldReferencesNoObjects},
 			"SequenceOpts": {status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
 			"DropTime": {status: thisFieldReferencesNoObjects},
@@ -1703,6 +1699,7 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
+			d.desc.Privileges = descpb.NewBasePrivilegeDescriptor(security.RootUserName())
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
 			err := validate.Self(desc)
@@ -1944,26 +1941,158 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Temporary:               true,
 			},
 		},
+		// Views.
+		{ // 10
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:             1,
+					Name:           "primary",
+					KeyColumnIDs:   []descpb.ColumnID{1},
+					KeyColumnNames: []string{"a"},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+				DependedOnBy: []descpb.TableDescriptor_Reference{
+					{ID: 52},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				Name:                    "bar",
+				ID:                      52,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				ViewQuery:               "SELECT * FROM foo",
+				DependsOn:               []descpb.ID{51},
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+			}},
+		},
+		{ // 11
+			err: `depended-on-by relation "bar" (52) has no corresponding forward reference`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:             1,
+					Name:           "primary",
+					KeyColumnIDs:   []descpb.ColumnID{1},
+					KeyColumnNames: []string{"a"},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+				DependedOnBy: []descpb.TableDescriptor_Reference{
+					{ID: 52, ColumnIDs: []descpb.ColumnID{1}},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				Name:                    "bar",
+				ID:                      52,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				ViewQuery:               "SELECT a FROM foo",
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+			}},
+		},
+		{ // 12
+			err: `depended-on-by relation "bar" (52) is referenced with unknown column ID 123`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:             1,
+					Name:           "primary",
+					KeyColumnIDs:   []descpb.ColumnID{1},
+					KeyColumnNames: []string{"a"},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+				DependedOnBy: []descpb.TableDescriptor_Reference{
+					{ID: 52, ColumnIDs: []descpb.ColumnID{123}},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				Name:                    "bar",
+				ID:                      52,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				DependsOn:               []descpb.ID{51},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:             1,
+					Name:           "primary",
+					KeyColumnIDs:   []descpb.ColumnID{1},
+					KeyColumnNames: []string{"a"},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+			}},
+		},
+		{ // 13
+			err: `depends-on relation "bar" (52) has no corresponding depended-on-by back reference`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				ViewQuery:               "SELECT a FROM bar",
+				DependsOn:               []descpb.ID{52},
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				Name:                    "bar",
+				ID:                      52,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:             1,
+					Name:           "primary",
+					KeyColumnIDs:   []descpb.ColumnID{1},
+					KeyColumnNames: []string{"a"},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+				DependedOnBy: []descpb.TableDescriptor_Reference{{ID: 123}},
+			}},
+		},
 	}
 
 	for i, test := range tests {
-		var cb nstree.MutableCatalog
-		cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable())
-		for _, otherDesc := range test.otherDescs {
-			otherDesc.Privileges = descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
-			cb.UpsertDescriptorEntry(NewBuilder(&otherDesc).BuildImmutable())
-		}
-		desc := NewBuilder(&test.desc).BuildImmutable()
-		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
-		results := cb.Validate(ctx, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
-		if err := results.CombinedError(); err == nil {
-			if test.err != "" {
-				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)
+		t.Run(test.err, func(t *testing.T) {
+			var cb nstree.MutableCatalog
+			cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable())
+			for _, otherDesc := range test.otherDescs {
+				otherDesc.Privileges = descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+				cb.UpsertDescriptorEntry(NewBuilder(&otherDesc).BuildImmutable())
 			}
-		} else if expectedErr != err.Error() {
-			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
-		}
+			desc := NewBuilder(&test.desc).BuildImmutable()
+			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
+			const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
+			results := cb.Validate(ctx, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
+			if err := results.CombinedError(); err == nil {
+				if test.err != "" {
+					t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)
+				}
+			} else if expectedErr != err.Error() {
+				t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
+			}
+		})
 	}
 }
 

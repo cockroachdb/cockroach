@@ -1854,6 +1854,9 @@ subtest sequence_in_txn
 statement ok
 CREATE SEQUENCE seq_txn
 
+# Validate that cross DB sequences are detected by internal tables
+subtest cross_db_sequences
+
 statement ok
 BEGIN
 
@@ -1890,6 +1893,46 @@ query I
 SELECT nextval('seq_txn')
 ----
 612
+
+# Sequence used for regression test for issue #63147
+statement ok
+CREATE SEQUENCE s63147
+
+statement ok
+CREATE TABLE t63147 (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t63147 (a) VALUES (1), (2)
+
+statement error pgcode 0A000 cannot evaluate scalar expressions containing sequence operations in this context
+ALTER TABLE t63147 ADD b INT DEFAULT nextval('s63147')
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+statement ok
+DROP TABLE t63147
+
+statement ok
+CREATE TABLE t63147 (i INT PRIMARY KEY DEFAULT (nextval('s63147')))
+
+statement ok
+CREATE VIEW v63147 AS SELECT nextval('s63147') FROM t63147
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+statement ok
+ALTER TABLE t63147 DROP COLUMN j CASCADE
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
 
 # Verify CREATE SEQUENCE ... AS works as expected.
 statement ok

@@ -823,6 +823,7 @@ func TestTableImplicitTypeDescCannotBeSerializedOrValidated(t *testing.T) {
 		ParentID:       1,
 		ParentSchemaID: 1,
 		Kind:           descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE,
+		Privileges:     descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 	}
 
 	desc := typedesc.NewBuilder(td).BuildImmutable()
