@@ -664,6 +664,11 @@ func (rf *cFetcher) Init(
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly (if mon is non-nil). The
+// caller can only reuse the spans slice after the fetcher has been closed, and
+// if the caller does, it becomes responsible for the memory accounting.
 func (rf *cFetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -711,6 +716,11 @@ func (rf *cFetcher) StartScan(
 	)
 	if err != nil {
 		return err
+	}
+	// Make sure to close the previous fetcher if there is one since StartScan
+	// can be used multiple times.
+	if rf.fetcher != nil {
+		rf.fetcher.Close(ctx)
 	}
 	rf.fetcher = f
 	rf.machine.lastRowPrefix = nil
@@ -1646,5 +1656,6 @@ func initCFetcher(
 func (rf *cFetcher) Close(ctx context.Context) {
 	if rf != nil && rf.fetcher != nil {
 		rf.fetcher.Close(ctx)
+		rf.fetcher = nil
 	}
 }
