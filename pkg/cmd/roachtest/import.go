@@ -152,8 +152,10 @@ func registerImportTPCH(r *testRegistry) {
 		// is required to confirm this. Until then, the 4 and 32 node configurations
 		// are removed (4 is too slow and 32 is pretty expensive) while 8-node is
 		// given a 50% longer timeout (which running by hand suggests should be OK).
-		// (10/30/19) The timeout was increased again to 8 hours.
-		{8, 8 * time.Hour},
+		// (07/27/21) The timeout was increased again to 10 hours. The test runs in
+		// ~7 hours which causes it to occasionally exceed the previous timeout of 8
+		// hours.
+		{8, 10 * time.Hour},
 	} {
 		item := item
 		r.Add(testSpec{
