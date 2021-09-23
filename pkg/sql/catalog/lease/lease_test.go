@@ -1282,8 +1282,10 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
-				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType) {
-					atomic.AddInt32(&testAcquisitionBlockCount, 1)
+				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType, id descpb.ID) {
+					if id > keys.MaxReservedDescID {
+						atomic.AddInt32(&testAcquisitionBlockCount, 1)
+					}
 				},
 			},
 		},
@@ -1739,8 +1741,10 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					defer mu.Unlock()
 					releasedIDs[id] = struct{}{}
 				},
-				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType) {
-					atomic.AddInt32(&testAcquisitionBlockCount, 1)
+				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType, id descpb.ID) {
+					if id > keys.MaxReservedDescID {
+						atomic.AddInt32(&testAcquisitionBlockCount, 1)
+					}
 				},
 			},
 			TestingDescriptorUpdateEvent: func(_ *descpb.Descriptor) error {
