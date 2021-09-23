@@ -151,9 +151,6 @@ func MakeSimpleTableDescriptor(
 	if create.IfNotExists {
 		return nil, unimplemented.NewWithIssueDetailf(42846, "import.if-no-exists", "unsupported IF NOT EXISTS")
 	}
-	if create.Interleave != nil {
-		return nil, unimplemented.NewWithIssueDetailf(42846, "import.interleave", "interleaved not supported")
-	}
 	if create.AsSource != nil {
 		return nil, unimplemented.NewWithIssueDetailf(42846, "import.create-as", "CREATE AS not supported")
 	}

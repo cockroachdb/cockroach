@@ -559,14 +559,6 @@ CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > _) -- literals remov
 CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_) WHERE _ > 3) -- identifiers removed
 
 parse
-CREATE TABLE a (b INT, UNIQUE INDEX foo (b) INTERLEAVE IN PARENT c (d))
-----
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- normalized!
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- fully parenthesized
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- literals removed
-CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_) INTERLEAVE IN PARENT _ (_)) -- identifiers removed
-
-parse
 CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
 ----
 CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) -- normalized!
@@ -1321,14 +1313,6 @@ CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c)) -- f
 CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c)) -- literals removed
 CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE WITHOUT INDEX (_, _)) -- identifiers removed
 
-parse
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f))
-----
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f))
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f)) -- fully parenthesized
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f)) -- literals removed
-CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE (_, _) INTERLEAVE IN PARENT _ (_, _)) -- identifiers removed
-
 error
 CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
@@ -1614,14 +1598,6 @@ CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c)) -- literals
 CREATE TABLE _ (_ INT8, _ STRING, INDEX (_ ASC, _ DESC) STORING (_)) -- identifiers removed
 
 parse
-CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e))
-----
-CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e))
-CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e)) -- fully parenthesized
-CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e)) -- literals removed
-CREATE TABLE _ (_ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_, _)) -- identifiers removed
-
-parse
 CREATE TABLE a (b INT8, FAMILY (b))
 ----
 CREATE TABLE a (b INT8, FAMILY (b))
@@ -1636,22 +1612,6 @@ CREATE TABLE a (b INT8, c STRING, FAMILY foo (b), FAMILY (c))
 CREATE TABLE a (b INT8, c STRING, FAMILY foo (b), FAMILY (c)) -- fully parenthesized
 CREATE TABLE a (b INT8, c STRING, FAMILY foo (b), FAMILY (c)) -- literals removed
 CREATE TABLE _ (_ INT8, _ STRING, FAMILY _ (_), FAMILY (_)) -- identifiers removed
-
-parse
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d)
-----
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d)
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d) -- fully parenthesized
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d) -- literals removed
-CREATE TABLE _ (_ INT8) INTERLEAVE IN PARENT _ (_, _) -- identifiers removed
-
-parse
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE
-----
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE -- fully parenthesized
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE -- literals removed
-CREATE TABLE _ (_ INT8) INTERLEAVE IN PARENT _ (_) CASCADE -- identifiers removed
 
 parse
 CREATE TABLE a.b (b INT8)
@@ -1834,15 +1794,6 @@ CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM (mi
 CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM ((minvalue)) TO ((1)), PARTITION p2 VALUES FROM ((2), (maxvalue)) TO ((4), (4)), PARTITION p3 VALUES FROM ((4), (4)) TO ((maxvalue))) -- fully parenthesized
 CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (_), PARTITION p2 VALUES FROM (_, maxvalue) TO (_, _), PARTITION p3 VALUES FROM (_, _) TO (maxvalue)) -- literals removed
 CREATE TABLE _ (_ INT8) PARTITION ALL BY RANGE (_) (PARTITION _ VALUES FROM (_) TO (1), PARTITION _ VALUES FROM (2, _) TO (4, 4), PARTITION _ VALUES FROM (4, 4) TO (_)) -- identifiers removed
-
-
-parse
-CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))
-----
-CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))
-CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN ((1))) -- fully parenthesized
-CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (_)) -- literals removed
-CREATE TABLE _ () INTERLEAVE IN PARENT _ (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
 
 parse
 CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (1))
