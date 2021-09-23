@@ -114,7 +114,7 @@ func (r *Record) AppendDescription(description string) {
 		r.Description = description
 		return
 	}
-	r.Description = r.Description + ";" + description
+	r.Description = r.Description + "; " + description
 }
 
 // SetNonCancelable sets NonCancelable of this Record to the value returned from
