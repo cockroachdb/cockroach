@@ -81,22 +81,6 @@ CREATE INDEX ON a (b) WHERE c > _ -- literals removed
 CREATE INDEX ON _ (_) WHERE _ > 3 -- identifiers removed
 
 parse
-CREATE INDEX ON a (b) INTERLEAVE IN PARENT c (d)
-----
-CREATE INDEX ON a (b) INTERLEAVE IN PARENT c (d)
-CREATE INDEX ON a (b) INTERLEAVE IN PARENT c (d) -- fully parenthesized
-CREATE INDEX ON a (b) INTERLEAVE IN PARENT c (d) -- literals removed
-CREATE INDEX ON _ (_) INTERLEAVE IN PARENT _ (_) -- identifiers removed
-
-parse
-CREATE INDEX ON a (b) INTERLEAVE IN PARENT c.d (e)
-----
-CREATE INDEX ON a (b) INTERLEAVE IN PARENT c.d (e)
-CREATE INDEX ON a (b) INTERLEAVE IN PARENT c.d (e) -- fully parenthesized
-CREATE INDEX ON a (b) INTERLEAVE IN PARENT c.d (e) -- literals removed
-CREATE INDEX ON _ (_) INTERLEAVE IN PARENT _._ (_) -- identifiers removed
-
-parse
 CREATE INDEX ON a (b ASC, c DESC)
 ----
 CREATE INDEX ON a (b ASC, c DESC)
@@ -145,22 +129,6 @@ CREATE UNIQUE INDEX a ON b (c) WHERE d > _ -- literals removed
 CREATE UNIQUE INDEX _ ON _ (_) WHERE _ > 3 -- identifiers removed
 
 parse
-CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d (e, f)
-----
-CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d (e, f)
-CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d (e, f) -- fully parenthesized
-CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d (e, f) -- literals removed
-CREATE UNIQUE INDEX _ ON _ (_) INTERLEAVE IN PARENT _ (_, _) -- identifiers removed
-
-parse
-CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d.e (f, g)
-----
-CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d.e (f, g)
-CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d.e (f, g) -- fully parenthesized
-CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d.e (f, g) -- literals removed
-CREATE UNIQUE INDEX _ ON _ (_) INTERLEAVE IN PARENT _._ (_, _) -- identifiers removed
-
-parse
 CREATE UNIQUE INDEX a ON b.c (d)
 ----
 CREATE UNIQUE INDEX a ON b.c (d)
@@ -200,14 +168,6 @@ CREATE INVERTED INDEX a ON b (c) WHERE d > 3
 CREATE INVERTED INDEX a ON b (c) WHERE ((d) > (3)) -- fully parenthesized
 CREATE INVERTED INDEX a ON b (c) WHERE d > _ -- literals removed
 CREATE INVERTED INDEX _ ON _ (_) WHERE _ > 3 -- identifiers removed
-
-parse
-CREATE INVERTED INDEX a ON b (c) INTERLEAVE IN PARENT d (e)
-----
-CREATE INVERTED INDEX a ON b (c) INTERLEAVE IN PARENT d (e)
-CREATE INVERTED INDEX a ON b (c) INTERLEAVE IN PARENT d (e) -- fully parenthesized
-CREATE INVERTED INDEX a ON b (c) INTERLEAVE IN PARENT d (e) -- literals removed
-CREATE INVERTED INDEX _ ON _ (_) INTERLEAVE IN PARENT _ (_) -- identifiers removed
 
 parse
 CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > 3

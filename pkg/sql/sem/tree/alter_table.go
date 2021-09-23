@@ -255,10 +255,9 @@ func (node *AlterTableAlterColumnType) GetColumn() Name {
 
 // AlterTableAlterPrimaryKey represents an ALTER TABLE ALTER PRIMARY KEY command.
 type AlterTableAlterPrimaryKey struct {
-	Columns    IndexElemList
-	Interleave *InterleaveDef
-	Sharded    *ShardedIndexDef
-	Name       Name
+	Columns IndexElemList
+	Sharded *ShardedIndexDef
+	Name    Name
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.
@@ -273,9 +272,6 @@ func (node *AlterTableAlterPrimaryKey) Format(ctx *FmtCtx) {
 	ctx.WriteString(")")
 	if node.Sharded != nil {
 		ctx.FormatNode(node.Sharded)
-	}
-	if node.Interleave != nil {
-		ctx.FormatNode(node.Interleave)
 	}
 }
 

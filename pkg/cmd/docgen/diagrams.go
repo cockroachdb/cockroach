@@ -626,27 +626,6 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:   "create_index_interleaved_stmt",
-		stmt:   "create_index_stmt",
-		match:  []*regexp.Regexp{regexp.MustCompile("'INTERLEAVE'")},
-		inline: []string{"opt_unique", "opt_storing", "opt_interleave", "opt_concurrently"},
-		replace: map[string]string{
-			"'ON' a_expr":                          "'ON' column_name",
-			"'=' a_expr":                           "'=' n_buckets",
-			" opt_index_name":                      "",
-			" opt_partition_by":                    "",
-			" opt_index_access_method":             "",
-			"'ON' table_name '(' index_params ')'": "'...'",
-			"storing '(' name_list ')'":            "'STORING' '(' stored_columns ')'",
-			"table_name '(' name_list":             "parent_table '(' interleave_prefix",
-		},
-		exclude: []*regexp.Regexp{
-			regexp.MustCompile("'CREATE' 'INVERTED'"),
-			regexp.MustCompile("'EXISTS'"),
-		},
-		unlink: []string{"stored_columns", "parent_table", "interleave_prefix", "n_buckets"},
-	},
-	{
 		name:   "create_inverted_index_stmt",
 		stmt:   "create_index_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("'CREATE' .* 'INVERTED' 'INDEX'")},
@@ -977,20 +956,10 @@ var specs = []stmtSpec{
 	},
 	{name: "iso_level"},
 	{
-		name:    "interleave",
-		stmt:    "create_table_stmt",
-		inline:  []string{"opt_interleave", "opt_table_with", "opt_with_storage_parameter_list", "storage_parameter_list", "opt_create_table_on_commit"},
-		replace: map[string]string{"opt_table_elem_list": "table_definition"},
-		unlink:  []string{"table_definition"},
-	},
-	{
 		name: "not_null_column_level",
 		stmt: "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'NOT NULL' ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
 		unlink: []string{"table_name", "column_name", "column_type", "table_constraints"},
-	},
-	{
-		name: "opt_interleave",
 	},
 	{
 		name:   "opt_with_storage_parameter_list",
