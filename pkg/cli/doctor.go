@@ -325,6 +325,10 @@ func fromZipDir(
 
 	maybePrint := func(fileName string) string {
 		path := path.Join(zipDirPath, fileName)
+		_, err := os.Stat(path + ".err.txt")
+		if err == nil {
+			fmt.Printf("WARNING: errors occurred during the production of %s, contents may be missing or incomplete.\n", fileName)
+		}
 		if debugCtx.verbose {
 			fmt.Println("reading " + path)
 		}

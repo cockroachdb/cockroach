@@ -1,6 +1,7 @@
 debug doctor recreate zipdir testdata/doctor/debugzip
 ----
 debug doctor recreate zipdir testdata/doctor/debugzip
+WARNING: errors occurred during the production of system.jobs.txt, contents may be missing or incomplete.
 BEGIN;
 SELECT 1/(1-sign(count(*))) FROM system.descriptor WHERE id >= 52;
 SELECT crdb_internal.unsafe_delete_descriptor(id, true) FROM system.descriptor WHERE id >= 50;
