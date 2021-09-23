@@ -80,7 +80,7 @@ func newSkipResult(format string, args ...interface{}) auditResult {
 
 // runChecks runs the audit checks and prints warnings to stdout for those that
 // fail.
-func (a *auditor) runChecks() {
+func (a *auditor) runChecks(localWarehouses bool) {
 	type check struct {
 		name string
 		f    func(a *auditor) auditResult
@@ -89,11 +89,19 @@ func (a *auditor) runChecks() {
 		{"9.2.1.7", check9217},
 		{"9.2.2.5.1", check92251},
 		{"9.2.2.5.2", check92252},
-		{"9.2.2.5.3", check92253},
-		{"9.2.2.5.4", check92254},
 		{"9.2.2.5.5", check92255},
 		{"9.2.2.5.6", check92256},
 	}
+
+	// If we're keeping the workload local, these checks are expected to fail.
+	// Bypass them instead of allowing them to fail.
+	if !localWarehouses {
+		checks = append(checks,
+			check{"9.2.2.5.3", check92253},
+			check{"9.2.2.5.4", check92254},
+		)
+	}
+
 	for _, check := range checks {
 		result := check.f(a)
 		msg := fmt.Sprintf("Audit check %s: %s", check.name, result.status)
