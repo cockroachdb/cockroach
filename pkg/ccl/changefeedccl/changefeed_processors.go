@@ -289,7 +289,7 @@ func (ca *changeAggregator) startKVFeed(
 	cfg := ca.flowCtx.Cfg
 	buf := kvevent.NewThrottlingBuffer(
 		kvevent.NewMemBuffer(ca.kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
-		cdcutils.NodeLevelThrottler(&cfg.Settings.SV))
+		cdcutils.NodeLevelThrottler(&cfg.Settings.SV, &ca.metrics.ThrottleMetrics))
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
 	// we return the kvevent.Reader part to the caller.

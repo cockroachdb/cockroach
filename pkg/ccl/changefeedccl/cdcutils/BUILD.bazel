@@ -9,7 +9,9 @@ go_library(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/settings",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/quotapool",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
     ],
 )
