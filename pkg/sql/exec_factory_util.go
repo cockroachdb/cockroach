@@ -33,6 +33,7 @@ func constructPlan(
 	subqueries []exec.Subquery,
 	cascades []exec.Cascade,
 	checks []exec.Node,
+	rootRowCount int64,
 ) (exec.Plan, error) {
 	res := &planComponents{}
 	assignPlan := func(plan *planMaybePhysical, node exec.Node) {
@@ -46,6 +47,7 @@ func constructPlan(
 		}
 	}
 	assignPlan(&res.main, root)
+	res.mainRowCount = rootRowCount
 	if len(subqueries) > 0 {
 		res.subqueryPlans = make([]subquery, len(subqueries))
 		for i := range subqueries {
@@ -65,6 +67,7 @@ func constructPlan(
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}
 			out.expanded = true
+			out.rowCount = in.RowCount
 			assignPlan(&out.plan, in.Root)
 		}
 	}

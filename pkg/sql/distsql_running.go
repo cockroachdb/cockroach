@@ -1142,7 +1142,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if err != nil {
 		return err
 	}
-	dsp.FinalizePlan(subqueryPlanCtx, subqueryPhysPlan)
+	dsp.finalizePlanWithRowCount(subqueryPlanCtx, subqueryPhysPlan, subqueryPlan.rowCount)
 
 	// TODO(arjun): #28264: We set up a row container, wrap it in a row
 	// receiver, and use it and serialize the results of the subquery. The type
@@ -1271,7 +1271,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		recv.SetError(err)
 		return physPlanCleanup
 	}
-	dsp.FinalizePlan(planCtx, physPlan)
+	dsp.finalizePlanWithRowCount(planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
 	runCleanup := dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 	return func() {

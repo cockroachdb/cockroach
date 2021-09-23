@@ -528,9 +528,10 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"default distributed SQL execution mode",
 	"auto",
 	map[int64]string{
-		int64(sessiondatapb.DistSQLOff):  "off",
-		int64(sessiondatapb.DistSQLAuto): "auto",
-		int64(sessiondatapb.DistSQLOn):   "on",
+		int64(sessiondatapb.DistSQLOff):    "off",
+		int64(sessiondatapb.DistSQLAuto):   "auto",
+		int64(sessiondatapb.DistSQLOn):     "on",
+		int64(sessiondatapb.DistSQLAlways): "always",
 	},
 ).WithPublic()
 
@@ -1405,6 +1406,15 @@ func shouldDistributeGivenRecAndMode(
 // is reused, but if plan has logical representation (i.e. it is a planNode
 // tree), then we traverse that tree in order to determine the distribution of
 // the plan.
+// WARNING: in some cases when this method returns
+// physicalplan.FullyDistributedPlan, the plan might actually run locally. This
+// is the case when
+// - the plan ends up with a single flow on the gateway, or
+// - during the plan finalization (in DistSQLPlanner.finalizePlanWithRowCount)
+// we decide that it is beneficial to move the single flow of the plan from the
+// remote node to the gateway.
+// TODO(yuzefovich): this will be easy to solve once the DistSQL spec factory is
+// completed but is quite annoying to do at the moment.
 func getPlanDistribution(
 	ctx context.Context,
 	p *planner,
