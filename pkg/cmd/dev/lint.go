@@ -36,7 +36,7 @@ func (d *dev) lint(cmd *cobra.Command, _ []string) error {
 	var args []string
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
-	args = append(args, "run", "--color=yes", "--config=test", "//build/bazelutil:lint")
+	args = append(args, "run", "--config=test", "//build/bazelutil:lint")
 	args = append(args, getConfigFlags()...)
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	args = append(args, "--", "-test.v")

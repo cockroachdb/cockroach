@@ -265,10 +265,6 @@ func getBasicBuildArgs(targets []string) (args, fullTargets []string, err error)
 	}
 
 	args = append(args, "build")
-	args = append(args, "--color=yes")
-	// Don't let bazel generate any convenience symlinks, we'll create them
-	// ourself.
-	args = append(args, "--experimental_convenience_symlinks=ignore")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
