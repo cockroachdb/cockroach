@@ -173,7 +173,7 @@ func BenchmarkDefaultAggregateFunction(b *testing.B) {
 				benchmarkAggregateFunction(
 					b, agg, aggFn, []*types.T{types.String, types.String}, groupSize,
 					0 /* distinctProb */, numInputRows,
-				)
+					agg.name == "ordered" /* orderedGroup */)
 			}
 		}
 	}

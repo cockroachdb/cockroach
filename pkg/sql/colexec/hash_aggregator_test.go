@@ -199,7 +199,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 				benchmarkAggregateFunction(
 					b, agg, aggFn, []*types.T{types.Int}, groupSize,
 					0 /* distinctProb */, numInputRows,
-				)
+					false /* orderedGroup */)
 			}
 		}
 	}

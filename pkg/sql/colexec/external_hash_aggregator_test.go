@@ -205,10 +205,9 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 							return colexecop.NewNoop(op), err
 						},
 						name: fmt.Sprintf("spilled=%t", spillForced),
-					},
-					aggFn, []*types.T{types.Int}, groupSize,
+					}, aggFn, []*types.T{types.Int}, groupSize,
 					0 /* distinctProb */, numInputRows,
-				)
+					false /* orderedGroup */)
 			}
 		}
 	}

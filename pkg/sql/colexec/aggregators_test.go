@@ -935,6 +935,7 @@ func benchmarkAggregateFunction(
 	groupSize int,
 	distinctProb float64,
 	numInputRows int,
+	orderedGroup bool,
 ) {
 	defer log.Scope(b).Close(b)
 	if groupSize > numInputRows {
@@ -957,7 +958,7 @@ func benchmarkAggregateFunction(
 		cols[i] = testAllocator.NewMemColumn(typs[i], numInputRows)
 	}
 	groups := cols[0].Int64()
-	if agg.name == "hash" {
+	if !orderedGroup {
 		numGroups := numInputRows / groupSize
 		for i := 0; i < numInputRows; i++ {
 			groups[i] = int64(rng.Intn(numGroups))
@@ -1099,7 +1100,7 @@ func BenchmarkAggregator(b *testing.B) {
 				benchmarkAggregateFunction(
 					b, agg, aggFn, []*types.T{types.Int}, groupSize,
 					0 /* distinctProb */, numInputRows,
-				)
+					agg.name == "ordered" /* orderedGroup */)
 			}
 		}
 	}
@@ -1136,7 +1137,7 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 				benchmarkAggregateFunction(
 					b, agg, aggFn, aggInputTypes, groupSize,
 					0 /* distinctProb */, numInputRows,
-				)
+					agg.name == "ordered" /* orderedGroup */)
 			}
 		}
 	}
@@ -1158,8 +1159,8 @@ func BenchmarkDistinctAggregation(b *testing.B) {
 						continue
 					}
 					benchmarkAggregateFunction(
-						b, agg, aggFn, []*types.T{types.Int}, groupSize, distinctProb, numInputRows,
-					)
+						b, agg, aggFn, []*types.T{types.Int}, groupSize, distinctProb,
+						numInputRows, agg.name == "ordered" /* orderedGroup */)
 				}
 			}
 		}
