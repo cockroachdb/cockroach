@@ -1251,7 +1251,9 @@ func makeJSONPopulateImpl(gen tree.GeneratorWithExprsFactory, info string) tree.
 		// The json{,b}_populate_record{,set} builtins all have a 2 argument
 		// structure. The first argument is an arbitrary tuple type, which is used
 		// to set the columns of the output when the builtin is used as a FROM
-		// source, or used as-is when it's used as an ordinary projection.
+		// source, or used as-is when it's used as an ordinary projection. To match
+		// PostgreSQL, the argument actually is types.Any, and its tuple-ness is
+		// checked at execution time.
 		// The second argument is a JSON object or array of objects. The builtin
 		// transforms the JSON in the second argument into the tuple in the first
 		// argument, field by field, casting fields in key "k" to the type in the
@@ -1306,6 +1308,12 @@ func jsonPopulateRecordEvalArgs(
 		}
 	}
 	tupleType := args[0].(tree.TypedExpr).ResolvedType()
+	if tupleType.Family() != types.TupleFamily && tupleType.Family() != types.UnknownFamily {
+		return nil, nil, pgerror.New(
+			pgcode.DatatypeMismatch,
+			"first argument of json{b}_populate_record{set} must be a record type",
+		)
+	}
 	var defaultElems tree.Datums
 	if evalled[0] == tree.DNull {
 		defaultElems = make(tree.Datums, len(tupleType.TupleLabels()))
