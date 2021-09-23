@@ -49,7 +49,7 @@ This line is ignored.
 ----
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev //docs/generated:gen-logging-md //docs/generated/sql
+bazel build --config=dev //docs/generated:gen-logging-md //docs/generated/sql
 ----
 
 bazel info bazel-bin --color=no --config=dev
@@ -161,7 +161,7 @@ cat go/src/github.com/cockroachdb/cockroach/build/bazelutil/checked_in_genfiles.
 ----
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/roachpb:gen-batch-generated //pkg/sql/opt/optgen/lang:gen-expr //pkg/sql/opt/optgen/lang:gen-operator
+bazel build --config=dev //pkg/roachpb:gen-batch-generated //pkg/sql/opt/optgen/lang:gen-expr //pkg/sql/opt/optgen/lang:gen-operator
 ----
 
 bazel info bazel-bin --color=no --config=dev

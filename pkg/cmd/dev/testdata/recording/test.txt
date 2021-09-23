@@ -13,7 +13,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --test_output errors
+bazel test --config=dev //pkg/util/tracing:tracing_test --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.2s
@@ -41,7 +41,7 @@ bazel query kind(go_test,  //pkg/util/tracing/...)
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --test_output errors
+bazel test --config=dev //pkg/util/tracing:tracing_test --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                 [0m[32m(cached) PASSED[0m in 0.2s
@@ -65,7 +65,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output errors
+bazel test --config=dev //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.1s
@@ -89,7 +89,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output all --test_arg -test.v
+bazel test --config=dev //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output all --test_arg -test.v
 ----
 ----
 ==================== Test output for //pkg/util/tracing:tracing_test:
@@ -117,7 +117,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experimental_remote_downloader=grpc://127.0.0.1:9092 //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output errors
+bazel test --config=dev --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experimental_remote_downloader=grpc://127.0.0.1:9092 //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                 [0m[32m(cached) PASSED[0m in 0.0s
@@ -141,7 +141,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --nocache_test_results --test_filter='TestStartChild*' --test_output errors
+bazel test --config=dev //pkg/util/tracing:tracing_test --nocache_test_results --test_filter='TestStartChild*' --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.1s
@@ -165,7 +165,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under @com_github_cockroachdb_stress//:stress  --test_filter='TestStartChild*' --test_output errors
+bazel test --config=dev --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under @com_github_cockroachdb_stress//:stress  --test_filter='TestStartChild*' --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 12.3s
@@ -189,7 +189,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under @com_github_cockroachdb_stress//:stress -maxtime=10s  --test_timeout=11 --test_filter='TestStartChild*' --test_output all --test_arg -test.v
+bazel test --config=dev --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under @com_github_cockroachdb_stress//:stress -maxtime=10s  --test_timeout=11 --test_filter='TestStartChild*' --test_output all --test_arg -test.v
 ----
 ----
 ==================== Test output for //pkg/util/tracing:tracing_test:
@@ -219,7 +219,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/testutils:testutils_test --test_timeout=10 --test_output errors
+bazel test --config=dev //pkg/testutils:testutils_test --test_timeout=10 --test_output errors
 ----
 ----
 [32mLoading:[0m 
@@ -259,7 +259,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev -s //pkg/util/tracing:tracing_test --test_output errors
+bazel test --config=dev -s //pkg/util/tracing:tracing_test --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.2s
