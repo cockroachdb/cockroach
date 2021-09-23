@@ -59,7 +59,7 @@ CREATE TABLE customer
     primary key (c_w_id, c_d_id, c_id),
     index customer_idx (c_w_id, c_d_id, c_last, c_first),
     foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)
-) interleave in parent district (c_w_id, c_d_id)
+)
 ----
 
 exec-ddl
@@ -143,7 +143,7 @@ CREATE TABLE stock
     primary key (s_w_id, s_i_id),
     foreign key (s_w_id) references warehouse (w_id),
     foreign key (s_i_id) references item (i_id)
-) interleave in parent warehouse (s_w_id)
+)
 ----
 
 exec-ddl

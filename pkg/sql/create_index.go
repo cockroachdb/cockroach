@@ -65,10 +65,6 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	}
 
 	if tableDesc.MaterializedView() {
-		if n.Interleave != nil {
-			return nil, pgerror.New(pgcode.InvalidObjectDefinition,
-				"cannot create interleaved index on materialized view")
-		}
 		if n.Sharded != nil {
 			return nil, pgerror.New(pgcode.InvalidObjectDefinition,
 				"cannot create hash sharded index on materialized view")
@@ -204,10 +200,6 @@ func MakeIndexDescriptor(
 	}
 
 	if n.Inverted {
-		if n.Interleave != nil {
-			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support interleaved tables")
-		}
-
 		if n.Sharded != nil {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding")
 		}
@@ -243,9 +235,6 @@ func MakeIndexDescriptor(
 		}
 		if tableDesc.IsLocalityRegionalByRow() {
 			return nil, hashShardedIndexesOnRegionalByRowError()
-		}
-		if n.Interleave != nil {
-			return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 		}
 		shardCol, newColumns, newColumn, err := setupShardedIndex(
 			params.ctx,
@@ -600,10 +589,6 @@ func maybeCreateAndAddShardCol(
 	return shardCol, created, err
 }
 
-var interleavedTableDisabledMigrationError = pgnotice.Newf(
-	"creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored." +
-		" For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations")
-
 func (n *createIndexNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("index"))
 	foundIndex, err := n.tableDesc.FindIndexWithName(string(n.n.Name))
@@ -638,14 +623,6 @@ func (n *createIndexNode) startExec(params runParams) error {
 				"Consider modifying the index such that it is also partitioned.",
 			),
 		)
-	}
-
-	if n.n.Interleave != nil {
-		if n.n.PartitionByIndex != nil {
-			return pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot be partitioned")
-		}
-		params.p.BufferClientNotice(params.ctx, interleavedTableDisabledMigrationError)
-		n.n.Interleave = nil
 	}
 
 	indexDesc, err := MakeIndexDescriptor(params, *n.n, n.tableDesc)

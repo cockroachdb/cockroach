@@ -544,78 +544,6 @@ Index ID 2 is the secondary index `i2`.
                 ^------------------------------------------------------------                                        ^-^---------
                 Indexed column: Collation key for 'Ted'                                                          BYTES 'Ted'
 
-Interleaving
-------------
-
-By default, indexes (in CRDB terminology, so both primary and secondary)
-occupy disjoint KV key spans. Users can request that an index be
-interleaved with another index, which improves the efficiency of joining
-them.
-
-One index, the parent, must have a primary key that, ignoring column
-names, is a prefix (not necessarily proper) of the other index, the
-child. The parent, which currently must be a primary index, has its
-usual encoding. To encode a KV key in the child, encode it as if it were
-in the parent but with an interleaving sentinel
-(`EncodeNotNullDescending` in [pkg/util/encoding/encoding.go]) where the
-column family ID would be. Append the non-interleaved child encoding but
-without the parent columns. The sentinel informs the decoder that the
-row does not belong to the parent table.
-
-Note that the parent may itself be interleaved. In general, the
-interleaving relationships constitute an [arborescence].
-
-Example schema and data:
-
-    CREATE TABLE owners (
-      owner_id INT PRIMARY KEY,
-      owner STRING
-    );
-
-    CREATE TABLE accounts (
-      owner_id INT,
-      account_id INT,
-      balance DECIMAL,
-      PRIMARY KEY (owner_id, account_id)
-    ) INTERLEAVE IN PARENT owners (owner_id);
-
-    INSERT INTO owners VALUES (19, 'Alice');
-    INSERT INTO accounts VALUES (19, 83, 10000.50);
-
-Example dump:
-
-    /Table/51/1/19/0/1489433137.133889094,0 : 0xDBCE04550A2605416C696365
-           ^- ^ ^- ^                            ^-------^-^^^-----------
-           |  | |  |                            |       | |||
-           Table ID (owners)                    Checksum| |||
-              | |  |                                    | |||
-              Index ID                                  Value type (TUPLE)
-                |  |                                      |||
-                Primary key (owner_id = 19)               Column ID difference
-                   |                                       ||
-                   Column family ID                        Datum encoding type (Bytes)
-                                                            |
-                                                            Datum encoding ('Alice')
-
-    /Table/51/1/19/#/52/1/83/0/1489433137.137447008,0 : 0x691956790A3505348D0F4272
-           ^- ^ ^- ^ ^- ^ ^- ^                            ^-------^-^^^-----------
-           |  | |  | |  | |  |                            |       | |||
-           Table ID (owners) |                            Checksum| |||
-              | |  | |  | |  |                                    | |||
-              Index ID  | |  |                                    Value type (TUPLE)
-                |  | |  | |  |                                      |||
-                Primary key (owner_id = 19)                         Column ID difference
-                   | |  | |  |                                       ||
-                   Interleaving sentinel                             Datum encoding type (Decimal)
-                     |  | |  |                                        |
-                     Table ID (accounts)                              Datum encoding (10000.50)
-                        | |  |
-                        Index ID
-                          |  |
-                          Primary key (account_id = 83)
-                             |
-                             Column family ID
-
   [pkg/util/encoding/encoding.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/util/encoding/encoding.go
   [SQL in CockroachDB: Mapping Table Data to Key-Value Storage]: https://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/
   [Implementing Column Families in CockroachDB]: https://www.cockroachlabs.com/blog/sql-cockroachdb-column-families/
@@ -631,4 +559,3 @@ Example dump:
   [pkg/roachpb/data.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/roachpb/data.proto
   [Unicode Collation Algorithm]: http://unicode.org/reports/tr10/
   [an efficient partial inverse]: http://stackoverflow.com/q/23609457/2144669
-  [arborescence]: https://en.wikipedia.org/wiki/Arborescence_(graph_theory)
