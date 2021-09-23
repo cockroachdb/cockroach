@@ -771,7 +771,7 @@ func maybeAddSequenceDependencies(
 	ctx context.Context,
 	st *cluster.Settings,
 	sc resolver.SchemaResolver,
-	tableDesc *tabledesc.Mutable,
+	tableDesc catalog.TableDescriptor,
 	col *descpb.ColumnDescriptor,
 	expr tree.TypedExpr,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
@@ -807,22 +807,43 @@ func maybeAddSequenceDependencies(
 		if prev, ok := backrefs[seqDesc.ID]; ok {
 			seqDesc = prev
 		}
-		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
 		// Add reference from sequence descriptor to column.
+		{
+			var found bool
+			for _, seqID := range col.UsesSequenceIds {
+				if seqID == seqDesc.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
+			}
+		}
 		refIdx := -1
 		for i, reference := range seqDesc.DependedOnBy {
-			if reference.ID == tableDesc.ID {
+			if reference.ID == tableDesc.GetID() {
 				refIdx = i
 			}
 		}
 		if refIdx == -1 {
 			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
-				ID:        tableDesc.ID,
+				ID:        tableDesc.GetID(),
 				ColumnIDs: []descpb.ColumnID{col.ID},
 				ByID:      true,
 			})
 		} else {
-			seqDesc.DependedOnBy[refIdx].ColumnIDs = append(seqDesc.DependedOnBy[refIdx].ColumnIDs, col.ID)
+			ref := &seqDesc.DependedOnBy[refIdx]
+			var found bool
+			for _, colID := range ref.ColumnIDs {
+				if colID == col.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				ref.ColumnIDs = append(ref.ColumnIDs, col.ID)
+			}
 		}
 		seqDescs = append(seqDescs, seqDesc)
 	}
