@@ -60,7 +60,6 @@ func main() {
 			newstmts[0] = stmt
 			switch stmt := stmt.(type) {
 			case *tree.CreateTable:
-				stmt.Interleave = nil
 				stmt.PartitionByTable = nil
 				var newdefs tree.TableDefs
 				for _, def := range stmt.Defs {

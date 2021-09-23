@@ -290,11 +290,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 		return err
 	}
-	if n.n.Interleave != nil {
-		telemetry.Inc(sqltelemetry.CreateInterleavedTableCounter)
-		params.p.BufferClientNotice(params.ctx, interleavedTableDisabledMigrationError)
-		n.n.Interleave = nil
-	}
 	if n.n.Persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
 
@@ -668,11 +663,6 @@ func addUniqueWithoutIndexTableDef(
 	if len(d.Storing) > 0 {
 		return pgerror.New(pgcode.FeatureNotSupported,
 			"unique constraints without an index cannot store columns",
-		)
-	}
-	if d.Interleave != nil {
-		return pgerror.New(pgcode.FeatureNotSupported,
-			"interleaved unique constraints without an index are not supported",
 		)
 	}
 	if d.PartitionByIndex.ContainsPartitions() {
@@ -1486,9 +1476,6 @@ func NewTableDesc(
 				if n.PartitionByTable.ContainsPartitions() {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 				}
-				if n.Interleave != nil {
-					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
-				}
 				buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
 				if err != nil {
 					return nil, err
@@ -1693,9 +1680,6 @@ func NewTableDesc(
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
-				if d.Interleave != nil {
-					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
-				}
 				if isRegionalByRow {
 					return nil, hashShardedIndexesOnRegionalByRowError()
 				}
@@ -1777,9 +1761,6 @@ func NewTableDesc(
 			if err := desc.AddSecondaryIndex(idx); err != nil {
 				return nil, err
 			}
-			if d.Interleave != nil {
-				return nil, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
-			}
 		case *tree.UniqueConstraintTableDef:
 			if d.WithoutIndex {
 				// We will add the unique constraint below.
@@ -1815,9 +1796,6 @@ func NewTableDesc(
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
-				if n.Interleave != nil && d.PrimaryKey {
-					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
-				}
 				if isRegionalByRow {
 					return nil, hashShardedIndexesOnRegionalByRowError()
 				}
@@ -1884,12 +1862,6 @@ func NewTableDesc(
 				if err := desc.AddPrimaryIndex(idx); err != nil {
 					return nil, err
 				}
-				if d.Interleave != nil {
-					return nil, unimplemented.NewWithIssue(
-						45710,
-						"interleave not supported in primary key constraint definition",
-					)
-				}
 				for _, c := range columns {
 					primaryIndexColumnSet[string(c.Column)] = struct{}{}
 				}
@@ -1897,9 +1869,6 @@ func NewTableDesc(
 				if err := desc.AddSecondaryIndex(idx); err != nil {
 					return nil, err
 				}
-			}
-			if d.Interleave != nil {
-				return nil, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled below.
