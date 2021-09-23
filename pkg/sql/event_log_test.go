@@ -540,7 +540,7 @@ func TestPerfLogging(t *testing.T) {
 			cleanup:     `RESET transaction_rows_read_err`,
 			query:       `SELECT * FROM t WHERE i = 6 OR i = 7`,
 			errRe:       `pq: txn has read 2 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       ``,
+			logRe:       `"EventType":"txn_rows_read_limit"`,
 			logExpected: false,
 			channel:     channel.SQL_PERF,
 		},
