@@ -41,13 +41,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -272,7 +276,17 @@ func StartTenant(
 	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
 	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 
-	if err := args.costController.Start(ctx, args.stopper, status.GetUserCPUSeconds); err != nil {
+	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(
+		ctx,
+		args.stopper,
+		s.sqlInstanceProvider,
+		s.SQLInstanceID(),
+	)
+
+	if err := args.costController.Start(
+		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
+		status.GetUserCPUSeconds, nextLiveInstanceIDFn,
+	); err != nil {
 		return nil, "", "", err
 	}
 
@@ -475,6 +489,83 @@ func makeTenantSQLServerArgs(
 	}, nil
 }
 
+func makeNextLiveInstanceIDFn(
+	serverCtx context.Context,
+	stopper *stop.Stopper,
+	sqlInstanceProvider sqlinstance.Provider,
+	instanceID base.SQLInstanceID,
+) multitenant.NextLiveInstanceIDFn {
+	retrieveNextLiveInstanceID := func(ctx context.Context) base.SQLInstanceID {
+		instances, err := sqlInstanceProvider.GetAllInstances(ctx)
+		if err != nil {
+			log.Infof(ctx, "GetAllInstances failed: %v", err)
+			// We will try again.
+			return 0
+		}
+		if len(instances) == 0 {
+			return 0
+		}
+		// Find the next ID in circular order.
+		var minID, nextID base.SQLInstanceID
+		for i := range instances {
+			id := instances[i].InstanceID
+			if minID == 0 || minID > id {
+				minID = id
+			}
+			if id > instanceID && (nextID == 0 || nextID > id) {
+				nextID = id
+			}
+		}
+		if nextID == 0 {
+			return minID
+		}
+		return nextID
+	}
+
+	// We retrieve the value from the provider every minute.
+	//
+	// We report each retrieved value only once; for all other calls we return 0.
+	// We prefer to not provide a value rather than providing a stale value which
+	// might cause a bit of unnecessary work on the server side.
+	//
+	// TODO(radu): once the provider caches the information (see #69976), we can
+	// use it directly each time.
+	const interval = 1 * time.Minute
+	var mu syncutil.Mutex
+	var lastRefresh time.Time
+	var lastValue base.SQLInstanceID
+	var refreshInProgress bool
+
+	serverCtx = logtags.AddTag(serverCtx, "get-next-live-instance-id", nil)
+
+	return func(ctx context.Context) base.SQLInstanceID {
+		mu.Lock()
+		defer mu.Unlock()
+		if lastValue != 0 {
+			v := lastValue
+			lastValue = 0
+			return v
+		}
+
+		if now := timeutil.Now(); lastRefresh.Before(now.Add(-interval)) && !refreshInProgress {
+			lastRefresh = now
+			refreshInProgress = true
+
+			// An error here indicates that the server is shutting down, so we can
+			// ignore it.
+			_ = stopper.RunAsyncTask(serverCtx, "get-next-live-instance-id", func(ctx context.Context) {
+				newValue := retrieveNextLiveInstanceID(ctx)
+
+				mu.Lock()
+				defer mu.Unlock()
+				lastValue = newValue
+				refreshInProgress = false
+			})
+		}
+		return 0
+	}
+}
+
 // NewTenantSideCostController is a hook for CCL code which implements the
 // controller.
 var NewTenantSideCostController = func(
@@ -496,7 +587,12 @@ type noopTenantSideCostController struct{}
 var _ multitenant.TenantSideCostController = noopTenantSideCostController{}
 
 func (noopTenantSideCostController) Start(
-	ctx context.Context, stopper *stop.Stopper, cpuSecsFn multitenant.CPUSecsFn,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	instanceID base.SQLInstanceID,
+	sessionID sqlliveness.SessionID,
+	cpuSecsFn multitenant.CPUSecsFn,
+	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn,
 ) error {
 	return nil
 }

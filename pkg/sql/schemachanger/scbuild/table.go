@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -81,6 +82,16 @@ func (b *buildContext) alterTableAddColumn(
 	toType, err := tree.ResolveType(ctx, d.Type, b.SemaCtx.GetTypeResolver())
 	if err != nil {
 		panic(err)
+	}
+
+	version := b.EvalCtx.Settings.Version.ActiveVersionOrEmpty(ctx)
+	supported := types.IsTypeSupportedInVersion(version, toType)
+	if !supported {
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"type %s is not supported until version upgrade is finalized",
+			toType.SQLString(),
+		))
 	}
 
 	// User defined columns are not supported, since we don't

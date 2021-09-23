@@ -57,6 +57,10 @@ const defaultRefillRate = 100
 // throttled.
 const defaultInitialRUs = 10 * 1000 * 1000
 
+// maxInstancesCleanup restricts the number of stale instances that are removed
+// in a single transaction.
+const maxInstancesCleanup = 10
+
 // update accounts for the passing of time since LastUpdate.
 // If the tenantState is not initialized (Present=false), it is initialized now.
 func (ts *tenantState) update(now time.Time) {
@@ -391,18 +395,79 @@ func (h *sysTableHelper) accomodateNewInstance(tenant *tenantState, instance *in
 	return err
 }
 
+// maybeCleanupStaleInstance checks the last update time of the given instance;
+// if it is older than the cutoff time, the instance is removed and the next
+// instance ID is returned (this ID is 0 if this is the highest instance ID).
+func (h *sysTableHelper) maybeCleanupStaleInstance(
+	cutoff time.Time, instanceID base.SQLInstanceID,
+) (deleted bool, nextInstance base.SQLInstanceID, _ error) {
+	ts := tree.MustMakeDTimestamp(cutoff, time.Microsecond)
+	row, err := h.ex.QueryRowEx(
+		h.ctx, "tenant-usage-delete", h.txn,
+		sessiondata.NodeUserSessionDataOverride,
+		`DELETE FROM system.tenant_usage
+		 WHERE tenant_id = $1 AND instance_id = $2 AND last_update < $3
+		 RETURNING next_instance_id`,
+		h.tenantID.ToUint64(),
+		int32(instanceID),
+		ts,
+	)
+	if err != nil {
+		return false, -1, err
+	}
+	if row == nil {
+		log.VEventf(h.ctx, 1, "tenant %s instance %d not stale", h.tenantID, instanceID)
+		return false, -1, nil
+	}
+	nextInstance = base.SQLInstanceID(tree.MustBeDInt(row[0]))
+	log.VEventf(h.ctx, 1, "cleaned up tenant %s instance %d", h.tenantID, instanceID)
+	return true, nextInstance, nil
+}
+
+// maybeCleanupStaleInstances removes up to maxInstancesCleanup stale instances
+// (where the last update time is before the cutoff) with IDs in the range
+//   [startID, endID).
+// If endID is -1, then the range is unrestricted [startID, ∞).
+//
+// Returns the ID of the instance following the deleted instances. This is
+// the same with startID if nothing was cleaned up, and it is 0 if we cleaned up
+// the last (highest ID) instance.
+func (h *sysTableHelper) maybeCleanupStaleInstances(
+	cutoff time.Time, startID, endID base.SQLInstanceID,
+) (nextInstance base.SQLInstanceID, _ error) {
+	log.VEventf(
+		h.ctx, 1, "checking stale instances (tenant=%s startID=%d endID=%d)",
+		h.tenantID, startID, endID,
+	)
+	id := startID
+	for n := 0; n < maxInstancesCleanup; n++ {
+		deleted, nextInstance, err := h.maybeCleanupStaleInstance(cutoff, id)
+		if err != nil {
+			return -1, err
+		}
+		if !deleted {
+			break
+		}
+		id = nextInstance
+		if id == 0 || (endID != -1 && id >= endID) {
+			break
+		}
+	}
+	return id, nil
+}
+
 // maybeCheckInvariants checks the invariants for the system table with a random
 // probability and only if this is a test build.
-func (h *sysTableHelper) maybeCheckInvariants(ctx context.Context) error {
+func (h *sysTableHelper) maybeCheckInvariants() error {
 	if util.CrdbTestBuild && rand.Intn(10) == 0 {
-		return h.checkInvariants(ctx)
+		return h.checkInvariants()
 	}
 	return nil
 }
 
 // checkInvariants reads all rows in the system table for the given tenant and
 // checks that the state is consistent.
-func (h *sysTableHelper) checkInvariants(ctx context.Context) error {
+func (h *sysTableHelper) checkInvariants() error {
 	// Read the two rows for the per-tenant state (instance_id = 0) and the
 	// per-instance state.
 	rows, err := h.ex.QueryBufferedEx(
@@ -432,7 +497,7 @@ func (h *sysTableHelper) checkInvariants(ctx context.Context) error {
 	)
 	if err != nil {
 		if h.ctx.Err() == nil {
-			log.Warningf(ctx, "checkInvariants query failed: %v", err)
+			log.Warningf(h.ctx, "checkInvariants query failed: %v", err)
 		}
 		// We don't want to cause a panic for a query error (which is expected
 		// during shutdown).
@@ -568,8 +633,8 @@ func InspectTenantMetadata(
 	}
 	for _, r := range rows {
 		fmt.Fprintf(
-			&buf, "  Instance %s:  lease=%s  seq=%s  shares=%s  next-instance=%s  last-update=%s\n",
-			r[0], r[3], r[4], r[5], r[1], tree.MustBeDTimestamp(r[2]).Time.Format(timeFormat),
+			&buf, "  Instance %s:  lease=%q  seq=%s  shares=%s  next-instance=%s  last-update=%s\n",
+			r[0], tree.MustBeDBytes(r[3]), r[4], r[5], r[1], tree.MustBeDTimestamp(r[2]).Time.Format(timeFormat),
 		)
 	}
 	return buf.String(), nil

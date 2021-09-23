@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -142,7 +143,14 @@ func (ts *testState) start(t *testing.T) {
 		usage := time.Duration(atomic.LoadInt64((*int64)(&ts.cpuUsage)))
 		return usage.Seconds()
 	}
-	if err := ts.controller.Start(ctx, ts.stopper, cpuUsageFn); err != nil {
+	nextLiveInstanceIDFn := func(ctx context.Context) base.SQLInstanceID {
+		return 0
+	}
+	instanceID := base.SQLInstanceID(1)
+	sessionID := sqlliveness.SessionID("foo")
+	if err := ts.controller.Start(
+		ctx, ts.stopper, instanceID, sessionID, cpuUsageFn, nextLiveInstanceIDFn,
+	); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -441,6 +449,8 @@ type testProvider struct {
 		syncutil.Mutex
 		consumption roachpb.TenantConsumption
 
+		lastSeqNum int64
+
 		cfg testProviderConfig
 	}
 	recvOnRequest chan struct{}
@@ -506,6 +516,11 @@ func (tp *testProvider) TokenBucket(
 	case <-tp.recvOnRequest:
 	default:
 	}
+
+	if in.SeqNum <= tp.mu.lastSeqNum {
+		panic("non-increasing sequence number")
+	}
+	tp.mu.lastSeqNum = in.SeqNum
 
 	if tp.mu.cfg.Error {
 		return nil, errors.New("injected error")

@@ -1641,6 +1641,9 @@ func NewTableDesc(
 					)
 				}
 			}
+			if err := checkTypeIsSupported(ctx, st, defType); err != nil {
+				return nil, err
+			}
 			if d.PrimaryKey.Sharded {
 				if !sessionData.HashShardedIndexesEnabled {
 					return nil, hashShardedIndexesDisabledError
@@ -2912,4 +2915,16 @@ func hashShardedIndexesOnRegionalByRowError() error {
 
 func interleaveOnRegionalByRowError() error {
 	return pgerror.New(pgcode.FeatureNotSupported, "interleaved tables are not compatible with REGIONAL BY ROW tables")
+}
+
+func checkTypeIsSupported(ctx context.Context, settings *cluster.Settings, typ *types.T) error {
+	version := settings.Version.ActiveVersionOrEmpty(ctx)
+	if supported := types.IsTypeSupportedInVersion(version, typ); !supported {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"type %s is not supported until version upgrade is finalized",
+			typ.SQLString(),
+		)
+	}
+	return nil
 }
