@@ -957,7 +957,6 @@ unreserved_keyword ::=
 	| 'IMMEDIATE'
 	| 'IMPORT'
 	| 'INCLUDE'
-	| 'INCLUDE_DEPRECATED_INTERLEAVES'
 	| 'INCLUDING'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
@@ -1872,7 +1871,6 @@ backup_options ::=
 	| 'REVISION_HISTORY'
 	| 'DETACHED'
 	| 'KMS' '=' string_or_placeholder_opt_list
-	| 'INCLUDE_DEPRECATED_INTERLEAVES'
 
 c_expr ::=
 	d_expr

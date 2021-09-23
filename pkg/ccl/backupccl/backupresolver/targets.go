@@ -11,7 +11,6 @@ package backupresolver
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -632,8 +631,5 @@ func ResolveTargetsToDescriptors(
 		return nil, nil, err
 	}
 
-	// Ensure interleaved tables appear after their parent. Since parents must be
-	// created before their children, simply sorting by ID accomplishes this.
-	sort.Slice(matched.Descs, func(i, j int) bool { return matched.Descs[i].GetID() < matched.Descs[j].GetID() })
 	return matched.Descs, matched.ExpandedDB, nil
 }

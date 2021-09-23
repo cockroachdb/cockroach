@@ -56,15 +56,14 @@ import (
 )
 
 const (
-	backupOptRevisionHistory    = "revision_history"
-	backupOptIncludeInterleaves = "include_deprecated_interleaves"
-	backupOptEncPassphrase      = "encryption_passphrase"
-	backupOptEncKMS             = "kms"
-	backupOptWithPrivileges     = "privileges"
-	backupOptAsJSON             = "as_json"
-	backupOptWithDebugIDs       = "debug_ids"
-	localityURLParam            = "COCKROACH_LOCALITY"
-	defaultLocalityValue        = "default"
+	backupOptRevisionHistory = "revision_history"
+	backupOptEncPassphrase   = "encryption_passphrase"
+	backupOptEncKMS          = "kms"
+	backupOptWithPrivileges  = "privileges"
+	backupOptAsJSON          = "as_json"
+	backupOptWithDebugIDs    = "debug_ids"
+	localityURLParam         = "COCKROACH_LOCALITY"
+	defaultLocalityValue     = "default"
 )
 
 type encryptionMode int
@@ -242,56 +241,39 @@ func getLogicallyMergedTableSpans(
 		lhsSpan := table.IndexSpan(codec, lhsIndexID)
 		rhsSpan := table.IndexSpan(codec, rhsIndexID)
 
-		lhsIndex, err := table.FindIndexWithID(lhsIndexID)
-		if err != nil {
-			return nil, err
-		}
-		rhsIndex, err := table.FindIndexWithID(rhsIndexID)
-		if err != nil {
-			return nil, err
-		}
-
-		// If either the lhs or rhs is an interleaved index, we do not attempt to
-		// perform a logical merge of the spans because the index span for
-		// interleaved contains the tableID/indexID of the furthest ancestor in
-		// the interleaved chain.
-		if lhsIndex.IsInterleaved() || rhsIndex.IsInterleaved() {
-			mergedIndexSpans = append(mergedIndexSpans, mergedSpan)
-			mergedSpan = rhsSpan
-		} else {
-			var foundDroppedKV bool
-			// Iterate over all index IDs between the two candidates (lhs and
-			// rhs) which may be logically merged. These index IDs represent
-			// non-public (and perhaps dropped) indexes between the two public
-			// index spans.
-			for i := lhsIndexID + 1; i < rhsIndexID; i++ {
-				// If we find an index which has been dropped but not gc'ed, we
-				// cannot merge the lhs and rhs spans.
-				foundDroppedKV, err = checkForKVInBounds(lhsSpan.EndKey, rhsSpan.Key, endTime)
-				if err != nil {
-					// If we're unable to check for KVs in bounds, assume that we've found
-					// one. It's always safe to assume that since we won't merge over this
-					// span. One possible error is a GC threshold error if this schema
-					// revision is older than the configured GC window on the span we're
-					// checking.
-					log.Warningf(ctx, "error while scanning [%s, %s) @ %v: %v",
-						lhsSpan.EndKey, rhsSpan.Key, endTime, err)
-					foundDroppedKV = true
-				}
-				// If we find an index that is being added, don't merge the spans. We
-				// don't want to backup data that is being backfilled until the backfill
-				// is complete. Even if the backfill has not started yet and there is no
-				// data we should not back up this span since we want these spans to
-				// appear as introduced when the index becomes PUBLIC.
-				// The indexes will appear in introduced spans because indexes
-				// will never go from PUBLIC to ADDING.
-				_, foundAddingIndex := addingIndexIDs[i]
-				if foundDroppedKV || foundAddingIndex {
-					mergedSpan.EndKey = lhsSpan.EndKey
-					mergedIndexSpans = append(mergedIndexSpans, mergedSpan)
-					mergedSpan = rhsSpan
-					break
-				}
+		var foundDroppedKV bool
+		// Iterate over all index IDs between the two candidates (lhs and
+		// rhs) which may be logically merged. These index IDs represent
+		// non-public (and perhaps dropped) indexes between the two public
+		// index spans.
+		for i := lhsIndexID + 1; i < rhsIndexID; i++ {
+			var err error
+			// If we find an index which has been dropped but not gc'ed, we
+			// cannot merge the lhs and rhs spans.
+			foundDroppedKV, err = checkForKVInBounds(lhsSpan.EndKey, rhsSpan.Key, endTime)
+			if err != nil {
+				// If we're unable to check for KVs in bounds, assume that we've found
+				// one. It's always safe to assume that since we won't merge over this
+				// span. One possible error is a GC threshold error if this schema
+				// revision is older than the configured GC window on the span we're
+				// checking.
+				log.Warningf(ctx, "error while scanning [%s, %s) @ %v: %v",
+					lhsSpan.EndKey, rhsSpan.Key, endTime, err)
+				foundDroppedKV = true
+			}
+			// If we find an index that is being added, don't merge the spans. We
+			// don't want to backup data that is being backfilled until the backfill
+			// is complete. Even if the backfill has not started yet and there is no
+			// data we should not back up this span since we want these spans to
+			// appear as introduced when the index becomes PUBLIC.
+			// The indexes will appear in introduced spans because indexes
+			// will never go from PUBLIC to ADDING.
+			_, foundAddingIndex := addingIndexIDs[i]
+			if foundDroppedKV || foundAddingIndex {
+				mergedSpan.EndKey = lhsSpan.EndKey
+				mergedIndexSpans = append(mergedIndexSpans, mergedSpan)
+				mergedSpan = rhsSpan
+				break
 			}
 		}
 
@@ -934,16 +916,6 @@ func backupPlanHook(
 			return errors.AssertionFailedf("unexpected descriptor coverage %v", backupStmt.Coverage())
 		}
 
-		if !backupStmt.Options.IncludeDeprecatedInterleaves {
-			for _, desc := range targetDescs {
-				if table, ok := desc.(catalog.TableDescriptor); ok {
-					if table.IsInterleaved() {
-						return errors.Errorf("interleaved tables are deprecated and backups containing interleaved tables will not be able to be RESTORE'd by future versions -- use option %q to backup interleaved tables anyway %q", backupOptIncludeInterleaves, table.TableDesc().Name)
-					}
-				}
-			}
-		}
-
 		// Check BACKUP privileges.
 		err = checkPrivilegesForBackup(ctx, backupStmt, p, targetDescs, to)
 		if err != nil {
@@ -961,10 +933,6 @@ func backupPlanHook(
 				// vs having each object in a separate file, or somewhere in between.
 				statsFiles[desc.GetID()] = backupStatisticsFileName
 			}
-		}
-
-		if err := ensureInterleavesIncluded(tables); err != nil {
-			return err
 		}
 
 		if err := validateMultiRegionBackup(backupStmt, targetDescs, tables); err != nil {

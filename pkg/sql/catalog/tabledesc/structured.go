@@ -1537,13 +1537,6 @@ func (desc *wrapper) FindFKByName(name string) (*descpb.ForeignKeyConstraint, er
 	return nil, fmt.Errorf("fk %q does not exist", name)
 }
 
-// IsInterleaved implements the TableDescriptor interface.
-func (desc *wrapper) IsInterleaved() bool {
-	return nil != catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
-		return idx.IsInterleaved()
-	})
-}
-
 // IsPrimaryIndexDefaultRowID returns whether or not the table's primary
 // index is the default primary key on the hidden rowid column.
 func (desc *wrapper) IsPrimaryIndexDefaultRowID() bool {
@@ -2153,8 +2146,6 @@ func (desc *wrapper) IndexSpan(codec keys.SQLCodec, indexID descpb.IndexID) roac
 
 // TableSpan implements the TableDescriptor interface.
 func (desc *wrapper) TableSpan(codec keys.SQLCodec) roachpb.Span {
-	// TODO(jordan): Why does IndexSpan consider interleaves but TableSpan does
-	// not? Should it?
 	prefix := codec.TablePrefix(uint32(desc.ID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
@@ -2267,14 +2258,6 @@ func (desc *wrapper) FindAllReferences() (map[descpb.ID]struct{}, error) {
 	for i := range desc.InboundFKs {
 		fk := &desc.InboundFKs[i]
 		refs[fk.OriginTableID] = struct{}{}
-	}
-	for _, index := range desc.NonDropIndexes() {
-		for i := 0; i < index.NumInterleaveAncestors(); i++ {
-			refs[index.GetInterleaveAncestor(i).TableID] = struct{}{}
-		}
-		for i := 0; i < index.NumInterleavedBy(); i++ {
-			refs[index.GetInterleavedBy(i).Table] = struct{}{}
-		}
 	}
 
 	for _, c := range desc.NonDropColumns() {
