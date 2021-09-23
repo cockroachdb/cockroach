@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -25,6 +26,8 @@ import (
 )
 
 var rubyPGTestFailureRegex = regexp.MustCompile(`^rspec ./.*# .*`)
+var testFailureFilenameRegexp = regexp.MustCompile("^rspec .*.rb.*([0-9]|]) # ")
+var testSummaryRegexp = regexp.MustCompile("^([0-9]+) examples, [0-9]+ failures")
 var rubyPGVersion = "v1.2.3"
 
 // This test runs Ruby PG's full test suite against a single cockroach node.
@@ -160,8 +163,17 @@ func registerRubyPG(r registry.Registry) {
 		}
 
 		scanner := bufio.NewScanner(bytes.NewReader(rawResults))
+		totalTests := int64(0)
 		for scanner.Scan() {
-			match := rubyPGTestFailureRegex.FindStringSubmatch(scanner.Text())
+			line := scanner.Text()
+			testSummaryMatch := testSummaryRegexp.FindStringSubmatch(line)
+			if testSummaryMatch != nil {
+				totalTests, err = strconv.ParseInt(testSummaryMatch[1], 10, 64)
+				require.NoError(t, err)
+				continue
+			}
+
+			match := rubyPGTestFailureRegex.FindStringSubmatch(line)
 			if match == nil {
 				continue
 			}
@@ -175,7 +187,7 @@ func registerRubyPG(r registry.Registry) {
 			// This regex is used to get the name of the test.
 			// The test name follows the file name and a hashtag.
 			// ie. test.rb:99 # TEST NAME.
-			strs := regexp.MustCompile("^rspec .*.rb.*([0-9]|]) # ").Split(test, -1)
+			strs := testFailureFilenameRegexp.Split(test, -1)
 			if len(strs) != 2 {
 				log.Fatalf(ctx, "expected test output line to be split into two strings")
 			}
@@ -193,9 +205,18 @@ func registerRubyPG(r registry.Registry) {
 				results.results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
 					test, maybeAddGithubLink(issue),
 				)
+				results.failUnexpectedCount++
+				results.currentFailures = append(results.currentFailures, test)
 			}
 			results.runTests[test] = struct{}{}
 		}
+
+		if totalTests == 0 {
+			log.Fatalf(ctx, "failed to find total number of tests run")
+		}
+		totalPasses := int(totalTests) - (results.failUnexpectedCount + results.failExpectedCount)
+		results.passUnexpectedCount = len(expectedFailures) - results.failExpectedCount
+		results.passExpectedCount = totalPasses - results.passUnexpectedCount
 
 		results.summarizeAll(t, "ruby-pg", blocklistName, expectedFailures, version, rubyPGVersion)
 	}
