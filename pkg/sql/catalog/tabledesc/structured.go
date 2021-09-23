@@ -2468,3 +2468,18 @@ func LocalityConfigGlobal() descpb.TableDescriptor_LocalityConfig {
 func PrimaryKeyIndexName(tableName string) string {
 	return tableName + "_pkey"
 }
+
+// RemoveDependedOnBy removes a depended-on-by reference by ID.
+func (desc *Mutable) RemoveDependedOnBy(remove descpb.ID) {
+	for i, by := range desc.DependedOnBy {
+		if by.ID == remove {
+			desc.DependedOnBy = append(desc.DependedOnBy[:i], desc.DependedOnBy[i+1:]...)
+			return
+		}
+	}
+}
+
+// AddDependedOnBy adds a depended-on-by reference.
+func (desc *Mutable) AddDependedOnBy(ref descpb.TableDescriptor_Reference) {
+	desc.DependedOnBy = append(desc.DependedOnBy, ref)
+}
