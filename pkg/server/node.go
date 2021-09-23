@@ -1423,7 +1423,11 @@ func (n *Node) TokenBucket(
 
 // NewTenantUsageServer is a hook for CCL code which implements the tenant usage
 // server.
-var NewTenantUsageServer = func(db *kv.DB, executor *sql.InternalExecutor) multitenant.TenantUsageServer {
+var NewTenantUsageServer = func(
+	settings *cluster.Settings,
+	db *kv.DB,
+	executor *sql.InternalExecutor,
+) multitenant.TenantUsageServer {
 	return dummyTenantUsageServer{}
 }
 

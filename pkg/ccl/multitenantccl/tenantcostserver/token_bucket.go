@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -68,8 +69,30 @@ func (s *instance) TokenBucketRequest(
 				return err
 			}
 		}
+		if string(instance.Lease) != string(in.InstanceLease) {
+			// This must be a different incarnation of the same ID. Clear the sequence
+			// number (the client starts with sequence number 1).
+			instance.Seq = 0
+			instance.Lease = tree.DBytes(in.InstanceLease)
+		}
 
-		tenant.Consumption.Add(&in.ConsumptionSinceLastRequest)
+		if in.NextLiveInstanceID != 0 {
+			if err := s.handleNextLiveInstanceID(
+				&h, &tenant, &instance, base.SQLInstanceID(in.NextLiveInstanceID),
+			); err != nil {
+				return err
+			}
+		}
+
+		// Only update consumption if we are sure this is not a duplicate request
+		// that we already counted. Note that if this is a duplicate request, it
+		// will still use RUs from the bucket (RUCurrent); we rely on a higher level
+		// control loop that periodically reconfigures the token bucket to correct
+		// such errors.
+		if instance.Seq == 0 || instance.Seq < in.SeqNum {
+			tenant.Consumption.Add(&in.ConsumptionSinceLastRequest)
+			instance.Seq = in.SeqNum
+		}
 
 		// TODO(radu): update shares.
 		*result = tenant.Bucket.Request(in)
@@ -79,7 +102,7 @@ func (s *instance) TokenBucketRequest(
 			return err
 		}
 
-		if err := h.maybeCheckInvariants(ctx); err != nil {
+		if err := h.maybeCheckInvariants(); err != nil {
 			panic(err)
 		}
 		consumption = tenant.Consumption
@@ -98,4 +121,79 @@ func (s *instance) TokenBucketRequest(
 	metrics.totalWriteBytes.Update(int64(consumption.WriteBytes))
 	metrics.totalSQLPodsCPUSeconds.Update(consumption.SQLPodsCPUSeconds)
 	return result
+}
+
+// handleNextLiveInstanceID checks the next live instance ID according to the
+// tenant and potentially cleans up stale instances that follow this instance
+// (in the circular order).
+func (s *instance) handleNextLiveInstanceID(
+	h *sysTableHelper,
+	tenant *tenantState,
+	instance *instanceState,
+	nextLiveInstanceID base.SQLInstanceID,
+) error {
+	// We use NextLiveInstanceID to figure out if there is a potential dead
+	// instance after this instance.
+	//
+	// In the fast path, the server and the tenant will agree on the live set
+	// and the values will match. If the values don't match, there are two cases:
+	//
+	//  1. There is an instance which the tenant is aware of and the server is
+	//     not. This can either be an instance that is starting up, or an
+	//     instance that was cleaned up and the tenant information is not up
+	//     to date. In either case no cleanup needs to be triggered.
+	//
+	//  2. There is a range of instance IDs that contains no live IDs according
+	//     to the tenant but contains at least one live ID according to the
+	//     server. We trigger a cleanup check (which makes the final decision
+	//     based on the last update timestamp).
+	expected := instance.NextInstance
+	if expected == 0 {
+		expected = tenant.FirstInstance
+	}
+	if nextLiveInstanceID == expected {
+		// Fast path: the values match.
+		return nil
+	}
+	var err error
+	cutoff := s.timeSource.Now().Add(-instanceInactivity.Get(&s.settings.SV))
+	if nextLiveInstanceID > instance.ID {
+		// According to the tenant, this is not the largest instance ID.
+		if instance.NextInstance != 0 && instance.NextInstance < nextLiveInstanceID {
+			// Case 2: range [instance.NextInstance, nextLiveInstanceID) potentially
+			// needs cleanup.
+			instance.NextInstance, err = h.maybeCleanupStaleInstances(
+				cutoff, instance.NextInstance, nextLiveInstanceID,
+			)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		// According to the tenant, this is the largest instance ID and
+		// nextLiveInstanceID is the ID of the first live instance. There are
+		// two potential ranges for cleanup, one around the smallest IDs and
+		// one around the largest IDs.
+		if tenant.FirstInstance < nextLiveInstanceID {
+			// Case 2: range [tenant.FirstInstance, nextLiveInstanceID)
+			// potentially needs cleanup.
+			tenant.FirstInstance, err = h.maybeCleanupStaleInstances(
+				cutoff, tenant.FirstInstance, nextLiveInstanceID,
+			)
+			if err != nil {
+				return err
+			}
+		}
+		if instance.NextInstance != 0 {
+			// Case 2: in our table, this is not the largest ID. The range
+			// [instance.NextInstance, ∞) potentially needs cleanup.
+			instance.NextInstance, err = h.maybeCleanupStaleInstances(
+				cutoff, instance.NextInstance, -1,
+			)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

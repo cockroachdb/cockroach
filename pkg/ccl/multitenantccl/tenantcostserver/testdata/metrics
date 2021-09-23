@@ -50,8 +50,8 @@ Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current
 Consumption: ru=1110  reads=2220 req/3330 bytes  writes=4440 req/5550 bytes  pod-cpu-usage: 6660
 Last update: 00:00:00.000
 First active instance: 1
-  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=2  last-update=00:00:00.000
-  Instance 2:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 1:  lease="foo"  seq=2  shares=0.0  next-instance=2  last-update=00:00:00.000
+  Instance 2:  lease="foo"  seq=3  shares=0.0  next-instance=0  last-update=00:00:00.000
 
 metrics
 tenant_id="5"
