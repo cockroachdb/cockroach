@@ -1938,3 +1938,42 @@ query T
 SELECT array_positions(NULL::record[], ROW(33,'hippo'))
 ----
 NULL
+
+# Handle tuples with mismatched types. This behavior matches PostgreSQL -- the
+# tuple comparison will short-circuit, so for example, there will be no error
+# if the second elements' types don't match as long as the first elements are
+# unequal.
+
+query error pgcode 42804 unsupported comparison.*\n.*at record column 2
+SELECT array_replace(ARRAY[(1,'cat'),(2,'dog')], (1, 12.3::decimal), (3,'fish'))
+
+# array_append does not require the tuple types to match exactly.
+query error pgcode 42804 unsupported comparison.*\n.*at record column 2
+SELECT array_replace(array_append(array[(1,'cat')], (2,true)), (2,'fish'), (3,'dog'))
+
+# This works because the comparison short-circuits before comparing the boolean column
+query T
+SELECT array_replace(array_append(array[(1,'cat')], (2,true)), (1,'fish'), (3,'dog'))
+----
+{"(1,cat)","(2,t)"}
+
+# The value that replaces the old one can have types.
+query T
+SELECT array_replace(ARRAY[(1,'cat'),(2,'dog')], (2, 'dog'), (3,true))
+----
+{"(1,cat)","(3,t)"}
+
+query error pgcode 42804 unsupported comparison.*\n.*at record column 1
+SELECT array_position(ARRAY[(12::OID,NULL),(NULL,NULL)], ('\xc03b4478eb'::BYTEA,NULL))
+
+query error pgcode 42804 unsupported comparison.*\n.*at record column 2
+SELECT array_positions(ARRAY[(1,'cat'),(2,'dog')], (2,true))
+
+query error pgcode 42804 unsupported comparison.*\n.*at record column 2
+SELECT array_remove(ARRAY[(1,'cat'),(2,'dog')], (2,'\xc03b4478eb'::BYTEA))
+
+# This works because the comparison short-circuits before comparing the BYTEA column
+query T
+SELECT array_remove(ARRAY[(1,'cat'),(2,'dog')], (3,'\xc03b4478eb'::BYTEA))
+----
+{"(1,cat)","(2,dog)"}
