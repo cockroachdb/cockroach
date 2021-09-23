@@ -182,6 +182,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_output", "errors")
 	}
 
+	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }
 

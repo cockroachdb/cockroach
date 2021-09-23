@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -205,4 +206,11 @@ func splitArgsAtDash(cmd *cobra.Command, args []string) (before, after []string)
 		after = args[argsLenAtDash:]
 	}
 	return
+}
+
+func logCommand(cmd string, args ...string) {
+	var fullArgs []string
+	fullArgs = append(fullArgs, cmd)
+	fullArgs = append(fullArgs, args...)
+	log.Printf("$ %s", shellescape.QuoteCommand(fullArgs))
 }

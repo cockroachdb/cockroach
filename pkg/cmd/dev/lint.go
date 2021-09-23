@@ -50,5 +50,6 @@ func (d *dev) lint(cmd *cobra.Command, _ []string) error {
 		args = append(args, "-test.run", filter)
 	}
 
+	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }
