@@ -763,6 +763,10 @@ func (jr *joinReader) readInput() (
 			bytesLimit = rowinfra.DefaultBatchBytesLimit
 		}
 	}
+	// Note that the fetcher takes ownership of the spans slice - it will modify
+	// it and perform the memory accounting. We don't care about the
+	// modification here, and the double counting of the memory seems acceptable
+	// given that we tend to not account for all things anyway.
 	if err := jr.fetcher.StartScan(
 		jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
 		jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
