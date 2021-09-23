@@ -97,7 +97,7 @@ vectorized: true
 │ order: +k,+k
 │
 └── • lookup join
-    │ table: j2@primary
+    │ table: j2@j2_pkey
     │ equality: (k) = (k)
     │ equality cols are key
     │ pred: j @> j
@@ -109,7 +109,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: j1@primary
+            │     table: j1@j1_pkey
             │     spans: FULL SCAN
             │
             └── • values
@@ -177,7 +177,7 @@ vectorized: true
 │ order: +k,+k
 │
 └── • lookup join
-    │ table: a2@primary
+    │ table: a2@a2_pkey
     │ equality: (k) = (k)
     │ equality cols are key
     │ pred: a @> a
@@ -189,7 +189,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: a1@primary
+            │     table: a1@a1_pkey
             │     spans: FULL SCAN
             │
             └── • values

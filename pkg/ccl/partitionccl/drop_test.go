@@ -83,7 +83,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	// Set zone configs on the primary index, secondary index, and one partition
 	// of the secondary index.
 	ttlYaml := "gc: {ttlseconds: 1}"
-	sqlutils.SetZoneConfig(t, sqlDB, "INDEX t.kv@primary", "")
+	sqlutils.SetZoneConfig(t, sqlDB, "INDEX t.kv@kv_pkey", "")
 	sqlutils.SetZoneConfig(t, sqlDB, "INDEX t.kv@i", ttlYaml)
 	sqlutils.SetZoneConfig(t, sqlDB, "PARTITION p2 OF INDEX t.kv@i", ttlYaml)
 

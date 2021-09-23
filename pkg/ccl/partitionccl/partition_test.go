@@ -1504,7 +1504,7 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	)`)
 	sqlDB.Exec(t, `ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
 	sqlDB.Exec(t, `ALTER PARTITION p34 OF INDEX t@i CONFIGURE ZONE USING DEFAULT`)
-	sqlDB.Exec(t, `ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.Exec(t, `ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`)
 	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 
 	// Remove the enterprise license.
@@ -1522,18 +1522,18 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	expectErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`, partitionErr)
 	expectErr(`ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`, zoneErr)
 	expectErr(`ALTER PARTITION p34 OF INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
-	expectErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`, zoneErr)
+	expectErr(`ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`, zoneErr)
 	expectErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
 
 	// But they can be removed.
 	sqlDB.Exec(t, `ALTER TABLE t PARTITION BY NOTHING`)
 	sqlDB.Exec(t, `ALTER INDEX t@i PARTITION BY NOTHING`)
-	sqlDB.Exec(t, `ALTER INDEX t@primary CONFIGURE ZONE DISCARD`)
+	sqlDB.Exec(t, `ALTER INDEX t@t_pkey CONFIGURE ZONE DISCARD`)
 	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE DISCARD`)
 
 	// Once removed, they cannot be added back.
 	expectErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`, partitionErr)
 	expectErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`, partitionErr)
-	expectErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`, zoneErr)
+	expectErr(`ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`, zoneErr)
 	expectErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
 }

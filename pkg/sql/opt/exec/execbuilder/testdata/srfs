@@ -91,13 +91,13 @@ vectorized: true
 │   ├── • scan
 │   │     columns: (a)
 │   │     estimated row count: 1,000 (missing stats)
-│   │     table: t@primary
+│   │     table: t@t_pkey
 │   │     spans: FULL SCAN
 │   │
 │   └── • scan
 │         columns: (b)
 │         estimated row count: 1,000 (missing stats)
-│         table: u@primary
+│         table: u@u_pkey
 │         spans: FULL SCAN
 │
 └── • project set
@@ -134,7 +134,7 @@ vectorized: true
     └── • scan
           columns: (a)
           estimated row count: 1,000 (missing stats)
-          table: data@primary
+          table: data@data_pkey
           spans: FULL SCAN
 
 statement ok
@@ -182,14 +182,14 @@ vectorized: true
             │     columns: (x, y)
             │     ordering: +x
             │     estimated row count: 1,000 (missing stats)
-            │     table: xy@primary
+            │     table: xy@xy_pkey
             │     spans: FULL SCAN
             │
             └── • scan
                   columns: (x, z)
                   ordering: +x
                   estimated row count: 1,000 (missing stats)
-                  table: xz@primary
+                  table: xz@xz_pkey
                   spans: FULL SCAN
 
 query T
@@ -220,13 +220,13 @@ vectorized: true
         │   └── • scan
         │         columns: (x, y)
         │         estimated row count: 1,000 (missing stats)
-        │         table: xy@primary
+        │         table: xy@xy_pkey
         │         spans: FULL SCAN
         │
         └── • scan
               columns: (x, z)
               estimated row count: 1,000 (missing stats)
-              table: xz@primary
+              table: xz@xz_pkey
               spans: FULL SCAN
 
 query T
@@ -259,14 +259,14 @@ vectorized: true
         │     columns: (x, y)
         │     ordering: +x
         │     estimated row count: 1,000 (missing stats)
-        │     table: xy@primary
+        │     table: xy@xy_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (x, z)
               ordering: +x
               estimated row count: 1,000 (missing stats)
-              table: xz@primary
+              table: xz@xz_pkey
               spans: FULL SCAN
 
 query T
@@ -290,7 +290,7 @@ vectorized: true
 │       └── • scan
 │             columns: (z)
 │             estimated row count: 1,000 (missing stats)
-│             table: xz@primary
+│             table: xz@xz_pkey
 │             spans: FULL SCAN
 │
 └── • subquery
@@ -313,7 +313,7 @@ vectorized: true
                 └── • scan
                       columns: (x, y)
                       estimated row count: 1,000 (missing stats)
-                      table: xy@primary
+                      table: xy@xy_pkey
                       spans: FULL SCAN
 
 # Regression test for #24676.
@@ -369,7 +369,7 @@ vectorized: true
                 │   └── • scan
                 │         columns: (id, data)
                 │         estimated row count: 1,000 (missing stats)
-                │         table: groups@primary
+                │         table: groups@groups_pkey
                 │         spans: FULL SCAN
                 │
                 └── • render
@@ -381,7 +381,7 @@ vectorized: true
                     └── • scan
                           columns: (data)
                           estimated row count: 1,000 (missing stats)
-                          table: groups@primary
+                          table: groups@groups_pkey
                           spans: FULL SCAN
 
 # Regression test for #32162.
@@ -460,7 +460,7 @@ vectorized: true
                 └── • scan
                       columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)
                       estimated row count: 1,000 (missing stats)
-                      table: articles@primary
+                      table: articles@articles_pkey
                       spans: FULL SCAN
 
 # Regression test for #32723.

@@ -39,12 +39,12 @@ vectorized: true
                 │
                 ├── • scan
                 │     missing stats
-                │     table: c@primary
+                │     table: c@c_pkey
                 │     spans: FULL SCAN
                 │
                 └── • render
                     │
                     └── • scan
                           missing stats
-                          table: o@primary
+                          table: o@o_pkey
                           spans: FULL SCAN

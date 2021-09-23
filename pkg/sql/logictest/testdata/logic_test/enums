@@ -376,7 +376,7 @@ SHOW CREATE t1
 t1  CREATE TABLE public.t1 (
     x public.greeting NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
     INDEX i (x ASC),
     FAMILY "primary" (x, rowid)
 )
@@ -389,7 +389,7 @@ SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_na
 CREATE TABLE public.t1 (
    x public.greeting NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
    INDEX i (x ASC),
    FAMILY "primary" (x, rowid)
 )
@@ -494,7 +494,7 @@ enum_default  CREATE TABLE public.enum_default (
               y public.greeting NULL DEFAULT 'hello':::public.greeting,
               z BOOL NULL DEFAULT 'hello':::public.greeting IS OF (public.greeting, public.greeting),
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+              CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
               FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
 )
 
@@ -552,7 +552,7 @@ enum_computed  CREATE TABLE public.enum_computed (
                z BOOL NULL AS (w = 'howdy':::public.greeting) STORED,
                w public.greeting NULL,
                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+               CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
                FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
 )
 
@@ -586,7 +586,7 @@ SHOW CREATE enum_checks
 enum_checks  CREATE TABLE public.enum_checks (
              x public.greeting NULL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-             CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+             CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
              FAMILY "primary" (x, rowid),
              CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
              CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
@@ -1480,7 +1480,7 @@ arr_t6  CREATE TABLE public.arr_t6 (
         j public.arr_typ2 NULL DEFAULT (ARRAY['b':::public.arr_typ2]:::public.arr_typ2[])[1:::INT8],
         k public.arr_typ2[] NULL DEFAULT ARRAY['c':::public.arr_typ2]:::public.arr_typ2[],
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+        CONSTRAINT arr_t6_pkey PRIMARY KEY (rowid ASC),
         FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
 )
 

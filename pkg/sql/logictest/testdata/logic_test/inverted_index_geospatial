@@ -57,7 +57,7 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
-        │ table: geo_table@primary
+        │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ nodes: <hidden>
@@ -143,7 +143,7 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
-        │ table: geo_table@primary
+        │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ nodes: <hidden>
@@ -205,7 +205,7 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
-        │ table: geo_table@primary
+        │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
             │ nodes: <hidden>

@@ -120,7 +120,7 @@ INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = v + 1
 statement count 1
 INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = kv.v + 20
 
-statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\(3\) already exists\.
+statement error duplicate key value violates unique constraint "kv_pkey"\nDETAIL: Key \(k\)=\(3\) already exists\.
 INSERT INTO kv VALUES (2, 10) ON CONFLICT (k) DO UPDATE SET k = 3, v = 10
 
 statement count 1
@@ -636,7 +636,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 CREATE TABLE public.t29494 (
    x INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (x, rowid)
 )
 
@@ -800,7 +800,7 @@ a  b    c  d
 
 # Final check to ensure that primary index is correct.
 query TTTT colnames
-SELECT * FROM indexed@primary ORDER BY a
+SELECT * FROM indexed@indexed_pkey ORDER BY a
 ----
 a  b    c  d
 1  1.0  2  3

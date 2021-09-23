@@ -17,7 +17,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -31,7 +31,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -45,7 +45,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -62,7 +62,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: t@primary
+          table: t@t_pkey
           spans: FULL SCAN
 
 query T
@@ -79,7 +79,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: t@primary
+          table: t@t_pkey
           spans: FULL SCAN
 
 statement ok
@@ -103,5 +103,5 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: t@primary
+          table: t@t_pkey
           spans: FULL SCAN

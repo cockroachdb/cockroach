@@ -16,12 +16,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: uniontest@primary
+│     table: uniontest@uniontest_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: uniontest@primary
+      table: uniontest@uniontest_pkey
       spans: FULL SCAN
 
 query T
@@ -34,12 +34,12 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: uniontest@primary
+│     table: uniontest@uniontest_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: uniontest@primary
+      table: uniontest@uniontest_pkey
       spans: FULL SCAN
 
 # Check that EXPLAIN properly releases memory for virtual tables.
@@ -82,7 +82,7 @@ vectorized: true
     │   └── • scan
     │         columns: (a, b)
     │         estimated row count: 1,000 (missing stats)
-    │         table: abc@primary
+    │         table: abc@abc_pkey
     │         spans: FULL SCAN
     │
     └── • project
@@ -91,7 +91,7 @@ vectorized: true
         └── • scan
               columns: (a, c)
               estimated row count: 1,000 (missing stats)
-              table: abc@primary
+              table: abc@abc_pkey
               spans: FULL SCAN
 
 # Regression test for #32723.
@@ -188,13 +188,13 @@ vectorized: true
     │       └── • scan
     │             columns: (k)
     │             estimated row count: 1,000 (missing stats)
-    │             table: uniontest@primary
+    │             table: uniontest@uniontest_pkey
     │             spans: FULL SCAN
     │
     └── • scan
           columns: ()
           estimated row count: 1,000 (missing stats)
-          table: uniontest@primary
+          table: uniontest@uniontest_pkey
           spans: FULL SCAN
 
 statement ok
@@ -449,7 +449,7 @@ vectorized: true
 │         columns: (a, b, c, d, e)
 │         ordering: +a
 │         estimated row count: 1,000 (missing stats)
-│         table: abcde@primary
+│         table: abcde@abcde_pkey
 │         spans: FULL SCAN
 │
 └── • sort
@@ -531,7 +531,7 @@ vectorized: true
 │         columns: (a, b, c, d, e)
 │         ordering: +a
 │         estimated row count: 1,000 (missing stats)
-│         table: abcde@primary
+│         table: abcde@abcde_pkey
 │         spans: FULL SCAN
 │
 └── • filter
@@ -544,7 +544,7 @@ vectorized: true
           columns: (a, b, c, d, e)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: abcde@primary
+          table: abcde@abcde_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskN1q20AQhe_7FMNcSe0GW5YCZcEgp95QgSqlkvtH0cVGOwSBolV319Bi_O7FUiFRiE3S5HJ-znznzA7trxY5iu9X6SrJwFsn5ab8nDL4KoqLvBQ-lCIVHzbwFi6L_BN401Je14rgS5bkGazSFB6Z-vDtoygEeDUsIfBhla3BU7AE8iEv1qKAix8gkWGnFWXylizynxhgxbA3uiZrtTm0dsNCon4jnzNsun7rDu2KYa0NId-ha1xLyHEjr1sqSCoyszkyVORk0w5nB0dxb5pbaf4gw7KXneVwhtWeod66u6PWyRtCHuzZ08GXTevIkJkFU-rY5-DF4eEHnPMk27z_94o4giXE5_5RC4vnWLifffHC7OF_ZQ9fM3t01MIdWRtFhtQUGwfvsNo_4jPTZ7qfRZPtY_T5cx5QkO11Z-mJlyuGpG5ojGL11tR0ZXQ9YMYyH3RDQ5F14zQYi6QbRweD98XBSXE0EQcPxYuT4vA0OXwJOTopPn9ArvZv_gYAAP__aIR-OA==
@@ -687,7 +687,7 @@ vectorized: true
 │         columns: (a, b, c, d, e)
 │         ordering: +a
 │         estimated row count: 1,000 (missing stats)
-│         table: abcde@primary
+│         table: abcde@abcde_pkey
 │         spans: FULL SCAN
 │
 └── • filter
@@ -700,7 +700,7 @@ vectorized: true
           columns: (a, b, c, d, e)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: abcde@primary
+          table: abcde@abcde_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskm-L2kAQxt_3UwzzKqlbNH-EsiCsd-ao4BmbhPZK8UUuO7WBXJLurtBD_O4lSeGMqK3tvZyZ_c0zz5PsUP8okGPwsFpM50uwZvM4iT8uGHwKopswDmyIg0Vwm8BbuIvCe7D6ZfqYSYLg4TZYJTBdLODE2IbPH4IoACuDCTg2TJczsCRMgGwIo1kQwc0XSJFhWUlapk-kkX9FB9cMa1VlpHWlmtaufTCXP5GPGOZlvTVNe80wqxQh36HJTUHIMUkfC4oolaSGI2QoyaR50a5tLxK1yp9S9YwM4zotNYd3uN4zrLbmZak26YaQO3v298J3eWFIkRo6fdWuz8ESXpMB53y-TN7_jkL4MAExts-e4F5zwqF39z-9e__k3XtN7_7ZE16Ut2WlJCmSPeF1Q_7pyQkf96Q2FJMJ66Hfd5I818QPfnZkWNA3YwlnwIQ7YMIbMOEPmBgP7InKN99Pj5BhuDUchMOEy4THhM_E-GwC42s-QkS6rkpNx0mc3Dxq7JPcUBenrrYqo5WqslamK8OWaxuStOmmTlfMy27UHHgIOxdhvwc7x7B7EfYuK3tXKLvHsH8RHh8pr_dvfgUAAP__ApejQg==
@@ -814,7 +814,7 @@ vectorized: true
 │     columns: (a, b, c)
 │     ordering: +a
 │     estimated row count: 1,000 (missing stats)
-│     table: abcde@primary
+│     table: abcde@abcde_pkey
 │     spans: FULL SCAN
 │
 └── • scan
@@ -841,7 +841,7 @@ vectorized: true
 │     columns: (a, b, c)
 │     ordering: +a
 │     estimated row count: 1,000 (missing stats)
-│     table: abcde@primary
+│     table: abcde@abcde_pkey
 │     spans: FULL SCAN
 │
 └── • scan
@@ -902,7 +902,7 @@ vectorized: true
       columns: (a, d, e)
       ordering: +a
       estimated row count: 1,000 (missing stats)
-      table: abcde@primary
+      table: abcde@abcde_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckt9r2zAQx9_3V4h7aumNxD_yYhioaz0IuHUWm1EYxijWLTO4lifJ0BLyvw_blMYh8Za-BHS6jz7fu3gH5k8FAYRPq-h2-ciu7pdJmnyPkP0I11_jJLxmSRiFdynbICuQSfZtHT8wsSkksfDpLlylbw0CmURGBw2AUCtJj-KZDAQ_wYEModGqIGOU7kq7vmEpXyCYI5R109qunCEUShMEO7ClrQgCSMWmojUJSXo2BwRJVpRV_2zv4v1vvsmLXOaUl_IFEJJG1CZgnwEhbm3AuIvcQ-5DtkdQrX3XGSu2BIGzx49Fck5FanT5LPTrqSAOch_54mwQ95Ig96WxZV3YmTtO0Vm6iTurlqRJDua-ds7sfcjs_Y_5rNM_63xXtbUaXhqZso78V8uJ4A-kt5SQjZuZP46evjYUvH3at1EECBX9slfcuUHu3iD3bq6_6HL7e1w6_Gcn97u4ZL9rMo2qDR3PfPLleTcoyS0NizOq1QWttCp6zXCMe64vSDJ2uHWHw7IerrqAh7AzCXvTsDsJ-yPYOYa9C2D3GPYn4cVR7Gz_6W8AAAD__751mqU=
@@ -922,7 +922,7 @@ vectorized: true
 │     columns: (a, b, c)
 │     ordering: +a
 │     estimated row count: 1,000 (missing stats)
-│     table: abcde@primary
+│     table: abcde@abcde_pkey
 │     spans: FULL SCAN
 │
 └── • scan
@@ -948,13 +948,13 @@ vectorized: true
 ├── • scan
 │     columns: (a, b, c)
 │     estimated row count: 1,000 (missing stats)
-│     table: abcde@primary
+│     table: abcde@abcde_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (b, c, d)
       estimated row count: 1,000 (missing stats)
-      table: abcde@primary
+      table: abcde@abcde_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkUFrq0AUhffvVwx39R7cEDVvNSvT1oJgNdW0FIqLiXMJgnHszAgtwf9eMlKSlKQ07fKee849n84WzEsDHKKnRTKPU_b3Ji6WxX2C7DHKr7Ii-seKKImul0wgWyGr2G2e3TGxqiSxhzTOUjZPkg_PzoBMHngAoVWSUrEhA_wZfCgROq0qMkbpnbR1hli-AvcQ6rbr7U4uESqlCfgWbG0bAg5LsWooJyFJTz1AkGRF3bizrivsdL0R-g0Qik60hrMJIGS95SwMMJxh-B_KAUH1dl9irFgTcH_An4H4F4L46FjOggRnQfb9hnQtGta3SkvSJI8QyuEEcaomqpsGn4ynCbxLfkVOplOtoW9eLhFIrmn8HKN6XdFCq8rVjGPmck6QZOy4DcYhbt3KvdVh2P9NOPgyPDsKe0M5_HkPAAD__-GfBxI=
@@ -981,7 +981,7 @@ vectorized: true
 │     columns: (d, e, f)
 │     ordering: +d
 │     estimated row count: 1,000 (missing stats)
-│     table: def@primary
+│     table: def@def_pkey
 │     spans: FULL SCAN
 │
 └── • scan
@@ -1013,7 +1013,7 @@ vectorized: true
 │     columns: (e, f, g, h)
 │     ordering: +e
 │     estimated row count: 1,000 (missing stats)
-│     table: efgh@primary
+│     table: efgh@efgh_pkey
 │     spans: FULL SCAN
 │
 └── • sort
@@ -1056,7 +1056,7 @@ vectorized: true
 │         columns: (k, tableoid)
 │         ordering: +k
 │         estimated row count: 1,000 (missing stats)
-│         table: t68702@primary
+│         table: t68702@t68702_pkey
 │         spans: FULL SCAN
 │
 └── • values

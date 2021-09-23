@@ -19,10 +19,10 @@ t1          c_idx       true        3             b            ASC        false 
 t1          d_b_idx     false       1             d            ASC        false    false
 t1          d_b_idx     false       2             b            ASC        false    false
 t1          d_b_idx     false       3             a            ASC        false    true
-t1          primary     false       1             a            ASC        false    false
-t1          primary     false       2             b            ASC        false    false
-t1          primary     false       3             c            N/A        true     false
-t1          primary     false       4             d            N/A        true     false
+t1          t1_pkey     false       1             a            ASC        false    false
+t1          t1_pkey     false       2             b            ASC        false    false
+t1          t1_pkey     false       3             c            N/A        true     false
+t1          t1_pkey     false       4             d            N/A        true     false
 
 statement ok
 CREATE TABLE t2 (
@@ -59,8 +59,8 @@ t2          d_idx        true        1             d            ASC        false
 t2          d_idx        true        2             c            ASC        false    true
 t2          d_idx        true        3             b            ASC        false    true
 t2          d_idx        true        4             a            ASC        false    true
-t2          primary      false       1             c            ASC        false    false
-t2          primary      false       2             b            ASC        false    false
-t2          primary      false       3             a            ASC        false    false
-t2          primary      false       4             d            N/A        true     false
-t2          primary      false       5             e            N/A        true     false
+t2          t2_pkey      false       1             c            ASC        false    false
+t2          t2_pkey      false       2             b            ASC        false    false
+t2          t2_pkey      false       3             a            ASC        false    false
+t2          t2_pkey      false       4             d            N/A        true     false
+t2          t2_pkey      false       5             e            N/A        true     false

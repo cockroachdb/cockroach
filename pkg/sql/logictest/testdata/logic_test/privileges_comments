@@ -15,7 +15,7 @@ statement ok
 COMMENT ON DATABASE d45707 IS 'd45707';
 COMMENT ON TABLE d45707.t45707 IS 't45707';
 COMMENT ON COLUMN d45707.t45707.x IS 'x45707';
-COMMENT ON INDEX d45707.t45707@primary IS 'p45707'
+COMMENT ON INDEX d45707.t45707@t45707_pkey IS 'p45707'
 
 user testuser
 
@@ -34,7 +34,7 @@ statement error user testuser does not have CREATE privilege on relation t45707
 COMMENT ON COLUMN d45707.t45707.x IS 'x45707'
 
 statement error user testuser does not have CREATE privilege on relation t45707
-COMMENT ON INDEX d45707.t45707@primary IS 'p45707'
+COMMENT ON INDEX d45707.t45707@t45707_pkey IS 'p45707'
 
 # Verify that the user can view the comments
 
@@ -79,4 +79,4 @@ statement ok
 COMMENT ON DATABASE d45707 IS 'd45707_2';
 COMMENT ON TABLE d45707.t45707 IS 't45707_2';
 COMMENT ON COLUMN d45707.t45707.x IS 'x45707_2';
-COMMENT ON INDEX d45707.t45707@primary IS 'p45707_2'
+COMMENT ON INDEX d45707.t45707@t45707_pkey IS 'p45707_2'

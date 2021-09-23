@@ -13,7 +13,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y, z)
 NOTICE: primary key changes are finalized asynchronously; further schema changes on this table may be restricted until the job completes
 
 query IIII rowsort
-SELECT * FROM t@primary
+SELECT * FROM t@t_pkey
 ----
 1 2 3 4
 5 6 7 8
@@ -22,7 +22,7 @@ statement ok
 INSERT INTO t VALUES (9, 10, 11, 12)
 
 query IIII rowsort
-SELECT * from t@primary
+SELECT * from t@t_pkey
 ----
 1 2 3 4
 5 6 7 8
@@ -32,7 +32,7 @@ statement ok
 UPDATE t SET x = 2 WHERE z = 7
 
 query IIII rowsort
-SELECT * from t@primary
+SELECT * from t@t_pkey
 ----
 1 2 3 4
 2 6 7 8
@@ -81,7 +81,7 @@ statement ok
 ALTER TABLE t_composite ALTER PRIMARY KEY USING COLUMNS (y)
 
 query IT rowsort
-SELECT * FROM t_composite@primary
+SELECT * FROM t_composite@t_composite_pkey
 ----
 1 1.0
 2 1.001
@@ -172,7 +172,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    y INT8 NOT NULL,
-   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC),
    UNIQUE INDEX t_rowid_key (rowid ASC),
    FAMILY fam_0_rowid_y (rowid, y)
 )
@@ -209,7 +209,7 @@ t  CREATE TABLE public.t (
    w INT8 NULL,
    v JSONB NULL,
    crdb_internal_z_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 4:::INT8)) STORED,
-   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC),
    UNIQUE INDEX i3 (z ASC) STORING (y),
    UNIQUE INDEX t_x_key (x ASC),
    INDEX i1 (w ASC),
@@ -228,15 +228,15 @@ t  CREATE TABLE public.t (
 query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
-4 i3
-9 primary
-10 t_x_key
-11 i1
-12 i2
-13 i4
-14 i5
-15 i6
-16 i7
+4   i3
+9   t_pkey
+10  t_x_key
+11  i1
+12  i2
+13  i4
+14  i5
+15  i6
+16  i7
 
 # Make sure that each index can index join against the new primary key;
 
@@ -245,7 +245,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i1] OFFSET 2
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats
@@ -262,7 +262,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i2] OFFSET 2
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats
@@ -279,7 +279,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i3] OFFSET 2
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats
@@ -296,7 +296,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i4] OFFSET 2
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats
@@ -313,7 +313,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i5] OFFSET 2
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats
@@ -330,7 +330,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i7] OFFSET 2
 ----
 ·
 • index join
-│ table: t@primary
+│ table: t@t_pkey
 │
 └── • scan
       missing stats
@@ -365,7 +365,7 @@ t  CREATE TABLE public.t (
    z INT8 NULL,
    crdb_internal_z_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 5:::INT8)) STORED,
    crdb_internal_y_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 10:::INT8)) STORED,
-   CONSTRAINT "primary" PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 10,
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 10,
    UNIQUE INDEX t_x_key (x ASC),
    INDEX i1 (z ASC) USING HASH WITH BUCKET_COUNT = 5,
    FAMILY fam_0_x_y_z_crdb_internal_z_shard_5 (x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10),
@@ -386,12 +386,12 @@ SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
 query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
-3 primary
-4 t_x_key
-5 i1
+3  t_pkey
+4  t_x_key
+5  i1
 
 query III
-SELECT * FROM t@primary
+SELECT * FROM t@t_pkey
 ----
 1 2 3
 
@@ -426,7 +426,7 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NULL,
-   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC),
    UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 5,
    INDEX i (z ASC),
    FAMILY fam_0_x_y_z_crdb_internal_x_shard_5 (x, y, z, crdb_internal_x_shard_5),
@@ -454,7 +454,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid_1 ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (rowid_1 ASC),
    FAMILY "primary" (rowid, rowid_1)
 )
 
@@ -467,7 +467,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
    FAMILY "primary" (rowid, rowid_1)
 )
 
@@ -539,7 +539,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC),
    FAMILY "primary" (x, rowid)
 )
 
@@ -555,7 +555,7 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    crdb_internal_x_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) STORED,
-   CONSTRAINT "primary" PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 4,
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 4,
    FAMILY "primary" (x, rowid, crdb_internal_x_shard_4),
    CONSTRAINT check_crdb_internal_x_shard_4 CHECK (crdb_internal_x_shard_4 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8))
 )
@@ -619,16 +619,16 @@ DROP TABLE IF EXISTS t;
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
 
 statement error pq: relation "t" \([0-9]+\): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
-ALTER TABLE t DROP CONSTRAINT "primary"
+ALTER TABLE t DROP CONSTRAINT "t_pkey"
 
 statement error pq: multiple primary keys for table "t" are not allowed
-ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y), DROP CONSTRAINT "primary"
+ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y), DROP CONSTRAINT "primary"
 
 statement error pq: multiple primary keys for table "t" are not allowed
-ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y)
+ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT "primary", ADD CONSTRAINT "primary" PRIMARY KEY (y)
+ALTER TABLE t DROP CONSTRAINT "t_pkey", ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
 
 query TT
 SHOW CREATE t
@@ -636,7 +636,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
-   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC),
    FAMILY fam_0_x (x),
    FAMILY fam_1_y (y)
 )
@@ -651,10 +651,10 @@ statement ok
 BEGIN
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT "primary"
+ALTER TABLE t DROP CONSTRAINT "t_pkey"
 
 statement ok
-ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y)
+ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
 
 statement ok
 COMMIT
@@ -665,7 +665,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
-   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC),
    FAMILY fam_0_x (x),
    FAMILY fam_1_y (y)
 )
@@ -680,7 +680,7 @@ statement ok
 BEGIN
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT "primary"
+ALTER TABLE t DROP CONSTRAINT t_pkey
 
 statement error pgcode 55C02 requested table does not have a primary key
 INSERT INTO t VALUES (1, 1)
@@ -692,7 +692,7 @@ statement ok
 BEGIN
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT "primary"
+ALTER TABLE t DROP CONSTRAINT t_pkey
 
 statement error pgcode 55C02 pq: requested table does not have a primary key
 DELETE FROM t WHERE x = 1
@@ -704,7 +704,7 @@ statement ok
 BEGIN
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT "primary"
+ALTER TABLE t DROP CONSTRAINT t_pkey
 
 statement error pgcode 55C02 pq: requested table does not have a primary key
 UPDATE t SET x = 1 WHERE y = 1
@@ -716,7 +716,7 @@ statement ok
 BEGIN
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT "primary"
+ALTER TABLE t DROP CONSTRAINT t_pkey
 
 statement error pgcode 55C02 pq: requested table does not have a primary key
 SELECT * FROM t
@@ -731,7 +731,7 @@ statement ok
 BEGIN
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT "primary"
+ALTER TABLE t DROP CONSTRAINT t_pkey
 
 statement error pgcode 55C02 pq: requested table does not have a primary key
 CREATE INDEX ON t(x)
@@ -743,7 +743,7 @@ statement ok
 BEGIN
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT "primary"
+ALTER TABLE t DROP CONSTRAINT t_pkey
 
 statement error pgcode 55C02 pq: requested table does not have a primary key
 ALTER TABLE t ADD COLUMN z INT
@@ -755,7 +755,7 @@ statement ok
 BEGIN
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT "primary"
+ALTER TABLE t DROP CONSTRAINT t_pkey
 
 statement error pgcode 55C02 pq: requested table does not have a primary key
 ALTER TABLE t ADD COLUMN z INT, ADD PRIMARY KEY (x)
@@ -774,7 +774,7 @@ statement ok
 BEGIN
 
 statement ok
-ALTER TABLE t1 DROP CONSTRAINT "primary"
+ALTER TABLE t1 DROP CONSTRAINT t1_pkey
 
 statement ok
 INSERT INTO t2 VALUES (1)
@@ -791,7 +791,7 @@ DROP TABLE IF EXISTS t;
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
 
 statement error pq: table "t" does not have a primary key, cannot perform ADD COLUMN z INT8 AS \(x \+ 1\) STORED
-ALTER TABLE t DROP CONSTRAINT "primary", ADD COLUMN z INT AS (x + 1) STORED, ADD PRIMARY KEY (y)
+ALTER TABLE t DROP CONSTRAINT t_pkey, ADD COLUMN z INT AS (x + 1) STORED, ADD PRIMARY KEY (y)
 
 
 subtest create_table_change_pk
@@ -818,7 +818,7 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC),
    INDEX t_y_idx (y ASC),
    FAMILY fam_0_x_y_rowid (x, y, rowid)
 )
@@ -828,7 +828,7 @@ t  CREATE TABLE public.t (
 query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
-3  primary
+3  t_pkey
 4  t_y_idx
 
 # Repeat the above test using ALTER PRIMARY KEY.
@@ -855,7 +855,7 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC),
    INDEX t_y_idx (y ASC),
    FAMILY fam_0_x_y_rowid (x, y, rowid)
 )
@@ -865,7 +865,7 @@ t  CREATE TABLE public.t (
 query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
-3  primary
+3  t_pkey
 4  t_y_idx
 
 # Test when multiple indexes get created and destroyed.
@@ -898,7 +898,7 @@ t  CREATE TABLE public.t (
    z INT8 NULL,
    w INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC),
    INDEX i1 (y ASC),
    UNIQUE INDEX i2 (z ASC),
    INDEX i3 (w ASC) STORING (y, z),
@@ -909,7 +909,7 @@ t  CREATE TABLE public.t (
 query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
-5  primary
+5  t_pkey
 6  i1
 7  i2
 8  i3
@@ -929,7 +929,7 @@ t  CREATE TABLE public.t (
    crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) STORED,
    x INT8 NOT NULL,
    crdb_internal_x_shard_3 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) STORED,
-   CONSTRAINT "primary" PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 3,
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 3,
    FAMILY "primary" (crdb_internal_x_shard_2, x, crdb_internal_x_shard_3),
    CONSTRAINT check_crdb_internal_x_shard_2 CHECK (crdb_internal_x_shard_2 IN (0:::INT8, 1:::INT8)),
    CONSTRAINT check_crdb_internal_x_shard_3 CHECK (crdb_internal_x_shard_3 IN (0:::INT8, 1:::INT8, 2:::INT8))
@@ -950,7 +950,7 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    crdb_internal_y_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 2:::INT8)) STORED,
-   CONSTRAINT "primary" PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 2,
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 2,
    UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 2,
    FAMILY fam_0_x_y_crdb_internal_x_shard_2 (x, y, crdb_internal_x_shard_2, crdb_internal_y_shard_2),
    CONSTRAINT check_crdb_internal_x_shard_2 CHECK (crdb_internal_x_shard_2 IN (0:::INT8, 1:::INT8)),
@@ -988,10 +988,6 @@ create table t1(id integer not null, id2 integer not null, name varchar(32));
 query TTT
 select index_name,column_name,direction from [show indexes from t1] where index_name like 'primary%';
 ----
-primary  rowid  ASC
-primary  id     N/A
-primary  id2    N/A
-primary  name   N/A
 
 statement ok
 alter table t1 alter primary key using columns(id, id2);
@@ -1000,10 +996,10 @@ alter table t1 alter primary key using columns(id, id2);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary  id     ASC
-primary  id2    ASC
-primary  name   N/A
-primary  rowid  N/A
+t1_pkey  id     ASC
+t1_pkey  id2    ASC
+t1_pkey  name   N/A
+t1_pkey  rowid  N/A
 
 
 statement ok
@@ -1013,23 +1009,22 @@ alter table t1 alter primary key using columns(id, id2);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary  id     ASC
-primary  id2    ASC
-primary  name   N/A
-primary  rowid  N/A
+t1_pkey  id     ASC
+t1_pkey  id2    ASC
+t1_pkey  name   N/A
+t1_pkey  rowid  N/A
 
 # Validate drop and recreate
 statement ok
-alter table t1 drop constraint "primary", alter primary key using columns(id, id2);
-
+alter table t1 drop constraint t1_pkey, alter primary key using columns(id, id2);
 
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary  id     ASC
-primary  id2    ASC
-primary  name   N/A
-primary  rowid  N/A
+t1_pkey  id     ASC
+t1_pkey  id2    ASC
+t1_pkey  name   N/A
+t1_pkey  rowid  N/A
 
 statement ok
 alter table t1 alter primary key using columns(id);
@@ -1038,10 +1033,10 @@ alter table t1 alter primary key using columns(id);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary        id     ASC
-primary        id2    N/A
-primary        name   N/A
-primary        rowid  N/A
+t1_pkey        id     ASC
+t1_pkey        id2    N/A
+t1_pkey        name   N/A
+t1_pkey        rowid  N/A
 t1_id_id2_key  id     ASC
 t1_id_id2_key  id2    ASC
 
@@ -1052,39 +1047,39 @@ alter table t1 alter primary key using columns(id desc);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary        id     DESC
-primary        id2    N/A
-primary        name   N/A
-primary        rowid  N/A
-t1_id_id2_key  id     ASC
-t1_id_id2_key  id2    ASC
-t1_id_key      id     ASC
-
-
-statement ok
-alter table t1 alter primary key using columns(id desc);
-
-query TTT
-select index_name,column_name,direction from [show indexes from t1];
-----
-primary        id     DESC
-primary        id2    N/A
-primary        name   N/A
-primary        rowid  N/A
+t1_pkey        id     DESC
+t1_pkey        id2    N/A
+t1_pkey        name   N/A
+t1_pkey        rowid  N/A
 t1_id_id2_key  id     ASC
 t1_id_id2_key  id2    ASC
 t1_id_key      id     ASC
 
+
 statement ok
 alter table t1 alter primary key using columns(id desc);
 
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary        id     DESC
-primary        id2    N/A
-primary        name   N/A
-primary        rowid  N/A
+t1_pkey        id     DESC
+t1_pkey        id2    N/A
+t1_pkey        name   N/A
+t1_pkey        rowid  N/A
+t1_id_id2_key  id     ASC
+t1_id_id2_key  id2    ASC
+t1_id_key      id     ASC
+
+statement ok
+alter table t1 alter primary key using columns(id desc);
+
+query TTT
+select index_name,column_name,direction from [show indexes from t1];
+----
+t1_pkey        id     DESC
+t1_pkey        id2    N/A
+t1_pkey        name   N/A
+t1_pkey        rowid  N/A
 t1_id_id2_key  id     ASC
 t1_id_id2_key  id2    ASC
 t1_id_key      id     ASC
@@ -1095,11 +1090,11 @@ alter table t1 alter primary key using columns(id) USING HASH WITH BUCKET_COUNT 
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary        crdb_internal_id_shard_10  ASC
-primary        id                         ASC
-primary        id2                        N/A
-primary        name                       N/A
-primary        rowid                      N/A
+t1_pkey        crdb_internal_id_shard_10  ASC
+t1_pkey        id                         ASC
+t1_pkey        id2                        N/A
+t1_pkey        name                       N/A
+t1_pkey        rowid                      N/A
 t1_id_key1     id                         DESC
 t1_id_key1     crdb_internal_id_shard_10  ASC
 t1_id_id2_key  id                         ASC
@@ -1124,7 +1119,7 @@ table_with_virtual_cols  CREATE TABLE public.table_with_virtual_cols (
                          id INT8 NOT NULL,
                          new_pk INT8 NOT NULL,
                          virtual_col INT8 NULL AS (1:::INT8) VIRTUAL,
-                         CONSTRAINT "primary" PRIMARY KEY (new_pk ASC),
+                         CONSTRAINT table_with_virtual_cols_pkey PRIMARY KEY (new_pk ASC),
                          UNIQUE INDEX table_with_virtual_cols_id_key (id ASC),
                          FAMILY fam_0_id_new_pk (id, new_pk)
 )
@@ -1140,7 +1135,7 @@ CREATE TABLE t (i INT PRIMARY KEY)
 query TTT
 SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
 ----
-primary  i  ASC
+t_pkey  i  ASC
 
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i) USING HASH WITH BUCKET_COUNT = 2
@@ -1148,8 +1143,8 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i) USING HASH WITH BUCKET_COUNT =
 query TTT
 SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
 ----
-primary  crdb_internal_i_shard_2  ASC
-primary  i                        ASC
+t_pkey  crdb_internal_i_shard_2  ASC
+t_pkey  i                        ASC
 
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i);
@@ -1157,5 +1152,5 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i);
 query TTT
 SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
 ----
-primary  i                        ASC
-primary  crdb_internal_i_shard_2  N/A
+t_pkey  i                        ASC
+t_pkey  crdb_internal_i_shard_2  N/A

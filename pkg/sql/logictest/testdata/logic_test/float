@@ -17,7 +17,7 @@ SELECT * FROM p WHERE f = 'NaN'
 NaN
 
 query RBBB
-SELECT f, f IS NaN, f = 'NaN', isnan(f) FROM p@{FORCE_INDEX=primary} ORDER BY 1
+SELECT f, f IS NaN, f = 'NaN', isnan(f) FROM p@{FORCE_INDEX=p_pkey} ORDER BY 1
 ----
 NULL  NULL   NULL   NULL
 NaN   true   true   true
@@ -39,7 +39,7 @@ NaN   true   true   true
 +Inf  false  false  false
 
 query RB
-select f, f > 'NaN' from p@{FORCE_INDEX=primary} where f > 'NaN' ORDER BY f
+select f, f > 'NaN' from p@{FORCE_INDEX=p_pkey} where f > 'NaN' ORDER BY f
 ----
 -Inf  true
 -1    true

@@ -43,7 +43,7 @@ vectorized: true
 └── • scan
       columns: (x, y, z)
       estimated row count: 1,000 (missing stats)
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 
 query T
@@ -56,7 +56,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: xyz@primary
+      table: xyz@xyz_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkF9ro0AUxd_3UwznaRfukpjdp3kybLJUsDFVoS2ND1O9BME4dmYETfC7lyj0H7Skj_fcOb9z5p5gnypIrO-24TLYiJ-rIEmTm_CXSNbh-l8qOhI9iSOJHbQpylpVpet3EP_j6Fp0_VHcBumViOJVsFmGQXoPQq0L3qgDW8gHeMgIjdE5W6vNWTqND4Kig5wTyrpp3VnOCLk2DHmCK13FkEjVY8Uxq4LNbA5CwU6V1Yjt-qPfmPKgTA9C0qjaSvEbhKh1UvgL8v-Q_xfZQNCte42wTu0Z0hvo8hrRy79n3rsWn9EX36HHbBtdW76IPB8yAhd7ng5pdWty3hqdjzHTGI2-USjYumnrTUNQT6tzwbdm70vz4oM5G348BwAA__8gULfl

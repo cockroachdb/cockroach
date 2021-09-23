@@ -44,7 +44,7 @@ sql.schema.validation_errors.read.self.type
 feature-usage
 CREATE TABLE t (x INT PRIMARY KEY);
 BEGIN;
-ALTER TABLE t DROP CONSTRAINT "primary";
+ALTER TABLE t DROP CONSTRAINT t_pkey;
 COMMIT;
 ----
 error: pq: relation "t" (56): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction

@@ -72,7 +72,7 @@ vectorized: true
 • scan
   columns: (p, d, c)
   estimated row count: 1,000 (missing stats)
-  table: num_ref@primary
+  table: num_ref@num_ref_pkey
   spans: FULL SCAN
 
 query T
@@ -84,7 +84,7 @@ vectorized: true
 • scan
   columns: (c)
   estimated row count: 1,000 (missing stats)
-  table: num_ref@primary
+  table: num_ref@num_ref_pkey
   spans: FULL SCAN
 
 query T
@@ -96,7 +96,7 @@ vectorized: true
 • scan
   columns: (p, c)
   estimated row count: 1,000 (missing stats)
-  table: num_ref@primary
+  table: num_ref@num_ref_pkey
   spans: FULL SCAN
 
 query T
@@ -108,7 +108,7 @@ vectorized: true
 • scan
   columns: (p, d, c)
   estimated row count: 1,000 (missing stats)
-  table: num_ref@primary
+  table: num_ref@num_ref_pkey
   spans: FULL SCAN
 
 query T
@@ -120,7 +120,7 @@ vectorized: true
 • scan
   columns: (c, d, p)
   estimated row count: 1,000 (missing stats)
-  table: num_ref@primary
+  table: num_ref@num_ref_pkey
   spans: FULL SCAN
 
 query T
@@ -132,7 +132,7 @@ vectorized: true
 • scan
   columns: (col1, col2, col3)
   estimated row count: 1,000 (missing stats)
-  table: num_ref@primary
+  table: num_ref@num_ref_pkey
   spans: FULL SCAN
 
 query T
@@ -192,7 +192,7 @@ vectorized: true
 • scan
   columns: (p)
   estimated row count: 1,000 (missing stats)
-  table: num_ref@primary
+  table: num_ref@num_ref_pkey
   spans: FULL SCAN
 
 query T
@@ -216,7 +216,7 @@ vectorized: true
 • scan
   columns: (d)
   estimated row count: 1,000 (missing stats)
-  table: num_ref@primary
+  table: num_ref@num_ref_pkey
   spans: FULL SCAN
 
 query T
@@ -240,7 +240,7 @@ vectorized: true
 • scan
   columns: (c)
   estimated row count: 1,000 (missing stats)
-  table: num_ref@primary
+  table: num_ref@num_ref_pkey
   spans: FULL SCAN
 
 query T
@@ -264,7 +264,7 @@ vectorized: true
 • scan
   columns: (a)
   estimated row count: 1,000 (missing stats)
-  table: num_ref_hidden@primary
+  table: num_ref_hidden@num_ref_hidden_pkey
   spans: FULL SCAN
 
 query T
@@ -276,7 +276,7 @@ vectorized: true
 • scan
   columns: ()
   estimated row count: 1,000 (missing stats)
-  table: num_ref_hidden@primary
+  table: num_ref_hidden@num_ref_hidden_pkey
   spans: FULL SCAN
 
 query T
@@ -288,7 +288,7 @@ vectorized: true
 • scan
   columns: (rowid)
   estimated row count: 1,000 (missing stats)
-  table: num_ref_hidden@primary
+  table: num_ref_hidden@num_ref_hidden_pkey
   spans: FULL SCAN
 
 query error pq: \[666\(1\) AS num_ref_alias\]: relation \"\[666\]\" does not exist
@@ -327,7 +327,7 @@ vectorized: true
 • scan
   columns: (x, y)
   estimated row count: 333 (missing stats)
-  table: a@primary
+  table: a@a_pkey
   spans: /2-
 
 query T
@@ -344,7 +344,7 @@ vectorized: true
 └── • scan
       columns: (x, y)
       estimated row count: 1,000 (missing stats)
-      table: a@primary
+      table: a@a_pkey
       spans: FULL SCAN
 
 query T
@@ -356,7 +356,7 @@ vectorized: true
 • scan
   columns: (x, y)
   estimated row count: 1 (missing stats)
-  table: a@primary
+  table: a@a_pkey
   spans: /2/0
 
 query T
@@ -373,7 +373,7 @@ vectorized: true
 └── • scan
       columns: (x, y)
       estimated row count: 333 (missing stats)
-      table: a@primary
+      table: a@a_pkey
       spans: /2-
 
 query T
@@ -390,7 +390,7 @@ vectorized: true
 └── • scan
       columns: (x)
       estimated row count: 1,000 (missing stats)
-      table: a@primary
+      table: a@a_pkey
       spans: FULL SCAN
 
 query T
@@ -411,7 +411,7 @@ vectorized: true
 └── • scan
       columns: (x, y)
       estimated row count: 1,000 (missing stats)
-      table: a@primary
+      table: a@a_pkey
       spans: FULL SCAN
 
 query T
@@ -434,7 +434,7 @@ vectorized: true
     └── • scan
           columns: (x, y)
           estimated row count: 1,000 (missing stats)
-          table: a@primary
+          table: a@a_pkey
           spans: FULL SCAN
 
 query T
@@ -449,7 +449,7 @@ vectorized: true
 └── • scan
       columns: (x, y)
       estimated row count: 1,000 (missing stats)
-      table: a@primary
+      table: a@a_pkey
       spans: FULL SCAN
 
 query T
@@ -472,7 +472,7 @@ vectorized: true
     └── • scan
           columns: (x, y)
           estimated row count: 1,000 (missing stats)
-          table: a@primary
+          table: a@a_pkey
           spans: FULL SCAN
 
 statement ok
@@ -493,7 +493,7 @@ vectorized: true
 • scan
   columns: (x, y)
   estimated row count: 1,000 (missing stats)
-  table: b@primary
+  table: b@b_pkey
   spans: FULL SCAN
 
 query T
@@ -505,7 +505,7 @@ vectorized: true
 • scan
   columns: (x, y, rowid)
   estimated row count: 333 (missing stats)
-  table: b@primary
+  table: b@b_pkey
   spans: /1-
 
 statement ok
@@ -537,10 +537,10 @@ t           c_idx       false       1             c            ASC        false 
 t           c_idx       false       2             b            N/A        true     false
 t           c_idx       false       3             d            N/A        true     false
 t           c_idx       false       4             a            ASC        false    true
-t           primary     false       1             a            ASC        false    false
-t           primary     false       2             b            N/A        true     false
-t           primary     false       3             c            N/A        true     false
-t           primary     false       4             d            N/A        true     false
+t           t_pkey      false       1             a            ASC        false    false
+t           t_pkey      false       2             b            N/A        true     false
+t           t_pkey      false       3             c            N/A        true     false
+t           t_pkey      false       4             d            N/A        true     false
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
@@ -725,7 +725,7 @@ vectorized: true
 └── • scan
       columns: ()
       estimated row count: 1,000 (missing stats)
-      table: nocols@primary
+      table: nocols@nocols_pkey
       spans: FULL SCAN
 
 statement ok
@@ -753,7 +753,7 @@ vectorized: true
   columns: (a collatedstring{da}, b int)
   ordering: +a,+b
   estimated row count: 1,000 (missing stats)
-  table: coll@primary
+  table: coll@coll_pkey
   spans: FULL SCAN
 
 query T
@@ -829,9 +829,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /dt/primary/'2015-08-25 04:45:45.53453' -> NULL
-fetched: /dt/primary/'2015-08-25 04:45:45.53453'/b -> '2015-08-25'
-fetched: /dt/primary/'2015-08-25 04:45:45.53453'/c -> '02:45:02.234'
+fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453' -> NULL
+fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453'/b -> '2015-08-25'
+fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453'/c -> '02:45:02.234'
 output row: ['2015-08-25 04:45:45.53453' '2015-08-25' '02:45:02.234']
 
 statement ok
@@ -876,7 +876,7 @@ vectorized: true
 • scan
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
-  table: dec@primary
+  table: dec@dec_pkey
   spans: /NaN/NaN/0
 
 # Test again with separate column families.
@@ -893,7 +893,7 @@ vectorized: true
 • scan
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
-  table: decfam@primary
+  table: decfam@decfam_pkey
   spans: /NaN/NaN-/NaN/NaN/#
 
 # The NaN suffix is decimalNaNDesc, not decimalNaN(Asc).
@@ -906,7 +906,7 @@ vectorized: true
 • scan
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
-  table: dec@primary
+  table: dec@dec_pkey
   spans: /Infinity/Infinity/0
 
 query T
@@ -918,7 +918,7 @@ vectorized: true
 • scan
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
-  table: dec@primary
+  table: dec@dec_pkey
   spans: /-Infinity/-Infinity/0
 
 statement ok
@@ -1004,7 +1004,7 @@ vectorized: true
 └── • scan
       columns: (d decimal)
       estimated row count: 1,000 (missing stats)
-      table: dec2@primary
+      table: dec2@dec2_pkey
       spans: FULL SCAN
 
 statement ok
@@ -1057,7 +1057,7 @@ vectorized: true
 └── • scan
       columns: (f float)
       estimated row count: 1,000 (missing stats)
-      table: flt@primary
+      table: flt@flt_pkey
       spans: FULL SCAN
 
 statement ok
@@ -1344,7 +1344,7 @@ vectorized: true
           columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
-          table: abcd@primary
+          table: abcd@abcd_pkey
           spans: FULL SCAN
 
 query T
@@ -1371,7 +1371,7 @@ vectorized: true
         └── • scan
               columns: (a, b, c)
               estimated row count: 1,000 (missing stats)
-              table: abcd@primary
+              table: abcd@abcd_pkey
               spans: FULL SCAN
 
 
@@ -1396,7 +1396,7 @@ vectorized: true
           columns: (a, b, c)
           ordering: -a,-b
           estimated row count: 1,000 (missing stats)
-          table: abcd@primary
+          table: abcd@abcd_pkey
           spans: FULL SCAN
 
 # Ensure that filter nodes (and filtered scan nodes) get populated with the correct ordering.
@@ -1416,7 +1416,7 @@ vectorized: true
       columns: (a, b, c, d)
       ordering: +a
       estimated row count: 1,000 (missing stats)
-      table: abcd@primary
+      table: abcd@abcd_pkey
       spans: FULL SCAN
 
 query T
@@ -1439,7 +1439,7 @@ vectorized: true
     └── • scan
           columns: (a, b, c, d)
           estimated row count: 1,000 (missing stats)
-          table: abcd@primary
+          table: abcd@abcd_pkey
           spans: FULL SCAN
 
 query T
@@ -1458,7 +1458,7 @@ vectorized: true
       columns: (a, b)
       ordering: +a
       estimated row count: 10 (missing stats)
-      table: abcd@primary
+      table: abcd@abcd_pkey
       spans: LIMITED SCAN
       limit: 10
 
@@ -1485,7 +1485,7 @@ vectorized: true
           columns: (a, b, c)
           ordering: +a
           estimated row count: 10 (missing stats)
-          table: abcd@primary
+          table: abcd@abcd_pkey
           spans: LIMITED SCAN
           limit: 10
 
@@ -1531,7 +1531,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: a@primary
+  table: a@a_pkey
   spans: [/10 - /10]
 
 query T
@@ -1542,7 +1542,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: a@primary
+  table: a@a_pkey
   spans: [/10 - /10] [/20 - /20]
 
 query T
@@ -1553,7 +1553,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: a@primary
+  table: a@a_pkey
   spans: [/10 - /10] [/20 - /20]
 
 # Verify that consolidated point spans are still parallelized.
@@ -1565,7 +1565,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: a@primary
+  table: a@a_pkey
   spans: [/10 - /11]
 
 query T
@@ -1576,7 +1576,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: a@primary
+  table: a@a_pkey
   spans: [/11 - /19]
 
 # This ticks all the boxes for parallelization apart from the fact that there
@@ -1589,7 +1589,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: a@primary
+  table: a@a_pkey
   spans: [/11 - ]
 
 # Test non-int types.
@@ -1602,7 +1602,7 @@ distribution: local
 vectorized: true
 ·
 • index join
-│ table: a@primary
+│ table: a@a_pkey
 │
 └── • scan
       missing stats
@@ -1618,7 +1618,7 @@ distribution: local
 vectorized: true
 ·
 • index join
-│ table: a@primary
+│ table: a@a_pkey
 │
 └── • scan
       missing stats
@@ -1633,7 +1633,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: b@primary
+  table: b@b_pkey
   spans: [/10/10 - /10/10] [/20/20 - /20/20]
 
 # This one isn't parallelizable because it's not a point lookup - only part of
@@ -1646,7 +1646,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: b@primary
+  table: b@b_pkey
   spans: [/10 - /10] [/20 - /20]
 
 # This one isn't parallelizable because it has a LIMIT clause.
@@ -1658,7 +1658,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: a@primary
+  table: a@a_pkey
   spans: [/10 - /10] [/20 - /20]
   limit: 1
 
@@ -1806,12 +1806,12 @@ vectorized: true
         │
         ├── • scan
         │     missing stats
-        │     table: e@primary
+        │     table: e@e_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               missing stats
-              table: s@primary
+              table: s@s_pkey
               spans: FULL SCAN
 
 # Check that we have a sane row count estimate when there are a lot of null
@@ -1860,5 +1860,5 @@ vectorized: true
 └── • scan
       columns: (x, y)
       estimated row count: 11,110,000 (100% of the table; stats collected <hidden> ago)
-      table: nulls@primary
+      table: nulls@nulls_pkey
       spans: FULL SCAN

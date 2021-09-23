@@ -8,7 +8,7 @@ CREATE TABLE p (
 statement ok
 INSERT INTO p VALUES ('a' COLLATE en_u_ks_level1)
 
-statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(a\)=\('a' COLLATE en_u_ks_level1\) already exists\.
+statement error duplicate key value violates unique constraint "p_pkey"\nDETAIL: Key \(a\)=\('a' COLLATE en_u_ks_level1\) already exists\.
 INSERT INTO p VALUES ('A' COLLATE en_u_ks_level1)
 
 statement ok
@@ -62,7 +62,7 @@ INSERT INTO c2 VALUES ('A' COLLATE en_u_ks_level1, 'apple' COLLATE en_u_ks_level
 statement ok
 INSERT INTO c2 VALUES ('b' COLLATE en_u_ks_level1, 'banana' COLLATE en_u_ks_level1)
 
-statement error foreign key violation: value \['p' COLLATE en_u_ks_level1\] not found in p@primary \[a\]|insert on table "c2" violates foreign key constraint "fk_p"
+statement error foreign key violation: value \['p' COLLATE en_u_ks_level1\] not found in p@p_pkey \[a\]|insert on table "c2" violates foreign key constraint "fk_p"
 INSERT INTO c2 VALUES ('p' COLLATE en_u_ks_level1, 'pear' COLLATE en_u_ks_level1)
 
 query T

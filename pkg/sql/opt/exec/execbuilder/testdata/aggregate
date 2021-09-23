@@ -58,7 +58,7 @@ vectorized: true
     └── • scan
           columns: ()
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -111,7 +111,7 @@ vectorized: true
     └── • scan
           columns: (k int, v int, s string)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 # Aggregate functions trigger aggregation and computation when there is no source.
@@ -205,7 +205,7 @@ vectorized: true
       columns: (k int)
       ordering: +k
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 # Selecting and grouping on a more complex expression works.
@@ -229,7 +229,7 @@ vectorized: true
     └── • scan
           columns: (k int, v int)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
@@ -257,7 +257,7 @@ vectorized: true
           columns: (k int, v int)
           ordering: +k
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -274,7 +274,7 @@ vectorized: true
 └── • scan
       columns: ()
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 query T
@@ -293,7 +293,7 @@ vectorized: true
 └── • scan
       columns: (k int)
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 query T
@@ -315,7 +315,7 @@ vectorized: true
 └── • scan
       columns: (v)
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 query T
@@ -346,13 +346,13 @@ vectorized: true
             ├── • scan
             │     columns: (k, v, w, s)
             │     estimated row count: 1,000 (missing stats)
-            │     table: kv@primary
+            │     table: kv@kv_pkey
             │     spans: FULL SCAN
             │
             └── • scan
                   columns: ()
                   estimated row count: 1,000 (missing stats)
-                  table: kv@primary
+                  table: kv@kv_pkey
                   spans: FULL SCAN
 
 query T
@@ -378,13 +378,13 @@ vectorized: true
         ├── • scan
         │     columns: (k)
         │     estimated row count: 1,000 (missing stats)
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (k)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 query T
@@ -410,13 +410,13 @@ vectorized: true
         ├── • scan
         │     columns: (k)
         │     estimated row count: 1,000 (missing stats)
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (k)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 # A useful optimization: naked tuple expansion in GROUP BY clause.
@@ -443,13 +443,13 @@ vectorized: true
         ├── • scan
         │     columns: (k)
         │     estimated row count: 1,000 (missing stats)
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (k)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 # Show reuse of renders expression inside an expansion.
@@ -475,13 +475,13 @@ vectorized: true
         ├── • scan
         │     columns: (v, w, s)
         │     estimated row count: 1,000 (missing stats)
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: ()
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 statement ok
@@ -506,7 +506,7 @@ vectorized: true
 └── • scan
       columns: (a char)
       estimated row count: 1 (missing stats)
-      table: abc@primary
+      table: abc@abc_pkey
       spans: LIMITED SCAN
       limit: 1
 
@@ -724,14 +724,14 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /xyz/primary/1 -> NULL
-fetched: /xyz/primary/1/y -> 2
-fetched: /xyz/primary/1/z -> 3.0
-fetched: /xyz/primary/4 -> NULL
-fetched: /xyz/primary/4/y -> 5
-fetched: /xyz/primary/4/z -> 6.0
-fetched: /xyz/primary/7 -> NULL
-fetched: /xyz/primary/7/z -> 8.0
+fetched: /xyz/xyz_pkey/1 -> NULL
+fetched: /xyz/xyz_pkey/1/y -> 2
+fetched: /xyz/xyz_pkey/1/z -> 3.0
+fetched: /xyz/xyz_pkey/4 -> NULL
+fetched: /xyz/xyz_pkey/4/y -> 5
+fetched: /xyz/xyz_pkey/4/z -> 6.0
+fetched: /xyz/xyz_pkey/7 -> NULL
+fetched: /xyz/xyz_pkey/7/z -> 8.0
 output row: [9 4.5 6.33333333333333]
 
 query T
@@ -831,7 +831,7 @@ vectorized: true
     └── • scan
           columns: (v int)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -855,7 +855,7 @@ vectorized: true
     └── • scan
           columns: (v int)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -889,7 +889,7 @@ vectorized: true
             └── • scan
                   columns: (v int)
                   estimated row count: 1,000 (missing stats)
-                  table: kv@primary
+                  table: kv@kv_pkey
                   spans: FULL SCAN
 
 # Check that filters propagate through no-op aggregation.
@@ -919,7 +919,7 @@ vectorized: true
         └── • scan
               columns: (v)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 # Verify that FILTER works.
@@ -959,7 +959,7 @@ vectorized: true
         └── • scan
               columns: (k, v)
               estimated row count: 1,000 (missing stats)
-              table: filter_test@primary
+              table: filter_test@filter_test_pkey
               spans: FULL SCAN
 
 query T
@@ -988,7 +988,7 @@ vectorized: true
         └── • scan
               columns: (k, v)
               estimated row count: 1,000 (missing stats)
-              table: filter_test@primary
+              table: filter_test@filter_test_pkey
               spans: FULL SCAN
 
 # Tests with * inside GROUP BY.
@@ -1006,7 +1006,7 @@ vectorized: true
 └── • scan
       columns: ()
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 query T
@@ -1033,13 +1033,13 @@ vectorized: true
         ├── • scan
         │     columns: (k int)
         │     estimated row count: 1,000 (missing stats)
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (d decimal)
               estimated row count: 1,000 (missing stats)
-              table: abc@primary
+              table: abc@abc_pkey
               spans: FULL SCAN
 
 # opt_test is used for tests around the single-row optimization for MIN/MAX.
@@ -1133,7 +1133,7 @@ vectorized: true
             └── • scan
                   columns: (v int)
                   estimated row count: 1,000 (missing stats)
-                  table: opt_test@primary
+                  table: opt_test@opt_test_pkey
                   spans: FULL SCAN
 
 # Verify that we don't use the optimization if there is a GROUP BY.
@@ -1158,7 +1158,7 @@ vectorized: true
           columns: (k int, v int)
           ordering: +k
           estimated row count: 1,000 (missing stats)
-          table: opt_test@primary
+          table: opt_test@opt_test_pkey
           spans: FULL SCAN
 
 statement ok
@@ -1178,7 +1178,7 @@ vectorized: true
 └── • scan
       columns: (a int, b int)
       estimated row count: 1,000 (missing stats)
-      table: ab@primary
+      table: ab@ab_pkey
       spans: FULL SCAN
 
 query T
@@ -1207,13 +1207,13 @@ vectorized: true
         ├── • scan
         │     columns: (a int, b int)
         │     estimated row count: 1,000 (missing stats)
-        │     table: ab@primary
+        │     table: ab@ab_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (x string, y string)
               estimated row count: 1,000 (missing stats)
-              table: xy@primary
+              table: xy@xy_pkey
               spans: FULL SCAN
 
 # Test that ordering on GROUP BY columns is maintained.
@@ -1361,7 +1361,7 @@ vectorized: true
             └── • scan
                   columns: (v int, w int)
                   estimated row count: 1,000 (missing stats)
-                  table: kv@primary
+                  table: kv@kv_pkey
                   spans: FULL SCAN
 
 statement ok
@@ -1393,7 +1393,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: foo@primary
+              table: foo@foo_pkey
               spans: FULL SCAN
 
 query T
@@ -1421,7 +1421,7 @@ vectorized: true
         └── • scan
               columns: (a, b)
               estimated row count: 1,000 (missing stats)
-              table: foo@primary
+              table: foo@foo_pkey
               spans: FULL SCAN
 
 query T
@@ -1444,7 +1444,7 @@ vectorized: true
     └── • scan
           columns: (v)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -1465,7 +1465,7 @@ vectorized: true
     └── • scan
           columns: (k, s)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -1483,7 +1483,7 @@ vectorized: true
       columns: (k, s)
       ordering: +k
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 query T
@@ -1506,7 +1506,7 @@ vectorized: true
     └── • scan
           columns: (k, s)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -1532,7 +1532,7 @@ vectorized: true
           columns: (k, s)
           ordering: +k
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 # Verify that we project away all input columns for count(*).
@@ -1564,7 +1564,7 @@ vectorized: true
         └── • scan
               columns: (v)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 
@@ -1613,7 +1613,7 @@ vectorized: true
     └── • scan
           columns: (s)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 statement ok
@@ -1659,7 +1659,7 @@ vectorized: true
         └── • scan
               columns: (company_id, employee)
               estimated row count: 1,000 (missing stats)
-              table: string_agg_test@primary
+              table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
 
 query T
@@ -1698,7 +1698,7 @@ vectorized: true
         └── • scan
               columns: (company_id, employee)
               estimated row count: 1,000 (missing stats)
-              table: string_agg_test@primary
+              table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
 
 query T
@@ -1737,7 +1737,7 @@ vectorized: true
         └── • scan
               columns: (company_id, employee)
               estimated row count: 1,000 (missing stats)
-              table: string_agg_test@primary
+              table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
 
 query T
@@ -1776,5 +1776,5 @@ vectorized: true
         └── • scan
               columns: (company_id, employee)
               estimated row count: 1,000 (missing stats)
-              table: string_agg_test@primary
+              table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN

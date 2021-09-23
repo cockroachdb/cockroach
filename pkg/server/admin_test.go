@@ -631,12 +631,12 @@ func TestAdminAPITableDetails(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	for _, tc := range []struct {
-		name, dbName, tblName string
+		name, dbName, tblName, pkName string
 	}{
-		{name: "lower", dbName: "test", tblName: "tbl"},
-		{name: "lower", dbName: "test", tblName: `testschema.tbl`},
-		{name: "lower with space", dbName: "test test", tblName: `"tbl tbl"`},
-		{name: "upper", dbName: "TEST", tblName: `"TBL"`}, // Regression test for issue #14056
+		{name: "lower", dbName: "test", tblName: "tbl", pkName: "tbl_pkey"},
+		{name: "lower", dbName: "test", tblName: `testschema.tbl`, pkName: "tbl_pkey"},
+		{name: "lower with space", dbName: "test test", tblName: `"tbl tbl"`, pkName: "tbl tbl_pkey"},
+		{name: "upper", dbName: "TEST", tblName: `"TBL"`, pkName: "TBL_pkey"}, // Regression test for issue #14056
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -733,11 +733,11 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			// Verify indexes.
 			expIndexes := []serverpb.TableDetailsResponse_Index{
-				{Name: "primary", Column: "string_default", Direction: "N/A", Unique: true, Seq: 5, Storing: true},
-				{Name: "primary", Column: "default2", Direction: "N/A", Unique: true, Seq: 4, Storing: true},
-				{Name: "primary", Column: "nulls_not_allowed", Direction: "N/A", Unique: true, Seq: 3, Storing: true},
-				{Name: "primary", Column: "nulls_allowed", Direction: "N/A", Unique: true, Seq: 2, Storing: true},
-				{Name: "primary", Column: "rowid", Direction: "ASC", Unique: true, Seq: 1},
+				{Name: tc.pkName, Column: "string_default", Direction: "N/A", Unique: true, Seq: 5, Storing: true},
+				{Name: tc.pkName, Column: "default2", Direction: "N/A", Unique: true, Seq: 4, Storing: true},
+				{Name: tc.pkName, Column: "nulls_not_allowed", Direction: "N/A", Unique: true, Seq: 3, Storing: true},
+				{Name: tc.pkName, Column: "nulls_allowed", Direction: "N/A", Unique: true, Seq: 2, Storing: true},
+				{Name: tc.pkName, Column: "rowid", Direction: "ASC", Unique: true, Seq: 1},
 				{Name: "descidx", Column: "rowid", Direction: "ASC", Unique: false, Seq: 2, Implicit: true},
 				{Name: "descidx", Column: "default2", Direction: "DESC", Unique: false, Seq: 1},
 			}

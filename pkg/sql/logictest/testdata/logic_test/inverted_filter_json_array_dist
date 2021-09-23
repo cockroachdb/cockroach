@@ -172,7 +172,7 @@ vectorized: true
 │ filter: (b @> '[[1, 2]]') OR (b @> '[[3, 4]]')
 │
 └── • index join
-    │ table: json_tab@primary
+    │ table: json_tab@json_tab_pkey
     │
     └── • sort
         │ order: +a
@@ -222,7 +222,7 @@ vectorized: true
 │ filter: (b @> '[3]') OR (b @> '[[1, 2]]')
 │
 └── • index join
-    │ table: json_tab@primary
+    │ table: json_tab@json_tab_pkey
     │
     └── • sort
         │ order: +a
@@ -298,7 +298,7 @@ vectorized: true
 └── • union all
     │
     ├── • index join
-    │   │ table: json_tab@primary
+    │   │ table: json_tab@json_tab_pkey
     │   │
     │   └── • sort
     │       │ order: +a
@@ -310,7 +310,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: json_tab@primary
+          table: json_tab@json_tab_pkey
           spans: [/44 - /44]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lFFP2zAUhd_3K6z7AmhBiZ20hUiTykamdWKUpUjbxKLJbTzIVOLMdicQ6n-fkrCmKcRu1og3N_Z377HvOX0A-XsOPgRfL85ORudo_3Q0uZx8PjtAk-AseHeJKHofjj-hX5KnPxSdoi8fgjBA-1M0_L5wHJehvSsc7R2gcYj2KXqDPC9fnwYhevsNUbAg5TE7p7dMgn8FGCwgYIELkQWZ4DMmJRf51kNxcBTfge9YkKTZQuWfIwtmXDDwH0Alas7Ah0s6nbOQ0ZgJ2wELYqZoMi_K_1M5zERyS8U9WDDJaCp9ZHtecXi8UD4aYmtIIFpawBeqaiQVvWbg46W1vZjTRKoknSn7uK5kmN90LGImWJw33OhWFZjeoxsqb57Q0bJS1GtUVNXhZa_NOq_LQo2yMWmlu9LU71zTOT_kmY3d-vHHgTXqGNR04O2tgxusUyyS9M-ad7Bjnwhh48PVyr4Q7GdyF6Rx5alGiaSNxAkXignbfe7Rni_vtin_kSfp4wP0jNnZIixem-Yr1w1eLCy407A4nYSFbG9Ssr1JycqkZHeTGiQ-mtT7X5Mayq-ZtN-9SQ3NV9M-ejGTkk5Nijv_R3-mXchkxlPJar2aKju5YBZfs_KCki_EjF0IPivalD_HBVd8iJlU5S4uf4zScisXuA7jTRivw0c1GLeDsbsLTfQw0V7a0NnVv5infzJPS_f0cE8L9_VwXwsP9PBgl0nrYdOk9bRh0ke7TPpYP2nHEA5DtEzZeuLwOk4M-BOPt8qmnjaGU48bZob1CdvsHS1f_Q0AAP__NmxOwg==
@@ -328,7 +328,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: json_tab@primary
+      table: json_tab@json_tab_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkd_Km0AQxe_7FMPcfAa2xLV3CwXzx1CLiakG2pJK2egQLMY1uyu0BN-9qJTEQkq_yzlnz8yPszc01woFBl_20SLcgbMO00P6KZpBGkTB6gASNkm8hR9G1d-tPMHnD0ESgHMC_1vruu8IXo48e5lBnIBjrto6Uoh1sAq3i2gG78HrnXWQwPIrSGRYq4J28kIGxRE5ZgwbrXIyRuleug0PwuInCpdhWTet7eWMYa40obihLW1FKPAgTxUlJAvScxcZFmRlWQ1r_7D6jS4vUv9ChmkjayPgLTKMWyvA58z3MOsYqtbejxgrz4SCd-z_QTZlZUmTnvMpxagLcHxv2pUQ4mMa75YPnfl8Wpq4j3fip7jea3ATMo2qDU1gn212u4whFWca_8aoVue01yofzoxjPOQGoSBjR5ePQ1iPVg_4GOb_DHt_hbPuze8AAAD__3Di014=
@@ -416,7 +416,7 @@ vectorized: true
 └── • union all
     │
     ├── • index join
-    │   │ table: array_tab@primary
+    │   │ table: array_tab@array_tab_pkey
     │   │
     │   └── • sort
     │       │ order: +a
@@ -428,7 +428,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: array_tab@primary
+          table: array_tab@array_tab_pkey
           spans: [/1 - /1]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF9r2zAUxd_3KcR9acpUbNn5axhkWzyWkSWdHdjGZopiX4ohtTxJHivB333EDm1dEsVJ6YuxpPu751wd0AbUnzV44P-4nr2fzklnMg2X4bfZJQn9mf9xSTj5FCy-Ei4lv7_RfEW-f_YDn3RWZPy7sG0XycWGlReXZBGQDifvCNv-TvyAfPhJOFDIRIJzfocKvF_AgIIDFFyIKORSxKiUkNujTVU4Tf6BZ1NIs7zQ9bZO9RrBAyETlJgAhQQ1T9dVvzF7C1EZUYiFRPAeq-fiSuTWsFEdlRREoXedIwpK81sEr1fSA-p7Gk9SpdMs1tbouROgsKg9eqReFbr6O6Tbb-gys-6Sr9YYIE9QWqwp_ZDNmEt5k2Z_gUKY80x5xGK2xa62X6eFIecUQ6GQGqXl7gtkf3v3lPZfRJrtxu0dGjeX6R2X94-T0bFzUL3bUHfa37Z9XP7htqviFmbYuWac9tE7VfTOOdEfMbSLvntu9EfaP4m-_8rRv-x5GbR6XuxTnpcAVS4yhS07RxQwucV6FCUKGeO1FHElUy8XFVdtJKh0fcrqxTSrj7YGn8LMDNtm2jHSrhl2jXDXDHeNcNM2ew73jPDIDPeN8MBse2CEh2Z4-BLbo5MuLCrf_A8AAP__OQalPQ==
@@ -448,7 +448,7 @@ vectorized: true
 └── • union all
     │
     ├── • index join
-    │   │ table: array_tab@primary
+    │   │ table: array_tab@array_tab_pkey
     │   │
     │   └── • sort
     │       │ order: +a
@@ -464,7 +464,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: array_tab@primary
+          table: array_tab@array_tab_pkey
           spans: [/1 - /1]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlV9P2zwUxu_fT3F0bgC9QY2dlkKkSd1G0DoxylqkbVor5DZHEKnYme0iEOp3n5J0LSmt0yA07QbhP4_Pz-d54j6h-TXFEKPvl-fvuxewf9odXA2-nh_AIDqPPl6BgLN-7wsIrcXjtRVj-PYp6kewvz-GznDm-wHB3hOb7x1Arw-lST7fOyhmBbwDlv17GvXhww8Q6KFUMV2IOzIY_kSGHnL0MMCRh6lWEzJG6WzpKd_YjR8w9D1MZDqzxbRN7JQwxJlUOiZNMXoYkxXJNFsfzUceTpQmDFdbTxNjEzmxjVZpL3ay8r2ZDaHDcDT3UM3sos7IQ2PFDWHYnHtbWDZUGihtSTeO1uv8v_X4Vp3jP6tE9knEpBvtcomlTZ1UJ3dCP65u5nX41upHdaov23i8qY2FGRtauTpg_Ai3wty-UOemLYjaW4lW52wyftFkFzbza3GvmI7fnOlCHaq0wXh5e1UUT0oczO3WlRhPaREWti0sQuvrRN6jh4NUSBNCg_kNdpj9DXZLEK_D1JX3pC3FZ8nUkiadF3kG9mc9ekg1KAkdFoLJwMBYoW04xOGQMzZEIBkvRsEQYStdUKLju3fMr_68lh3LN-_QKvZaGL67fTy3j7_SvgqmF_Y1_yX7lt_5yV97nvibPk_szZ-nDeX6ZFIlDa39am4-2c-AKb6h4oJGzfSELrWa5GWKYS_X5RMxGVussmLQlcVSBvhczJxi7hZzpzhwi4N1MXsubpbErJ6Ycbe66eRuucUtd7srbn3kVLfd4rZT7Lu5j93cFTk5cav9ipS5M1pBzl6EtE5UKtRVWWHukK-HZTT_73cAAAD__yXI0Rs=
@@ -482,7 +482,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: array_tab@primary
+      table: array_tab@array_tab_pkey
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVFr2zAQx9_3KY57qQMqkeWXISg4W1xmyJxOCWwlM0OJj2JwLU-SYSX4uw_bIW0G8bbH--v-5x_-HdH9rFBi8u1htUgzCJbpZrv5sprBJlklH7eg4V6tP4O2Vr_88HoPXz8lKoEg2EP8veU8Irg5iu5mBotsCYGGO4hmM1grCPY7nsMd6H5aJgo-PIJGhrUpKNPP5FDuMESGEeYMG2sO5JyxfXwcltLiF0rOsKyb1vdxzvBgLKE8oi99RSgxM7emmQtkWJDXZTWsdQxN619LzusnQhl17M3hcPrwVu8rUqQLsnN-cR7P_yJubPms7Qsy3DS6dhJukeG69RLikMUCr5GE_0NyX1aeLNl5eIkx5hKCIBZnFwulFo87IaVMs-37_GQlDnstp_BkZ8hisePn3Vf2q-DiAvwvbhS5xtSO_kkO73KGVDzR6N-Z1h7owZrD8JlxXA-9ISjI-fE1Goe0Hp96wLflcLIspstissz_KOfdu98BAAD__xs0B0Q=

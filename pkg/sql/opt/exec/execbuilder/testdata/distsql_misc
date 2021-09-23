@@ -121,7 +121,7 @@ vectorized: true
 • scan
   columns: (a int, b int, c float, d decimal)
   estimated row count: 1,000 (100% of the table; stats collected <hidden> ago)
-  table: data@primary
+  table: data@data_pkey
   spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Gr0zAUx9_9FOH_pJKSpe186JOiEwZzd657UKQPsTleC11SkwyUse8uy4Rr5U5y15dCzumv_18PJ0f4Hz0qLD5tVm-Wa_b83bLe1R9XnO0-bxb1C1YvVou3O_aSvd_efWBaBQUOYzWt1Z48qi-Q4MjBUYCjBMccDcfgbEveW3d-5RiBpf6JasbRmeEQzuWGo7WOUB0RutATKuzU1562pDQ5MQOHpqC6Psaco18Prtsr9wsc9aCMr1gmJFNGM8ls-E4OzYnDHsJDgg_qnlDJE79i8RB-MNZpcqTHwZ0J4H-e33qrQmy33V71aE6P_MTaZnYQ89FXrnnlIy-ZPh2ZMh0hM5HfMJ883SNP8sgzUdzgUaR7FEkeRSbKGzzKdI8yyaPMxHzi3j7isSU_WOMpafNm59UlfU-XS-DtwbW0cbaNMZfjXeRiQZMPl668HJYmtqLg37D8L_xqBM_-hfMpycUUuJwCz58EN6dnvwMAAP__eCPGvQ==
