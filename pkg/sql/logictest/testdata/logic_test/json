@@ -899,11 +899,26 @@ d
 query error could not parse \"foo\" as type int
 SELECT json_populate_record(((3,) AS a), '{"a": "foo"}')
 
-query error anonymous records cannot be used with json_populate_record
+query error anonymous records cannot be used with json{b}_populate_record{set}
 SELECT * FROM json_populate_record((1,2,3,4), '{"a": 3, "c": 10, "d": 11.001}')
 
-query error anonymous records cannot be used with json_populate_record
+query error anonymous records cannot be used with json{b}_populate_record{set}
 SELECT * FROM json_populate_record(NULL, '{"a": 3, "c": 10, "d": 11.001}')
+
+query error first argument of json{b}_populate_record{set} must be a record type
+SELECT * FROM json_populate_record(1, '{"a": 3, "c": 10, "d": 11.001}')
+
+query error first argument of json{b}_populate_record{set} must be a record type
+SELECT * FROM json_populate_record(NULL::INT, '{"a": 3, "c": 10, "d": 11.001}')
+
+query error anonymous records cannot be used with json{b}_populate_record{set}
+SELECT * FROM json_populate_record(NULL::record, '{"a": 3, "c": 10, "d": 11.001}')
+
+query error anonymous records cannot be used with json{b}_populate_record{set}
+SELECT * FROM json_populate_recordset(NULL, '[{"a": 3, "c": 10, "d": 11.001}, {}]')
+
+query error first argument of json{b}_populate_record{set} must be a record type
+SELECT * FROM json_populate_recordset(NULL::INT, '[{"a": 3, "c": 10, "d": 11.001}, {}]')
 
 query I
 SELECT * FROM json_populate_record(((3,) AS a), NULL)

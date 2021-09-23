@@ -1498,7 +1498,10 @@ func PopulateRecordWithJSON(
 	tupleTypes := desiredType.TupleContents()
 	labels := desiredType.TupleLabels()
 	if labels == nil {
-		return pgerror.Newf(pgcode.InvalidParameterValue, "anonymous records cannot be used with json_populate_record")
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"anonymous records cannot be used with json{b}_populate_record{set}",
+		)
 	}
 	for i := range tupleTypes {
 		val, err := j.FetchValKey(labels[i])
