@@ -104,11 +104,13 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 func (c collectionBackedDereferencer) fastDescLookup(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	leaseCacheEntry := c.tc.leased.cache.GetByID(id)
-	if leaseCacheEntry != nil {
-		return leaseCacheEntry.(lease.LeasedDescriptor).Underlying(), nil
+	if uc := c.tc.uncommitted.getByID(id); uc != nil {
+		return uc, nil
 	}
-	return c.tc.uncommitted.getByID(id), nil
+	if ld := c.tc.leased.cache.GetByID(id); ld != nil {
+		return ld.(lease.LeasedDescriptor).Underlying(), nil
+	}
+	return nil, nil
 }
 
 // DereferenceDescriptorIDs implements the validate.ValidationDereferencer
