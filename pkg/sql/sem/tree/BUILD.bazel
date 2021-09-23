@@ -23,7 +23,7 @@ go_library(
         "annotation.go",
         "as_of.go",
         "backup.go",
-        "casts.go",
+        "cast.go",
         "changefeed.go",
         "col_name.go",
         "collatedstring.go",
@@ -176,7 +176,7 @@ go_test(
     name = "tree_test",
     size = "small",
     srcs = [
-        "casts_test.go",
+        "cast_test.go",
         "col_types_test.go",
         "collatedstring_test.go",
         "compare_test.go",
