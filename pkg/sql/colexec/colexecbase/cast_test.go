@@ -91,17 +91,15 @@ func TestRandomizedCast(t *testing.T) {
 			input = append(input, colexectestutils.Tuple{fromConverter(fromDatum)})
 			output = append(output, colexectestutils.Tuple{fromConverter(fromDatum), toPhys})
 		}
-		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(
-			t, testAllocator, []colexectestutils.Tuples{input}, [][]*types.T{{from}}, output, colexectestutils.OrderedVerifier,
+		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(t, testAllocator,
+			[]colexectestutils.Tuples{input}, [][]*types.T{{from}}, output, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexecbase.GetCastOperator(testAllocator, input[0], 0, 1, from, to, &evalCtx)
-			},
-			func(err error) {
+			}, func(err error) {
 				if !errorExpected {
 					t.Fatal(err)
 				}
-			},
-		)
+			}, nil /* orderedCols */)
 	}
 }
 
