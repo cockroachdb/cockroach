@@ -770,7 +770,11 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 }
 
 func (e *distSQLSpecExecFactory) ConstructPlan(
-	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
+	root exec.Node,
+	subqueries []exec.Subquery,
+	cascades []exec.Cascade,
+	checks []exec.Node,
+	rootRowCount int64,
 ) (exec.Plan, error) {
 	if len(subqueries) != 0 {
 		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: subqueries")
@@ -781,7 +785,7 @@ func (e *distSQLSpecExecFactory) ConstructPlan(
 	if len(checks) != 0 {
 		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: checks")
 	}
-	return constructPlan(e.planner, root, subqueries, cascades, checks)
+	return constructPlan(e.planner, root, subqueries, cascades, checks, rootRowCount)
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplainOpt(
