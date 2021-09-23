@@ -11,12 +11,18 @@
 package cli
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble/vfs"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInitInsecure(t *testing.T) {
@@ -149,4 +155,29 @@ func TestAddrWithDefaultHost(t *testing.T) {
 			t.Errorf("expected %q, got %q", test.outAddr, addr)
 		}
 	}
+}
+
+func TestExitIfDiskFull(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	err := exitIfDiskFull(mockDiskSpaceFS{FS: vfs.NewMem()}, []base.StoreSpec{
+		{},
+	})
+	require.Error(t, err)
+	var cliErr *clierror.Error
+	require.True(t, errors.As(err, &cliErr))
+	require.Equal(t, exit.DiskFull(), cliErr.GetExitCode())
+}
+
+type mockDiskSpaceFS struct {
+	vfs.FS
+}
+
+func (fs mockDiskSpaceFS) GetDiskUsage(path string) (vfs.DiskUsage, error) {
+	return vfs.DiskUsage{
+		AvailBytes: 10 << 20,
+		TotalBytes: 100 << 30,
+		UsedBytes:  100<<30 - 10<<20,
+	}, nil
 }
