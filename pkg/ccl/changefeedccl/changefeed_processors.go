@@ -915,6 +915,34 @@ type jobState struct {
 	progressUpdatesSkipped bool
 }
 
+func loadJobState(
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	spec execinfrapb.ChangeFrontierSpec,
+	metrics *Metrics,
+	ts timeutil.TimeSource,
+) (*jobState, error) {
+	var job *jobs.Job
+	var err error
+
+	if spec.SessionID == "" {
+		// TODO(ssd): Even in mixed version clusters, I don't
+		// think this should be possible currently since the
+		// changeFrontier is run on the coordinator and thus
+		// its spec proto was populated on the same node that
+		// adopted the job.
+		log.Warning(ctx, "no session ID found for changefeed job")
+		job, err = cfg.JobRegistry.LoadJob(ctx, spec.JobID)
+	} else {
+		job, err = cfg.JobRegistry.LoadJobWithSessionID(ctx, spec.JobID, spec.SessionID)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return newJobState(job, cfg.Settings, metrics, ts), nil
+}
+
 func newJobState(
 	j *jobs.Job, st *cluster.Settings, metrics *Metrics, ts timeutil.TimeSource,
 ) *jobState {
@@ -1086,19 +1114,19 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
 	if cf.spec.JobID != 0 {
-		job, err := cf.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cf.spec.JobID)
+		var err error
+		cf.js, err = loadJobState(ctx, cf.flowCtx.Cfg, cf.spec, cf.metrics, timeutil.DefaultTimeSource{})
 		if err != nil {
 			cf.MoveToDraining(err)
 			return
 		}
-		cf.js = newJobState(job, cf.flowCtx.Cfg.Settings, cf.metrics, timeutil.DefaultTimeSource{})
 
 		if changefeedbase.FrontierCheckpointFrequency.Get(&cf.flowCtx.Cfg.Settings.SV) == 0 {
 			log.Warning(ctx,
 				"Frontier checkpointing disabled; set changefeed.frontier_checkpoint_frequency to non-zero value to re-enable")
 		}
 
-		p := job.Progress()
+		p := cf.js.job.Progress()
 		if ts := p.GetHighWater(); ts != nil {
 			cf.highWaterAtStart.Forward(*ts)
 		}

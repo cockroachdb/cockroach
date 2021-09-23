@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -35,6 +36,7 @@ func StartDistChangefeed(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
+	jobSessionID sqlliveness.SessionID,
 	details jobspb.ChangefeedDetails,
 	trackedSpans []roachpb.Span,
 	initialHighWater hlc.Timestamp,
@@ -98,6 +100,7 @@ func StartDistChangefeed(
 		TrackedSpans: trackedSpans,
 		Feed:         details,
 		JobID:        jobID,
+		SessionID:    jobSessionID,
 		UserProto:    execCtx.User().EncodeProto(),
 	}
 

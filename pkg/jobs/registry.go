@@ -680,6 +680,26 @@ func (r *Registry) LoadJob(ctx context.Context, jobID jobspb.JobID) (*Job, error
 	return r.LoadJobWithTxn(ctx, jobID, nil)
 }
 
+// LoadJob loads an existing job with the given jobID from the
+// system.jobs table. The job must be claimed by the given sessionID
+// or an error is returned.
+func (r *Registry) LoadJobWithSessionID(
+	ctx context.Context, jobID jobspb.JobID, sessionID sqlliveness.SessionID,
+) (*Job, error) {
+	if sessionID == "" {
+		return nil, errors.AssertionFailedf("LoadJobWithSessionID called with empty sessionID")
+	}
+	j := &Job{
+		id:        jobID,
+		sessionID: sessionID,
+		registry:  r,
+	}
+	if err := j.load(ctx, nil); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
 // LoadJobWithTxn does the same as above, but using the transaction passed in
 // the txn argument. Passing a nil transaction is equivalent to calling LoadJob
 // in that a transaction will be automatically created.

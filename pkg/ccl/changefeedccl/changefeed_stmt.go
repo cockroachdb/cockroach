@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -336,7 +337,7 @@ func changefeedPlanHook(
 
 		if details.SinkURI == `` {
 			telemetry.Count(`changefeed.create.core`)
-			err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
+			err := distChangefeedFlow(ctx, p, 0 /* jobID */, "" /* sessionID */, details, progress, resultsCh)
 			if err != nil {
 				telemetry.Count(`changefeed.core.error`)
 			}
@@ -637,10 +638,11 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
 	jobID := b.job.ID()
+	jobSessionID := b.job.SessionID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
-	err := b.resumeWithRetries(ctx, jobExec, jobID, details, progress, execCfg)
+	err := b.resumeWithRetries(ctx, jobExec, jobID, jobSessionID, details, progress, execCfg)
 	if err != nil {
 		return b.handleChangefeedError(ctx, err, details, jobExec)
 	}
@@ -686,6 +688,7 @@ func (b *changefeedResumer) resumeWithRetries(
 	ctx context.Context,
 	jobExec sql.JobExecContext,
 	jobID jobspb.JobID,
+	jobSessionID sqlliveness.SessionID,
 	details jobspb.ChangefeedDetails,
 	progress jobspb.Progress,
 	execCfg *sql.ExecutorConfig,
@@ -708,7 +711,7 @@ func (b *changefeedResumer) resumeWithRetries(
 		// a dummy channel.
 		startedCh := make(chan tree.Datums, 1)
 
-		if err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh); err == nil {
+		if err = distChangefeedFlow(ctx, jobExec, jobID, jobSessionID, details, progress, startedCh); err == nil {
 			return nil
 		}
 

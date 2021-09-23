@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -54,6 +55,7 @@ func distChangefeedFlow(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
+	jobSessionID sqlliveness.SessionID,
 	details jobspb.ChangefeedDetails,
 	progress jobspb.Progress,
 	resultsCh chan<- tree.Datums,
@@ -115,7 +117,7 @@ func distChangefeedFlow(
 		checkpoint = *cf.Checkpoint
 	}
 	return changefeeddist.StartDistChangefeed(
-		ctx, execCtx, jobID, details, trackedSpans, initialHighWater, checkpoint, resultsCh)
+		ctx, execCtx, jobID, jobSessionID, details, trackedSpans, initialHighWater, checkpoint, resultsCh)
 }
 
 func fetchSpansForTargets(
