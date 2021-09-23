@@ -49,6 +49,9 @@ var requireConstMsg = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/util/log.VEvent":    true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.VErrEvent": true,
 
+	"(*github.com/cockroachdb/cockroach/pkg/util/tracing/Span).Record":  true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/tracing/Span).Recordf": true,
+
 	"(*github.com/cockroachdb/cockroach/pkg/sql.optPlanningCtx).log": true,
 }
 
