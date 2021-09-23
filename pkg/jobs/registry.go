@@ -680,6 +680,29 @@ func (r *Registry) LoadJob(ctx context.Context, jobID jobspb.JobID) (*Job, error
 	return r.LoadJobWithTxn(ctx, jobID, nil)
 }
 
+// LoadClaimedJob loads an existing job with the given jobID from the
+// system.jobs table. The job must have already been claimed by this
+// Registry.
+func (r *Registry) LoadClaimedJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
+	r.mu.Lock()
+	adoptedJob, ok := r.mu.adoptedJobs[jobID]
+	if !ok {
+		r.mu.Unlock()
+		return nil, &JobNotFoundError{jobID: jobID}
+	}
+	r.mu.Unlock()
+
+	j := &Job{
+		id:        jobID,
+		sessionID: adoptedJob.sid,
+		registry:  r,
+	}
+	if err := j.load(ctx, nil); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
 // LoadJobWithTxn does the same as above, but using the transaction passed in
 // the txn argument. Passing a nil transaction is equivalent to calling LoadJob
 // in that a transaction will be automatically created.
