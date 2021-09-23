@@ -81,6 +81,15 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	return false
 }
 
+// RowCountIfAvailable returns the RowCount if the stats were available and a
+// negative number otherwise.
+func (s *Statistics) RowCountIfAvailable() float64 {
+	if s.Available {
+		return s.RowCount
+	}
+	return -1
+}
+
 // CopyFrom copies a Statistics object which can then be modified independently.
 func (s *Statistics) CopyFrom(other *Statistics) {
 	s.Available = other.Available

@@ -1976,8 +1976,9 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 		// subquery mode that reads and discards all rows. This could possibly also
 		// be fixed by ensuring that bufferNode exhausts its input (and forcing it
 		// to behave like a spoolNode) and using the EXISTS mode.
-		Mode: exec.SubqueryAllRows,
-		Root: buffer,
+		Mode:     exec.SubqueryAllRows,
+		Root:     buffer,
+		RowCount: int64(with.Relational().Stats.RowCountIfAvailable()),
 	})
 
 	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
@@ -2031,7 +2032,8 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		if err != nil {
 			return nil, err
 		}
-		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks)
+		rootRowCount := int64(rec.Recursive.Relational().Stats.RowCountIfAvailable())
+		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks, rootRowCount)
 	}
 
 	label := fmt.Sprintf("working buffer (%s)", rec.Name)

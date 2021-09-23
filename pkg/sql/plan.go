@@ -415,6 +415,10 @@ type planComponents struct {
 	// plan for the main query.
 	main planMaybePhysical
 
+	// mainRowCount is the estimated number of rows that the main query will
+	// return, negative if the stats weren't available to make a good estimate.
+	mainRowCount int64
+
 	// cascades contains metadata for all cascades.
 	cascades []cascadeMetadata
 
@@ -614,6 +618,10 @@ func (pf planFlags) IsSet(flag planFlags) bool {
 
 func (pf *planFlags) Set(flag planFlags) {
 	*pf |= flag
+}
+
+func (pf *planFlags) Unset(flag planFlags) {
+	*pf &= ^flag
 }
 
 // IsDistributed returns true if either the fully or the partially distributed

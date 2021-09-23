@@ -4049,9 +4049,76 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	return planCtx
 }
 
+// maybeMoveSingleFlowToGateway checks whether plan consists of a single flow
+// on the remote node and would benefit from bringing that flow to the gateway.
+func maybeMoveSingleFlowToGateway(planCtx *PlanningCtx, plan *PhysicalPlan, rowCount int64) {
+	if !planCtx.isLocal && planCtx.ExtendedEvalCtx.SessionData().DistSQLMode != sessiondatapb.DistSQLAlways {
+		// If we chose to distribute this plan, yet we created only a single
+		// remote flow, it might be a good idea to bring that whole flow back
+		// to the gateway.
+		//
+		// This comes from the limitation of pinning each flow based on the
+		// physical planning of table readers. However, if later stages of the
+		// plan contain other processors, e.g. joinReaders, the whole flow can
+		// become quite expensive. With high enough frequency of such flows, the
+		// node having the lease for the ranges of the table readers becomes the
+		// hot spot. In such a scenario we might choose to run the flow locally
+		// to distribute the load on the cluster better (assuming that the
+		// queries are issued against all nodes with equal frequency).
+
+		// If we estimate that the plan reads far more rows than it returns in
+		// the output, it probably makes sense to keep the flow as distributed
+		// (i.e. keep the computation where the data is). Therefore, when we
+		// don't have a good estimate (rowCount is negative) or the data
+		// cardinality is reduced significantly (the reduction ratio is at least
+		// 10), we will keep the plan as is.
+		const rowReductionRatio = 10
+		keepPlan := rowCount <= 0 || float64(plan.TotalEstimatedScannedRows)/float64(rowCount) >= rowReductionRatio
+		if keepPlan {
+			return
+		}
+		singleFlow := true
+		moveFlowToGateway := false
+		nodeID := plan.Processors[0].Node
+		for _, p := range plan.Processors[1:] {
+			if p.Node != nodeID {
+				singleFlow = false
+				break
+			}
+			core := p.Spec.Core
+			if core.JoinReader != nil || core.MergeJoiner != nil || core.HashJoiner != nil ||
+				core.ZigzagJoiner != nil || core.InvertedJoiner != nil {
+				// We want to move the flow when it contains a processor that
+				// might increase the cardinality of the data flowing through it
+				// or that performs the KV work.
+				moveFlowToGateway = true
+			}
+		}
+		if singleFlow && moveFlowToGateway {
+			for i := range plan.Processors {
+				plan.Processors[i].Node = plan.GatewayNodeID
+			}
+			planCtx.isLocal = true
+			planCtx.planner.curPlan.flags.Unset(planFlagFullyDistributed)
+			planCtx.planner.curPlan.flags.Unset(planFlagPartiallyDistributed)
+			plan.Distribution = physicalplan.LocalPlan
+		}
+	}
+}
+
 // FinalizePlan adds a final "result" stage and a final projection if necessary
 // as well as populates the endpoints of the plan.
 func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan) {
+	dsp.finalizePlanWithRowCount(planCtx, plan, -1 /* rowCount */)
+}
+
+// finalizePlanWithRowCount adds a final "result" stage and a final projection
+// if necessary as well as populates the endpoints of the plan.
+// - rowCount is the estimated number of rows that the plan outputs. Use a
+// negative number if the stats were not available to make an estimate.
+func (dsp *DistSQLPlanner) finalizePlanWithRowCount(
+	planCtx *PlanningCtx, plan *PhysicalPlan, rowCount int64,
+) {
 	// Find all MetadataTestSenders in the plan, so that the MetadataTestReceiver
 	// knows how many sender IDs it should expect.
 	var metadataSenders []string
@@ -4060,6 +4127,8 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 			metadataSenders = append(metadataSenders, proc.Spec.Core.MetadataTestSender.ID)
 		}
 	}
+
+	maybeMoveSingleFlowToGateway(planCtx, plan, rowCount)
 
 	// Add a final "result" stage if necessary.
 	plan.EnsureSingleStreamOnGateway()
