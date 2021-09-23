@@ -208,8 +208,9 @@ type Fetcher struct {
 	// calculate the kvBatchFetcher's firstBatchLimit.
 	numKeysPerRow int
 
-	// True if the index key must be decoded. This is only false if there are no
-	// needed columns.
+	// True if the index key must be decoded.
+	// If there is more than one table, the index key must always be decoded.
+	// This is only false if there are no needed columns.
 	mustDecodeIndexKey bool
 
 	// lockStrength represents the row-level locking mode to use when fetching

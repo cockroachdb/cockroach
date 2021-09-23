@@ -53,8 +53,6 @@ const (
 		family       static    (d_w_id, d_id, d_name, d_street_1, d_street_2, d_city, d_state, d_zip),
 		family       dynamic_1 (d_ytd),
 		family       dynamic_2 (d_next_o_id, d_tax)`
-	tpccDistrictSchemaInterleaveSuffix = `
-		interleave in parent warehouse (d_w_id)`
 
 	// CUSTOMER table.
 	tpccCustomerSchemaBase = `(
@@ -87,8 +85,6 @@ const (
 			c_city, c_state, c_zip, c_phone, c_since, c_credit, c_credit_lim, c_discount
 		),
 		family dynamic (c_balance, c_ytd_payment, c_payment_cnt, c_data, c_delivery_cnt)`
-	tpccCustomerSchemaInterleaveSuffix = `
-		interleave in parent district (c_w_id, c_d_id)`
 
 	// HISTORY table.
 	tpccHistorySchemaBase = `(
@@ -119,8 +115,6 @@ const (
 		primary key  (o_w_id, o_d_id, o_id DESC),
 		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC) storing (o_entry_d, o_carrier_id)
 	`
-	tpccOrderSchemaInterleaveSuffix = `
-		interleave in parent district (o_w_id, o_d_id)`
 
 	// NEW-ORDER table.
 	tpccNewOrderSchema = `(
@@ -129,11 +123,6 @@ const (
 		no_w_id  integer   not null,
 		primary key (no_w_id, no_d_id, no_o_id)
 	`
-	// This natural-seeming interleave makes performance worse, because this
-	// table has a ton of churn and produces a lot of MVCC tombstones, which
-	// then will gum up the works of scans over the parent table.
-	// tpccNewOrderSchemaInterleaveSuffix = `
-	// 	interleave in parent "order" (no_w_id, no_d_id, no_o_id)`
 
 	// ITEM table.
 	tpccItemSchema = `(
@@ -167,8 +156,6 @@ const (
 		primary key (s_w_id, s_i_id)`
 	deprecatedTpccStockSchemaFkSuffix = `
 		index stock_item_fk_idx (s_i_id)`
-	tpccStockSchemaInterleaveSuffix = `
-		interleave in parent warehouse (s_w_id)`
 
 	// ORDER-LINE table.
 	tpccOrderLineSchemaBase = `(
@@ -185,8 +172,6 @@ const (
 		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`
 	deprecatedTpccOrderLineSchemaFkSuffix = `
 		index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id)`
-	tpccOrderLineSchemaInterleaveSuffix = `
-		interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 
 	localityRegionalByRowSuffix = `
 		locality regional by row`
@@ -197,11 +182,10 @@ const (
 )
 
 type schemaOptions struct {
-	fkClause         string
-	familyClause     string
-	columnClause     string
-	localityClause   string
-	interleaveClause string
+	fkClause       string
+	familyClause   string
+	columnClause   string
+	localityClause string
 }
 
 type makeSchemaOption func(o *schemaOptions)
@@ -218,14 +202,6 @@ func maybeAddColumnFamiliesSuffix(separateColumnFamilies bool, suffix string) ma
 	return func(o *schemaOptions) {
 		if separateColumnFamilies {
 			o.familyClause = suffix
-		}
-	}
-}
-
-func maybeAddInterleaveSuffix(interleave bool, suffix string) makeSchemaOption {
-	return func(o *schemaOptions) {
-		if interleave {
-			o.interleaveClause = suffix
 		}
 	}
 }
@@ -270,9 +246,6 @@ func makeSchema(base string, opts ...makeSchemaOption) string {
 	}
 	if o.columnClause != "" {
 		ret += "," + o.columnClause
-	}
-	if o.interleaveClause != "" {
-		ret += "," + o.interleaveClause
 	}
 	ret += endSchema
 	if o.localityClause != "" {

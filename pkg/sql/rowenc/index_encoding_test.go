@@ -1003,24 +1003,6 @@ func createEquivTCs(hierarchy map[string]*interleaveInfo) []equivSigTestCases {
 			},
 			expected: [][]byte{hierarchy["t1"].equivSig},
 		},
-
-		{
-			name: "OneAncestor",
-			table: interleaveTableArgs{
-				indexKeyArgs: indexKeyTest{tableID: 100, primaryInterleaves: []descpb.ID{50}},
-				values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
-			},
-			expected: [][]byte{hierarchy["t1"].equivSig, hierarchy["t1"].children["t2"].equivSig},
-		},
-
-		{
-			name: "TwoAncestors",
-			table: interleaveTableArgs{
-				indexKeyArgs: indexKeyTest{tableID: 20, primaryInterleaves: []descpb.ID{50, 150}},
-				values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(30)},
-			},
-			expected: [][]byte{hierarchy["t1"].equivSig, hierarchy["t1"].children["t3"].equivSig, hierarchy["t1"].children["t3"].children["t4"].equivSig},
-		},
 	}
 }
 
@@ -1330,23 +1312,9 @@ func ExtractIndexKey(
 	}
 	values := make([]EncDatum, index.NumKeyColumns())
 	dirs := index.IndexDesc().KeyColumnDirections
-	if index.NumInterleaveAncestors() > 0 {
-		// TODO(dan): In the interleaved index case, we parse the key twice; once to
-		// find the index id so we can look up the descriptor, and once to extract
-		// the values. Only parse once.
-		var ok bool
-		_, ok, _, err = DecodeIndexKey(codec, tableDesc, index, indexTypes, values, dirs, entry.Key)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return nil, errors.Errorf("descriptor did not match key")
-		}
-	} else {
-		key, _, err = DecodeKeyVals(indexTypes, values, dirs, key)
-		if err != nil {
-			return nil, err
-		}
+	key, _, err = DecodeKeyVals(indexTypes, values, dirs, key)
+	if err != nil {
+		return nil, err
 	}
 
 	// Extract the values for index.KeySuffixColumnIDs

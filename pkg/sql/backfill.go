@@ -292,9 +292,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 			if col := m.AsColumn(); col != nil {
 				needColumnBackfill = catalog.ColumnNeedsBackfill(col)
 			} else if idx := m.AsIndex(); idx != nil {
-				if !canClearRangeForDrop(idx) {
-					droppedIndexes = append(droppedIndexes, idx)
-				}
+				// no-op
 			} else if c := m.AsConstraint(); c != nil {
 				constraintsToDrop = append(constraintsToDrop, c)
 			} else if m.AsPrimaryKeySwap() != nil || m.AsComputedColumnSwap() != nil || m.AsMaterializedViewRefresh() != nil {
@@ -769,74 +767,6 @@ func (sc *SchemaChanger) getTableVersion(
 	return tableDesc, nil
 }
 
-// TruncateInterleavedIndexes truncates the input set of indexes from the given
-// table. It is used in the schema change GC job to delete interleaved index
-// data as part of a TRUNCATE statement. Note that we cannot use
-// SchemaChanger.truncateIndexes instead because that accesses the most recent
-// version of the table when deleting. In this case, we need to use the version
-// of the table before truncation, which is passed in.
-func TruncateInterleavedIndexes(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	table catalog.TableDescriptor,
-	indexIDs []descpb.IndexID,
-) error {
-	log.Infof(ctx, "truncating %d interleaved indexes", len(indexIDs))
-	chunkSize := int64(indexTruncateChunkSize)
-	alloc := &rowenc.DatumAlloc{}
-	codec, db := execCfg.Codec, execCfg.DB
-	zoneConfigIndexIDList := make([]uint32, len(indexIDs))
-	for i, id := range indexIDs {
-		zoneConfigIndexIDList[i] = uint32(id)
-	}
-	for _, id := range indexIDs {
-		idx, err := table.FindIndexWithID(id)
-		if err != nil {
-			return err
-		}
-		var resume roachpb.Span
-		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
-			log.VEventf(ctx, 2, "truncate interleaved index (%d) at row: %d, span: %s", table.GetID(), rowIdx, resume)
-			resumeAt := resume
-			// Make a new txn just to drop this chunk.
-			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				rd := row.MakeDeleter(
-					codec, table, nil /* requestedCols */, &execCfg.Settings.SV, true, /* internal */
-					execCfg.GetRowMetrics(true /* internal */),
-				)
-				td := tableDeleter{rd: rd, alloc: alloc}
-				if err := td.init(ctx, txn, nil /* *tree.EvalContext */, &execCfg.Settings.SV); err != nil {
-					return err
-				}
-				resume, err := td.deleteIndex(
-					ctx,
-					idx,
-					resumeAt,
-					chunkSize,
-					false, /* traceKV */
-				)
-				done = resume.Key == nil
-				return err
-			}); err != nil {
-				return err
-			}
-		}
-		// All the data chunks have been removed. Now also removed the
-		// zone configs for the dropped indexes, if any.
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			freshTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, table.GetID())
-			if err != nil {
-				return err
-			}
-			return RemoveIndexZoneConfigs(ctx, txn, execCfg, freshTableDesc, zoneConfigIndexIDList)
-		}); err != nil {
-			return err
-		}
-	}
-	log.Infof(ctx, "finished truncating interleaved indexes")
-	return nil
-}
-
 // truncateIndexes truncate the KV ranges corresponding to dropped indexes.
 //
 // The indexes are dropped chunk by chunk, each chunk being deleted in
@@ -858,7 +788,6 @@ func (sc *SchemaChanger) truncateIndexes(
 	for _, idx := range dropped {
 		var resume roachpb.Span
 		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
-			resumeAt := resume
 			if log.V(2) {
 				log.Infof(ctx, "drop index (%d, %d) at row: %d, span: %s",
 					sc.descID, sc.mutationID, rowIdx, resume)
@@ -888,17 +817,6 @@ func (sc *SchemaChanger) truncateIndexes(
 				)
 				td := tableDeleter{rd: rd, alloc: alloc}
 				if err := td.init(ctx, txn, nil /* *tree.EvalContext */, &sc.settings.SV); err != nil {
-					return err
-				}
-				if !canClearRangeForDrop(idx) {
-					resume, err = td.deleteIndex(
-						ctx,
-						idx,
-						resumeAt,
-						chunkSize,
-						false, /* traceKV */
-					)
-					done = resume.Key == nil
 					return err
 				}
 				done = true
@@ -2118,24 +2036,6 @@ func runSchemaChangesInTxn(
 		}
 
 		if err := tableDesc.MakeMutationComplete(tableDesc.Mutations[m.MutationOrdinal()]); err != nil {
-			return err
-		}
-
-		// If the mutation we processed was a primary key swap, there is some
-		// extra work that needs to be done. Note that we don't need to create
-		// a job to clean up the dropped indexes because those mutations can
-		// get processed in this txn on the new table.
-		if err := maybeRemoveInterleaveBackreference(
-			ctx, planner.txn, planner.Descriptors(), m, tableDesc, func(
-				ctx context.Context, ancestor *tabledesc.Mutable,
-			) error {
-				return planner.writeSchemaChange(ctx, ancestor, descpb.InvalidMutationID,
-					fmt.Sprintf("remove interleaved backreference from table %s(%d) "+
-						"for primary key swap of table %s(%d)",
-						ancestor.Name, ancestor.ID, tableDesc.Name, tableDesc.GetID(),
-					))
-			},
-		); err != nil {
 			return err
 		}
 	}
