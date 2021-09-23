@@ -340,11 +340,11 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 					encoding.PrettyPrintValue(directions, span.EndKey, "/")))
 			}
 
-			if len(actual) != len(test.generatedSpans) {
+			if len(actual) != len(test.parsed.generatedSpans) {
 				t.Fatalf("got \n    %v\n expected \n    %v", actual, test.generatedSpans)
 			}
 			for i := range actual {
-				if expected := strings.TrimSpace(test.generatedSpans[i]); actual[i] != expected {
+				if expected := strings.TrimSpace(test.parsed.generatedSpans[i]); actual[i] != expected {
 					t.Errorf("%d: got [%s] expected [%s]", i, actual[i], expected)
 				}
 			}
