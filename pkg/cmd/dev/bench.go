@@ -114,6 +114,7 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 		if short {
 			args = append(args, "-test.short", "-test.benchtime=1ns")
 		}
+		logCommand("bazel", args...)
 		err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 		if err != nil {
 			return err
