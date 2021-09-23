@@ -34,8 +34,8 @@ type MutationVisitor interface {
 	MarkDescriptorAsDroppedSynthetically(context.Context, MarkDescriptorAsDroppedSynthetically) error
 	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
-	UpdateRelationDeps(context.Context, UpdateRelationDeps) error
 	RemoveColumnDefaultExpression(context.Context, RemoveColumnDefaultExpression) error
+	RemoveColumnSequenceReferences(context.Context, RemoveColumnSequenceReferences) error
 	AddTypeBackRef(context.Context, AddTypeBackRef) error
 	RemoveRelationDependedOnBy(context.Context, RemoveRelationDependedOnBy) error
 	RemoveTypeBackRef(context.Context, RemoveTypeBackRef) error
@@ -131,13 +131,13 @@ func (op DrainDescriptorName) Visit(ctx context.Context, v MutationVisitor) erro
 }
 
 // Visit is part of the MutationOp interface.
-func (op UpdateRelationDeps) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.UpdateRelationDeps(ctx, op)
+func (op RemoveColumnDefaultExpression) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveColumnDefaultExpression(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op RemoveColumnDefaultExpression) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.RemoveColumnDefaultExpression(ctx, op)
+func (op RemoveColumnSequenceReferences) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveColumnSequenceReferences(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

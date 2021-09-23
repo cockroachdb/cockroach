@@ -390,11 +390,10 @@ upsert descriptor #66
   -    - 65
      createAsOfTime:
        wallTime: "1"
-     dependedOnBy:
+  -  dependedOnBy:
   -  - columnIds:
   -    - 2
   -    id: 68
-  +  - {}
      families:
      - columnIds:
   ...
@@ -426,9 +425,6 @@ upsert descriptor #67
   -    - 64
      createAsOfTime:
        wallTime: "1"
-  +  dependedOnBy: []
-     families:
-     - columnIds:
   ...
      modificationTime: {}
      name: t1

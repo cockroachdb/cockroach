@@ -97,6 +97,11 @@ type PostDeserializationTableDescriptorChanges struct {
 	// one computed column which also had a DEFAULT expression, which therefore
 	// had to be removed. See issue #72881 for details.
 	RemovedDefaultExprFromComputedColumn bool
+
+	// RemovedDuplicateIDsInRefs indicates that the table
+	// has redundant IDs in its DependsOn, DependsOnTypes and DependedOnBy
+	// references.
+	RemovedDuplicateIDsInRefs bool
 }
 
 // DescriptorType returns the type of this descriptor.
@@ -2495,4 +2500,26 @@ func LocalityConfigGlobal() catpb.LocalityConfig {
 // given table.
 func PrimaryKeyIndexName(tableName string) string {
 	return tableName + "_pkey"
+}
+
+// UpdateColumnsDependedOnBy creates, updates or deletes a depended-on-by column
+// reference by ID.
+func (desc *Mutable) UpdateColumnsDependedOnBy(id descpb.ID, colIDs catalog.TableColSet) {
+	ref := descpb.TableDescriptor_Reference{
+		ID:        id,
+		ColumnIDs: colIDs.Ordered(),
+		ByID:      true,
+	}
+	for i := range desc.DependedOnBy {
+		by := &desc.DependedOnBy[i]
+		if by.ID == id {
+			if colIDs.Empty() {
+				desc.DependedOnBy = append(desc.DependedOnBy[:i], desc.DependedOnBy[i+1:]...)
+				return
+			}
+			*by = ref
+			return
+		}
+	}
+	desc.DependedOnBy = append(desc.DependedOnBy, ref)
 }

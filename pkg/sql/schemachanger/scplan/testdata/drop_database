@@ -331,7 +331,10 @@ PreCommitPhase stage 1 of 1 with 56 MutationType ops
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 60
-    *scop.UpdateRelationDeps
+    *scop.RemoveColumnSequenceReferences
+      ColumnID: 3
+      SequenceIDs:
+      - 57
       TableID: 60
     *scop.DeleteDatabaseSchemaEntry
       DatabaseID: 54
@@ -342,7 +345,10 @@ PreCommitPhase stage 1 of 1 with 56 MutationType ops
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 59
-    *scop.UpdateRelationDeps
+    *scop.RemoveColumnSequenceReferences
+      ColumnID: 3
+      SequenceIDs:
+      - 58
       TableID: 59
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 61

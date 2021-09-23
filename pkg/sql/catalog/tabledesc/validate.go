@@ -159,6 +159,20 @@ func (desc *wrapper) ValidateCrossReferences(
 		}
 	}
 
+	// For views, check dependent relations.
+	if desc.IsView() {
+		for _, id := range desc.DependsOn {
+			vea.Report(desc.validateOutboundTableRef(id, vdg))
+		}
+		for _, id := range desc.DependsOnTypes {
+			vea.Report(desc.validateOutboundTypeRef(id, vdg))
+		}
+	}
+
+	for _, by := range desc.DependedOnBy {
+		vea.Report(desc.validateInboundTableRef(by, vdg))
+	}
+
 	// Check foreign keys.
 	for i := range desc.OutboundFKs {
 		vea.Report(desc.validateOutboundFK(&desc.OutboundFKs[i], vdg))
@@ -182,6 +196,78 @@ func (desc *wrapper) ValidateCrossReferences(
 			}
 		}
 	}
+}
+
+func (desc *wrapper) validateOutboundTableRef(
+	id descpb.ID, vdg catalog.ValidationDescGetter,
+) error {
+	referencedTable, err := vdg.GetTableDescriptor(id)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on relation reference")
+	}
+	for _, by := range referencedTable.TableDesc().DependedOnBy {
+		if by.ID == desc.GetID() {
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("depends-on relation %q (%d) has no corresponding depended-on-by back reference",
+		referencedTable.GetName(), id)
+}
+
+func (desc *wrapper) validateOutboundTypeRef(id descpb.ID, vdg catalog.ValidationDescGetter) error {
+	_, err := vdg.GetTypeDescriptor(id)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on type reference")
+	}
+	// TODO(postamar): maintain back-references in type, and validate these.
+	return nil
+}
+
+func (desc *wrapper) validateInboundTableRef(
+	by descpb.TableDescriptor_Reference, vdg catalog.ValidationDescGetter,
+) error {
+	backReferencedTable, err := vdg.GetTableDescriptor(by.ID)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depended-on-by relation back reference")
+	}
+
+	if desc.IsSequence() {
+		// The ColumnIDs field takes a different meaning when the validated
+		// descriptor is for a sequence. In this case, they refer to the columns
+		// in the referenced descriptor instead.
+		for _, colID := range by.ColumnIDs {
+			col, _ := backReferencedTable.FindColumnWithID(colID)
+			if col == nil {
+				return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
+					backReferencedTable.GetName(), by.ID, colID)
+			}
+			var found bool
+			for i := 0; i < col.NumUsesSequences(); i++ {
+				if col.GetUsesSequenceID(i) == desc.GetID() {
+					found = true
+					break
+				}
+			}
+			if found {
+				continue
+			}
+			return errors.AssertionFailedf(
+				"depended-on-by relation %q (%d) has no reference to this sequence in column %q (%d)",
+				backReferencedTable.GetName(), by.ID, col.GetName(), col.GetID())
+		}
+	}
+
+	// View back-references need corresponding forward reference.
+	if !backReferencedTable.IsView() {
+		return nil
+	}
+	for _, id := range backReferencedTable.TableDesc().DependsOn {
+		if id == desc.GetID() {
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("depended-on-by view %q (%d) has no corresponding depends-on forward reference",
+		backReferencedTable.GetName(), by.ID)
 }
 
 func (desc *wrapper) validateOutboundFK(
@@ -310,8 +396,62 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		vea.Report(errors.AssertionFailedf("invalid parent ID %d", desc.GetParentID()))
 	}
 
+	// Validate the privilege descriptor.
+	if desc.Privileges == nil {
+		vea.Report(errors.AssertionFailedf("privileges not set"))
+	} else {
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Table))
+	}
+
+	// Validate that the depended-on-by references are well-formed.
+	for _, ref := range desc.DependedOnBy {
+		if ref.ID == descpb.InvalidID {
+			vea.Report(errors.AssertionFailedf(
+				"invalid relation ID %d in depended-on-by references",
+				ref.ID))
+		}
+		if len(ref.ColumnIDs) > catalog.MakeTableColSet(ref.ColumnIDs...).Len() {
+			vea.Report(errors.AssertionFailedf("duplicate column IDs found in depended-on-by references: %v",
+				ref.ColumnIDs))
+		}
+	}
+
+	if !desc.IsView() {
+		if len(desc.DependsOn) > 0 {
+			vea.Report(errors.AssertionFailedf(
+				"has depends-on references despite not being a view"))
+		}
+		if len(desc.DependsOnTypes) > 0 {
+			vea.Report(errors.AssertionFailedf(
+				"has depends-on-types references despite not being a view"))
+		}
+	}
+
 	if desc.IsSequence() {
 		return
+	}
+
+	// Validate the depended-on-by references to this table's columns and indexes
+	// for non-sequence relations.
+	// The ColumnIDs field takes a different meaning when the validated
+	// descriptor is for a sequence, in that case they refer to the columns of the
+	// referenced relation. This case is handled during cross-reference
+	// validation.
+	for _, ref := range desc.DependedOnBy {
+		if ref.IndexID != 0 {
+			if idx, _ := desc.FindIndexWithID(ref.IndexID); idx == nil {
+				vea.Report(errors.AssertionFailedf(
+					"index ID %d found in depended-on-by references, no such index in this relation",
+					ref.IndexID))
+			}
+		}
+		for _, colID := range ref.ColumnIDs {
+			if col, _ := desc.FindColumnWithID(colID); col == nil {
+				vea.Report(errors.AssertionFailedf(
+					"column ID %d found in depended-on-by references, no such column in this relation",
+					colID))
+			}
+		}
 	}
 
 	if len(desc.Columns) == 0 {
@@ -326,7 +466,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return
 	}
 
-	// TODO(dt, nathan): virtual descs don't validate (missing privs, PK, etc).
 	if desc.IsVirtualTable() {
 		return
 	}
@@ -386,9 +525,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			return
 		}
 	}
-
-	// Validate the privilege descriptor.
-	vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Table))
 
 	// Ensure that mutations cannot be queued if a primary key change or
 	// an alter column type schema change has either been started in
