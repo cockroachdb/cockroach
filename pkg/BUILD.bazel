@@ -289,6 +289,7 @@ ALL_TESTS = [
     "//pkg/sql/schemachanger/scexec:scexec_test",
     "//pkg/sql/schemachanger/scpb:scpb_test",
     "//pkg/sql/schemachanger/scplan:scplan_test",
+    "//pkg/sql/schemachanger/screl:screl_test",
     "//pkg/sql/schemachanger:schemachanger_test",
     "//pkg/sql/sem/builtins:builtins_test",
     "//pkg/sql/sem/tree/eval_test:eval_test_test",
