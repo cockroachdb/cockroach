@@ -67,17 +67,9 @@ func (p *planner) AlterPrimaryKey(
 		}
 	}
 
-	if alterPKNode.Interleave != nil {
-		p.BufferClientNotice(ctx, interleavedTableDisabledMigrationError)
-		alterPKNode.Interleave = nil
-	}
-
 	if alterPKNode.Sharded != nil {
 		if !p.EvalContext().SessionData().HashShardedIndexesEnabled {
 			return hashShardedIndexesDisabledError
-		}
-		if alterPKNode.Interleave != nil {
-			return pgerror.Newf(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 		}
 		if tableDesc.IsLocalityRegionalByRow() {
 			return pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables")
