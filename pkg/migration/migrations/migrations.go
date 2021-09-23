@@ -95,12 +95,6 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		retryJobsWithExponentialBackoff),
 	migration.NewTenantMigration(
-		"validates no interleaved tables exist",
-		toCV(clusterversion.EnsureNoInterleavedTables),
-		interleavedTablesRemovedCheck,
-		interleavedTablesRemovedMigration,
-	),
-	migration.NewTenantMigration(
 		"add system.zones table for secondary tenants",
 		toCV(clusterversion.ZonesTableForSecondaryTenants),
 		NoPrecondition,

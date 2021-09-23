@@ -231,13 +231,13 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 		expectedDesc := tabledesc.NewBuilder(expected).BuildImmutableTable()
 		gotDesc := tabledesc.NewBuilder(got).BuildImmutableTable()
 		e, err := catformat.IndexForDisplay(
-			ctx, expectedDesc, tableName, expectedDesc.PublicNonPrimaryIndexes()[i], "" /* partition */, "" /* interleave */, &semaCtx,
+			ctx, expectedDesc, tableName, expectedDesc.PublicNonPrimaryIndexes()[i], "" /* partition */, &semaCtx,
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
 		g, err := catformat.IndexForDisplay(
-			ctx, gotDesc, tableName, gotDesc.PublicNonPrimaryIndexes()[i], "" /* partition */, "" /* interleave */, &semaCtx,
+			ctx, gotDesc, tableName, gotDesc.PublicNonPrimaryIndexes()[i], "" /* partition */, &semaCtx,
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)

@@ -76,12 +76,6 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
-	// TODO(andyk): For now, just remember that the table was interleaved. In the
-	// future, it may be necessary to extract additional metadata.
-	if stmt.Interleave != nil {
-		tab.interleaved = true
-	}
-
 	// Find the PK columns; we have to force these to be non-nullable.
 	pkCols := make(map[tree.Name]struct{})
 	for _, def := range stmt.Defs {

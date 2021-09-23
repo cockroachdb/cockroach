@@ -459,12 +459,6 @@ var experimentalComputedColumnRewrites = settings.RegisterValidatedStringSetting
 	},
 )
 
-var copyPartitioningWhenDeinterleavingTable = settings.RegisterBoolSetting(
-	`sql.defaults.copy_partitioning_when_deinterleaving_table.enabled`,
-	`default value for enable_copying_partitioning_when_deinterleaving_table session variable`,
-	false,
-).WithPublic()
-
 var propagateInputOrdering = settings.RegisterBoolSetting(
 	`sql.defaults.propagate_input_ordering.enabled`,
 	`default value for the experimental propagate_input_ordering session variable`,
@@ -2921,12 +2915,6 @@ func (m *sessionDataMutator) SetDateStyleEnabled(enabled bool) {
 // SetStubCatalogTablesEnabled sets default value for stub_catalog_tables.
 func (m *sessionDataMutator) SetStubCatalogTablesEnabled(enabled bool) {
 	m.data.StubCatalogTablesEnabled = enabled
-}
-
-// SetCopyPartitioningWhenDeinterleavingTable sets the value for
-// CopyPartitioningWhenDeinterleavingTable.
-func (m *sessionDataMutator) SetCopyPartitioningWhenDeinterleavingTable(b bool) {
-	m.data.CopyPartitioningWhenDeinterleavingTable = b
 }
 
 func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {

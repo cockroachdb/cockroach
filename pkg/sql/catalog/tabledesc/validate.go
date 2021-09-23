@@ -51,20 +51,12 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
 		ids.Add(desc.GetParentSchemaID())
 	}
-	// Collect referenced table IDs in foreign keys and interleaves.
+	// Collect referenced table IDs in foreign keys.
 	for _, fk := range desc.OutboundFKs {
 		ids.Add(fk.ReferencedTableID)
 	}
 	for _, fk := range desc.InboundFKs {
 		ids.Add(fk.OriginTableID)
-	}
-	for _, idx := range desc.NonDropIndexes() {
-		for i := 0; i < idx.NumInterleaveAncestors(); i++ {
-			ids.Add(idx.GetInterleaveAncestor(i).TableID)
-		}
-		for i := 0; i < idx.NumInterleavedBy(); i++ {
-			ids.Add(idx.GetInterleavedBy(i).Table)
-		}
 	}
 	// Collect user defined type Oids and sequence references in columns.
 	for _, col := range desc.DeletableColumns() {
@@ -177,82 +169,6 @@ func (desc *wrapper) ValidateCrossReferences(
 			}
 		}
 	}
-
-	// Check interleaves.
-	for _, indexI := range desc.NonDropIndexes() {
-		vea.Report(desc.validateIndexInterleave(indexI, vdg))
-	}
-	// TODO(dan): Also validate SharedPrefixLen in the interleaves.
-}
-
-func (desc *wrapper) validateIndexInterleave(
-	indexI catalog.Index, vdg catalog.ValidationDescGetter,
-) error {
-	// Check interleaves.
-	if indexI.NumInterleaveAncestors() > 0 {
-		// Only check the most recent ancestor, the rest of them don't point
-		// back.
-		ancestor := indexI.GetInterleaveAncestor(indexI.NumInterleaveAncestors() - 1)
-		targetTable, err := vdg.GetTableDescriptor(ancestor.TableID)
-		if err != nil {
-			return errors.Wrapf(err,
-				"invalid interleave: missing table=%d index=%d", ancestor.TableID, errors.Safe(ancestor.IndexID))
-		}
-		targetIndex, err := targetTable.FindIndexWithID(ancestor.IndexID)
-		if err != nil {
-			return errors.Wrapf(err,
-				"invalid interleave: missing table=%s index=%d", targetTable.GetName(), errors.Safe(ancestor.IndexID))
-		}
-
-		found := false
-		for j := 0; j < targetIndex.NumInterleavedBy(); j++ {
-			backref := targetIndex.GetInterleavedBy(j)
-			if backref.Table == desc.ID && backref.Index == indexI.GetID() {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return errors.AssertionFailedf(
-				"missing interleave back reference to %q@%q from %q@%q",
-				desc.Name, indexI.GetName(), targetTable.GetName(), targetIndex.GetName())
-		}
-	}
-
-	interleaveBackrefs := make(map[descpb.ForeignKeyReference]struct{})
-	for j := 0; j < indexI.NumInterleavedBy(); j++ {
-		backref := indexI.GetInterleavedBy(j)
-		if _, ok := interleaveBackrefs[backref]; ok {
-			return errors.AssertionFailedf("duplicated interleave backreference %+v", backref)
-		}
-		interleaveBackrefs[backref] = struct{}{}
-		targetTable, err := vdg.GetTableDescriptor(backref.Table)
-		if err != nil {
-			return errors.Wrapf(err,
-				"invalid interleave backreference table=%d index=%d",
-				backref.Table, backref.Index)
-		}
-		targetIndex, err := targetTable.FindIndexWithID(backref.Index)
-		if err != nil {
-			return errors.Wrapf(err,
-				"invalid interleave backreference table=%s index=%d",
-				targetTable.GetName(), backref.Index)
-		}
-		if targetIndex.NumInterleaveAncestors() == 0 {
-			return errors.AssertionFailedf(
-				"broken interleave backward reference from %q@%q to %q@%q",
-				desc.Name, indexI.GetName(), targetTable.GetName(), targetIndex.GetName())
-		}
-		// The last ancestor is required to be a backreference.
-		ancestor := targetIndex.GetInterleaveAncestor(targetIndex.NumInterleaveAncestors() - 1)
-		if ancestor.TableID != desc.ID || ancestor.IndexID != indexI.GetID() {
-			return errors.AssertionFailedf(
-				"broken interleave backward reference from %q@%q to %q@%q",
-				desc.Name, indexI.GetName(), targetTable.GetName(), targetIndex.GetName())
-		}
-	}
-
-	return nil
 }
 
 func (desc *wrapper) validateOutboundFK(
@@ -855,6 +771,10 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			return errors.AssertionFailedf("index %q contains deprecated foreign key representation", idx.GetName())
 		}
 
+		if len(idx.IndexDesc().Interleave.Ancestors) > 0 || len(idx.IndexDesc().InterleavedBy) > 0 {
+			return errors.Newf("index is interleaved")
+		}
+
 		if _, indexNameExists := indexNames[idx.GetName()]; indexNameExists {
 			for i := range desc.Indexes {
 				if desc.Indexes[i].Name == idx.GetName() {
@@ -1052,16 +972,6 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	}
 	if part.NumColumns() == 0 {
 		return nil
-	}
-
-	// TODO(dan): The sqlccl.GenerateSubzoneSpans logic is easier if we disallow
-	// setting zone configs on indexes that are interleaved into another index.
-	// InterleavedBy is fine, so using the root of the interleave hierarchy will
-	// work. It is expected that this is sufficient for real-world use cases.
-	// Revisit this restriction if that expectation is wrong.
-	if idx.NumInterleaveAncestors() > 0 {
-		return errors.Errorf("cannot set a zone config for interleaved index %s; "+
-			"set it on the root of the interleaved hierarchy instead", idx.GetName())
 	}
 
 	// We don't need real prefixes in the DecodePartitionTuple calls because we're

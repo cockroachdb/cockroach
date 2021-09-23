@@ -282,14 +282,6 @@ BACKUP TABLE _ TO 'bar' WITH revision_history, encryption_passphrase = '*****' -
 BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase = 'secret' -- passwords exposed
 
 parse
-BACKUP foo TO 'bar' WITH KMS = 'foo', revision_history, include_deprecated_interleaves
-----
-BACKUP TABLE foo TO 'bar' WITH revision_history, kms = 'foo', include_deprecated_interleaves -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH revision_history, kms = ('foo'), include_deprecated_interleaves -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH revision_history, kms = '_', include_deprecated_interleaves -- literals removed
-BACKUP TABLE _ TO 'bar' WITH revision_history, kms = 'foo', include_deprecated_interleaves -- identifiers removed
-
-parse
 BACKUP foo TO 'bar' WITH KMS = ('foo', 'bar'), revision_history
 ----
 BACKUP TABLE foo TO 'bar' WITH revision_history, kms = ('foo', 'bar') -- normalized!

@@ -36,11 +36,10 @@ const (
 
 // BackupOptions describes options for the BACKUP execution.
 type BackupOptions struct {
-	CaptureRevisionHistory       bool
-	EncryptionPassphrase         Expr
-	Detached                     bool
-	EncryptionKMSURI             StringOrPlaceholderOptList
-	IncludeDeprecatedInterleaves bool
+	CaptureRevisionHistory bool
+	EncryptionPassphrase   Expr
+	Detached               bool
+	EncryptionKMSURI       StringOrPlaceholderOptList
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -238,11 +237,6 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("kms = ")
 		ctx.FormatNode(&o.EncryptionKMSURI)
 	}
-
-	if o.IncludeDeprecatedInterleaves {
-		maybeAddSep()
-		ctx.WriteString("include_deprecated_interleaves")
-	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -274,14 +268,6 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		o.EncryptionKMSURI = other.EncryptionKMSURI
 	} else if other.EncryptionKMSURI != nil {
 		return errors.New("kms specified multiple times")
-	}
-
-	if o.IncludeDeprecatedInterleaves {
-		if other.IncludeDeprecatedInterleaves {
-			return errors.New("include_deprecated_interleaves option specified multiple times")
-		}
-	} else {
-		o.IncludeDeprecatedInterleaves = other.IncludeDeprecatedInterleaves
 	}
 
 	return nil

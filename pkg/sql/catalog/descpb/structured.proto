@@ -513,7 +513,7 @@ message IndexDescriptor {
 
   // Interleave, if it's not the zero value, describes how this index's data is
   // interleaved into another index's data.
-  optional InterleaveDescriptor interleave = 11 [(gogoproto.nullable) = false];
+  optional InterleaveDescriptor interleave = 11 [(gogoproto.nullable) = false, deprecated = true];
 
   // InterleavedBy contains a reference to every table/index that is interleaved
   // into this one.
@@ -526,7 +526,7 @@ message IndexDescriptor {
   // despite the message used here, interleavings don't have to have
   // corresponding foreign key references (and whether they do or not is
   // irrelevant for this field).
-  repeated ForeignKeyReference interleaved_by = 12 [(gogoproto.nullable) = false];
+  repeated ForeignKeyReference interleaved_by = 12 [(gogoproto.nullable) = false, deprecated = true];
 
   // Partitioning, if it's not the zero value, describes how this index's data
   // is partitioned into spans of keys each addressable by zone configs.
@@ -1157,9 +1157,6 @@ message TableDescriptor {
   // can be reused. This list is separate because mutations can
   // lie in this list for a long time (gc deadline) and should not block
   // the execution of other schema changes on the table.
-  //
-  // TODO(vivekmenezes): This is currently only used by the non-interleaved drop
-  // index case. Also use for dropped interleaved indexes and columns.
   repeated GCDescriptorMutation gc_mutations = 33 [(gogoproto.nullable) = false,
                                                   (gogoproto.customname) = "GCMutations"];
 

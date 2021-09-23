@@ -381,46 +381,6 @@ func showCreateLocality(desc catalog.TableDescriptor, f *tree.FmtCtx) error {
 	return nil
 }
 
-// showCreateInterleave returns an INTERLEAVE IN PARENT clause for the specified
-// index, if applicable.
-//
-// The name of the parent table is prefixed by its database name unless
-// it is equal to the given dbPrefix. This allows us to elide the prefix
-// when the given index is interleaved in a table of the current database.
-func showCreateInterleave(
-	idx catalog.Index, buf *bytes.Buffer, dbPrefix string, lCtx simpleSchemaResolver,
-) error {
-	if idx.NumInterleaveAncestors() == 0 {
-		return nil
-	}
-	intl := idx.IndexDesc().Interleave
-	parentTableID := intl.Ancestors[len(intl.Ancestors)-1].TableID
-	var err error
-	var parentName tree.TableName
-	if lCtx != nil {
-		parentName, err = getParentAsTableName(lCtx, parentTableID, dbPrefix)
-		if err != nil {
-			return err
-		}
-	} else {
-		parentName = tree.MakeTableNameWithSchema(tree.Name(""), tree.PublicSchemaName, tree.Name(fmt.Sprintf("[%d as parent]", parentTableID)))
-		parentName.ExplicitCatalog = false
-		parentName.ExplicitSchema = false
-	}
-	var sharedPrefixLen int
-	for _, ancestor := range intl.Ancestors {
-		sharedPrefixLen += int(ancestor.SharedPrefixLen)
-	}
-	buf.WriteString(" INTERLEAVE IN PARENT ")
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	fmtCtx.FormatNode(&parentName)
-	buf.WriteString(fmtCtx.CloseAndGetString())
-	buf.WriteString(" (")
-	formatQuoteNames(buf, idx.IndexDesc().KeyColumnNames[:sharedPrefixLen]...)
-	buf.WriteString(")")
-	return nil
-}
-
 // ShowCreatePartitioning returns a PARTITION BY clause for the specified
 // index, if applicable.
 func ShowCreatePartitioning(
