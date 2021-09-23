@@ -26,6 +26,8 @@ type subquery struct {
 	expanded bool
 	started  bool
 	plan     planMaybePhysical
+	// rowCount is the estimated number of rows that plan will output.
+	rowCount int64
 	result   tree.Datum
 }
 

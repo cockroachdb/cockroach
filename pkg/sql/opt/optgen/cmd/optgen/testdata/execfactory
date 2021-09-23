@@ -84,7 +84,11 @@ type StubFactory struct{}
 var _ Factory = StubFactory{}
 
 func (StubFactory) ConstructPlan(
-	root Node, subqueries []Subquery, cascades []Cascade, checks []Node,
+	root Node,
+	subqueries []Subquery,
+	cascades []Cascade,
+	checks []Node,
+	rootRowCount int64,
 ) (Plan, error) {
 	return struct{}{}, nil
 }
