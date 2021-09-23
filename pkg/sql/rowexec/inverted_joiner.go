@@ -147,6 +147,8 @@ type invertedJoiner struct {
 	// columns are functionally dependent on the PK.
 	indexRows *rowcontainer.DiskBackedNumberedRowContainer
 
+	indexSpans roachpb.Spans
+
 	// emitCursor contains information about where the next row to emit is within
 	// joinedRowIdx.
 	emitCursor struct {
@@ -487,21 +489,27 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 		return ijEmittingRows, nil
 	}
 	// NB: spans is already sorted, and that sorting is preserved when
-	// generating indexSpans.
-	indexSpans, err := ij.spanBuilder.SpansFromInvertedSpans(spans, nil /* constraint */)
+	// generating ij.indexSpans.
+	ij.indexSpans, err = ij.spanBuilder.SpansFromInvertedSpans(spans, nil /* constraint */, ij.indexSpans)
 	if err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, ij.DrainHelper()
 	}
 
-	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(indexSpans))
+	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(ij.indexSpans))
 	if err = ij.fetcher.StartScan(
-		ij.Ctx, ij.FlowCtx.Txn, indexSpans, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
+		ij.Ctx, ij.FlowCtx.Txn, ij.indexSpans, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
 		ij.FlowCtx.TraceKV, ij.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, ij.DrainHelper()
 	}
+
+	// Deeply reset the index spans.
+	for i := range ij.indexSpans {
+		ij.indexSpans[i] = roachpb.Span{}
+	}
+	ij.indexSpans = ij.indexSpans[:0]
 
 	return ijPerformingIndexScan, nil
 }
