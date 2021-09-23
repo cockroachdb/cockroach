@@ -4057,6 +4057,46 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 		}
 	}
 
+	if !planCtx.isLocal && planCtx.ExtendedEvalCtx.SessionData().DistSQLMode != sessiondatapb.DistSQLAlways {
+		// If we chose to distribute this plan, yet we created only a single
+		// remote flow, it might be a good idea to bring that whole flow back
+		// to the gateway.
+		//
+		// This comes from the limitation of pinning the whole flow based on the
+		// physical planning of table readers. However, if later stages of the
+		// plan contain other processors, e.g. joinReaders, the whole flow can
+		// become quite expensive. With high enough frequency of such flows, the
+		// node having the lease for the ranges of the table readers becomes the
+		// hot spot. In such a scenario we choose to run the flow locally to
+		// distribute the load on the cluster better (assuming that the queries
+		// are issued against all nodes with equal frequency).
+		singleFlow := true
+		moveFlowToGateway := false
+		nodeID := plan.Processors[0].Node
+		for _, p := range plan.Processors[1:] {
+			if p.Node != nodeID {
+				singleFlow = false
+				break
+			}
+			core := p.Spec.Core
+			if core.JoinReader != nil || core.MergeJoiner != nil || core.HashJoiner != nil ||
+				core.ZigzagJoiner != nil || core.InvertedJoiner != nil {
+				// We want to move the flow when it contains a processor that
+				// might increase the cardinality of the data flowing through it
+				// or that performs the KV work.
+				moveFlowToGateway = true
+			}
+		}
+		if singleFlow && moveFlowToGateway {
+			for i := range plan.Processors {
+				plan.Processors[i].Node = plan.GatewayNodeID
+			}
+			planCtx.isLocal = true
+			planCtx.planner.curPlan.flags.Unset(planFlagFullyDistributed)
+			planCtx.planner.curPlan.flags.Unset(planFlagPartiallyDistributed)
+		}
+	}
+
 	// Add a final "result" stage if necessary.
 	plan.EnsureSingleStreamOnGateway()
 

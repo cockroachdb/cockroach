@@ -616,6 +616,10 @@ func (pf *planFlags) Set(flag planFlags) {
 	*pf |= flag
 }
 
+func (pf *planFlags) Unset(flag planFlags) {
+	*pf &= ^flag
+}
+
 // IsDistributed returns true if either the fully or the partially distributed
 // flags is set.
 func (pf planFlags) IsDistributed() bool {

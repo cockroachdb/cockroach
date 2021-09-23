@@ -520,9 +520,10 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"default distributed SQL execution mode",
 	"auto",
 	map[int64]string{
-		int64(sessiondatapb.DistSQLOff):  "off",
-		int64(sessiondatapb.DistSQLAuto): "auto",
-		int64(sessiondatapb.DistSQLOn):   "on",
+		int64(sessiondatapb.DistSQLOff):    "off",
+		int64(sessiondatapb.DistSQLAuto):   "auto",
+		int64(sessiondatapb.DistSQLOn):     "on",
+		int64(sessiondatapb.DistSQLAlways): "always",
 	},
 ).WithPublic()
 
