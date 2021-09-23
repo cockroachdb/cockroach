@@ -163,7 +163,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               {"The bar indicates the ratio of runtime success (gray) to "}
@@ -194,7 +194,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       <Tooltip
         placement="bottom"
         style="tableTitle"
-        content={<p>Database on which the ${contentModifier} was executed.</p>}
+        content={<p>Database on which the {contentModifier} was executed.</p>}
       >
         {getLabel("database")}
       </Tooltip>
@@ -232,7 +232,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               The gray bar indicates the mean number of rows read from disk. The
@@ -277,7 +277,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               The gray bar indicates the mean number of bytes read from disk.
@@ -322,7 +322,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={planningExecutionTime} target="_blank">
                 planning and execution time
               </Anchor>
-              {` of ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified time interval.`}
+              {` of ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified time interval. `}
             </p>
             <p>
               The gray bar indicates the mean latency. The blue bar indicates
@@ -367,7 +367,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               The gray bar indicates mean contention time. The blue bar
@@ -408,7 +408,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               The gray bar indicates the average max memory usage. The blue bar
@@ -453,7 +453,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               If this value is 0, the statement was executed on a single node.
@@ -528,7 +528,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            % of runtime all ${contentModifier} with this fingerprint$
+            % of runtime all {contentModifier} with this fingerprint
             {fingerprintModifier} represent, compared to the cumulative runtime
             of all queries within the last hour or specified time interval.
           </p>
@@ -554,7 +554,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         placement="bottom"
         style="tableTitle"
         content={
-          <p>Regions/Nodes in which the ${contentModifier} was executed.</p>
+          <p>Regions/Nodes in which the {contentModifier} was executed.</p>
         }
       >
         {getLabel("regionNodes")}
