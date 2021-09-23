@@ -414,7 +414,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		value := roachpb.Value{RawBytes: valueScratch}
 		iter.NextKey()
 
-		key.Key, ok, err = rd.kr.RewriteKey(key.Key, false /* isFromSpan */)
+		key.Key, ok, err = rd.kr.RewriteKey(key.Key)
 		if err != nil {
 			return summary, err
 		}

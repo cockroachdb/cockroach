@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1208,36 +1207,6 @@ func RewriteTableDescs(
 			table.ViewQuery = viewQuery
 		}
 
-		if err := catalog.ForEachNonDropIndex(table, func(indexI catalog.Index) error {
-			index := indexI.IndexDesc()
-			// Verify that for any interleaved index being restored, the interleave
-			// parent is also being restored. Otherwise, the interleave entries in the
-			// restored IndexDescriptors won't have anything to point to.
-			// TODO(dan): It seems like this restriction could be lifted by restoring
-			// stub TableDescriptors for the missing interleave parents.
-			for j, a := range index.Interleave.Ancestors {
-				ancestorRewrite, ok := descriptorRewrites[a.TableID]
-				if !ok {
-					return errors.Errorf(
-						"cannot restore table %q without interleave parent %d", table.Name, a.TableID,
-					)
-				}
-				index.Interleave.Ancestors[j].TableID = ancestorRewrite.ID
-			}
-			for j, c := range index.InterleavedBy {
-				childRewrite, ok := descriptorRewrites[c.Table]
-				if !ok {
-					return errors.Errorf(
-						"cannot restore table %q without interleave child table %d", table.Name, c.Table,
-					)
-				}
-				index.InterleavedBy[j].Table = childRewrite.ID
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-
 		// TODO(lucy): deal with outbound foreign key mutations here as well.
 		origFKs := table.OutboundFKs
 		table.OutboundFKs = nil
@@ -1865,8 +1834,7 @@ func doRestorePlan(
 				continue
 			}
 			index := table.GetPrimaryIndex()
-			if index.IsInterleaved() &&
-				currentVersion.IsActive(clusterversion.PreventNewInterleavedTables) {
+			if len(index.Interleave.Ancestors) > 0 || len(index.InterleavedBy) > 0 {
 				return errors.Errorf("restoring interleaved tables is no longer allowed. table %s was found to be interleaved", table.Name)
 			}
 			if err := catalog.ForEachNonDropIndex(

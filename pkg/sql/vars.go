@@ -1634,24 +1634,6 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	`enable_copying_partitioning_when_deinterleaving_table`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`enable_experimental_stream_replication`),
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar(`enable_experimental_stream_replication`, s)
-			if err != nil {
-				return err
-			}
-			m.SetCopyPartitioningWhenDeinterleavingTable(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().CopyPartitioningWhenDeinterleavingTable), nil
-		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(copyPartitioningWhenDeinterleavingTable.Get(sv))
-		},
-	},
-
 	`null_ordered_last`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`null_ordered_last`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

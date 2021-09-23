@@ -795,7 +795,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDE_DEPRECATED_INTERLEAVES INCLUDING INCREMENT INCREMENTAL
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDING INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INTEGER
@@ -2596,7 +2596,6 @@ opt_clear_data:
 //    encryption_passphrase="secret": encrypt backups
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
-//    include_deprecated_interleaves: allow backing up interleaved tables, even if future versions will be unable to restore.
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -2701,10 +2700,6 @@ backup_options:
 | KMS '=' string_or_placeholder_opt_list
   {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
-  }
-| INCLUDE_DEPRECATED_INTERLEAVES
-  {
-    $$.val = &tree.BackupOptions{IncludeDeprecatedInterleaves: true}
   }
 
 
@@ -13254,7 +13249,6 @@ unreserved_keyword:
 | IMMEDIATE
 | IMPORT
 | INCLUDE
-| INCLUDE_DEPRECATED_INTERLEAVES
 | INCLUDING
 | INCREMENT
 | INCREMENTAL

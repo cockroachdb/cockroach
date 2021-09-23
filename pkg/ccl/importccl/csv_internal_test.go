@@ -34,10 +34,6 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			error: "unsupported IF NOT EXISTS",
 		},
 		{
-			stmt:  "create table a (i int) interleave in parent b (id)",
-			error: "interleaved not supported",
-		},
-		{
 			stmt:  "create table a as select 1",
 			error: "CREATE AS not supported",
 		},

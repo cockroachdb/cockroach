@@ -40,7 +40,6 @@ go_library(
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
-        "//pkg/clusterversion",
         "//pkg/featureflag",
         "//pkg/gossip",
         "//pkg/jobs",

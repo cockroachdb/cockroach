@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
-	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -31,7 +30,6 @@ type ledger struct {
 
 	seed              int64
 	customers         int
-	interleaved       bool
 	inlineArgs        bool
 	splits            int
 	fks               bool
@@ -60,7 +58,6 @@ var ledgerMeta = workload.Meta{
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.customers, `customers`, 1000, `Number of customers`)
-		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
 		g.flags.BoolVar(&g.inlineArgs, `inline-args`, false, `Use inline query arguments`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
@@ -87,9 +84,6 @@ func (w *ledger) Flags() workload.Flags { return w.flags }
 func (w *ledger) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if w.interleaved {
-				return errors.Errorf("interleaved tables are not yet supported")
-			}
 			return initializeMix(w)
 		},
 		PostLoad: func(sqlDB *gosql.DB) error {
