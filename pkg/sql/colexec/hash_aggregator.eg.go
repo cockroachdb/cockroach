@@ -9,7 +9,12 @@
 
 package colexec
 
-import "github.com/cockroachdb/cockroach/pkg/col/coldata"
+import (
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/errors"
+)
 
 // populateEqChains populates op.scratch.eqChains with indices of tuples from b
 // that belong to the same groups. It returns the number of equality chains.
@@ -45,6 +50,48 @@ func (op *hashAggregator) populateEqChains(
 		eqChainsCount = populateEqChains_false(op, batchLength, sel, HeadIDToEqChainsID)
 	}
 	return eqChainsCount, sel
+}
+
+// findSplit returns true if there's a distinct group in op.distinctOutput, as
+// well as the index of the first distinct group found, in the inclusive range
+// [start, end].
+// useSel is true if the selection vector sel should be used.
+// ascending indicates the direction in which we should look for the first
+// distinct group. If true, we look at increasing index values, if false, we
+// look at decreasing index values.
+// execgen:inline
+const _ = "template_findSplit"
+
+// getNext provides the next batch of aggregated tuples. It is a finite state
+// machine that buffers incoming batches of tuples, aggregates them according to
+// the grouping column(s), and emits the aggregated tuples. The buffer may be
+// larger than the batch size in order to amortize the aggregation cost.
+// If partialOrder is true, one or more grouping columns are ordered, so the
+// input is chunked into distinct groups. When enough distinct groups are found
+// to fill the input buffer, getNext aggregates them. If the last group is
+// complete, then the aggregated groups are emitted and getNext goes back to
+// buffering more incoming tuples.
+// If partialOrder is false, there are no guarantees on input ordering and all
+// input tuples are processed before emitting any data.
+const _ = "template_getNext"
+
+// defaultSelectionVector contains all integers in [0, coldata.MaxBatchSize)
+// range.
+var defaultSelectionVector []int
+
+func init() {
+	defaultSelectionVector = make([]int, coldata.MaxBatchSize)
+	for i := range defaultSelectionVector {
+		defaultSelectionVector[i] = i
+	}
+}
+
+func (op *hashAggregator) Next() coldata.Batch {
+	if len(op.spec.OrderedGroupCols) > 0 {
+		return getNext_true(op)
+	} else {
+		return getNext_false(op)
+	}
 }
 
 // populateEqChains populates op.scratch.eqChains with indices of tuples from b
