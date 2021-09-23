@@ -541,7 +541,10 @@ func (txn *Txn) scan(
 // ascending order.
 //
 // The returned []KeyValue will contain up to maxRows elements (or all results
-// when zero is supplied).
+// when zero is supplied). NB: even if there are further results, it is not
+// guaranteed to return maxRows elements, and the caller is expected to keep
+// paginating until the result is empty or the desired number of rows are
+// returned.
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) Scan(
@@ -555,7 +558,10 @@ func (txn *Txn) Scan(
 // each of the returned keys.
 //
 // The returned []KeyValue will contain up to maxRows elements (or all results
-// when zero is supplied).
+// when zero is supplied). NB: even if there are further results, it is not
+// guaranteed to return maxRows elements, and the caller is expected to keep
+// paginating until the result is empty or the desired number of rows are
+// returned.
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ScanForUpdate(
@@ -568,7 +574,10 @@ func (txn *Txn) ScanForUpdate(
 // in descending order.
 //
 // The returned []KeyValue will contain up to maxRows elements (or all results
-// when zero is supplied).
+// when zero is supplied). NB: even if there are further results, it is not
+// guaranteed to return maxRows elements, and the caller is expected to keep
+// paginating until the result is empty or the desired number of rows are
+// returned.
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ReverseScan(
@@ -608,9 +617,6 @@ func (txn *Txn) Iterate(
 		}
 		if err := f(rows); err != nil {
 			return errors.Wrap(err, "running iterate callback")
-		}
-		if len(rows) < pageSize {
-			return nil
 		}
 		begin = rows[len(rows)-1].Key.Next()
 	}
