@@ -59,6 +59,8 @@ func Example_sql() {
 	// first batch consisting of 1 row has been returned to the client.
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(@1-2) from generate_series(1,3)`})
 	c.RunWithArgs([]string{`sql`, `-e`, `SELECT '20:01:02+03:04:05'::timetz AS regression_65066`})
+	c.RunWithArgs([]string{`sql`, `-e`, `CREATE USER my_user WITH CREATEDB; GRANT admin TO my_user;`})
+	c.RunWithArgs([]string{`sql`, `-e`, `\du my_user`})
 
 	// Output:
 	// sql -e show application_name
@@ -120,6 +122,11 @@ func Example_sql() {
 	// sql -e SELECT '20:01:02+03:04:05'::timetz AS regression_65066
 	// regression_65066
 	// 20:01:02+03:04:05
+	// sql -e CREATE USER my_user WITH CREATEDB; GRANT admin TO my_user;
+	// GRANT
+	// sql -e \du my_user
+	// username	options	member_of
+	// my_user	CREATEDB	{admin}
 }
 
 func Example_sql_config() {
