@@ -133,11 +133,7 @@ message LocalOnlySessionData {
   // experimentalComputedColumnRewrites cluster setting for a description of the
   // format.
   string experimental_computed_column_rewrites = 35;
-  // CopyPartitioningWhenDeinterleavingTable indicates that when running an
-  // ALTER PRIMARY KEY that retains the same columns but removes any
-  // interleaving that zone configurations and partitioning from the root
-  // of that interleave should be applied to the new primary index.
-  bool copy_partitioning_when_deinterleaving_table = 36;
+  reserved 36;
   // EnableStreamReplication indicates whether to allow setting up a replication
   // stream.
   bool enable_stream_replication = 37;

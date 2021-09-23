@@ -386,8 +386,6 @@ func BenchmarkSQL(b *testing.B) {
 			runBenchmarkInsertDistinct,
 			runBenchmarkInsertFK,
 			runBenchmarkInsertSecondaryIndex,
-			runBenchmarkInterleavedSelect,
-			runBenchmarkInterleavedFK,
 			runBenchmarkTrackChoices,
 			runBenchmarkUpdate,
 			runBenchmarkUpsert,
@@ -749,88 +747,6 @@ func BenchmarkScanFilter(b *testing.B) {
 			})
 		})
 	})
-}
-
-func runBenchmarkInterleavedSelect(b *testing.B, db *sqlutils.SQLRunner, count int) {
-	defer func() {
-		db.Exec(b, `DROP TABLE IF EXISTS bench.interleaved_select2`)
-		db.Exec(b, `DROP TABLE IF EXISTS bench.interleaved_select1`)
-	}()
-
-	db.Exec(b, `CREATE TABLE bench.interleaved_select1 (a INT PRIMARY KEY, b INT)`)
-	db.Exec(b, `CREATE TABLE bench.interleaved_select2 (c INT PRIMARY KEY, d INT) INTERLEAVE IN PARENT interleaved_select1 (c)`)
-
-	const interleaveFreq = 4
-
-	var buf1 bytes.Buffer
-	var buf2 bytes.Buffer
-	buf1.WriteString(`INSERT INTO bench.interleaved_select1 VALUES `)
-	buf2.WriteString(`INSERT INTO bench.interleaved_select2 VALUES `)
-	for i := 0; i < count; i++ {
-		if i > 0 {
-			buf1.WriteString(", ")
-		}
-		fmt.Fprintf(&buf1, "(%d, %d)", i, i)
-		if i%interleaveFreq == 0 {
-			if i > 0 {
-				buf2.WriteString(", ")
-			}
-			fmt.Fprintf(&buf2, "(%d, %d)", i, i)
-		}
-	}
-	db.Exec(b, buf1.String())
-	db.Exec(b, buf2.String())
-
-	query := `SELECT * FROM bench.interleaved_select1 is1 INNER JOIN bench.interleaved_select2 is2 on is1.a = is2.c`
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		rows := db.Query(b, query)
-		n := 0
-		for rows.Next() {
-			n++
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			b.Fatal(err)
-		}
-		expected := (count + interleaveFreq - 1) / interleaveFreq
-		if n != expected {
-			b.Fatalf("unexpected result count: %d (expected %d)", n, expected)
-		}
-	}
-	b.StopTimer()
-}
-
-func runBenchmarkInterleavedFK(b *testing.B, db *sqlutils.SQLRunner, count int) {
-	defer func() {
-		db.Exec(b, `DROP TABLE IF EXISTS bench.parent CASCADE; DROP TABLE IF EXISTS bench.child CASCADE`)
-	}()
-
-	db.Exec(b, `
-CREATE TABLE bench.parent (a INT PRIMARY KEY);
-INSERT INTO bench.parent VALUES(0);
-CREATE TABLE bench.child
-  (a INT REFERENCES bench.parent(a),
-   b INT, PRIMARY KEY(a, b))
-INTERLEAVE IN PARENT bench.parent (a)
-`)
-
-	b.ResetTimer()
-	var buf bytes.Buffer
-	val := 0
-	for i := 0; i < b.N; i++ {
-		buf.Reset()
-		buf.WriteString(`INSERT INTO bench.child VALUES `)
-		for j := 0; j < count; j++ {
-			if j > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, "(0, %d)", val)
-			val++
-		}
-		db.Exec(b, buf.String())
-	}
 }
 
 // runBenchmarkOrderBy benchmarks scanning a table and sorting the results.

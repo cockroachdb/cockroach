@@ -786,14 +786,16 @@ func (rf *Fetcher) prettyEncDatums(types []*types.T, vals []rowenc.EncDatum) str
 func (rf *Fetcher) ReadIndexKey(
 	key roachpb.Key,
 ) (remaining []byte, ok bool, foundNull bool, err error) {
-	return rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-		rf.table.desc,
-		rf.table.index,
+	remaining, foundNull, err = rowenc.DecodeKeyVals(
 		rf.table.keyValTypes,
 		rf.table.keyVals,
 		rf.table.indexColumnDirs,
 		key[rf.table.knownPrefixLength:],
 	)
+	if err != nil {
+		return nil, false, false, err
+	}
+	return remaining, true, foundNull, nil
 }
 
 // KeyToDesc implements the KeyToDescTranslator interface. The implementation is

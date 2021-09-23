@@ -418,17 +418,6 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 
-	if idx.NumInterleaveAncestors() > 0 {
-		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
-			return err
-		}
-	}
-	for i := 0; i < idx.NumInterleavedBy(); i++ {
-		if err := p.removeInterleave(ctx, idx.GetInterleavedBy(i)); err != nil {
-			return err
-		}
-	}
-
 	var droppedViews []string
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == idx.GetID() {
