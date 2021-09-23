@@ -2026,11 +2026,11 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
+				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Sequence.IncrementSequence(evalCtx.Ctx(), qualifiedName)
+				res, err := evalCtx.Sequence.IncrementSequenceByID(evalCtx.Ctx(), int64(dOid.DInt))
 				if err != nil {
 					return nil, err
 				}
@@ -2066,11 +2066,11 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
+				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequence(evalCtx.Ctx(), qualifiedName)
+				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(evalCtx.Ctx(), int64(dOid.DInt))
 				if err != nil {
 					return nil, err
 				}
@@ -2127,14 +2127,14 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
+				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
 
 				newVal := tree.MustBeDInt(args[1])
-				if err := evalCtx.Sequence.SetSequenceValue(
-					evalCtx.Ctx(), qualifiedName, int64(newVal), true); err != nil {
+				if err := evalCtx.Sequence.SetSequenceValueByID(
+					evalCtx.Ctx(), int64(dOid.DInt), int64(newVal), true); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2166,16 +2166,15 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
+				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
-
 				isCalled := bool(tree.MustBeDBool(args[2]))
 
 				newVal := tree.MustBeDInt(args[1])
-				if err := evalCtx.Sequence.SetSequenceValue(
-					evalCtx.Ctx(), qualifiedName, int64(newVal), isCalled); err != nil {
+				if err := evalCtx.Sequence.SetSequenceValueByID(
+					evalCtx.Ctx(), int64(dOid.DInt), int64(newVal), isCalled); err != nil {
 					return nil, err
 				}
 				return args[1], nil

@@ -222,7 +222,7 @@ SELECT foo from select_test
 
 # USING THE `nextval` AND `currval` FUNCTIONS
 
-statement error pgcode 55000 pq: currval\(\): currval of sequence "foo" is not yet defined in this session
+statement error pgcode 55000 pq: currval\(\): currval of sequence "test.public.foo" is not yet defined in this session
 SELECT currval('foo')
 
 query I
@@ -350,11 +350,11 @@ SELECT nextval('spécial')
 statement ok
 CREATE TABLE kv (k bytes primary key, v bytes)
 
-statement error pgcode 42809 "kv" is not a sequence
+statement error pgcode 42809 nextval\(\): "test.public.kv" is not a sequence
 SELECT nextval('kv')
 
-# Parse errors in the argument to nextval are handled.
-statement error pq: nextval\(\): at or near "@": syntax error
+# This matches PG's error.
+statement error pq: nextval\(\): relation "@#%@!324234" does not exist
 SELECT nextval('@#%@!324234')
 
 # You can create and find sequences from other databases.
@@ -1816,3 +1816,7 @@ SELECT * FROM "".crdb_internal.cross_db_references;
 db2  public  seq   db1  public  t  sequences owning table
 db2  public  seq2  db1  public  t  sequences owning table
 test  public  tdb3ref  db3  public  s  table column refers to sequence
+
+# Testing parsing empty string for currval issue #34527.
+statement error pq: currval\(\): invalid table name:
+SELECT currval('')

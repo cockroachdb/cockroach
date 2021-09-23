@@ -379,23 +379,9 @@ func (so *importSequenceOperators) HasPrivilege(
 	return false, errors.WithStack(errSequenceOperators)
 }
 
-// IncrementSequence implements the tree.SequenceOperators interface.
-func (so *importSequenceOperators) IncrementSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	return 0, errSequenceOperators
-}
-
 // IncrementSequenceByID implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) IncrementSequenceByID(
 	ctx context.Context, seqID int64,
-) (int64, error) {
-	return 0, errSequenceOperators
-}
-
-// GetLatestValueInSessionForSequence implements the tree.SequenceOperators interface.
-func (so *importSequenceOperators) GetLatestValueInSessionForSequence(
-	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
 	return 0, errSequenceOperators
 }
@@ -405,13 +391,6 @@ func (so *importSequenceOperators) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
 	return 0, errSequenceOperators
-}
-
-// SetSequenceValue implements the tree.SequenceOperators interface.
-func (so *importSequenceOperators) SetSequenceValue(
-	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
-) error {
-	return errSequenceOperators
 }
 
 // SetSequenceValueByID implements the tree.SequenceOperators interface.
