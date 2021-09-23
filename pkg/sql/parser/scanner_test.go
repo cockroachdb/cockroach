@@ -355,6 +355,9 @@ func TestScanError(t *testing.T) {
 		{`$0`, "placeholder index must be between 1 and 65536"},
 		{`$9223372036854775809`, "placeholder index must be between 1 and 65536"},
 		{`B'123'`, `"2" is not a valid binary digit`},
+		{string([]byte{34, 103, 111, 108, 97, 110, 103, 0x0, 34}), `control character found`},
+		{string([]byte{34, 103, 111, 108, 0x0, 97, 110, 103, 34}), `control character found`},
+		{string([]byte{34, 0x0, 34}), `control character found`},
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql)

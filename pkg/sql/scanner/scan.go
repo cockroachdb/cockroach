@@ -16,6 +16,7 @@ import (
 	"go/token"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 	"unsafe"
 
@@ -28,6 +29,7 @@ const errInvalidUTF8 = "invalid UTF-8 byte sequence"
 const errInvalidHexNumeric = "invalid hexadecimal numeric literal"
 const singleQuote = '\''
 const identQuote = '"'
+const errControlCharacter = "control character found"
 
 // NewNumValFn allows us to use tree.NewNumVal without a dependency on tree.
 var NewNumValFn = func(constant.Value, string, bool) interface{} {
@@ -908,6 +910,14 @@ outer:
 		case eof:
 			lval.SetID(lexbase.ERROR)
 			lval.SetStr(errUnterminated)
+			return false
+		}
+	}
+
+	for _, r := range buf {
+		if unicode.IsControl(rune(r)) {
+			lval.SetID(lexbase.ERROR)
+			lval.SetStr(errControlCharacter)
 			return false
 		}
 	}
