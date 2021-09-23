@@ -316,8 +316,7 @@ func (tc *distinctTestCase) runTests(
 	if tc.errorOnDup == "" {
 		colexectestutils.RunTestsWithTyps(
 			t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs},
-			tc.expected, verifier, constructor,
-		)
+			tc.expected, verifier, nil /* orderedCols */, constructor)
 	} else {
 		var numErrorRuns int
 		errorHandler := func(err error) {
@@ -338,8 +337,7 @@ func (tc *distinctTestCase) runTests(
 		}
 		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs},
-			tc.expected, verifier, instrumentedConstructor, errorHandler,
-		)
+			tc.expected, verifier, instrumentedConstructor, errorHandler, nil /* orderedCols */)
 		if tc.noError {
 			require.Zero(t, numErrorRuns)
 		} else {
@@ -418,11 +416,10 @@ func TestUnorderedDistinctRandom(t *testing.T) {
 		nTuples = maxNumTuples
 	}
 	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
-	colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tups}, [][]*types.T{typs}, expected, colexectestutils.UnorderedVerifier,
+	colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tups}, [][]*types.T{typs}, expected, colexectestutils.UnorderedVerifier, nil, /* orderedCols */
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */), nil
-		},
-	)
+		})
 }
 
 // getNewValueProbabilityForDistinct returns the probability that we need to use

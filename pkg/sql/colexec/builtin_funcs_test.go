@@ -76,7 +76,9 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 
 	for _, tc := range testCases {
 		log.Infof(ctx, "%s", tc.desc)
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.inputTuples}, tc.outputTuples, colexectestutils.OrderedVerifier,
+		colexectestutils.RunTests(t, testAllocator,
+			[]colexectestutils.Tuples{tc.inputTuples}, tc.outputTuples,
+			colexectestutils.OrderedVerifier, nil, /* orderedCols */
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], tc.inputTypes,

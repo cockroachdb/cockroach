@@ -92,12 +92,10 @@ func TestLikeOperators(t *testing.T) {
 			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
 		},
 	} {
-		colexectestutils.RunTests(
-			t, testAllocator, []colexectestutils.Tuples{tc.tups}, tc.expected, colexectestutils.OrderedVerifier,
-			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-				return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)
-			})
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tups}, tc.expected, colexectestutils.OrderedVerifier, nil, func(input []colexecop.Operator) (colexecop.Operator, error) {
+			ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+			return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)
+		})
 	}
 }
 

@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/apd/v2"
@@ -52,6 +51,7 @@ type aggregatorTestCase struct {
 	aggDistinct    []bool
 	aggFilter      []int
 	unorderedInput bool
+	orderedCols    []uint32
 
 	// convToDecimal will convert any float64s to apd.Decimals. If a string is
 	// encountered, a best effort is made to convert that string to an
@@ -59,11 +59,20 @@ type aggregatorTestCase struct {
 	convToDecimal bool
 }
 
+type Ordering int64
+
+const (
+	Ordered Ordering = iota
+	Partial
+	Unordered
+)
+
 // aggType is a helper struct that allows tests to test both the ordered and
 // hash aggregators at the same time.
 type aggType struct {
-	new  func(*colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error)
-	name string
+	new   func(*colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error)
+	name  string
+	order Ordering
 }
 
 var aggTypes = []aggType{
@@ -73,11 +82,22 @@ var aggTypes = []aggType{
 		new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
 			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
 		},
-		name: "hash",
+		name:  "hash",
+		order: Unordered,
 	},
 	{
-		new:  NewOrderedAggregator,
-		name: "ordered",
+		// This is a wrapper around NewHashAggregator so its signature is
+		// compatible with NewOrderedAggregator.
+		new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
+			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
+		},
+		name:  "hash-partial-order",
+		order: Partial,
+	},
+	{
+		new:   NewOrderedAggregator,
+		name:  "ordered",
+		order: Ordered,
 	},
 }
 
@@ -128,13 +148,23 @@ func (tc *aggregatorTestCase) init() error {
 		Aggregations: aggregations,
 	}
 	if !tc.unorderedInput {
-		// If we have ordered on grouping columns input, then we'll require the
-		// output to also have the same ordering.
-		outputOrdering := execinfrapb.Ordering{Columns: make([]execinfrapb.Ordering_Column, len(tc.groupCols))}
-		for i, col := range tc.groupCols {
-			outputOrdering.Columns[i].ColIdx = col
+		if len(tc.orderedCols) == 0 {
+			// If we have ordered on grouping columns input, then we'll require the
+			// output to also have the same ordering.
+			outputOrdering := execinfrapb.Ordering{Columns: make([]execinfrapb.Ordering_Column, len(tc.groupCols))}
+			for i, col := range tc.groupCols {
+				outputOrdering.Columns[i].ColIdx = col
+			}
+			tc.spec.OutputOrdering = outputOrdering
+		} else {
+			// In case there is partial ordering on the input, note the subset of ordered columns.
+			tc.spec.OrderedGroupCols = tc.orderedCols
+			outputOrdering := execinfrapb.Ordering{Columns: make([]execinfrapb.Ordering_Column, len(tc.orderedCols))}
+			for i, col := range tc.orderedCols {
+				outputOrdering.Columns[i].ColIdx = col
+			}
+			tc.spec.OutputOrdering = outputOrdering
 		}
-		tc.spec.OutputOrdering = outputOrdering
 	}
 	return nil
 }
@@ -760,12 +790,12 @@ func TestAggregators(t *testing.T) {
 		)
 		require.NoError(t, err)
 		for _, agg := range aggTypes {
-			if tc.unorderedInput && agg.name == "ordered" {
+			if tc.unorderedInput && agg.order == Ordered {
 				// This test case has unordered input, so we skip ordered
 				// aggregator.
 				continue
 			}
-			if agg.name != "hash" && tc.aggFilter != nil {
+			if agg.order == Ordered && tc.aggFilter != nil {
 				// Filtering aggregation is only supported with hash aggregator.
 				continue
 			}
@@ -774,7 +804,10 @@ func TestAggregators(t *testing.T) {
 			if tc.unorderedInput {
 				verifier = colexectestutils.UnorderedVerifier
 			}
-			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier,
+			if agg.order == Partial {
+				verifier = colexectestutils.PartialOrderedVerifier
+			}
+			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier, nil,
 				func(input []colexecop.Operator) (colexecop.Operator, error) {
 					return agg.new(&colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
@@ -912,10 +945,13 @@ func TestAggregatorRandom(t *testing.T) {
 					a.Init(context.Background())
 
 					testOutput := colexectestutils.NewOpTestOutput(a, expectedTuples)
-					if strings.Contains(agg.name, "hash") {
-						err = testOutput.VerifyAnyOrder()
-					} else {
+
+					if agg.order == Ordered {
 						err = testOutput.Verify()
+					} else if agg.order == Partial {
+						err = testOutput.VerifyPartialOrder()
+					} else {
+						err = testOutput.VerifyAnyOrder()
 					}
 
 					if err != nil {
@@ -927,20 +963,33 @@ func TestAggregatorRandom(t *testing.T) {
 	}
 }
 
+// benchmarkAggregateFunction runs aggregator microbenchmarks. numGroupCol is
+// the number of grouping columns. groupSize is the number of tuples to target
+// in each distinct aggregation group. chunkSize is the number of tuples to
+// target in each distinct partially ordered group column, and is intended for
+// use with Partial order. Limit is the number of rows to retrieve from the
+// aggregation function before ending the microbenchmark.
 func benchmarkAggregateFunction(
 	b *testing.B,
 	agg aggType,
 	aggFn execinfrapb.AggregatorSpec_Func,
 	aggInputTypes []*types.T,
+	numGroupCol int,
 	groupSize int,
 	distinctProb float64,
 	numInputRows int,
+	chunkSize int,
+	limit int,
 ) {
 	defer log.Scope(b).Close(b)
 	if groupSize > numInputRows {
 		// In this case all tuples will be part of the same group, and we have
 		// likely already benchmarked such scenario with this value of
 		// numInputRows, so we short-circuit.
+		return
+	}
+	if numGroupCol < 1 {
+		// We should always have at least one group column.
 		return
 	}
 	rng, _ := randutil.NewPseudoRand()
@@ -951,18 +1000,19 @@ func benchmarkAggregateFunction(
 	defer aggMemAcc.Close(ctx)
 	evalCtx.SingleDatumAggMemAccount = &aggMemAcc
 	const bytesFixedLength = 8
-	typs := append([]*types.T{types.Int}, aggInputTypes...)
+	typs := []*types.T{types.Int}
+	groupCols := []uint32{0}
+	for g := 1; g < numGroupCol; g++ {
+		typs = append(typs, types.Int)
+		groupCols = append(groupCols, uint32(g))
+	}
+	typs = append(typs, aggInputTypes...)
 	cols := make([]coldata.Vec, len(typs))
 	for i := range typs {
 		cols[i] = testAllocator.NewMemColumn(typs[i], numInputRows)
 	}
 	groups := cols[0].Int64()
-	if agg.name == "hash" {
-		numGroups := numInputRows / groupSize
-		for i := 0; i < numInputRows; i++ {
-			groups[i] = int64(rng.Intn(numGroups))
-		}
-	} else {
+	if agg.order == Ordered {
 		curGroup := -1
 		for i := 0; i < numInputRows; i++ {
 			if groupSize == 1 || i%groupSize == 0 {
@@ -970,8 +1020,26 @@ func benchmarkAggregateFunction(
 			}
 			groups[i] = int64(curGroup)
 		}
+	} else if agg.order == Unordered {
+		numGroups := numInputRows / groupSize
+		for i := 0; i < numInputRows; i++ {
+			groups[i] = int64(rng.Intn(numGroups))
+		}
+	} else {
+		// Partial order.
+		chunks := cols[0].Int64()
+		groups = cols[1].Int64()
+		curChunk := -1
+		numGroups := groupSize / chunkSize
+		for i := 0; i < numInputRows; i++ {
+			if chunkSize == 1 || i%chunkSize == 0 {
+				curChunk++
+			}
+			chunks[i] = int64(curChunk)
+			groups[i] = int64(rng.Intn(numGroups))
+		}
 	}
-	for _, col := range cols[1:] {
+	for _, col := range cols[numGroupCol:] {
 		coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
 			Rand:             rng,
 			Vec:              col,
@@ -984,7 +1052,7 @@ func benchmarkAggregateFunction(
 		// Integer summation of random Int64 values can lead
 		// to overflow, and we will panic. To go around it, we
 		// restrict the range of values.
-		vals := cols[1].Int64()
+		vals := cols[numGroupCol].Int64()
 		for i := range vals {
 			vals[i] = vals[i] % 1024
 		}
@@ -993,11 +1061,11 @@ func benchmarkAggregateFunction(
 
 	aggCols := make([]uint32, len(aggInputTypes))
 	for i := range aggCols {
-		aggCols[i] = uint32(i + 1)
+		aggCols[i] = uint32(numGroupCol + i)
 	}
 	tc := aggregatorTestCase{
 		typs:      typs,
-		groupCols: []uint32{0},
+		groupCols: groupCols,
 		aggCols:   [][]uint32{aggCols},
 		aggFns:    []execinfrapb.AggregatorSpec_Func{aggFn},
 	}
@@ -1012,12 +1080,15 @@ func benchmarkAggregateFunction(
 			vals[i] = vals[i] % distinctModulo
 		}
 	}
+	if agg.order == Partial {
+		tc.unorderedInput = false
+		tc.orderedCols = []uint32{0}
+	}
 	require.NoError(b, tc.init())
 	constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 		&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 	)
 	require.NoError(b, err)
-
 	fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]
 	// Only count the aggregation columns.
 	var argumentsSize int
@@ -1069,8 +1140,14 @@ func benchmarkAggregateFunction(
 					b.Fatal(err)
 				}
 				a.Init(ctx)
-				// Exhaust aggregator until all batches have been read.
+				// Exhaust aggregator until all batches have been read or limit, if
+				// non-zero, is reached.
+				tupleCount := 0
 				for b := a.Next(); b.Length() != 0; b = a.Next() {
+					tupleCount += b.Length()
+					if limit > 0 && tupleCount >= limit {
+						break
+					}
 				}
 				if err = a.(colexecop.Closer).Close(); err != nil {
 					b.Fatal(err)
@@ -1096,10 +1173,16 @@ func BenchmarkAggregator(b *testing.B) {
 	for _, agg := range aggTypes {
 		for _, numInputRows := range numRows {
 			for _, groupSize := range groupSizes {
+				chunkSize := 0
+				groupCol := 1
+				if agg.order == Partial {
+					chunkSize = groupSize
+					groupCol = 2
+				}
 				benchmarkAggregateFunction(
-					b, agg, aggFn, []*types.T{types.Int}, groupSize,
-					0 /* distinctProb */, numInputRows,
-				)
+					b, agg, aggFn, []*types.T{types.Int}, groupCol,
+					groupSize, 0 /* distinctProb */, numInputRows,
+					chunkSize, 0 /* limit */)
 			}
 		}
 	}
@@ -1133,10 +1216,16 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 				aggInputTypes = []*types.T{types.Int}
 			}
 			for _, groupSize := range []int{1, coldata.BatchSize()} {
-				benchmarkAggregateFunction(
-					b, agg, aggFn, aggInputTypes, groupSize,
+				chunkSize := 0
+				groupCol := 1
+				if agg.order == Partial {
+					chunkSize = groupSize
+					groupCol = 2
+				}
+				benchmarkAggregateFunction(b, agg, aggFn, aggInputTypes,
+					groupCol, groupSize,
 					0 /* distinctProb */, numInputRows,
-				)
+					chunkSize, 0 /* limit */)
 			}
 		}
 	}
@@ -1157,9 +1246,16 @@ func BenchmarkDistinctAggregation(b *testing.B) {
 						// skip such configuration.
 						continue
 					}
-					benchmarkAggregateFunction(
-						b, agg, aggFn, []*types.T{types.Int}, groupSize, distinctProb, numInputRows,
-					)
+					chunkSize := 0
+					groupCol := 1
+					if agg.order == Partial {
+						chunkSize = groupSize
+						groupCol = 2
+					}
+					benchmarkAggregateFunction(b, agg, aggFn, []*types.T{types.Int},
+						groupCol, groupSize,
+						0 /* distinctProb */, numInputRows,
+						chunkSize, 0 /* limit */)
 				}
 			}
 		}

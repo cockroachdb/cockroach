@@ -88,6 +88,8 @@ func TestExternalHashAggregator(t *testing.T) {
 				verifier := colexectestutils.OrderedVerifier
 				if tc.unorderedInput {
 					verifier = colexectestutils.UnorderedVerifier
+				} else if len(tc.orderedCols) > 0 {
+					verifier = colexectestutils.PartialOrderedVerifier
 				}
 				var numExpectedClosers int
 				if diskSpillingEnabled {
@@ -112,6 +114,7 @@ func TestExternalHashAggregator(t *testing.T) {
 					[][]*types.T{tc.typs},
 					tc.expected,
 					verifier,
+					tc.orderedCols,
 					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						sem := colexecop.NewTestingSemaphore(ehaNumRequiredFDs)
 						semsToCheck = append(semsToCheck, sem)
@@ -144,6 +147,101 @@ func TestExternalHashAggregator(t *testing.T) {
 				for i, sem := range semsToCheck {
 					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 				}
+			}
+		}
+	}
+	for _, acc := range accounts {
+		acc.Close(ctx)
+	}
+	for _, mon := range monitors {
+		mon.Stop(ctx)
+	}
+}
+
+func TestExternalHashAggregatorDiskSpiller(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+		DiskMonitor: testDiskMonitor,
+	}
+
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+
+	var (
+		accounts []*mon.BoundAccount
+		monitors []*mon.BytesMonitor
+	)
+	rng, _ := randutil.NewPseudoRand()
+	numForcedRepartitions := rng.Intn(5)
+	HashAggregationDiskSpillingEnabled.Override(ctx, &flowCtx.Cfg.Settings.SV, true)
+	for _, memoryLimitBytes := range []int64{hashAggregatorAllocSize * sizeOfAggBucket, hashAggregatorAllocSize * sizeOfAggBucket * 2} {
+		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimitBytes
+		for _, tc := range append(aggregatorsTestCases, hashAggregatorTestCases...) {
+			if len(tc.groupCols) == 0 {
+				// If there are no grouping columns, then the ordered
+				// aggregator is planned.
+				continue
+			}
+			if tc.aggFilter != nil {
+				// Filtering aggregation is not supported with the ordered
+				// aggregation which is required for the external hash
+				// aggregator in the fallback strategy.
+				continue
+			}
+			log.Infof(ctx, "memoryLimitBytes=%d/numRepartitions=%d/%s", memoryLimitBytes, numForcedRepartitions, tc.name)
+			constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
+				&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+			)
+			require.NoError(t, err)
+			verifier := colexectestutils.OrderedVerifier
+			if tc.unorderedInput {
+				verifier = colexectestutils.UnorderedVerifier
+			} else if len(tc.orderedCols) > 0 {
+				verifier = colexectestutils.PartialOrderedVerifier
+			}
+			// The external sorter and the disk spiller should be added
+			// as Closers (the latter is responsible for closing the
+			// in-memory hash aggregator as well as the external one).
+			numExpectedClosers := 2
+			if len(tc.spec.OutputOrdering.Columns) > 0 {
+				// When the output ordering is required, we also plan
+				// another external sort.
+				numExpectedClosers++
+			}
+			var semsToCheck []semaphore.Semaphore
+			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier, tc.orderedCols, func(input []colexecop.Operator) (colexecop.Operator, error) {
+				sem := colexecop.NewTestingSemaphore(ehaNumRequiredFDs)
+				semsToCheck = append(semsToCheck, sem)
+				op, accs, mons, closers, err := createExternalHashAggregator(
+					ctx, flowCtx, &colexecagg.NewAggregatorArgs{
+						Allocator:      testAllocator,
+						MemAccount:     testMemAcc,
+						Input:          input[0],
+						InputTypes:     tc.typs,
+						Spec:           tc.spec,
+						EvalCtx:        &evalCtx,
+						Constructors:   constructors,
+						ConstArguments: constArguments,
+						OutputTypes:    outputTypes,
+					},
+					queueCfg, sem, numForcedRepartitions,
+				)
+				accounts = append(accounts, accs...)
+				monitors = append(monitors, mons...)
+				require.Equal(t, numExpectedClosers, len(closers))
+				return op, err
+			})
+			for i, sem := range semsToCheck {
+				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
 		}
 	}
@@ -206,9 +304,8 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 						},
 						name: fmt.Sprintf("spilled=%t", spillForced),
 					},
-					aggFn, []*types.T{types.Int}, groupSize,
-					0 /* distinctProb */, numInputRows,
-				)
+					aggFn, []*types.T{types.Int}, 1 /* numGroupCol */, groupSize,
+					0 /* distinctProb */, numInputRows, 0 /* chunkSize */, 0 /* limit */)
 			}
 		}
 	}

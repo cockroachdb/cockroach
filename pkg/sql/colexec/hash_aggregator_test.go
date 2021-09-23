@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 
@@ -105,6 +106,266 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 		},
 		convToDecimal: true,
 	},
+	{
+		name: "oneOrderedCol",
+		typs: []*types.T{types.Int, types.Int, types.Int},
+		input: colexectestutils.Tuples{
+			{0, 1, 1},
+			{1, 0, 1},
+			{2, 1, 1},
+			{2, 1, 1},
+			{2, 0, 1},
+			{3, 1, 1},
+			{3, 0, 1},
+			{3, 0, 1},
+			{3, 1, 1},
+			{4, 0, 1},
+			{4, 0, 1},
+			{5, 1, 1},
+			{5, 0, 1},
+			{5, 1, 1},
+		},
+		groupCols: []uint32{0, 1},
+		aggCols:   [][]uint32{{0}, {1}, {2}},
+		aggFns: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.SumInt,
+		},
+		expected: colexectestutils.Tuples{
+			{0, 1, 1},
+			{1, 0, 1},
+			{2, 1, 2},
+			{2, 0, 1},
+			{3, 1, 2},
+			{3, 0, 2},
+			{4, 0, 2},
+			{5, 1, 2},
+			{5, 0, 1},
+		},
+		unorderedInput: false,
+		orderedCols:    []uint32{0},
+	},
+	{
+		name: "twoOrderedCol",
+		typs: []*types.T{types.Int, types.Int, types.Int},
+		input: colexectestutils.Tuples{
+			{0, 1, 1},
+			{1, 0, 1},
+			{2, 0, 1},
+			{2, 1, 1},
+			{2, 1, 1},
+			{3, 0, 1},
+			{3, 0, 1},
+			{3, 1, 1},
+			{3, 1, 1},
+			{4, 0, 1},
+			{4, 0, 1},
+			{5, 0, 1},
+			{5, 1, 1},
+			{5, 1, 1},
+		},
+		groupCols: []uint32{0, 1, 2},
+		aggCols:   [][]uint32{{0}, {1}, {2}, {2}},
+		aggFns: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.SumInt,
+		},
+		expected: colexectestutils.Tuples{
+			{0, 1, 1, 1},
+			{1, 0, 1, 1},
+			{2, 0, 1, 1},
+			{2, 1, 1, 2},
+			{3, 0, 1, 2},
+			{3, 1, 1, 2},
+			{4, 0, 1, 2},
+			{5, 0, 1, 1},
+			{5, 1, 1, 2},
+		},
+		unorderedInput: false,
+		orderedCols:    []uint32{0, 1},
+	},
+	{
+		name: "orderedColSpansMultMaxBufferBoundary",
+		typs: []*types.T{types.Int, types.Int, types.Int},
+		input: colexectestutils.Tuples{
+			{0, 1, 1},
+			{0, 1, 1},
+			{0, 3, 1},
+			{0, 2, 1},
+			{0, 3, 1},
+			{0, 3, 1},
+			{0, 3, 1},
+			{0, 2, 1},
+			{0, 1, 1},
+			{0, 3, 1},
+			{0, 1, 1},
+			{0, 1, 1},
+			{0, 3, 1},
+			{0, 1, 1},
+			{0, 3, 1},
+			{0, 1, 1},
+			{0, 1, 1},
+			{0, 2, 1},
+			{0, 2, 1},
+			{0, 2, 1},
+			{0, 3, 1},
+			{0, 1, 1},
+			{0, 1, 1},
+			{0, 1, 1},
+			{0, 2, 1},
+			{1, 1, 1},
+		},
+		groupCols: []uint32{0, 1},
+		aggCols:   [][]uint32{{0}, {1}, {2}},
+		aggFns: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.SumInt,
+		},
+		expected: colexectestutils.Tuples{
+			{0, 1, 11},
+			{0, 3, 8},
+			{0, 2, 6},
+			{1, 1, 1},
+		},
+		unorderedInput: false,
+		orderedCols:    []uint32{0},
+	},
+	{
+		name: "orderedColUnique",
+		typs: []*types.T{types.Int, types.Int, types.Int},
+		input: colexectestutils.Tuples{
+			{0, 1, 2},
+			{1, 1, 3},
+			{2, 3, 1},
+			{3, 2, 1},
+			{4, 3, 0},
+			{5, 3, 5},
+			{6, 3, 1},
+			{7, 3, 1},
+			{8, 1, 1},
+			{9, 4, 8},
+			{10, 3, 2},
+			{11, 3, 1},
+			{12, 2, 3},
+			{13, 1, 3},
+			{14, 1, 2},
+		},
+		groupCols: []uint32{0, 1},
+		aggCols:   [][]uint32{{0}, {1}, {2}},
+		aggFns: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.SumInt,
+		},
+		expected: colexectestutils.Tuples{
+			{0, 1, 2},
+			{1, 1, 3},
+			{2, 3, 1},
+			{3, 2, 1},
+			{4, 3, 0},
+			{5, 3, 5},
+			{6, 3, 1},
+			{7, 3, 1},
+			{8, 1, 1},
+			{9, 4, 8},
+			{10, 3, 2},
+			{11, 3, 1},
+			{12, 2, 3},
+			{13, 1, 3},
+			{14, 1, 2},
+		},
+		unorderedInput: false,
+		orderedCols:    []uint32{0},
+	},
+	{
+		name: "spilloverAfterEmit",
+		typs: []*types.T{types.Int, types.Int, types.Int},
+		input: colexectestutils.Tuples{
+			{1, 0, 1},
+			{1, 0, 1},
+			{1, 0, 1},
+			{1, 0, 1},
+			{1, 0, 1},
+			{3, 0, 1},
+			{3, 1, 1},
+			{3, 2, 1},
+			{3, 3, 1},
+			{3, 4, 1},
+			{3, 5, 1},
+			{3, 6, 1},
+			{3, 7, 1},
+			{3, 8, 1},
+			{3, 9, 1},
+			{3, 10, 1},
+			{3, 11, 1},
+			{3, 12, 1},
+			{3, 13, 1},
+			{3, 14, 1},
+			{3, 15, 1},
+			{3, 16, 1},
+			{3, 17, 1},
+			{3, 18, 1},
+			{3, 19, 1},
+			{3, 20, 1},
+			{3, 21, 1},
+			{3, 22, 1},
+			{3, 23, 1},
+			{3, 24, 1},
+			{3, 25, 1},
+			{3, 26, 1},
+			{3, 27, 1},
+			{3, 28, 1},
+			{3, 29, 1},
+			{4, 0, 1},
+		},
+		groupCols: []uint32{0, 1},
+		aggCols:   [][]uint32{{0}, {1}, {2}},
+		aggFns: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.SumInt,
+		},
+		expected: colexectestutils.Tuples{
+			{1, 0, 5},
+			{3, 0, 1},
+			{3, 1, 1},
+			{3, 2, 1},
+			{3, 3, 1},
+			{3, 4, 1},
+			{3, 5, 1},
+			{3, 6, 1},
+			{3, 7, 1},
+			{3, 8, 1},
+			{3, 9, 1},
+			{3, 10, 1},
+			{3, 11, 1},
+			{3, 12, 1},
+			{3, 13, 1},
+			{3, 14, 1},
+			{3, 15, 1},
+			{3, 16, 1},
+			{3, 17, 1},
+			{3, 18, 1},
+			{3, 19, 1},
+			{3, 20, 1},
+			{3, 21, 1},
+			{3, 22, 1},
+			{3, 23, 1},
+			{3, 24, 1},
+			{3, 25, 1},
+			{3, 26, 1},
+			{3, 27, 1},
+			{3, 28, 1},
+			{3, 29, 1},
+			{4, 0, 1},
+		},
+		unorderedInput: false,
+		orderedCols:    []uint32{0},
+	},
 }
 
 func init() {
@@ -122,6 +383,7 @@ func TestHashAggregator(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for _, tc := range hashAggregatorTestCases {
+		log.Infof(context.Background(), "%s", tc.name)
 		constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 		)
@@ -129,8 +391,10 @@ func TestHashAggregator(t *testing.T) {
 		verifier := colexectestutils.OrderedVerifier
 		if tc.unorderedInput {
 			verifier = colexectestutils.UnorderedVerifier
+		} else if len(tc.orderedCols) > 0 {
+			verifier = colexectestutils.PartialOrderedVerifier
 		}
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.input}, tc.expected, verifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.input}, tc.expected, verifier, tc.orderedCols, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 			return NewHashAggregator(&colexecagg.NewAggregatorArgs{
 				Allocator:      testAllocator,
 				MemAccount:     testMemAcc,
@@ -178,7 +442,8 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 					new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
 						return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
 					},
-					name: "tracking=false",
+					name:  "tracking=false",
+					order: Unordered,
 				},
 				{
 					new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
@@ -193,17 +458,99 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 							DiskAcc:            testDiskAcc,
 						}, testAllocator, math.MaxInt64)
 					},
-					name: "tracking=true",
+					name:  "tracking=true",
+					order: Unordered,
 				},
 			} {
-				benchmarkAggregateFunction(
-					b, agg, aggFn, []*types.T{types.Int}, groupSize,
-					0 /* distinctProb */, numInputRows,
-				)
+				benchmarkAggregateFunction(b, agg, aggFn, []*types.T{types.Int}, 1, groupSize, 0, numInputRows, 0, 0)
 			}
 		}
 	}
 
+	for _, account := range memAccounts {
+		account.Close(ctx)
+	}
+}
+
+// BenchmarkHashAggregatorPartialOrder compares the performance of the in-memory
+// hash aggregator with one of two grouping columns ordered against both
+// grouping columns unordered.
+func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
+	defer cleanup()
+	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
+	queueCfg.SetDefaultBufferSizeBytesForCacheMode()
+
+	aggFn := execinfrapb.Min
+	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
+	// chunkSizes is the number distinct values in the ordered group column.
+	chunkSizes := []int{1, 32, coldata.BatchSize(), coldata.BatchSize() + 1}
+	// groupSizes is the total number of groups.
+	groupSizes := []int{1, 32, 128, coldata.BatchSize() + 1}
+	limits := []int{1, 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
+	if testing.Short() {
+		numRows = []int{32, 32 * coldata.BatchSize()}
+		chunkSizes = []int{1, coldata.BatchSize() + 1}
+		groupSizes = []int{1, coldata.BatchSize()}
+	}
+	var memAccounts []*mon.BoundAccount
+	for _, numInputRows := range numRows {
+		for _, limit := range limits {
+			if limit > numInputRows {
+				continue
+			}
+			for _, groupSize := range groupSizes {
+				for _, chunkSize := range chunkSizes {
+					if groupSize < chunkSize || chunkSize > numInputRows {
+						continue
+					}
+					for _, agg := range []aggType{
+						{
+							new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
+								spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
+								memAccounts = append(memAccounts, &spillingQueueMemAcc)
+								return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
+									UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
+									Types:              args.InputTypes,
+									MemoryLimit:        execinfra.DefaultMemoryLimit,
+									DiskQueueCfg:       queueCfg,
+									FDSemaphore:        &colexecop.TestingSemaphore{},
+									DiskAcc:            testDiskAcc,
+								}, testAllocator, math.MaxInt64)
+							},
+							name:  fmt.Sprintf("hash-unordered/limit=%d/chunkSize=%d", limit, chunkSize),
+							order: Unordered,
+						},
+						{
+							new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
+								spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
+								memAccounts = append(memAccounts, &spillingQueueMemAcc)
+								return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
+									UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
+									Types:              args.InputTypes,
+									MemoryLimit:        execinfra.DefaultMemoryLimit,
+									DiskQueueCfg:       queueCfg,
+									FDSemaphore:        &colexecop.TestingSemaphore{},
+									DiskAcc:            testDiskAcc,
+								}, testAllocator, math.MaxInt64)
+							},
+							name:  fmt.Sprintf("hash-partial-order/limit=%d/chunkSize=%d", limit, chunkSize),
+							order: Partial,
+						},
+					} {
+						benchmarkAggregateFunction(b, agg, aggFn, []*types.T{types.Int}, 2, groupSize, 0, numInputRows, chunkSize, limit)
+					}
+				}
+			}
+		}
+	}
 	for _, account := range memAccounts {
 		account.Close(ctx)
 	}

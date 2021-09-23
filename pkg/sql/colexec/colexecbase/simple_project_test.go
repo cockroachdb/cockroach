@@ -68,14 +68,16 @@ func TestSimpleProjectOp(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return colexecbase.NewSimpleProjectOp(input[0], len(tc.tuples[0]), tc.colsToKeep), nil
-		})
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, nil, /* orderedCols */
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
+				return colexecbase.NewSimpleProjectOp(input[0], len(tc.tuples[0]), tc.colsToKeep), nil
+			})
 	}
 
 	// Empty projection. The all nulls injection test case will also return
 	// nothing.
-	colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{{{1, 2, 3}, {1, 2, 3}}}, nil, colexectestutils.Tuples{{}, {}}, colexectestutils.OrderedVerifier,
+	colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{{{1, 2, 3}, {1, 2, 3}}},
+		nil /* typs */, colexectestutils.Tuples{{}, {}}, colexectestutils.OrderedVerifier, nil, /* orderedCols */
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexecbase.NewSimpleProjectOp(input[0], 3 /* numInputCols */, nil), nil
 		})
@@ -114,7 +116,7 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 		{"b", constVal},
 		{"bb", constVal},
 	}
-	colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, inputTuples, [][]*types.T{inputTypes, inputTypes}, expected, colexectestutils.UnorderedVerifier,
+	colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, inputTuples, [][]*types.T{inputTypes, inputTypes}, expected, colexectestutils.UnorderedVerifier, nil, /* orderedCols */
 		func(inputs []colexecop.Operator) (colexecop.Operator, error) {
 			var input colexecop.Operator
 			parallelUnorderedSynchronizerInputs := make([]colexecargs.OpWithMetaInfo, len(inputs))

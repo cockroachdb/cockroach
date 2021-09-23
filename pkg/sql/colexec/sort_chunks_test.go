@@ -188,9 +188,10 @@ func TestSortChunks(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	for _, tc := range sortChunksTestCases {
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, execinfra.DefaultMemoryLimit)
-		})
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, nil, /* orderedCols */
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
+				return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, execinfra.DefaultMemoryLimit)
+			})
 	}
 }
 
@@ -230,9 +231,10 @@ func TestSortChunksRandomized(t *testing.T) {
 				copy(expected, tups)
 				sort.Slice(expected, less(expected, ordCols))
 
-				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{sortedTups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen, execinfra.DefaultMemoryLimit)
-				})
+				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{sortedTups}, expected, colexectestutils.OrderedVerifier, nil, /* orderedCols */
+					func(input []colexecop.Operator) (colexecop.Operator, error) {
+						return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen, execinfra.DefaultMemoryLimit)
+					})
 			}
 		}
 	}

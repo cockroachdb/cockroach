@@ -34,8 +34,9 @@ func TestBoolVecToSelOp(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewBoolVecToSelOp(input[0], 0), nil
-		})
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, nil, /* orderedCols */
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
+				return NewBoolVecToSelOp(input[0], 0), nil
+			})
 	}
 }

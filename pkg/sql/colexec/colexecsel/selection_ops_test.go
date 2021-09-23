@@ -38,15 +38,16 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tups := colexectestutils.Tuples{{0}, {1}, {2}, {nil}}
-	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, colexectestutils.Tuples{{0}, {1}}, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-		return &selLTInt64Int64ConstOp{
-			selConstOpBase: selConstOpBase{
-				OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
-				colIdx:         0,
-			},
-			constArg: 2,
-		}, nil
-	})
+	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, colexectestutils.Tuples{{0}, {1}}, colexectestutils.OrderedVerifier, nil, /* orderedCols */
+		func(input []colexecop.Operator) (colexecop.Operator, error) {
+			return &selLTInt64Int64ConstOp{
+				selConstOpBase: selConstOpBase{
+					OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
+					colIdx:         0,
+				},
+				constArg: 2,
+			}, nil
+		})
 }
 
 func TestSelLTInt64Int64(t *testing.T) {
@@ -61,15 +62,16 @@ func TestSelLTInt64Int64(t *testing.T) {
 		{-1, nil},
 		{nil, nil},
 	}
-	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, colexectestutils.Tuples{{0, 1}}, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-		return &selLTInt64Int64Op{
-			selOpBase: selOpBase{
-				OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
-				col1Idx:        0,
-				col2Idx:        1,
-			},
-		}, nil
-	})
+	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, colexectestutils.Tuples{{0, 1}}, colexectestutils.OrderedVerifier, nil, /* orderedCols */
+		func(input []colexecop.Operator) (colexecop.Operator, error) {
+			return &selLTInt64Int64Op{
+				selOpBase: selOpBase{
+					OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
+					col1Idx:        0,
+					col2Idx:        1,
+				},
+			}, nil
+		})
 }
 
 func TestGetSelectionConstOperator(t *testing.T) {

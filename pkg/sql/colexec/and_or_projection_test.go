@@ -202,6 +202,7 @@ func TestAndOrOps(t *testing.T) {
 					[][]*types.T{{types.Bool, types.Bool}},
 					tc.expected,
 					colexectestutils.OrderedVerifier,
+					nil, /* orderedCols */
 					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						projOp, err := colexectestutils.CreateTestProjectingOperator(
 							ctx, flowCtx, input[0], []*types.T{types.Bool, types.Bool},

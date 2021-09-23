@@ -69,10 +69,9 @@ func TestOrdinality(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier,
-			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return createTestOrdinalityOperator(ctx, flowCtx, input[0], tc.inputTypes)
-			})
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, nil, func(input []colexecop.Operator) (colexecop.Operator, error) {
+			return createTestOrdinalityOperator(ctx, flowCtx, input[0], tc.inputTypes)
+		})
 	}
 }
 

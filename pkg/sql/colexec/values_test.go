@@ -80,7 +80,7 @@ func TestValues(t *testing.T) {
 				}
 			}
 
-			colexectestutils.RunTests(t, testAllocator, nil, expected, colexectestutils.OrderedVerifier,
+			colexectestutils.RunTests(t, testAllocator, nil, expected, colexectestutils.OrderedVerifier, nil, /* orderedCols */
 				func(inputs []colexecop.Operator) (colexecop.Operator, error) {
 					spec, err := execinfra.GenerateValuesSpec(colTypes, rows)
 					if err != nil {

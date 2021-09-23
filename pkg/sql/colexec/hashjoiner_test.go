@@ -992,7 +992,7 @@ func runHashJoinTestCase(
 		runner = colexectestutils.RunTestsWithTyps
 	}
 	log.Infof(context.Background(), "%s", tc.description)
-	runner(t, testAllocator, inputs, typs, tc.expected, colexectestutils.UnorderedVerifier, hjOpConstructor)
+	runner(t, testAllocator, inputs, typs, tc.expected, colexectestutils.UnorderedVerifier, nil /* orderedCols */, hjOpConstructor)
 }
 
 func TestHashJoiner(t *testing.T) {

@@ -146,7 +146,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 					&evalCtx, &semaCtx, tc.spec.Aggregations, tc.typs,
 				)
 				require.NoError(t, err)
-				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.UnorderedVerifier,
+				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.UnorderedVerifier, nil, /* orderedCols */
 					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						return agg.new(&colexecagg.NewAggregatorArgs{
 							Allocator:      testAllocator,
@@ -170,10 +170,17 @@ func BenchmarkDefaultAggregateFunction(b *testing.B) {
 	for _, agg := range aggTypes {
 		for _, numInputRows := range []int{32, 32 * coldata.BatchSize()} {
 			for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize()} {
+				chunkSize := 0
+				groupCol := 1
+				if agg.order == Partial {
+					chunkSize = groupSize
+					groupCol = 2
+				}
 				benchmarkAggregateFunction(
-					b, agg, aggFn, []*types.T{types.String, types.String}, groupSize,
+					b, agg, aggFn, []*types.T{types.String, types.String},
+					groupCol, groupSize,
 					0 /* distinctProb */, numInputRows,
-				)
+					chunkSize, 0 /* limit */)
 			}
 		}
 	}

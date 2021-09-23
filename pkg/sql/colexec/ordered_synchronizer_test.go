@@ -147,9 +147,10 @@ func TestOrderedSync(t *testing.T) {
 		for i := range typs {
 			typs[i] = types.Int
 		}
-		colexectestutils.RunTests(t, testAllocator, tc.sources, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {
-			return NewOrderedSynchronizer(testAllocator, execinfra.DefaultMemoryLimit, colexectestutils.MakeInputs(inputs), typs, tc.ordering), nil
-		})
+		colexectestutils.RunTests(t, testAllocator, tc.sources, tc.expected, colexectestutils.OrderedVerifier, nil, /* orderedCols */
+			func(inputs []colexecop.Operator) (colexecop.Operator, error) {
+				return NewOrderedSynchronizer(testAllocator, execinfra.DefaultMemoryLimit, colexectestutils.MakeInputs(inputs), typs, tc.ordering), nil
+			})
 	}
 }
 

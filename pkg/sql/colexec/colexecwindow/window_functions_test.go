@@ -1033,53 +1033,54 @@ func TestWindowFunctions(t *testing.T) {
 		} {
 			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
 			var semsToCheck []semaphore.Semaphore
-			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
-				tc.init()
-				ct := make([]*types.T, len(tc.tuples[0]))
-				for i := range ct {
-					ct[i] = types.Int
-				}
-				resultType := types.Int
-				fun := tc.windowerSpec.WindowFns[0].Func
-				if fun.WindowFunc != nil {
-					if fun.WindowFunc == &percentRankFn || fun.WindowFunc == &cumeDistFn {
-						resultType = types.Float
+			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.UnorderedVerifier, nil, /* orderedCols */
+				func(sources []colexecop.Operator) (colexecop.Operator, error) {
+					tc.init()
+					ct := make([]*types.T, len(tc.tuples[0]))
+					for i := range ct {
+						ct[i] = types.Int
 					}
-				} else {
-					argIdxs := tc.windowerSpec.WindowFns[0].ArgsIdxs
-					aggregations := []execinfrapb.AggregatorSpec_Aggregation{{
-						Func:   *fun.AggregateFunc,
-						ColIdx: argIdxs,
-					}}
-					_, _, outputTypes, err :=
-						colexecagg.ProcessAggregations(&evalCtx, &semaCtx, aggregations, ct)
-					require.NoError(t, err)
-					resultType = outputTypes[0]
-				}
-				spec := &execinfrapb.ProcessorSpec{
-					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: ct}},
-					Core: execinfrapb.ProcessorCoreUnion{
-						Windower: &tc.windowerSpec,
-					},
-					ResultTypes: append(ct, resultType),
-				}
-				// Relative rank operators currently require the most number of
-				// FDs.
-				sem := colexecop.NewTestingSemaphore(relativeRankNumRequiredFDs)
-				args := &colexecargs.NewColOperatorArgs{
-					Spec:                spec,
-					Inputs:              colexectestutils.MakeInputs(sources),
-					StreamingMemAccount: testMemAcc,
-					DiskQueueCfg:        queueCfg,
-					FDSemaphore:         sem,
-				}
-				semsToCheck = append(semsToCheck, sem)
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-				accounts = append(accounts, result.OpAccounts...)
-				monitors = append(monitors, result.OpMonitors...)
-				return result.Root, err
-			})
+					resultType := types.Int
+					fun := tc.windowerSpec.WindowFns[0].Func
+					if fun.WindowFunc != nil {
+						if fun.WindowFunc == &percentRankFn || fun.WindowFunc == &cumeDistFn {
+							resultType = types.Float
+						}
+					} else {
+						argIdxs := tc.windowerSpec.WindowFns[0].ArgsIdxs
+						aggregations := []execinfrapb.AggregatorSpec_Aggregation{{
+							Func:   *fun.AggregateFunc,
+							ColIdx: argIdxs,
+						}}
+						_, _, outputTypes, err :=
+							colexecagg.ProcessAggregations(&evalCtx, &semaCtx, aggregations, ct)
+						require.NoError(t, err)
+						resultType = outputTypes[0]
+					}
+					spec := &execinfrapb.ProcessorSpec{
+						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: ct}},
+						Core: execinfrapb.ProcessorCoreUnion{
+							Windower: &tc.windowerSpec,
+						},
+						ResultTypes: append(ct, resultType),
+					}
+					// Relative rank operators currently require the most number of
+					// FDs.
+					sem := colexecop.NewTestingSemaphore(relativeRankNumRequiredFDs)
+					args := &colexecargs.NewColOperatorArgs{
+						Spec:                spec,
+						Inputs:              colexectestutils.MakeInputs(sources),
+						StreamingMemAccount: testMemAcc,
+						DiskQueueCfg:        queueCfg,
+						FDSemaphore:         sem,
+					}
+					semsToCheck = append(semsToCheck, sem)
+					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
+					accounts = append(accounts, result.OpAccounts...)
+					monitors = append(monitors, result.OpMonitors...)
+					return result.Root, err
+				})
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}

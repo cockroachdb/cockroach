@@ -129,7 +129,7 @@ func TestIsNullProjOp(t *testing.T) {
 				fmt.Sprintf("@1 %s", c.projExpr), false /* canFallbackToRowexec */, testMemAcc,
 			)
 		}
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, nil /* orderedCols */, opConstructor)
 	}
 }
 
@@ -251,6 +251,6 @@ func TestIsNullSelOp(t *testing.T) {
 			}
 			return result.Root, nil
 		}
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, nil /* orderedCols */, opConstructor)
 	}
 }

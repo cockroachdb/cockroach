@@ -84,6 +84,7 @@ func TestExternalSort(t *testing.T) {
 					[][]*types.T{tc.typs},
 					tc.expected,
 					colexectestutils.OrderedVerifier,
+					nil, /* orderedCols */
 					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						// A sorter should never exceed ExternalSorterMinPartitions, even
 						// during repartitioning. A panic will happen if a sorter requests
@@ -207,6 +208,7 @@ func TestExternalSortRandomized(t *testing.T) {
 						[]colexectestutils.Tuples{tups},
 						expected,
 						colexectestutils.OrderedVerifier,
+						nil, /* orderedCols */
 						func(input []colexecop.Operator) (colexecop.Operator, error) {
 							sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 							semsToCheck = append(semsToCheck, sem)

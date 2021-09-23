@@ -107,7 +107,7 @@ func TestDefaultCmpProjOps(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.cmpExpr, func(t *testing.T) {
-			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, [][]*types.T{c.inputTypes}, c.outputTuples, colexectestutils.OrderedVerifier,
+			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, [][]*types.T{c.inputTypes}, c.outputTuples, colexectestutils.OrderedVerifier, nil, /* orderedCols */
 				func(input []colexecop.Operator) (colexecop.Operator, error) {
 					return colexectestutils.CreateTestProjectingOperator(
 						ctx, flowCtx, input[0], c.inputTypes,

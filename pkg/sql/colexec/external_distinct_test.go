@@ -191,10 +191,10 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		testAllocator,
 		[]colexectestutils.Tuples{tups},
 		[][]*types.T{typs},
-		expected,
 		// tups and expected are in an arbitrary order, so we use an unordered
 		// verifier.
-		colexectestutils.UnorderedVerifier,
+		expected, colexectestutils.UnorderedVerifier,
+		nil, /* orderedCols */
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			// Since we're giving very low memory limit to the operator, in
 			// order to make the test run faster, we'll use an unlimited number
@@ -215,8 +215,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			monitors = append(monitors, newMonitors...)
 			numRuns++
 			return distinct, nil
-		},
-	)
+		})
 	for i, sem := range semsToCheck {
 		require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 	}

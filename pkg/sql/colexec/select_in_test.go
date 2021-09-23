@@ -85,7 +85,7 @@ func TestSelectInInt64(t *testing.T) {
 			return &op, nil
 		}
 		if !c.hasNulls || !c.negate {
-			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
+			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, nil /* orderedCols */, opConstructor)
 		} else {
 			// When the input tuples already have nulls and we have NOT IN
 			// operator, then the nulls injection might not change the output. For
@@ -93,7 +93,7 @@ func TestSelectInInt64(t *testing.T) {
 			// output of length 0; similarly, we will get the same zero-length
 			// output for the corresponding nulls injection test case
 			// "1 NOT IN (NULL, NULL, NULL)".
-			colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, nil, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
+			colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, nil, c.outputTuples, colexectestutils.OrderedVerifier, nil /* orderedCols */, opConstructor)
 		}
 	}
 }
@@ -215,7 +215,7 @@ func TestProjectInInt64(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier,
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, nil, /* orderedCols */
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
