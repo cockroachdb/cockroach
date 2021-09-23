@@ -154,6 +154,14 @@ func (desc *wrapper) ValidateCrossReferences(
 		}
 	}
 
+	// For views, check dependent relations.
+	for _, id := range desc.DependsOn {
+		vea.Report(desc.validateOutboundTableRef(id, vdg))
+	}
+	for _, by := range desc.DependedOnBy {
+		vea.Report(desc.validateInboundTableRef(by, vdg))
+	}
+
 	// Check foreign keys.
 	for i := range desc.OutboundFKs {
 		vea.Report(desc.validateOutboundFK(&desc.OutboundFKs[i], vdg))
@@ -253,6 +261,38 @@ func (desc *wrapper) validateIndexInterleave(
 	}
 
 	return nil
+}
+
+func (desc *wrapper) validateOutboundTableRef(
+	id descpb.ID, vdg catalog.ValidationDescGetter,
+) error {
+	referencedTable, err := vdg.GetTableDescriptor(id)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid relation reference")
+	}
+	for _, by := range referencedTable.TableDesc().DependedOnBy {
+		if by.ID == desc.GetID() {
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("missing back-reference for referenced relation %q (%d)",
+		referencedTable.GetName(), id)
+}
+
+func (desc *wrapper) validateInboundTableRef(
+	by descpb.TableDescriptor_Reference, vdg catalog.ValidationDescGetter,
+) error {
+	backReferencedView, err := vdg.GetTableDescriptor(by.ID)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid relation back-reference")
+	}
+	for _, id := range backReferencedView.TableDesc().DependsOn {
+		if id == desc.GetID() {
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("missing forward reference for back-referenced relation %q (%d)",
+		backReferencedView.GetName(), by.ID)
 }
 
 func (desc *wrapper) validateOutboundFK(
@@ -494,6 +534,13 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		vea.Report(errors.AssertionFailedf("invalid parent ID %d", desc.GetParentID()))
 	}
 
+	// Validate the privilege descriptor.
+	if desc.Privileges == nil {
+		vea.Report(errors.AssertionFailedf("privileges not set"))
+	} else {
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Table))
+	}
+
 	if desc.IsSequence() {
 		return
 	}
@@ -510,7 +557,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return
 	}
 
-	// TODO(dt, nathan): virtual descs don't validate (missing privs, PK, etc).
 	if desc.IsVirtualTable() {
 		return
 	}
@@ -570,9 +616,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			return
 		}
 	}
-
-	// Validate the privilege descriptor.
-	vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Table))
 
 	// Ensure that mutations cannot be queued if a primary key change or
 	// an alter column type schema change has either been started in
