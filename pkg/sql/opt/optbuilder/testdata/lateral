@@ -10,6 +10,18 @@ exec-ddl
 CREATE TABLE z (c INT PRIMARY KEY)
 ----
 
+exec-ddl
+CREATE TABLE ax (a INT, x INT)
+----
+
+exec-ddl
+CREATE TABLE ay (a INT, y INT)
+----
+
+exec-ddl
+CREATE TABLE az (a INT, z INT)
+----
+
 build
 SELECT * FROM x, y, z
 ----
@@ -335,3 +347,72 @@ build
 SELECT * FROM x FULL OUTER JOIN LATERAL (SELECT * FROM y WHERE b = x.a) ON true
 ----
 error (42601): The combining JOIN type must be INNER or LEFT for a LATERAL reference
+
+
+build
+SELECT * FROM ax JOIN LATERAL (SELECT * FROM ay WHERE x=y) USING (a)
+----
+project
+ ├── columns: a:1 x:2 y:7!null
+ └── inner-join-apply
+      ├── columns: ax.a:1 x:2 ax.rowid:3!null ax.crdb_internal_mvcc_timestamp:4 ax.tableoid:5 ay.a:6 y:7!null
+      ├── scan ax
+      │    └── columns: ax.a:1 x:2 ax.rowid:3!null ax.crdb_internal_mvcc_timestamp:4 ax.tableoid:5
+      ├── project
+      │    ├── columns: ay.a:6 y:7!null
+      │    └── select
+      │         ├── columns: ay.a:6 y:7!null ay.rowid:8!null ay.crdb_internal_mvcc_timestamp:9 ay.tableoid:10
+      │         ├── scan ay
+      │         │    └── columns: ay.a:6 y:7 ay.rowid:8!null ay.crdb_internal_mvcc_timestamp:9 ay.tableoid:10
+      │         └── filters
+      │              └── x:2 = y:7
+      └── filters
+           └── ax.a:1 = ay.a:6
+
+build
+SELECT * FROM ax NATURAL JOIN LATERAL (SELECT * FROM ay WHERE x=y)
+----
+project
+ ├── columns: a:1 x:2 y:7!null
+ └── inner-join-apply
+      ├── columns: ax.a:1 x:2 ax.rowid:3!null ax.crdb_internal_mvcc_timestamp:4 ax.tableoid:5 ay.a:6 y:7!null
+      ├── scan ax
+      │    └── columns: ax.a:1 x:2 ax.rowid:3!null ax.crdb_internal_mvcc_timestamp:4 ax.tableoid:5
+      ├── project
+      │    ├── columns: ay.a:6 y:7!null
+      │    └── select
+      │         ├── columns: ay.a:6 y:7!null ay.rowid:8!null ay.crdb_internal_mvcc_timestamp:9 ay.tableoid:10
+      │         ├── scan ay
+      │         │    └── columns: ay.a:6 y:7 ay.rowid:8!null ay.crdb_internal_mvcc_timestamp:9 ay.tableoid:10
+      │         └── filters
+      │              └── x:2 = y:7
+      └── filters
+           └── ax.a:1 = ay.a:6
+
+build
+SELECT * FROM ax JOIN ay ON true LEFT JOIN LATERAL (SELECT a+z AS y FROM az WHERE x=z) USING (y)
+----
+project
+ ├── columns: y:7 a:1 x:2 a:6
+ └── left-join-apply
+      ├── columns: ax.a:1 x:2 ax.rowid:3!null ax.crdb_internal_mvcc_timestamp:4 ax.tableoid:5 ay.a:6 ay.y:7 ay.rowid:8!null ay.crdb_internal_mvcc_timestamp:9 ay.tableoid:10 y:16
+      ├── inner-join (cross)
+      │    ├── columns: ax.a:1 x:2 ax.rowid:3!null ax.crdb_internal_mvcc_timestamp:4 ax.tableoid:5 ay.a:6 ay.y:7 ay.rowid:8!null ay.crdb_internal_mvcc_timestamp:9 ay.tableoid:10
+      │    ├── scan ax
+      │    │    └── columns: ax.a:1 x:2 ax.rowid:3!null ax.crdb_internal_mvcc_timestamp:4 ax.tableoid:5
+      │    ├── scan ay
+      │    │    └── columns: ay.a:6 ay.y:7 ay.rowid:8!null ay.crdb_internal_mvcc_timestamp:9 ay.tableoid:10
+      │    └── filters
+      │         └── true
+      ├── project
+      │    ├── columns: y:16
+      │    ├── select
+      │    │    ├── columns: az.a:11 z:12!null az.rowid:13!null az.crdb_internal_mvcc_timestamp:14 az.tableoid:15
+      │    │    ├── scan az
+      │    │    │    └── columns: az.a:11 z:12 az.rowid:13!null az.crdb_internal_mvcc_timestamp:14 az.tableoid:15
+      │    │    └── filters
+      │    │         └── x:2 = z:12
+      │    └── projections
+      │         └── az.a:11 + z:12 [as=y:16]
+      └── filters
+           └── ay.y:7 = y:16
