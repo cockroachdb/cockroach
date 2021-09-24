@@ -507,3 +507,150 @@ ALTER PARTITION zero OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE US
 
 statement ok
 DROP TABLE parent, child, grandchild CASCADE;
+
+
+# Regression test to make sure that the de-interleaving policy works based
+# on column names in the shared prefix and not IDs. There was a previous bug
+# where de-interleaving would not copy if the columns did not have the same
+# ID in the parent and child.
+
+subtest mismatched_column_ids
+
+statement ok
+CREATE TABLE parent (
+                  parent_id STRING(100) NOT NULL,
+                  CONSTRAINT "primary" PRIMARY KEY (parent_id ASC),
+                  FAMILY "primary" (parent_id)
+              ) PARTITION BY RANGE (parent_id) (
+                  PARTITION ca VALUES FROM ('E-') TO ('F-'),
+                  PARTITION us VALUES FROM ('W-') TO ('X-'),
+                  PARTITION ap VALUES FROM ('C-') TO ('D-')
+              );
+CREATE TABLE child1 (
+                           other_column STRING(100),
+                           parent_id STRING(100) NOT NULL,
+                           child_id STRING(50) NOT NULL,
+                           CONSTRAINT "primary" PRIMARY KEY (parent_id ASC, child_id ASC),
+                           CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES public.parent(parent_id) ON DELETE CASCADE,
+                           FAMILY "primary" (other_column, parent_id, child_id)
+                       ) INTERLEAVE IN PARENT public.parent (parent_id);
+CREATE TABLE child2 (
+                       child_id STRING(100) NOT NULL,
+                       parent_id STRING(100) NOT NULL,
+                       other_column STRING(100),
+                       CONSTRAINT "primary" PRIMARY KEY (parent_id ASC, child_id ASC),
+                       CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES public.parent(parent_id) ON DELETE CASCADE,
+                       FAMILY "primary" (child_id, parent_id, other_column)
+                   ) INTERLEAVE IN PARENT public.parent (parent_id);
+ALTER PARTITION ca OF INDEX parent@primary CONFIGURE ZONE USING
+  range_min_bytes = 1048576,
+  range_max_bytes = 67108864,
+  gc.ttlseconds = 90000,
+  num_replicas = 3,
+  constraints = '[]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION us OF INDEX parent@primary CONFIGURE ZONE USING
+  range_min_bytes = 1048576,
+  range_max_bytes = 67108864,
+  gc.ttlseconds = 90000,
+  num_replicas = 3,
+  constraints = '[]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION ap OF INDEX parent@primary CONFIGURE ZONE USING
+  range_min_bytes = 1048576,
+  range_max_bytes = 67108864,
+  gc.ttlseconds = 90000,
+  num_replicas = 3,
+  constraints = '[]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE parent]
+----
+CREATE TABLE public.parent (
+  parent_id STRING(100) NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (parent_id ASC),
+  FAMILY "primary" (parent_id)
+) PARTITION BY RANGE (parent_id) (
+  PARTITION ca VALUES FROM ('E-') TO ('F-'),
+  PARTITION us VALUES FROM ('W-') TO ('X-'),
+  PARTITION ap VALUES FROM ('C-') TO ('D-')
+);
+ALTER PARTITION ap OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  range_min_bytes = 1048576,
+  range_max_bytes = 67108864,
+  gc.ttlseconds = 90000,
+  num_replicas = 3,
+  constraints = '[]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION ca OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  range_min_bytes = 1048576,
+  range_max_bytes = 67108864,
+  gc.ttlseconds = 90000,
+  num_replicas = 3,
+  constraints = '[]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION us OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  range_min_bytes = 1048576,
+  range_max_bytes = 67108864,
+  gc.ttlseconds = 90000,
+  num_replicas = 3,
+  constraints = '[]',
+  lease_preferences = '[[+region=us-east-1]]'
+
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child1]
+----
+CREATE TABLE public.child1 (
+                                                  other_column STRING(100) NULL,
+                                                  parent_id STRING(100) NOT NULL,
+                                                  child_id STRING(50) NOT NULL,
+                                                  CONSTRAINT "primary" PRIMARY KEY (parent_id ASC, child_id ASC),
+                                                  CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES public.parent(parent_id) ON DELETE CASCADE,
+                                                  FAMILY "primary" (other_column, parent_id, child_id)
+) INTERLEAVE IN PARENT public.parent (parent_id)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child2]
+----
+CREATE TABLE public.child2 (
+                                                  child_id STRING(100) NOT NULL,
+                                                  parent_id STRING(100) NOT NULL,
+                                                  other_column STRING(100) NULL,
+                                                  CONSTRAINT "primary" PRIMARY KEY (parent_id ASC, child_id ASC),
+                                                  CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES public.parent(parent_id) ON DELETE CASCADE,
+                                                  FAMILY "primary" (child_id, parent_id, other_column)
+) INTERLEAVE IN PARENT public.parent (parent_id)
+
+statement ok
+alter table child1 ALTER PRIMARY KEY USING COLUMNS (parent_id, child_id);
+
+statement ok
+alter table child2 ALTER PRIMARY KEY USING COLUMNS (parent_id, child_id);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child1]
+----
+CREATE TABLE public.child1 (
+   other_column STRING(100) NULL,
+   parent_id STRING(100) NOT NULL,
+   child_id STRING(50) NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (parent_id ASC, child_id ASC),
+   CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES public.parent(parent_id) ON DELETE CASCADE,
+   UNIQUE INDEX child1_parent_id_child_id_key (parent_id ASC, child_id ASC),
+   FAMILY "primary" (other_column, parent_id, child_id)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child2]
+----
+CREATE TABLE public.child2 (
+   child_id STRING(100) NOT NULL,
+   parent_id STRING(100) NOT NULL,
+   other_column STRING(100) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (parent_id ASC, child_id ASC),
+   CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES public.parent(parent_id) ON DELETE CASCADE,
+   UNIQUE INDEX child2_parent_id_child_id_key (parent_id ASC, child_id ASC),
+   FAMILY "primary" (child_id, parent_id, other_column)
+)
