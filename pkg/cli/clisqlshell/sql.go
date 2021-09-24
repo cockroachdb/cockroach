@@ -127,6 +127,14 @@ type cliState struct {
 	ins readline.EditLine
 	// buf is used to read lines if isInteractive is false.
 	buf *bufio.Reader
+	// singleStatement is set to true when this state level
+	// is currently processing for runString(). In that mode:
+	// - a missing semicolon at the end of input is ignored:
+	//   runString("select 1") is valid.
+	// - errors are not printed by runStatement, since the
+	//   caller of runString() is responsible for processing/
+	//   printing the exitErr.
+	singleStatement bool
 
 	// levels is the number of inclusion recursion levels.
 	levels int
@@ -1393,6 +1401,36 @@ func (c *cliState) runInclude(
 		}
 	}()
 
+	// Including a file: increase the recursion level.
+	newLevel := c.levels + 1
+
+	return c.runIncludeInternal(contState, errState,
+		filename, bufio.NewReader(f), newLevel, false /* singleStatement */)
+}
+
+func (c *cliState) runString(
+	contState, errState cliStateEnum, stmt string,
+) (resState cliStateEnum) {
+	r := strings.NewReader(stmt)
+	buf := bufio.NewReader(r)
+
+	// Running a string: don't increase the recursion level. We want
+	// that running sql -e '\i ...' gives access to the same maximum
+	// number of recursive includes as entering \i on the interactive
+	// prompt.
+	newLevel := c.levels
+
+	return c.runIncludeInternal(contState, errState,
+		"-e", buf, newLevel, true /* singleStatement */)
+}
+
+func (c *cliState) runIncludeInternal(
+	contState, errState cliStateEnum,
+	filename string,
+	input *bufio.Reader,
+	level int,
+	singleStatement bool,
+) (resState cliStateEnum) {
 	newState := cliState{
 		cliCtx:     c.cliCtx,
 		sqlConnCtx: c.sqlConnCtx,
@@ -1403,8 +1441,10 @@ func (c *cliState) runInclude(
 		conn:       c.conn,
 		includeDir: filepath.Dir(filename),
 		ins:        noLineEditor,
-		buf:        bufio.NewReader(f),
-		levels:     c.levels + 1,
+		buf:        input,
+		levels:     level,
+
+		singleStatement: singleStatement,
 	}
 
 	if err := newState.doRunShell(cliStartLine, nil, nil, nil); err != nil {
@@ -1432,7 +1472,6 @@ func (c *cliState) doPrepareStatementLine(
 	}
 
 	lastTok, ok := scanner.LastLexicalToken(c.concatLines)
-	endOfStmt := isEndOfStatement(lastTok)
 	if c.partialStmtsLen == 0 && !ok {
 		// More whitespace, or comments. Still nothing to do. However
 		// if the syntax was non-trivial to arrive here,
@@ -1441,6 +1480,12 @@ func (c *cliState) doPrepareStatementLine(
 			c.addHistory(c.lastInputLine)
 		}
 		return startState
+	}
+	endOfStmt := isEndOfStatement(lastTok)
+	if c.singleStatement && c.atEOF {
+		// We're always at the end of a statement if EOF is reached in the
+		// single statement mode.
+		endOfStmt = true
 	}
 	if c.atEOF {
 		// Definitely no more input expected.
@@ -1519,7 +1564,9 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 		// with the specified options.
 		c.exitErr = c.conn.Exec("SET tracing = off; SET tracing = "+c.iCtx.autoTrace, nil)
 		if c.exitErr != nil {
-			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			if !c.singleStatement {
+				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			}
 			if c.iCtx.errExit {
 				return cliStop
 			}
@@ -1531,7 +1578,9 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	c.exitErr = c.sqlExecCtx.RunQueryAndFormatResults(c.conn, c.iCtx.stdout, c.iCtx.stderr,
 		clisqlclient.MakeQuery(c.concatLines))
 	if c.exitErr != nil {
-		clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		if !c.singleStatement {
+			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		}
 	}
 
 	// If we are tracing, stop tracing and display the trace. We do
@@ -1808,21 +1857,8 @@ func (c *cliState) configurePreShellDefaults(
 func (c *cliState) runStatements(stmts []string) error {
 	for {
 		for i, stmt := range stmts {
-			// We do not use the logic from doRunStatement here
-			// because we need a different error handling mechanism:
-			// the error, if any, must not be printed to stderr if
-			// we are returning directly.
-			if strings.HasPrefix(stmt, `\`) {
-				// doHandleCliCmd takes its input from c.lastInputLine.
-				c.lastInputLine = stmt
-				if nextState := c.doHandleCliCmd(cliRunStatement, cliStop); nextState == cliStop && c.exitErr == nil {
-					// The client-side command failed with an error, but
-					// did not populate c.exitErr itself. Do it here.
-					c.exitErr = errors.New("error in client-side command")
-				}
-			} else {
-				c.exitErr = c.sqlExecCtx.RunQueryAndFormatResults(c.conn, c.iCtx.stdout, c.iCtx.stderr, clisqlclient.MakeQuery(stmt))
-			}
+			c.exitErr = nil
+			_ = c.runString(cliRunStatement, cliStop, stmt)
 			if c.exitErr != nil {
 				if !c.iCtx.errExit && i < len(stmts)-1 {
 					// Print the error now because we don't get a chance later.

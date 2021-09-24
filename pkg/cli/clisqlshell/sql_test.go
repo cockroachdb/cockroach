@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func Example_sql() {
@@ -34,6 +37,7 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `-e`, `begin`, `-e`, `select 3 as "3"`, `-e`, `commit`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select * from t.f`})
 	c.RunWithArgs([]string{`sql`, `--execute=SELECT database_name, owner FROM [show databases]`})
+	c.RunWithArgs([]string{`sql`, `-e`, `\l`, `-e`, `\echo hello`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1 as "1"; select 2 as "2"`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1 as "1"; select 2 as "@" where false`})
 	// CREATE TABLE AS returns a SELECT tag with a row count, check this.
@@ -81,6 +85,13 @@ func Example_sql() {
 	// postgres	root
 	// system	node
 	// t	root
+	// sql -e \l -e \echo hello
+	// database_name	owner	primary_region	regions	survival_goal
+	// defaultdb	root	NULL	{}	NULL
+	// postgres	root	NULL	{}	NULL
+	// system	node	NULL	{}	NULL
+	// t	root	NULL	{}	NULL
+	// hello
 	// sql -e select 1 as "1"; select 2 as "2"
 	// 1
 	// 1
@@ -99,7 +110,7 @@ func Example_sql() {
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
 	// x
 	// sql -e copy t.f from stdin
-	// ERROR: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
+	// ERROR: -e: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// sql -e select 1/(@1-2) from generate_series(1,3)
 	// ?column?
 	// -1
@@ -151,14 +162,13 @@ func Example_sql_config() {
 	// # 1 row
 	// sql --set unknownoption -e select 123 as "123"
 	// invalid syntax: \set unknownoption. Try \? for help.
-	// ERROR: invalid syntax
+	// ERROR: -e: invalid syntax
 	// sql --set display_format=invalidvalue -e select 123 as "123"
 	// \set display_format invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
-	// ERROR: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+	// ERROR: -e: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 	// sql -e \set display_format=invalidvalue -e select 123 as "123"
 	// \set display_format invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
-	// ERROR: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
-
+	// ERROR: -e: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 }
 
 func Example_sql_watch() {
@@ -450,4 +460,26 @@ func setupTestCliStateWithConn(conn clisqlclient.Conn) clisqlshell.Shell {
 	sqlCtx := &clisqlshell.Context{}
 	c := clisqlshell.NewShell(cliCtx, sqlConnCtx, sqlExecCtx, sqlCtx, conn)
 	return c
+}
+
+// TestAutoTraceInAutoRunStatements checks that auto_trace works
+// for statements specified via -e.
+func TestAutoTraceInAutoRunStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := cli.NewCLITest(cli.TestCLIParams{T: t})
+	defer c.Cleanup()
+
+	stmt := []string{`sql`, `-e`, `\set auto_trace on`, `-e`, `select 'hel'||'lo'`}
+	out, err := c.RunWithCaptureArgs(stmt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("output:\n%s", out)
+	if !strings.HasPrefix(out, strings.Join(stmt, " ")+"\n?column?\nhello") {
+		t.Errorf("output does not start with statement result")
+	}
+	if !strings.Contains(out, "SPAN START") {
+		t.Errorf("output does not contain trace")
+	}
 }
