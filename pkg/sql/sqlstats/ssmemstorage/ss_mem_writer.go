@@ -219,6 +219,7 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.MaxRetries = value.RetryCount
 	}
 	stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
+	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
 	stats.mu.data.BytesRead.Record(stats.mu.data.Count, float64(value.BytesRead))
 
 	if value.CollectedExecStats {

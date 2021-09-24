@@ -215,6 +215,17 @@ export class TransactionDetails extends React.Component<
                         <div
                           className={summaryCardStylesCx("summary--card__item")}
                         >
+                          <Text>Mean rows written</Text>
+                          <Text>
+                            {formatNumberForDisplay(
+                              transactionStats.rows_written?.mean,
+                              formatTwoPlaces,
+                            )}
+                          </Text>
+                        </div>
+                        <div
+                          className={summaryCardStylesCx("summary--card__item")}
+                        >
                           <Text>Max memory usage</Text>
                           <Text>
                             {formatNumberForDisplay(

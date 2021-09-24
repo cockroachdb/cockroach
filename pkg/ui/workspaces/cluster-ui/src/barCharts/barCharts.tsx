@@ -34,6 +34,10 @@ const bytesReadBars = [
   bar("bytes-read", (d: StatementStatistics) => d.stats.bytes_read.mean),
 ];
 
+const rowsWrittenBars = [
+  bar("rows-written", (d: StatementStatistics) => d.stats.rows_written?.mean),
+];
+
 const latencyBars = [
   bar("bar-chart__parse", (d: StatementStatistics) => d.stats.parse_lat.mean),
   bar("bar-chart__plan", (d: StatementStatistics) => d.stats.plan_lat.mean),
@@ -76,8 +80,12 @@ const retryBars = [
 const rowsReadStdDev = bar(cx("rows-read-dev"), (d: StatementStatistics) =>
   stdDevLong(d.stats.rows_read, d.stats.count),
 );
-const bytesReadStdDev = bar(cx("rows-read-dev"), (d: StatementStatistics) =>
+const bytesReadStdDev = bar(cx("bytes-read-dev"), (d: StatementStatistics) =>
   stdDevLong(d.stats.bytes_read, d.stats.count),
+);
+const rowsWrittenStdDev = bar(
+  cx("rows-written-dev"),
+  (d: StatementStatistics) => stdDevLong(d.stats.rows_written, d.stats.count),
 );
 const latencyStdDev = bar(
   cx("bar-chart__overall-dev"),
@@ -110,6 +118,13 @@ export const bytesReadBarChart = barChartFactory(
   bytesReadBars,
   Bytes,
   bytesReadStdDev,
+);
+export const rowsWrittenBarChart = barChartFactory(
+  "grey",
+  rowsWrittenBars,
+  approximify,
+  rowsWrittenStdDev,
+  formatTwoPlaces,
 );
 export const latencyBarChart = barChartFactory(
   "grey",
