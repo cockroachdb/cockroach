@@ -12,7 +12,7 @@ SHOW CREATE TABLE p
 ----
 p  CREATE TABLE public.p (
    a INT8 NOT NULL,
-   CONSTRAINT "primary" PRIMARY KEY (a ASC),
+   CONSTRAINT p_pkey PRIMARY KEY (a ASC),
    FAMILY "primary" (a)
 ) PARTITION BY LIST (a) (
   PARTITION p1 VALUES IN ((1)),

@@ -29,7 +29,7 @@ regions: <hidden>
   KV rows read: 0
   KV bytes read: 0 B
   missing stats
-  table: kv@primary
+  table: kv@kv_pkey
   spans: [/2 - ]
 
 statement ok
@@ -56,7 +56,7 @@ regions: <hidden>
   KV rows read: 3
   KV bytes read: 24 B
   missing stats
-  table: kv@primary
+  table: kv@kv_pkey
   spans: [/2 - ]
 
 statement ok
@@ -98,7 +98,7 @@ regions: <hidden>
 │     MVCC step count (ext/int): 0/0
 │     MVCC seek count (ext/int): 0/0
 │     estimated row count: 1,000 (missing stats)
-│     table: kv@primary
+│     table: kv@kv_pkey
 │     spans: FULL SCAN
 │
 └── • scan
@@ -114,7 +114,7 @@ regions: <hidden>
       MVCC step count (ext/int): 0/0
       MVCC seek count (ext/int): 0/0
       estimated row count: 1,000 (missing stats)
-      table: ab@primary
+      table: ab@ab_pkey
       spans: FULL SCAN
 
 # Regression tests for weird explain analyze cases.

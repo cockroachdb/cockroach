@@ -214,8 +214,8 @@ ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
 	expected = `
   table_name | constraint_name
 -------------+------------------
-  żółw       | primary
   żółw       | żó
+  żółw       | żółw_pkey
 (2 rows)
 `
 	if a, e := b.String(), expected[1:]; a != e {

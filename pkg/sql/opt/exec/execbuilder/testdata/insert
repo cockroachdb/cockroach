@@ -31,19 +31,19 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv/primary/'A' -> NULL
-fetched: /kv/primary/'a' -> NULL
-fetched: /kv/primary/'a'/v -> 'b'
-fetched: /kv/primary/'c' -> NULL
-fetched: /kv/primary/'c'/v -> 'd'
-fetched: /kv/primary/'e' -> NULL
-fetched: /kv/primary/'e'/v -> 'f'
-fetched: /kv/primary/'g' -> NULL
-fetched: /kv/primary/'g'/v -> ''
-fetched: /kv/primary/'nil1' -> NULL
-fetched: /kv/primary/'nil2' -> NULL
-fetched: /kv/primary/'nil3' -> NULL
-fetched: /kv/primary/'nil4' -> NULL
+fetched: /kv/kv_pkey/'A' -> NULL
+fetched: /kv/kv_pkey/'a' -> NULL
+fetched: /kv/kv_pkey/'a'/v -> 'b'
+fetched: /kv/kv_pkey/'c' -> NULL
+fetched: /kv/kv_pkey/'c'/v -> 'd'
+fetched: /kv/kv_pkey/'e' -> NULL
+fetched: /kv/kv_pkey/'e'/v -> 'f'
+fetched: /kv/kv_pkey/'g' -> NULL
+fetched: /kv/kv_pkey/'g'/v -> ''
+fetched: /kv/kv_pkey/'nil1' -> NULL
+fetched: /kv/kv_pkey/'nil2' -> NULL
+fetched: /kv/kv_pkey/'nil3' -> NULL
+fetched: /kv/kv_pkey/'nil4' -> NULL
 output row: ['A' NULL]
 output row: ['a' 'b']
 output row: ['c' 'd']
@@ -92,19 +92,19 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv/primary/'A' -> NULL
-fetched: /kv/primary/'a' -> NULL
-fetched: /kv/primary/'a'/v -> 'b'
-fetched: /kv/primary/'c' -> NULL
-fetched: /kv/primary/'c'/v -> 'd'
-fetched: /kv/primary/'e' -> NULL
-fetched: /kv/primary/'e'/v -> 'f'
-fetched: /kv/primary/'g' -> NULL
-fetched: /kv/primary/'g'/v -> ''
-fetched: /kv/primary/'nil1' -> NULL
-fetched: /kv/primary/'nil2' -> NULL
-fetched: /kv/primary/'nil3' -> NULL
-fetched: /kv/primary/'nil4' -> NULL
+fetched: /kv/kv_pkey/'A' -> NULL
+fetched: /kv/kv_pkey/'a' -> NULL
+fetched: /kv/kv_pkey/'a'/v -> 'b'
+fetched: /kv/kv_pkey/'c' -> NULL
+fetched: /kv/kv_pkey/'c'/v -> 'd'
+fetched: /kv/kv_pkey/'e' -> NULL
+fetched: /kv/kv_pkey/'e'/v -> 'f'
+fetched: /kv/kv_pkey/'g' -> NULL
+fetched: /kv/kv_pkey/'g'/v -> ''
+fetched: /kv/kv_pkey/'nil1' -> NULL
+fetched: /kv/kv_pkey/'nil2' -> NULL
+fetched: /kv/kv_pkey/'nil3' -> NULL
+fetched: /kv/kv_pkey/'nil4' -> NULL
 output row: ['A' NULL]
 output row: ['a' 'b']
 output row: ['c' 'd']
@@ -153,21 +153,21 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv/primary/'A' -> NULL
-fetched: /kv/primary/'a' -> NULL
-fetched: /kv/primary/'a'/v -> 'b'
-fetched: /kv/primary/'c' -> NULL
-fetched: /kv/primary/'c'/v -> 'd'
-fetched: /kv/primary/'e' -> NULL
-fetched: /kv/primary/'e'/v -> 'f'
-fetched: /kv/primary/'f' -> NULL
-fetched: /kv/primary/'f'/v -> 'g'
-fetched: /kv/primary/'g' -> NULL
-fetched: /kv/primary/'g'/v -> ''
-fetched: /kv/primary/'nil1' -> NULL
-fetched: /kv/primary/'nil2' -> NULL
-fetched: /kv/primary/'nil3' -> NULL
-fetched: /kv/primary/'nil4' -> NULL
+fetched: /kv/kv_pkey/'A' -> NULL
+fetched: /kv/kv_pkey/'a' -> NULL
+fetched: /kv/kv_pkey/'a'/v -> 'b'
+fetched: /kv/kv_pkey/'c' -> NULL
+fetched: /kv/kv_pkey/'c'/v -> 'd'
+fetched: /kv/kv_pkey/'e' -> NULL
+fetched: /kv/kv_pkey/'e'/v -> 'f'
+fetched: /kv/kv_pkey/'f' -> NULL
+fetched: /kv/kv_pkey/'f'/v -> 'g'
+fetched: /kv/kv_pkey/'g' -> NULL
+fetched: /kv/kv_pkey/'g'/v -> ''
+fetched: /kv/kv_pkey/'nil1' -> NULL
+fetched: /kv/kv_pkey/'nil2' -> NULL
+fetched: /kv/kv_pkey/'nil3' -> NULL
+fetched: /kv/kv_pkey/'nil4' -> NULL
 output row: ['A' NULL]
 output row: ['a' 'b']
 output row: ['c' 'd']
@@ -219,21 +219,21 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv/primary/'A' -> NULL
-fetched: /kv/primary/'a' -> NULL
-fetched: /kv/primary/'a'/v -> 'b'
-fetched: /kv/primary/'c' -> NULL
-fetched: /kv/primary/'c'/v -> 'd'
-fetched: /kv/primary/'e' -> NULL
-fetched: /kv/primary/'e'/v -> 'f'
-fetched: /kv/primary/'f' -> NULL
-fetched: /kv/primary/'f'/v -> 'g'
-fetched: /kv/primary/'g' -> NULL
-fetched: /kv/primary/'g'/v -> ''
-fetched: /kv/primary/'nil1' -> NULL
-fetched: /kv/primary/'nil2' -> NULL
-fetched: /kv/primary/'nil3' -> NULL
-fetched: /kv/primary/'nil4' -> NULL
+fetched: /kv/kv_pkey/'A' -> NULL
+fetched: /kv/kv_pkey/'a' -> NULL
+fetched: /kv/kv_pkey/'a'/v -> 'b'
+fetched: /kv/kv_pkey/'c' -> NULL
+fetched: /kv/kv_pkey/'c'/v -> 'd'
+fetched: /kv/kv_pkey/'e' -> NULL
+fetched: /kv/kv_pkey/'e'/v -> 'f'
+fetched: /kv/kv_pkey/'f' -> NULL
+fetched: /kv/kv_pkey/'f'/v -> 'g'
+fetched: /kv/kv_pkey/'g' -> NULL
+fetched: /kv/kv_pkey/'g'/v -> ''
+fetched: /kv/kv_pkey/'nil1' -> NULL
+fetched: /kv/kv_pkey/'nil2' -> NULL
+fetched: /kv/kv_pkey/'nil3' -> NULL
+fetched: /kv/kv_pkey/'nil4' -> NULL
 output row: ['A' NULL]
 output row: ['a' 'b']
 output row: ['c' 'd']
@@ -331,7 +331,7 @@ vectorized: true
         └── • scan
               columns: (x, v)
               estimated row count: 1,000 (missing stats)
-              table: select_t@primary
+              table: select_t@select_t_pkey
               spans: FULL SCAN
 
 # Check that INSERT supports LIMIT (MySQL extension)
@@ -357,7 +357,7 @@ vectorized: true
     └── • scan
           columns: (x, v)
           estimated row count: 1 (missing stats)
-          table: select_t@primary
+          table: select_t@select_t_pkey
           spans: LIMITED SCAN
           limit: 1
 
@@ -487,7 +487,7 @@ vectorized: true
                 └── • scan
                       columns: (k, v)
                       estimated row count: 1,000 (missing stats)
-                      table: kv@primary
+                      table: kv@kv_pkey
                       spans: FULL SCAN
 
 # ------------------------------------------------------------------------------
@@ -603,7 +603,7 @@ vectorized: true
                     └── • scan
                           columns: (a, b, c)
                           estimated row count: 1,000 (missing stats)
-                          table: abc@primary
+                          table: abc@abc_pkey
                           spans: FULL SCAN
 
 # ------------------------------------------------------------------------------
@@ -641,7 +641,7 @@ vectorized: true
   estimated row count: 0 (missing stats)
   into: t62270_child(c, p, rowid)
   auto commit
-  FK check: t62270_parent@primary
+  FK check: t62270_parent@t62270_parent_pkey
   size: 3 columns, 1 row
   row 0, expr 0: gen_random_uuid()
   row 0, expr 1: 1

@@ -26,7 +26,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join
-│ table: rtable@primary
+│ table: rtable@rtable_pkey
 │ equality: (rk1, rk2) = (rk1,rk2)
 │ equality cols are key
 │ pred: st_intersects(geom1, geom)
@@ -36,7 +36,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: ltable@primary
+          table: ltable@ltable_pkey
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUksGO0zAQhu88xWhOW2lgm3Th4JMRFCmr0ixtD0goWoV4VJmmdrAdVFT13ZGdFUsLregtM55v_OmP9-i_tyhw-vlh9raYw837YrlafpqNYDmdTd-toN0QuE0GHxblR2hD_bVluC-LObj0Lddst4_aKN5BOQcfHrUJ7Dw3wd8M46_iSEZPQKpGSGis4nm9ZY_iC2ZYEXbONuy9dbG1TwOF2qEYE2rT9SG2K8LGOkaxx6BDyyhwFdcuuFbsbsdIqDjUuk1rBwHZOb2t3U8kXHa18QJeImHZBwEyI5ljdSC0fXi-wod6zSiyA_2_RmF-sAus7q027G6zY5O_0kL6TUx3nTtJTuYE8m50pElyQvL1Wdn8Gtko-RRZ_k_R58hm1m76Dr5ZbcAaAdHiLoqd_u3k_ObI-bzt5BrbBfvOGs9Hpuc2jw8VIas1D6_I2941_OBsk64ZyjJxqaHYh-E0G4rCDEdR8E84uwjnl-H8Ijw5gavDi18BAAD__7oxLRY=
@@ -49,7 +49,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join
-│ table: rtable@primary
+│ table: rtable@rtable_pkey
 │ equality: (rk1, rk2) = (rk1,rk2)
 │ equality cols are key
 │ pred: st_intersects(geom1, geom)
@@ -59,7 +59,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: ltable@primary
+          table: ltable@ltable_pkey
           spans: FULL SCAN
 
 query T
@@ -70,7 +70,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join
-│ table: rtable@primary
+│ table: rtable@rtable_pkey
 │ equality: (rk1, rk2) = (rk1,rk2)
 │ equality cols are key
 │ pred: st_dwithin(geom1, geom, 5.0)
@@ -80,7 +80,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: ltable@primary
+          table: ltable@ltable_pkey
           spans: FULL SCAN
 
 query T
@@ -111,7 +111,7 @@ vectorized: true
         └── • lookup join (inner)
             │ columns: (lk, geom1, rk1, rk2, rk1, geom)
             │ ordering: +lk
-            │ table: rtable@primary
+            │ table: rtable@rtable_pkey
             │ equality: (rk1, rk2) = (rk1,rk2)
             │ equality cols are key
             │ pred: st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)
@@ -131,7 +131,7 @@ vectorized: true
                           columns: (lk, geom1)
                           ordering: +lk
                           estimated row count: 1,000 (missing stats)
-                          table: ltable@primary
+                          table: ltable@ltable_pkey
                           spans: FULL SCAN
 
 query T
@@ -162,7 +162,7 @@ vectorized: true
         └── • lookup join (inner)
             │ columns: (lk, geom1, rk1, rk2, rk1, geom)
             │ ordering: +lk
-            │ table: rtable@primary
+            │ table: rtable@rtable_pkey
             │ equality: (rk1, rk2) = (rk1,rk2)
             │ equality cols are key
             │ pred: st_intersects(geom1, geom) AND st_dwithin(geom, geom1, 2.0)
@@ -182,7 +182,7 @@ vectorized: true
                           columns: (lk, geom1)
                           ordering: +lk
                           estimated row count: 1,000 (missing stats)
-                          table: ltable@primary
+                          table: ltable@ltable_pkey
                           spans: FULL SCAN
 
 query T
@@ -204,7 +204,7 @@ vectorized: true
     │
     └── • lookup join (inner)
         │ columns: (lk, geom1, geom2, rk1, rk2, rk1, geom)
-        │ table: rtable@primary
+        │ table: rtable@rtable_pkey
         │ equality: (rk1, rk2) = (rk1,rk2)
         │ equality cols are key
         │ pred: (st_intersects(geom1, geom) AND st_covers(geom2, geom)) AND (st_dfullywithin(geom, geom1, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom))
@@ -221,7 +221,7 @@ vectorized: true
                 └── • scan
                       columns: (lk, geom1, geom2)
                       estimated row count: 1,000 (missing stats)
-                      table: ltable@primary
+                      table: ltable@ltable_pkey
                       spans: FULL SCAN
 
 # This query performs a semi-join, which is converted to paired joins by the
@@ -243,7 +243,7 @@ vectorized: true
     │
     └── • lookup join (semi)
         │ columns: (lk, geom2, rk1, rk2, cont)
-        │ table: rtable@primary
+        │ table: rtable@rtable_pkey
         │ equality: (rk1, rk2) = (rk1,rk2)
         │ equality cols are key
         │ pred: st_intersects(geom2, geom)
@@ -260,7 +260,7 @@ vectorized: true
                 └── • scan
                       columns: (lk, geom2)
                       estimated row count: 1,000 (missing stats)
-                      table: ltable@primary
+                      table: ltable@ltable_pkey
                       spans: FULL SCAN
 
 # Left outer joins are also converted to paired joins by the optimizer.
@@ -281,7 +281,7 @@ vectorized: true
     │
     └── • lookup join (left outer)
         │ columns: (lk, geom1, rk1, rk2, cont, rk1, geom)
-        │ table: rtable@primary
+        │ table: rtable@rtable_pkey
         │ equality: (rk1, rk2) = (rk1,rk2)
         │ equality cols are key
         │ pred: st_intersects(geom1, geom)
@@ -298,7 +298,7 @@ vectorized: true
                 └── • scan
                       columns: (lk, geom1)
                       estimated row count: 1,000 (missing stats)
-                      table: ltable@primary
+                      table: ltable@ltable_pkey
                       spans: FULL SCAN
 
 query T
@@ -339,7 +339,7 @@ vectorized: true
 │               │
 │               └── • lookup join (left outer)
 │                   │ columns: (lk, geom1, rk1, rk2, cont, geom)
-│                   │ table: rtable@primary
+│                   │ table: rtable@rtable_pkey
 │                   │ equality: (rk1, rk2) = (rk1,rk2)
 │                   │ equality cols are key
 │                   │ pred: st_intersects(geom1, geom)
@@ -373,7 +373,7 @@ vectorized: true
 │       └── • scan
 │             columns: (lk, geom1, geom2)
 │             estimated row count: 333 (missing stats)
-│             table: ltable@primary
+│             table: ltable@ltable_pkey
 │             spans: /3-
 │
 └── • subquery
@@ -412,7 +412,7 @@ vectorized: true
     │
     └── • lookup join (anti)
         │ columns: (lk, geom2, rk1, rk2, cont)
-        │ table: rtable@primary
+        │ table: rtable@rtable_pkey
         │ equality: (rk1, rk2) = (rk1,rk2)
         │ equality cols are key
         │ pred: st_intersects(geom2, geom)
@@ -429,7 +429,7 @@ vectorized: true
                 └── • scan
                       columns: (lk, geom2)
                       estimated row count: 1,000 (missing stats)
-                      table: ltable@primary
+                      table: ltable@ltable_pkey
                       spans: FULL SCAN
 
 query T
@@ -452,7 +452,7 @@ vectorized: true
     │
     └── • lookup join (anti)
         │ columns: (lk, geom1, rk1, rk2, cont)
-        │ table: rtable@primary
+        │ table: rtable@rtable_pkey
         │ equality: (rk1, rk2) = (rk1,rk2)
         │ equality cols are key
         │ pred: st_covers(geom1, geom)
@@ -470,7 +470,7 @@ vectorized: true
                 └── • scan
                       columns: (lk, geom1)
                       estimated row count: 1,000 (missing stats)
-                      table: ltable@primary
+                      table: ltable@ltable_pkey
                       spans: FULL SCAN
 
 # Bounding box operations.
@@ -494,7 +494,7 @@ vectorized: true
     │
     └── • lookup join (inner)
         │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
-        │ table: rtable@primary
+        │ table: rtable@rtable_pkey
         │ equality: (rk1, rk2) = (rk1,rk2)
         │ equality cols are key
         │ pred: geom1 ~ geom
@@ -511,7 +511,7 @@ vectorized: true
                 └── • scan
                       columns: (lk, geom1)
                       estimated row count: 1,000 (missing stats)
-                      table: ltable@primary
+                      table: ltable@ltable_pkey
                       spans: FULL SCAN
 
 query T
@@ -531,7 +531,7 @@ vectorized: true
     │
     └── • lookup join (inner)
         │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
-        │ table: rtable@primary
+        │ table: rtable@rtable_pkey
         │ equality: (rk1, rk2) = (rk1,rk2)
         │ equality cols are key
         │ pred: geom ~ geom1
@@ -548,7 +548,7 @@ vectorized: true
                 └── • scan
                       columns: (lk, geom1)
                       estimated row count: 1,000 (missing stats)
-                      table: ltable@primary
+                      table: ltable@ltable_pkey
                       spans: FULL SCAN
 
 query T
@@ -568,7 +568,7 @@ vectorized: true
     │
     └── • lookup join (inner)
         │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
-        │ table: rtable@primary
+        │ table: rtable@rtable_pkey
         │ equality: (rk1, rk2) = (rk1,rk2)
         │ equality cols are key
         │ pred: geom && geom1
@@ -585,7 +585,7 @@ vectorized: true
                 └── • scan
                       columns: (lk, geom1)
                       estimated row count: 1,000 (missing stats)
-                      table: ltable@primary
+                      table: ltable@ltable_pkey
                       spans: FULL SCAN
 
 statement ok
@@ -599,7 +599,7 @@ CREATE INVERTED INDEX foo_inv ON g(geom)
 
 # This query performs an inverted join.
 query T
-EXPLAIN SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
+EXPLAIN SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
 distribution: local
 vectorized: true
@@ -608,7 +608,7 @@ vectorized: true
 │ order: +k,+k
 │
 └── • lookup join
-    │ table: g@primary
+    │ table: g@g_pkey
     │ equality: (k) = (k)
     │ equality cols are key
     │ pred: st_contains(geom, geom)
@@ -618,12 +618,12 @@ vectorized: true
         │
         └── • scan
               missing stats
-              table: g@primary
+              table: g@g_pkey
               spans: FULL SCAN
 
 # This query performs a cross join followed by a filter.
 query T
-EXPLAIN SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
+EXPLAIN SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
 distribution: local
 vectorized: true
@@ -636,17 +636,17 @@ vectorized: true
     │
     ├── • scan
     │     missing stats
-    │     table: g@primary
+    │     table: g@g_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           missing stats
-          table: g@primary
+          table: g@g_pkey
           spans: FULL SCAN
 
 # This query performs an inverted join with an additional filter.
 query T
-EXPLAIN SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2
+EXPLAIN SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2
 WHERE ST_Contains(g1.geom, g2.geom)
   AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
   AND g2.k < 20
@@ -659,7 +659,7 @@ vectorized: true
 │ order: +k,+k
 │
 └── • lookup join
-    │ table: g@primary
+    │ table: g@g_pkey
     │ equality: (k) = (k)
     │ equality cols are key
     │ pred: st_contains(geom, geom) AND st_contains(geom, '010300000001000000050000000000000000000000000000000000000000000000000000000000000000001440000000000000144000000000000014400000000000001440000000000000000000000000000000000000000000000000')
@@ -669,12 +669,12 @@ vectorized: true
         │
         └── • scan
               missing stats
-              table: g@primary
+              table: g@g_pkey
               spans: [ - /19]
 
 # This query performs a cross join followed by a filter.
 query T
-EXPLAIN SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2
+EXPLAIN SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2
 WHERE ST_Contains(g1.geom, g2.geom)
   AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
   AND g2.k < 20
@@ -691,7 +691,7 @@ vectorized: true
     │
     ├── • scan
     │     missing stats
-    │     table: g@primary
+    │     table: g@g_pkey
     │     spans: [ - /19]
     │
     └── • filter
@@ -699,5 +699,5 @@ vectorized: true
         │
         └── • scan
               missing stats
-              table: g@primary
+              table: g@g_pkey
               spans: FULL SCAN

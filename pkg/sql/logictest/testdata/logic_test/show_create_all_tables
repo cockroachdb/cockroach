@@ -50,19 +50,19 @@ CREATE TABLE public.parent (
     y INT8 NULL,
     z INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT parent_pkey PRIMARY KEY (rowid ASC),
     UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
     UNIQUE INDEX parent_x_key (x ASC),
     FAMILY f1 (x, y, z, rowid)
 );
 CREATE TABLE public.full_test (
-    x INT8 NULL,
-    y INT8 NULL,
-    z INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX full_test_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+                                                                                                                                                                     x INT8 NULL,
+                                                                                                                                                                     y INT8 NULL,
+                                                                                                                                                                     z INT8 NULL,
+                                                                                                                                                                     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                                                                                                                                     CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
+                                                                                                                                                                     UNIQUE INDEX full_test_x_key (x ASC),
+                                                                                                                                                                     FAMILY f1 (x, y, z, rowid)
 );
 CREATE VIEW public.vx ("?column?") AS SELECT 1;
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
@@ -98,19 +98,19 @@ CREATE TABLE public.parent (
     y INT8 NULL,
     z INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT parent_pkey PRIMARY KEY (rowid ASC),
     UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
     UNIQUE INDEX parent_x_key (x ASC),
     FAMILY f1 (x, y, z, rowid)
 );
 CREATE TABLE public.full_test (
-    x INT8 NULL,
-    y INT8 NULL,
-    z INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX full_test_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+                                                                                                                                                                     x INT8 NULL,
+                                                                                                                                                                     y INT8 NULL,
+                                                                                                                                                                     z INT8 NULL,
+                                                                                                                                                                     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                                                                                                                                     CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
+                                                                                                                                                                     UNIQUE INDEX full_test_x_key (x ASC),
+                                                                                                                                                                     FAMILY f1 (x, y, z, rowid)
 );
 CREATE VIEW public.vx ("?column?") AS SELECT 1;
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
@@ -168,50 +168,50 @@ SHOW CREATE ALL TABLES
 create_statement
 CREATE TABLE public.b (
     i INT8 NOT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    CONSTRAINT b_pkey PRIMARY KEY (i ASC),
     FAMILY "primary" (i)
 );
 CREATE TABLE public.a (
     i INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
     FAMILY "primary" (i, rowid)
 );
 CREATE TABLE public.g (
     i INT8 NOT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    CONSTRAINT g_pkey PRIMARY KEY (i ASC),
     FAMILY "primary" (i)
 );
 CREATE TABLE public.f (
     i INT8 NOT NULL,
     g INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    CONSTRAINT f_pkey PRIMARY KEY (i ASC),
     FAMILY f1 (i, g)
 );
 CREATE TABLE public.e (
     i INT8 NOT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    CONSTRAINT e_pkey PRIMARY KEY (i ASC),
     FAMILY "primary" (i)
 );
 CREATE TABLE public.d (
     i INT8 NOT NULL,
     e INT8 NULL,
     f INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    CONSTRAINT d_pkey PRIMARY KEY (i ASC),
     FAMILY f1 (i, e, f)
 );
 CREATE TABLE public.c (
-    i INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (i, rowid)
+                                                                                       i INT8 NULL,
+                                                                                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                                                       CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
+                                                                                       FAMILY "primary" (i, rowid)
 );
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 CREATE TABLE public.s_tbl (
-    id INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-    v INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (id ASC),
-    FAMILY f1 (id, v)
+                                                                                                                     id INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
+                                                                                                                     v INT8 NULL,
+                                                                                                                     CONSTRAINT s_tbl_pkey PRIMARY KEY (id ASC),
+                                                                                                                     FAMILY f1 (id, v)
 );
 ALTER TABLE public.a ADD CONSTRAINT fk_i_ref_b FOREIGN KEY (i) REFERENCES public.b(i);
 ALTER TABLE public.f ADD CONSTRAINT fk_g_ref_g FOREIGN KEY (g) REFERENCES public.g(i);
@@ -248,17 +248,17 @@ SHOW CREATE ALL TABLES
 ----
 create_statement
 CREATE TABLE public.loop_b (
-  id INT8 NOT NULL,
-  a_id INT8 NULL,
-  CONSTRAINT "primary" PRIMARY KEY (id ASC),
-  FAMILY f1 (id, a_id)
+    id INT8 NOT NULL,
+    a_id INT8 NULL,
+    CONSTRAINT loop_b_pkey PRIMARY KEY (id ASC),
+    FAMILY f1 (id, a_id)
 );
 CREATE TABLE public.loop_a (
-  id INT8 NOT NULL,
-  b_id INT8 NULL,
-  CONSTRAINT "primary" PRIMARY KEY (id ASC),
-  INDEX loop_a_b_id_idx (b_id ASC),
-  FAMILY f1 (id, b_id)
+                                                                                                                                    id INT8 NOT NULL,
+                                                                                                                                    b_id INT8 NULL,
+                                                                                                                                    CONSTRAINT loop_a_pkey PRIMARY KEY (id ASC),
+                                                                                                                                    INDEX loop_a_b_id_idx (b_id ASC),
+                                                                                                                                    FAMILY f1 (id, b_id)
 );
 ALTER TABLE public.loop_b ADD CONSTRAINT fk_a_id_ref_loop_a FOREIGN KEY (a_id) REFERENCES public.loop_a(id) ON DELETE CASCADE;
 ALTER TABLE public.loop_a ADD CONSTRAINT b_id_delete_constraint FOREIGN KEY (b_id) REFERENCES public.loop_b(id) ON DELETE CASCADE;
@@ -302,7 +302,7 @@ create_statement
 CREATE TABLE public.t (
     a INT8 NOT NULL,
     b INT8 NULL AS (a + 1:::INT8) STORED,
-    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+    CONSTRAINT t_pkey PRIMARY KEY (a ASC),
     FAMILY f1 (a, b)
 );
 
@@ -321,7 +321,7 @@ create_statement
 CREATE TABLE public.";" (
     ";" INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT ";_pkey" PRIMARY KEY (rowid ASC),
     INDEX ";_;_idx" (";" ASC),
     FAMILY "primary" (";", rowid)
 );
@@ -333,7 +333,7 @@ CREATE DATABASE test_comment;
 USE test_comment;
 CREATE TABLE test_comment."t   t" ("x'" INT PRIMARY KEY);
 COMMENT ON TABLE test_comment."t   t" IS 'has '' quotes';
-COMMENT ON INDEX test_comment."t   t"@primary IS 'has '' more '' quotes';
+COMMENT ON INDEX test_comment."t   t"@"t   t_pkey" IS 'has '' more '' quotes';
 COMMENT ON COLUMN test_comment."t   t"."x'" IS 'i '' just '' love '' quotes';
 
 query T colnames
@@ -342,12 +342,12 @@ SHOW CREATE ALL TABLES
 create_statement
 CREATE TABLE public."t   t" (
   "x'" INT8 NOT NULL,
-  CONSTRAINT "primary" PRIMARY KEY ("x'" ASC),
+  CONSTRAINT "t   t_pkey" PRIMARY KEY ("x'" ASC),
   FAMILY "primary" ("x'")
 );
 COMMENT ON TABLE public."t   t" IS e'has \' quotes';
 COMMENT ON COLUMN public."t   t"."x'" IS e'i \' just \' love \' quotes';
-COMMENT ON INDEX public."t   t"@primary IS e'has \' more \' quotes';
+COMMENT ON INDEX public."t   t"@"t   t_pkey" IS e'has \' more \' quotes';
 
 # Ensure schemas are shown correctly.
 statement ok
@@ -365,13 +365,13 @@ create_statement
 CREATE TABLE sc1.t (
     x INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
     FAMILY "primary" (x, rowid)
 );
 CREATE TABLE sc2.t (
     x INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
     FAMILY "primary" (x, rowid)
 );
 
@@ -401,7 +401,7 @@ create_statement
 CREATE TABLE public.t (
     x public.test NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
     FAMILY "primary" (x, rowid)
 );
 
@@ -421,7 +421,7 @@ CREATE TABLE public.t (
     z INT8 NULL,
     h STRING NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
     FAMILY f1 (x, y, rowid),
     FAMILY f2 (z),
     FAMILY f3 (h)

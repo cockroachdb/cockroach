@@ -37,7 +37,7 @@ CREATE TABLE public.s (
    k INT8 NOT NULL,
    a INT8 NULL,
    geom GEOMETRY NULL,
-   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   CONSTRAINT s_pkey PRIMARY KEY (k ASC),
    INVERTED INDEX s_a_geom_idx (a, geom) WITH (geometry_min_x=0),
    FAMILY fam_0_k (k),
    FAMILY fam_1_a (a),
@@ -63,7 +63,7 @@ CREATE TABLE public.drop_j (
    a INT8 NULL,
    b INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT drop_j_pkey PRIMARY KEY (rowid ASC),
    FAMILY fam_0_a_b_j_rowid (a, b, rowid)
 )
 
@@ -86,7 +86,7 @@ CREATE TABLE public.drop_a (
    b INT8 NULL,
    j JSONB NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT drop_a_pkey PRIMARY KEY (rowid ASC),
    FAMILY fam_0_a_b_j_rowid (b, j, rowid)
 )
 
@@ -103,7 +103,7 @@ CREATE TABLE public.dst (
    b INT8 NULL,
    j JSONB NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   CONSTRAINT src_pkey PRIMARY KEY (rowid ASC),
    INVERTED INDEX src_a_j_idx (a, j),
    INVERTED INDEX src_a_b_j_idx (a, b, j),
    FAMILY "primary" (a, b, j, rowid)

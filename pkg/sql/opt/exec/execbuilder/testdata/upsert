@@ -32,7 +32,7 @@ vectorized: true
         └── • scan
               columns: (k, v)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 # Use explicit target columns (which can use blind KV Put).
@@ -61,7 +61,7 @@ vectorized: true
         └── • scan
               columns: (k, v)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 # Add RETURNING clause (should still use blind KV Put).
@@ -90,7 +90,7 @@ vectorized: true
         └── • scan
               columns: (k, v)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 # Use subset of explicit target columns (which cannot use blind KV Put).
@@ -105,12 +105,12 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: kv(k, v)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: kv_pkey
 │
 └── • lookup join (inner)
     │ columns: (k, v_default, k)
     │ estimated row count: 2 (missing stats)
-    │ table: kv@primary
+    │ table: kv@kv_pkey
     │ equality: (k) = (k)
     │ equality cols are key
     │
@@ -137,7 +137,7 @@ vectorized: true
                 └── • scan
                       columns: (k, v)
                       estimated row count: 1,000 (missing stats)
-                      table: kv@primary
+                      table: kv@kv_pkey
                       spans: FULL SCAN
 
 # Use Upsert with indexed table, default columns, computed columns, and check
@@ -165,7 +165,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: indexed(a, b, c, d)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: indexed_pkey
 │
 └── • project
     │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
@@ -198,7 +198,7 @@ vectorized: true
             └── • scan
                   columns: (a, b, c, d)
                   estimated row count: 1 (missing stats)
-                  table: indexed@primary
+                  table: indexed@indexed_pkey
                   spans: /1/0
                   locking strength: for update
 
@@ -213,7 +213,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: indexed(a, b, c, d)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: indexed_pkey
 │
 └── • project
     │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
@@ -234,7 +234,7 @@ vectorized: true
         └── • lookup join (left outer)
             │ columns: (d_comp, b_default, c_default, column1, a, b, c, d)
             │ estimated row count: 4 (missing stats)
-            │ table: indexed@primary
+            │ table: indexed@indexed_pkey
             │ equality: (column1) = (a)
             │ equality cols are key
             │ locking strength: for update
@@ -270,7 +270,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: indexed(a, b, c, d)
 │ auto commit
-│ arbiter indexes: primary
+│ arbiter indexes: indexed_pkey
 │
 └── • project
     │ columns: (column1, column2, column3, d_comp, a, b, c, d, upsert_b, upsert_c, upsert_d, a, check1)
@@ -321,7 +321,7 @@ vectorized: true
                 └── • scan
                       columns: (a, b, c, d)
                       estimated row count: 1 (missing stats)
-                      table: indexed@primary
+                      table: indexed@indexed_pkey
                       spans: /1/0
                       locking strength: for update
 
@@ -461,7 +461,7 @@ vectorized: true
                         └── • scan
                               columns: (a, b, c)
                               estimated row count: 1,000 (missing stats)
-                              table: abc@primary
+                              table: abc@abc_pkey
                               spans: FULL SCAN
 
 # ------------------------------------------------------------------------------
@@ -517,7 +517,7 @@ vectorized: true
 │ columns: ()
 │ estimated row count: 0 (missing stats)
 │ into: table38627(a, b)
-│ arbiter indexes: primary
+│ arbiter indexes: table38627_pkey
 │
 └── • project
     │ columns: (a, b, a, b, c, b, a)
@@ -525,14 +525,14 @@ vectorized: true
     └── • lookup join (inner)
         │ columns: (a, b, a, b, c)
         │ estimated row count: 1 (missing stats)
-        │ table: table38627@primary
+        │ table: table38627@table38627_pkey
         │ equality: (a) = (a)
         │ equality cols are key
         │
         └── • scan
               columns: (a, b)
               estimated row count: 1 (missing stats)
-              table: table38627@primary
+              table: table38627@table38627_pkey
               spans: /1/0
 
 statement ok

@@ -41,7 +41,7 @@ c  CREATE TABLE public.c (
    foo JSONB NULL,
    "bAr" JSONB NULL,
    "qUuX" JSONB NULL,
-   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   CONSTRAINT c_pkey PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
    INVERTED INDEX "c_bAr_idx" ("bAr"),
    FAMILY "primary" (id, foo, "bAr", "qUuX")
@@ -1116,7 +1116,7 @@ c  CREATE TABLE public.c (
    id INT8 NOT NULL,
    foo INT8[] NULL,
    bar STRING[] NULL,
-   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   CONSTRAINT c_pkey PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
    INVERTED INDEX c_bar_idx (bar),
    FAMILY "primary" (id, foo, bar)

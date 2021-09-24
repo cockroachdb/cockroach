@@ -73,7 +73,7 @@ ORDER BY i.relname
 ----
 name              primary  unique  indkey  column_indexes  column_names  definition
 customers_id_idx  false    false   2       {1,2}           {name,id}     CREATE INDEX customers_id_idx ON test.public.customers USING btree (id ASC)
-primary           true     true    1       {1,2}           {name,id}     CREATE UNIQUE INDEX "primary" ON test.public.customers USING btree (name ASC)
+customers_pkey    true     true    1       {1,2}           {name,id}     CREATE UNIQUE INDEX customers_pkey ON test.public.customers USING btree (name ASC)
 
 
 query TT colnames

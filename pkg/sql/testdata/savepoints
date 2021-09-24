@@ -218,7 +218,7 @@ COMMIT
 -- NoTxn       -> Open        #.....  (none)
 2: SAVEPOINT foo -- 0 rows
 -- Open        -> Open        ##....  foo
-3: SELECT * FROM t WHERE x = 1 FOR UPDATE NOWAIT -- pq: could not obtain lock on row (x)=(1) in t@primary
+3: SELECT * FROM t WHERE x = 1 FOR UPDATE NOWAIT -- pq: could not obtain lock on row (x)=(1) in t@t_pkey
 -- Open        -> Aborted     XXXXXX  foo
 4: ROLLBACK TO SAVEPOINT foo -- 0 rows
 -- Aborted     -> Open        ##....  foo
@@ -278,7 +278,7 @@ SET lock_timeout = 0
 -- NoTxn       -> Open        ##......  (none)
 3: SAVEPOINT foo -- 0 rows
 -- Open        -> Open        ###.....  foo
-4: SELECT * FROM t WHERE x = 1 FOR UPDATE -- pq: canceling statement due to lock timeout on row (x)=(1) in t@primary
+4: SELECT * FROM t WHERE x = 1 FOR UPDATE -- pq: canceling statement due to lock timeout on row (x)=(1) in t@t_pkey
 -- Open        -> Aborted     XXXXXXXX  foo
 5: ROLLBACK TO SAVEPOINT foo -- 0 rows
 -- Aborted     -> Open        ###.....  foo

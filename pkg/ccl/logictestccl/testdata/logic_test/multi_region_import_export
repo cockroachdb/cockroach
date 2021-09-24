@@ -98,6 +98,6 @@ team                                            CREATE TABLE public.team (
                                                 name STRING NULL,
                                                 likes STRING[] NULL,
                                                 dislikes STRING[] NULL,
-                                                CONSTRAINT "primary" PRIMARY KEY (id ASC),
+                                                CONSTRAINT team_pkey PRIMARY KEY (id ASC),
                                                 FAMILY "primary" (id, name, likes, dislikes)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION

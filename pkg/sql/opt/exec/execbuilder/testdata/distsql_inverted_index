@@ -79,7 +79,7 @@ vectorized: true
 │ order: +a
 │
 └── • lookup join
-    │ table: json_tab@primary
+    │ table: json_tab@json_tab_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b @> '[1, 2]'
@@ -107,7 +107,7 @@ vectorized: true
 │ order: +a
 │
 └── • lookup join
-    │ table: json_tab@primary
+    │ table: json_tab@json_tab_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: (b @> '[1]') AND (b @> '[2]')
@@ -135,7 +135,7 @@ vectorized: true
 │ order: +a
 │
 └── • lookup join
-    │ table: json_tab@primary
+    │ table: json_tab@json_tab_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b @> '[[1, 2]]'
@@ -196,7 +196,7 @@ vectorized: true
 │ order: +a
 │
 └── • lookup join
-    │ table: array_tab@primary
+    │ table: array_tab@array_tab_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b @> ARRAY[1,2]

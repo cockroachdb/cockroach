@@ -85,7 +85,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	exp := `CREATE TABLE public.kv (
 	k INT8 NOT NULL,
 	v INT8 NULL,
-	CONSTRAINT "primary" PRIMARY KEY (k ASC),
+	CONSTRAINT kv_pkey PRIMARY KEY (k ASC),
 	INDEX foo (v ASC) PARTITION BY RANGE (v) (
 		PARTITION p2 VALUES FROM (1) TO (2)
 	),
@@ -121,7 +121,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	}
 	sqlDB.Exec(t, `INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, zoneConfigBytes)
 	for _, p := range []string{
-		"PARTITION p1 OF INDEX t.public.kv@primary",
+		"PARTITION p1 OF INDEX t.public.kv@kv_pkey",
 		"PARTITION p2 OF INDEX t.public.kv@foo",
 	} {
 		if exists := sqlutils.ZoneConfigExists(t, sqlDB, p); !exists {
@@ -147,7 +147,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	exp = `CREATE TABLE public.kv (
 	k INT8 NOT NULL,
 	v INT8 NULL,
-	CONSTRAINT "primary" PRIMARY KEY (k ASC),
+	CONSTRAINT kv_pkey PRIMARY KEY (k ASC),
 	INDEX foo (v ASC),
 	FAMILY fam_0_k (k),
 	FAMILY fam_1_v (v)

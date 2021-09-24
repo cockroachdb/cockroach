@@ -74,19 +74,19 @@ SELECT a FROM (VALUES ('{"a": "b"}'::jsonb)) AS a(z) INNER INVERTED JOIN y ON b 
 sql.plan.hints.inverted-join
 
 feature-usage
-SELECT * FROM x@primary
+SELECT * FROM x@x_pkey
 ----
 sql.plan.hints.index
 sql.plan.hints.index.select
 
 feature-usage
-UPDATE x@primary SET a=1 WHERE a>1
+UPDATE x@x_pkey SET a=1 WHERE a>1
 ----
 sql.plan.hints.index
 sql.plan.hints.index.update
 
 feature-usage
-DELETE FROM x@primary WHERE a>1
+DELETE FROM x@x_pkey WHERE a>1
 ----
 sql.plan.hints.index
 sql.plan.hints.index.delete

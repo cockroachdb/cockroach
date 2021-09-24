@@ -30,7 +30,7 @@ SELECT * FROM t WHERE a = '2015-08-25 04:45:45.53453+01:00'::timestamp
 2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
 
 # insert duplicate value with different time zone offset
-statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(a\)=\('2015-08-30 03:34:45\.34567'\) already exists\.
+statement error duplicate key value violates unique constraint "t_pkey"\nDETAIL: Key \(a\)=\('2015-08-30 03:34:45\.34567'\) already exists\.
 INSERT INTO t VALUES
   ('2015-08-30 03:34:45.34567-07:00', '2015-08-31', '35h2s')
 
@@ -1093,10 +1093,10 @@ CREATE TABLE tz (
 query TTBTTTB
 SHOW COLUMNS FROM tz
 ----
-a  INT8         false  NULL  ·  {primary}  false
-b  TIMESTAMP    true   NULL  ·  {primary}  false
-c  TIMESTAMPTZ  true   NULL  ·  {primary}  false
-d  TIMESTAMPTZ  true   NULL  ·  {primary}  false
+a  INT8         false  NULL  ·  {tz_pkey}  false
+b  TIMESTAMP    true   NULL  ·  {tz_pkey}  false
+c  TIMESTAMPTZ  true   NULL  ·  {tz_pkey}  false
+d  TIMESTAMPTZ  true   NULL  ·  {tz_pkey}  false
 
 statement ok
 INSERT INTO tz VALUES
