@@ -641,11 +641,11 @@ func RunTestsWithFn(
 			inputSources := make([]colexecop.Operator, len(tups))
 			var inputTypes []*types.T
 			if useSel {
+				rng, _ := randutil.NewTestRandFromGlobalSeed()
 				for i, tup := range tups {
 					if typs != nil {
 						inputTypes = typs[i]
 					}
-					rng, _ := randutil.NewPseudoRand()
 					inputSources[i] = newOpTestSelInput(allocator, rng, batchSize, tup, inputTypes)
 				}
 			} else {
@@ -929,7 +929,7 @@ func (s *opTestInput) Next() coldata.Batch {
 		}
 	}
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRandFromGlobalSeed()
 
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
@@ -1598,7 +1598,7 @@ const MinBatchSize = 3
 func GenerateBatchSize() int {
 	randomizeBatchSize := envutil.EnvOrDefaultBool("COCKROACH_RANDOMIZE_BATCH_SIZE", true)
 	if randomizeBatchSize {
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRandFromGlobalSeed()
 		// sizesToChooseFrom specifies some predetermined and one random sizes
 		// that we will choose from. Such distribution is chosen due to the
 		// fact that most of our unit tests don't have a lot of data, so in
