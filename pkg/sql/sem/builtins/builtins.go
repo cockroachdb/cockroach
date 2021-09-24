@@ -25,6 +25,7 @@ import (
 	"hash/fnv"
 	"io/ioutil"
 	"math"
+	"math/bits"
 	"math/rand"
 	"net"
 	"regexp/syntax"
@@ -2009,6 +2010,25 @@ var builtins = map[string]builtinDefinition{
 				"insert timestamp and the ID of the node executing the statement, which " +
 				"guarantees this combination is globally unique. However, there can be " +
 				"gaps and the order is not completely guaranteed.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"unordered_unique_rowid": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				v := GenerateUniqueUnorderedID(ctx.NodeID.SQLInstanceID())
+				return tree.NewDInt(v), nil
+			},
+			Info: "Returns a unique ID. The value is a combination of the " +
+				"insert timestamp and the ID of the node executing the statement, which " +
+				"guarantees this combination is globally unique. The way it is generated " +
+				"there is no ordering",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -7582,6 +7602,26 @@ func overlay(s, to string, pos, size int) (tree.Datum, error) {
 // NodeIDBits is the number of bits stored in the lower portion of
 // GenerateUniqueInt.
 const NodeIDBits = 15
+
+// GenerateUniqueUnorderedID creates a unique int64 composed of the current time
+// at a 10-microsecond granularity and the instance-id. The top-bit is left
+// empty so that negative values are not returned. The 48 bits following after
+// represent the reversed timestamp and then 15 bits of the node id.
+func GenerateUniqueUnorderedID(instanceID base.SQLInstanceID) tree.DInt {
+	orig := uint64(GenerateUniqueInt(instanceID))
+	uniqueUnorderedID := mapToUnorderedUniqueInt(orig)
+	return tree.DInt(uniqueUnorderedID)
+}
+
+// mapToUnorderedUniqueInt is used by GenerateUniqueUnorderedID to convert a
+// serial unique uint64 to an unordered unique int64. The bit manipulation
+// should preserve the number of 1-bits.
+func mapToUnorderedUniqueInt(val uint64) uint64 {
+	// val is [0][48 bits of ts][15 bits of node id]
+	ts := (val & ((uint64(math.MaxUint64) >> 16) << 15)) >> 15
+	v := (bits.Reverse64(ts) >> 1) | (val & (1<<15 - 1))
+	return v
+}
 
 // GenerateUniqueInt creates a unique int composed of the current time at a
 // 10-microsecond granularity and the instance-id. The instance-id is stored in the

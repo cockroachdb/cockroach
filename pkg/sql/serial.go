@@ -31,6 +31,10 @@ import (
 // SessionNormalizationMode is SerialUsesRowID.
 var uniqueRowIDExpr = &tree.FuncExpr{Func: tree.WrapFunction("unique_rowid")}
 
+// unorderedUniqueRowIDExpr is used when SessionNormalizationMode is
+// SerialUsesUnorderedRowID.
+var unorderedUniqueRowIDExpr = &tree.FuncExpr{Func: tree.WrapFunction("unordered_unique_rowid")}
+
 // realSequenceOpts (nil) is used when SessionNormalizationMode is
 // SerialUsesSQLSequences.
 var realSequenceOpts tree.SequenceOptions
@@ -132,10 +136,11 @@ func (p *planner) generateSerialInColumnDef(
 
 	// Find the integer type that corresponds to the specification.
 	switch serialNormalizationMode {
-	case sessiondatapb.SerialUsesRowID, sessiondatapb.SerialUsesVirtualSequences:
-		// If unique_rowid() or virtual sequences are requested, we have
-		// no choice but to use the full-width integer type, no matter
-		// which serial size was requested, otherwise the values will not fit.
+	case sessiondatapb.SerialUsesRowID, sessiondatapb.SerialUsesUnorderedRowID, sessiondatapb.SerialUsesVirtualSequences:
+		// If unique_rowid() or unordered_unique_rowid() or virtual sequences are
+		// requested, we have no choice but to use the full-width integer type, no
+		// matter which serial size was requested, otherwise the values will not
+		// fit.
 		//
 		// TODO(bob): Follow up with https://github.com/cockroachdb/cockroach/issues/32534
 		// when the default is inverted to determine if we should also
@@ -161,6 +166,9 @@ func (p *planner) generateSerialInColumnDef(
 		// We're not constructing a sequence for this SERIAL column.
 		// Use the "old school" CockroachDB default.
 		newSpec.DefaultExpr.Expr = uniqueRowIDExpr
+		return &newSpec, nil, nil, nil, nil
+	} else if serialNormalizationMode == sessiondatapb.SerialUsesUnorderedRowID {
+		newSpec.DefaultExpr.Expr = unorderedUniqueRowIDExpr
 		return &newSpec, nil, nil, nil, nil
 	}
 

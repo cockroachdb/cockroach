@@ -534,6 +534,7 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 	"rowid",
 	map[int64]string{
 		int64(sessiondatapb.SerialUsesRowID):              "rowid",
+		int64(sessiondatapb.SerialUsesUnorderedRowID):     "unordered_rowid",
 		int64(sessiondatapb.SerialUsesVirtualSequences):   "virtual_sequence",
 		int64(sessiondatapb.SerialUsesSQLSequences):       "sql_sequence",
 		int64(sessiondatapb.SerialUsesCachedSQLSequences): "sql_sequence_cached",
