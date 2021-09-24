@@ -457,7 +457,7 @@ func resolveCast(
 
 	default:
 		// TODO(mgartner): Use OID cast map.
-		cast := lookupCast(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled)
+		cast := lookupCastInfo(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled)
 		if cast == nil {
 			return pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, castTo)
 		}

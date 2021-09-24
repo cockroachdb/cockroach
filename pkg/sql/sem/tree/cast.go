@@ -709,6 +709,26 @@ func ForEachCast(fn func(src, tgt oid.Oid)) {
 	}
 }
 
+// ValidCast returns true if a valid cast exists from src to tgt in the given
+// context.
+func ValidCast(src, tgt oid.Oid, ctx CastContext) bool {
+	if c, ok := lookupCast(src, tgt); ok {
+		return c.maxContext >= ctx
+	}
+	return false
+}
+
+// lookupCast returns a cast that describes the cast from src to tgt if
+// it exists. If it does not exist, ok=false is returned.
+func lookupCast(src, tgt oid.Oid) (cast, bool) {
+	if tgts, ok := castMap[src]; ok {
+		if c, ok := tgts[tgt]; ok {
+			return c, true
+		}
+	}
+	return cast{}, false
+}
+
 type castInfo struct {
 	from       types.Family
 	to         types.Family
@@ -1109,10 +1129,12 @@ func isDateStyleCastAffected(from, to types.Family) bool {
 	return false
 }
 
-// lookupCast returns the information for a valid cast.
+// lookupCastInfo returns the information for a valid cast.
 // Returns nil if this is not a valid cast.
 // Does not handle array and tuple casts.
-func lookupCast(from, to types.Family, intervalStyleEnabled bool, dateStyleEnabled bool) *castInfo {
+func lookupCastInfo(
+	from, to types.Family, intervalStyleEnabled bool, dateStyleEnabled bool,
+) *castInfo {
 	k := castsMapKey{from: from, to: to}
 	if (intervalStyleEnabled && isIntervalStyleCastAffected(from, to)) ||
 		(dateStyleEnabled && isDateStyleCastAffected(from, to)) {
@@ -1155,7 +1177,7 @@ func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Vol
 		return maxVolatility, true
 	}
 
-	cast := lookupCast(
+	cast := lookupCastInfo(
 		fromFamily,
 		toFamily,
 		sd != nil && sd.IntervalStyleEnabled,
@@ -1170,11 +1192,30 @@ func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Vol
 // PerformCast performs a cast from the provided Datum to the specified
 // types.T.
 func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
-	ret, err := performCastWithoutPrecisionTruncation(ctx, d, t)
+	ret, err := performCastWithoutPrecisionTruncation(ctx, d, t, true /* truncateWidth */)
 	if err != nil {
 		return nil, err
 	}
 	return AdjustValueToType(t, ret)
+}
+
+// PerformAssignmentCast performs an assignment cast from the provided Datum to
+// the specified type. It is similar to PerformCast, but differs because it
+// errors if the datum's width is too wide for the given type rather than
+// silently truncating. The one exception is casts to the special "char" type
+// which are truncated.
+func PerformAssignmentCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
+	if !ValidCast(d.ResolvedType().Oid(), t.Oid(), CastContextAssignment) {
+		return nil, pgerror.Newf(
+			pgcode.CannotCoerce,
+			"invalid assignment cast: %s -> %s", d.ResolvedType(), t,
+		)
+	}
+	d, err := performCastWithoutPrecisionTruncation(ctx, d, t, false /* truncateWidth */)
+	if err != nil {
+		return nil, err
+	}
+	return AdjustValueToType(t, d)
 }
 
 // AdjustValueToType checks that the width (for strings, byte arrays, and bit
@@ -1194,10 +1235,12 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 // In the case of geospatial types, it will check whether the SRID and Shape in the
 // datum matches the type definition.
 //
-// This method is used by casts, parsing, INSERT and UPDATE. It is important to note
-// that width must be altered *before* this function, as width truncations should
-// only occur during casting and parsing but not update/inserts (see
-// enforceLocalColumnConstraints).
+// This method is used by casts and parsing. It is important to note that this
+// function will error if the given value is too wide for the given type. Width
+// truncation should be performed before this function for explicit casts and
+// parsing, not during assignment casts. The one exception is assignment casts
+// to the special "char" type. AdjustValueToType will perform truncation in this
+// case, which is valid for assignment casts to "char".
 func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 	switch typ.Family() {
 	case types.StringFamily, types.CollatedStringFamily:
@@ -1387,12 +1430,17 @@ func formatBitArrayToType(d *DBitArray, t *types.T) *DBitArray {
 }
 
 // performCastWithoutPrecisionTruncation performs the cast, but does not do a
-// check on whether the datum fits the type.
+// check on whether the datum fits the type. If truncateWidth is true, widths
+// are truncated to match the target type t. If truncateWidth is false, the
+// input datum is not truncated.
+//
 // In an ideal state, components of AdjustValueToType should be embedded into
 // this function, but the code base needs a general refactor of parsing
 // and casting logic before this can happen.
 // See also: #55094.
-func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
+func performCastWithoutPrecisionTruncation(
+	ctx *EvalContext, d Datum, t *types.T, truncateWidth bool,
+) (Datum, error) {
 	// If we're casting a DOidWrapper, then we want to cast the wrapped datum.
 	// It is also reasonable to lose the old Oid value too.
 	// Note that we pass in nil as the first argument since we're not interested
@@ -1400,28 +1448,33 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 	d = UnwrapDatum(nil /* evalCtx */, d)
 	switch t.Family() {
 	case types.BitFamily:
+		var ba *DBitArray
 		switch v := d.(type) {
 		case *DBitArray:
-			return formatBitArrayToType(v, t), nil
+			ba = v
 		case *DInt:
-			r, err := NewDBitArrayFromInt(int64(*v), uint(t.Width()))
+			var err error
+			ba, err = NewDBitArrayFromInt(int64(*v), uint(t.Width()))
 			if err != nil {
 				return nil, err
 			}
-			return formatBitArrayToType(r, t), nil
 		case *DString:
 			res, err := bitarray.Parse(string(*v))
 			if err != nil {
 				return nil, err
 			}
-			return formatBitArrayToType(&DBitArray{res}, t), nil
+			ba = &DBitArray{res}
 		case *DCollatedString:
 			res, err := bitarray.Parse(v.Contents)
 			if err != nil {
 				return nil, err
 			}
-			return formatBitArrayToType(&DBitArray{res}, t), nil
+			ba = &DBitArray{res}
 		}
+		if truncateWidth {
+			ba = formatBitArrayToType(ba, t)
+		}
+		return ba, nil
 
 	case types.BoolFamily:
 		switch v := d.(type) {
@@ -1493,12 +1546,6 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			res = NewDInt(DInt(v.Unix()))
 		case *DTimestampTZ:
 			res = NewDInt(DInt(v.Unix()))
-		case *DDate:
-			// TODO(mjibson): This cast is unsupported by postgres. Should we remove ours?
-			if !v.IsFinite() {
-				return nil, ErrIntOutOfRange
-			}
-			res = NewDInt(DInt(v.UnixEpochDays()))
 		case *DInterval:
 			iv, ok := v.AsInt64()
 			if !ok {
@@ -1730,7 +1777,7 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			// If the string type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
 			// This is true of all the string type variants.
-			if t.Width() > 0 {
+			if truncateWidth && t.Width() > 0 {
 				s = util.TruncateString(s, int(t.Width()))
 			}
 			return NewDString(s), nil
@@ -1740,7 +1787,7 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 				s = strings.TrimRight(s, " ")
 			}
 			// Ditto truncation like for TString.
-			if t.Width() > 0 {
+			if truncateWidth && t.Width() > 0 {
 				s = util.TruncateString(s, int(t.Width()))
 			}
 			return NewDCollatedString(s, t.Locale(), &ctx.CollationEnv)

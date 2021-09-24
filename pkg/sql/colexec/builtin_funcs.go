@@ -11,6 +11,8 @@
 package colexec
 
 import (
+	"errors"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -118,7 +120,11 @@ func NewBuiltinFunctionOperator(
 	outputIdx int,
 	input colexecop.Operator,
 ) (colexecop.Operator, error) {
-	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
+	overload := funcExpr.ResolvedOverload()
+	if overload.FnWithExprs != nil {
+		return nil, errors.New("builtins with FnWithExprs are not supported in the vectorized engine")
+	}
+	switch overload.SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
 		input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.String, outputIdx)
 		return newSubstringOperator(
