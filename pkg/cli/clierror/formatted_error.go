@@ -57,6 +57,10 @@ type formattedError struct {
 	showSeverity, verbose bool
 }
 
+func (f *formattedError) Unwrap() error {
+	return f.err
+}
+
 // Error implements the error interface.
 func (f *formattedError) Error() string {
 	// If we're applying recursively, ignore what's there and display the original error.
