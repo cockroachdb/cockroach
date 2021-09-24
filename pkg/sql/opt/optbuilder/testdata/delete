@@ -193,7 +193,7 @@ delete xyz
       │    │    └── filters
       │    │         └── x:6 = $1
       │    └── projections
-      │         └── y:7 + $2 [as=column11:11]
+      │         └── y:7 + $2::INT8 [as=column11:11]
       └── 2
 
 

@@ -220,7 +220,7 @@ project
  │    ├── fd: ()-->(2,4)
  │    └── ($1, $2)
  └── projections
-      └── column4:4 + ((column2:2 + 1) + 2) [as="?column?":5, outer=(2,4), immutable]
+      └── ((column2:2::INT8 + 1) + 2) + column4:4::INT8 [as="?column?":5, outer=(2,4), immutable]
 
 # Multiple constant columns, multiple refs to each, interspersed with other
 # columns.

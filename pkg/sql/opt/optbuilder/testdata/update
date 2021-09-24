@@ -483,7 +483,7 @@ update abcde
       │    │    └── filters
       │    │         └── c:11 = 10
       │    └── projections
-      │         └── $1 + 1 [as=a_new:17]
+      │         └── $1::INT8 + 1 [as=a_new:17]
       └── projections
            └── (a_new:17 + c:11) + 1 [as=d_comp:18]
 
