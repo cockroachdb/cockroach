@@ -275,6 +275,23 @@ func TestChangefeedTenants(t *testing.T) {
 	})
 }
 
+func TestMissingTableErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, kvSQLdb, cleanup := startTestServer(t, feedTestOptions{argsFn: func(args *base.TestServerArgs) {
+		args.ExternalIODirConfig.DisableOutbound = true
+	}})
+	defer cleanup()
+
+	t.Run("changefeed on non existing table fails", func(t *testing.T) {
+		kvSQL := sqlutils.MakeSQLRunner(kvSQLdb)
+		kvSQL.ExpectErr(t, `^pq: failed to resolve targets in the CHANGEFEED stmt: table "foo" does not exist$`,
+			`CREATE CHANGEFEED FOR foo`,
+		)
+	})
+}
+
 func TestChangefeedTenantsExternalIOEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

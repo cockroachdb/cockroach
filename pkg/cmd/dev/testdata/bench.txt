@@ -5,8 +5,8 @@ which cc
 readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 git grep -l ^func Benchmark -- pkg/util/*_test.go
-bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --test_sharding_strategy=disabled --config=dev //pkg/util:util_test -- -test.run=- -test.bench=.
-bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --test_sharding_strategy=disabled --config=dev //pkg/util/uuid:uuid_test -- -test.run=- -test.bench=.
+bazel run --config=test --test_sharding_strategy=disabled --config=dev //pkg/util:util_test -- -test.run=- -test.bench=.
+bazel run --config=test --test_sharding_strategy=disabled --config=dev //pkg/util/uuid:uuid_test -- -test.run=- -test.bench=.
 
 dev bench pkg/sql/parser --filter=BenchmarkParse
 ----
@@ -14,4 +14,4 @@ getenv PATH
 which cc
 readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --test_sharding_strategy=disabled --config=dev //pkg/sql/parser:parser_test -- -test.run=- -test.bench=BenchmarkParse
+bazel run --config=test --test_sharding_strategy=disabled --config=dev //pkg/sql/parser:parser_test -- -test.run=- -test.bench=BenchmarkParse

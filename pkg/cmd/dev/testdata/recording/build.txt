@@ -13,7 +13,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore //pkg/cmd/cockroach-short --config=dev
+bazel build //pkg/cmd/cockroach-short --config=dev
 ----
 
 bazel info workspace --color=no --config=dev
@@ -48,7 +48,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore --local_cpu_resources=12 //pkg/cmd/cockroach-short --config=dev
+bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short --config=dev
 ----
 
 bazel info workspace --color=no --config=dev
@@ -83,7 +83,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore //pkg/cmd/cockroach-short --config=dev
+bazel build //pkg/cmd/cockroach-short --config=dev
 ----
 
 bazel info workspace --color=no --config=dev
@@ -118,7 +118,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore --remote_local_fallback --remote_cache=grpc://127.0.0.1:9090 --experimental_remote_downloader=grpc://127.0.0.1:9090 //pkg/cmd/cockroach-short --config=dev
+bazel build --remote_local_fallback --remote_cache=grpc://127.0.0.1:9090 --experimental_remote_downloader=grpc://127.0.0.1:9090 //pkg/cmd/cockroach-short --config=dev
 ----
 
 bazel info workspace --color=no --config=dev
@@ -153,7 +153,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore //pkg/cmd/cockroach-short
+bazel build //pkg/cmd/cockroach-short
 ----
 
 bazel info workspace --color=no
@@ -188,7 +188,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore //pkg/cmd/cockroach-short --config=dev
+bazel build //pkg/cmd/cockroach-short --config=dev
 ----
 
 bazel info workspace --color=no --config=dev
@@ -258,7 +258,7 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore //pkg/cmd/cockroach-short -s --config=dev
+bazel build //pkg/cmd/cockroach-short -s --config=dev
 ----
 
 bazel info workspace --color=no --config=dev

@@ -103,6 +103,7 @@ func TestHandleCliCmdSqlAlias(t *testing.T) {
 		{`\dt`, `SHOW TABLES`},
 		{`\dT`, `SHOW TYPES`},
 		{`\du`, `SHOW USERS`},
+		{`\du myuser`, `SELECT * FROM [SHOW USERS] WHERE username = 'myuser'`},
 		{`\d mytable`, `SHOW COLUMNS FROM mytable`},
 		{`\d`, `SHOW TABLES`},
 	}

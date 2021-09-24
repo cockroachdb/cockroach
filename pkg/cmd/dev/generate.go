@@ -103,7 +103,7 @@ func (d *dev) generateDocs(cmd *cobra.Command) error {
 	}
 	// Build targets.
 	var args []string
-	args = append(args, "build", "--color=yes", "--experimental_convenience_symlinks=ignore")
+	args = append(args, "build")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	args = append(args, getConfigFlags()...)
 	args = append(args, targets...)
@@ -165,7 +165,7 @@ func (d *dev) generateGo(cmd *cobra.Command) error {
 	}
 	// Build targets.
 	var args []string
-	args = append(args, "build", "--color=yes", "--experimental_convenience_symlinks=ignore")
+	args = append(args, "build")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	args = append(args, getConfigFlags()...)
 	args = append(args, targets...)
