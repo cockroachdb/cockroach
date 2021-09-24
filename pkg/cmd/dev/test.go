@@ -94,8 +94,6 @@ func (d *dev) runUnitTest(cmd *cobra.Command, commandLine []string) error {
 
 	var args []string
 	args = append(args, "test")
-	args = append(args, "--color=yes")
-	args = append(args, "--experimental_convenience_symlinks=ignore")
 	args = append(args, getConfigFlags()...)
 	args = append(args, additionalBazelArgs...)
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
@@ -182,6 +180,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_output", "errors")
 	}
 
+	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }
 

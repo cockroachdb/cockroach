@@ -74,7 +74,7 @@ Informational
   \l                list all databases in the CockroachDB cluster.
   \dt               show the tables of the current schema in the current database.
   \dT               show the user defined types of the current database.
-  \du               list the users for all databases.
+  \du [USER]        list the specified user, or list the users for all databases if no user is specified.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
 
 Formatting
@@ -1155,8 +1155,14 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return cliRunStatement
 
 	case `\du`:
-		c.concatLines = `SHOW USERS`
-		return cliRunStatement
+		if len(cmd) == 1 {
+			c.concatLines = `SHOW USERS`
+			return cliRunStatement
+		} else if len(cmd) == 2 {
+			c.concatLines = fmt.Sprintf(`SELECT * FROM [SHOW USERS] WHERE username = %s`, lexbase.EscapeSQLString(cmd[1]))
+			return cliRunStatement
+		}
+		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
 
 	case `\d`:
 		if len(cmd) == 1 {
