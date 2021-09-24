@@ -151,6 +151,11 @@ func (b Overload) InferReturnTypeFromInputArgTypes(inputTypes []*types.T) *types
 	return retTyp
 }
 
+// IsGenerator returns true if the function is a set returning function (SRF).
+func (b Overload) IsGenerator() bool {
+	return b.Generator != nil || b.GeneratorWithExprs != nil
+}
+
 // Signature returns a human-readable signature.
 // If simplify is bool, tuple-returning functions with just
 // 1 tuple element unwrap the return type in the signature.
