@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -45,6 +46,7 @@ import (
 	// register some workloads for TestWorkload
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 	"github.com/cockroachdb/errors"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -62,6 +64,8 @@ type cliTest struct {
 	logScope *log.TestLogScope
 	// if true, doesn't print args during RunWithArgs
 	omitArgs bool
+	// if true, reports the requested exit code.
+	reportExitCode bool
 }
 
 type cliTestParams struct {
@@ -352,6 +356,13 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 		return Run(args)
 	}(); err != nil {
 		cliOutputError(os.Stdout, err, true /*showSeverity*/, false /*verbose*/)
+		if c.reportExitCode {
+			fmt.Fprintln(os.Stdout, "exit code:", getExitCode(err))
+		}
+	} else {
+		if c.reportExitCode {
+			fmt.Fprintln(os.Stdout, "exit code:", exit.Success())
+		}
 	}
 }
 
@@ -2207,4 +2218,30 @@ func Example_includes() {
 	// sql -f testdata/i_maxrecursion.sql
 	// \i: too many recursion levels (max 10)
 	// ERROR: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: \i: too many recursion levels (max 10)
+}
+
+func Example_exitcode() {
+	c := newCLITest(cliTestParams{noServer: true})
+	defer c.cleanup()
+
+	testCmd := &cobra.Command{
+		Use: "test-exit-code",
+		RunE: MaybeDecorateGRPCError(
+			func(_ *cobra.Command, _ []string) error {
+				return &cliError{
+					exitCode: exit.Interrupted(),
+					cause:    errors.New("err"),
+				}
+			}),
+	}
+	cockroachCmd.AddCommand(testCmd)
+	defer cockroachCmd.RemoveCommand(testCmd)
+
+	c.reportExitCode = true
+	c.Run("test-exit-code")
+
+	// Output:
+	// test-exit-code
+	// ERROR: err
+	// exit code: 3
 }
