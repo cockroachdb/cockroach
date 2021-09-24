@@ -11,11 +11,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -113,7 +113,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, commandLine []string) error {
 		pkg = strings.TrimRight(pkg, "/")
 
 		if !strings.HasPrefix(pkg, "pkg/") {
-			return errors.Newf("malformed package %q, expecting %q", pkg, "pkg/{...}")
+			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
 
 		if strings.HasSuffix(pkg, "...") {

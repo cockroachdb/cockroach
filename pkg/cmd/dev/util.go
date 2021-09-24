@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -83,7 +82,7 @@ func parseAddr(addr string) (string, error) {
 
 	ip := net.ParseIP(host)
 	if ip == nil {
-		return "", errors.Newf("invalid address %s", addr)
+		return "", fmt.Errorf("invalid address %s", addr)
 	}
 
 	return fmt.Sprintf("%s:%s", ip, port), nil
@@ -127,7 +126,7 @@ func addCommonTestFlags(cmd *cobra.Command) {
 func (d *dev) ensureBinaryInPath(bin string) error {
 	if !isTesting {
 		if _, err := d.exec.LookPath(bin); err != nil {
-			return errors.Newf("Could not find %s in PATH", bin)
+			return fmt.Errorf("Could not find %s in PATH", bin)
 		}
 	}
 	return nil
