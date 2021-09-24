@@ -1808,6 +1808,10 @@ func sessionDataTimeZoneFormat(loc *time.Location) string {
 	if parsed {
 		return origRepr
 	}
+	_, origRepr, parsed = timeutil.ParseTimeZoneOffset(locStr, timeutil.TimeZoneStringToLocationISO8601Standard)
+	if parsed {
+		return origRepr
+	}
 	return locStr
 }
 
