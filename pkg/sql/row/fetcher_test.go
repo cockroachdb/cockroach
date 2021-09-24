@@ -42,34 +42,27 @@ type initFetcherArgs struct {
 	tableDesc       catalog.TableDescriptor
 	indexIdx        int
 	valNeededForCol util.FastIntSet
-	spans           roachpb.Spans
 }
 
-func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
-	fetcherArgs := make([]FetcherTableArgs, len(entries))
-
-	for i, entry := range entries {
-		index := entry.tableDesc.ActiveIndexes()[entry.indexIdx]
-		fetcherArgs[i] = FetcherTableArgs{
-			Spans:            entry.spans,
-			Desc:             entry.tableDesc,
-			Index:            index,
-			ColIdxMap:        catalog.ColumnIDToOrdinalMap(entry.tableDesc.PublicColumns()),
-			IsSecondaryIndex: !index.Primary(),
-			Cols:             entry.tableDesc.PublicColumns(),
-			ValNeededForCol:  entry.valNeededForCol,
-		}
+func makeFetcherArgs(entry initFetcherArgs) FetcherTableArgs {
+	index := entry.tableDesc.ActiveIndexes()[entry.indexIdx]
+	return FetcherTableArgs{
+		Desc:             entry.tableDesc,
+		Index:            index,
+		ColIdxMap:        catalog.ColumnIDToOrdinalMap(entry.tableDesc.PublicColumns()),
+		IsSecondaryIndex: !index.Primary(),
+		Cols:             entry.tableDesc.PublicColumns(),
+		ValNeededForCol:  entry.valNeededForCol,
 	}
-	return fetcherArgs
 }
 
 func initFetcher(
-	entries []initFetcherArgs, reverseScan bool, alloc *rowenc.DatumAlloc, memMon *mon.BytesMonitor,
+	entry initFetcherArgs, reverseScan bool, alloc *rowenc.DatumAlloc, memMon *mon.BytesMonitor,
 ) (fetcher *Fetcher, err error) {
 	fetcher = &Fetcher{}
 
 	fetcherCodec := keys.SystemSQLCodec
-	fetcherArgs := makeFetcherArgs(entries)
+	fetcherArgs := makeFetcherArgs(entry)
 
 	if err := fetcher.Init(
 		context.Background(),
@@ -81,7 +74,7 @@ func initFetcher(
 		false, /* isCheck */
 		alloc,
 		memMon,
-		fetcherArgs...,
+		fetcherArgs,
 	); err != nil {
 		return nil, err
 	}
@@ -148,12 +141,10 @@ func TestNextRowSingle(t *testing.T) {
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nCols-1)
 
-			args := []initFetcherArgs{
-				{
-					tableDesc:       tableDesc,
-					indexIdx:        0,
-					valNeededForCol: valNeededForCol,
-				},
+			args := initFetcherArgs{
+				tableDesc:       tableDesc,
+				indexIdx:        0,
+				valNeededForCol: valNeededForCol,
 			}
 
 			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /* memMon */)
@@ -269,12 +260,10 @@ func TestNextRowBatchLimiting(t *testing.T) {
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nCols-1)
 
-			args := []initFetcherArgs{
-				{
-					tableDesc:       tableDesc,
-					indexIdx:        0,
-					valNeededForCol: valNeededForCol,
-				},
+			args := initFetcherArgs{
+				tableDesc:       tableDesc,
+				indexIdx:        0,
+				valNeededForCol: valNeededForCol,
 			}
 
 			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
@@ -369,12 +358,10 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, 1)
 
-	args := []initFetcherArgs{
-		{
-			tableDesc:       tableDesc,
-			indexIdx:        0,
-			valNeededForCol: valNeededForCol,
-		},
+	args := initFetcherArgs{
+		tableDesc:       tableDesc,
+		indexIdx:        0,
+		valNeededForCol: valNeededForCol,
 	}
 
 	alloc := &rowenc.DatumAlloc{}
@@ -448,12 +435,10 @@ INDEX(c)
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, table.nCols-1)
 
-	args := []initFetcherArgs{
-		{
-			tableDesc:       tableDesc,
-			indexIdx:        0,
-			valNeededForCol: valNeededForCol,
-		},
+	args := initFetcherArgs{
+		tableDesc:       tableDesc,
+		indexIdx:        0,
+		valNeededForCol: valNeededForCol,
 	}
 
 	rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
@@ -628,13 +613,11 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nVals-1)
 
-			args := []initFetcherArgs{
-				{
-					tableDesc: tableDesc,
-					// We scan from the first secondary index.
-					indexIdx:        1,
-					valNeededForCol: valNeededForCol,
-				},
+			args := initFetcherArgs{
+				tableDesc: tableDesc,
+				// We scan from the first secondary index.
+				indexIdx:        1,
+				valNeededForCol: valNeededForCol,
 			}
 
 			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
@@ -756,12 +739,10 @@ func TestRowFetcherReset(t *testing.T) {
 	tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "foo")
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, 1)
-	args := []initFetcherArgs{
-		{
-			tableDesc:       tableDesc,
-			indexIdx:        0,
-			valNeededForCol: valNeededForCol,
-		},
+	args := initFetcherArgs{
+		tableDesc:       tableDesc,
+		indexIdx:        0,
+		valNeededForCol: valNeededForCol,
 	}
 	da := rowenc.DatumAlloc{}
 	fetcher, err := initFetcher(args, false, &da, nil /*memMon*/)
@@ -775,9 +756,6 @@ func TestRowFetcherReset(t *testing.T) {
 	}
 
 	resetFetcher.Reset()
-	if len(resetFetcher.tables) != 0 || cap(resetFetcher.tables) != 1 {
-		t.Fatal("Didn't find saved slice:", resetFetcher.tables)
-	}
 
 	// Now re-init the reset fetcher and make sure its the same as the fetcher we
 	// didn't reset.
@@ -793,7 +771,7 @@ func TestRowFetcherReset(t *testing.T) {
 		false, /* isCheck */
 		&da,
 		nil, /* memMonitor */
-		fetcherArgs...,
+		fetcherArgs,
 	); err != nil {
 		t.Fatal(err)
 	}
