@@ -219,6 +219,8 @@ func StartTenant(
 		})
 		f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
 		mux.Handle(statusVars, http.HandlerFunc(f))
+		ff := loadVarsHandler(ctx, args.runtime)
+		mux.Handle(loadStatusVars, http.HandlerFunc(ff))
 
 		tlsConnManager := netutil.MakeServer(
 			args.stopper,
@@ -299,6 +301,26 @@ func StartTenant(
 	}
 
 	return s, pgLAddr, httpLAddr, nil
+}
+
+// Construct a handler responsible for serving the instant values of selected
+// load metrics. These include user and system CPU time currently.
+func loadVarsHandler(
+	ctx context.Context, rsr *status.RuntimeStatSampler,
+) func(http.ResponseWriter, *http.Request) {
+	registry := metric.NewRegistry()
+	registry.AddMetric(rsr.CPUUserNS)
+	registry.AddMetric(rsr.CPUSysNS)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		rsr.SampleCPU(ctx)
+		exporter := metric.MakePrometheusExporter()
+		exporter.ScrapeRegistry(registry, true)
+		if err := exporter.PrintAsText(w); err != nil {
+			log.Errorf(r.Context(), "%v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
 }
 
 func makeTenantSQLServerArgs(
