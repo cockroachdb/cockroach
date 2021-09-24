@@ -261,7 +261,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	// Update the deadline on the transaction based on the collections.
 	err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
 	if err != nil {
-		return nil, nil, err
+		ev, pl := ex.makeErrEvent(err, ast)
+		return ev, pl, nil
 	}
 
 	if prepared != nil {
