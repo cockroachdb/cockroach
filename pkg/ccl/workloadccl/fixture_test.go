@@ -196,9 +196,9 @@ func TestImportFixture(t *testing.T) {
 
 	// Since we did not inject stats, the IMPORT should have triggered
 	// automatic stats collection.
-	sqlDB.CheckQueryResultsRetry(t,
-		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
-           FROM [SHOW STATISTICS FOR TABLE ingest.fx]`,
+	statsQuery := fmt.Sprintf(`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+           FROM [SHOW STATISTICS FOR TABLE ingest.fx] WHERE row_count = %d`, fixtureTestGenRows)
+	sqlDB.CheckQueryResultsRetry(t, statsQuery,
 		[][]string{
 			{"__auto__", "{key}", "10", "10", "0"},
 			{"__auto__", "{value}", "10", "1", "0"},
