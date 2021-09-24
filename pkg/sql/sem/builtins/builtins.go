@@ -3452,8 +3452,15 @@ value if you rely on the HLC for accuracy.`,
 
 	"array_append": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
-			ReturnType: tree.IdentityReturnType(0),
+			Types: tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
+			ReturnType: func(args []tree.TypedExpr) *types.T {
+				if len(args) > 0 {
+					if argTyp := args[0].ResolvedType(); argTyp.Family() != types.UnknownFamily {
+						return argTyp
+					}
+				}
+				return types.MakeArray(typ)
+			},
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.AppendToMaybeNullArray(typ, args[0], args[1])
 			},
@@ -3464,8 +3471,15 @@ value if you rely on the HLC for accuracy.`,
 
 	"array_prepend": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"elem", typ}, {"array", types.MakeArray(typ)}},
-			ReturnType: tree.IdentityReturnType(1),
+			Types: tree.ArgTypes{{"elem", typ}, {"array", types.MakeArray(typ)}},
+			ReturnType: func(args []tree.TypedExpr) *types.T {
+				if len(args) > 1 {
+					if argTyp := args[1].ResolvedType(); argTyp.Family() != types.UnknownFamily {
+						return argTyp
+					}
+				}
+				return types.MakeArray(typ)
+			},
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.PrependToMaybeNullArray(typ, args[0], args[1])
 			},
