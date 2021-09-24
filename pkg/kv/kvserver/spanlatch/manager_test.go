@@ -553,9 +553,9 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	waitUntilAcquiredCh := func(g *Guard) <-chan *Guard {
 		ch := make(chan *Guard)
 		go func() {
-			g, err := m.WaitUntilAcquired(context.Background(), g)
+			lg, err := m.WaitUntilAcquired(context.Background(), g)
 			require.NoError(t, err)
-			ch <- g
+			ch <- lg
 		}()
 		return ch
 	}

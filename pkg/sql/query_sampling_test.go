@@ -46,8 +46,8 @@ func TestUpdateRollingQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stubTime := stubTime{}
-	stubTime.setTime(timeutil.Now())
+	st := stubTime{}
+	st.setTime(timeutil.Now())
 
 	type numUpdatesPerDelay struct {
 		numUpdates int
@@ -82,13 +82,13 @@ func TestUpdateRollingQueryCounts(t *testing.T) {
 	for _, tc := range testData {
 		freshMetrics := NewTelemetryLoggingMetrics(defaultSmoothingAlpha, int64(tc.intervalLength))
 		freshMetrics.Knobs = &TelemetryLoggingTestingKnobs{
-			getTimeNow: stubTime.TimeNow,
+			getTimeNow: st.TimeNow,
 		}
 
 		for i := 0; i < len(tc.updatesPerDelay); i++ {
 			secondsDelay := tc.updatesPerDelay[i].timeDelay
 			numUpdates := tc.updatesPerDelay[i].numUpdates
-			stubTime.setTime(stubTime.TimeNow().Add(time.Second * secondsDelay))
+			st.setTime(st.TimeNow().Add(time.Second * secondsDelay))
 			for j := 0; j < numUpdates; j++ {
 				freshMetrics.updateRollingQueryCounts()
 			}
