@@ -83,12 +83,14 @@ func TestTelemetryLogging(t *testing.T) {
 	st.setTime(timeutil.Now())
 	stubInterval := fakeInterval{}
 	stubInterval.setInterval(1)
+	stubLastEmittedTime := stubTime{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
 				getRollingIntervalLength: stubInterval.getInterval,
 				getTimeNow:               st.TimeNow,
+				getLastEmittedTime:       stubLastEmittedTime.TimeNow,
 			},
 		},
 	})
@@ -98,11 +100,6 @@ func TestTelemetryLogging(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
-
-	samplingRateFail := float64(0)
-	samplingRatePass := float64(1)
-	qpsThresholdExceed := int64(0)
-	qpsThresholdNotExceed := int64(1000000)
 
 	// Testing Cases:
 	// - entries that are NOT sampled
@@ -115,51 +112,45 @@ func TestTelemetryLogging(t *testing.T) {
 	//		- statement type DML, above QPS threshold, and sampling rate passes
 
 	testData := []struct {
-		name                 string
-		query                string
-		numExec              []int
-		intervalLength       int64
-		expectedLogStatement string
-		stubQPSThreshold     int64
-		stubSamplingRate     float64
-		expectedSkipped      int
+		name                  string
+		query                 string
+		execTimestampsSeconds []float64 // Execute the query with the following timestamps.
+		expectedLogStatement  string
+		stubSamplingRate      float64
+		expectedSkipped       int
 	}{
 		{
 			// Test case with statement that is not of type DML.
+			// Even though the queries are executed within the required
+			// elapsed interval, we should still see that they were all
+			// logged, we log all statements that are not of type DML.
 			"create-table-query",
 			"CREATE TABLE t();",
-			[]int{1},
-			1,
+			[]float64{1, 1.1, 1.2},
 			"CREATE TABLE ‹defaultdb›.public.‹t› ()",
-			qpsThresholdExceed,
-			samplingRatePass,
+			float64(1),
 			0,
 		},
 		{
 			// Test case with statement that is of type DML.
-			// QPS threshold is not expected to be exceeded, therefore,
-			// no sampling will occur.
+			// The first statement should be logged.
 			"select-*-limit-1-query",
 			"SELECT * FROM t LIMIT 1;",
-			[]int{1},
-			2,
+			[]float64{1},
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹1›`,
-			qpsThresholdNotExceed,
-			samplingRatePass,
+			float64(1),
 			0,
 		},
 		{
 			// Test case with statement that is of type DML.
-			// Sampling selection will guaranteed fail, therefore,
-			// no log will appear.
+			// All timestamps are within the required elapsed interval,
+			// and so only one statement should be logged.
 			"select-*-limit-2-query",
 			"SELECT * FROM t LIMIT 2;",
-			[]int{2},
-			1,
+			[]float64{1, 1.1, 1.2},
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹2›`,
-			qpsThresholdExceed,
-			samplingRateFail,
-			0,
+			float64(1),
+			2,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -167,11 +158,9 @@ func TestTelemetryLogging(t *testing.T) {
 			// selection is guaranteed.
 			"select-*-limit-3-query",
 			"SELECT * FROM t LIMIT 3;",
-			[]int{2},
-			1,
+			[]float64{1, 1.1, 1.2},
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹3›`,
-			1,
-			samplingRatePass,
+			float64(1),
 			2, // sum of exec counts of previous test.
 		},
 		{
@@ -181,24 +170,20 @@ func TestTelemetryLogging(t *testing.T) {
 			// Test case executes multiple queries in multiple 1s intervals.
 			"select-*-limit-4-query",
 			"SELECT * FROM t LIMIT 4;",
-			[]int{2, 3, 4},
-			1,
+			[]float64{1, 1.1, 1.2},
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹4›`,
-			1,
-			samplingRatePass,
+			float64(1),
 			0,
 		},
 	}
 
 	for _, tc := range testData {
-		telemetryQPSThreshold.Override(context.Background(), &s.ClusterSettings().SV, tc.stubQPSThreshold)
 		telemetrySampleRate.Override(context.Background(), &s.ClusterSettings().SV, tc.stubSamplingRate)
 		st.setTime(st.TimeNow().Add(time.Second))
-		stubInterval.setInterval(tc.intervalLength)
-		for _, numExec := range tc.numExec {
-			for i := 0; i < numExec; i++ {
-				db.Exec(t, tc.query)
-			}
+		stubLastEmittedTime.setTime(st.TimeNow())
+		for _, execTimestamp := range tc.execTimestampsSeconds {
+			stubLastEmittedTime.setTime(st.TimeNow())
+			db.Exec(t, tc.query)
 			st.setTime(st.TimeNow().Add(time.Second))
 		}
 	}

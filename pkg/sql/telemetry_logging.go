@@ -29,6 +29,8 @@ type TelemetryLoggingMetrics struct {
 		// MovingQPS is used in ExpSmoothQPS(), where we calculate a smoothed QPS
 		// value.
 		MovingQPS []int64
+		// The timestamp of the last emitted telemetry event.
+		lastEmittedTime time.Time
 	}
 	smoothingAlpha  float64
 	rollingInterval int
@@ -47,6 +49,10 @@ type TelemetryLoggingTestingKnobs struct {
 	// getTimeNow allows tests to override the timeutil.Now() function used
 	// when updating rolling query counts.
 	getTimeNow func() time.Time
+
+	// getLastEmittedTime allows tests to override the value of the lastEmittedTime
+	// in TelemetryLoggingMetrics.
+	getLastEmittedTime func() time.Time
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
@@ -111,6 +117,27 @@ func (t *TelemetryLoggingMetrics) resetSkippedQueryCount() (res uint64) {
 
 func (t *TelemetryLoggingMetrics) incSkippedQueryCount() {
 	atomic.AddUint64(&t.skippedQueryCount, 1)
+}
+
+// maybeUpdateLastEmittedTime updates the lastEmittedTime if the amount of time
+// elapsed between lastEmittedTime and newTime is greather than requiredSecondsElapsed.
+func (t *TelemetryLoggingMetrics) maybeUpdateLastEmittedTime(
+	newTime time.Time, requiredSecondsElapsed float64,
+) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	lastEmittedTime := t.mu.lastEmittedTime
+	if t.Knobs != nil && t.Knobs.getLastEmittedTime != nil {
+		lastEmittedTime = t.Knobs.getLastEmittedTime()
+	}
+
+	if float64(newTime.Sub(lastEmittedTime))*1e-9 >= requiredSecondsElapsed {
+		t.mu.lastEmittedTime = newTime
+		return true
+	}
+
+	return false
 }
 
 // queryCountCircularBuffer is a circular buffer of queryCountAndTime objects.

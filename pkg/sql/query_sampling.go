@@ -14,7 +14,7 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 
 // Default value used to designate a rate at which logs to the telemetry channel
 // will be sampled.
-const defaultTelemetrySampleRate = 0.00001
+const defaultTelemetrySampleRate = 0.1
 
 var telemetrySampleRate = settings.RegisterFloatSetting(
 	"sql.telemetry.query_sampling.sample_rate",
