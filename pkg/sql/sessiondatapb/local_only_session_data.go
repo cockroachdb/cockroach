@@ -118,6 +118,8 @@ type SerialNormalizationMode int64
 const (
 	// SerialUsesRowID means use INT NOT NULL DEFAULT unique_rowid().
 	SerialUsesRowID SerialNormalizationMode = iota
+	// SerialUsesUnorderedRowID means use INT NOT NULL DEFAULT unordered_unique_rowid().
+	SerialUsesUnorderedRowID
 	// SerialUsesVirtualSequences means create a virtual sequence and
 	// use INT NOT NULL DEFAULT nextval(...).
 	SerialUsesVirtualSequences
@@ -140,6 +142,8 @@ func (m SerialNormalizationMode) String() string {
 	switch m {
 	case SerialUsesRowID:
 		return "rowid"
+	case SerialUsesUnorderedRowID:
+		return "unordered_rowid"
 	case SerialUsesVirtualSequences:
 		return "virtual_sequence"
 	case SerialUsesSQLSequences:
@@ -156,6 +160,8 @@ func SerialNormalizationModeFromString(val string) (_ SerialNormalizationMode, o
 	switch strings.ToUpper(val) {
 	case "ROWID":
 		return SerialUsesRowID, true
+	case "UNORDERED_ROWID":
+		return SerialUsesUnorderedRowID, true
 	case "VIRTUAL_SEQUENCE":
 		return SerialUsesVirtualSequences, true
 	case "SQL_SEQUENCE":

@@ -34,9 +34,9 @@ eexpect "shutdown completed"
 eexpect ":/# "
 end_test
 
-start_test "Check that Ctrl+C finishes with exit code 1. (#9051)"
+start_test "Check that Ctrl+C finishes with exit code 3. (#9051+#70673)"
 send "echo \$?\r"
-eexpect "1\r\n"
+eexpect "3\r\n"
 eexpect ":/# "
 end_test
 
