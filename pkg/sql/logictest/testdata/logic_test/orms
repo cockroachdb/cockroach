@@ -105,7 +105,7 @@ AND t1.relname ='b'
 AND t3.nspname = ANY (current_schemas(false))
 ORDER BY c.conname
 ----
-a  a_id  id  fk_a_id_ref_a  a  a
+a  a_id  id  b_a_id_fkey  a  a
 
 # Default value columns in Rails produce these kinds of queries:
 query O

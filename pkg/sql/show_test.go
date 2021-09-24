@@ -175,8 +175,8 @@ func TestShowCreateTable(t *testing.T) {
 	k INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b),
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES public.items(c),
+	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b),
+	CONSTRAINT %[1]s_k_fkey FOREIGN KEY (k) REFERENCES public.items(c),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
@@ -195,8 +195,8 @@ func TestShowCreateTable(t *testing.T) {
 	k INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b) MATCH FULL,
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES public.items(c) MATCH FULL,
+	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b) MATCH FULL,
+	CONSTRAINT %[1]s_k_fkey FOREIGN KEY (k) REFERENCES public.items(c) MATCH FULL,
 	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
@@ -230,8 +230,8 @@ func TestShowCreateTable(t *testing.T) {
 	k INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES public.items(c) ON DELETE SET NULL,
+	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
+	CONSTRAINT %[1]s_k_fkey FOREIGN KEY (k) REFERENCES public.items(c) ON DELETE SET NULL,
 	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
@@ -253,8 +253,8 @@ func TestShowCreateTable(t *testing.T) {
 	l INT8 NULL DEFAULT 4:::INT8,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k, l) REFERENCES public.items(a, b) MATCH FULL ON UPDATE CASCADE,
+	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
+	CONSTRAINT %[1]s_k_l_fkey FOREIGN KEY (k, l) REFERENCES public.items(a, b) MATCH FULL ON UPDATE CASCADE,
 	FAMILY "primary" (i, j, k, l, rowid)
 )`,
 		},

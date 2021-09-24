@@ -15,7 +15,7 @@ TABLE parent
  ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    └── p int not null
- └── REFERENCED BY CONSTRAINT fk_p_ref_parent FOREIGN KEY child (p) REFERENCES parent (p)
+ └── REFERENCED BY CONSTRAINT child_p_fkey FOREIGN KEY child (p) REFERENCES parent (p)
 
 exec-ddl
 SHOW CREATE child
@@ -27,7 +27,7 @@ TABLE child
  ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    └── c int not null
- └── CONSTRAINT fk_p_ref_parent FOREIGN KEY child (p) REFERENCES parent (p)
+ └── CONSTRAINT child_p_fkey FOREIGN KEY child (p) REFERENCES parent (p)
 
 exec-ddl
 CREATE TABLE parent2 (p INT UNIQUE)
@@ -50,7 +50,7 @@ TABLE parent2
  ├── UNIQUE INDEX parent2_p_key
  │    ├── p int
  │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
- └── REFERENCED BY CONSTRAINT fk_p_ref_parent2 FOREIGN KEY child2 (p) REFERENCES parent2 (p)
+ └── REFERENCED BY CONSTRAINT child2_p_fkey FOREIGN KEY child2 (p) REFERENCES parent2 (p)
 
 exec-ddl
 SHOW CREATE child2
@@ -62,7 +62,7 @@ TABLE child2
  ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    └── c int not null
- └── CONSTRAINT fk_p_ref_parent2 FOREIGN KEY child2 (p) REFERENCES parent2 (p)
+ └── CONSTRAINT child2_p_fkey FOREIGN KEY child2 (p) REFERENCES parent2 (p)
 
 exec-ddl
 CREATE TABLE parent_multicol (p INT, q INT, r INT, PRIMARY KEY (p,q,r))

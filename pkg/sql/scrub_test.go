@@ -494,7 +494,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 		Database:     "t",
 		Table:        "child",
 		PrimaryKey:   "(10)",
-		DetailsRegex: `{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "10", "parent_id": "0"}}`,
+		DetailsRegex: `{"constraint_name": "child_parent_id_fkey", "row_data": {"child_id": "10", "parent_id": "0"}}`,
 	}
 	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
 	// Run again with AS OF SYSTEM TIME.
@@ -552,7 +552,7 @@ ALTER TABLE t.child ADD FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent 
 		Database:     "t",
 		Table:        "child",
 		PrimaryKey:   "(11)",
-		DetailsRegex: `{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
+		DetailsRegex: `{"constraint_name": "child_parent_id_parent_id2_fkey", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
 	}
 	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
 	time.Sleep(1 * time.Millisecond)

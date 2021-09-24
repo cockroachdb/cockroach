@@ -3770,7 +3770,7 @@ upsert uniq_fk_parent
  │    └── upsert_c:22 => uniq_fk_parent.c:4
  ├── input binding: &1
  ├── cascades
- │    └── fk_b_ref_uniq_fk_parent
+ │    └── uniq_fk_child_b_c_fkey
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
