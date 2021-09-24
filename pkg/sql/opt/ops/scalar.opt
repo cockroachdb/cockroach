@@ -267,7 +267,7 @@ define ZipItem {
     Cols ColList
 }
 
-# And is the boolean conjunction operator that evalutes to true only if both of
+# And is the boolean conjunction operator that evaluates to true only if both of
 # its conditions evaluate to true.
 [Scalar, Bool]
 define And {
@@ -630,8 +630,8 @@ define UnaryCbrt {
     Input ScalarExpr
 }
 
-# Cast converts the input expression into an expression of the target type.
-# Note that the conversion may cause trunction based on the target types' width,
+# Cast converts the input expression into an expression of the target type. Note
+# that the conversion may cause truncation based on the target types' width,
 # such as in this example:
 #
 #   'hello'::VARCHAR(2)
@@ -641,6 +641,23 @@ define UnaryCbrt {
 # of a "lossy" cast.
 [Scalar]
 define Cast {
+    Input ScalarExpr
+    Typ Type
+}
+
+# AssignmentCast is similar to CastExpr, but is performed in the context of an
+# INSERT, UPDATE, or UPSERT to match the type of a mutation value to the type of
+# the target column. An expression separate from CastExpr is required because it
+# behaves slightly differently than an explicit cast. For example, while an
+# explicit cast will truncate a value to fit the width of a type, an assignment
+# cast will error instead if the value does not fit the type. See
+# tree.CastContext for more details.
+#
+# An assignment cast is represented as a distinct expression within the
+# optimizer, but is built into a crdb_internal.assignment_cast function call in
+# execbuilder.
+[Scalar]
+define AssignmentCast {
     Input ScalarExpr
     Typ Type
 }

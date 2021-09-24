@@ -184,7 +184,7 @@ project
       │    │    ├── offset
       │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:27
       │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    ├── has-placeholder
+      │    │    │    ├── immutable, has-placeholder
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(1-12,14,15,27)
       │    │    │    ├── select
@@ -261,8 +261,8 @@ project
       │    │    │    │    │              └── flavors.id:1
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (true_agg:27 IS NOT NULL) [outer=(12,27)]
-      │    │    │    └── $3
-      │    │    └── $4
+      │    │    │    └── $3::INT8
+      │    │    └── $4::INT8
       │    └── filters (true)
       └── filters (true)
 
@@ -350,7 +350,7 @@ sort
            │    ├── offset
            │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:38
            │    │    ├── internal-ordering: +7 opt(11)
-           │    │    ├── has-placeholder
+           │    │    ├── immutable, has-placeholder
            │    │    ├── key: (1)
            │    │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15,38), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
            │    │    ├── ordering: +7 opt(11) [actual: +7]
@@ -517,8 +517,8 @@ sort
            │    │    │         │              └── flavors.updated_at:15
            │    │    │         └── filters
            │    │    │              └── is_public:12 OR (true_agg:38 IS NOT NULL) [outer=(12,38)]
-           │    │    └── $3
-           │    └── $4
+           │    │    └── $3::INT8
+           │    └── $4::INT8
            └── filters
                 └── flavor_extra_specs_1.flavor_id:43 = flavors.id:1 [outer=(1,43), constraints=(/1: (/NULL - ]; /43: (/NULL - ]), fd=(1)==(43), (43)==(1)]
 
@@ -608,7 +608,7 @@ sort
            │    ├── offset
            │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30
            │    │    ├── internal-ordering: +7,+1 opt(13)
-           │    │    ├── has-placeholder
+           │    │    ├── immutable, has-placeholder
            │    │    ├── key: (1)
            │    │    ├── fd: ()-->(13), (1)-->(2-12,14-16,30), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
            │    │    ├── ordering: +7,+1 opt(13) [actual: +7,+1]
@@ -709,8 +709,8 @@ sort
            │    │    │         │              └── instance_types.updated_at:16
            │    │    │         └── filters
            │    │    │              └── is_public:12 OR (true_agg:30 IS NOT NULL) [outer=(12,30)]
-           │    │    └── $5
-           │    └── $6
+           │    │    └── $5::INT8
+           │    └── $6::INT8
            ├── select
            │    ├── columns: instance_type_extra_specs_1.id:32!null key:33 value:34 instance_type_extra_specs_1.instance_type_id:35!null instance_type_extra_specs_1.deleted:36!null instance_type_extra_specs_1.deleted_at:37 instance_type_extra_specs_1.created_at:38 instance_type_extra_specs_1.updated_at:39
            │    ├── has-placeholder
@@ -968,7 +968,7 @@ project
       │    │    ├── offset
       │    │    │    ├── columns: instance_types.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30
       │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    ├── has-placeholder
+      │    │    │    ├── immutable, has-placeholder
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(1-16,30)
       │    │    │    ├── select
@@ -1058,8 +1058,8 @@ project
       │    │    │    │    │              └── instance_types.id:1
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (true_agg:30 IS NOT NULL) [outer=(12,30)]
-      │    │    │    └── $5
-      │    │    └── $6
+      │    │    │    └── $5::INT8
+      │    │    └── $6::INT8
       │    └── filters
       │         └── instance_type_extra_specs_1.deleted:36 = $7 [outer=(36), constraints=(/36: (/NULL - ]), fd=()-->(36)]
       └── filters (true)
@@ -1148,7 +1148,7 @@ project
       │    │    ├── offset
       │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30
       │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    ├── has-placeholder
+      │    │    │    ├── immutable, has-placeholder
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(1-16,30)
       │    │    │    ├── select
@@ -1232,8 +1232,8 @@ project
       │    │    │    │    │              └── instance_types.id:1
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (true_agg:30 IS NOT NULL) [outer=(12,30)]
-      │    │    │    └── $5
-      │    │    └── $6
+      │    │    │    └── $5::INT8
+      │    │    └── $6::INT8
       │    └── filters
       │         └── instance_type_extra_specs_1.deleted:36 = $7 [outer=(36), constraints=(/36: (/NULL - ]), fd=()-->(36)]
       └── filters (true)
@@ -1313,7 +1313,7 @@ project
       │    │    ├── offset
       │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:27
       │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    ├── has-placeholder
+      │    │    │    ├── immutable, has-placeholder
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(1-12,14,15,27)
       │    │    │    ├── select
@@ -1390,8 +1390,8 @@ project
       │    │    │    │    │              └── flavors.id:1
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (true_agg:27 IS NOT NULL) [outer=(12,27)]
-      │    │    │    └── $3
-      │    │    └── $4
+      │    │    │    └── $3::INT8
+      │    │    └── $4::INT8
       │    └── filters (true)
       └── filters (true)
 
@@ -1470,7 +1470,7 @@ project
       │    │    ├── offset
       │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:27
       │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    ├── has-placeholder
+      │    │    │    ├── immutable, has-placeholder
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(1-12,14,15,27)
       │    │    │    ├── select
@@ -1547,8 +1547,8 @@ project
       │    │    │    │    │              └── flavors.id:1
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (true_agg:27 IS NOT NULL) [outer=(12,27)]
-      │    │    │    └── $3
-      │    │    └── $4
+      │    │    │    └── $3::INT8
+      │    │    └── $4::INT8
       │    └── filters (true)
       └── filters (true)
 
@@ -1633,7 +1633,7 @@ sort
            │    ├── offset
            │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:27
            │    │    ├── internal-ordering: +7
-           │    │    ├── has-placeholder
+           │    │    ├── immutable, has-placeholder
            │    │    ├── key: (1)
            │    │    ├── fd: (1)-->(2-12,14,15,27), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
            │    │    ├── ordering: +7
@@ -1728,8 +1728,8 @@ sort
            │    │    │         │              └── flavors.updated_at:15
            │    │    │         └── filters
            │    │    │              └── is_public:12 OR (true_agg:27 IS NOT NULL) [outer=(12,27)]
-           │    │    └── $5
-           │    └── $6
+           │    │    └── $5::INT8
+           │    └── $6::INT8
            └── filters
                 └── flavor_extra_specs_1.flavor_id:32 = flavors.id:1 [outer=(1,32), constraints=(/1: (/NULL - ]; /32: (/NULL - ]), fd=(1)==(32), (32)==(1)]
 
@@ -1818,7 +1818,7 @@ sort
            │    ├── offset
            │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30
            │    │    ├── internal-ordering: +7,+1 opt(13)
-           │    │    ├── has-placeholder
+           │    │    ├── immutable, has-placeholder
            │    │    ├── key: (1)
            │    │    ├── fd: ()-->(13), (1)-->(2-12,14-16,30), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
            │    │    ├── ordering: +7,+1 opt(13) [actual: +7,+1]
@@ -1918,8 +1918,8 @@ sort
            │    │    │         │              └── instance_types.updated_at:16
            │    │    │         └── filters
            │    │    │              └── is_public:12 OR (true_agg:30 IS NOT NULL) [outer=(12,30)]
-           │    │    └── $4
-           │    └── $5
+           │    │    └── $4::INT8
+           │    └── $5::INT8
            ├── select
            │    ├── columns: instance_type_extra_specs_1.id:32!null key:33 value:34 instance_type_extra_specs_1.instance_type_id:35!null instance_type_extra_specs_1.deleted:36!null instance_type_extra_specs_1.deleted_at:37 instance_type_extra_specs_1.created_at:38 instance_type_extra_specs_1.updated_at:39
            │    ├── has-placeholder
@@ -2018,7 +2018,7 @@ project
       │    │    ├── offset
       │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30
       │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    ├── has-placeholder
+      │    │    │    ├── immutable, has-placeholder
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(1-16,30)
       │    │    │    ├── select
@@ -2108,8 +2108,8 @@ project
       │    │    │    │    │              └── instance_types.id:1
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (true_agg:30 IS NOT NULL) [outer=(12,30)]
-      │    │    │    └── $5
-      │    │    └── $6
+      │    │    │    └── $5::INT8
+      │    │    └── $6::INT8
       │    └── filters
       │         └── instance_type_extra_specs_1.deleted:36 = $7 [outer=(36), constraints=(/36: (/NULL - ]), fd=()-->(36)]
       └── filters (true)
@@ -2344,7 +2344,7 @@ sort
            │    ├── offset
            │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30
            │    │    ├── internal-ordering: +7 opt(13)
-           │    │    ├── has-placeholder
+           │    │    ├── immutable, has-placeholder
            │    │    ├── key: (1)
            │    │    ├── fd: ()-->(13), (1)-->(2-12,14-16,30), (7)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
            │    │    ├── ordering: +7 opt(13) [actual: +7]
@@ -2445,8 +2445,8 @@ sort
            │    │    │         │              └── instance_types.updated_at:16
            │    │    │         └── filters
            │    │    │              └── is_public:12 OR (true_agg:30 IS NOT NULL) [outer=(12,30)]
-           │    │    └── $7
-           │    └── $8
+           │    │    └── $7::INT8
+           │    └── $8::INT8
            └── filters
                 └── instance_type_extra_specs_1.instance_type_id:35 = instance_types.id:1 [outer=(1,35), constraints=(/1: (/NULL - ]; /35: (/NULL - ]), fd=(1)==(35), (35)==(1)]
 
@@ -2525,7 +2525,7 @@ sort
            │    ├── offset
            │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:27
            │    │    ├── internal-ordering: +7
-           │    │    ├── has-placeholder
+           │    │    ├── immutable, has-placeholder
            │    │    ├── key: (1)
            │    │    ├── fd: (1)-->(2-12,14,15,27), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
            │    │    ├── ordering: +7
@@ -2612,8 +2612,8 @@ sort
            │    │    │         │              └── flavors.updated_at:15
            │    │    │         └── filters
            │    │    │              └── is_public:12 OR (true_agg:27 IS NOT NULL) [outer=(12,27)]
-           │    │    └── $2
-           │    └── $3
+           │    │    └── $2::INT8
+           │    └── $3::INT8
            ├── scan flavor_extra_specs [as=flavor_extra_specs_1]
            │    ├── columns: flavor_extra_specs_1.id:29!null key:30!null value:31 flavor_extra_specs_1.flavor_id:32!null flavor_extra_specs_1.created_at:33 flavor_extra_specs_1.updated_at:34
            │    ├── key: (29)
@@ -2724,7 +2724,7 @@ sort
            │    ├── offset
            │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:43
            │    │    ├── internal-ordering: +7,+1 opt(11,13)
-           │    │    ├── has-placeholder
+           │    │    ├── immutable, has-placeholder
            │    │    ├── key: (1)
            │    │    ├── fd: ()-->(11,13), (1)-->(2-10,12,14-16,43), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
            │    │    ├── ordering: +7,+1 opt(11,13) [actual: +7,+1]
@@ -2904,8 +2904,8 @@ sort
            │    │    │         │              └── instance_types.updated_at:16
            │    │    │         └── filters
            │    │    │              └── is_public:12 OR (true_agg:43 IS NOT NULL) [outer=(12,43)]
-           │    │    └── $7
-           │    └── $8
+           │    │    └── $7::INT8
+           │    └── $8::INT8
            └── filters
                 └── instance_type_extra_specs_1.instance_type_id:48 = instance_types.id:1 [outer=(1,48), constraints=(/1: (/NULL - ]; /48: (/NULL - ]), fd=(1)==(48), (48)==(1)]
 
@@ -2996,7 +2996,7 @@ project
       │    │    ├── offset
       │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:30
       │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    ├── has-placeholder
+      │    │    │    ├── immutable, has-placeholder
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(1-16,30)
       │    │    │    ├── select
@@ -3086,8 +3086,8 @@ project
       │    │    │    │    │              └── instance_types.id:1
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (true_agg:30 IS NOT NULL) [outer=(12,30)]
-      │    │    │    └── $5
-      │    │    └── $6
+      │    │    │    └── $5::INT8
+      │    │    └── $6::INT8
       │    └── filters
       │         └── instance_type_extra_specs_1.deleted:36 = $7 [outer=(36), constraints=(/36: (/NULL - ]), fd=()-->(36)]
       └── filters (true)
@@ -3167,7 +3167,7 @@ project
       │    │    ├── offset
       │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:27
       │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    ├── has-placeholder
+      │    │    │    ├── immutable, has-placeholder
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(1-12,14,15,27)
       │    │    │    ├── select
@@ -3245,8 +3245,8 @@ project
       │    │    │    │    │              └── flavors.id:1
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (true_agg:27 IS NOT NULL) [outer=(12,27)]
-      │    │    │    └── $3
-      │    │    └── $4
+      │    │    │    └── $3::INT8
+      │    │    └── $4::INT8
       │    └── filters (true)
       └── filters (true)
 
@@ -3408,7 +3408,7 @@ sort
            │    │         │              └── flavors.updated_at:15
            │    │         └── filters
            │    │              └── is_public:12 OR (true_agg:27 IS NOT NULL) [outer=(12,27)]
-           │    └── $2
+           │    └── $2::INT8
            ├── scan flavor_extra_specs [as=flavor_extra_specs_1]
            │    ├── columns: flavor_extra_specs_1.id:29!null key:30!null value:31 flavor_extra_specs_1.flavor_id:32!null flavor_extra_specs_1.created_at:33 flavor_extra_specs_1.updated_at:34
            │    ├── key: (29)

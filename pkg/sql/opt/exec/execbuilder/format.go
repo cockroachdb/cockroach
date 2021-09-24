@@ -29,8 +29,14 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 		return ""
 	}
 
-	// Let the filters node show up; we will apply the code on each filter.
-	if scalar.Op() == opt.FiltersOp {
+	switch scalar.Op() {
+	case opt.FiltersOp:
+		// Let the filters node show up; we will apply the code on each filter.
+		return ""
+	case opt.AssignmentCastOp:
+		// Let the AssignmentCast node show up to make it clear in optimizer
+		// tests that it is a distinct expression and not just a function call
+		// for crdb_internal.assignment_cast.
 		return ""
 	}
 
