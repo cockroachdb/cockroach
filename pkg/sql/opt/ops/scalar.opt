@@ -267,7 +267,7 @@ define ZipItem {
     Cols ColList
 }
 
-# And is the boolean conjunction operator that evalutes to true only if both of
+# And is the boolean conjunction operator that evaluates to true only if both of
 # its conditions evaluate to true.
 [Scalar, Bool]
 define And {
@@ -630,8 +630,8 @@ define UnaryCbrt {
     Input ScalarExpr
 }
 
-# Cast converts the input expression into an expression of the target type.
-# Note that the conversion may cause trunction based on the target types' width,
+# Cast converts the input expression into an expression of the target type. Note
+# that the conversion may cause truncation based on the target types' width,
 # such as in this example:
 #
 #   'hello'::VARCHAR(2)

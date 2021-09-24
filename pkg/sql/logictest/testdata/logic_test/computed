@@ -883,8 +883,16 @@ CREATE TABLE x (
   b INT AS (a+1) STORED
 )
 
-query error value type decimal doesn't match type int of column "a"
+statement ok
 INSERT INTO x VALUES(1.4)
+
+query II
+SELECT * FROM x
+----
+1  2
+
+query error value type date doesn't match type int of column "a"
+INSERT INTO x VALUES('1970-01-01'::date)
 
 # Regression test for #34901: verify that builtins can be used in computed
 # column expressions without a "memory budget exceeded" error while backfilling
@@ -1025,3 +1033,33 @@ SET experimental_computed_column_rewrites = "bad"
 
 statement error invalid column rewrites expression
 SET CLUSTER SETTING sql.defaults.experimental_computed_column_rewrites = "bad"
+
+# Regression test for #69327. Computed columns should be evaluated after
+# assignment casts have been performed.
+statement ok
+CREATE TABLE t69327 (
+  c "char",
+  v STRING AS (c) STORED
+);
+INSERT INTO t69327 VALUES ('foo'::STRING)
+
+# Both columns should have a value of "f".
+query TT
+SELECT * FROM t69327
+----
+f  f
+
+# Regression test for #69665.Computed columns should be evaluated after
+# assignment casts have been performed.
+statement ok
+CREATE TABLE t69665 (
+  c CHAR,
+  v STRING AS (c) STORED
+);
+INSERT INTO t69665 VALUES (' '::STRING)
+
+# Both columns should be empty values.
+query II
+SELECT length(c), length(v) FROM t69665
+----
+0  0
