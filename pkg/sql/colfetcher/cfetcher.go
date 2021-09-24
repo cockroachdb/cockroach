@@ -651,6 +651,7 @@ func (rf *cFetcher) Init(
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 func (rf *cFetcher) StartScan(
+	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
 	bsHeader *roachpb.BoundedStalenessHeader,
@@ -683,6 +684,7 @@ func (rf *cFetcher) StartScan(
 	// Note that we pass a nil memMonitor here, because the cfetcher does its own
 	// memory accounting.
 	f, err := row.NewKVFetcher(
+		ctx,
 		txn,
 		spans,
 		bsHeader,

@@ -1955,6 +1955,7 @@ func (ex *connExecutor) recordTransaction(
 		CollectedExecStats:      ex.extraTxnState.shouldCollectTxnExecutionStats,
 		ExecStats:               ex.extraTxnState.accumulatedStats,
 		RowsRead:                ex.extraTxnState.rowsRead,
+		RowsWritten:             ex.extraTxnState.rowsWritten,
 		BytesRead:               ex.extraTxnState.bytesRead,
 	}
 
