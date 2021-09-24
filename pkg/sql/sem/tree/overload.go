@@ -636,10 +636,16 @@ func typeCheckOverloadedExprs(
 			// become a homogeneous type, if all resolvable expressions became one.
 			// This is only possible if resolvable expressions were resolved
 			// homogeneously up to this point.
+			// We need to further make sure that, if we do have a homogeneous type,
+			// the constants can *actually* become that type - otherwise we'll
+			// accidentally pre-filter-out some overloads that we can't actually use
+			// later.
 			if homogeneousTyp != nil {
+				semaCtx := MakeSemaContext()
 				allConstantsAreHomogenous = true
 				for _, i := range s.constIdxs {
-					if !canConstantBecome(exprs[i].(Constant), homogeneousTyp) {
+					constExpr := exprs[i].(Constant)
+					if _, err := constExpr.ResolveAsType(ctx, &semaCtx, homogeneousTyp); err != nil {
 						allConstantsAreHomogenous = false
 						break
 					}
