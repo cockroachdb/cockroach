@@ -598,8 +598,6 @@ go_test(
         "//pkg/sql/sessionphase",
         "//pkg/sql/span",
         "//pkg/sql/sqlliveness",
-        "//pkg/sql/sqlliveness/slinstance",
-        "//pkg/sql/sqlliveness/slprovider",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqltestutils",
         "//pkg/sql/stats",
