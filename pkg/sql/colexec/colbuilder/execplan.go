@@ -625,9 +625,7 @@ func MaybeRemoveRootColumnarizer(r colexecargs.OpWithMetaInfo) execinfra.RowSour
 	if util.CrdbTestBuild {
 		// We might have an invariants checker as the root right now, we gotta
 		// peek inside of it if so.
-		if i, ok := root.(*colexec.InvariantsChecker); ok {
-			root = i.Input
-		}
+		root = colexec.MaybeUnwrapInvariantsChecker(root)
 	}
 	c, isColumnarizer := root.(*colexec.Columnarizer)
 	if !isColumnarizer {
@@ -1542,13 +1540,10 @@ func NewColOperator(
 
 	takeOverMetaInfo(&result.OpWithMetaInfo, inputs)
 	if util.CrdbTestBuild {
-		// TODO(yuzefovich): remove the testing knob.
-		if args.TestingKnobs.PlanInvariantsCheckers {
-			// Plan an invariants checker if it isn't already the root of the
-			// tree.
-			if _, isInvariantsChecker := r.Root.(*colexec.InvariantsChecker); !isInvariantsChecker {
-				r.Root = colexec.NewInvariantsChecker(r.Root)
-			}
+		// Plan an invariants checker if it isn't already the root of the
+		// tree.
+		if i := colexec.MaybeUnwrapInvariantsChecker(r.Root); i == r.Root {
+			r.Root = colexec.NewInvariantsChecker(r.Root)
 		}
 		// Also verify planning assumptions.
 		r.AssertInvariants()
