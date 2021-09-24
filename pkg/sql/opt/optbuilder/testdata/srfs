@@ -600,7 +600,7 @@ project
 build
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).other
 ----
-error (42804): could not identify column "other" in tuple{string AS x, int AS n}
+error (42703): could not identify column "other" in tuple{string AS x, int AS n}
 
 build
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).@4
