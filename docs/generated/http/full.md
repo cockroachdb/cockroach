@@ -4342,6 +4342,124 @@ LivenessResponse contains the liveness status of each node on the cluster.
 
 
 
+## Schedules
+
+`GET /_admin/v1/schedules`
+
+Schedules returns the schedule records for all schedules of the given
+status and type.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+SchedulesRequest requests system schedule information of the given status and type.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| limit | [int32](#cockroach.server.serverpb.SchedulesRequest-int32) |  |  | [reserved](#support-status) |
+| status | [string](#cockroach.server.serverpb.SchedulesRequest-string) |  |  | [reserved](#support-status) |
+| type | [string](#cockroach.server.serverpb.SchedulesRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+SchedulesResponse contains the schedule record for each matching schedule.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| schedules | [ScheduleResponse](#cockroach.server.serverpb.SchedulesResponse-cockroach.server.serverpb.ScheduleResponse) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.SchedulesResponse-cockroach.server.serverpb.ScheduleResponse"></a>
+#### ScheduleResponse
+
+ScheduleResponse contains the schedule record for a schedule.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [int64](#cockroach.server.serverpb.SchedulesResponse-int64) |  |  | [reserved](#support-status) |
+| label | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+| status | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+| next_run | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+| state | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+| recurrence | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+| running_jobs | [int64](#cockroach.server.serverpb.SchedulesResponse-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## Schedule
+
+`GET /_admin/v1/schedules/{schedule_id}`
+
+Schedule returns the schedule record for the schedule of the given
+schedule_id.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+ScheduleRequest requests system schedule information for the given
+schedule_id.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| schedule_id | [int64](#cockroach.server.serverpb.ScheduleRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+ScheduleResponse contains the schedule record for a schedule.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [int64](#cockroach.server.serverpb.ScheduleResponse-int64) |  |  | [reserved](#support-status) |
+| label | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+| status | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+| next_run | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+| state | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+| recurrence | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+| running_jobs | [int64](#cockroach.server.serverpb.ScheduleResponse-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## Jobs
 
 `GET /_admin/v1/jobs`

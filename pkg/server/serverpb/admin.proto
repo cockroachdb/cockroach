@@ -608,6 +608,36 @@ message JobResponse {
   string running_status = 15;
 }
 
+
+// SchedulesRequest requests system schedule information of the given status and type.
+message SchedulesRequest {
+  int32 limit = 1;
+  string status = 2;
+  string type = 3;
+}
+
+// SchedulesResponse contains the schedule record for each matching schedule.
+message SchedulesResponse {
+  repeated ScheduleResponse schedules = 1 [(gogoproto.nullable) = false];
+}
+
+// ScheduleRequest requests system schedule information for the given
+// schedule_id.
+message ScheduleRequest {
+  int64 schedule_id = 1;
+}
+
+// ScheduleResponse contains the schedule record for a schedule.
+message ScheduleResponse {
+  int64 id = 1 [(gogoproto.customname) = "ID"];
+  string label = 2;
+  string status = 3;
+  string next_run = 4;
+  string state = 5;
+  string recurrence = 6;
+  int64 running_jobs = 7;
+}
+
 // LocationsRequest requests system locality location information.
 message LocationsRequest {
 }
@@ -910,6 +940,22 @@ service Admin {
   rpc Liveness(LivenessRequest) returns (LivenessResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/liveness"
+    };
+  }
+
+  // Schedules returns the schedule records for all schedules of the given
+  // status and type.
+  rpc Schedules(SchedulesRequest) returns (SchedulesResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/schedules"
+    };
+  }
+
+  // Schedule returns the schedule record for the schedule of the given
+  // schedule_id.
+  rpc Schedule(ScheduleRequest) returns (ScheduleResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/schedules/{schedule_id}"
     };
   }
 

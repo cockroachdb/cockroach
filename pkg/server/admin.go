@@ -1825,6 +1825,179 @@ func (s *adminServer) Liveness(
 	}, nil
 }
 
+func (s *adminServer) Schedules(
+	ctx context.Context, req *serverpb.SchedulesRequest,
+) (_ *serverpb.SchedulesResponse, retErr error) {
+	// All errors returned by this method must be serverErrors. We are careful
+	// to not use serverError* methods in the body of the function, so we can
+	// just do it here.
+	defer func() {
+		if retErr != nil {
+			retErr = s.serverError(retErr)
+		}
+	}()
+
+	ctx = s.server.AnnotateCtx(ctx)
+
+	userName, err := userFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	q := makeSQLQuery()
+	q.Append(`
+SELECT id, label, schedule_status, next_run, state, recurrence, jobsRunning 
+FROM [%s]
+`)
+	showQuery := makeSQLQuery()
+	showQuery.Append(`SHOW`)
+
+	// Check if the request has asked for schedules with a particular status.
+	switch req.Status {
+	case "running":
+		showQuery.Append(" RUNNING")
+	case "paused":
+		showQuery.Append(" PAUSED")
+	case "":
+		// No status provided in request.
+	default:
+		return nil, errors.New("invalid schedule status")
+	}
+
+	showQuery.Append(` SCHEDULES`)
+
+	switch req.Type {
+	case tree.ScheduledBackupExecutor.InternalName():
+		showQuery.Append(" FOR BACKUP")
+	case "":
+		// No executor type provided in request.
+	default:
+		return nil, errors.New("invalid schedule executor type")
+	}
+
+	if req.Limit > 0 {
+		q.Append(" LIMIT $", tree.DInt(req.Limit))
+	}
+	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
+		ctx, "admin-schedules", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: userName},
+		fmt.Sprintf(q.String(), showQuery), q.QueryArguments()...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+	ok, err := it.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp serverpb.SchedulesResponse
+	if !ok {
+		// The query returned 0 rows.
+		return &resp, nil
+	}
+	scanner := makeResultScanner(it.Types())
+	for ; ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
+		var schedule serverpb.ScheduleResponse
+		err := scanRowIntoSchedule(scanner, row, &schedule)
+		if err != nil {
+			return nil, err
+		}
+
+		resp.Schedules = append(resp.Schedules, schedule)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (s *adminServer) Schedule(
+	ctx context.Context, req *serverpb.ScheduleRequest,
+) (_ *serverpb.ScheduleResponse, retErr error) {
+	// All errors returned by this method must be serverErrors. We are careful
+	// to not use serverError* methods in the body of the function, so we can
+	// just do it here.
+	defer func() {
+		if retErr != nil {
+			retErr = s.serverError(retErr)
+		}
+	}()
+
+	ctx = s.server.AnnotateCtx(ctx)
+
+	userName, err := userFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	query := `
+SELECT id, label, schedule_status, next_run, state, recurrence, jobsRunning 
+FROM [SHOW SCHEDULES]
+WHERE schedule_id = $1
+`
+
+	row, cols, err := s.server.sqlServer.internalExecutor.QueryRowExWithCols(
+		ctx, "admin-job", nil,
+		sessiondata.InternalExecutorOverride{User: userName},
+		query,
+		req.ScheduleId,
+	)
+
+	if err != nil {
+		return nil, errors.Wrapf(err, "expected to find 1 schedule with schedule_id=%d", req.ScheduleId)
+	}
+
+	if row == nil {
+		return nil, errors.Errorf(
+			"could not get schedule for schedule_id %d; 0 rows returned", req.ScheduleId,
+		)
+	}
+
+	scanner := makeResultScanner(cols)
+
+	var schedule serverpb.ScheduleResponse
+	err = scanRowIntoSchedule(scanner, row, &schedule)
+	if err != nil {
+		return nil, err
+	}
+
+	return &schedule, nil
+}
+
+func scanRowIntoSchedule(
+	scanner resultScanner, row tree.Datums, schedule *serverpb.ScheduleResponse,
+) error {
+	var state *string
+	var nextRun *time.Time
+	if err := scanner.ScanAll(
+		row,
+		&schedule.ID,
+		&schedule.Label,
+		&schedule.Status,
+		&nextRun,
+		&state,
+		&schedule.Recurrence,
+		&schedule.RunningJobs,
+	); err != nil {
+		return err
+	}
+	if nextRun != nil {
+		schedule.NextRun = nextRun.UTC().String()
+	}
+
+	if state != nil {
+		schedule.State = *state
+	}
+	return nil
+}
+
 func (s *adminServer) Jobs(
 	ctx context.Context, req *serverpb.JobsRequest,
 ) (_ *serverpb.JobsResponse, retErr error) {
@@ -2766,25 +2939,30 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		}
 
 	case *time.Time:
-		s, ok := src.(*tree.DTimestamp)
-		if !ok {
+		s, timestampOk := src.(*tree.DTimestamp)
+		sTZ, timestampTZOk := src.(*tree.DTimestampTZ)
+		if timestampOk {
+			*d = s.Time
+		} else if timestampTZOk {
+			*d = sTZ.Time
+		} else {
 			return errors.Errorf("source type assertion failed")
 		}
-		*d = s.Time
 
 	// Passing a **time.Time instead of a *time.Time means the source is allowed
 	// to be NULL, in which case nil is stored into *src.
 	case **time.Time:
-		s, ok := src.(*tree.DTimestamp)
-		if !ok {
-			if src != tree.DNull {
-				return errors.Errorf("source type assertion failed")
-			}
+		s, timestampOk := src.(*tree.DTimestamp)
+		sTZ, timestampTZOk := src.(*tree.DTimestampTZ)
+		if timestampOk {
+			*d = &s.Time
+		} else if timestampTZOk {
+			*d = &sTZ.Time
+		} else if src == tree.DNull {
 			*d = nil
-			break
+		} else {
+			return errors.Errorf("source type assertion failed")
 		}
-		*d = &s.Time
-
 	case *[]byte:
 		s, ok := src.(*tree.DBytes)
 		if !ok {
