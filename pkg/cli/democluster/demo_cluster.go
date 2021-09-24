@@ -1091,8 +1091,8 @@ func (c *transientCluster) runWorkload(
 		return errors.Wrap(err, "unable to create workload")
 	}
 
-	// Use a light rate limit of 25 queries per second
-	limiter := rate.NewLimiter(rate.Limit(25), 1)
+	// Use a rate limit (default 25 queries per second).
+	limiter := rate.NewLimiter(rate.Limit(c.demoCtx.WorkloadMaxQPS), 1)
 
 	// Start a goroutine to run each of the workload functions.
 	for _, workerFn := range ops.WorkerFns {
