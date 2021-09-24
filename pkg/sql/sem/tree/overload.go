@@ -71,10 +71,14 @@ type Overload struct {
 	// Only one of the following three attributes can be set.
 
 	// Fn is the normal builtin implementation function. It's for functions that
-	// take in datums and return a datum.
+	// take in Datums and return a Datum.
 	Fn func(*EvalContext, Datums) (Datum, error)
 
-	// Generator is for SRFs. SRFs take datums and return multiple rows of datums.
+	// FnWithExprs is for builtins that need access to their arguments as Exprs
+	// and not pre-evaluated Datums, but is otherwise identical to Fn.
+	FnWithExprs func(*EvalContext, Exprs) (Datum, error)
+
+	// Generator is for SRFs. SRFs take Datums and return multiple rows of Datums.
 	Generator GeneratorFactory
 
 	// GeneratorWithExprs is for SRFs that need access to their arguments as Exprs

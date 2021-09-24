@@ -383,6 +383,16 @@ eval
 e'a\U0001F41Bb'
 
 eval
+'hello'::varchar(2)
+----
+'he'
+
+eval
+'a🐛b🏠c'::varchar(3)
+----
+e'a\U0001F41Bb'
+
+eval
 'hello'::bytes
 ----
 '\x68656c6c6f'
@@ -1336,3 +1346,33 @@ eval
 0::char
 ----
 '0'
+
+eval
+1::BIT
+----
+B'1'
+
+eval
+2::BIT
+----
+B'0'
+
+eval
+123::BIT
+----
+B'1'
+
+eval
+'1'::BIT
+----
+B'1'
+
+eval
+'01'::BIT
+----
+B'0'
+
+eval
+'2'::BIT
+----
+could not parse string as bit array: "2" is not a valid binary digit
