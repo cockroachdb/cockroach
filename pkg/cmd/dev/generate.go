@@ -11,11 +11,12 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
-	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -63,7 +64,7 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	for _, target := range targets {
 		generator, ok := generatorTargetMapping[target]
 		if !ok {
-			return errors.Newf("unrecognized target: %s", target)
+			return fmt.Errorf("unrecognized target: %s", target)
 		}
 
 		if err := generator(cmd); err != nil {
@@ -194,7 +195,7 @@ func (d *dev) generateGo(cmd *cobra.Command) error {
 }
 
 func (*dev) generateUnimplemented(*cobra.Command) error {
-	return errors.New("To hoist all generated code into the workspace, run " +
+	return errors.New("to hoist all generated code into the workspace, run " +
 		"`dev build` with the flag `--hoist-generated-code`; to build the generated Go " +
 		"code needed to pass CI, run `dev generate go`")
 }
