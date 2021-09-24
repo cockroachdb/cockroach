@@ -2006,7 +2006,7 @@ vectorized: true
 │                 locking strength: for update
 │
 ├── • fk-cascade
-│     fk: fk_b_ref_uniq_fk_parent
+│     fk: uniq_fk_child_b_c_fkey
 │     input: buffer 1
 │
 └── • constraint-check
@@ -3214,7 +3214,7 @@ vectorized: true
 │                             size: 3 columns, 2 rows
 │
 ├── • fk-cascade
-│     fk: fk_b_ref_uniq_fk_parent
+│     fk: uniq_fk_child_b_c_fkey
 │     input: buffer 1
 │
 ├── • constraint-check

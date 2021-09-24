@@ -558,7 +558,7 @@ SELECT     NULL::text  AS pktable_cat,
        con.conname,
        pos.n
 ----
-NULL  public  customers  id  NULL  public  orders  cust  1  3  3  fk_cust_ref_customers  customers_pkey  7
+NULL  public  customers  id  NULL  public  orders  cust  1  3  3  orders_cust_fkey  customers_pkey  7
 
 
 # Tests for filter propagation through joins.

@@ -250,7 +250,7 @@ statement error pgcode 23505 pq: duplicate key value violates unique constraint 
 INSERT INTO uniq_fk_child VALUES (1, 1, 1), (2, 2, 2)
 
 # This fails the foreign key checks but passes the uniqueness checks.
-statement error pgcode 23503 pq: insert on table "uniq_fk_child" violates foreign key constraint "fk_b_ref_uniq_fk_parent"\nDETAIL: Key \(b, c\)=\(., .\) is not present in table "uniq_fk_parent"\.
+statement error pgcode 23503 pq: insert on table "uniq_fk_child" violates foreign key constraint "uniq_fk_child_b_c_fkey"\nDETAIL: Key \(b, c\)=\(., .\) is not present in table "uniq_fk_parent"\.
 INSERT INTO uniq_fk_child VALUES (3, 3, 3), (4, 4, 4)
 
 # This fails both types of checks.
@@ -466,7 +466,7 @@ statement error pgcode 23505 pq: duplicate key value violates unique constraint 
 UPDATE uniq_fk_parent SET c = 1
 
 # Inbound foreign key check should fail.
-statement error pgcode 23503 pq: update on table "uniq_fk_parent" violates foreign key constraint "fk_d_ref_uniq_fk_parent" on table "uniq_fk_child"\nDETAIL: Key \(d\)=\(2\) is still referenced from table "uniq_fk_child"\.
+statement error pgcode 23503 pq: update on table "uniq_fk_parent" violates foreign key constraint "uniq_fk_child_d_fkey" on table "uniq_fk_child"\nDETAIL: Key \(d\)=\(2\) is still referenced from table "uniq_fk_child"\.
 UPDATE uniq_fk_parent SET d = 3 WHERE a = 2
 
 # Combine unique checks with foreign keys.
@@ -849,14 +849,14 @@ subtest Delete
 # checks still work.
 
 # Inbound foreign key check should fail.
-statement error pgcode 23503 pq: delete on table "uniq_fk_parent" violates foreign key constraint "fk_b_ref_uniq_fk_parent" on table "uniq_fk_child"\nDETAIL: Key \(b, c\)=\(2, 2\) is still referenced from table "uniq_fk_child"\.
+statement error pgcode 23503 pq: delete on table "uniq_fk_parent" violates foreign key constraint "uniq_fk_child_b_c_fkey" on table "uniq_fk_child"\nDETAIL: Key \(b, c\)=\(2, 2\) is still referenced from table "uniq_fk_child"\.
 DELETE FROM uniq_fk_parent WHERE a = 2
 
 statement ok
 UPDATE uniq_fk_child SET b = NULL WHERE a = 2
 
 # Inbound foreign key check should still fail.
-statement error pgcode 23503 pq: delete on table "uniq_fk_parent" violates foreign key constraint "fk_d_ref_uniq_fk_parent" on table "uniq_fk_child"\nDETAIL: Key \(d\)=\(2\) is still referenced from table "uniq_fk_child"\.
+statement error pgcode 23503 pq: delete on table "uniq_fk_parent" violates foreign key constraint "uniq_fk_child_d_fkey" on table "uniq_fk_child"\nDETAIL: Key \(d\)=\(2\) is still referenced from table "uniq_fk_child"\.
 DELETE FROM uniq_fk_parent WHERE a = 2
 
 statement ok
