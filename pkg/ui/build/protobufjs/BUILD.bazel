@@ -1,0 +1,16 @@
+# Generated file from yarn_install rule.
+# See rules_nodejs/internal/npm_install/generate_build_file.ts
+
+package(default_visibility = ["//visibility:public"])
+
+load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
+
+js_library(
+    name = "protobufjs",
+    package_name = "protobufjs",
+    package_path = "",
+    srcs = ["//pkg/ui:protobufjs"],
+    deps = [
+        "//pkg/ui:node_modules",
+    ],
+)

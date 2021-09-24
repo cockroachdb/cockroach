@@ -1,0 +1,15 @@
+package(default_visibility = ["//visibility:public"])
+
+load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
+
+nodejs_binary(
+    name = "pbjs",
+    entry_point = "//pkg/ui:node_modules/protobufjs/bin/pbjs",
+    data = ["//pkg/ui/build/protobufjs:protobufjs"],
+)
+
+nodejs_binary(
+    name = "pbts",
+    entry_point = "//pkg/ui:node_modules/protobufjs/bin/pbts",
+    data = ["//pkg/ui/build/protobufjs:protobufjs"],
+)

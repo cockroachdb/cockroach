@@ -1,4 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
+
+package(default_visibility = ["//visibility:public"])
 
 go_library(
     name = "ui",
@@ -13,18 +16,15 @@ go_library(
     ],
 )
 
-filegroup(
+js_library(
     name = "node_modules",
+    package_name = "$node_modules$",
     srcs = glob(
         include = [
-            "node_modules/**",
-        ],
-        exclude = [
-            "node_modules/db-console",
-            "node_modules/@cockroachlabs/cluster-ui",
+            "node_modules/**/*",
+            "node_modules/.bin/*",
         ],
     ),
-    visibility = ["//pkg/ui:__subpackages__"],
 )
 
 filegroup(
@@ -55,4 +55,15 @@ filegroup(
         ],
     ),
     visibility = ["//pkg/ui:__subpackages__"],
+)
+
+
+js_library(
+    name = "protobufjs",
+    package_name = "$node_modules$",
+    srcs = glob(
+        include = [
+            "node_modules/protobufjs/**/*",
+        ],
+    ),
 )
