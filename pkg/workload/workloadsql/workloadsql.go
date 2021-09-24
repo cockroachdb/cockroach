@@ -36,6 +36,18 @@ import (
 func Setup(
 	ctx context.Context, db *gosql.DB, gen workload.Generator, l workload.InitialDataLoader,
 ) (int64, error) {
+	var hooks workload.Hooks
+	if h, ok := gen.(workload.Hookser); ok {
+		hooks = h.Hooks()
+	}
+	// Added for multi-region TPC-C. Used to convert the database to a multi-
+	// region database and add all of the relevant regions before IMPORT begins.
+	if hooks.PreCreate != nil {
+		if err := hooks.PreCreate(db); err != nil {
+			return 0, errors.Wrapf(err, "Could not pre-create")
+		}
+	}
+
 	bytes, err := l.InitialDataLoad(ctx, db, gen)
 	if err != nil {
 		return 0, err
@@ -48,10 +60,6 @@ func Setup(
 		}
 	}
 
-	var hooks workload.Hooks
-	if h, ok := gen.(workload.Hookser); ok {
-		hooks = h.Hooks()
-	}
 	if hooks.PostLoad != nil {
 		if err := hooks.PostLoad(db); err != nil {
 			return 0, errors.Wrapf(err, "Could not postload")
