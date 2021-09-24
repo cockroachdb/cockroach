@@ -1169,6 +1169,11 @@ can also be specified (e.g. .25).`,
 		Description: `Run a demo workload against the pre-loaded database.`,
 	}
 
+	DemoWorkloadMaxQPS = FlagInfo{
+		Name:        "workload-max-qps",
+		Description: "The maximum QPS when a workload is running.",
+	}
+
 	DemoNodeLocality = FlagInfo{
 		Name: "demo-locality",
 		Description: `
