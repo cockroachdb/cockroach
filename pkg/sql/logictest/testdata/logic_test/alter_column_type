@@ -200,9 +200,6 @@ rowid  INT8    false  unique_rowid()  ·  {primary}  true
 statement ok
 INSERT INTO t2 VALUES ('5')
 
-statement error pq: value type int doesn't match type string of column "id"
-INSERT INTO t2 VALUES (6)
-
 # Verify ALTER COLUMN TYPE from INT to STRING works correctly.
 # Column order should stay the same.
 statement ok

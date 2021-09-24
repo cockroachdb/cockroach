@@ -1077,8 +1077,9 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 		// We don't want to show the OriginalExpr.
 		private = nil
 
-	case *CastExpr:
-		private = t.Typ.SQLString()
+	case *CastExpr, *AssignmentCastExpr:
+		typ := scalar.Private().(*types.T)
+		private = typ.SQLString()
 
 	case *KVOptionsItem:
 		fmt.Fprintf(f.Buffer, " %s", t.Key)

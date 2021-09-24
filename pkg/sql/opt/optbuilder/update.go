@@ -230,6 +230,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		}
 
 		// Add new column to the projections scope.
+		// TODO(mgartner): Perform an assignment cast if necessary.
 		targetColMeta := mb.md.ColumnMeta(targetColID)
 		desiredType := targetColMeta.Type
 		texpr := inScope.resolveType(expr, desiredType)

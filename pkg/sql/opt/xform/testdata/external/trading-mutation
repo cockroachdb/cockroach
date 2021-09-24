@@ -1249,20 +1249,30 @@ insert transactions
  │    ├── column1:12 => dealerid:1
  │    ├── column2:13 => isbuy:2
  │    ├── column3:14 => date:3
- │    ├── column4:15 => accountname:4
- │    ├── column5:16 => customername:5
+ │    ├── column4:18 => accountname:4
+ │    ├── column5:19 => customername:5
  │    ├── column6:17 => operationid:6
- │    ├── version_default:18 => version:7
- │    └── olddate_default:19 => olddate:8
+ │    ├── version_default:20 => version:7
+ │    └── olddate_default:21 => olddate:8
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column6:17!null version_default:18 olddate_default:19!null
+      ├── columns: column1:12!null column2:13!null column3:14!null column6:17!null column4:18 column5:19 version_default:20 olddate_default:21!null
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()
-      ├── fd: ()-->(12-19)
-      └── (1, false, '2020-03-01 00:00:00+00:00', 'the-account', 'the-customer', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', cluster_logical_timestamp(), '0001-01-01 00:00:00')
+      ├── fd: ()-->(12-14,17-21)
+      └── tuple
+           ├── 1
+           ├── false
+           ├── '2020-03-01 00:00:00+00:00'
+           ├── '70f03eb1-4f58-4c26-b72d-c524a9d537dd'
+           ├── assignment-cast: VARCHAR(128)
+           │    └── 'the-account'
+           ├── assignment-cast: VARCHAR(128)
+           │    └── 'the-customer'
+           ├── cluster_logical_timestamp()
+           └── '0001-01-01 00:00:00'
 
 # Upsert buy or sell transaction.
 opt

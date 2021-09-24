@@ -54,6 +54,15 @@ CREATE TABLE decimals (
 ----
 
 exec-ddl
+CREATE TABLE assn_cast (
+    c CHAR,
+    qc "char",
+    i INT,
+    s STRING
+)
+----
+
+exec-ddl
 CREATE TABLE on_update_bare (
     a INT NOT NULL,
     v INT ON UPDATE 5
@@ -747,7 +756,25 @@ insert abcde
 build
 INSERT INTO xyz (x) VALUES (10)
 ----
-error (42804): value type int doesn't match type string of column "x"
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => x:1
+ │    ├── y_default:8 => y:2
+ │    └── z_default:9 => z:3
+ └── project
+      ├── columns: y_default:8 z_default:9 column1:7
+      ├── project
+      │    ├── columns: column1:7
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    └── (10,)
+      │    └── projections
+      │         └── assignment-cast: STRING [as=column1:7]
+      │              └── column1:6
+      └── projections
+           ├── NULL::INT8 [as=y_default:8]
+           └── NULL::FLOAT8 [as=z_default:9]
 
 # Try to insert into computed column.
 build
@@ -1154,7 +1181,7 @@ insert checks
            └── abcde.a:7 > 0 [as=check2:17]
 
 # ------------------------------------------------------------------------------
-# Test decimal column rounding.
+# Test assignment casts.
 # ------------------------------------------------------------------------------
 
 build
@@ -1163,37 +1190,107 @@ INSERT INTO decimals (a, b) VALUES (1.1, ARRAY[0.95, NULL, 15])
 insert decimals
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── a:10 => decimals.a:1
- │    ├── b:11 => decimals.b:2
- │    ├── c_default:12 => c:3
- │    └── d_comp:14 => d:4
- ├── check columns: check1:15 check2:16
+ │    ├── column1:9 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── c_default:10 => c:3
+ │    └── d_comp:11 => d:4
+ ├── check columns: check1:12 check2:13
  └── project
-      ├── columns: check1:15 check2:16 a:10 b:11 c_default:12 d_comp:14
+      ├── columns: check1:12 check2:13 column2:8 column1:9 c_default:10!null d_comp:11
       ├── project
-      │    ├── columns: d_comp:14 a:10 b:11 c_default:12
+      │    ├── columns: d_comp:11 column2:8 column1:9 c_default:10!null
       │    ├── project
-      │    │    ├── columns: d_comp:13 a:10 b:11 c_default:12
+      │    │    ├── columns: c_default:10!null column2:8 column1:9
       │    │    ├── project
-      │    │    │    ├── columns: a:10 b:11 c_default:12
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: c_default:9!null column1:7!null column2:8
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: column1:7!null column2:8
-      │    │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
-      │    │    │    │    └── projections
-      │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
+      │    │    │    ├── columns: column1:9 column2:8
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:7!null column2:8
+      │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
       │    │    │    └── projections
-      │    │    │         ├── crdb_internal.round_decimal_values(column1:7, 0) [as=a:10]
-      │    │    │         ├── crdb_internal.round_decimal_values(column2:8, 1) [as=b:11]
-      │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
+      │    │    │         └── assignment-cast: DECIMAL(10) [as=column1:9]
+      │    │    │              └── column1:7
       │    │    └── projections
-      │    │         └── (a:10 + c_default:12::DECIMAL)::DECIMAL(10,1) [as=d_comp:13]
+      │    │         └── 1.23::DECIMAL(10,1) [as=c_default:10]
       │    └── projections
-      │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
+      │         └── (column1:9::DECIMAL + c_default:10::DECIMAL)::DECIMAL(10,1) [as=d_comp:11]
       └── projections
-           ├── round(a:10) = a:10 [as=check1:15]
-           └── b:11[0] > 1 [as=check2:16]
+           ├── round(column1:9) = column1:9 [as=check1:12]
+           └── column2:8[0] > 1 [as=check2:13]
+
+assign-placeholders-norm query-args=(1.1, (ARRAY[0.95, NULL, 15]))
+INSERT INTO decimals (a, b) VALUES ($1, $2)
+----
+insert decimals
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── c_default:10 => c:3
+ │    └── d_comp:11 => d:4
+ ├── check columns: check1:12 check2:13
+ └── project
+      ├── columns: check1:12 check2:13 d_comp:11 column2:8!null column1:9 c_default:10!null
+      ├── values
+      │    ├── columns: column2:8!null c_default:10!null column1:9
+      │    └── tuple
+      │         ├── ARRAY[0.95,NULL,15]
+      │         ├── 1.2
+      │         └── assignment-cast: DECIMAL(10)
+      │              └── 1.1
+      └── projections
+           ├── column1:9 = round(column1:9) [as=check1:12]
+           ├── CAST(NULL AS BOOL) [as=check2:13]
+           └── (column1:9::DECIMAL + 1.2)::DECIMAL(10,1) [as=d_comp:11]
+
+build
+INSERT INTO assn_cast (c, qc, i, s) VALUES (' ', 'foo', '1', 2)
+----
+insert assn_cast
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:12 => c:1
+ │    ├── column2:13 => qc:2
+ │    ├── column3:10 => i:3
+ │    ├── column4:14 => s:4
+ │    └── rowid_default:15 => rowid:5
+ └── project
+      ├── columns: rowid_default:15 column3:10!null column1:12 column2:13 column4:14
+      ├── project
+      │    ├── columns: column1:12 column2:13 column4:14 column3:10!null
+      │    ├── values
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
+      │    │    └── ('', 'f', 1, 2)
+      │    └── projections
+      │         ├── assignment-cast: CHAR [as=column1:12]
+      │         │    └── column1:8
+      │         ├── assignment-cast: "char" [as=column2:13]
+      │         │    └── column2:9
+      │         └── assignment-cast: STRING [as=column4:14]
+      │              └── column4:11
+      └── projections
+           └── unique_rowid() [as=rowid_default:15]
+
+assign-placeholders-norm query-args=(' ', 'foo', '1')
+INSERT INTO assn_cast (c, qc, i) VALUES ($1, $2, $3)
+----
+insert assn_cast
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:11 => c:1
+ │    ├── column2:12 => qc:2
+ │    ├── column3:10 => i:3
+ │    ├── s_default:13 => s:4
+ │    └── rowid_default:14 => rowid:5
+ └── values
+      ├── columns: column3:10!null s_default:13 rowid_default:14 column1:11 column2:12
+      └── tuple
+           ├── 1
+           ├── CAST(NULL AS STRING)
+           ├── unique_rowid()
+           ├── assignment-cast: CHAR
+           │    └── ' '
+           └── assignment-cast: "char"
+                └── 'foo'
 
 # Regression test for #38293; the default values should be separate projections.
 exec-ddl

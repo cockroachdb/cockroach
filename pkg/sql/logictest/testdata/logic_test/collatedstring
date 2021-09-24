@@ -231,8 +231,10 @@ INSERT INTO t VALUES
   ('x' COLLATE en),
   ('ü' COLLATE en)
 
-statement error value type collatedstring{de} doesn't match type collatedstring{en} of column "a"
-INSERT INTO t VALUES ('X' COLLATE de)
+statement ok
+INSERT INTO t VALUES
+  ('X' COLLATE de),
+  ('y' COLLATE de)
 
 query T
 SELECT a FROM t ORDER BY t.a
@@ -243,6 +245,8 @@ b
 B
 ü
 x
+X
+y
 
 query T
 SELECT a FROM t ORDER BY t.a COLLATE da
@@ -252,6 +256,8 @@ A
 b
 B
 x
+X
+y
 ü
 
 query T
