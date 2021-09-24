@@ -296,13 +296,15 @@ func (jf jsonFields) decodeJSON(js json.JSON) (err error) {
 
 	for i := range jf {
 		fieldName = jf[i].field
-		field, err := safeFetchVal(js, fieldName)
+		field, err := js.FetchValKey(fieldName)
 		if err != nil {
 			return err
 		}
-		err = jf[i].val.decodeJSON(field)
-		if err != nil {
-			return err
+		if field != nil {
+			err = jf[i].val.decodeJSON(field)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -436,26 +438,4 @@ func (d *decimal) decodeJSON(js json.JSON) error {
 
 func (d *decimal) encodeJSON() (json.JSON, error) {
 	return json.FromDecimal(*(*apd.Decimal)(d)), nil
-}
-
-func safeFetchVal(jsonVal json.JSON, key string) (json.JSON, error) {
-	field, err := jsonVal.FetchValKey(key)
-	if err != nil {
-		return nil, err
-	}
-	if field == nil {
-		return nil, errors.Newf("%s field is not found in the JSON payload", key)
-	}
-	return field, nil
-}
-
-func safeFetchValIdx(jsonVal json.JSON, idx int) (json.JSON, error) {
-	field, err := jsonVal.FetchValIdx(idx)
-	if err != nil {
-		return nil, err
-	}
-	if field == nil {
-		return nil, errors.Newf("%dth element is not found in the JSON payload", idx)
-	}
-	return field, nil
 }
