@@ -7,6 +7,5 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/dev/recording",
-        "@com_github_cockroachdb_errors//oserror",
     ],
 )
