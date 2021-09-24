@@ -25,7 +25,7 @@ var telemetrySampleRate = settings.RegisterFloatSetting(
 
 // Default value for the QPS threshold used to determine whether telemetry logs
 // will be sampled.
-const defaultQPSThreshold = 2000
+const defaultQPSThreshold = 10
 
 var telemetryQPSThreshold = settings.RegisterIntSetting(
 	"sql.telemetry.query_sampling.qps_threshold",
