@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -1071,12 +1072,10 @@ func (ot *OptTester) AssignPlaceholders(queryArgs []string, explore bool) (opt.E
 			return nil, err
 		}
 
-		id := tree.PlaceholderIdx(i)
-		typ, _ := ot.semaCtx.Placeholders.ValueType(id)
 		texpr, err := schemaexpr.SanitizeVarFreeExpr(
 			context.Background(),
 			parg,
-			typ,
+			types.Any,
 			"", /* context */
 			&ot.semaCtx,
 			tree.VolatilityVolatile,

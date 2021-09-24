@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // fillInPlaceholder helps with the EXECUTE foo(args) SQL statement: it takes in
@@ -43,12 +43,8 @@ func fillInPlaceholders(
 	for i, e := range params {
 		idx := tree.PlaceholderIdx(i)
 
-		typ, ok := ps.ValueType(idx)
-		if !ok {
-			return nil, errors.AssertionFailedf("no type for placeholder %s", idx)
-		}
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-			ctx, e, typ, "EXECUTE parameter" /* context */, &semaCtx, tree.VolatilityVolatile,
+			ctx, e, types.Any, "EXECUTE parameter" /* context */, &semaCtx, tree.VolatilityVolatile,
 		)
 		if err != nil {
 			return nil, pgerror.WithCandidateCode(err, pgcode.WrongObjectType)
