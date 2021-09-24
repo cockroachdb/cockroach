@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -61,15 +62,23 @@ type TestCLI struct {
 	logScope *log.TestLogScope
 	// if true, doesn't print args during RunWithArgs.
 	omitArgs bool
+	// if true, prints the requested exit code during RunWithArgs.
+	reportExitCode bool
 }
 
 // TestCLIParams contains parameters used by TestCLI.
 type TestCLIParams struct {
-	T           *testing.T
-	Insecure    bool
-	NoServer    bool
-	StoreSpecs  []base.StoreSpec
-	Locality    roachpb.Locality
+	T        *testing.T
+	Insecure bool
+	// NoServer, if true, starts the test without a DB server.
+	NoServer bool
+
+	// The store specifications for the in-memory server.
+	StoreSpecs []base.StoreSpec
+	// The locality tiers for the in-memory server.
+	Locality roachpb.Locality
+
+	// NoNodelocal, if true, disables node-local external I/O storage.
 	NoNodelocal bool
 }
 
@@ -350,6 +359,13 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 		return Run(args)
 	}(); err != nil {
 		clierror.OutputError(os.Stdout, err, true /*showSeverity*/, false /*verbose*/)
+		if c.reportExitCode {
+			fmt.Fprintln(os.Stdout, "exit code:", getExitCode(err))
+		}
+	} else {
+		if c.reportExitCode {
+			fmt.Fprintln(os.Stdout, "exit code:", exit.Success())
+		}
 	}
 }
 
