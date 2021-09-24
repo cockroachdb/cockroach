@@ -2292,8 +2292,12 @@ func NewTableDesc(
 	// constructing the table descriptor so that we can check all foreign key
 	// constraints in on place as opposed to traversing the input and finding all
 	// inline/explicit foreign key constraints.
-	if err := tabledesc.ValidateOnUpdate(desc.AllColumns(), desc.GetOutboundFKs()); err != nil {
-		return nil, err
+	var onUpdateErr error
+	tabledesc.ValidateOnUpdate(&desc, func(err error) {
+		onUpdateErr = err
+	})
+	if onUpdateErr != nil {
+		return nil, onUpdateErr
 	}
 
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`

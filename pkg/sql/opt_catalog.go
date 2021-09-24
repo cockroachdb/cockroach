@@ -836,8 +836,7 @@ func newOptTable(
 		}
 	}
 
-	for i := range ot.desc.GetOutboundFKs() {
-		fk := &ot.desc.GetOutboundFKs()[i]
+	_ = ot.desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       ot.ID(),
@@ -849,9 +848,9 @@ func newOptTable(
 			deleteAction:      fk.OnDelete,
 			updateAction:      fk.OnUpdate,
 		})
-	}
-	for i := range ot.desc.GetInboundFKs() {
-		fk := &ot.desc.GetInboundFKs()[i]
+		return nil
+	})
+	_ = ot.desc.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       cat.StableID(fk.OriginTableID),
@@ -863,7 +862,8 @@ func newOptTable(
 			deleteAction:      fk.OnDelete,
 			updateAction:      fk.OnUpdate,
 		})
-	}
+		return nil
+	})
 
 	ot.primaryFamily.init(ot, &desc.GetFamilies()[0])
 	ot.families = make([]optFamily, len(desc.GetFamilies())-1)

@@ -342,8 +342,6 @@ type TableDescriptor interface {
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	GetConstraintInfo() (map[string]descpb.ConstraintDetail, error)
 	AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint
-	GetInboundFKs() []descpb.ForeignKeyConstraint
-	GetOutboundFKs() []descpb.ForeignKeyConstraint
 
 	GetLocalityConfig() *descpb.TableDescriptor_LocalityConfig
 	IsLocalityRegionalByRow() bool
