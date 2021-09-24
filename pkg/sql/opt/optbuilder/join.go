@@ -84,7 +84,7 @@ func (b *Builder) buildJoin(
 		outScope = inScope.push()
 
 		var jb usingJoinBuilder
-		jb.init(b, joinType, flags, leftScope, rightScope, outScope)
+		jb.init(b, joinType, flags, isLateral, leftScope, rightScope, outScope)
 
 		switch t := cond.(type) {
 		case tree.NaturalJoinCond:
@@ -284,6 +284,7 @@ type usingJoinBuilder struct {
 	joinType   descpb.JoinType
 	joinFlags  memo.JoinFlags
 	filters    memo.FiltersExpr
+	isLateral  bool
 	leftScope  *scope
 	rightScope *scope
 	outScope   *scope
@@ -307,11 +308,13 @@ func (jb *usingJoinBuilder) init(
 	b *Builder,
 	joinType descpb.JoinType,
 	flags memo.JoinFlags,
+	isLateral bool,
 	leftScope, rightScope, outScope *scope,
 ) {
 	jb.b = b
 	jb.joinType = joinType
 	jb.joinFlags = flags
+	jb.isLateral = isLateral
 	jb.leftScope = leftScope
 	jb.rightScope = rightScope
 	jb.outScope = outScope
@@ -395,7 +398,7 @@ func (jb *usingJoinBuilder) finishBuild() {
 		jb.rightScope.expr.(memo.RelExpr),
 		jb.filters,
 		&memo.JoinPrivate{Flags: jb.joinFlags},
-		false, /* isLateral */
+		jb.isLateral,
 	)
 
 	if !jb.ifNullCols.Empty() {
