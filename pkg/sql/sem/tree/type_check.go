@@ -457,7 +457,7 @@ func resolveCast(
 
 	default:
 		// TODO(mgartner): Use OID cast map.
-		cast := lookupCast(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled)
+		cast := lookupCastInfo(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled)
 		if cast == nil {
 			return pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, castTo)
 		}
@@ -1551,6 +1551,12 @@ func (expr *ArrayFlatten) TypeCheck(
 func (expr *Placeholder) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
+	// When we populate placeholder values from pgwire, there is no special
+	// handling of type details like widths. Therefore, we infer the types of
+	// placeholders as only canonical types. This is safe to do because a value
+	// can always be losslessly converted to its canonical type.
+	canonicalDesired := desired.CanonicalType()
+
 	// Perform placeholder typing. This function is only called during Prepare,
 	// when there are no available values for the placeholders yet, because
 	// during Execute all placeholders are replaced from the AST before type
@@ -1568,7 +1574,7 @@ func (expr *Placeholder) TypeCheck(
 			// the type system expects. Then, when the value is actually sent to us
 			// later, we cast the input value (whose type is the expected type) to the
 			// desired type here.
-			typ = desired
+			typ = canonicalDesired
 		}
 		// We call SetType regardless of the above condition to inform the
 		// placeholder struct that this placeholder is locked to its type and cannot
@@ -1582,10 +1588,10 @@ func (expr *Placeholder) TypeCheck(
 	if desired.IsAmbiguous() {
 		return nil, placeholderTypeAmbiguityError(expr.Idx)
 	}
-	if err := semaCtx.Placeholders.SetType(expr.Idx, desired); err != nil {
+	if err := semaCtx.Placeholders.SetType(expr.Idx, canonicalDesired); err != nil {
 		return nil, err
 	}
-	expr.typ = desired
+	expr.typ = canonicalDesired
 	return expr, nil
 }
 

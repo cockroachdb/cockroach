@@ -810,7 +810,7 @@ SELECT * FROM a
 {hello}
 {goodbye}
 
-statement error value type collatedstring{fr}\[\] doesn't match type collatedstring{en}\[\] of column "b"
+statement ok
 INSERT INTO a VALUES (ARRAY['hello' COLLATE fr])
 
 statement ok
@@ -841,7 +841,7 @@ CREATE TABLE a (b STRING[])
 statement ok
 INSERT INTO a VALUES (ARRAY['foo'])
 
-statement error value type collatedstring{en}\[\] doesn't match type string\[\] of column "b"
+statement ok
 INSERT INTO a VALUES (ARRAY['foo' COLLATE en])
 
 statement ok
