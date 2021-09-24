@@ -895,7 +895,7 @@ func ResolveFK(
 	constraintName := string(d.Name)
 	if constraintName == "" {
 		constraintName = tabledesc.GenerateUniqueName(
-			fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name),
+			tabledesc.ForeignKeyConstraintName(tbl.GetName(), d.FromCols.ToStrings()),
 			func(p string) bool {
 				_, ok := constraintInfo[p]
 				return ok

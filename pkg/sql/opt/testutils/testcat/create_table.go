@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -422,8 +423,9 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 
 	constraintName := string(d.Name)
 	if constraintName == "" {
-		constraintName = fmt.Sprintf(
-			"fk_%s_ref_%s", string(d.FromCols[0]), targetTable.TabName.Table(),
+		constraintName = tabledesc.ForeignKeyConstraintName(
+			tab.TabName.Table(),
+			d.FromCols.ToStrings(),
 		)
 	}
 
