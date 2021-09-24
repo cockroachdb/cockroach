@@ -7201,6 +7201,7 @@ COMMIT;
 			// This transaction will not complete. Therefore, we don't check the returned error.
 			_, _ = conn2.DB.ExecContext(context.Background(),
 				`
+	   SET application_name='TestDropColumnAfterMutations';
 	   BEGIN;
 	   ALTER TABLE t ALTER COLUMN j SET NOT NULL;
 	   ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL UNIQUE;
@@ -7215,6 +7216,7 @@ COMMIT;
 			// This transaction will not complete. Therefore, we don't check the returned error.
 			_, _ = conn1.DB.ExecContext(context.Background(),
 				`
+	   SET application_name='TestDropColumnAfterMutations';
 	   SET sql_safe_updates = false;
 	   BEGIN;
 	   ALTER TABLE t DROP COLUMN j;
@@ -7251,7 +7253,8 @@ COMMIT;
 		conn1.CheckQueryResults(t, fmt.Sprintf("SELECT status from system.jobs WHERE id = %d", jobIDs[0]), [][]string{{string(jobs.StatusRunning)}})
 		// Both jobs should be stuck in COMMIT, waiting for jobs to complete.
 		conn1.CheckQueryResults(t,
-			"SELECT count(*) FROM [SHOW SESSIONS] WHERE last_active_query LIKE '%COMMIT%' AND session_id != (SELECT * FROM [SHOW session_id])",
+			"SELECT count(*) FROM [SHOW SESSIONS] WHERE last_active_query LIKE '%COMMIT%' AND session_id != (SELECT * FROM [SHOW session_id]) "+
+				"AND application_name='TestDropColumnAfterMutations'",
 			[][]string{{"2"}},
 		)
 
@@ -7281,6 +7284,7 @@ COMMIT;
 			// This transaction will not complete. Therefore, we don't check the returned error.
 			_, _ = conn2.DB.ExecContext(context.Background(),
 				`
+	   SET application_name='TestDropColumnAfterMutations';
 	   BEGIN;
 	   ALTER TABLE t ALTER COLUMN j SET NOT NULL;
 	   ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL;
@@ -7293,6 +7297,7 @@ COMMIT;
 			// This transaction will not complete. Therefore, we don't check the returned error.
 			_, _ = conn1.DB.ExecContext(context.Background(),
 				`
+	   SET application_name='TestDropColumnAfterMutations';
 	   SET sql_safe_updates = false;
 	   BEGIN;
 	   ALTER TABLE t DROP COLUMN j;
@@ -7343,7 +7348,8 @@ COMMIT;
 		)
 		// Both jobs should be stuck in COMMIT, waiting for jobs to complete.
 		conn1.CheckQueryResults(t,
-			"SELECT count(*) FROM [SHOW SESSIONS] WHERE last_active_query LIKE '%COMMIT%' AND session_id != (SELECT * FROM [SHOW session_id])",
+			"SELECT count(*) FROM [SHOW SESSIONS] WHERE last_active_query LIKE '%COMMIT%' AND session_id != (SELECT * FROM [SHOW session_id]) "+
+				"AND application_name='TestDropColumnAfterMutations'",
 			[][]string{{"2"}},
 		)
 
