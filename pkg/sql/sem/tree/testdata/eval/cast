@@ -383,6 +383,16 @@ eval
 e'a\U0001F41Bb'
 
 eval
+'hello'::varchar(2)
+----
+'he'
+
+eval
+'a🐛b🏠c'::varchar(3)
+----
+e'a\U0001F41Bb'
+
+eval
 'hello'::bytes
 ----
 '\x68656c6c6f'
@@ -1266,6 +1276,18 @@ eval
 ----
 'a'
 
+# TODO(#70771): This should return '{'.
+eval
+123::"char"
+----
+'1'
+
+# TODO(#70771): This should be an out of range error.
+eval
+1234::"char"
+----
+'1'
+
 eval
 'null'::jsonb::geography
 ----
@@ -1275,3 +1297,33 @@ eval
 'null'::jsonb::geometry
 ----
 NULL
+
+eval
+1::BIT
+----
+B'1'
+
+eval
+2::BIT
+----
+B'0'
+
+eval
+123::BIT
+----
+B'1'
+
+eval
+'1'::BIT
+----
+B'1'
+
+eval
+'01'::BIT
+----
+B'0'
+
+eval
+'2'::BIT
+----
+could not parse string as bit array: "2" is not a valid binary digit
