@@ -33,3 +33,39 @@ mkdir go/src/github.com/cockroachdb/cockroach/artifacts
 
 docker run --rm -it -v go/src/github.com/cockroachdb/cockroach:/cockroach --workdir=/cockroach -v go/src/github.com/cockroachdb/cockroach/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 1001:1002 mock_bazel_image:1234
 ----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
+id
+----
+1001:1002
+
+bazel info workspace --color=no --config=dev
+----
+go/src/github.com/cockroachdb/cockroach
+
+cat go/src/github.com/cockroachdb/cockroach/build/teamcity-bazel-support.sh
+----
+BAZEL_IMAGE=mock_bazel_image:1234
+
+docker volume inspect bzlhome
+----
+
+mkdir go/src/github.com/cockroachdb/cockroach/artifacts
+----
+
+docker run --rm -it -v go/src/github.com/cockroachdb/cockroach:/cockroach --workdir=/cockroach -v go/src/github.com/cockroachdb/cockroach/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 1001:1002 mock_bazel_image:1234 echo hi
+----
