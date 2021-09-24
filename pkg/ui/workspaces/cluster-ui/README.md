@@ -220,8 +220,7 @@ directory of CockroachDB.
 
 ```shell
 $ make ui-maintainer-clean
-$ make pkg/ui/yarn.protobuf.installed -B
-$ make pkg/ui/yarn.cluster-ui.installed -B
+$ make ui-generate -B
 ```
 
 ### 4. Publish
