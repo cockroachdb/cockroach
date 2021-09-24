@@ -254,7 +254,7 @@ func timeZoneVarGetStringVal(
 		return "", newVarValueError("timezone", values[0].String())
 	}
 	if loc == nil {
-		loc = timeutil.FixedOffsetTimeZoneToLocation(int(offset), d.String())
+		loc = timeutil.TimeZoneOffsetToLocation(int(offset))
 	}
 
 	return loc.String(), nil
