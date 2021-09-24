@@ -281,6 +281,11 @@ const (
 	// MarkerDataKeysRegistry switches to using an atomic marker file
 	// for denoting which data keys registry is active.
 	MarkerDataKeysRegistry
+	// PebbleSetWithDelete switches to a backwards incompatible Pebble version
+	// that provides SingleDelete semantics that are cleaner and robust to
+	// programming error. See https://github.com/cockroachdb/pebble/issues/1255
+	// and #69891.
+	PebbleSetWithDelete
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -470,6 +475,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     MarkerDataKeysRegistry,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1164},
+	},
+	{
+		Key:     PebbleSetWithDelete,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1166},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
