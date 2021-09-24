@@ -12,6 +12,7 @@ package timeutil
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -94,8 +95,9 @@ func TimeZoneStringToLocation(
 //
 // The strings produced by FixedOffsetTimeZoneToLocation look like
 // "<fixedOffsetPrefix><offset> (<origRepr>)".
-// TODO(#42404): this is not the format given by the results in
-// pgwire/testdata/connection_params.
+// The old <origRepr> is simply a number.
+// The new <origRepr> is formatted <-%s>+%s or <+%s>+%s.
+// We have to be able to format both versions.
 func ParseFixedOffsetTimeZone(location string) (offset int, origRepr string, success bool) {
 	if !strings.HasPrefix(location, fixedOffsetPrefix) {
 		return 0, "", false
@@ -115,6 +117,26 @@ func ParseFixedOffsetTimeZone(location string) (offset int, origRepr string, suc
 	if !strings.HasPrefix(origRepr, "(") || !strings.HasSuffix(origRepr, ")") {
 		return 0, "", false
 	}
+
+	origRepr = strings.TrimSuffix(strings.TrimPrefix(origRepr, "("), ")")
+
+	if !strings.HasPrefix(origRepr, "<") {
+		// Try parsing as a Float first.
+		f, err := strconv.ParseFloat(origRepr, 64)
+		if err != nil {
+			// If we can't parse as a Float, handle normally.
+			return offset, strings.TrimSuffix(strings.TrimPrefix(origRepr, "("), ")"), true
+		} else {
+			origRepr = floatToHoursMinutesSeconds(math.Abs(f))
+			if offset <= 0 {
+				origRepr = fmt.Sprintf("<-%s>+%s", origRepr, origRepr)
+			} else {
+				origRepr = fmt.Sprintf("<+%s>-%s", origRepr, origRepr)
+			}
+		}
+		return offset, origRepr, true
+	}
+
 	return offset, strings.TrimSuffix(strings.TrimPrefix(origRepr, "("), ")"), true
 }
 
@@ -166,4 +188,30 @@ func timeZoneOffsetStringConversion(
 		return 0, false
 	}
 	return offset, true
+}
+
+// floatToHoursMinutesSeconds converts a float to a HH:MM:SS.
+// The minutes and seconds sections are only included in the precision is
+// necessary.
+// For example:
+//    11.00 -> 11
+//    11.5 -> 11:30
+//    11.51 -> 11:30:36
+func floatToHoursMinutesSeconds(f float64) string {
+	hours := int(f)
+	remaining := f - float64(hours)
+
+	secondsPerHour := float64(60 * 60)
+	totalSeconds := remaining * secondsPerHour
+	minutes := int(totalSeconds / 60)
+	seconds := totalSeconds - float64(minutes*60)
+
+	if seconds == 0 && minutes == 0 {
+		return fmt.Sprintf("%02d", hours)
+	} else if seconds == 0 {
+		return fmt.Sprintf("%d:%d", hours, minutes)
+	} else {
+		// PG doesn't round, truncate precision.
+		return fmt.Sprintf("%d:%d:%2.0f", hours, minutes, seconds)
+	}
 }
