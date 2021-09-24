@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/elastic/gosigar"
 )
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -219,6 +221,8 @@ func StartTenant(
 		})
 		f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
 		mux.Handle(statusVars, http.HandlerFunc(f))
+		ff := loadVarsHandler(ctx, args.runtime)
+		mux.Handle(loadStatusVars, http.HandlerFunc(ff))
 
 		tlsConnManager := netutil.MakeServer(
 			args.stopper,
@@ -299,6 +303,39 @@ func StartTenant(
 	}
 
 	return s, pgLAddr, httpLAddr, nil
+}
+
+// Construct a handler responsible for serving the instant values of selected
+// load metrics. These include user and system CPU time currently.
+func loadVarsHandler(
+	ctx context.Context, rsr *status.RuntimeStatSampler,
+) func(http.ResponseWriter, *http.Request) {
+	cpuTime := gosigar.ProcTime{}
+	cpuUserNS := metric.NewGauge(rsr.CPUUserNS.GetMetadata())
+	cpuSysNS := metric.NewGauge(rsr.CPUSysNS.GetMetadata())
+	registry := metric.NewRegistry()
+	registry.AddMetric(cpuUserNS)
+	registry.AddMetric(cpuSysNS)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := cpuTime.Get(os.Getpid()); err != nil {
+			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		utime := int64(cpuTime.User) * 1e6
+		stime := int64(cpuTime.Sys) * 1e6
+		cpuUserNS.Update(utime)
+		cpuSysNS.Update(stime)
+
+		exporter := metric.MakePrometheusExporter()
+		exporter.ScrapeRegistry(registry, true)
+		if err := exporter.PrintAsText(w); err != nil {
+			log.Errorf(r.Context(), "%v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 }
 
 func makeTenantSQLServerArgs(
