@@ -2182,7 +2182,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						isRetSet := false
 						if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 							var retOid oid.Oid
-							if fixedRetType.Family() == types.TupleFamily && builtin.Generator != nil {
+							if fixedRetType.Family() == types.TupleFamily && builtin.IsGenerator() {
 								isRetSet = true
 								// Functions returning tables with zero, or more than one
 								// columns are marked to return "anyelement"
