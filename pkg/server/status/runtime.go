@@ -416,6 +416,20 @@ func GetCGoMemStats(ctx context.Context) *CGoMemStats {
 	}
 }
 
+// SampleCPU gets the current user and system times and updates the two associated gauges.
+func (rsr *RuntimeStatSampler) SampleCPU(ctx context.Context) {
+	cpuTime := gosigar.ProcTime{}
+	if err := cpuTime.Get(os.Getpid()); err != nil {
+		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
+		return
+	}
+	// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
+	utime := int64(cpuTime.User) * 1e6
+	stime := int64(cpuTime.Sys) * 1e6
+	rsr.CPUUserNS.Update(utime)
+	rsr.CPUSysNS.Update(stime)
+}
+
 // SampleEnvironment queries the runtime system for various interesting metrics,
 // storing the resulting values in the set of metric gauges maintained by
 // RuntimeStatSampler. This makes runtime statistics more convenient for
@@ -445,10 +459,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	if err := mem.Get(pid); err != nil {
 		log.Ops.Errorf(ctx, "unable to get mem usage: %v", err)
 	}
-	cpuTime := gosigar.ProcTime{}
-	if err := cpuTime.Get(pid); err != nil {
-		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
-	}
+	rsr.SampleCPU(ctx)
 	cgroupCPU, _ := cgroups.GetCgroupCPU()
 	cpuShare := cgroupCPU.CPUShares()
 
@@ -506,9 +517,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	// if calculated later using downsampled time series data.
 	now := rsr.clock.PhysicalNow()
 	dur := float64(now - rsr.last.now)
-	// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
-	utime := int64(cpuTime.User) * 1e6
-	stime := int64(cpuTime.Sys) * 1e6
+	utime := rsr.CPUUserNS.Value()
+	stime := rsr.CPUSysNS.Value()
 	urate := float64(utime-rsr.last.utime) / dur
 	srate := float64(stime-rsr.last.stime) / dur
 	combinedNormalizedPerc := (srate + urate) / cpuShare
@@ -565,9 +575,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	rsr.GcCount.Update(gc.NumGC)
 	rsr.GcPauseNS.Update(int64(gc.PauseTotal))
 	rsr.GcPausePercent.Update(gcPauseRatio)
-	rsr.CPUUserNS.Update(utime)
 	rsr.CPUUserPercent.Update(urate)
-	rsr.CPUSysNS.Update(stime)
 	rsr.CPUSysPercent.Update(srate)
 	rsr.CPUCombinedPercentNorm.Update(combinedNormalizedPerc)
 	rsr.FDOpen.Update(int64(fds.Open))
