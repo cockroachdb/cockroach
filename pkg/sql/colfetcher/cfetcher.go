@@ -567,7 +567,7 @@ func (rf *cFetcher) Init(
 	if table.index.GetType() == descpb.IndexDescriptor_INVERTED {
 		id := table.index.InvertedColumnID()
 		colIdx, ok := tableArgs.ColIdxMap.Get(id)
-		if ok && neededCols.Contains(int(id)) {
+		if (ok && neededCols.Contains(int(id))) || rf.traceKV {
 			table.invertedColOrdinal = colIdx
 		} else if neededCols.Contains(int(id)) {
 			return errors.AssertionFailedf("needed column %d not in colIdxMap", id)
@@ -580,7 +580,7 @@ func (rf *cFetcher) Init(
 		for i := 0; i < table.index.NumKeySuffixColumns(); i++ {
 			id := table.index.GetKeySuffixColumnID(i)
 			colIdx, ok := tableArgs.ColIdxMap.Get(id)
-			if ok && neededCols.Contains(int(id)) {
+			if (ok && neededCols.Contains(int(id))) || rf.traceKV {
 				if compositeColumnIDs.Contains(int(id)) {
 					table.compositeIndexColOrdinals.Add(colIdx)
 				} else {
