@@ -1153,7 +1153,7 @@ SET TIME ZONE -5
 query T
 SHOW TIME ZONE
 ----
--5
+<-05>+05
 
 statement ok
 SET TIME ZONE INTERVAL '+04:00' HOUR TO MINUTE
@@ -1194,7 +1194,7 @@ SET TIME ZONE 0
 query T
 SHOW TIME ZONE
 ----
-0
+<-00>+00
 
 query T
 SELECT DATE '1999-01-01' + INTERVAL '4 minutes'

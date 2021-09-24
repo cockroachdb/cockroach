@@ -1,0 +1,246 @@
+statement ok
+SET TIME ZONE 0
+
+query T
+SHOW TIME ZONE
+----
+<-00>+00
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 +0000 UTC
+
+statement ok
+SET TIME ZONE 10
+
+query T
+SHOW TIME ZONE
+----
+<+10>-10
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 +1000 +1000
+
+statement ok
+SET TIME ZONE -10
+
+query T
+SHOW TIME ZONE
+----
+<-10>+10
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 -1000 -1000
+
+statement ok
+SET TIME ZONE '10'
+
+query T
+SHOW TIME ZONE
+----
+<+10>-10
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 +1000 +1000
+
+statement ok
+SET TIME ZONE '+10'
+
+query T
+SHOW TIME ZONE
+----
+<+10>-10
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 +1000 +1000
+
+statement ok
+SET TIME ZONE '-10'
+
+query T
+SHOW TIME ZONE
+----
+<-10>+10
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 -1000 -1000
+
+statement ok
+SET TIME ZONE '+10.5'
+
+query T
+SHOW TIME ZONE
+----
+<+10:30>-10:30
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 +1030 +1030
+
+statement ok
+SET TIME ZONE '-10.5'
+
+query T
+SHOW TIME ZONE
+----
+<-10:30>+10:30
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 -1030 -1030
+
+statement ok
+SET TIME ZONE '+10.555'
+
+query T
+SHOW TIME ZONE
+----
+<+10:33:18>-10:33:18
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 +1033 +1033
+
+statement ok
+SET TIME ZONE '-10.555'
+
+query T
+SHOW TIME ZONE
+----
+<-10:33:18>+10:33:18
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 -1033 -1033
+
+statement ok
+SET TIME ZONE '     +10'
+
+query T
+SHOW TIME ZONE
+----
+<+10>-10
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 +1000 +1000
+
+statement ok
+SET TIME ZONE '     -10'
+
+query T
+SHOW TIME ZONE
+----
+<-10>+10
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 -1000 -1000
+
+statement ok
+SET TIME ZONE 'GMT+3'
+
+query T
+SHOW TIME ZONE
+----
+GMT+3
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 -0300 -0300
+
+statement ok
+SET TIME ZONE 'GMT-3'
+
+query T
+SHOW TIME ZONE
+----
+GMT-3
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 +0300 +0300
+
+statement ok
+SET TIME ZONE 'UTC+3'
+
+query T
+SHOW TIME ZONE
+----
+UTC+3
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 -0300 -0300
+
+statement ok
+SET TIME ZONE 'UTC-3'
+
+query T
+SHOW TIME ZONE
+----
+UTC-3
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 +0300 +0300
+
+statement ok
+SET TIME ZONE 'America/New_York'
+
+query T
+SHOW TIME ZONE
+----
+America/New_York
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 -0400 -0400
+
+statement ok
+SET TIME ZONE 'PST8PDT'
+
+query T
+SHOW TIME ZONE
+----
+PST8PDT
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 -0700 -0700
+
+statement ok
+SET TIME ZONE 'zulu'
+
+query T
+SHOW TIME ZONE
+----
+Zulu
+
+query T
+SELECT TIME '05:40:00'::TIMETZ
+----
+0000-01-01 05:40:00 +0000 UTC
