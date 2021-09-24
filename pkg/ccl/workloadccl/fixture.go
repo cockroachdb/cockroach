@@ -370,6 +370,18 @@ func ImportFixture(
 	injectStats bool,
 	csvServer string,
 ) (int64, error) {
+	var hooks workload.Hooks
+	if h, ok := gen.(workload.Hookser); ok {
+		hooks = h.Hooks()
+	}
+	// Added for multi-region TPC-C. Used to convert the database to a multi-
+	// region database and add all of the relevant regions.
+	if hooks.PreCreate != nil {
+		if err := hooks.PreCreate(sqlDB); err != nil {
+			return 0, errors.Wrapf(err, "Could not pre-create")
+		}
+	}
+
 	for _, t := range gen.Tables() {
 		if t.InitialRows.FillBatch == nil {
 			return 0, errors.Errorf(
@@ -401,6 +413,19 @@ func ImportFixture(
 		pathPrefix = `workload://`
 	}
 
+	// Pre-create tables. It's required that we pre-create the tables before we
+	// parallelize the IMPORT because for multi-region setups, the create table
+	// will end up modifying the crdb_internal_region type (to install back
+	// references). If create table is done in parallel with IMPORT, some IMPORT
+	// jobs may fail because the type is being modified concurrently with the
+	// IMPORT. Removing the need to pre-create is being tracked with #70987.
+	for _, table := range tables {
+		err := createFixtureTable(sqlDB, dbName, table)
+		if err != nil {
+			return 0, errors.Wrapf(err, `creating table %s`, table.Name)
+		}
+	}
+
 	for _, t := range tables {
 		table := t
 		paths := csvServerPaths(pathPrefix, gen, table, numNodes*filesPerNode)
@@ -414,7 +439,25 @@ func ImportFixture(
 	if err := g.Wait(); err != nil {
 		return 0, err
 	}
+
+	// For TPC-C, sets up FKs and modifies multi-region tables to their desired
+	// final state.
+	if hooks.PostLoad != nil {
+		if err := hooks.PostLoad(sqlDB); err != nil {
+			return 0, errors.Wrapf(err, "Could not complete post-load")
+		}
+	}
 	return atomic.LoadInt64(&bytesAtomic), nil
+}
+
+func createFixtureTable(sqlDB *gosql.DB, dbName string, table workload.Table) error {
+	qualifiedTableName := makeQualifiedTableName(dbName, &table)
+	createTable := fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS %s %s`,
+		qualifiedTableName,
+		table.Schema)
+	_, err := sqlDB.Exec(createTable)
+	return err
 }
 
 func importFixtureTable(
@@ -429,8 +472,10 @@ func importFixtureTable(
 	start := timeutil.Now()
 	var buf bytes.Buffer
 	var params []interface{}
+
 	qualifiedTableName := makeQualifiedTableName(dbName, &table)
-	fmt.Fprintf(&buf, `IMPORT TABLE %s %s CSV DATA (`, qualifiedTableName, table.Schema)
+
+	fmt.Fprintf(&buf, `IMPORT INTO %s CSV DATA (`, qualifiedTableName)
 	// Generate $1,...,$N-1, where N is the number of csv paths.
 	for _, path := range paths {
 		params = append(params, path)
