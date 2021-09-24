@@ -457,7 +457,7 @@ func resolveCast(
 
 	default:
 		// TODO(mgartner): Use OID cast map.
-		cast := lookupCast(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled)
+		cast := lookupCastInfo(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled)
 		if cast == nil {
 			return pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, castTo)
 		}
@@ -1551,6 +1551,18 @@ func (expr *ArrayFlatten) TypeCheck(
 func (expr *Placeholder) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
+	// We don't infer the width and precision of a placeholder. So we make a
+	// copy of the desired type and set the width and precision to zero. Also
+	// set TimePrecisionIsSet to true for time and interval types.
+	desiredLocal := *desired
+	desiredLocal.InternalType.Width = 0
+	desiredLocal.InternalType.Precision = 0
+	switch desiredLocal.Family() {
+	case types.TimestampFamily, types.TimestampTZFamily, types.TimeFamily,
+		types.TimeTZFamily, types.IntervalFamily:
+		desiredLocal.InternalType.TimePrecisionIsSet = true
+	}
+
 	// Perform placeholder typing. This function is only called during Prepare,
 	// when there are no available values for the placeholders yet, because
 	// during Execute all placeholders are replaced from the AST before type
@@ -1558,7 +1570,7 @@ func (expr *Placeholder) TypeCheck(
 	if typ, ok, err := semaCtx.Placeholders.Type(expr.Idx); err != nil {
 		return expr, err
 	} else if ok {
-		if !desired.Equivalent(typ) {
+		if !desiredLocal.Equivalent(typ) {
 			// This indicates there's a conflict between what the type system thinks
 			// the type for this position should be, and the actual type of the
 			// placeholder. This actual placeholder type could be either a type hint
@@ -1568,7 +1580,7 @@ func (expr *Placeholder) TypeCheck(
 			// the type system expects. Then, when the value is actually sent to us
 			// later, we cast the input value (whose type is the expected type) to the
 			// desired type here.
-			typ = desired
+			typ = &desiredLocal
 		}
 		// We call SetType regardless of the above condition to inform the
 		// placeholder struct that this placeholder is locked to its type and cannot
@@ -1579,13 +1591,13 @@ func (expr *Placeholder) TypeCheck(
 		expr.typ = typ
 		return expr, nil
 	}
-	if desired.IsAmbiguous() {
+	if desiredLocal.IsAmbiguous() {
 		return nil, placeholderTypeAmbiguityError(expr.Idx)
 	}
-	if err := semaCtx.Placeholders.SetType(expr.Idx, desired); err != nil {
+	if err := semaCtx.Placeholders.SetType(expr.Idx, &desiredLocal); err != nil {
 		return nil, err
 	}
-	expr.typ = desired
+	expr.typ = &desiredLocal
 	return expr, nil
 }
 

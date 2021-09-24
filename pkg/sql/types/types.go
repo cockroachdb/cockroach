@@ -1334,6 +1334,10 @@ func (t *T) Name() string {
 			return "float"
 		case 32:
 			return "float4"
+		case 0:
+			// A float type with width zero is only possible as an inferred type
+			// of a placeholder.
+			return "float"
 		default:
 			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
 		}
@@ -1346,6 +1350,10 @@ func (t *T) Name() string {
 			return "int4"
 		case 16:
 			return "int2"
+		case 0:
+			// An integer type with width zero is only possible as an inferred
+			// type of a placeholder.
+			return "int"
 		default:
 			panic(errors.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
 		}
@@ -1651,6 +1659,10 @@ func (t *T) SQLString() string {
 		return typName
 	case IntFamily:
 		switch t.Width() {
+		case 0:
+			// An integer type with width zero is only possible as an inferred
+			// type of a placeholder.
+			return strings.ToUpper(t.Name())
 		case 16:
 			return "INT2"
 		case 32:
@@ -1665,12 +1677,16 @@ func (t *T) SQLString() string {
 	case CollatedStringFamily:
 		return t.collatedStringTypeSQL(false /* isArray */)
 	case FloatFamily:
-		const realName = "FLOAT4"
-		const doubleName = "FLOAT8"
-		if t.Width() == 32 {
-			return realName
+		switch t.Width() {
+		case 0:
+			// A float type with width zero is only possible as an inferred type
+			// of a placeholder.
+			return strings.ToUpper(t.Name())
+		case 32:
+			return "FLOAT4"
+		case 64:
+			return "FLOAT8"
 		}
-		return doubleName
 	case DecimalFamily:
 		if t.Precision() > 0 {
 			if t.Width() > 0 {

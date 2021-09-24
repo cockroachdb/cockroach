@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,23 +38,24 @@ func init() {
 	// the functions depend on scalarBuildFuncMap which in turn depends on the
 	// functions).
 	scalarBuildFuncMap = [opt.NumOperators]buildFunc{
-		opt.VariableOp:     (*Builder).buildVariable,
-		opt.ConstOp:        (*Builder).buildTypedExpr,
-		opt.NullOp:         (*Builder).buildNull,
-		opt.PlaceholderOp:  (*Builder).buildTypedExpr,
-		opt.TupleOp:        (*Builder).buildTuple,
-		opt.FunctionOp:     (*Builder).buildFunction,
-		opt.CaseOp:         (*Builder).buildCase,
-		opt.CastOp:         (*Builder).buildCast,
-		opt.CoalesceOp:     (*Builder).buildCoalesce,
-		opt.ColumnAccessOp: (*Builder).buildColumnAccess,
-		opt.ArrayOp:        (*Builder).buildArray,
-		opt.AnyOp:          (*Builder).buildAny,
-		opt.AnyScalarOp:    (*Builder).buildAnyScalar,
-		opt.IndirectionOp:  (*Builder).buildIndirection,
-		opt.CollateOp:      (*Builder).buildCollate,
-		opt.ArrayFlattenOp: (*Builder).buildArrayFlatten,
-		opt.IfErrOp:        (*Builder).buildIfErr,
+		opt.VariableOp:       (*Builder).buildVariable,
+		opt.ConstOp:          (*Builder).buildTypedExpr,
+		opt.NullOp:           (*Builder).buildNull,
+		opt.PlaceholderOp:    (*Builder).buildTypedExpr,
+		opt.TupleOp:          (*Builder).buildTuple,
+		opt.FunctionOp:       (*Builder).buildFunction,
+		opt.CaseOp:           (*Builder).buildCase,
+		opt.CastOp:           (*Builder).buildCast,
+		opt.AssignmentCastOp: (*Builder).buildAssignmentCast,
+		opt.CoalesceOp:       (*Builder).buildCoalesce,
+		opt.ColumnAccessOp:   (*Builder).buildColumnAccess,
+		opt.ArrayOp:          (*Builder).buildArray,
+		opt.AnyOp:            (*Builder).buildAny,
+		opt.AnyScalarOp:      (*Builder).buildAnyScalar,
+		opt.IndirectionOp:    (*Builder).buildIndirection,
+		opt.CollateOp:        (*Builder).buildCollate,
+		opt.ArrayFlattenOp:   (*Builder).buildArrayFlatten,
+		opt.IfErrOp:          (*Builder).buildIfErr,
 
 		// Item operators.
 		opt.ProjectionsItemOp:  (*Builder).buildItem,
@@ -343,6 +345,38 @@ func (b *Builder) buildCast(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Ty
 		return input, nil
 	}
 	return tree.NewTypedCastExpr(input, cast.Typ), nil
+}
+
+// buildAssignmentCast builds an AssignmentCastExpr with input i and type T into
+// a built-in function call crdb_internal.assignment_cast(i, NULL::T).
+func (b *Builder) buildAssignmentCast(
+	ctx *buildScalarCtx, scalar opt.ScalarExpr,
+) (tree.TypedExpr, error) {
+	cast := scalar.(*memo.AssignmentCastExpr)
+	input, err := b.buildScalar(ctx, cast.Input)
+	if err != nil {
+		return nil, err
+	}
+	if cast.Typ.Family() == types.TupleFamily {
+		// TODO(radu): casts to Tuple are not supported (they can't be
+		// serialized for distsql). This should only happen when the input is
+		// always NULL so the expression should still be valid without the cast
+		// (though there could be cornercases where the type does matter).
+		return input, nil
+	}
+	const fnName = "crdb_internal.assignment_cast"
+	funcRef := tree.WrapFunction(fnName)
+	props, overloads := builtins.GetBuiltinProperties(fnName)
+	return tree.NewTypedFuncExpr(
+		funcRef,
+		0, /* aggQualifier */
+		tree.TypedExprs{input, tree.NewTypedCastExpr(tree.DNull, cast.Typ)},
+		nil, /* filter */
+		nil, /* windowDef */
+		cast.Typ,
+		props,
+		&overloads[0],
+	), nil
 }
 
 func (b *Builder) buildCoalesce(
