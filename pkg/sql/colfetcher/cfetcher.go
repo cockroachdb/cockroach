@@ -236,6 +236,7 @@ const noOutputColumn = -1
 //      }
 //      // Process res.colBatch
 //   }
+//   rf.Close(ctx)
 type cFetcher struct {
 	// table is the table that's configured for fetching.
 	table *cTableInfo
@@ -681,8 +682,6 @@ func (rf *cFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	// Note that we pass a nil memMonitor here, because the cfetcher does its own
-	// memory accounting.
 	f, err := row.NewKVFetcher(
 		ctx,
 		txn,
@@ -694,7 +693,7 @@ func (rf *cFetcher) StartScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.lockTimeout,
-		nil, /* memMonitor */
+		rf.accountingHelper.Allocator.GetMonitor(),
 		forceProductionKVBatchSize,
 	)
 	if err != nil {
@@ -1626,4 +1625,10 @@ func initCFetcher(
 	}
 
 	return fetcher, nil
+}
+
+func (rf *cFetcher) Close(ctx context.Context) {
+	if rf != nil && rf.fetcher != nil {
+		rf.fetcher.Close(ctx)
+	}
 }

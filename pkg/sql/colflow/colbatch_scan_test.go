@@ -90,7 +90,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.TestCleanup()
+	defer res.TestCleanupNoError(t)
 	tr := res.Root
 	tr.Init(ctx)
 	meta := tr.(*colexecutils.CancelChecker).Input.(colexecop.DrainableOperator).DrainMeta()
@@ -169,7 +169,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 					}
 				}
 				b.StopTimer()
-				res.TestCleanup()
+				res.TestCleanupNoError(b)
 			}
 		})
 	}

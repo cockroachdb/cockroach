@@ -105,7 +105,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	}
 	r1, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
-	defer r1.TestCleanup()
+	defer r1.TestCleanupNoError(t)
 
 	args = &colexecargs.NewColOperatorArgs{
 		Spec: &execinfrapb.ProcessorSpec{
@@ -119,7 +119,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	}
 	r, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
-	defer r.TestCleanup()
+	defer r.TestCleanupNoError(t)
 
 	m := colexec.NewMaterializer(
 		flowCtx,
