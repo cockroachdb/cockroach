@@ -1305,6 +1305,71 @@ func (f Family) Name() string {
 	return ret
 }
 
+// CanonicalType returns the canonical type of the given type's family. If the
+// family does not have a canonical type, the original type is returned.
+func (t *T) CanonicalType() *T {
+	switch t.Family() {
+	case BoolFamily:
+		return Bool
+	case IntFamily:
+		return Int
+	case FloatFamily:
+		return Float
+	case DecimalFamily:
+		return Decimal
+	case DateFamily:
+		return Date
+	case TimestampFamily:
+		return Timestamp
+	case IntervalFamily:
+		return Interval
+	case StringFamily:
+		return String
+	case BytesFamily:
+		return Bytes
+	case TimestampTZFamily:
+		return TimestampTZ
+	case CollatedStringFamily:
+		// CollatedStringFamily has no canonical type.
+		return t
+	case OidFamily:
+		return Oid
+	case UnknownFamily:
+		return Unknown
+	case UuidFamily:
+		return Uuid
+	case ArrayFamily:
+		// ArrayFamily has no canonical type.
+		return t
+	case INetFamily:
+		return INet
+	case TimeFamily:
+		return Time
+	case JsonFamily:
+		return Jsonb
+	case TimeTZFamily:
+		return TimeTZ
+	case TupleFamily:
+		// TupleFamily has no canonical type.
+		return t
+	case BitFamily:
+		return VarBit
+	case GeometryFamily:
+		return Geometry
+	case GeographyFamily:
+		return Geography
+	case EnumFamily:
+		// EnumFamily has no canonical type.
+		return t
+	case Box2DFamily:
+		return Box2D
+	case AnyFamily:
+		return Any
+	default:
+		panic(errors.AssertionFailedf("unexpected type family: %v", errors.Safe(t.Family())))
+	}
+}
+
 // Name returns a single word description of the type that describes it
 // succinctly, but without all the details, such as width, locale, etc. The name
 // is sometimes the same as the name returned by SQLStandardName, but is more
