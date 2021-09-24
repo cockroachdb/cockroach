@@ -4189,6 +4189,10 @@ func (expr *FuncExpr) MaybeWrapError(err error) error {
 
 // Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
+	if expr.fn.FnWithExprs != nil {
+		return expr.fn.FnWithExprs(ctx, expr.Exprs)
+	}
+
 	nullResult, args, err := expr.evalArgs(ctx)
 	if err != nil {
 		return nil, err

@@ -60,17 +60,25 @@ func init() {
 			if overload.Fn != nil {
 				fnCount++
 			}
+			if overload.FnWithExprs != nil {
+				fnCount++
+			}
 			if overload.Generator != nil {
 				overload.Fn = unsuitableUseOfGeneratorFn
+				overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
 				fnCount++
 			}
 			if overload.GeneratorWithExprs != nil {
 				overload.Fn = unsuitableUseOfGeneratorFn
+				overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
 				fnCount++
 			}
 			if fnCount > 1 {
-				panic(fmt.Sprintf("builtin %s: at most 1 of Fn, Generator, and GeneratorWithExprs must be set on overloads; (found %d)",
-					name, fnCount))
+				panic(fmt.Sprintf(
+					"builtin %s: at most 1 of Fn, FnWithExprs, Generator, and GeneratorWithExprs"+
+						"must be set on overloads; (found %d)",
+					name, fnCount,
+				))
 			}
 		}
 	}
