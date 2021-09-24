@@ -11,6 +11,9 @@
 package tabledesc
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -522,4 +525,9 @@ func lazyAllocAppendIndex(slice *[]catalog.Index, idx catalog.Index, cap int) {
 		*slice = make([]catalog.Index, 0, cap)
 	}
 	*slice = append(*slice, idx)
+}
+
+// ForeignKeyConstraintName forms a default foreign key constraint name.
+func ForeignKeyConstraintName(fromTable string, columnNames []string) string {
+	return fmt.Sprintf("%s_%s_fkey", fromTable, strings.Join(columnNames, "_"))
 }
