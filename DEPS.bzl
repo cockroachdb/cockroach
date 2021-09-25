@@ -1856,8 +1856,8 @@ def go_deps():
         name = "com_github_goware_modvendor",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/goware/modvendor",
-        sum = "h1:pQoHt7SOUiWSwN/W5FzibTQLx/1Xa3VMBRcZGtdb1wo=",
-        version = "v0.3.0",
+        sum = "h1:3XXkmWdTccMzBswM5FTTXvWEtCV7DP7VRkIACRCGaqU=",
+        version = "v0.5.0",
     )
     go_repository(
         name = "com_github_gregjones_httpcache",
@@ -2831,8 +2831,8 @@ def go_deps():
         name = "com_github_mattn_go_zglob",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mattn/go-zglob",
-        sum = "h1:6HgbBMgs3hI9y1/MYG0r9j6daUubUskZNsEW4fkWR/k=",
-        version = "v0.0.2-0.20191112051448-a8912a37f9e7",
+        sum = "h1:6Ry4EYsScDyt5di4OI6xw1bYhOqfE5S33Z1OPy+d+To=",
+        version = "v0.0.3",
     )
     go_repository(
         name = "com_github_mattn_goveralls",
