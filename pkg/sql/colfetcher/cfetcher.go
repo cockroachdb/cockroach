@@ -328,6 +328,10 @@ type cFetcher struct {
 		tableoidCol coldata.DatumVec
 	}
 
+	// scratch is a scratch space used when decoding bytes-like and decimal
+	// keys.
+	scratch []byte
+
 	typs             []*types.T
 	accountingHelper colmem.SetAccountingHelper
 	memoryLimit      int64
@@ -511,12 +515,14 @@ func (rf *cFetcher) Init(
 	}
 	indexColOrdinals := table.indexColOrdinals
 	_ = indexColOrdinals[len(indexColumnIDs)-1]
+	needToDecodeDecimalKey := false
 	for i, id := range indexColumnIDs {
 		colIdx, ok := tableArgs.ColIdxMap.Get(id)
 		if (ok && neededCols.Contains(int(id))) || rf.traceKV {
 			//gcassert:bce
 			indexColOrdinals[i] = colIdx
 			rf.mustDecodeIndexKey = true
+			needToDecodeDecimalKey = needToDecodeDecimalKey || typs[colIdx].Family() == types.DecimalFamily
 			// A composite column might also have a value encoding which must be
 			// decoded. Others can be removed from neededValueColsByIdx.
 			if compositeColumnIDs.Contains(int(id)) {
@@ -531,6 +537,13 @@ func (rf *cFetcher) Init(
 				return errors.AssertionFailedf("needed column %d not in colIdxMap", id)
 			}
 		}
+	}
+	if needToDecodeDecimalKey && cap(rf.scratch) < 64 {
+		// If we need to decode the decimal key encoding, it might use a scratch
+		// byte slice internally, so we'll allocate such a space to be reused
+		// for every decimal.
+		// TODO(yuzefovich): 64 was chosen arbitrarily, tune it.
+		rf.scratch = make([]byte, 64)
 	}
 	table.invertedColOrdinal = -1
 	if table.index.GetType() == descpb.IndexDescriptor_INVERTED {
@@ -893,7 +906,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				// to determine whether a KV belongs to the same row as the
 				// previous KV or a different row.
 				checkAllColsForNull := rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1
-				key, matches, foundNull, err = colencoding.DecodeIndexKeyToCols(
+				key, matches, foundNull, rf.scratch, err = colencoding.DecodeIndexKeyToCols(
 					&rf.table.da,
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
@@ -905,6 +918,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 					rf.table.indexColumnDirs,
 					rf.machine.nextKV.Key[rf.table.knownPrefixLength:],
 					rf.table.invertedColOrdinal,
+					rf.scratch,
 				)
 				if err != nil {
 					return nil, err
@@ -1262,7 +1276,7 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if table.isSecondaryIndex && table.index.IsUnique() {
 				// This is a unique secondary index; decode the extra
 				// column values from the value.
-				valueBytes, _, err = colencoding.DecodeKeyValsToCols(
+				valueBytes, _, rf.scratch, err = colencoding.DecodeKeyValsToCols(
 					&table.da,
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
@@ -1273,6 +1287,7 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 					&rf.machine.remainingValueColsByIdx,
 					valueBytes,
 					rf.table.invertedColOrdinal,
+					rf.scratch,
 				)
 				if err != nil {
 					return scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
@@ -1578,7 +1593,8 @@ func (rf *cFetcher) Release() {
 	*rf = cFetcher{
 		// The types are small objects, so we don't bother deeply resetting this
 		// slice.
-		typs: rf.typs[:0],
+		typs:    rf.typs[:0],
+		scratch: rf.scratch[:0],
 	}
 	cFetcherPool.Put(rf)
 }
