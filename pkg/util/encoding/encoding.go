@@ -594,25 +594,38 @@ func EncodeBytesDescending(b []byte, data []byte) []byte {
 // are appended to r. The remainder of the input buffer and the
 // decoded []byte are returned.
 func DecodeBytesAscending(b []byte, r []byte) ([]byte, []byte, error) {
-	return decodeBytesInternal(b, r, ascendingBytesEscapes, true /* expectMarker */)
+	return decodeBytesInternal(b, r, ascendingBytesEscapes, true /* expectMarker */, false /* deepCopy */)
+}
+
+// DecodeBytesAscendingDeepCopy is the same as DecodeBytesAscending, but the
+// decoded []byte will never alias memory of b.
+func DecodeBytesAscendingDeepCopy(b []byte, r []byte) ([]byte, []byte, error) {
+	return decodeBytesInternal(b, r, ascendingBytesEscapes, true /* expectMarker */, true /* deepCopy */)
 }
 
 // DecodeBytesDescending decodes a []byte value from the input buffer
 // which was encoded using EncodeBytesDescending. The decoded bytes
 // are appended to r. The remainder of the input buffer and the
 // decoded []byte are returned.
+//
+// Note that this method internally will always perform a deep copy, so there is
+// no need to introduce DecodeBytesDescendingDeepCopy to mirror
+// DecodeBytesAscendingDeepCopy.
 func DecodeBytesDescending(b []byte, r []byte) ([]byte, []byte, error) {
-	// Always pass an `r` to make sure we never get back a sub-slice of `b`,
+	// Ask for the deep copy to make sure we never get back a sub-slice of `b`,
 	// since we're going to modify the contents of the slice.
-	if r == nil {
-		r = []byte{}
-	}
-	b, r, err := decodeBytesInternal(b, r, descendingBytesEscapes, true /* expectMarker */)
+	b, r, err := decodeBytesInternal(b, r, descendingBytesEscapes, true /* expectMarker */, true /* deepCopy */)
 	onesComplement(r)
 	return b, r, err
 }
 
-func decodeBytesInternal(b []byte, r []byte, e escapes, expectMarker bool) ([]byte, []byte, error) {
+// decodeBytesInternal decodes an encoded []byte value from b and appends it to
+// r. The remainder of b and the decoded []byte are returned. If deepCopy is
+// true, then the decoded []byte will be deep copied from b and there will no
+// aliasing of the same memory.
+func decodeBytesInternal(
+	b []byte, r []byte, e escapes, expectMarker bool, deepCopy bool,
+) ([]byte, []byte, error) {
 	if expectMarker {
 		if len(b) == 0 || b[0] != e.marker {
 			return nil, nil, errors.Errorf("did not find marker %#x in buffer %#x", e.marker, b)
@@ -630,7 +643,7 @@ func decodeBytesInternal(b []byte, r []byte, e escapes, expectMarker bool) ([]by
 		}
 		v := b[i+1]
 		if v == e.escapedTerm {
-			if r == nil {
+			if r == nil && !deepCopy {
 				r = b[:i]
 			} else {
 				r = append(r, b[:i]...)
@@ -809,6 +822,14 @@ func unsafeString(b []byte) string {
 // string may share storage with the input buffer.
 func DecodeUnsafeStringAscending(b []byte, r []byte) ([]byte, string, error) {
 	b, r, err := DecodeBytesAscending(b, r)
+	return b, unsafeString(r), err
+}
+
+// DecodeUnsafeStringAscendingDeepCopy is the same as
+// DecodeUnsafeStringAscending but the returned string will never share storage
+// with the input buffer.
+func DecodeUnsafeStringAscendingDeepCopy(b []byte, r []byte) ([]byte, string, error) {
+	b, r, err := DecodeBytesAscendingDeepCopy(b, r)
 	return b, unsafeString(r), err
 }
 
@@ -1214,7 +1235,7 @@ func DecodeGeoAscending(b []byte, so *geopb.SpatialObject) ([]byte, error) {
 	}
 
 	var pbBytes []byte
-	b, pbBytes, err = decodeBytesInternal(b, pbBytes, ascendingGeoEscapes, false /* expectMarker */)
+	b, pbBytes, err = decodeBytesInternal(b, pbBytes, ascendingGeoEscapes, false /* expectMarker */, false /* deepCopy */)
 	if err != nil {
 		return b, err
 	}
@@ -1239,7 +1260,7 @@ func DecodeGeoDescending(b []byte, so *geopb.SpatialObject) ([]byte, error) {
 	}
 
 	var pbBytes []byte
-	b, pbBytes, err = decodeBytesInternal(b, pbBytes, descendingGeoEscapes, false /* expectMarker */)
+	b, pbBytes, err = decodeBytesInternal(b, pbBytes, descendingGeoEscapes, false /* expectMarker */, false /* deepCopy */)
 	if err != nil {
 		return b, err
 	}
