@@ -280,6 +280,8 @@ func decodeTableKeyToCol(
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		var r []byte
 		if dir == descpb.IndexDescriptor_ASC {
+			// No need to perform the deep copy since Set() below will do that
+			// for us.
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
