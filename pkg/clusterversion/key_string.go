@@ -46,11 +46,12 @@ func _() {
 	_ = x[DateAndIntervalStyle-35]
 	_ = x[PebbleFormatVersioned-36]
 	_ = x[MarkerDataKeysRegistry-37]
+	_ = x[PebbleSetWithDelete-38]
 }
 
-const _Key_name = "replacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTableDatabaseRoleSettingsTenantUsageTableSQLInstancesTableNewRetryableRangefeedErrorsAlterSystemWebSessionsCreateIndexesSeparatedIntentsMigrationPostSeparatedIntentsMigrationRetryJobsWithExponentialBackoffRecordsBasedRegistryAutoSpanConfigReconciliationJobPreventNewInterleavedTablesEnsureNoInterleavedTablesDefaultPrivilegesZonesTableForSecondaryTenantsUseKeyEncodeForHashShardedIndexesDatabasePlacementPolicyGeneratedAsIdentityOnUpdateExpressionsSpanConfigurationsTableBoundedStalenessSQLStatsCompactionScheduledJobDateAndIntervalStylePebbleFormatVersionedMarkerDataKeysRegistry"
+const _Key_name = "replacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTableDatabaseRoleSettingsTenantUsageTableSQLInstancesTableNewRetryableRangefeedErrorsAlterSystemWebSessionsCreateIndexesSeparatedIntentsMigrationPostSeparatedIntentsMigrationRetryJobsWithExponentialBackoffRecordsBasedRegistryAutoSpanConfigReconciliationJobPreventNewInterleavedTablesEnsureNoInterleavedTablesDefaultPrivilegesZonesTableForSecondaryTenantsUseKeyEncodeForHashShardedIndexesDatabasePlacementPolicyGeneratedAsIdentityOnUpdateExpressionsSpanConfigurationsTableBoundedStalenessSQLStatsCompactionScheduledJobDateAndIntervalStylePebbleFormatVersionedMarkerDataKeysRegistryPebbleSetWithDelete"
 
-var _Key_index = [...]uint16{0, 46, 96, 134, 176, 181, 194, 203, 218, 247, 264, 281, 330, 344, 357, 377, 393, 410, 437, 472, 497, 526, 557, 577, 608, 635, 660, 677, 706, 739, 762, 781, 800, 823, 839, 869, 889, 910, 932}
+var _Key_index = [...]uint16{0, 46, 96, 134, 176, 181, 194, 203, 218, 247, 264, 281, 330, 344, 357, 377, 393, 410, 437, 472, 497, 526, 557, 577, 608, 635, 660, 677, 706, 739, 762, 781, 800, 823, 839, 869, 889, 910, 932, 951}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {

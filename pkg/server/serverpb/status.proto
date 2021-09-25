@@ -1124,6 +1124,9 @@ message JobStatusResponse {
 // Request object for issuing a SQL stats reset request.
 message ResetSQLStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  // reset_persisted_stats specifies if the persisted SQL Stats will be reset
+  // along with the in-memory SQL stats.
+  bool reset_persisted_stats = 2;
 }
 
 // Response object returned by ResetSQLStats.

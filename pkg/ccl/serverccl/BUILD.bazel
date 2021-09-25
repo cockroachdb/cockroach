@@ -2,9 +2,25 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "serverccl",
-    srcs = ["doc.go"],
+    srcs = [
+        "doc.go",
+        "tenant_test_utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/serverccl",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/server/serverpb",
+        "//pkg/sql/pgwire",
+        "//pkg/sql/sqlstats/persistedsqlstats",
+        "//pkg/sql/tests",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 go_test(
@@ -37,6 +53,7 @@ go_test(
         "//pkg/sql/sqlstats",
         "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
