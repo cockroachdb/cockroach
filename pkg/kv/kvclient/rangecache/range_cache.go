@@ -634,9 +634,7 @@ func (rc *RangeCache) tryLookup(
 		return returnToken, nil
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "lookup range descriptor: key=%s (reverse: %t)", key, useReverseScan)
-	}
+	log.VEventf(ctx, 2, "looking up range descriptor: key=%s (reverse: %t)", key, useReverseScan)
 
 	var prevDesc *roachpb.RangeDescriptor
 	if evictToken.Valid() {
@@ -761,9 +759,9 @@ func (rc *RangeCache) tryLookup(
 		s = res.Val.(EvictionToken).String()
 	}
 	if res.Shared {
-		log.Eventf(ctx, "looked up range descriptor with shared request: %s", s)
+		log.VEventf(ctx, 2, "looked up range descriptor with shared request: %s", s)
 	} else {
-		log.Eventf(ctx, "looked up range descriptor: %s", s)
+		log.VEventf(ctx, 2, "looked up range descriptor: %s", s)
 	}
 	if res.Err != nil {
 		return EvictionToken{}, res.Err
