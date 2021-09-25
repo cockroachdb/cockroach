@@ -208,7 +208,10 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 			Fields:    make([]otlog.Field, len(l.Fields)),
 		}
 		for i, f := range l.Fields {
-			lr.Fields[i] = otlog.String(f.Key, f.Value)
+			// TODO(obs-inf): the use of opentracing data structures here seems
+			// like detritus and prevents good redactability of the result.
+			// It looks like this is only used for Recording.String() though.
+			lr.Fields[i] = otlog.String(f.Key, f.Value.StripMarkers())
 		}
 		lastLog := ownLogs[len(ownLogs)-1]
 		ownLogs = append(ownLogs, conv(lr, lastLog.Timestamp))
@@ -507,7 +510,7 @@ func TestingCheckRecordedSpans(rec Recording, expected string) error {
 		for _, l := range rs.Logs {
 			var msg string
 			for _, f := range l.Fields {
-				msg = msg + fmt.Sprintf("    %s: %v", f.Key, f.Value)
+				msg = msg + fmt.Sprintf("    %s: %v", f.Key, f.Value.StripMarkers())
 			}
 			row(d, "%s", msg)
 		}

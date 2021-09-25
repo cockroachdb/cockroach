@@ -24,7 +24,7 @@ message LogRecord {
                                      (gogoproto.stdtime) = true];
   message Field {
     string key = 1;
-    string value = 2;
+    string value = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
   }
   // Fields with values converted to strings.
   repeated Field fields = 2 [(gogoproto.nullable) = false];
@@ -70,6 +70,10 @@ message RecordedSpan {
   google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
 
+  // RedactableLogs determines whether the verbose log messages are redactable.
+  // This field was introduced in the 22.1 cycle. It can be removed in the 22.2
+  // cycle.
+  bool redactable_logs = 15;
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
 
