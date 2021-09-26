@@ -164,7 +164,7 @@ func ResolveType(
 		return resolver.ResolveType(ctx, t)
 	case *OIDTypeReference:
 		if resolver == nil {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "type OID %d does not exist", t.OID)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "type resolver unavailable to resolve type OID %d", t.OID)
 		}
 		return resolver.ResolveTypeByOID(ctx, t.OID)
 	default:
