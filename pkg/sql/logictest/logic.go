@@ -2576,6 +2576,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 }
 
 func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
+	t.noticeBuffer = nil
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}

@@ -14,11 +14,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -134,6 +136,11 @@ func (p *planner) generateSerialInColumnDef(
 	// Clear the IsSerial bit now that it's been remapped.
 	newSpec.IsSerial = false
 
+	defType, err := tree.ResolveType(ctx, d.Type, p.semaCtx.GetTypeResolver())
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
 	// Find the integer type that corresponds to the specification.
 	switch serialNormalizationMode {
 	case sessiondatapb.SerialUsesRowID, sessiondatapb.SerialUsesUnorderedRowID, sessiondatapb.SerialUsesVirtualSequences:
@@ -145,7 +152,22 @@ func (p *planner) generateSerialInColumnDef(
 		// TODO(bob): Follow up with https://github.com/cockroachdb/cockroach/issues/32534
 		// when the default is inverted to determine if we should also
 		// switch this behavior around.
-		newSpec.Type = types.Int
+		upgradeType := types.Int
+		if defType.Width() < upgradeType.Width() {
+			p.noticeSender.BufferNotice(
+				errors.WithHintf(
+					pgnotice.Newf(
+						"upgrading the column %s to %s to utilize the session serial_normalization setting",
+						d.Name.String(),
+						upgradeType.SQLString(),
+					),
+					"change the serial_normalization to sql_sequence or sql_sequence_cached if you wish "+
+						"to use a smaller sized serial column at the cost of performance. See %s",
+					docs.URL("serial.html"),
+				),
+			)
+		}
+		newSpec.Type = upgradeType
 
 	case sessiondatapb.SerialUsesSQLSequences, sessiondatapb.SerialUsesCachedSQLSequences:
 		// With real sequences we can use the requested type as-is.
@@ -153,11 +175,6 @@ func (p *planner) generateSerialInColumnDef(
 	default:
 		return nil, nil, nil, nil,
 			errors.AssertionFailedf("unknown serial normalization mode: %s", serialNormalizationMode)
-	}
-
-	defType, err := tree.ResolveType(ctx, d.Type, p.semaCtx.GetTypeResolver())
-	if err != nil {
-		return nil, nil, nil, nil, err
 	}
 	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(
 		defType.Name(), serialNormalizationMode.String()))
