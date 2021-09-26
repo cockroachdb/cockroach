@@ -147,9 +147,9 @@ func formatTags(ctx context.Context, brackets bool, buf *strings.Builder) bool {
 	return true
 }
 
-// Event looks for an opentracing.Trace in the context and logs the given
-// message to it. If no Trace is found, it looks for an EventLog in the context
-// and logs the message to it. If neither is found, does nothing.
+// Event looks for a tracing span in the context and logs the given message to
+// it. If no span is found, it looks for an EventLog in the context and logs the
+// message to it. If neither is found, does nothing.
 func Event(ctx context.Context, msg string) {
 	sp, el, ok := getSpanOrEventLog(ctx)
 	if !ok {
@@ -167,8 +167,8 @@ func Event(ctx context.Context, msg string) {
 	eventInternal(sp, el, false /* isErr */, &entry)
 }
 
-// Eventf looks for an opentracing.Trace in the context and formats and logs
-// the given message to it. If no Trace is found, it looks for an EventLog in
+// Eventf looks for a tracing span in the context and formats and logs
+// the given message to it. If no span is found, it looks for an EventLog in
 // the context and logs the message to it. If neither is found, does nothing.
 func Eventf(ctx context.Context, format string, args ...interface{}) {
 	sp, el, ok := getSpanOrEventLog(ctx)

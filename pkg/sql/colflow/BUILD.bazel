@@ -50,6 +50,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_marusama_semaphore//:semaphore",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 

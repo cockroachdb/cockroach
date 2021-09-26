@@ -173,7 +173,8 @@ func TestPingInterceptors(t *testing.T) {
 	)
 
 	errBoomSend := errors.Handled(errors.New("boom due to onSendPing"))
-	errBoomRecv := status.Error(codes.FailedPrecondition, "boom due to onHandlePing")
+	recvMsg := "boom due to onHandlePing"
+	errBoomRecv := status.Error(codes.FailedPrecondition, recvMsg)
 	opts := ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
@@ -212,7 +213,11 @@ func TestPingInterceptors(t *testing.T) {
 	remoteAddr := ln.Addr().String()
 	{
 		_, err := rpcCtx.GRPCDialNode(remoteAddr, blockedOriginNodeID, SystemClass).Connect(ctx)
-		require.Equal(t, errBoomRecv, errors.Cause(err))
+		require.True(t, errors.HasType(err, errBoomRecv))
+		status, ok := status.FromError(errors.UnwrapAll(err))
+		require.True(t, ok)
+		require.Equal(t, codes.FailedPrecondition, status.Code())
+		require.Equal(t, recvMsg, status.Message())
 	}
 }
 
