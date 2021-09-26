@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // FlowCoordinator is the execinfra.Processor that is responsible for shutting
@@ -265,8 +266,8 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 	ctx, span := execinfra.ProcessorSpan(ctx, "batch flow coordinator")
 	if span != nil {
 		if span.IsVerbose() {
-			span.SetTag(execinfrapb.FlowIDTagKey, f.flowCtx.ID.String())
-			span.SetTag(execinfrapb.ProcessorIDTagKey, f.processorID)
+			span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(f.flowCtx.ID.String()))
+			span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(f.processorID)))
 		}
 		defer span.Finish()
 	}

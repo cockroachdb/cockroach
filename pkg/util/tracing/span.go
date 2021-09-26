@@ -12,11 +12,13 @@ package tracing
 
 import (
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	opentracing "github.com/opentracing/opentracing-go"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -28,7 +30,7 @@ const (
 // configuration, it can hold anywhere between zero and three destinations for
 // trace information:
 //
-// 1. external OpenTracing-compatible trace collector (Jaeger, Zipkin, Lightstep),
+// 1. external OpenTelemetry-compatible trace collector (Jaeger, Zipkin, Lightstep),
 // 2. /debug/requests endpoint (net/trace package); mostly useful for local debugging
 // 3. CRDB-internal trace span (powers SQL session tracing).
 //
@@ -191,7 +193,7 @@ func (sp *Span) RecordStructured(item Structured) {
 
 // SetTag adds a tag to the span. If there is a pre-existing tag set for the
 // key, it is overwritten.
-func (sp *Span) SetTag(key string, value interface{}) {
+func (sp *Span) SetTag(key string, value attribute.Value) {
 	if sp.done() {
 		return
 	}
@@ -230,13 +232,10 @@ type SpanMeta struct {
 	traceID uint64
 	spanID  uint64
 
-	// Underlying shadow tracer info and span context (optional). This
-	// will only be populated when the remote Span is reporting to an
-	// external opentracing tracer. We hold on to the type of tracer to
-	// avoid mixing spans when the tracer is reconfigured, as impls are
-	// not typically robust to being shown spans they did not create.
-	shadowTracerType string
-	shadowCtx        opentracing.SpanContext
+	// otelCtx is the OpenTelemetry span context. This is only populated when the
+	// remote Span is reporting to an external OpenTelemetry tracer. Setting this
+	// will cause child spans to also get an OpenTelemetry span.
+	otelCtx oteltrace.SpanContext
 
 	// If set, all spans derived from this context are being recorded.
 	//
@@ -253,8 +252,16 @@ func (sm SpanMeta) Empty() bool {
 	return sm.spanID == 0 && sm.traceID == 0
 }
 
-func (sm *SpanMeta) String() string {
-	return fmt.Sprintf("[spanID: %d, traceID: %d]", sm.spanID, sm.traceID)
+func (sm SpanMeta) String() string {
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("[spanID: %d, traceID: %d", sm.spanID, sm.traceID))
+	hasOtelSpan := sm.otelCtx.IsValid()
+	if hasOtelSpan {
+		s.WriteString(" hasOtel")
+		s.WriteString(fmt.Sprintf(" trace: %d span: %d", sm.otelCtx.TraceID(), sm.otelCtx.SpanID()))
+	}
+	s.WriteRune(']')
+	return s.String()
 }
 
 // Structured is an opaque protobuf that can be attached to a trace via

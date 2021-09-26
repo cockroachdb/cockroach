@@ -60,6 +60,7 @@ go_library(
         "@com_github_golang_snappy//:snappy",
         "@com_github_montanaflynn_stats//:stats",
         "@com_github_vividcortex_ewma//:ewma",
+        "@io_opentelemetry_go_otel//attribute",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//backoff",
         "@org_golang_google_grpc//codes",

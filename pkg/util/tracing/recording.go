@@ -43,6 +43,8 @@ const (
 )
 
 type traceLogData struct {
+	// TODO(andrei): Remove the opentracing dependency. We generally don't use
+	// opentracing any more and this little dependency here pulls a large package.
 	opentracing.LogRecord
 	depth int
 	// timeSincePrev represents the duration since the previous log line (previous in the
