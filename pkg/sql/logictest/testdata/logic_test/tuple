@@ -822,7 +822,7 @@ query error pq: column reference "unnest" is ambiguous
 SELECT ((unnest(ARRAY[1,2], ARRAY[1,2]))).unnest;
 
 # No labels
-query error pq: type tuple{int, int, int} is not composite
+query error pq: could not identify column "x" in record data type
 SELECT ((1,2,3)).x FROM tb
 
 query I colnames
