@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -55,7 +54,7 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 		pkg = strings.TrimRight(pkg, "/")
 
 		if !strings.HasPrefix(pkg, "pkg/") {
-			return errors.Newf("malformed package %q, expecting %q", pkg, "pkg/{...}")
+			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
 
 		if strings.HasSuffix(pkg, "/...") {

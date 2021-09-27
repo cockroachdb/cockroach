@@ -3814,7 +3814,7 @@ objoid      classoid    objsubid  description
 4294967041  4294967133  0         pg_statio_user_indexes was created for compatibility and is currently unimplemented
 4294967040  4294967133  0         pg_statio_user_sequences was created for compatibility and is currently unimplemented
 4294967039  4294967133  0         pg_statio_user_tables was created for compatibility and is currently unimplemented
-4294967038  4294967133  0         pg_statistic_ext was created for compatibility and is currently unimplemented
+4294967038  4294967133  0         pg_statistic_ext has the statistics objects created with CREATE STATISTICS
 4294967036  4294967133  0         pg_subscription was created for compatibility and is currently unimplemented
 4294967037  4294967133  0         pg_subscription_rel was created for compatibility and is currently unimplemented
 4294967035  4294967133  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
@@ -5338,3 +5338,23 @@ WHERE usename = 'regression_70180'
 ----
 usename           valuntil
 regression_70180  NULL
+
+# Testing pg_statistic_ext
+statement ok
+CREATE TABLE stxtbl(a INT, b INT, c INT);
+CREATE STATISTICS stxobj ON b, c FROM stxtbl;
+
+query TTOOTTT colnames
+SELECT
+  relname,
+  stxname,
+  stxnamespace,
+  stxowner,
+  stxstattarget,
+  stxkeys,
+  stxkind
+FROM pg_statistic_ext
+JOIN pg_class ON pg_statistic_ext.stxrelid = pg_class.oid
+----
+relname  stxname  stxnamespace  stxowner  stxstattarget  stxkeys  stxkind
+stxtbl   stxobj   NULL          NULL      NULL           {2,3}    NULL
