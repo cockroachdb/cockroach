@@ -156,8 +156,8 @@ func makeGCSStorage(
 func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.Writer")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.Writer: %s",
-		path.Join(g.prefix, basename))})
+	sp.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("gcs.Writer: %s",
+		path.Join(g.prefix, basename))}))
 	w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
 	if !gcsChunkingEnabled.Get(&g.settings.SV) {
 		w.ChunkSize = 0
@@ -178,8 +178,8 @@ func (g *gcsStorage) ReadFileAt(
 
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.ReadFileAt")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.ReadFileAt: %s",
-		path.Join(g.prefix, basename))})
+	sp.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("gcs.ReadFileAt: %s",
+		path.Join(g.prefix, basename))}))
 
 	r := &cloud.ResumingReader{
 		Ctx: ctx,
@@ -207,7 +207,7 @@ func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.Li
 	dest := cloud.JoinPathPreservingTrailingSlash(g.prefix, prefix)
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.List")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.List: %s", dest)})
+	sp.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("gcs.List: %s", dest)}))
 
 	it := g.bucket.Objects(ctx, &gcs.Query{Prefix: dest, Delimiter: delim})
 

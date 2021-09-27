@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
@@ -31,6 +32,11 @@ import (
 // testStructuredImpl is a testing implementation of Structured event.
 type testStructuredImpl struct {
 	*types.StringValue
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *testStructuredImpl) SafeFormat(_ redact.SafePrinter, _ rune) {
+	// Needs implementation
 }
 
 var _ tracing.Structured = &testStructuredImpl{}

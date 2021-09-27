@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/types"
 )
@@ -69,6 +70,11 @@ const (
 	// ProcessorIDTagKey is the key used for processor id tags in tracing spans.
 	ProcessorIDTagKey = tracing.TagPrefix + "processorid"
 )
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *ComponentStats) SafeFormat(_ redact.SafePrinter, _ rune) {
+	// Needs implementation
+}
 
 // StatsForQueryPlan returns the statistics as a list of strings that can be
 // displayed in query plans and diagrams.

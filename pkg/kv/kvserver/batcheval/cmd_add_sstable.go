@@ -182,7 +182,7 @@ func EvalAddSSTable(
 	ms.Add(stats)
 
 	if args.IngestAsWrites {
-		span.RecordStructured(&types.StringValue{Value: fmt.Sprintf("ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))})
+		span.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))}))
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))
 		dataIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 		for {

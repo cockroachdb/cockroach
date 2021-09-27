@@ -92,7 +92,7 @@ func evalExport(
 		evalExportTrace.Value = fmt.Sprintf("evaluating Export [%s, %s) on remote node %d",
 			args.Key, args.EndKey, cArgs.EvalCtx.NodeID())
 	}
-	evalExportSpan.RecordStructured(&evalExportTrace)
+	evalExportSpan.RecordStructured(roachpb.NeedsRedaction(&evalExportTrace))
 
 	if !args.ReturnSST {
 		return result.Result{}, errors.New("ReturnSST is required")

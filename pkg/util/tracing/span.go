@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
@@ -267,5 +268,6 @@ func (sm SpanMeta) String() string {
 // Structured is an opaque protobuf that can be attached to a trace via
 // `Span.RecordStructured`.
 type Structured interface {
+	redact.SafeFormatter
 	protoutil.Message
 }

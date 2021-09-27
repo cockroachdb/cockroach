@@ -255,7 +255,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				if rts.traceRealSpan {
 					// Add a dummy recording so we actually see something in the trace.
 					span := tracing.SpanFromContext(ctx)
-					span.RecordStructured(&types.StringValue{Value: "boom"})
+					span.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: "boom"}))
 				}
 				rts.mu.Lock()
 				rts.mu.a.ResumeStart = true
@@ -289,7 +289,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				if rts.traceRealSpan {
 					// Add a dummy recording so we actually see something in the trace.
 					span := tracing.SpanFromContext(ctx)
-					span.RecordStructured(&types.StringValue{Value: "boom"})
+					span.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: "boom"}))
 				}
 				rts.mu.Lock()
 				rts.mu.a.OnFailOrCancelStart = true

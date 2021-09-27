@@ -1636,3 +1636,8 @@ func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 func (s *ScanStats) String() string {
 	return redact.StringWithoutMarkers(s)
 }
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *RetryTracingEvent) SafeFormat(_ redact.SafePrinter, _ rune) {
+	// Needs implementation
+}

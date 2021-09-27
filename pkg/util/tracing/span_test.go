@@ -12,6 +12,8 @@ package tracing
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/redact"
 	"reflect"
 	"regexp"
 	"strings"
@@ -206,7 +208,7 @@ func TestSpanRecordStructured(t *testing.T) {
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
 
-	sp.RecordStructured(&types.Int32Value{Value: 4})
+	sp.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: "4"})
 	rec := sp.GetRecording()
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].DeprecatedInternalStructured, 1)
@@ -226,7 +228,7 @@ func TestSpanRecordStructured(t *testing.T) {
 		`))
 	require.NoError(t, TestingCheckRecording(rec, `
 		=== operation:root
-        structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
+        structured:{"@type":"type.googleapis.com/google.protobuf.StringValue","value":4}
 	`))
 }
 
@@ -316,6 +318,11 @@ func TestSpanRecordLimit(t *testing.T) {
 // testStructuredImpl is a testing implementation of Structured event.
 type testStructuredImpl struct {
 	*types.Int32Value
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *testStructuredImpl) SafeFormat(_ redact.SafePrinter, _ rune) {
+	// Needs implementation
 }
 
 var _ Structured = &testStructuredImpl{}
@@ -412,7 +419,7 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	defer ch.Finish()
 	require.Equal(t, 1, sp.i.crdb.mu.recording.children.len())
 	require.Equal(t, ch.i.crdb, sp.i.crdb.mu.recording.children.get(0))
-	ch.RecordStructured(&types.Int32Value{Value: 5})
+	ch.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: "x"}))
 	// Check that the child span (incl its payload) is in the recording.
 	rec := sp.GetRecording()
 	require.Len(t, rec, 2)

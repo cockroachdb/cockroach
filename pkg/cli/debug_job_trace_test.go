@@ -25,13 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +55,8 @@ func (r *traceSpanResumer) Resume(ctx context.Context, _ interface{}) error {
 	_, span := tracing.ChildSpan(ctx, "trace test")
 	defer span.Finish()
 	// Picked a random proto message that was simple to match output against.
-	span.RecordStructured(&serverpb.TableStatsRequest{Database: "foo", Table: "bar"})
+	span.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: "foo bar"}))
+	// span.RecordStructured(&serverpb.TableStatsRequest{Database: "foo", Table: "bar"})
 	r.recordedSpanCh <- struct{}{}
 	<-r.completeResumerCh
 	return nil

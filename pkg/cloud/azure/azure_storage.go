@@ -118,8 +118,8 @@ func (s *azureStorage) Settings() *cluster.Settings {
 func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "azure.Writer")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.Writer: %s",
-		path.Join(s.prefix, basename))})
+	sp.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("azure.Writer: %s",
+		path.Join(s.prefix, basename))}))
 
 	blob := s.getBlob(basename)
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
@@ -143,8 +143,8 @@ func (s *azureStorage) ReadFileAt(
 ) (io.ReadCloser, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFileAt")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.ReadFileAt: %s",
-		path.Join(s.prefix, basename))})
+	sp.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("azure.ReadFileAt: %s",
+		path.Join(s.prefix, basename))}))
 
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	blob := s.getBlob(basename)
@@ -180,7 +180,7 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 	defer sp.Finish()
 
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.List: %s", dest)})
+	sp.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("azure.List: %s", dest)}))
 
 	var marker azblob.Marker
 	for marker.NotDone() {

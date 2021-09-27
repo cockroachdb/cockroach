@@ -283,7 +283,7 @@ func backup(
 		return nil
 	}
 
-	resumerSpan.RecordStructured(&types.StringValue{Value: "starting DistSQL backup execution"})
+	resumerSpan.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: "starting DistSQL backup execution"}))
 	runBackup := func(ctx context.Context) error {
 		return distBackup(
 			ctx,
@@ -303,7 +303,7 @@ func backup(
 	backupManifest.ID = backupID
 	// Write additional partial descriptors to each node for partitioned backups.
 	if len(storageByLocalityKV) > 0 {
-		resumerSpan.RecordStructured(&types.StringValue{Value: "writing partition descriptors for partitioned backup"})
+		resumerSpan.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: "writing partition descriptors for partitioned backup"}))
 		filesByLocalityKV := make(map[string][]BackupManifest_File)
 		for _, file := range backupManifest.Files {
 			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], file)
@@ -338,7 +338,7 @@ func backup(
 		}
 	}
 
-	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup manifest"})
+	resumerSpan.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: "writing backup manifest"}))
 	if err := writeBackupManifest(ctx, settings, defaultStore, backupManifestName, encryption, backupManifest); err != nil {
 		return RowCount{}, err
 	}
@@ -368,7 +368,7 @@ func backup(
 		Statistics: tableStatistics,
 	}
 
-	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup table statistics"})
+	resumerSpan.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: "writing backup table statistics"}))
 	if err := writeTableStatistics(ctx, defaultStore, backupStatisticsFileName, encryption, &statsTable); err != nil {
 		return RowCount{}, err
 	}
@@ -440,7 +440,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	ptsID := details.ProtectedTimestampRecord
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
-		resumerSpan.RecordStructured(&types.StringValue{Value: "verifying protected timestamp"})
+		resumerSpan.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: "verifying protected timestamp"}))
 		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
 			if errors.Is(err, protectedts.ErrNotExists) {
 				// No reason to return an error which might cause problems if it doesn't

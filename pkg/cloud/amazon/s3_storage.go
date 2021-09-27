@@ -394,7 +394,7 @@ func (s *s3Storage) Settings() *cluster.Settings {
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.Writer")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))})
+	sp.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))}))
 
 	uploader, err := s.getUploader(ctx)
 	if err != nil {
@@ -453,7 +453,7 @@ func (s *s3Storage) ReadFileAt(
 ) (io.ReadCloser, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.ReadFileAt")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.ReadFileAt: %s", path.Join(s.prefix, basename))})
+	sp.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("s3.ReadFileAt: %s", path.Join(s.prefix, basename))}))
 
 	stream, err := s.openStreamAt(ctx, basename, offset)
 	if err != nil {
@@ -490,7 +490,7 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 	defer sp.Finish()
 
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.List: %s", dest)})
+	sp.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("s3.List: %s", dest)}))
 
 	client, err := s.getClient(ctx)
 	if err != nil {

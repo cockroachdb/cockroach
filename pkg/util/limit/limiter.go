@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -54,7 +55,7 @@ func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) (Reservation, erro
 		var span *tracing.Span
 		ctx, span = tracing.ChildSpan(ctx, l.spanName)
 		defer span.Finish()
-		span.RecordStructured(&types.StringValue{Value: fmt.Sprintf("%d requests are waiting", l.sem.Len())})
+		span.RecordStructured(roachpb.NeedsRedaction(&types.StringValue{Value: fmt.Sprintf("%d requests are waiting", l.sem.Len())}))
 		res, err = l.sem.Acquire(ctx, 1)
 	}
 	return res, err
