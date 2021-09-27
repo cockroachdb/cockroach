@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -340,8 +342,10 @@ func changefeedPlanHook(
 		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
 
 		if details.SinkURI == `` {
+			jobID := jobspb.JobID(0)
 			telemetry.Count(`changefeed.create.core`)
-			err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
+			logChangefeedCreateTelemetry(ctx, p, changefeedStmt, opts, nil, jobID)
+			err := distChangefeedFlow(ctx, p, jobID, details, progress, resultsCh)
 			if err != nil {
 				telemetry.Count(`changefeed.core.error`)
 			}
@@ -448,6 +452,8 @@ func changefeedPlanHook(
 			return err
 		}
 
+		logChangefeedCreateTelemetry(ctx, p, changefeedStmt, opts, &sinkURL{URL: parsedSink}, jobID)
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -459,6 +465,91 @@ func changefeedPlanHook(
 
 	}
 	return fn, header, nil, avoidBuffering, nil
+}
+
+func logChangefeedCreateTelemetry(
+	ctx context.Context,
+	p sql.PlanHookState,
+	changefeedStmt *tree.CreateChangefeed,
+	opts map[string]string,
+	sinkURL *sinkURL,
+	jobID jobspb.JobID,
+) {
+	nodeID, ok := p.ExecCfg().NodeInfo.NodeID.OptionalNodeID()
+	if !ok {
+		nodeID = -1
+	}
+	tenantID, ok := roachpb.TenantFromContext(ctx)
+	if !ok {
+		tenantID = roachpb.SystemTenantID
+	}
+
+	changefeedType := "enterprise"
+	if sinkURL == nil {
+		changefeedType = "core"
+	}
+
+	changefeedEventDetails := eventpb.CommonChangefeedEventDetails{
+		ChangefeedType:  changefeedType,
+		CrdbVersion:     build.GetInfo().Tag,
+		NodeID:          int32(nodeID),
+		InstanceID:      int32(p.ExecCfg().NodeInfo.NodeID.SQLInstanceID()),
+		ClusterID:       p.ExecCfg().NodeInfo.ClusterID().String(),
+		TenantID:        tenantID.ToUint64(),
+		Internal:        true,
+		SamplingRate:    1,
+		SeverityNumeric: 1,
+		Severity:        "INFO",
+		OrganizationID:  p.ExecCfg().Organization(),
+		JobID:           int64(jobID),
+	}
+
+	scanValue := ""
+	if opts[changefeedbase.OptInitialScan] != "" {
+		scanValue = "initial_scan"
+	}
+	if opts[changefeedbase.OptNoInitialScan] != "" {
+		scanValue = "no_initial_scan"
+	}
+
+	createChangefeedEvent := &eventpb.CreateChangefeedQuery{
+		CommonChangefeedEventDetails: changefeedEventDetails,
+		NumTables:                    int32(len(changefeedStmt.Targets.Tables)),
+
+		// Changefeed Options
+		Updated:                  opts[changefeedbase.OptUpdatedTimestamps] != "",
+		Resolved:                 opts[changefeedbase.OptResolvedTimestamps],
+		Envelope:                 opts[changefeedbase.OptEnvelope],
+		Cursor:                   opts[changefeedbase.OptCursor] != "",
+		Format:                   opts[changefeedbase.OptFormat],
+		ConfluentSchemaRegistry:  opts[changefeedbase.OptConfluentSchemaRegistry] != "",
+		KeyInValue:               opts[changefeedbase.OptKeyInValue] != "",
+		Diff:                     opts[changefeedbase.OptDiff] != "",
+		Compression:              opts[changefeedbase.OptCompression],
+		ProtectDataFromGcOnPause: opts[changefeedbase.OptProtectDataFromGCOnPause] != "",
+		SchemaChangeEvents:       opts[changefeedbase.OptSchemaChangeEvents],
+		SchemaChangePolicy:       opts[changefeedbase.OptSchemaChangePolicy],
+		Scan:                     scanValue,
+		FullTableName:            opts[changefeedbase.OptFullTableName] != "",
+		AvroSchemaPrefix:         opts[changefeedbase.OptAvroSchemaPrefix] != "",
+	}
+
+	if sinkURL != nil {
+		// Fill in Sink parameters
+		createChangefeedEvent.TopicPrefix = sinkURL.consumeParam(changefeedbase.SinkParamTopicPrefix) != ""
+		createChangefeedEvent.TlsEnabled = sinkURL.consumeParam(changefeedbase.SinkParamTLSEnabled) != ""
+		createChangefeedEvent.CaCert = sinkURL.consumeParam(changefeedbase.SinkParamCACert) != ""
+		createChangefeedEvent.ClientCert = sinkURL.consumeParam(changefeedbase.SinkParamClientCert) != ""
+		createChangefeedEvent.ClientKey = sinkURL.consumeParam(changefeedbase.SinkParamClientKey) != ""
+		createChangefeedEvent.SaslEnabled = sinkURL.consumeParam(changefeedbase.SinkParamSASLEnabled) != ""
+		createChangefeedEvent.SaslMechanism = sinkURL.consumeParam(changefeedbase.SinkParamSASLMechanism)
+		createChangefeedEvent.SaslUser = sinkURL.consumeParam(changefeedbase.SinkParamSASLUser) != ""
+		createChangefeedEvent.SaslPassword = sinkURL.consumeParam(changefeedbase.SinkParamSASLPassword) != ""
+		createChangefeedEvent.FileSize = sinkURL.consumeParam(changefeedbase.SinkParamFileSize)
+		createChangefeedEvent.InsecureTlsSkipVerify = sinkURL.consumeParam(changefeedbase.SinkParamSkipTLSVerify) != ""
+	}
+
+	log.StructuredEvent(ctx, createChangefeedEvent)
 }
 
 func changefeedJobDescription(
