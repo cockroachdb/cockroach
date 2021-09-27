@@ -33,18 +33,8 @@ func (s *instance) ReconfigureTokenBucket(
 	asOf time.Time,
 	asOfConsumedRequestUnits float64,
 ) error {
-	row, err := s.executor.QueryRowEx(
-		ctx, "check-tenant", txn, sessiondata.NodeUserSessionDataOverride,
-		`SELECT active FROM system.tenants WHERE id = $1`, tenantID.ToUint64(),
-	)
-	if err != nil {
+	if err := s.checkTenantID(ctx, txn, tenantID); err != nil {
 		return err
-	}
-	if row == nil {
-		return pgerror.Newf(pgcode.UndefinedObject, "tenant %q does not exist", tenantID)
-	}
-	if active := *row[0].(*tree.DBool); !active {
-		return errors.Errorf("tenant %q is not active", tenantID)
 	}
 	h := makeSysTableHelper(ctx, s.executor, txn, tenantID)
 	state, err := h.readTenantState()
@@ -59,6 +49,26 @@ func (s *instance) ReconfigureTokenBucket(
 	)
 	if err := h.updateTenantState(state); err != nil {
 		return err
+	}
+	return nil
+}
+
+// checkTenantID verifies that the tenant exists and is active.
+func (s *instance) checkTenantID(
+	ctx context.Context, txn *kv.Txn, tenantID roachpb.TenantID,
+) error {
+	row, err := s.executor.QueryRowEx(
+		ctx, "check-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+		`SELECT active FROM system.tenants WHERE id = $1`, tenantID.ToUint64(),
+	)
+	if err != nil {
+		return err
+	}
+	if row == nil {
+		return pgerror.Newf(pgcode.UndefinedObject, "tenant %q does not exist", tenantID)
+	}
+	if active := *row[0].(*tree.DBool); !active {
+		return errors.Errorf("tenant %q is not active", tenantID)
 	}
 	return nil
 }

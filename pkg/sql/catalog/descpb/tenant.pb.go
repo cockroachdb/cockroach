@@ -4,7 +4,9 @@
 package descpb
 
 import (
+	encoding_binary "encoding/binary"
 	fmt "fmt"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	io "io"
@@ -108,31 +110,123 @@ func (m *TenantInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_TenantInfo proto.InternalMessageInfo
 
+// TenantInfoAndUsage contains the information for a tenant in a multi-tenant
+// cluster plus metadata related to cost control and consumption.
+type TenantInfoWithUsage struct {
+	TenantInfo `protobuf:"bytes,1,opt,name=info,embedded=info" json:"info"`
+	Usage      *TenantInfoWithUsage_Usage `protobuf:"bytes,2,opt,name=usage" json:"usage,omitempty"`
+}
+
+func (m *TenantInfoWithUsage) Reset()         { *m = TenantInfoWithUsage{} }
+func (m *TenantInfoWithUsage) String() string { return proto.CompactTextString(m) }
+func (*TenantInfoWithUsage) ProtoMessage()    {}
+func (*TenantInfoWithUsage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_8b0599e17640b090, []int{1}
+}
+func (m *TenantInfoWithUsage) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TenantInfoWithUsage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *TenantInfoWithUsage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TenantInfoWithUsage.Merge(m, src)
+}
+func (m *TenantInfoWithUsage) XXX_Size() int {
+	return m.Size()
+}
+func (m *TenantInfoWithUsage) XXX_DiscardUnknown() {
+	xxx_messageInfo_TenantInfoWithUsage.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TenantInfoWithUsage proto.InternalMessageInfo
+
+// Usage contains metadata related to cost control and consumption. In a
+// running cluster, this data is stored in the system.tenant_usage table.
+// Each field corresponds has a corresponding column in that table.
+type TenantInfoWithUsage_Usage struct {
+	RUBurstLimit float64 `protobuf:"fixed64,1,opt,name=ru_burst_limit,json=ruBurstLimit" json:"ru_burst_limit"`
+	RURefillRate float64 `protobuf:"fixed64,2,opt,name=ru_refill_rate,json=ruRefillRate" json:"ru_refill_rate"`
+	RUCurrent    float64 `protobuf:"fixed64,3,opt,name=ru_current,json=ruCurrent" json:"ru_current"`
+	// All-time consumption for this tenant. Each field has a corresponding column
+	// in system.tenant_usage.
+	Consumption roachpb.TenantConsumption `protobuf:"bytes,4,opt,name=consumption" json:"consumption"`
+}
+
+func (m *TenantInfoWithUsage_Usage) Reset()         { *m = TenantInfoWithUsage_Usage{} }
+func (m *TenantInfoWithUsage_Usage) String() string { return proto.CompactTextString(m) }
+func (*TenantInfoWithUsage_Usage) ProtoMessage()    {}
+func (*TenantInfoWithUsage_Usage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_8b0599e17640b090, []int{1, 0}
+}
+func (m *TenantInfoWithUsage_Usage) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TenantInfoWithUsage_Usage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *TenantInfoWithUsage_Usage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TenantInfoWithUsage_Usage.Merge(m, src)
+}
+func (m *TenantInfoWithUsage_Usage) XXX_Size() int {
+	return m.Size()
+}
+func (m *TenantInfoWithUsage_Usage) XXX_DiscardUnknown() {
+	xxx_messageInfo_TenantInfoWithUsage_Usage.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TenantInfoWithUsage_Usage proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterEnum("cockroach.sql.sqlbase.TenantInfo_State", TenantInfo_State_name, TenantInfo_State_value)
 	proto.RegisterType((*TenantInfo)(nil), "cockroach.sql.sqlbase.TenantInfo")
+	proto.RegisterType((*TenantInfoWithUsage)(nil), "cockroach.sql.sqlbase.TenantInfoWithUsage")
+	proto.RegisterType((*TenantInfoWithUsage_Usage)(nil), "cockroach.sql.sqlbase.TenantInfoWithUsage.Usage")
 }
 
 func init() { proto.RegisterFile("sql/catalog/descpb/tenant.proto", fileDescriptor_8b0599e17640b090) }
 
 var fileDescriptor_8b0599e17640b090 = []byte{
-	// 249 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x2e, 0xcc, 0xd1,
-	0x4f, 0x4e, 0x2c, 0x49, 0xcc, 0xc9, 0x4f, 0xd7, 0x4f, 0x49, 0x2d, 0x4e, 0x2e, 0x48, 0xd2, 0x2f,
-	0x49, 0xcd, 0x4b, 0xcc, 0x2b, 0xd1, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0x4d, 0xce, 0x4f,
-	0xce, 0x2e, 0xca, 0x4f, 0x4c, 0xce, 0xd0, 0x2b, 0x2e, 0xcc, 0x01, 0xe1, 0xa4, 0xc4, 0xe2, 0x54,
-	0x29, 0x91, 0xf4, 0xfc, 0xf4, 0x7c, 0xb0, 0x0a, 0x7d, 0x10, 0x0b, 0xa2, 0x58, 0x69, 0x36, 0x23,
-	0x17, 0x57, 0x08, 0x58, 0xb7, 0x67, 0x5e, 0x5a, 0xbe, 0x90, 0x14, 0x17, 0x53, 0x66, 0x8a, 0x04,
-	0xa3, 0x02, 0xa3, 0x06, 0x8b, 0x13, 0xd7, 0x89, 0x7b, 0xf2, 0x0c, 0x8f, 0xee, 0xc9, 0x33, 0x79,
-	0xba, 0x04, 0x31, 0x65, 0xa6, 0x08, 0x39, 0x73, 0xb1, 0x16, 0x97, 0x24, 0x96, 0xa4, 0x4a, 0x30,
-	0x29, 0x30, 0x6a, 0xf0, 0x19, 0xa9, 0xeb, 0x61, 0xb5, 0x47, 0x0f, 0x61, 0x9a, 0x5e, 0x30, 0x48,
-	0xb9, 0x13, 0x0b, 0xc8, 0x9c, 0x20, 0x88, 0x5e, 0x25, 0x35, 0x2e, 0x56, 0xb0, 0xa8, 0x10, 0x17,
-	0x17, 0x9b, 0xa3, 0x73, 0x88, 0x67, 0x98, 0xab, 0x00, 0x83, 0x10, 0x3b, 0x17, 0xb3, 0xa3, 0x8b,
-	0x8b, 0x00, 0xa3, 0x10, 0x07, 0x17, 0x8b, 0x4b, 0x90, 0x7f, 0x80, 0x00, 0x93, 0x15, 0xcb, 0x8b,
-	0x05, 0xf2, 0x8c, 0x4e, 0x1a, 0x27, 0x1e, 0xca, 0x31, 0x9c, 0x78, 0x24, 0xc7, 0x78, 0xe1, 0x91,
-	0x1c, 0xe3, 0x8d, 0x47, 0x72, 0x8c, 0x0f, 0x1e, 0xc9, 0x31, 0x4e, 0x78, 0x2c, 0xc7, 0x70, 0xe1,
-	0xb1, 0x1c, 0xc3, 0x8d, 0xc7, 0x72, 0x0c, 0x51, 0x6c, 0x90, 0x10, 0x00, 0x04, 0x00, 0x00, 0xff,
-	0xff, 0x15, 0x46, 0x27, 0xec, 0x16, 0x01, 0x00, 0x00,
+	// 457 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x92, 0xc1, 0x6e, 0xd3, 0x30,
+	0x18, 0xc7, 0xe3, 0x34, 0x1d, 0xdb, 0xd7, 0x69, 0xea, 0xcc, 0x90, 0xaa, 0x1e, 0x92, 0x51, 0x21,
+	0xe8, 0x29, 0x99, 0x7a, 0xdc, 0x05, 0x2d, 0x2d, 0x48, 0x95, 0x26, 0x81, 0xcc, 0x0a, 0x12, 0x97,
+	0xca, 0x4d, 0xd3, 0xcc, 0x22, 0x8b, 0x33, 0xc7, 0x79, 0x04, 0xee, 0xdc, 0xb9, 0xf0, 0x00, 0x3c,
+	0x48, 0x8f, 0x3d, 0xee, 0x54, 0x41, 0x7a, 0xe1, 0x31, 0x90, 0xed, 0x40, 0x86, 0x84, 0xb4, 0x43,
+	0x22, 0xdb, 0xdf, 0xff, 0xf7, 0xf7, 0xdf, 0x9f, 0x0d, 0x5e, 0x71, 0x9b, 0x06, 0x11, 0x95, 0x34,
+	0xe5, 0x49, 0xb0, 0x8c, 0x8b, 0x28, 0x5f, 0x04, 0x32, 0xce, 0x68, 0x26, 0xfd, 0x5c, 0x70, 0xc9,
+	0xf1, 0x93, 0x88, 0x47, 0x9f, 0x04, 0xa7, 0xd1, 0xb5, 0x5f, 0xdc, 0xa6, 0xea, 0x5b, 0xd0, 0x22,
+	0xee, 0x9f, 0x24, 0x3c, 0xe1, 0x5a, 0x11, 0xa8, 0x91, 0x11, 0xf7, 0x8f, 0xb5, 0x30, 0x5f, 0x04,
+	0x34, 0x67, 0x66, 0x69, 0xf0, 0x15, 0x01, 0x5c, 0x69, 0xc3, 0x69, 0xb6, 0xe2, 0xb8, 0x0f, 0x36,
+	0x5b, 0xf6, 0xd0, 0x29, 0x1a, 0x3a, 0x21, 0xac, 0xb7, 0x9e, 0x55, 0x6d, 0x3d, 0x7b, 0x3a, 0x21,
+	0x36, 0x5b, 0xe2, 0x31, 0xb4, 0x0b, 0x49, 0x65, 0xdc, 0xb3, 0x4f, 0xd1, 0xf0, 0x68, 0xf4, 0xc2,
+	0xff, 0xef, 0xd6, 0x7e, 0xe3, 0xe6, 0xbf, 0x53, 0xf2, 0xd0, 0x51, 0x3e, 0xc4, 0xb0, 0x83, 0xe7,
+	0xd0, 0xd6, 0xab, 0x18, 0x60, 0xef, 0x62, 0x7c, 0x35, 0x7d, 0xff, 0xaa, 0x6b, 0xe1, 0x47, 0xd0,
+	0xba, 0x98, 0x4c, 0xba, 0x08, 0xef, 0x83, 0x33, 0x21, 0x6f, 0xde, 0x76, 0xed, 0x73, 0xe7, 0xd7,
+	0x37, 0x0f, 0x0d, 0xbe, 0xb7, 0xe0, 0x71, 0xe3, 0xf7, 0x81, 0xc9, 0xeb, 0x59, 0x41, 0x93, 0x18,
+	0xbf, 0x04, 0x87, 0x65, 0x2b, 0xae, 0x83, 0x76, 0x46, 0x4f, 0x1f, 0x4c, 0x12, 0xee, 0xab, 0x0c,
+	0x9b, 0xad, 0x87, 0x88, 0x06, 0xf1, 0x6b, 0x68, 0x97, 0xca, 0x49, 0x9f, 0xa5, 0x33, 0x3a, 0x7b,
+	0xd0, 0xe1, 0xef, 0xde, 0xbe, 0xfe, 0x13, 0x83, 0xf7, 0x3f, 0xdb, 0xd0, 0x36, 0x91, 0xce, 0xe1,
+	0x48, 0x94, 0xf3, 0x45, 0x29, 0x0a, 0x39, 0x4f, 0xd9, 0x0d, 0x93, 0x3a, 0x1c, 0x0a, 0x4f, 0xea,
+	0x2e, 0x1e, 0x92, 0x59, 0xa8, 0x8a, 0x97, 0xaa, 0x46, 0x0e, 0x45, 0xd9, 0xcc, 0x6a, 0x56, 0xc4,
+	0x2b, 0x96, 0xa6, 0x73, 0xf1, 0xa7, 0xc5, 0xff, 0xb0, 0x44, 0x17, 0x09, 0x95, 0xb1, 0x62, 0x9b,
+	0x19, 0x3e, 0x03, 0x10, 0xe5, 0x3c, 0x2a, 0x85, 0x88, 0x33, 0xd9, 0x6b, 0x69, 0xee, 0xb8, 0xe6,
+	0x0e, 0xc8, 0x6c, 0x6c, 0x0a, 0xe4, 0x40, 0x94, 0xf5, 0x10, 0x5f, 0x42, 0x27, 0xe2, 0x59, 0x51,
+	0xde, 0xe4, 0x92, 0xf1, 0xac, 0xe7, 0xe8, 0x0e, 0x3c, 0xbb, 0xd7, 0x81, 0xfa, 0x95, 0xd4, 0xa7,
+	0x1f, 0x37, 0xda, 0xfa, 0x2a, 0xef, 0xe3, 0xe6, 0xa2, 0xcc, 0x3f, 0x1c, 0xae, 0x7f, 0xba, 0xd6,
+	0xba, 0x72, 0xd1, 0xa6, 0x72, 0xd1, 0x5d, 0xe5, 0xa2, 0x1f, 0x95, 0x8b, 0xbe, 0xec, 0x5c, 0x6b,
+	0xb3, 0x73, 0xad, 0xbb, 0x9d, 0x6b, 0x7d, 0xdc, 0x33, 0x6f, 0xf8, 0x77, 0x00, 0x00, 0x00, 0xff,
+	0xff, 0x89, 0xae, 0x9a, 0x55, 0xd8, 0x02, 0x00, 0x00,
 }
 
 func (this *TenantInfo) Equal(that interface{}) bool {
@@ -158,6 +252,66 @@ func (this *TenantInfo) Equal(that interface{}) bool {
 		return false
 	}
 	if this.State != that1.State {
+		return false
+	}
+	return true
+}
+func (this *TenantInfoWithUsage) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*TenantInfoWithUsage)
+	if !ok {
+		that2, ok := that.(TenantInfoWithUsage)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !this.TenantInfo.Equal(&that1.TenantInfo) {
+		return false
+	}
+	if !this.Usage.Equal(that1.Usage) {
+		return false
+	}
+	return true
+}
+func (this *TenantInfoWithUsage_Usage) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*TenantInfoWithUsage_Usage)
+	if !ok {
+		that2, ok := that.(TenantInfoWithUsage_Usage)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.RUBurstLimit != that1.RUBurstLimit {
+		return false
+	}
+	if this.RURefillRate != that1.RURefillRate {
+		return false
+	}
+	if this.RUCurrent != that1.RUCurrent {
+		return false
+	}
+	if !this.Consumption.Equal(&that1.Consumption) {
 		return false
 	}
 	return true
@@ -191,6 +345,96 @@ func (m *TenantInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *TenantInfoWithUsage) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TenantInfoWithUsage) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TenantInfoWithUsage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Usage != nil {
+		{
+			size, err := m.Usage.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTenant(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	{
+		size, err := m.TenantInfo.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintTenant(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *TenantInfoWithUsage_Usage) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TenantInfoWithUsage_Usage) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TenantInfoWithUsage_Usage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.Consumption.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintTenant(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x22
+	i -= 8
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.RUCurrent))))
+	i--
+	dAtA[i] = 0x19
+	i -= 8
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.RURefillRate))))
+	i--
+	dAtA[i] = 0x11
+	i -= 8
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.RUBurstLimit))))
+	i--
+	dAtA[i] = 0x9
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintTenant(dAtA []byte, offset int, v uint64) int {
 	offset -= sovTenant(v)
 	base := offset
@@ -210,6 +454,35 @@ func (m *TenantInfo) Size() (n int) {
 	_ = l
 	n += 1 + sovTenant(uint64(m.ID))
 	n += 1 + sovTenant(uint64(m.State))
+	return n
+}
+
+func (m *TenantInfoWithUsage) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.TenantInfo.Size()
+	n += 1 + l + sovTenant(uint64(l))
+	if m.Usage != nil {
+		l = m.Usage.Size()
+		n += 1 + l + sovTenant(uint64(l))
+	}
+	return n
+}
+
+func (m *TenantInfoWithUsage_Usage) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	n += 9
+	n += 9
+	n += 9
+	l = m.Consumption.Size()
+	n += 1 + l + sovTenant(uint64(l))
 	return n
 }
 
@@ -286,6 +559,241 @@ func (m *TenantInfo) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTenant(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTenant
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TenantInfoWithUsage) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTenant
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TenantInfoWithUsage: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TenantInfoWithUsage: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TenantInfo", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTenant
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTenant
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTenant
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TenantInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Usage", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTenant
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTenant
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTenant
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Usage == nil {
+				m.Usage = &TenantInfoWithUsage_Usage{}
+			}
+			if err := m.Usage.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTenant(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTenant
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TenantInfoWithUsage_Usage) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTenant
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Usage: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Usage: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RUBurstLimit", wireType)
+			}
+			var v uint64
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+			m.RUBurstLimit = float64(math.Float64frombits(v))
+		case 2:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RURefillRate", wireType)
+			}
+			var v uint64
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+			m.RURefillRate = float64(math.Float64frombits(v))
+		case 3:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RUCurrent", wireType)
+			}
+			var v uint64
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+			m.RUCurrent = float64(math.Float64frombits(v))
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Consumption", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTenant
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTenant
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTenant
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Consumption.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTenant(dAtA[iNdEx:])

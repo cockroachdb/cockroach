@@ -1515,7 +1515,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	// is the tenant in which the backup was taken.
 	backupCodec := keys.SystemSQLCodec
 	if len(sqlDescs) != 0 {
-		if len(latestBackupManifest.Spans) != 0 && len(latestBackupManifest.Tenants) == 0 {
+		if len(latestBackupManifest.Spans) != 0 && !latestBackupManifest.HasTenants() {
 			// If there are no tenant targets, then the entire keyspace covered by
 			// Spans must lie in 1 tenant.
 			_, backupTenantID, err := keys.DecodeTenantPrefix(latestBackupManifest.Spans[0].Key)
@@ -2081,7 +2081,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 			tenant.State = descpb.TenantInfo_DROP
 			// This is already a job so no need to spin up a gc job for the tenant;
 			// instead just GC the data eagerly.
-			if err := sql.GCTenantSync(ctx, execCfg, &tenant); err != nil {
+			if err := sql.GCTenantSync(ctx, execCfg, &tenant.TenantInfo); err != nil {
 				return err
 			}
 		}
