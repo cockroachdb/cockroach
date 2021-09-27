@@ -85,3 +85,46 @@ message CommonJobEventDetails {
   string status = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
+// CommonChangefeedEventDetails contains the fields common to all changefeed
+// events.
+message CommonChangefeedEventDetails {
+  // The type of changefeed (ex: Enterprise)
+  string changefeed_type = 1 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The CRDB version of the node that triggered the event
+  string crdb_version = 2 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The ID of the node that triggered the event
+  int32 node_id = 3 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The Instance ID of the running SQL server
+  int32 instance_id = 4 [(gogoproto.customname) = "InstanceID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The ID of the cluster containing the node that triggered the event
+  string cluster_id = 5 [(gogoproto.customname) = "ClusterID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The ID of the tenant that triggered the event
+  uint64 tenant_id = 6 [(gogoproto.customname) = "TenantID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The ID of the organization linked to the cluster
+  string organization_id = 7 [(gogoproto.customname) = "OrganizationID", (gogoproto.jsontag) = ",omitempty"];
+
+  // Whether the event originates from within CRDB or an external service
+  bool internal = 8 [(gogoproto.jsontag) = ",omitempty"];
+
+  // How often this event is emitted to the channel per event that takes place
+  float sampling_rate = 9 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Numeric value for the severity of the event
+  int32 severity_numeric = 10 [(gogoproto.jsontag) = ",omitempty"];
+
+  // String value for the severity of the event
+  string severity = 11 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The scheme of sink being emitted to (ex: kafka, nodelocal, webhook-https)
+  string sink_type = 12 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The ID of the job that triggered the event
+  int64 job_id = 13 [(gogoproto.customname) = "JobID", (gogoproto.jsontag) = ",omitempty"];
+}
+

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -448,6 +450,8 @@ func changefeedPlanHook(
 			return err
 		}
 
+    logChangefeedCreateTelemetry(ctx, p, changefeedStmt, opts, sinkURL{URL: parsedSink}, jobID)
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -459,6 +463,84 @@ func changefeedPlanHook(
 
 	}
 	return fn, header, nil, avoidBuffering, nil
+}
+
+func logChangefeedCreateTelemetry(
+	ctx context.Context,
+	p sql.PlanHookState,
+	changefeedStmt *tree.CreateChangefeed,
+	opts map[string]string,
+	sinkURL sinkURL,
+	jobID jobspb.JobID,
+) {
+		nodeID, ok := p.ExecCfg().NodeInfo.NodeID.OptionalNodeID()
+		if !ok {
+			nodeID = -1
+		}
+		tenantID, ok := roachpb.TenantFromContext(ctx)
+		if !ok {
+			tenantID = roachpb.SystemTenantID
+		}
+
+		changefeedEventDetails := eventpb.CommonChangefeedEventDetails{
+			ChangefeedType: "enterprise",
+			CrdbVersion: build.GetInfo().Tag,
+			NodeID:      int32(nodeID),
+			InstanceID:      int32(p.ExecCfg().NodeInfo.NodeID.SQLInstanceID()),
+			ClusterID:       p.ExecCfg().NodeInfo.ClusterID().String(),
+			TenantID:        tenantID.ToUint64(),
+			Internal:        true,
+			SamplingRate:    1,
+			SeverityNumeric: 1,
+			Severity:        "INFO",
+			OrganizationID:    p.ExecCfg().Organization(),
+      SinkType:        sinkURL.Scheme,
+      JobID:           int64(jobID),
+		}
+
+    scanValue := "";
+    if opts[changefeedbase.OptInitialScan] != "" {
+      scanValue = "initial_scan"
+    }
+    if opts[changefeedbase.OptNoInitialScan] != "" {
+      scanValue = "no_initial_scan"
+    }
+
+		log.StructuredEvent(ctx, &eventpb.CreateChangefeedQuery{
+			CommonChangefeedEventDetails: changefeedEventDetails,
+      NumTables: int32(len(changefeedStmt.Targets.Tables)),
+
+      // Sink params
+      TopicPrefix: sinkURL.consumeParam(changefeedbase.SinkParamTopicPrefix) != "",
+      TlsEnabled: sinkURL.consumeParam(changefeedbase.SinkParamTLSEnabled) != "",
+      CaCert: sinkURL.consumeParam(changefeedbase.SinkParamCACert) != "",
+      ClientCert: sinkURL.consumeParam(changefeedbase.SinkParamClientCert) != "",
+      ClientKey: sinkURL.consumeParam(changefeedbase.SinkParamClientKey) != "",
+
+      SaslEnabled: sinkURL.consumeParam(changefeedbase.SinkParamSASLEnabled) != "",
+      SaslMechanism: sinkURL.consumeParam(changefeedbase.SinkParamSASLMechanism),
+      SaslUser: sinkURL.consumeParam(changefeedbase.SinkParamSASLUser) != "",
+      SaslPassword: sinkURL.consumeParam(changefeedbase.SinkParamSASLPassword) != "",
+      FileSize: sinkURL.consumeParam(changefeedbase.SinkParamFileSize),
+      InsecureTlsSkipVerify: sinkURL.consumeParam(changefeedbase.SinkParamSkipTLSVerify) != "",
+
+      // Options
+      Updated: opts[changefeedbase.OptUpdatedTimestamps] != "",
+      Resolved: opts[changefeedbase.OptResolvedTimestamps],
+      Envelope: opts[changefeedbase.OptEnvelope],
+      Cursor: opts[changefeedbase.OptCursor] != "",
+      Format: opts[changefeedbase.OptFormat],
+      ConfluentSchemaRegistry: opts[changefeedbase.OptConfluentSchemaRegistry] != "",
+      KeyInValue: opts[changefeedbase.OptKeyInValue] != "",
+      Diff: opts[changefeedbase.OptDiff] != "",
+      Compression: opts[changefeedbase.OptCompression],
+      ProtectDataFromGcOnPause: opts[changefeedbase.OptProtectDataFromGCOnPause] != "",
+      SchemaChangeEvents: opts[changefeedbase.OptSchemaChangeEvents],
+      SchemaChangePolicy: opts[changefeedbase.OptSchemaChangePolicy],
+      Scan: scanValue,
+      FullTableName: opts[changefeedbase.OptFullTableName] != "",
+      AvroSchemaPrefix: opts[changefeedbase.OptAvroSchemaPrefix] != "",
+		})
 }
 
 func changefeedJobDescription(

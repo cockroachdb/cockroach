@@ -65,34 +65,161 @@ func (m *SampledQuery) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SampledQuery proto.InternalMessageInfo
 
+// CreateChangefeedQuery is the CREATE CHANGEFEED query event logged to the
+// telemetry channel. It contains usage details about the parameters the user
+// passed in to define the changefeed
+type CreateChangefeedQuery struct {
+	CommonEventDetails           `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonChangefeedEventDetails `protobuf:"bytes,2,opt,name=changefeed,proto3,embedded=changefeed" json:""`
+	// The number of tables listed in the query that the changefeed is to run on
+	NumTables int32 `protobuf:"varint,3,opt,name=num_tables,json=numTables,proto3" json:",omitempty"`
+	// (Kafka/CloudStorage Query Param) Whether a custom prefix is being added to all topic names
+	TopicPrefix bool `protobuf:"varint,4,opt,name=topic_prefix,json=topicPrefix,proto3" json:",omitempty"`
+	// (Kafka Query Param) Whether TLS is enabled on the connection to Kafka
+	TlsEnabled bool `protobuf:"varint,5,opt,name=tls_enabled,json=tlsEnabled,proto3" json:",omitempty"`
+	// (Kafka Query Param) The base64-encoded ca_cert file
+	CaCert bool `protobuf:"varint,6,opt,name=ca_cert,json=caCert,proto3" json:",omitempty"`
+	// (Kafka Query Param) Whether a Privacy Enhanced Email (PEM) certificate was specified
+	ClientCert bool `protobuf:"varint,7,opt,name=client_cert,json=clientCert,proto3" json:",omitempty"`
+	// (Kafka Query Param) Whether a private key for the PEM certificate was specified
+	ClientKey bool `protobuf:"varint,8,opt,name=client_key,json=clientKey,proto3" json:",omitempty"`
+	// (Kafka Query Param) Whether SASL is enabled
+	SaslEnabled bool `protobuf:"varint,9,opt,name=sasl_enabled,json=saslEnabled,proto3" json:",omitempty"`
+	// (Kafka Query Param) The SASL mechanism (ex: SASL-SCRAM-SHA-256, SASL-PLAIN)
+	SaslMechanism string `protobuf:"bytes,10,opt,name=sasl_mechanism,json=saslMechanism,proto3" json:",omitempty"`
+	// (Kafka Query Param) Whether a SASL username has been specified
+	SaslUser bool `protobuf:"varint,11,opt,name=sasl_user,json=saslUser,proto3" json:",omitempty"`
+	// (Kafka Query Param) Whether a SASL password has been specified
+	SaslPassword bool `protobuf:"varint,12,opt,name=sasl_password,json=saslPassword,proto3" json:",omitempty"`
+	// (CloudStorage Query Param) A custom maximum file size for files before they are flushed
+	FileSize string `protobuf:"bytes,13,opt,name=file_size,json=fileSize,proto3" json:",omitempty"`
+	// (Kafka Query Param) Whether client-side validation of responses has been disabled
+	InsecureTlsSkipVerify bool `protobuf:"varint,14,opt,name=insecure_tls_skip_verify,json=insecureTlsSkipVerify,proto3" json:",omitempty"`
+	// (Changefeed Option) Whether updated timestamps are emitted with each row
+	Updated bool `protobuf:"varint,15,opt,name=updated,proto3" json:",omitempty"`
+	// (Changefeed Option) The interval at which resolved timestamps are emitted
+	Resolved string `protobuf:"bytes,16,opt,name=resolved,proto3" json:",omitempty"`
+	// (Changefeed Option) Either key_only to emit only keys or wrapped for both key and value
+	Envelope string `protobuf:"bytes,17,opt,name=envelope,proto3" json:",omitempty"`
+	// (Changefeed Option) Whether a cursor timestamp has been specified to begin emitting events from
+	Cursor bool `protobuf:"varint,18,opt,name=cursor,proto3" json:",omitempty"`
+	// (Changefeed Option) The data format, either JSON or Avro, that the changefeed emits
+	Format string `protobuf:"bytes,19,opt,name=format,proto3" json:",omitempty"`
+	// (Changefeed Option) Whether a schema registry address has been specified
+	ConfluentSchemaRegistry bool `protobuf:"varint,20,opt,name=confluent_schema_registry,json=confluentSchemaRegistry,proto3" json:",omitempty"`
+	// (Changefeed Option) Whether to emit primary keys as the value for deleted rows
+	KeyInValue bool `protobuf:"varint,21,opt,name=key_in_value,json=keyInValue,proto3" json:",omitempty"`
+	// (Changefeed Option) Whether a `before` field is to be emitted with each message
+	Diff bool `protobuf:"varint,22,opt,name=diff,proto3" json:",omitempty"`
+	// (Changefeed Option) The compression format being used (ex: gzip)
+	Compression string `protobuf:"bytes,23,opt,name=compression,proto3" json:",omitempty"`
+	// (Changefeed Option) Whether data to resume a changefeed is protected from GC when paused
+	ProtectDataFromGcOnPause bool `protobuf:"varint,24,opt,name=protect_data_from_gc_on_pause,json=protectDataFromGcOnPause,proto3" json:",omitempty"`
+	// (Changefeed Option) The type of schema events that trigger the change policy
+	SchemaChangeEvents string `protobuf:"bytes,25,opt,name=schema_change_events,json=schemaChangeEvents,proto3" json:",omitempty"`
+	// (Changefeed Option) The behavior to trigger from a schema change event (ex: backfill)
+	SchemaChangePolicy string `protobuf:"bytes,26,opt,name=schema_change_policy,json=schemaChangePolicy,proto3" json:",omitempty"`
+	// Whether the initial_scan or no_initial_scan options have been specified
+	Scan string `protobuf:"bytes,27,opt,name=scan,proto3" json:",omitempty"`
+	// (Changefeed Option) Whether fully-qualified table names are used for topic names
+	FullTableName bool `protobuf:"varint,28,opt,name=full_table_name,json=fullTableName,proto3" json:",omitempty"`
+	// (Changefeed Option) Whether a custom namespace for table schemas is specified
+	AvroSchemaPrefix bool `protobuf:"varint,29,opt,name=avro_schema_prefix,json=avroSchemaPrefix,proto3" json:",omitempty"`
+}
+
+func (m *CreateChangefeedQuery) Reset()         { *m = CreateChangefeedQuery{} }
+func (m *CreateChangefeedQuery) String() string { return proto.CompactTextString(m) }
+func (*CreateChangefeedQuery) ProtoMessage()    {}
+func (*CreateChangefeedQuery) Descriptor() ([]byte, []int) {
+	return fileDescriptor_3d317b4ad74be4f7, []int{1}
+}
+func (m *CreateChangefeedQuery) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CreateChangefeedQuery) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *CreateChangefeedQuery) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CreateChangefeedQuery.Merge(m, src)
+}
+func (m *CreateChangefeedQuery) XXX_Size() int {
+	return m.Size()
+}
+func (m *CreateChangefeedQuery) XXX_DiscardUnknown() {
+	xxx_messageInfo_CreateChangefeedQuery.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CreateChangefeedQuery proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*SampledQuery)(nil), "cockroach.util.log.eventpb.SampledQuery")
+	proto.RegisterType((*CreateChangefeedQuery)(nil), "cockroach.util.log.eventpb.CreateChangefeedQuery")
 }
 
 func init() { proto.RegisterFile("util/log/eventpb/telemetry.proto", fileDescriptor_3d317b4ad74be4f7) }
 
 var fileDescriptor_3d317b4ad74be4f7 = []byte{
-	// 320 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0xd0, 0xbb, 0x6e, 0xf2, 0x30,
-	0x14, 0xc0, 0xf1, 0x18, 0x10, 0x9f, 0xe4, 0x0f, 0x51, 0x29, 0xea, 0x10, 0x21, 0xd5, 0x41, 0x5d,
-	0x4a, 0xa5, 0xca, 0xe9, 0x65, 0xe8, 0x4e, 0xdb, 0xad, 0x4b, 0xa0, 0x53, 0x17, 0x14, 0xc2, 0x51,
-	0x1a, 0x61, 0x63, 0x13, 0x3b, 0x15, 0xbc, 0x45, 0x1f, 0xaa, 0x03, 0x23, 0x23, 0x53, 0xd4, 0x26,
-	0x1b, 0x4f, 0x51, 0xc5, 0x64, 0xa8, 0x44, 0x6f, 0x53, 0x62, 0x9d, 0xbf, 0x7f, 0x3a, 0x32, 0xee,
-	0xa6, 0x3a, 0x66, 0x1e, 0x13, 0x91, 0x07, 0xcf, 0x30, 0xd3, 0x72, 0xec, 0x69, 0x60, 0xc0, 0x41,
-	0x27, 0x4b, 0x2a, 0x13, 0xa1, 0x85, 0xdd, 0x09, 0x45, 0x38, 0x4d, 0x44, 0x10, 0x3e, 0xd1, 0xb2,
-	0xa5, 0x4c, 0x44, 0xb4, 0x6a, 0x3b, 0x87, 0x91, 0x88, 0x84, 0xc9, 0xbc, 0xf2, 0x6f, 0x77, 0xa3,
-	0x73, 0xb4, 0x67, 0x9a, 0xaf, 0xaa, 0xc6, 0x27, 0x7b, 0x63, 0x35, 0x67, 0xa3, 0x20, 0x9d, 0xc4,
-	0x7a, 0xf4, 0x39, 0x3c, 0x7e, 0xad, 0xe1, 0xd6, 0x30, 0xe0, 0x92, 0xc1, 0xc4, 0x4f, 0x21, 0x59,
-	0xda, 0x0f, 0xb8, 0x19, 0x0a, 0xce, 0xc5, 0xcc, 0x41, 0x5d, 0xd4, 0xfb, 0x7f, 0x49, 0xe9, 0xf7,
-	0xbb, 0xd1, 0x1b, 0x53, 0xde, 0x95, 0xa7, 0x5b, 0xd0, 0x41, 0xcc, 0x54, 0xbf, 0xb5, 0xca, 0x5c,
-	0x6b, 0x9d, 0xb9, 0x68, 0x9b, 0xb9, 0xd6, 0xa0, 0xb2, 0x6c, 0x1f, 0xd7, 0xd5, 0x9c, 0x39, 0x35,
-	0x43, 0x5e, 0xfc, 0x4e, 0x0e, 0xfd, 0xfb, 0x1f, 0xd4, 0xd2, 0xb2, 0x07, 0xb8, 0x01, 0x0b, 0x08,
-	0x9d, 0xba, 0x31, 0xcf, 0xff, 0x66, 0x2e, 0x20, 0xfc, 0x9a, 0x34, 0x96, 0x7d, 0x8d, 0x0f, 0xd4,
-	0x34, 0x96, 0x12, 0x26, 0xa3, 0x79, 0x0a, 0x49, 0x0c, 0xca, 0x69, 0x74, 0x51, 0xaf, 0xd1, 0x6f,
-	0x6f, 0x33, 0x17, 0x9f, 0x09, 0x1e, 0x6b, 0xe0, 0x52, 0x2f, 0x07, 0xed, 0x2a, 0xf3, 0x77, 0x55,
-	0xff, 0x74, 0xf5, 0x4e, 0xac, 0x55, 0x4e, 0xd0, 0x3a, 0x27, 0x68, 0x93, 0x13, 0xf4, 0x96, 0x13,
-	0xf4, 0x52, 0x10, 0x6b, 0x5d, 0x10, 0x6b, 0x53, 0x10, 0xeb, 0xf1, 0x5f, 0xb5, 0xcc, 0xb8, 0x69,
-	0x1e, 0xfe, 0xea, 0x23, 0x00, 0x00, 0xff, 0xff, 0xbd, 0xbe, 0x4b, 0x03, 0x16, 0x02, 0x00, 0x00,
+	// 880 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x95, 0xcf, 0x53, 0x1b, 0x37,
+	0x14, 0xc7, 0xbd, 0x09, 0x01, 0x5b, 0x36, 0x90, 0xaa, 0xd0, 0x28, 0xb4, 0x18, 0x86, 0x43, 0x43,
+	0x7f, 0xc4, 0x26, 0xcd, 0xf4, 0xc7, 0xa1, 0x87, 0x0e, 0x24, 0xcd, 0xf4, 0x67, 0x00, 0xd3, 0x1c,
+	0x7a, 0xd1, 0x08, 0xed, 0x5b, 0xa3, 0xb1, 0x76, 0xb5, 0x48, 0x5a, 0x97, 0xcd, 0x5f, 0xd1, 0x3f,
+	0xaa, 0x07, 0x8e, 0x1c, 0x73, 0x62, 0x5a, 0xb8, 0xe5, 0xaf, 0xe8, 0x48, 0xbb, 0xa6, 0xcc, 0x58,
+	0x09, 0xbd, 0xe4, 0x64, 0x6b, 0xde, 0xe7, 0xfb, 0x7d, 0x4f, 0x4f, 0xda, 0x27, 0xb4, 0x5e, 0x58,
+	0x21, 0xfb, 0x52, 0x0d, 0xfb, 0x30, 0x86, 0xcc, 0xe6, 0x87, 0x7d, 0x0b, 0x12, 0x52, 0xb0, 0xba,
+	0xec, 0xe5, 0x5a, 0x59, 0x85, 0x57, 0xb8, 0xe2, 0x23, 0xad, 0x18, 0x3f, 0xea, 0x39, 0xb6, 0x27,
+	0xd5, 0xb0, 0x57, 0xb3, 0x2b, 0x4b, 0x43, 0x35, 0x54, 0x1e, 0xeb, 0xbb, 0x7f, 0x95, 0x62, 0x65,
+	0x75, 0xca, 0xd3, 0xff, 0x9a, 0x3a, 0xfc, 0x60, 0x2a, 0x6c, 0x8e, 0x25, 0x65, 0x45, 0x2c, 0x2c,
+	0xbd, 0x0e, 0x6e, 0xfc, 0x75, 0x0b, 0x75, 0x06, 0x2c, 0xcd, 0x25, 0xc4, 0x7b, 0x05, 0xe8, 0x12,
+	0x1f, 0xa0, 0x59, 0xae, 0xd2, 0x54, 0x65, 0x24, 0x5a, 0x8f, 0x36, 0xdb, 0x5f, 0xf4, 0x7a, 0x6f,
+	0xae, 0xad, 0xb7, 0xe3, 0xc9, 0xa7, 0x6e, 0xf5, 0x04, 0x2c, 0x13, 0xd2, 0x6c, 0x77, 0x4e, 0xcf,
+	0xd7, 0x1a, 0x67, 0xe7, 0x6b, 0xd1, 0xeb, 0xf3, 0xb5, 0xc6, 0x7e, 0xed, 0x85, 0xf7, 0xd0, 0x6d,
+	0x73, 0x2c, 0xc9, 0x2d, 0x6f, 0xf9, 0xe8, 0x66, 0xcb, 0xc1, 0xde, 0xcf, 0x6f, 0x71, 0x75, 0x5e,
+	0x78, 0x1f, 0xcd, 0xc0, 0x09, 0x70, 0x72, 0xdb, 0x7b, 0x6e, 0xfd, 0x3f, 0xcf, 0x13, 0xe0, 0x61,
+	0x4b, 0xef, 0x85, 0xbf, 0x46, 0x8b, 0x66, 0x24, 0xf2, 0x1c, 0x62, 0x7a, 0x5c, 0x80, 0x16, 0x60,
+	0xc8, 0xcc, 0x7a, 0xb4, 0x39, 0xb3, 0xbd, 0xf0, 0xfa, 0x7c, 0x0d, 0x7d, 0xae, 0x52, 0x61, 0x21,
+	0xcd, 0x6d, 0xb9, 0xbf, 0x50, 0x63, 0x7b, 0x15, 0xb5, 0x71, 0xda, 0x41, 0xcb, 0x3b, 0x1a, 0x98,
+	0x85, 0x9d, 0x23, 0x96, 0x0d, 0x21, 0x81, 0x77, 0xdb, 0xcf, 0x04, 0x21, 0x7e, 0x95, 0xa8, 0x6e,
+	0xeb, 0x37, 0x37, 0x3b, 0xff, 0x57, 0xdc, 0x5b, 0x72, 0x5c, 0x73, 0xc6, 0x0f, 0x11, 0xca, 0x8a,
+	0x94, 0x5a, 0x76, 0x28, 0xc1, 0xf8, 0x56, 0xdf, 0x99, 0xea, 0x45, 0x2b, 0x2b, 0xd2, 0x03, 0x0f,
+	0xe0, 0x47, 0xa8, 0x63, 0x55, 0x2e, 0x38, 0xcd, 0x35, 0x24, 0xe2, 0xc4, 0x37, 0xaf, 0x39, 0x25,
+	0x68, 0x7b, 0x66, 0xd7, 0x23, 0xb8, 0x8f, 0xda, 0x56, 0x1a, 0x0a, 0x99, 0x73, 0x88, 0xc9, 0x9d,
+	0xa0, 0x02, 0x59, 0x69, 0x9e, 0x56, 0x04, 0x7e, 0x80, 0xe6, 0x38, 0xa3, 0x1c, 0xb4, 0x25, 0xb3,
+	0x41, 0x78, 0x96, 0xb3, 0x1d, 0xd0, 0xd6, 0x39, 0x73, 0x29, 0x20, 0xb3, 0x15, 0x3c, 0x17, 0x76,
+	0xae, 0x10, 0x2f, 0x78, 0x88, 0xea, 0x15, 0x1d, 0x41, 0x49, 0x9a, 0x41, 0xbe, 0x55, 0x11, 0x3f,
+	0x41, 0xe9, 0x36, 0x6b, 0x98, 0x91, 0x57, 0xa5, 0xb7, 0xc2, 0x9b, 0x75, 0xcc, 0xa4, 0xf6, 0x2f,
+	0xd1, 0x82, 0x97, 0xa4, 0xe0, 0x7a, 0x2c, 0x4c, 0x4a, 0xd0, 0x7a, 0xb4, 0xd9, 0x9a, 0x12, 0xcd,
+	0x3b, 0xea, 0x97, 0x09, 0x84, 0x3f, 0x43, 0x2d, 0x2f, 0x2b, 0x0c, 0x68, 0xd2, 0x0e, 0xa6, 0x69,
+	0x3a, 0xe0, 0x37, 0x03, 0x1a, 0x3f, 0x46, 0x5e, 0x4d, 0x73, 0x66, 0xcc, 0x1f, 0x4a, 0xc7, 0xa4,
+	0x13, 0x14, 0xf8, 0xda, 0x77, 0x6b, 0xc6, 0x65, 0x48, 0x84, 0x04, 0x6a, 0xc4, 0x4b, 0x20, 0xf3,
+	0xc1, 0x9a, 0x9a, 0x0e, 0x18, 0x88, 0x97, 0x80, 0x9f, 0x21, 0x22, 0x32, 0x03, 0xbc, 0xd0, 0x40,
+	0xdd, 0xd9, 0xb9, 0x6f, 0x81, 0x8e, 0x41, 0x8b, 0xa4, 0x24, 0x0b, 0xc1, 0x64, 0xcb, 0x13, 0xfe,
+	0x40, 0x9a, 0xc1, 0x48, 0xe4, 0x2f, 0x3c, 0x8c, 0x37, 0xd1, 0x5c, 0x91, 0xc7, 0xcc, 0x42, 0x4c,
+	0x16, 0x83, 0xba, 0x49, 0x18, 0x7f, 0x8a, 0x9a, 0x1a, 0x8c, 0x92, 0x63, 0x88, 0xc9, 0xdd, 0x70,
+	0x79, 0x93, 0xb8, 0x63, 0x21, 0x1b, 0x83, 0x54, 0x39, 0x90, 0xf7, 0xc2, 0xec, 0x24, 0x8e, 0x3f,
+	0x46, 0xb3, 0xbc, 0xd0, 0x46, 0x69, 0x82, 0xdf, 0x70, 0x97, 0x7c, 0xd4, 0x71, 0x89, 0xd2, 0x29,
+	0xb3, 0xe4, 0xfd, 0xa0, 0x63, 0x1d, 0xc5, 0x3f, 0xa2, 0xfb, 0x5c, 0x65, 0x89, 0x2c, 0xdc, 0x2d,
+	0x32, 0xfc, 0x08, 0x52, 0x46, 0x35, 0x0c, 0x85, 0xb1, 0xba, 0x24, 0x4b, 0xc1, 0x14, 0xf7, 0xae,
+	0x04, 0x03, 0xcf, 0xef, 0xd7, 0x38, 0xde, 0x42, 0x9d, 0x11, 0x94, 0x54, 0x64, 0x74, 0xcc, 0x64,
+	0x01, 0x64, 0x39, 0x7c, 0x81, 0x47, 0x50, 0xfe, 0x90, 0xbd, 0x70, 0x04, 0xde, 0x40, 0x33, 0xb1,
+	0x48, 0x12, 0xf2, 0x41, 0x90, 0xf4, 0x31, 0xbc, 0x85, 0xda, 0x5c, 0xa5, 0xb9, 0x06, 0x63, 0x84,
+	0xca, 0xc8, 0xbd, 0xe0, 0x76, 0xae, 0x23, 0xf8, 0x39, 0x5a, 0x75, 0x6f, 0x05, 0x70, 0x4b, 0x63,
+	0x66, 0x19, 0x4d, 0xb4, 0x4a, 0xe9, 0x90, 0x53, 0x95, 0xd1, 0x9c, 0x15, 0x06, 0x08, 0x09, 0xa6,
+	0x23, 0xb5, 0xe8, 0x09, 0xb3, 0xec, 0x7b, 0xad, 0xd2, 0x67, 0xfc, 0x79, 0xb6, 0xeb, 0x78, 0xfc,
+	0x1d, 0x5a, 0xaa, 0x5b, 0x53, 0x4d, 0x9a, 0xfa, 0x45, 0x22, 0xf7, 0x83, 0xb5, 0xe0, 0x8a, 0xad,
+	0x46, 0x97, 0x1f, 0x5b, 0x66, 0xda, 0x21, 0x57, 0x52, 0xf0, 0x92, 0xac, 0xdc, 0xec, 0xb0, 0xeb,
+	0x49, 0xd7, 0x2a, 0xc3, 0x59, 0x46, 0x3e, 0x0c, 0x2a, 0x7c, 0x0c, 0x7f, 0x85, 0x16, 0x93, 0x42,
+	0xca, 0x6a, 0xfa, 0xd1, 0x8c, 0xa5, 0x40, 0x3e, 0x0a, 0x6e, 0x75, 0xde, 0x61, 0x7e, 0x04, 0xfe,
+	0xca, 0x52, 0xc0, 0xdf, 0x22, 0xcc, 0xc6, 0x5a, 0x4d, 0xce, 0xbf, 0x9e, 0x85, 0xab, 0x41, 0xe9,
+	0x5d, 0x47, 0x56, 0x07, 0x5f, 0x0d, 0xc4, 0xed, 0x4f, 0x4e, 0xff, 0xe9, 0x36, 0x4e, 0x2f, 0xba,
+	0xd1, 0xd9, 0x45, 0x37, 0x7a, 0x75, 0xd1, 0x8d, 0xfe, 0xbe, 0xe8, 0x46, 0x7f, 0x5e, 0x76, 0x1b,
+	0x67, 0x97, 0xdd, 0xc6, 0xab, 0xcb, 0x6e, 0xe3, 0xf7, 0xb9, 0x7a, 0xa8, 0x1f, 0xce, 0xfa, 0x37,
+	0xfc, 0xf1, 0xbf, 0x01, 0x00, 0x00, 0xff, 0xff, 0xb8, 0xf7, 0x47, 0xc7, 0x61, 0x08, 0x00, 0x00,
 }
 
 func (m *SampledQuery) Marshal() (dAtA []byte, err error) {
@@ -153,6 +280,315 @@ func (m *SampledQuery) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *CreateChangefeedQuery) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CreateChangefeedQuery) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CreateChangefeedQuery) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.AvroSchemaPrefix {
+		i--
+		if m.AvroSchemaPrefix {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xe8
+	}
+	if m.FullTableName {
+		i--
+		if m.FullTableName {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xe0
+	}
+	if len(m.Scan) > 0 {
+		i -= len(m.Scan)
+		copy(dAtA[i:], m.Scan)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.Scan)))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xda
+	}
+	if len(m.SchemaChangePolicy) > 0 {
+		i -= len(m.SchemaChangePolicy)
+		copy(dAtA[i:], m.SchemaChangePolicy)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.SchemaChangePolicy)))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xd2
+	}
+	if len(m.SchemaChangeEvents) > 0 {
+		i -= len(m.SchemaChangeEvents)
+		copy(dAtA[i:], m.SchemaChangeEvents)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.SchemaChangeEvents)))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xca
+	}
+	if m.ProtectDataFromGcOnPause {
+		i--
+		if m.ProtectDataFromGcOnPause {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xc0
+	}
+	if len(m.Compression) > 0 {
+		i -= len(m.Compression)
+		copy(dAtA[i:], m.Compression)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.Compression)))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xba
+	}
+	if m.Diff {
+		i--
+		if m.Diff {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xb0
+	}
+	if m.KeyInValue {
+		i--
+		if m.KeyInValue {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xa8
+	}
+	if m.ConfluentSchemaRegistry {
+		i--
+		if m.ConfluentSchemaRegistry {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xa0
+	}
+	if len(m.Format) > 0 {
+		i -= len(m.Format)
+		copy(dAtA[i:], m.Format)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.Format)))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x9a
+	}
+	if m.Cursor {
+		i--
+		if m.Cursor {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x90
+	}
+	if len(m.Envelope) > 0 {
+		i -= len(m.Envelope)
+		copy(dAtA[i:], m.Envelope)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.Envelope)))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x8a
+	}
+	if len(m.Resolved) > 0 {
+		i -= len(m.Resolved)
+		copy(dAtA[i:], m.Resolved)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.Resolved)))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x82
+	}
+	if m.Updated {
+		i--
+		if m.Updated {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x78
+	}
+	if m.InsecureTlsSkipVerify {
+		i--
+		if m.InsecureTlsSkipVerify {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x70
+	}
+	if len(m.FileSize) > 0 {
+		i -= len(m.FileSize)
+		copy(dAtA[i:], m.FileSize)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.FileSize)))
+		i--
+		dAtA[i] = 0x6a
+	}
+	if m.SaslPassword {
+		i--
+		if m.SaslPassword {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x60
+	}
+	if m.SaslUser {
+		i--
+		if m.SaslUser {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x58
+	}
+	if len(m.SaslMechanism) > 0 {
+		i -= len(m.SaslMechanism)
+		copy(dAtA[i:], m.SaslMechanism)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.SaslMechanism)))
+		i--
+		dAtA[i] = 0x52
+	}
+	if m.SaslEnabled {
+		i--
+		if m.SaslEnabled {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x48
+	}
+	if m.ClientKey {
+		i--
+		if m.ClientKey {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x40
+	}
+	if m.ClientCert {
+		i--
+		if m.ClientCert {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x38
+	}
+	if m.CaCert {
+		i--
+		if m.CaCert {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.TlsEnabled {
+		i--
+		if m.TlsEnabled {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.TopicPrefix {
+		i--
+		if m.TopicPrefix {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.NumTables != 0 {
+		i = encodeVarintTelemetry(dAtA, i, uint64(m.NumTables))
+		i--
+		dAtA[i] = 0x18
+	}
+	{
+		size, err := m.CommonChangefeedEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintTelemetry(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintTelemetry(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintTelemetry(dAtA []byte, offset int, v uint64) int {
 	offset -= sovTelemetry(v)
 	base := offset
@@ -178,6 +614,109 @@ func (m *SampledQuery) Size() (n int) {
 	n += 1 + l + sovTelemetry(uint64(l))
 	if m.SkippedQueries != 0 {
 		n += 1 + sovTelemetry(uint64(m.SkippedQueries))
+	}
+	return n
+}
+
+func (m *CreateChangefeedQuery) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovTelemetry(uint64(l))
+	l = m.CommonChangefeedEventDetails.Size()
+	n += 1 + l + sovTelemetry(uint64(l))
+	if m.NumTables != 0 {
+		n += 1 + sovTelemetry(uint64(m.NumTables))
+	}
+	if m.TopicPrefix {
+		n += 2
+	}
+	if m.TlsEnabled {
+		n += 2
+	}
+	if m.CaCert {
+		n += 2
+	}
+	if m.ClientCert {
+		n += 2
+	}
+	if m.ClientKey {
+		n += 2
+	}
+	if m.SaslEnabled {
+		n += 2
+	}
+	l = len(m.SaslMechanism)
+	if l > 0 {
+		n += 1 + l + sovTelemetry(uint64(l))
+	}
+	if m.SaslUser {
+		n += 2
+	}
+	if m.SaslPassword {
+		n += 2
+	}
+	l = len(m.FileSize)
+	if l > 0 {
+		n += 1 + l + sovTelemetry(uint64(l))
+	}
+	if m.InsecureTlsSkipVerify {
+		n += 2
+	}
+	if m.Updated {
+		n += 2
+	}
+	l = len(m.Resolved)
+	if l > 0 {
+		n += 2 + l + sovTelemetry(uint64(l))
+	}
+	l = len(m.Envelope)
+	if l > 0 {
+		n += 2 + l + sovTelemetry(uint64(l))
+	}
+	if m.Cursor {
+		n += 3
+	}
+	l = len(m.Format)
+	if l > 0 {
+		n += 2 + l + sovTelemetry(uint64(l))
+	}
+	if m.ConfluentSchemaRegistry {
+		n += 3
+	}
+	if m.KeyInValue {
+		n += 3
+	}
+	if m.Diff {
+		n += 3
+	}
+	l = len(m.Compression)
+	if l > 0 {
+		n += 2 + l + sovTelemetry(uint64(l))
+	}
+	if m.ProtectDataFromGcOnPause {
+		n += 3
+	}
+	l = len(m.SchemaChangeEvents)
+	if l > 0 {
+		n += 2 + l + sovTelemetry(uint64(l))
+	}
+	l = len(m.SchemaChangePolicy)
+	if l > 0 {
+		n += 2 + l + sovTelemetry(uint64(l))
+	}
+	l = len(m.Scan)
+	if l > 0 {
+		n += 2 + l + sovTelemetry(uint64(l))
+	}
+	if m.FullTableName {
+		n += 3
+	}
+	if m.AvroSchemaPrefix {
+		n += 3
 	}
 	return n
 }
@@ -335,6 +874,769 @@ func (m *SampledQuery) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTelemetry(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CreateChangefeedQuery) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTelemetry
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CreateChangefeedQuery: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CreateChangefeedQuery: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonChangefeedEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonChangefeedEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NumTables", wireType)
+			}
+			m.NumTables = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NumTables |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicPrefix", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.TopicPrefix = bool(v != 0)
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TlsEnabled", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.TlsEnabled = bool(v != 0)
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CaCert", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.CaCert = bool(v != 0)
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClientCert", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ClientCert = bool(v != 0)
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClientKey", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ClientKey = bool(v != 0)
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SaslEnabled", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.SaslEnabled = bool(v != 0)
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SaslMechanism", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SaslMechanism = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 11:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SaslUser", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.SaslUser = bool(v != 0)
+		case 12:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SaslPassword", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.SaslPassword = bool(v != 0)
+		case 13:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FileSize", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.FileSize = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 14:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field InsecureTlsSkipVerify", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.InsecureTlsSkipVerify = bool(v != 0)
+		case 15:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Updated", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Updated = bool(v != 0)
+		case 16:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Resolved", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Resolved = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 17:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Envelope", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Envelope = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 18:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Cursor", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Cursor = bool(v != 0)
+		case 19:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Format", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Format = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 20:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ConfluentSchemaRegistry", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ConfluentSchemaRegistry = bool(v != 0)
+		case 21:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field KeyInValue", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.KeyInValue = bool(v != 0)
+		case 22:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Diff", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Diff = bool(v != 0)
+		case 23:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Compression", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Compression = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 24:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProtectDataFromGcOnPause", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ProtectDataFromGcOnPause = bool(v != 0)
+		case 25:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SchemaChangeEvents", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SchemaChangeEvents = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 26:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SchemaChangePolicy", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SchemaChangePolicy = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 27:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Scan", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Scan = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 28:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FullTableName", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.FullTableName = bool(v != 0)
+		case 29:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AvroSchemaPrefix", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.AvroSchemaPrefix = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTelemetry(dAtA[iNdEx:])
