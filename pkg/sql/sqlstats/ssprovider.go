@@ -55,9 +55,6 @@ type Writer interface {
 // Reader provides methods to retrieve transaction/statement statistics from
 // the Storage.
 type Reader interface {
-	// GetLastReset returns the last time when the sqlstats is being reset.
-	GetLastReset() time.Time
-
 	// IterateStatementStats iterates through all the collected statement statistics
 	// by using StatementVisitor. Caller can specify iteration behavior, such
 	// as ordering, through IteratorOptions argument. StatementVisitor can return
@@ -80,6 +77,13 @@ type Reader interface {
 
 	// GetTransactionStats performs a point lookup of a transaction fingerprint key.
 	GetTransactionStats(appName string, key roachpb.TransactionFingerprintID) (*roachpb.CollectedTransactionStatistics, error)
+}
+
+// ApplicationStats is an interface to read from or write to the statistics
+// belongs to an application.
+type ApplicationStats interface {
+	Reader
+	Writer
 }
 
 // IteratorOptions provides the ability to the caller to change how it iterates
@@ -126,9 +130,9 @@ type StatsCollector interface {
 	// was previously tracking before being Reset.
 	PreviousPhaseTimes() *sessionphase.Times
 
-	// Reset resets the StatsCollector with a new Writer and a new copy of the
-	// sessionphase.Times.
-	Reset(Writer, *sessionphase.Times)
+	// Reset resets the StatsCollector with a new ApplicationStats and a new copy
+	// of the sessionphase.Times.
+	Reset(ApplicationStats, *sessionphase.Times)
 }
 
 // Storage provides clients with interface to perform read and write operations
@@ -136,9 +140,12 @@ type StatsCollector interface {
 type Storage interface {
 	Reader
 
-	// GetWriterForApplication returns a Writer instance for the given application
-	// name.
-	GetWriterForApplication(appName string) Writer
+	// GetLastReset returns the last time when the sqlstats is being reset.
+	GetLastReset() time.Time
+
+	// GetApplicationStats returns an ApplicationStats instance for the given
+	// application name.
+	GetApplicationStats(appName string) ApplicationStats
 
 	// Reset resets all the statistics stored in-memory in the current Storage.
 	Reset(context.Context) error

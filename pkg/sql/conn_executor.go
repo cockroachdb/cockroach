@@ -625,7 +625,7 @@ func (s *Server) SetupConn(
 
 	ex := s.newConnExecutor(
 		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
-		s.sqlStats.GetWriterForApplication(sd.ApplicationName),
+		s.sqlStats.GetApplicationStats(sd.ApplicationName),
 	)
 	return ConnectionHandler{ex}, nil
 }
@@ -733,7 +733,7 @@ func (s *Server) newConnExecutor(
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
-	statsWriter sqlstats.Writer,
+	applicationStats sqlstats.ApplicationStats,
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -811,11 +811,11 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
-	ex.statsWriter = statsWriter
-	ex.statsCollector = sslocal.NewStatsCollector(statsWriter, ex.phaseTimes)
+	ex.applicationStats = applicationStats
+	ex.statsCollector = sslocal.NewStatsCollector(applicationStats, ex.phaseTimes)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
-		ex.statsWriter = ex.server.sqlStats.GetWriterForApplication(newName)
+		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName)
 	}
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
@@ -866,7 +866,7 @@ func (s *Server) newConnExecutorWithTxn(
 	srvMetrics *Metrics,
 	txn *kv.Txn,
 	syntheticDescs []catalog.Descriptor,
-	statsWriter sqlstats.Writer,
+	applicationStats sqlstats.ApplicationStats,
 ) *connExecutor {
 	ex := s.newConnExecutor(
 		ctx,
@@ -875,7 +875,7 @@ func (s *Server) newConnExecutorWithTxn(
 		clientComm,
 		memMetrics,
 		srvMetrics,
-		statsWriter,
+		applicationStats,
 	)
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
@@ -1274,10 +1274,10 @@ type connExecutor struct {
 	// executor.
 	dataMutatorIterator *sessionDataMutatorIterator
 
-	// statsWriter is a writer interface for recording per-application SQL usage
-	// statistics. It is maintained to represent statistics for the application
-	// currently identified by sessiondata.ApplicationName.
-	statsWriter sqlstats.Writer
+	// applicationStats records per-application SQL usage statistics. It is
+	// maintained to represent statistics for the application currently identified
+	// by sessiondata.ApplicationName.
+	applicationStats sqlstats.ApplicationStats
 
 	// statsCollector is used to collect statistics about SQL statements and
 	// transactions.
@@ -2169,7 +2169,7 @@ func (ex *connExecutor) execCopyIn(
 		// state machine, but the copyMachine manages its own transactions without
 		// going through the state machine.
 		ex.state.sqlTimestamp = txnTS
-		ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
+		ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 		ex.initPlanner(ctx, p)
 		ex.resetPlanner(ctx, p, txn, stmtTS)
 	}

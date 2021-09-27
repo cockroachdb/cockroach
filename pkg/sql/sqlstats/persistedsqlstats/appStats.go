@@ -14,62 +14,54 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/errors"
 )
 
-// StatsWriter is a sqlstats.Writer that wraps a in-memory node-local stats
-// writer. StatsWriter signals the subsystem when it encounters memory pressure
-// which will triggers the flush operation.
-type StatsWriter struct {
+// ApplicationStats is a sqlstats.ApplicationStats that wraps an in-memory
+// node-local ApplicationStats. ApplicationStats signals the subsystem when it
+// encounters memory pressure which will triggers the flush operation.
+type ApplicationStats struct {
 	// local in-memory storage.
-	memWriter sqlstats.Writer
+	sqlstats.ApplicationStats
 
 	// Use to signal the stats writer is experiencing memory pressure.
 	memoryPressureSignal chan struct{}
 }
 
-var _ sqlstats.Writer = &StatsWriter{}
+var _ sqlstats.ApplicationStats = &ApplicationStats{}
 
-// RecordStatement implements sqlstats.Writer interface.
-func (s *StatsWriter) RecordStatement(
+// RecordStatement implements sqlstats.ApplicationStats interface.
+func (s *ApplicationStats) RecordStatement(
 	ctx context.Context, key roachpb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
 ) (roachpb.StmtFingerprintID, error) {
 	var fingerprintID roachpb.StmtFingerprintID
 	err := s.recordStatsOrSendMemoryPressureSignal(func() (err error) {
-		fingerprintID, err = s.memWriter.RecordStatement(ctx, key, value)
+		fingerprintID, err = s.ApplicationStats.RecordStatement(ctx, key, value)
 		return err
 	})
 	return fingerprintID, err
 }
 
-// RecordStatementExecStats implements sqlstats.Writer interface.
-func (s *StatsWriter) RecordStatementExecStats(
-	key roachpb.StatementStatisticsKey, stats execstats.QueryLevelStats,
-) error {
-	return s.memWriter.RecordStatementExecStats(key, stats)
-}
-
-// ShouldSaveLogicalPlanDesc implements sqlstats.Writer interface.
-func (s *StatsWriter) ShouldSaveLogicalPlanDesc(
+// ShouldSaveLogicalPlanDesc implements sqlstats.ApplicationStats interface.
+func (s *ApplicationStats) ShouldSaveLogicalPlanDesc(
 	fingerprint string, implicitTxn bool, database string,
 ) bool {
-	return s.memWriter.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, database)
+	return s.ApplicationStats.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, database)
 }
 
-// RecordTransaction implements sqlstats.Writer interface and saves
+// RecordTransaction implements sqlstats.ApplicationStats interface and saves
 // per-transaction statistics.
-func (s *StatsWriter) RecordTransaction(
+func (s *ApplicationStats) RecordTransaction(
 	ctx context.Context, key roachpb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) error {
 	return s.recordStatsOrSendMemoryPressureSignal(func() error {
-		return s.memWriter.RecordTransaction(ctx, key, value)
+		return s.ApplicationStats.RecordTransaction(ctx, key, value)
 	})
 }
 
-func (s *StatsWriter) recordStatsOrSendMemoryPressureSignal(fn func() error) error {
+func (s *ApplicationStats) recordStatsOrSendMemoryPressureSignal(fn func() error) error {
 	err := fn()
 	if errors.Is(err, ssmemstorage.ErrFingerprintLimitReached) || errors.Is(err, ssmemstorage.ErrMemoryPressure) {
 		select {

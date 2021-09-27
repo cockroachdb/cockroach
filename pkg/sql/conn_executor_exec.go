@@ -91,7 +91,7 @@ func (ex *connExecutor) execStmt(
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
 	if _, ok := ast.(tree.ObserverStatement); ok {
-		ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
+		ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 		err := ex.runObserverStatement(ctx, ast, res)
 		// Note that regardless of res.Err(), these observer statements don't
 		// generate error events; transactions are always allowed to continue.
@@ -364,7 +364,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
-	ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
+	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutatorIterator.paramStatusUpdater = res
 	p.noticeSender = res
@@ -1426,7 +1426,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		rwMode = ex.readWriteModeWithSessionDefault(modes.ReadWriteMode)
 		return rwMode, now, nil, nil
 	}
-	ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
+	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	p := &ex.planner
 
 	// NB: this use of p.txn is totally bogus. The planner's txn should
