@@ -17,7 +17,7 @@ id
 ----
 1001:1002
 
-bazel info workspace --color=no --config=dev
+bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 
@@ -53,7 +53,7 @@ id
 ----
 1001:1002
 
-bazel info workspace --color=no --config=dev
+bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 

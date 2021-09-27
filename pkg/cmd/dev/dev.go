@@ -74,6 +74,7 @@ lets engineers do a few things:
 		makeBenchCmd(ret.bench),
 		makeBuildCmd(ret.build),
 		makeBuilderCmd(ret.builder),
+		makeDoctorCmd(ret.doctor),
 		makeGenerateCmd(ret.generate),
 		makeLintCmd(ret.lint),
 		makeTestCmd(ret.test),
