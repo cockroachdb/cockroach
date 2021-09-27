@@ -270,7 +270,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		0, "Additional throughput to provision, in MiB/s")
 
 	flags.VarP(&o.EBSVolumes, ProviderName+"-ebs-volume", "",
-		"Additional EBS disk to attached; specified as JSON: {VolumeType=io2,VolumeSize=213,Iops=321}")
+		`Additional EBS disk to attached, repeated for extra disks; specified as JSON: {"VolumeType":"io2","VolumeSize":213,"Iops":321}`)
 
 	flags.StringSliceVar(&o.CreateZones, ProviderName+"-zones", nil,
 		fmt.Sprintf("aws availability zones to use for cluster creation. If zones are formatted\n"+
@@ -280,7 +280,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		"", "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
-		false, "Enable the use of multiple stores by creating one store directory per disk.  Default is to raid0 stripe all disks.")
+		false, "Enable the use of multiple stores by creating one store directory per disk. "+
+			"Default is to raid0 stripe all disks. "+
+			"See repeating --"+ProviderName+"-ebs-volume for adding extra volumes.")
 	flags.Float64Var(&o.CreateRateLimit, ProviderName+"-create-rate-limit", 2, "aws"+
 		" rate limit (per second) for instance creation. This is used to avoid hitting the request"+
 		" limits from aws, which can vary based on the region, and the size of the cluster being"+
