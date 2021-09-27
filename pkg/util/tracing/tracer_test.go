@@ -12,6 +12,7 @@ package tracing
 
 import (
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -636,4 +637,30 @@ func TestNoopSpanFinish(t *testing.T) {
 	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
 	sp.Finish()
 	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
+}
+
+func TestConcurrentChildAndRecording(t *testing.T) {
+	tags := logtags.SingleTagBuffer("foo", "bar")
+	tr := NewTracer()
+	rootSp := tr.StartSpan("root", WithForceRealSpan())
+	rootSp.SetVerbose(true)
+	var wg sync.WaitGroup
+	const n = 1000
+	wg.Add(2 * n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			sp := tr.StartSpan(
+				"child",
+				WithParentAndAutoCollection(rootSp), // links sp to rootSp
+				WithLogTags(tags),                   // causes tag to be set
+			)
+			sp.Finish()
+		}()
+		go func() {
+			defer wg.Done()
+			_ = rootSp.GetRecording()
+		}()
+	}
+	wg.Wait()
 }
