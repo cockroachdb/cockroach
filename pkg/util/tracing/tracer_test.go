@@ -12,6 +12,7 @@ package tracing
 
 import (
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -20,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	otelsdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -569,4 +571,28 @@ func TestNoopSpanFinish(t *testing.T) {
 	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
 	sp.Finish()
 	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
+}
+
+func TestConcurrentChildAndRecording(t *testing.T) {
+	tr := NewTracer()
+	rootSp := tr.StartSpan("root", WithForceRealSpan())
+	rootSp.SetVerbose(true)
+	var wg sync.WaitGroup
+	const n = 1000
+	wg.Add(2 * n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			sp := tr.StartSpan(
+				"child",
+				WithParentAndAutoCollection(rootSp),      // links sp to rootSp
+				WithSpanKind(oteltrace.SpanKindConsumer)) // causes a tag to be set
+			sp.Finish()
+		}()
+		go func() {
+			defer wg.Done()
+			_ = rootSp.GetRecording()
+		}()
+	}
+	wg.Wait()
 }
