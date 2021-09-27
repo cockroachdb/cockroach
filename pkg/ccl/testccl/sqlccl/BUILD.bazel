@@ -5,6 +5,7 @@ go_test(
     srcs = [
         "main_test.go",
         "run_control_test.go",
+        "temp_table_clean_test.go",
     ],
     deps = [
         "//pkg/base",
@@ -12,6 +13,9 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqltestutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
@@ -20,6 +24,8 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
