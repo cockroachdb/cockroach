@@ -86,11 +86,9 @@ func evalExport(
 
 	var evalExportTrace types.StringValue
 	if cArgs.EvalCtx.NodeID() == h.GatewayNodeID {
-		evalExportTrace.Value = fmt.Sprintf("evaluating Export [%s, %s) on local node %d",
-			args.Key, args.EndKey, cArgs.EvalCtx.NodeID())
+		evalExportTrace.Value = fmt.Sprintf("evaluating Export on local node %d", cArgs.EvalCtx.NodeID())
 	} else {
-		evalExportTrace.Value = fmt.Sprintf("evaluating Export [%s, %s) on remote node %d",
-			args.Key, args.EndKey, cArgs.EvalCtx.NodeID())
+		evalExportTrace.Value = fmt.Sprintf("evaluating Export on remote node %d", cArgs.EvalCtx.NodeID())
 	}
 	evalExportSpan.RecordStructured(&evalExportTrace)
 
