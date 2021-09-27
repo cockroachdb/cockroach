@@ -570,13 +570,8 @@ CREATE TABLE system.tenant_usage (
   -- Current sum of the shares values for all instances.
   current_share_sum FLOAT,
 
-  -- Cumulative usage statistics.
-  total_ru_usage            FLOAT,
-  total_read_requests       INT,
-  total_read_bytes          INT,
-  total_write_requests      INT,
-  total_write_bytes         INT,
-  total_sql_pod_cpu_seconds FLOAT, -- TODO: Maybe milliseconds and INT8?
+  -- Cumulative usage statistics, encoded as roachpb.TenantConsumption.
+  total_consumption BYTES,
 
 	-- -------------------------------------------------------------
 	--  The following fields are used for per-instance state, when
@@ -598,8 +593,7 @@ CREATE TABLE system.tenant_usage (
 	FAMILY "primary" (
 	  tenant_id, instance_id, next_instance_id, last_update,
 	  ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
-	  total_ru_usage, total_read_requests, total_read_bytes, total_write_requests,
-	  total_write_bytes, total_sql_pod_cpu_seconds,
+	  total_consumption,
 	  instance_lease, instance_seq, instance_shares
 	),
 
@@ -2156,15 +2150,10 @@ var (
 				{Name: "ru_refill_rate", ID: 6, Type: types.Float, Nullable: true},
 				{Name: "ru_current", ID: 7, Type: types.Float, Nullable: true},
 				{Name: "current_share_sum", ID: 8, Type: types.Float, Nullable: true},
-				{Name: "total_ru_usage", ID: 9, Type: types.Float, Nullable: true},
-				{Name: "total_read_requests", ID: 10, Type: types.Int, Nullable: true},
-				{Name: "total_read_bytes", ID: 11, Type: types.Int, Nullable: true},
-				{Name: "total_write_requests", ID: 12, Type: types.Int, Nullable: true},
-				{Name: "total_write_bytes", ID: 13, Type: types.Int, Nullable: true},
-				{Name: "total_sql_pod_cpu_seconds", ID: 14, Type: types.Float, Nullable: true},
-				{Name: "instance_lease", ID: 15, Type: types.Bytes, Nullable: true},
-				{Name: "instance_seq", ID: 16, Type: types.Int, Nullable: true},
-				{Name: "instance_shares", ID: 17, Type: types.Float, Nullable: true},
+				{Name: "total_consumption", ID: 9, Type: types.Bytes, Nullable: true},
+				{Name: "instance_lease", ID: 10, Type: types.Bytes, Nullable: true},
+				{Name: "instance_seq", ID: 11, Type: types.Int, Nullable: true},
+				{Name: "instance_shares", ID: 12, Type: types.Float, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2173,11 +2162,10 @@ var (
 					ColumnNames: []string{
 						"tenant_id", "instance_id", "next_instance_id", "last_update",
 						"ru_burst_limit", "ru_refill_rate", "ru_current", "current_share_sum",
-						"total_ru_usage", "total_read_requests", "total_read_bytes", "total_write_requests",
-						"total_write_bytes", "total_sql_pod_cpu_seconds",
+						"total_consumption",
 						"instance_lease", "instance_seq", "instance_shares",
 					},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
 					DefaultColumnID: 0,
 				},
 			},
