@@ -128,6 +128,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			closedTS:              makeTS(4),
 			intentCleanupAge:      5,
 			expResolvedTS:         makeTS(2).Prev(),
+			// The test sets current clock to 10; collect intents with WriteTimestamp < 10 - intentCleanupAge
 			expEncounteredIntents: []string{"d"},
 		},
 		{
