@@ -20,6 +20,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
+// globalSeed contains a pseudo random seed that should only be used in tests.
+var globalSeed int64
+
+// Initializes the global random seed. This value can be specified via an
+// environment variable COCKROACH_RANDOM_SEED=x.
+func init() {
+	globalSeed = envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
+}
+
 // NewPseudoSeed generates a seed from crypto/rand.
 func NewPseudoSeed() int64 {
 	var seed int64
@@ -45,6 +54,12 @@ func NewTestPseudoRand() (*rand.Rand, int64) {
 	rng, seed := NewPseudoRand()
 	log.Printf("random seed: %v", seed)
 	return rng, seed
+}
+
+// NewTestRandFromGlobalSeed returns an instance of math/rand.Rand seeded from
+// the seed set globally.
+func NewTestRandFromGlobalSeed() (*rand.Rand, int64) {
+	return rand.New(rand.NewSource(globalSeed)), globalSeed
 }
 
 // RandIntInRange returns a value in [min, max)
@@ -82,12 +97,9 @@ func ReadTestdataBytes(r *rand.Rand, arr []byte) {
 }
 
 // SeedForTests seeds the random number generator and prints the seed
-// value used. This value can be specified via an environment variable
-// COCKROACH_RANDOM_SEED=x to reuse the same value later. This function should
-// be called from TestMain; individual tests should not touch the seed
-// of the global random number generator.
+// value used. This function should be called from TestMain; individual tests
+// should not touch the seed of the global random number generator.
 func SeedForTests() {
-	seed := envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
-	rand.Seed(seed)
-	log.Printf("random seed: %v", seed)
+	rand.Seed(globalSeed)
+	log.Printf("random seed: %v", globalSeed)
 }
