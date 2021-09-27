@@ -95,7 +95,7 @@ export interface StatementsPageDispatchProps {
 
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
-  dateRange?: [Moment, Moment];
+  dateRange: [Moment, Moment];
   statementsError: Error | null;
   apps: string[];
   databases: string[];
@@ -120,8 +120,7 @@ export type StatementsPageProps = StatementsPageDispatchProps &
 
 function statementsRequestFromProps(
   props: StatementsPageProps,
-): cockroach.server.serverpb.StatementsRequest | null {
-  if (props.isTenant || props.dateRange == null) return null;
+): cockroach.server.serverpb.StatementsRequest {
   return new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(props.dateRange[0].unix()),
@@ -521,22 +520,18 @@ export class StatementsPage extends React.Component<
               showNodes={nodes.length > 1}
             />
           </PageConfigItem>
-          {this.props.dateRange && (
-            <>
-              <PageConfigItem>
-                <DateRange
-                  start={this.props.dateRange[0]}
-                  end={this.props.dateRange[1]}
-                  onSubmit={this.changeDateRange}
-                />
-              </PageConfigItem>
-              <PageConfigItem>
-                <button className={cx("reset-btn")} onClick={this.resetTime}>
-                  reset time
-                </button>
-              </PageConfigItem>
-            </>
-          )}
+          <PageConfigItem>
+            <DateRange
+              start={this.props.dateRange[0]}
+              end={this.props.dateRange[1]}
+              onSubmit={this.changeDateRange}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <button className={cx("reset-btn")} onClick={this.resetTime}>
+              reset time
+            </button>
+          </PageConfigItem>
         </PageConfig>
         <section className={sortableTableCx("cl-table-container")}>
           <div>
