@@ -4,7 +4,7 @@ getenv PATH
 which cc
 readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-bazel run --config=test //build/bazelutil:lint --config=dev -- -test.v
+bazel run --config=test //build/bazelutil:lint -- -test.v
 
 dev lint --short --timeout=5m
 ----
@@ -12,4 +12,4 @@ getenv PATH
 which cc
 readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-bazel run --config=test //build/bazelutil:lint --config=dev -- -test.v -test.short -test.timeout 5m0s
+bazel run --config=test //build/bazelutil:lint -- -test.v -test.short -test.timeout 5m0s
