@@ -174,10 +174,7 @@ func (s *crdbSpan) recordingType() RecordingType {
 //
 // If parent != nil, the Span will be registered as a child of the respective
 // parent. If nil, the parent's recording will not include this child.
-func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
-	if parent != nil {
-		parent.addChild(s)
-	}
+func (s *crdbSpan) enableRecording(recType RecordingType) {
 	if recType == RecordingOff || s.recordingType() == recType {
 		return
 	}
@@ -493,7 +490,7 @@ func (s *crdbSpan) addChild(child *crdbSpan) {
 // recurses on its list of children.
 func (s *crdbSpan) setVerboseRecursively(to bool) {
 	if to {
-		s.enableRecording(nil /* parent */, RecordingVerbose)
+		s.enableRecording(RecordingVerbose)
 	} else {
 		s.disableRecording()
 	}
