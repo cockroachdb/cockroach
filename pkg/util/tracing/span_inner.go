@@ -60,7 +60,7 @@ func (s *spanInner) SetVerbose(to bool) {
 		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
 	if to {
-		s.crdb.enableRecording(nil /* parent */, RecordingVerbose)
+		s.crdb.enableRecording(RecordingVerbose)
 	} else {
 		s.crdb.disableRecording()
 	}
