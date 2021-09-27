@@ -64,10 +64,6 @@ func postgisColumnsTablePopulator(
 
 					var datumNDims tree.Datum
 					switch m.ShapeType {
-					case geopb.ShapeType_Point, geopb.ShapeType_LineString, geopb.ShapeType_Polygon,
-						geopb.ShapeType_MultiPoint, geopb.ShapeType_MultiLineString, geopb.ShapeType_MultiPolygon,
-						geopb.ShapeType_GeometryCollection:
-						datumNDims = tree.NewDInt(2)
 					case geopb.ShapeType_Geometry, geopb.ShapeType_Unset:
 						// For geometry_columns, the query in PostGIS COALESCES the value to 2.
 						// Otherwise, the value is NULL.
@@ -76,6 +72,17 @@ func postgisColumnsTablePopulator(
 						} else {
 							datumNDims = tree.DNull
 						}
+					default:
+						zm := m.ShapeType & (geopb.ZShapeTypeFlag | geopb.MShapeTypeFlag)
+						switch zm {
+						case geopb.ZShapeTypeFlag | geopb.MShapeTypeFlag:
+							datumNDims = tree.NewDInt(4)
+						case geopb.ZShapeTypeFlag, geopb.MShapeTypeFlag:
+							datumNDims = tree.NewDInt(3)
+						default:
+							datumNDims = tree.NewDInt(2)
+						}
+
 					}
 
 					shapeName := m.ShapeType.String()
