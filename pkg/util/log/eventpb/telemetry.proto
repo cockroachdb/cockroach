@@ -45,3 +45,95 @@ message SampledQuery {
   string distribution = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
+
+// CreateChangefeedQuery is the CREATE CHANGEFEED query event logged to the
+// telemetry channel. It contains usage details about the parameters the user
+// passed in to define the changefeed
+message CreateChangefeedQuery {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonChangefeedEventDetails changefeed = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The number of tables listed in the query that the changefeed is to run on
+  int32 num_tables = 3 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Changefeed Sink Params
+
+  // (Kafka/CloudStorage Query Param) Whether a custom prefix is being added to all topic names
+  bool topic_prefix = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Kafka Query Param) Whether TLS is enabled on the connection to Kafka
+  bool tls_enabled = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Kafka Query Param) Whether a base64-encoded ca_cert file was specified
+  bool ca_cert = 6 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Kafka Query Param) Whether a Privacy Enhanced Email (PEM) certificate was specified
+  bool client_cert = 7 [(gogoproto.jsontag) = ",omitempty"];
+  // (Kafka Query Param) Whether a private key for the PEM certificate was specified
+  bool client_key = 8 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Kafka Query Param) Whether SASL is enabled
+  bool sasl_enabled = 9 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Kafka Query Param) The SASL mechanism (ex: SASL-SCRAM-SHA-256, SASL-PLAIN)
+  string sasl_mechanism = 10 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\"" ];
+
+  // (Kafka Query Param) Whether a SASL username has been specified
+  bool sasl_user = 11 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Kafka Query Param) Whether a SASL password has been specified
+  bool sasl_password = 12 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (CloudStorage Query Param) A custom maximum file size for files before they are flushed
+  string file_size = 13 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\"" ];
+
+  // (Kafka Query Param) Whether client-side validation of responses has been disabled
+  bool insecure_tls_skip_verify = 14 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Changefeed Options
+
+  // (Changefeed Option) Whether updated timestamps are emitted with each row
+  bool updated = 15 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Changefeed Option) The interval at which resolved timestamps are emitted
+  string resolved = 16 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\"" ];
+
+  // (Changefeed Option) Either key_only to emit only keys or wrapped for both key and value
+  string envelope = 17 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\"" ];
+
+  // (Changefeed Option) Whether a cursor timestamp has been specified to begin emitting events from
+  bool cursor = 18 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Changefeed Option) The data format, either JSON or Avro, that the changefeed emits
+  string format = 19 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\"" ];
+
+  // (Changefeed Option) Whether a schema registry address has been specified
+  bool confluent_schema_registry = 20 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Changefeed Option) Whether to emit primary keys as the value for deleted rows
+  bool key_in_value = 21 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Changefeed Option) Whether a `before` field is to be emitted with each message
+  bool diff = 22 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Changefeed Option) The compression format being used (ex: gzip)
+  string compression = 23 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\"" ];
+
+  // (Changefeed Option) Whether data to resume a changefeed is protected from GC when paused
+  bool protect_data_from_gc_on_pause = 24 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Changefeed Option) The type of schema events that trigger the change policy
+  string schema_change_events = 25 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\"" ];
+
+  // (Changefeed Option) The behavior to trigger from a schema change event (ex: backfill)
+  string schema_change_policy = 26 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\"" ];
+
+  // Whether the initial_scan or no_initial_scan options have been specified
+  string scan = 27 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\"" ];
+
+  // (Changefeed Option) Whether fully-qualified table names are used for topic names
+  bool full_table_name = 28 [(gogoproto.jsontag) = ",omitempty"];
+
+  // (Changefeed Option) Whether a custom namespace for table schemas is specified
+  bool avro_schema_prefix = 29 [(gogoproto.jsontag) = ",omitempty"];
+}

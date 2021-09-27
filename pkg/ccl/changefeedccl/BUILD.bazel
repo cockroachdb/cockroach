@@ -28,6 +28,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/build",
         "//pkg/ccl/backupccl/backupresolver",
         "//pkg/ccl/changefeedccl/cdcutils",
         "//pkg/ccl/changefeedccl/changefeedbase",
@@ -92,6 +93,7 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/json",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",

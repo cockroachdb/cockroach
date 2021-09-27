@@ -2261,6 +2261,64 @@ An event of type `drop_role` is recorded when a role is dropped.
 Events in this category are logged to the `TELEMETRY` channel.
 
 
+### `create_changefeed_query`
+
+An event of type `create_changefeed_query` is the CREATE CHANGEFEED query event logged to the
+telemetry channel. It contains usage details about the parameters the user
+passed in to define the changefeed
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on | no |
+| `TopicPrefix` | (Kafka/CloudStorage Query Param) Whether a custom prefix is being added to all topic names | no |
+| `TlsEnabled` | (Kafka Query Param) Whether TLS is enabled on the connection to Kafka | no |
+| `CaCert` | (Kafka Query Param) Whether a base64-encoded ca_cert file was specified | no |
+| `ClientCert` | (Kafka Query Param) Whether a Privacy Enhanced Email (PEM) certificate was specified | no |
+| `ClientKey` | (Kafka Query Param) Whether a private key for the PEM certificate was specified | no |
+| `SaslEnabled` | (Kafka Query Param) Whether SASL is enabled | no |
+| `SaslMechanism` | (Kafka Query Param) The SASL mechanism (ex: SASL-SCRAM-SHA-256, SASL-PLAIN) | no |
+| `SaslUser` | (Kafka Query Param) Whether a SASL username has been specified | no |
+| `SaslPassword` | (Kafka Query Param) Whether a SASL password has been specified | no |
+| `FileSize` | (CloudStorage Query Param) A custom maximum file size for files before they are flushed | no |
+| `InsecureTlsSkipVerify` | (Kafka Query Param) Whether client-side validation of responses has been disabled | no |
+| `Updated` | (Changefeed Option) Whether updated timestamps are emitted with each row | no |
+| `Resolved` | (Changefeed Option) The interval at which resolved timestamps are emitted | no |
+| `Envelope` | (Changefeed Option) Either key_only to emit only keys or wrapped for both key and value | no |
+| `Cursor` | (Changefeed Option) Whether a cursor timestamp has been specified to begin emitting events from | no |
+| `Format` | (Changefeed Option) The data format, either JSON or Avro, that the changefeed emits | no |
+| `ConfluentSchemaRegistry` | (Changefeed Option) Whether a schema registry address has been specified | no |
+| `KeyInValue` | (Changefeed Option) Whether to emit primary keys as the value for deleted rows | no |
+| `Diff` | (Changefeed Option) Whether a `before` field is to be emitted with each message | no |
+| `Compression` | (Changefeed Option) The compression format being used (ex: gzip) | no |
+| `ProtectDataFromGcOnPause` | (Changefeed Option) Whether data to resume a changefeed is protected from GC when paused | no |
+| `SchemaChangeEvents` | (Changefeed Option) The type of schema events that trigger the change policy | no |
+| `SchemaChangePolicy` | (Changefeed Option) The behavior to trigger from a schema change event (ex: backfill) | no |
+| `Scan` | Whether the initial_scan or no_initial_scan options have been specified | no |
+| `FullTableName` | (Changefeed Option) Whether fully-qualified table names are used for topic names | no |
+| `AvroSchemaPrefix` | (Changefeed Option) Whether a custom namespace for table schemas is specified | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `ChangefeedType` | The type of changefeed (ex: Enterprise) | no |
+| `CrdbVersion` | The CRDB version of the node that triggered the event | no |
+| `NodeID` | The ID of the node that triggered the event | no |
+| `InstanceID` | The Instance ID of the running SQL server | no |
+| `ClusterID` | The ID of the cluster containing the node that triggered the event | no |
+| `TenantID` | The ID of the tenant that triggered the event | no |
+| `OrganizationID` | The ID of the organization linked to the cluster | no |
+| `Internal` | Whether the event originates from within CRDB or an external service | no |
+| `SamplingRate` | How often this event is emitted to the channel per event that takes place | no |
+| `SeverityNumeric` | Numeric value for the severity of the event | no |
+| `Severity` | String value for the severity of the event | no |
+| `SinkType` | The scheme of sink being emitted to (ex: kafka, nodelocal, webhook-https) | no |
+| `JobID` | The ID of the job that triggered the event | no |
+
 ### `sampled_query`
 
 An event of type `sampled_query` is the SQL query event logged to the telemetry channel. It

@@ -85,3 +85,28 @@ message CommonJobEventDetails {
   string status = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
+// CommonChangefeedEventDetails contains the fields common to all changefeed
+// events.
+message CommonChangefeedEventDetails {
+  // The type of changefeed (ex: Enterprise)
+  string changefeed_type = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Whether the event originates from within CRDB or an external service
+  bool internal = 2 [(gogoproto.jsontag) = ",omitempty"];
+
+  // How often this event is emitted to the channel per event that takes place
+  float sampling_rate = 3 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Numeric value for the severity of the event
+  int32 severity_numeric = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // String value for the severity of the event
+  string severity = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The scheme of sink being emitted to (ex: kafka, nodelocal, webhook-https)
+  string sink_type = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The ID of the job that triggered the event
+  int64 job_id = 7 [(gogoproto.customname) = "JobID", (gogoproto.jsontag) = ",omitempty"];
+}
+
