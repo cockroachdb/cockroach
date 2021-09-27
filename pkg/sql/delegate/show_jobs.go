@@ -32,10 +32,12 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Jobs)
 
 	const (
-		selectClause = `SELECT job_id, job_type, description, statement, user_name, status,
-				       running_status, created, started, finished, modified,
-				       fraction_completed, error, coordinator_id, trace_id
-				FROM crdb_internal.jobs`
+		selectClause = `
+SELECT job_id, job_type, description, statement, user_name, status,
+       running_status, created, started, finished, modified,
+       fraction_completed, error, coordinator_id, trace_id, last_run,
+       next_run, num_runs, execution_errors
+  FROM crdb_internal.jobs`
 	)
 	var typePredicate, whereClause, orderbyClause string
 	if n.Jobs == nil {
