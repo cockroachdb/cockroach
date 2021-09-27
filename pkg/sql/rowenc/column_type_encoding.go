@@ -270,7 +270,9 @@ func DecodeTableKey(
 	case types.StringFamily:
 		var r string
 		if dir == encoding.Ascending {
-			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
+			// Perform a deep copy so that r would never reference the key's
+			// memory which might keep the BatchResponse alive.
+			rkey, r, err = encoding.DecodeUnsafeStringAscendingDeepCopy(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
@@ -281,7 +283,9 @@ func DecodeTableKey(
 	case types.CollatedStringFamily:
 		var r string
 		if dir == encoding.Ascending {
-			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
+			// Perform a deep copy so that r would never reference the key's
+			// memory which might keep the BatchResponse alive.
+			rkey, r, err = encoding.DecodeUnsafeStringAscendingDeepCopy(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
@@ -301,6 +305,8 @@ func DecodeTableKey(
 	case types.BytesFamily:
 		var r []byte
 		if dir == encoding.Ascending {
+			// No need to perform the deep copy since converting to string below
+			// will do that for us.
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
@@ -387,6 +393,8 @@ func DecodeTableKey(
 	case types.UuidFamily:
 		var r []byte
 		if dir == encoding.Ascending {
+			// No need to perform the deep copy since converting to UUID below
+			// will do that for us.
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
@@ -399,6 +407,8 @@ func DecodeTableKey(
 	case types.INetFamily:
 		var r []byte
 		if dir == encoding.Ascending {
+			// No need to perform the deep copy since converting to IPAddr below
+			// will do that for us.
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
@@ -420,6 +430,8 @@ func DecodeTableKey(
 	case types.EnumFamily:
 		var r []byte
 		if dir == encoding.Ascending {
+			// No need to perform the deep copy since we only need r for a brief
+			// period of time.
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
