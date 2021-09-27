@@ -12,13 +12,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -96,7 +96,7 @@ func (d *dev) getDockerRunArgs(
 		}
 	}
 	if bazelImage == "" {
-		err = errors.New("Could not find BAZEL_IMAGE in build/teamcity-bazel-support.sh")
+		err = errors.New("could not find BAZEL_IMAGE in build/teamcity-bazel-support.sh")
 		return
 	}
 

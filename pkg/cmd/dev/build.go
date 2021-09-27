@@ -20,8 +20,6 @@ import (
 	"strings"
 
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 )
 
@@ -152,7 +150,7 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGenerat
 		}
 
 		// Symlink from binaryPath -> symlinkPath
-		if err := d.os.Remove(symlinkPath); err != nil && !oserror.IsNotExist(err) {
+		if err := d.os.Remove(symlinkPath); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		if err := d.os.Symlink(binaryPath, symlinkPath); err != nil {
@@ -282,7 +280,7 @@ func getBasicBuildArgs(targets []string) (args, fullTargets []string, err error)
 		}
 		buildTarget, ok := buildTargetMapping[target]
 		if !ok {
-			err = errors.Newf("unrecognized target: %s", target)
+			err = fmt.Errorf("unrecognized target: %s", target)
 			return
 		}
 

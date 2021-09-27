@@ -762,6 +762,7 @@ func TestLint(t *testing.T) {
 			`\bos\.Is(Exist|NotExist|Timeout|Permission)`,
 			"--",
 			"*.go",
+			":!cmd/dev/**",
 		)
 		if err != nil {
 			t.Fatal(err)
