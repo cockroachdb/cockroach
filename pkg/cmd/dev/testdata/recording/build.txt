@@ -13,17 +13,17 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build //pkg/cmd/cockroach-short --config=dev
+bazel build //pkg/cmd/cockroach-short
 ----
 
-bazel info workspace --color=no --config=dev
+bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
 
-bazel info bazel-bin --color=no --config=dev
+bazel info bazel-bin --color=no
 ----
 /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
 
@@ -48,87 +48,17 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short --config=dev
+bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short
 ----
 
-bazel info workspace --color=no --config=dev
-----
-go/src/github.com/cockroachdb/cockroach
-
-mkdir go/src/github.com/cockroachdb/cockroach/bin
-----
-
-bazel info bazel-bin --color=no --config=dev
-----
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
-
-rm go/src/github.com/cockroachdb/cockroach/cockroach-short
-----
-
-ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
-----
-
-getenv PATH
-----
-/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-
-which cc
-----
-/usr/local/opt/ccache/libexec/cc
-
-readlink /usr/local/opt/ccache/libexec/cc
-----
-../bin/ccache
-
-export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-----
-
-bazel build //pkg/cmd/cockroach-short --config=dev
-----
-
-bazel info workspace --color=no --config=dev
+bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
 
-bazel info bazel-bin --color=no --config=dev
-----
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
-
-rm go/src/github.com/cockroachdb/cockroach/cockroach-short
-----
-
-ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
-----
-
-getenv PATH
-----
-/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-
-which cc
-----
-/usr/local/opt/ccache/libexec/cc
-
-readlink /usr/local/opt/ccache/libexec/cc
-----
-../bin/ccache
-
-export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-----
-
-bazel build --remote_local_fallback --remote_cache=grpc://127.0.0.1:9090 --experimental_remote_downloader=grpc://127.0.0.1:9090 //pkg/cmd/cockroach-short --config=dev
-----
-
-bazel info workspace --color=no --config=dev
-----
-go/src/github.com/cockroachdb/cockroach
-
-mkdir go/src/github.com/cockroachdb/cockroach/bin
-----
-
-bazel info bazel-bin --color=no --config=dev
+bazel info bazel-bin --color=no
 ----
 /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
 
@@ -188,17 +118,52 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build //pkg/cmd/cockroach-short --config=dev
+bazel build --remote_local_fallback --remote_cache=grpc://127.0.0.1:9090 --experimental_remote_downloader=grpc://127.0.0.1:9090 //pkg/cmd/cockroach-short
 ----
 
-bazel info workspace --color=no --config=dev
+bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
 
-bazel info bazel-bin --color=no --config=dev
+bazel info bazel-bin --color=no
+----
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
+
+rm go/src/github.com/cockroachdb/cockroach/cockroach-short
+----
+
+ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
+----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
+bazel build //pkg/cmd/cockroach-short
+----
+
+bazel info workspace --color=no
+----
+go/src/github.com/cockroachdb/cockroach
+
+mkdir go/src/github.com/cockroachdb/cockroach/bin
+----
+
+bazel info bazel-bin --color=no
 ----
 /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
 
@@ -258,17 +223,17 @@ readlink /usr/local/opt/ccache/libexec/cc
 export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
-bazel build //pkg/cmd/cockroach-short -s --config=dev
+bazel build //pkg/cmd/cockroach-short -s
 ----
 
-bazel info workspace --color=no --config=dev
+bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
 
-bazel info bazel-bin --color=no --config=dev
+bazel info bazel-bin --color=no
 ----
 /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
 

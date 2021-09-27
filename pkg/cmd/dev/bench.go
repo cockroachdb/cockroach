@@ -85,7 +85,6 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
 	argsBase = append(argsBase, "run", "--config=test", "--test_sharding_strategy=disabled")
-	argsBase = append(argsBase, getConfigFlags()...)
 	argsBase = append(argsBase, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		argsBase = append(argsBase, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
