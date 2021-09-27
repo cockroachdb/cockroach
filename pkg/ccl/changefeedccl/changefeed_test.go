@@ -1471,11 +1471,10 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 // 	waitForSchemaChangeError(t, feed)
 // }
 
-func TestChangefeedFailOnRBRChange(t *testing.T) {
+func TestChangefeedWorksOnRBRChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rbrErrorRegex := regexp.MustCompile(`CHANGEFEED cannot target REGIONAL BY ROW tables: rbr`)
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
@@ -1491,7 +1490,14 @@ func TestChangefeedFailOnRBRChange(t *testing.T) {
 				`rbr: [1]->{"after": {"a": 1, "b": 2}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
-			requireErrorSoon(context.Background(), t, rbr, rbrErrorRegex)
+			assertPayloads(t, rbr, []string{
+				`rbr: ["us-east-1", 0]->{"after": {"a": 0, "b": null, "crdb_region": "us-east-1"}}`,
+				`rbr: ["us-east-1", 1]->{"after": {"a": 1, "b": 2, "crdb_region": "us-east-1"}}`,
+			})
+			sqlDB.Exec(t, `INSERT INTO rbr VALUES (2, 3)`)
+			assertPayloads(t, rbr, []string{
+				`rbr: ["us-east-1", 2]->{"after": {"a": 2, "b": 3, "crdb_region": "us-east-1"}}`,
+			})
 		})
 	}
 	withTestServerRegion := func(args *base.TestServerArgs) {
@@ -1500,7 +1506,6 @@ func TestChangefeedFailOnRBRChange(t *testing.T) {
 			Value: testServerRegion,
 		})
 	}
-	t.Run(`sinkless`, sinklessTestWithServerArgs(withTestServerRegion, testFn))
 	t.Run("enterprise", enterpriseTestWithServerArgs(withTestServerRegion, testFn))
 }
 
@@ -2384,15 +2389,6 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `CHANGEFEED cannot target views: vw`,
 		`EXPERIMENTAL CHANGEFEED FOR vw`,
-	)
-
-	// Regional by row tables are not currently supported
-	sqlDB.Exec(t, fmt.Sprintf(`ALTER DATABASE defaultdb PRIMARY REGION "%s"`, testServerRegion))
-	sqlDB.Exec(t, `CREATE TABLE test_cdc_rbr_fails (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `ALTER TABLE test_cdc_rbr_fails SET LOCALITY REGIONAL BY ROW`)
-	sqlDB.ExpectErr(
-		t, `CHANGEFEED cannot target REGIONAL BY ROW tables: test_cdc_rbr_fails`,
-		`CREATE CHANGEFEED FOR test_cdc_rbr_fails`,
 	)
 
 	// Backup has the same bad error message #28170.
