@@ -601,8 +601,20 @@ func maybeCopyPartitioningWhenDeinterleaving(
 
 	// If the new primary key does not have the interleave root as a prefix,
 	// do not copy the interleave.
-	if rootKeys := rootIndex.IndexDesc().ColumnIDs; !descpb.ColumnIDs.Equals(
-		rootKeys, newPrimaryIndexDesc.ColumnIDs[:len(rootKeys)],
+	prefixMatches := func(a, b []string) bool {
+		if len(a) > len(b) {
+			return false
+		}
+		for i := range a {
+			if a[i] != b[i] {
+				return false
+			}
+		}
+		return true
+	}
+	if !prefixMatches(
+		rootIndex.IndexDesc().ColumnNames,
+		newPrimaryIndexDesc.ColumnNames,
 	) {
 		return nil
 	}
