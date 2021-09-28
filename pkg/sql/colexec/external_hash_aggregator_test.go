@@ -135,7 +135,7 @@ func TestExternalHashAggregator(t *testing.T) {
 						if !diskSpillingEnabled {
 							// Sanity check that indeed only the in-memory hash
 							// aggregator was created.
-							_, isHashAgg := op.(*hashAggregator)
+							_, isHashAgg := MaybeUnwrapInvariantsChecker(op).(*hashAggregator)
 							require.True(t, isHashAgg)
 						}
 						return op, err
