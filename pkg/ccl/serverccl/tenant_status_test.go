@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -305,5 +307,79 @@ func ensureExpectedStmtFingerprintExistsInRPCResponse(
 		}
 		require.True(t, found, "expected %s to be found in "+
 			"%s tenant cluster, but it was not found", fingerprint, clusterType)
+	}
+}
+
+func TestContentionEventsForTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+
+	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */)
+	defer testHelper.cleanup(ctx, t)
+
+	testingCluster := testHelper.testCluster()
+	controlledCluster := testHelper.controlCluster()
+
+	sqlutils.CreateTable(
+		t,
+		testingCluster[0].tenantConn,
+		"test",
+		"x INT PRIMARY KEY",
+		1, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn),
+	)
+
+	testTableID, err :=
+		strconv.Atoi(testingCluster.tenantConn(0).QueryStr(t, "SELECT 'test.test'::regclass::oid")[0][0])
+	require.NoError(t, err)
+
+	testingCluster.tenantConn(0).Exec(t, "USE test")
+	testingCluster.tenantConn(1).Exec(t, "USE test")
+
+	testingCluster.tenantConn(0).Exec(t, `
+BEGIN;
+UPDATE test SET x = 100 WHERE x = 1;
+`)
+	testingCluster.tenantConn(1).Exec(t, `
+SET TRACING=on;
+BEGIN PRIORITY HIGH;
+UPDATE test SET x = 1000 WHERE x = 1;
+COMMIT;
+SET TRACING=off;
+`)
+	testingCluster.tenantConn(0).ExpectErr(
+		t,
+		"^pq: restart transaction.+",
+		"COMMIT;",
+	)
+
+	resp, err :=
+		testingCluster.tenantStatusSrv(2).ListContentionEvents(ctx, &serverpb.ListContentionEventsRequest{})
+	require.NoError(t, err)
+
+	require.GreaterOrEqualf(t, len(resp.Events.IndexContentionEvents), 1,
+		"expecting at least 1 contention event, but found none")
+
+	found := false
+	for _, event := range resp.Events.IndexContentionEvents {
+		if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
+			found = true
+			break
+		}
+	}
+
+	require.True(t, found,
+		"expect to find contention event for table %d, but found %+v", testTableID, resp)
+
+	resp, err = controlledCluster.tenantStatusSrv(0).ListContentionEvents(ctx, &serverpb.ListContentionEventsRequest{})
+	require.NoError(t, err)
+	for _, event := range resp.Events.IndexContentionEvents {
+		if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
+			t.Errorf("did not expect contention event in controlled cluster, but it was found")
+		}
 	}
 }
