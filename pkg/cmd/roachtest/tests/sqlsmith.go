@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"os"
@@ -28,6 +29,7 @@ import (
 )
 
 func registerSQLSmith(r registry.Registry) {
+	const numNodes = 4
 	setups := map[string]sqlsmith.Setup{
 		"empty":       sqlsmith.Setups["empty"],
 		"seed":        sqlsmith.Setups["seed"],
@@ -102,7 +104,11 @@ func registerSQLSmith(r registry.Registry) {
 		setup := setupFunc(rng)
 		setting := settingFunc(rng)
 
-		conn := c.Conn(ctx, 1)
+		allConns := make([]*gosql.DB, 0, numNodes)
+		for node := 1; node <= numNodes; node++ {
+			allConns = append(allConns, c.Conn(ctx, node))
+		}
+		conn := allConns[0]
 		t.Status("executing setup")
 		t.L().Printf("setup:\n%s", setup)
 		if _, err := conn.Exec(setup); err != nil {
@@ -132,17 +138,11 @@ func registerSQLSmith(r registry.Registry) {
 		// other setup queries have already completed, including the smither
 		// instantiation (otherwise, the setup might fail because of the
 		// injected panics).
-		if rng.Float64() < 0.5 {
-			// TODO(yuzefovich): at the moment we're only injecting panics with
-			// 50% probability in order to test the hypothesis that this panic
-			// injection is the root cause of the inbox communication errors we
-			// have been seeing sporadically.
-			injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
-			if _, err := conn.Exec(injectPanicsStmt); err != nil {
-				t.Fatal(err)
-			}
-			logStmt(injectPanicsStmt)
+		injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
+		if _, err := conn.Exec(injectPanicsStmt); err != nil {
+			t.Fatal(err)
 		}
+		logStmt(injectPanicsStmt)
 
 		t.Status("smithing")
 		until := time.After(t.Spec().(*registry.TestSpec).Timeout / 2)
@@ -222,11 +222,6 @@ func registerSQLSmith(r registry.Registry) {
 						logStmt(stmt)
 						t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
 					}
-				} else if strings.Contains(es, "communication error") {
-					// A communication error can be because
-					// a non-gateway node has crashed.
-					logStmt(stmt)
-					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
 				} else if strings.Contains(es, "Empty statement returned by generate") ||
 					stmt == "" {
 					// Either were unable to generate a statement or
@@ -237,12 +232,15 @@ func registerSQLSmith(r registry.Registry) {
 				// frequently (due to sqlsmith not crafting
 				// executable queries 100% of the time) and are
 				// never interesting.
+				// TODO(yuzefovich): reevaluate this assumption.
 			}
 
-			// Ping the gateway to make sure it didn't crash.
-			if err := conn.PingContext(ctx); err != nil {
-				logStmt(stmt)
-				t.Fatalf("ping: %v\nprevious sql:\n%s;", err, stmt)
+			// Ping all nodes to make sure they didn't crash.
+			for idx, c := range allConns {
+				if err := c.PingContext(ctx); err != nil {
+					logStmt(stmt)
+					t.Fatalf("ping node %d: %v\nprevious sql:\n%s;", idx+1, err, stmt)
+				}
 			}
 		}
 	}
@@ -252,7 +250,7 @@ func registerSQLSmith(r registry.Registry) {
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
 			Owner:   registry.OwnerSQLQueries,
-			Cluster: r.MakeClusterSpec(4),
+			Cluster: r.MakeClusterSpec(numNodes),
 			Timeout: time.Minute * 20,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
