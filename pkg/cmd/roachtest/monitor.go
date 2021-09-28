@@ -78,6 +78,11 @@ func (m *monitorImpl) ResetDeaths() {
 	atomic.StoreInt32(&m.expDeaths, 0)
 }
 
+// NumExpectedDeaths is the number of expected deaths that have yet to happen.
+func (m *monitorImpl) NumExpectedDeaths() int32 {
+	return atomic.LoadInt32(&m.expDeaths)
+}
+
 var errTestFatal = errors.New("t.Fatal() was called")
 
 func (m *monitorImpl) Go(fn func(context.Context) error) {

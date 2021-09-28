@@ -17,6 +17,7 @@ type Monitor interface {
 	ExpectDeath()
 	ExpectDeaths(count int32)
 	ResetDeaths()
+	NumExpectedDeaths() int32
 	Go(fn func(context.Context) error)
 	WaitE() error
 	Wait()
