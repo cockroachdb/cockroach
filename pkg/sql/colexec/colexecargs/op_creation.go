@@ -13,6 +13,7 @@ package colexecargs
 import (
 	"context"
 	"sync"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewColOperator is a test helper that's always aliased to
@@ -129,13 +131,23 @@ func (r *NewColOperatorResult) AssertInvariants() {
 
 // TestCleanup releases the resources associated with this result. It should
 // only be used in tests.
-func (r *NewColOperatorResult) TestCleanup() {
+func (r *NewColOperatorResult) TestCleanup() error {
+	if err := r.ToClose.Close(); err != nil {
+		return err
+	}
 	for _, acc := range r.OpAccounts {
 		acc.Close(context.Background())
 	}
 	for _, m := range r.OpMonitors {
 		m.Stop(context.Background())
 	}
+	return nil
+}
+
+// TestCleanupNoError is the same as TestCleanup but asserts that no error is
+// returned.
+func (r *NewColOperatorResult) TestCleanupNoError(t testing.TB) {
+	require.NoError(t, r.TestCleanup())
 }
 
 var newColOperatorResultPool = sync.Pool{
