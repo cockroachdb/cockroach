@@ -30,6 +30,11 @@
     white-space: pre-line;
     word-wrap: break-word;
 
+    span {
+      font-family: SFMono-Semibold;
+      color: $colors--neutral-2;
+    }
+
     :global(.hljs-label) {
       padding-left: 8px;
     }
