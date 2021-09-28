@@ -573,6 +573,21 @@ func TestNoopSpanFinish(t *testing.T) {
 	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
 }
 
+// Test that a span constructed with a no-op span behaves like a root span - it
+// is present in the active spans registry.
+func TestSpanWithNoopParentIsInActiveSpans(t *testing.T) {
+	tr := NewTracer()
+	noop := tr.StartSpan("noop")
+	require.True(t, noop.IsNoop())
+	root := tr.StartSpan("foo", WithParentAndAutoCollection(noop), WithForceRealSpan())
+	require.Len(t, tr.activeSpans.m, 1)
+	visitor := func(sp *Span) error {
+		require.Equal(t, root, sp)
+		return nil
+	}
+	require.NoError(t, tr.VisitSpans(visitor))
+}
+
 func TestConcurrentChildAndRecording(t *testing.T) {
 	tr := NewTracer()
 	rootSp := tr.StartSpan("root", WithForceRealSpan())
