@@ -30,7 +30,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	db := storage.NewDefaultInMemForTesting()
+	db := storage.NewDefaultInMemForStickyEngineTesting()
 	defer db.Close()
 
 	makeTS := func(ts int64) hlc.Timestamp {
@@ -128,7 +128,6 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			closedTS:              makeTS(4),
 			intentCleanupAge:      5,
 			expResolvedTS:         makeTS(2).Prev(),
-			// The test sets current clock to 10; collect intents with WriteTimestamp < 10 - intentCleanupAge
 			expEncounteredIntents: []string{"d"},
 		},
 		{

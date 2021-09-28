@@ -12,9 +12,9 @@ package batcheval
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
