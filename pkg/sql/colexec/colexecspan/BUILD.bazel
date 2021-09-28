@@ -4,6 +4,7 @@ load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 go_library(
     name = "colexecspan",
     srcs = [
+        "range_distributor.go",
         ":gen-exec",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan",  # keep
@@ -16,9 +17,11 @@ go_library(
         "//pkg/roachpb:with-mocks",  # keep
         "//pkg/sql/catalog",  # keep
         "//pkg/sql/catalog/descpb",  # keep
+        "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colmem",  # keep
         "//pkg/sql/execinfra",  # keep
+        "//pkg/sql/execinfrapb",
         "//pkg/sql/rowenc",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep

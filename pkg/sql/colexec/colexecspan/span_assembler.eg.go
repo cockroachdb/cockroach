@@ -36,18 +36,61 @@ func NewColSpanAssembler(
 	inputTypes []*types.T,
 	neededCols util.FastIntSet,
 ) ColSpanAssembler {
-	base := spanAssemblerPool.Get().(*spanAssemblerBase)
+	keyEncDirections := make([]descpb.IndexDescriptor_Direction, index.NumKeyColumns())
+	for i := 0; i < index.NumKeyColumns(); i++ {
+		keyEncDirections[i] = index.GetKeyColumnDirection(i)
+	}
+	base := newColSpanAssemblerBase(codec, allocator, inputTypes, keyEncDirections, nil /* keyOrdinals */)
 	base.colFamStartKeys, base.colFamEndKeys = getColFamilyEncodings(neededCols, table, index)
 	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, table, index.GetID())
 	base.scratchKey = append(base.scratchKey[:0], keyPrefix...)
 	base.prefixLength = len(keyPrefix)
+	if len(base.colFamStartKeys) == 0 {
+		return &spanAssemblerNoColFamily{spanAssemblerBase: *base}
+	}
+	return &spanAssemblerWithColFamily{spanAssemblerBase: *base}
+}
+
+// NewColSpanAssemblerWithoutTablePrefix returns a ColSpanAssembler operator
+// that is able to generate lookup spans from input batches. It generates key
+// spans *without* the table/index prefix that make them actually valid for
+// lookups.
+func NewColSpanAssemblerWithoutTablePrefix(
+	codec keys.SQLCodec,
+	allocator *colmem.Allocator,
+	inputTypes []*types.T,
+	keyEncDirections []descpb.IndexDescriptor_Direction,
+	// keyOrdinals, if non-nil, is a slice that represents the ordinals within
+	// the input batches to encode. The ith element of keyOrdinals is the column
+	// ordinal at which to find the ith element of each key to construct.
+	keyOrdinals []int,
+) ColSpanAssembler {
+	base := newColSpanAssemblerBase(codec, allocator, inputTypes, keyEncDirections, keyOrdinals)
+	return &spanAssemblerNoColFamily{spanAssemblerBase: *base}
+}
+
+func newColSpanAssemblerBase(
+	codec keys.SQLCodec,
+	allocator *colmem.Allocator,
+	inputTypes []*types.T,
+	keyEncDirections []descpb.IndexDescriptor_Direction,
+	// keyOrdinals, if non-nil, is a slice that represents the ordinals within
+	// the input batches to encode. The ith element of keyOrdinals is the column
+	// ordinal at which to find the ith element of each key to construct.
+	keyOrdinals []int,
+) *spanAssemblerBase {
+	base := spanAssemblerPool.Get().(*spanAssemblerBase)
 	base.allocator = allocator
 
 	// Add span encoders to encode each primary key column as bytes. The
 	// ColSpanAssembler will later append these together to form valid spans.
-	for i := 0; i < index.NumKeyColumns(); i++ {
-		asc := index.GetKeyColumnDirection(i) == descpb.IndexDescriptor_ASC
-		base.spanEncoders = append(base.spanEncoders, newSpanEncoder(allocator, inputTypes[i], asc, i))
+	for i, dir := range keyEncDirections {
+		asc := dir == descpb.IndexDescriptor_ASC
+		idx := i
+		if keyOrdinals != nil {
+			idx = keyOrdinals[i]
+		}
+		base.spanEncoders = append(base.spanEncoders, newSpanEncoder(allocator, inputTypes[i], asc, idx))
 	}
 	if cap(base.spanCols) < len(base.spanEncoders) {
 		base.spanCols = make([]*coldata.Bytes, len(base.spanEncoders))
@@ -58,11 +101,7 @@ func NewColSpanAssembler(
 	// Account for the memory currently in use.
 	usedMem := int64(cap(base.spans) * int(spanSize))
 	base.allocator.AdjustMemoryUsage(usedMem)
-
-	if len(base.colFamStartKeys) == 0 {
-		return &spanAssemblerNoColFamily{spanAssemblerBase: *base}
-	}
-	return &spanAssemblerWithColFamily{spanAssemblerBase: *base}
+	return base
 }
 
 var spanAssemblerPool = sync.Pool{

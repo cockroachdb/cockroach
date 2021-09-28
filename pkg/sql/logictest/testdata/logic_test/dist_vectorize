@@ -235,7 +235,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             │         │ │ └ *colexec.ParallelUnorderedSynchronizer
 │             │         │ │   ├ *colexec.InvariantsChecker
 │             │         │ │   │ └ *colflow.routerOutputOp
-│             │         │ │   │   └ *colflow.HashRouter
+│             │         │ │   │   └ *colflow.Router
 │             │         │ │   │     └ *colexec.InvariantsChecker
 │             │         │ │   │       └ *colexecutils.CancelChecker
 │             │         │ │   │         └ *colexec.InvariantsChecker
@@ -252,7 +252,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             │         │   └ *colexec.ParallelUnorderedSynchronizer
 │             │         │     ├ *colexec.InvariantsChecker
 │             │         │     │ └ *colflow.routerOutputOp
-│             │         │     │   └ *colflow.HashRouter
+│             │         │     │   └ *colflow.Router
 │             │         │     │     └ *colexec.InvariantsChecker
 │             │         │     │       └ *colexecutils.CancelChecker
 │             │         │     │         └ *colexec.InvariantsChecker
@@ -293,7 +293,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │ │   │ └ *colrpc.Inbox
 │               │ │   ├ *colexec.InvariantsChecker
 │               │ │   │ └ *colflow.routerOutputOp
-│               │ │   │   └ *colflow.HashRouter
+│               │ │   │   └ *colflow.Router
 │               │ │   │     └ *colexec.InvariantsChecker
 │               │ │   │       └ *colexecutils.CancelChecker
 │               │ │   │         └ *colexec.InvariantsChecker
@@ -310,7 +310,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │     │ └ *colrpc.Inbox
 │               │     ├ *colexec.InvariantsChecker
 │               │     │ └ *colflow.routerOutputOp
-│               │     │   └ *colflow.HashRouter
+│               │     │   └ *colflow.Router
 │               │     │     └ *colexec.InvariantsChecker
 │               │     │       └ *colexecutils.CancelChecker
 │               │     │         └ *colexec.InvariantsChecker
@@ -343,7 +343,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │ │   │ └ *colrpc.Inbox
 │               │ │   ├ *colexec.InvariantsChecker
 │               │ │   │ └ *colflow.routerOutputOp
-│               │ │   │   └ *colflow.HashRouter
+│               │ │   │   └ *colflow.Router
 │               │ │   │     └ *colexec.InvariantsChecker
 │               │ │   │       └ *colexecutils.CancelChecker
 │               │ │   │         └ *colexec.InvariantsChecker
@@ -360,7 +360,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │     │ └ *colrpc.Inbox
 │               │     ├ *colexec.InvariantsChecker
 │               │     │ └ *colflow.routerOutputOp
-│               │     │   └ *colflow.HashRouter
+│               │     │   └ *colflow.Router
 │               │     │     └ *colexec.InvariantsChecker
 │               │     │       └ *colexecutils.CancelChecker
 │               │     │         └ *colexec.InvariantsChecker
@@ -393,7 +393,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │ │   │ └ *colrpc.Inbox
 │               │ │   ├ *colexec.InvariantsChecker
 │               │ │   │ └ *colflow.routerOutputOp
-│               │ │   │   └ *colflow.HashRouter
+│               │ │   │   └ *colflow.Router
 │               │ │   │     └ *colexec.InvariantsChecker
 │               │ │   │       └ *colexecutils.CancelChecker
 │               │ │   │         └ *colexec.InvariantsChecker
@@ -410,7 +410,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │     │ └ *colrpc.Inbox
 │               │     ├ *colexec.InvariantsChecker
 │               │     │ └ *colflow.routerOutputOp
-│               │     │   └ *colflow.HashRouter
+│               │     │   └ *colflow.Router
 │               │     │     └ *colexec.InvariantsChecker
 │               │     │       └ *colexecutils.CancelChecker
 │               │     │         └ *colexec.InvariantsChecker
@@ -443,7 +443,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
                 │ │   │ └ *colrpc.Inbox
                 │ │   └ *colexec.InvariantsChecker
                 │ │     └ *colflow.routerOutputOp
-                │ │       └ *colflow.HashRouter
+                │ │       └ *colflow.Router
                 │ │         └ *colexec.InvariantsChecker
                 │ │           └ *colexecutils.CancelChecker
                 │ │             └ *colexec.InvariantsChecker
@@ -460,7 +460,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
                 │     │ └ *colrpc.Inbox
                 │     └ *colexec.InvariantsChecker
                 │       └ *colflow.routerOutputOp
-                │         └ *colflow.HashRouter
+                │         └ *colflow.Router
                 │           └ *colexec.InvariantsChecker
                 │             └ *colexecutils.CancelChecker
                 │               └ *colexec.InvariantsChecker
