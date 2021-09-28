@@ -641,11 +641,11 @@ func RunTestsWithFn(
 			inputSources := make([]colexecop.Operator, len(tups))
 			var inputTypes []*types.T
 			if useSel {
-				rng, _ := randutil.NewTestRandFromGlobalSeed()
 				for i, tup := range tups {
 					if typs != nil {
 						inputTypes = typs[i]
 					}
+					rng, _ := randutil.NewTestRandFromGlobalSeed()
 					inputSources[i] = newOpTestSelInput(allocator, rng, batchSize, tup, inputTypes)
 				}
 			} else {
